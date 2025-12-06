@@ -7,7 +7,12 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 
 **See `ARCHITECTURE.md` for full details.**
 
-### Dual-Build Separation (Updated Dec 6, 2025)
+### Recent Changes (Dec 6, 2025)
+- **v2.1.1**: Added PyArmor --restrict mode for stronger code protection
+- **v2.1.1**: Added license heartbeat system for runtime re-validation
+- **v2.1.1**: Added code integrity hashing utilities
+
+### Dual-Build Separation
 | Build | Entry Point | Package | Database | Purpose |
 |-------|-------------|---------|----------|---------|
 | **Admin License Server** | `admin_server.py` | `admin_panel/` | `license_server.db` | License management ONLY |
