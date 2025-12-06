@@ -66,10 +66,16 @@ def init_database():
                 activated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 last_seen TEXT,
                 ip_address TEXT,
+                machine_info TEXT,
                 FOREIGN KEY (license_key) REFERENCES licenses(license_key),
                 UNIQUE(license_key, device_id)
             )
         ''')
+        
+        try:
+            cursor.execute('ALTER TABLE device_activations ADD COLUMN machine_info TEXT')
+        except:
+            pass
         
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS admin_users (
