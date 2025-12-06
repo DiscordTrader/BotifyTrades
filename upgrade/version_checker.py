@@ -166,19 +166,30 @@ class VersionChecker:
                 return self._cached_update
         
         current_version = get_current_version()
+        print(f"[UPDATE] Current version: {current_version}")
+        print(f"[UPDATE] Checking GitHub: {self.config.get_github_releases_url()}")
         
         try:
             update_info = self._check_github_releases()
             
             if update_info:
-                if compare_versions(update_info.version, current_version) > 0:
+                print(f"[UPDATE] Latest version on GitHub: {update_info.version}")
+                comparison = compare_versions(update_info.version, current_version)
+                print(f"[UPDATE] Version comparison result: {comparison} (>0 means update available)")
+                
+                if comparison > 0:
                     if not update_info.is_critical and self.is_version_skipped(update_info.version):
-                        print(f"[UPDATE] Version {update_info.version} is skipped")
+                        print(f"[UPDATE] Version {update_info.version} is skipped by user")
                         return None
                     
+                    print(f"[UPDATE] Update available: {current_version} -> {update_info.version}")
                     self._cached_update = update_info
                     self._last_check = datetime.now()
                     return update_info
+                else:
+                    print(f"[UPDATE] Already on latest version")
+            else:
+                print("[UPDATE] No update info returned from GitHub check")
             
             self._cached_update = None
             self._last_check = datetime.now()
@@ -186,11 +197,14 @@ class VersionChecker:
             
         except Exception as e:
             print(f"[UPDATE] Error checking for updates: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def _check_github_releases(self) -> Optional[UpdateInfo]:
         """Check GitHub releases for updates."""
         url = self.config.get_github_releases_url()
+        print(f"[UPDATE] Fetching releases from: {url}")
         
         try:
             headers = {'Accept': 'application/vnd.github.v3+json'}
@@ -198,15 +212,17 @@ class VersionChecker:
             github_token = os.environ.get('GITHUB_TOKEN')
             if github_token:
                 headers['Authorization'] = f'token {github_token}'
+                print("[UPDATE] Using GitHub token for authentication")
             
             response = requests.get(url, headers=headers, timeout=10)
+            print(f"[UPDATE] GitHub API response status: {response.status_code}")
             
             if response.status_code == 404:
-                print("[UPDATE] No releases found on GitHub")
+                print("[UPDATE] No releases found on GitHub (404)")
                 return None
             
             if response.status_code != 200:
-                print(f"[UPDATE] GitHub API error: {response.status_code}")
+                print(f"[UPDATE] GitHub API error: {response.status_code} - {response.text[:200]}")
                 return None
             
             release = response.json()

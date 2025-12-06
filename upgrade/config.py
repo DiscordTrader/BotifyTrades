@@ -40,8 +40,8 @@ class UpdateConfig:
     def from_env(cls) -> 'UpdateConfig':
         """Create config from environment variables."""
         return cls(
-            github_owner=os.environ.get('UPDATE_GITHUB_OWNER', 'BotifyTrades'),
-            github_repo=os.environ.get('UPDATE_GITHUB_REPO', 'BotifyTrades'),
+            github_owner=os.environ.get('UPDATE_GITHUB_OWNER', 'DiscordTrader'),
+            github_repo=os.environ.get('UPDATE_GITHUB_REPO', 'BotifyTradesv2'),
             update_check_url=os.environ.get('UPDATE_CHECK_URL'),
             check_on_startup=os.environ.get('UPDATE_CHECK_ON_STARTUP', 'true').lower() == 'true',
             check_interval_hours=int(os.environ.get('UPDATE_CHECK_INTERVAL_HOURS', '6')),
