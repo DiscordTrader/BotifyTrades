@@ -13,8 +13,8 @@ from typing import Optional, List
 class UpdateConfig:
     """Configuration for the auto-update system."""
     
-    github_owner: str = "BotifyTrades"
-    github_repo: str = "BotifyTrades"
+    github_owner: str = "DiscordTrader"
+    github_repo: str = "BotifyTradesv2"
     
     update_check_url: Optional[str] = None
     
