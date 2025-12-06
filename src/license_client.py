@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple, Dict
 
-LICENSE_SERVER_URL = "https://73c88a3f-ed39-46d5-9424-decd03d13c62-00-2bumin2yn8p08.riker.replit.dev"
+LICENSE_SERVER_URL = "https://92ef2f8a-9447-4d91-8823-2ac83e184d7a-00-384f7fcagd1yw.janeway.replit.dev"
 
 # RSA Public Key for verifying server-signed tokens
 # This key is embedded in the client - only the server has the private key
