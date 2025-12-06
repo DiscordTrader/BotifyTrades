@@ -5,15 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>User Agreement - BotifyTrades</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}?v=2">
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --aurora-cyan: #00F5FF;
-            --aurora-violet: #8B5CF6;
-            --bg-primary: #030308;
-            --gradient-aurora: linear-gradient(135deg, #00F5FF 0%, #8B5CF6 50%, #00F5FF 100%);
-            --glow-cyan: 0 0 20px rgba(0, 245, 255, 0.3);
-        }
         * {
             margin: 0;
             padding: 0;
@@ -21,494 +14,509 @@
         }
         
         body {
-            font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #0a1628 0%, #0d2847 50%, #0a1628 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0f172a;
             min-height: 100vh;
-            color: #e0e6ed;
+            color: #e2e8f0;
             display: flex;
             justify-content: center;
-            align-items: center;
-            padding: 20px;
+            align-items: flex-start;
+            padding: 40px 20px;
         }
         
         .consent-container {
-            max-width: 800px;
+            max-width: 720px;
             width: 100%;
-            background: linear-gradient(135deg, #0d2a3a 0%, #0f3a4f 100%);
-            border: 1px solid rgba(0, 212, 255, 0.3);
+            background: #1e293b;
             border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(0, 212, 255, 0.1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             overflow: hidden;
         }
         
         .consent-header {
-            background: linear-gradient(135deg, rgba(0, 212, 255, 0.15) 0%, rgba(0, 150, 200, 0.1) 100%);
-            padding: 30px;
+            background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+            padding: 32px;
             text-align: center;
-            border-bottom: 1px solid rgba(0, 212, 255, 0.2);
         }
         
-        .consent-header h1 {
-            color: #00d4ff;
-            font-size: 28px;
-            font-weight: 800;
-            letter-spacing: 1px;
+        .logo-container {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
             margin-bottom: 8px;
         }
         
-        .consent-header p {
-            color: #8899a6;
-            font-size: 14px;
-        }
-        
-        .logo-mark {
-            position: relative;
-            width: 60px;
-            height: 60px;
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, var(--aurora-cyan) 0%, var(--aurora-violet) 100%);
-            border-radius: 16px;
-            overflow: hidden;
-            margin: 0 auto 15px;
-            box-shadow: var(--glow-cyan), inset 0 1px 1px rgba(255,255,255,0.3);
-        }
-        
-        .logo-mark::before {
-            content: '';
-            position: absolute;
-            inset: 2px;
-            background: #0d2a3a;
-            border-radius: 14px;
-        }
-        
-        .logo-mark::after {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.2) 50%, transparent 60%);
-            animation: logoShine 3s ease-in-out infinite;
-        }
-        
-        @keyframes logoShine {
-            0%, 100% { transform: translateX(-100%) rotate(45deg); }
-            50% { transform: translateX(100%) rotate(45deg); }
-        }
-        
-        .logo-text {
-            position: relative;
-            z-index: 1;
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 22px;
+            font-size: 24px;
             font-weight: 700;
-            background: var(--gradient-aurora);
-            background-size: 200% 200%;
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: textGradient 4s ease infinite;
+            color: #fff;
         }
         
-        @keyframes textGradient {
-            0%, 100% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
+        .consent-header h1 {
+            color: #fff;
+            font-size: 24px;
+            font-weight: 700;
+        }
+        
+        .consent-header p {
+            color: rgba(255,255,255,0.8);
+            font-size: 14px;
+            margin-top: 4px;
         }
         
         .consent-body {
-            padding: 30px;
-            max-height: 450px;
+            padding: 32px;
+            max-height: 400px;
             overflow-y: auto;
         }
         
         .consent-body::-webkit-scrollbar {
-            width: 8px;
+            width: 6px;
         }
         
         .consent-body::-webkit-scrollbar-track {
-            background: rgba(0, 50, 80, 0.3);
-            border-radius: 4px;
+            background: #334155;
+            border-radius: 3px;
         }
         
         .consent-body::-webkit-scrollbar-thumb {
-            background: rgba(0, 212, 255, 0.3);
-            border-radius: 4px;
+            background: #64748b;
+            border-radius: 3px;
         }
         
         .consent-body::-webkit-scrollbar-thumb:hover {
-            background: rgba(0, 212, 255, 0.5);
+            background: #94a3b8;
         }
         
-        .consent-title {
-            color: #ff6b6b;
-            font-size: 18px;
-            font-weight: 700;
-            text-align: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid rgba(255, 107, 107, 0.3);
-        }
-        
-        .consent-subtitle {
-            color: #8899a6;
-            font-size: 13px;
-            text-align: center;
-            margin-bottom: 25px;
-        }
-        
-        .consent-section {
-            margin-bottom: 20px;
-            padding: 18px;
-            background: rgba(0, 50, 80, 0.3);
+        .alert-banner {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
             border-radius: 10px;
-            border-left: 3px solid #00d4ff;
+            margin-bottom: 24px;
         }
         
-        .consent-section h3 {
-            color: #00d4ff;
+        .alert-banner .icon {
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+        
+        .alert-banner .text {
             font-size: 14px;
-            font-weight: 700;
+            color: #fca5a5;
+            font-weight: 500;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+        }
+        
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            color: #f1f5f9;
             margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
         }
         
-        .consent-section p {
-            margin: 0;
-            line-height: 1.6;
-            font-size: 13px;
-            color: #c0c8d0;
-        }
-        
-        .consent-section ul {
-            margin: 8px 0 0 0;
-            padding-left: 20px;
-        }
-        
-        .consent-section li {
+        .section-title .num {
+            width: 24px;
+            height: 24px;
+            background: #334155;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-size: 12px;
-            color: #a0a8b0;
-            line-height: 1.5;
+            font-weight: 600;
+            color: #94a3b8;
+        }
+        
+        .section-content {
+            padding: 16px;
+            background: #0f172a;
+            border-radius: 10px;
+            border-left: 3px solid #3b82f6;
+        }
+        
+        .section-content.warning {
+            border-left-color: #f59e0b;
+        }
+        
+        .section-content.danger {
+            border-left-color: #ef4444;
+        }
+        
+        .section-content p {
+            font-size: 13px;
+            color: #cbd5e1;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+        
+        .section-content p:last-child {
+            margin-bottom: 0;
+        }
+        
+        .section-content ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+        
+        .section-content li {
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.6;
             margin-bottom: 4px;
         }
         
-        .section-warning {
-            border-left-color: #ff6b6b;
+        .highlight {
+            color: #fbbf24;
+            font-weight: 600;
         }
         
-        .section-warning h3 {
-            color: #ff6b6b;
+        .highlight-red {
+            color: #f87171;
+            font-weight: 600;
         }
         
-        .section-critical {
-            border-left-color: #ffc107;
-            background: rgba(255, 193, 7, 0.08);
-        }
-        
-        .section-critical h3 {
-            color: #ffc107;
-        }
-        
-        .consent-final {
-            margin-top: 25px;
+        .final-box {
+            margin-top: 24px;
             padding: 20px;
-            background: rgba(255, 107, 107, 0.1);
-            border: 1px solid rgba(255, 107, 107, 0.3);
-            border-radius: 10px;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 12px;
             text-align: center;
         }
         
-        .consent-final h3 {
-            color: #ff6b6b;
+        .final-box h3 {
             font-size: 16px;
+            color: #f87171;
             margin-bottom: 12px;
         }
         
-        .consent-final p {
-            color: #e0e6ed;
+        .final-box ul {
+            text-align: left;
+            padding-left: 24px;
+            margin: 0;
+        }
+        
+        .final-box li {
             font-size: 13px;
-            line-height: 1.6;
+            color: #e2e8f0;
+            line-height: 1.7;
+        }
+        
+        .checkbox-section {
+            padding: 0 32px 24px;
+        }
+        
+        .checkbox-wrapper {
+            display: block;
+            padding: 20px 24px;
+            background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%);
+            border: 2px solid #3b82f6;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+        
+        .checkbox-wrapper:hover {
+            background: linear-gradient(135deg, #234b7a 0%, #263548 100%);
+            border-color: #60a5fa;
+            transform: translateY(-1px);
+        }
+        
+        .checkbox-wrapper:active {
+            transform: translateY(0);
+        }
+        
+        .checkbox-wrapper.checked {
+            background: linear-gradient(135deg, #166534 0%, #14532d 100%);
+            border-color: #22c55e;
+        }
+        
+        .checkbox-inner {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .custom-checkbox {
+            width: 28px;
+            height: 28px;
+            min-width: 28px;
+            border: 2px solid #64748b;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            background: #0f172a;
+        }
+        
+        .checkbox-wrapper:hover .custom-checkbox {
+            border-color: #94a3b8;
+        }
+        
+        .checkbox-wrapper.checked .custom-checkbox {
+            background: #22c55e;
+            border-color: #22c55e;
+        }
+        
+        .custom-checkbox svg {
+            width: 16px;
+            height: 16px;
+            stroke: #fff;
+            stroke-width: 3;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        
+        .checkbox-wrapper.checked .custom-checkbox svg {
+            opacity: 1;
+        }
+        
+        .checkbox-label {
+            font-size: 14px;
+            color: #e2e8f0;
+            line-height: 1.5;
+            font-weight: 500;
+        }
+        
+        .checkbox-wrapper.checked .checkbox-label {
+            color: #bbf7d0;
+        }
+        
+        input[type="checkbox"] {
+            display: none;
         }
         
         .consent-footer {
-            padding: 25px 30px;
-            background: rgba(0, 30, 50, 0.5);
-            border-top: 1px solid rgba(0, 212, 255, 0.2);
+            padding: 24px 32px;
+            background: #0f172a;
             display: flex;
-            gap: 15px;
+            gap: 16px;
             justify-content: center;
         }
         
         .btn {
-            padding: 14px 35px;
+            padding: 14px 32px;
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             font-family: inherit;
             font-size: 15px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            transition: all 0.2s ease;
         }
         
         .btn-agree {
-            background: linear-gradient(135deg, #00c853, #00a843);
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
             color: white;
-            box-shadow: 0 4px 15px rgba(0, 200, 83, 0.4);
+            box-shadow: 0 4px 14px rgba(34, 197, 94, 0.4);
         }
         
         .btn-agree:hover:not(:disabled) {
-            background: linear-gradient(135deg, #00e65c, #00c853);
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 200, 83, 0.5);
+            box-shadow: 0 6px 20px rgba(34, 197, 94, 0.5);
         }
         
         .btn-agree:disabled {
-            opacity: 0.5;
+            background: #334155;
+            color: #64748b;
+            box-shadow: none;
             cursor: not-allowed;
         }
         
         .btn-decline {
-            background: rgba(255, 107, 107, 0.2);
-            color: #ff6b6b;
-            border: 1px solid rgba(255, 107, 107, 0.4);
+            background: transparent;
+            color: #94a3b8;
+            border: 1px solid #475569;
         }
         
         .btn-decline:hover {
-            background: rgba(255, 107, 107, 0.3);
-        }
-        
-        .checkbox-container {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            padding: 20px 25px;
-            background: rgba(0, 100, 150, 0.3);
-            border-radius: 10px;
-            margin: 0 30px 0 30px;
-            cursor: pointer;
-            border: 2px solid rgba(0, 212, 255, 0.3);
-            transition: all 0.2s ease;
-        }
-        
-        .checkbox-container:hover {
-            background: rgba(0, 100, 150, 0.4);
-            border-color: rgba(0, 212, 255, 0.6);
-        }
-        
-        .checkbox-container input {
-            width: 28px;
-            height: 28px;
-            min-width: 28px;
-            accent-color: #00d4ff;
-            cursor: pointer;
-            margin: 0;
-        }
-        
-        .checkbox-container label {
-            color: #e0e6ed;
-            font-size: 15px;
-            cursor: pointer;
-            user-select: none;
-            flex: 1;
-            line-height: 1.4;
+            background: rgba(239, 68, 68, 0.1);
+            border-color: #ef4444;
+            color: #f87171;
         }
         
         .version-info {
             text-align: center;
-            padding: 10px;
-            color: #6c757d;
+            padding: 16px;
+            color: #475569;
             font-size: 11px;
+            background: #0f172a;
         }
         
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-        
-        .warning-icon {
-            animation: pulse 2s infinite;
+        @media (max-width: 600px) {
+            body {
+                padding: 20px 12px;
+            }
+            
+            .consent-header {
+                padding: 24px 20px;
+            }
+            
+            .consent-body {
+                padding: 24px 20px;
+            }
+            
+            .checkbox-section {
+                padding: 0 20px 20px;
+            }
+            
+            .consent-footer {
+                padding: 20px;
+                flex-direction: column-reverse;
+            }
+            
+            .btn {
+                width: 100%;
+            }
         }
     </style>
 </head>
 <body>
     <div class="consent-container">
         <div class="consent-header">
-            <div class="logo-mark">
-                <span class="logo-text">BT</span>
+            <div class="logo-container">
+                <div class="logo-icon">BT</div>
             </div>
             <h1>BotifyTrades</h1>
-            <p>Automated Trading Bot</p>
+            <p>User Agreement & Risk Disclosure</p>
         </div>
         
         <div class="consent-body">
-            <h2 class="consent-title"><span class="warning-icon">⚠️</span> USER AGREEMENT & LIABILITY WAIVER</h2>
-            <p class="consent-subtitle">Discord Automation Bot, Webull/Alpaca API Integration & Auto-Trading Tool</p>
+            <div class="alert-banner">
+                <span class="icon">⚠️</span>
+                <span class="text">Please read carefully. Trading involves significant financial risk including total loss of investment.</span>
+            </div>
             
-            <div class="consent-section section-warning">
-                <h3>1. Acknowledgment of Risk</h3>
-                <p>By installing, accessing, or using this software/application/bot ("Software"), you expressly acknowledge and agree that:</p>
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">1</span>
+                    Risk Acknowledgment
+                </div>
+                <div class="section-content danger">
+                    <p>By using this software, you acknowledge:</p>
+                    <ul>
+                        <li>Trading involves significant financial risk, including total loss of investment</li>
+                        <li>Automated trading may malfunction or execute trades incorrectly</li>
+                        <li>You accept full responsibility for all actions taken by this software</li>
+                    </ul>
+                    <p class="highlight-red">The developer assumes NO responsibility for your trading activity.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">2</span>
+                    No Financial Advice
+                </div>
+                <div class="section-content">
+                    <p>This software does not provide investment recommendations or guarantee any trading results. The developer is not your broker, advisor, or fiduciary. <strong>All trading decisions are 100% your responsibility.</strong></p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">3</span>
+                    No Warranty
+                </div>
+                <div class="section-content">
+                    <p>The software is provided "AS-IS" without any warranty of performance, accuracy, uptime, or profitability. You accept the software with all faults, known and unknown.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">4</span>
+                    Liability Waiver
+                </div>
+                <div class="section-content warning">
+                    <p>The developer is NOT liable for:</p>
+                    <ul>
+                        <li>Financial losses, lost profits, or missed trades</li>
+                        <li>Account liquidation, margin calls, or incorrect trades</li>
+                        <li>Technical failures, bugs, crashes, or API errors</li>
+                        <li>Any direct, indirect, or consequential damages</li>
+                    </ul>
+                    <p class="highlight">You release the developer from ALL claims arising from your use of this software.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">5</span>
+                    Discord & Broker Compliance
+                </div>
+                <div class="section-content">
+                    <p>Self-bots may violate Discord Terms of Service. You are solely responsible for compliance with Discord ToS, brokerage rules, and all applicable regulations. The developer is not affiliated with any broker.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">6</span>
+                    Local Data Storage
+                </div>
+                <div class="section-content">
+                    <p>All credentials (Discord token, API keys, login info) are stored locally on your machine. The developer does not store, access, or control your accounts or trades.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">7</span>
+                    No Legal Claims
+                </div>
+                <div class="section-content danger">
+                    <p>By using this software, you waive your right to sue the developer, make financial claims, or demand compensation of any kind. This agreement is binding to the fullest extent permitted by law.</p>
+                </div>
+            </div>
+            
+            <div class="final-box">
+                <h3>By Clicking "I Agree" You Confirm:</h3>
                 <ul>
-                    <li>Trading involves significant financial risk, including the possible loss of your entire investment.</li>
-                    <li>Automated trading may malfunction, execute trades incorrectly, or fail to execute trades.</li>
-                    <li>You alone are choosing to use this Software for trading purposes.</li>
-                    <li>You accept full responsibility for all actions taken by this Software.</li>
-                </ul>
-                <p style="margin-top: 10px; color: #ff6b6b; font-weight: 600;">The developer, creator, owner, or distributor ("Developer") assumes NO responsibility for your trading activity.</p>
-            </div>
-            
-            <div class="consent-section">
-                <h3>2. No Financial Advice - No Fiduciary Duty</h3>
-                <p>You understand and agree that:</p>
-                <ul>
-                    <li>The Software is not a financial advisor.</li>
-                    <li>The Software does not provide investment recommendations.</li>
-                    <li>The Software cannot and does not guarantee any trading results.</li>
-                    <li>The Developer is not acting as your broker, advisor, agent, or fiduciary.</li>
-                </ul>
-                <p style="margin-top: 10px; font-weight: 600;">Any trading decision you make is 100% your decision and your responsibility.</p>
-            </div>
-            
-            <div class="consent-section">
-                <h3>3. "As-Is" and "As-Available" - No Warranty</h3>
-                <p>The Software is provided strictly "AS-IS," "AS-AVAILABLE," and WITHOUT ANY WARRANTY OF ANY KIND. This includes (but is not limited to):</p>
-                <ul>
-                    <li>No warranty of performance, accuracy, or profitability</li>
-                    <li>No warranty of uptime or correct API behavior</li>
-                    <li>No guarantee of correct or timely order execution</li>
-                    <li>No guarantee of functioning risk management</li>
-                </ul>
-                <p style="margin-top: 10px;">You accept the Software with all faults, known and unknown.</p>
-            </div>
-            
-            <div class="consent-section section-critical">
-                <h3>4. Total Waiver of Liability</h3>
-                <p>To the maximum extent permitted by law, you agree that the Developer:</p>
-                <ul>
-                    <li>Is NOT liable for any direct, indirect, incidental, or consequential damages</li>
-                    <li>Is NOT liable for financial losses, lost profits, or missed trades</li>
-                    <li>Is NOT liable for late, duplicated, or incorrect trades</li>
-                    <li>Is NOT liable for account liquidation or margin calls</li>
-                    <li>Is NOT liable for emotional, psychological damages, or "loss of opportunity"</li>
-                    <li>Is NOT liable for technical failures, bugs, crashes, or API errors</li>
-                </ul>
-                <p style="margin-top: 10px; color: #ffc107; font-weight: 600;">You hereby release the Developer from ALL claims, known or unknown, arising from your use of this Software.</p>
-            </div>
-            
-            <div class="consent-section section-warning">
-                <h3>5. You Assume All Financial, Personal & Technical Risks</h3>
-                <p>This includes risks such as:</p>
-                <ul>
-                    <li>Market volatility and slippage</li>
-                    <li>Incorrect parsing of signals</li>
-                    <li>Discord message delays or self-bot behavior being blocked</li>
-                    <li>API rate limits, broker downtime, API changes</li>
-                    <li>Loss of API access or loss of funds</li>
-                    <li>Bot misinterpretation of trading signals</li>
-                    <li>Execution at unexpected prices</li>
-                    <li>Delayed or missing notifications</li>
-                </ul>
-                <p style="margin-top: 10px; color: #ff6b6b; font-weight: 600;">You accept ALL risks unconditionally.</p>
-            </div>
-            
-            <div class="consent-section">
-                <h3>6. Discord Self-Bot & Policy Compliance</h3>
-                <p>This Software may use automated message reading and self-bot functionality. You understand:</p>
-                <ul>
-                    <li>Self-bots may violate Discord Terms of Service.</li>
-                    <li>You alone are responsible for compliance with Discord ToS.</li>
-                    <li>The Developer is not responsible for Discord account bans, suspensions, server bans, or enforcement actions.</li>
-                </ul>
-                <p style="margin-top: 10px;">You use this Software on Discord at your own risk.</p>
-            </div>
-            
-            <div class="consent-section">
-                <h3>7. Brokerage & API Compliance (Webull, Alpaca, etc.)</h3>
-                <p>The Software may interact with brokerage APIs such as Webull, Alpaca, or others. You acknowledge that:</p>
-                <ul>
-                    <li>The Developer is not affiliated with any broker.</li>
-                    <li>The Developer does not guarantee API availability or accuracy.</li>
-                    <li>You alone are responsible for compliance with all brokerage rules, regulations, and policies.</li>
-                </ul>
-                <p style="margin-top: 10px;">The Developer is not liable for API outages, order failures, mis-executed trades, or brokerage account termination.</p>
-            </div>
-            
-            <div class="consent-section">
-                <h3>8. Credentials Stored Locally - Not Accessed by Developer</h3>
-                <p>All credentials (e.g., Discord token, API keys, Webull login) are stored locally on your machine. The Developer:</p>
-                <ul>
-                    <li>Does not store any credentials</li>
-                    <li>Does not have access to your accounts</li>
-                    <li>Does not collect personal data</li>
-                    <li>Does not control your trades</li>
-                </ul>
-                <p style="margin-top: 10px;">You are fully responsible for securing your system.</p>
-            </div>
-            
-            <div class="consent-section">
-                <h3>9. Indemnification</h3>
-                <p>You agree to indemnify, defend, and hold harmless the Developer from any claims, losses, damages, liabilities, legal costs, or expenses arising out of:</p>
-                <ul>
-                    <li>Your use of this Software and your trading activities</li>
-                    <li>Your violation of Discord or brokerage policies</li>
-                    <li>Your use of self-bot functionalities</li>
-                    <li>Any financial losses you incur</li>
-                    <li>Any misuse or unauthorized modification of this Software</li>
-                </ul>
-            </div>
-            
-            <div class="consent-section section-critical">
-                <h3>10. No Suing / No Claims / No Disputes</h3>
-                <p>By using this Software, you agree that:</p>
-                <ul>
-                    <li>You waive your right to sue the Developer for any reason whatsoever.</li>
-                    <li>You waive your right to make any financial or legal claims.</li>
-                    <li>You waive your right to demand compensation of any kind.</li>
-                </ul>
-                <p style="margin-top: 10px; color: #ffc107; font-weight: 600;">This agreement is binding and enforceable to the fullest extent permitted by law.</p>
-            </div>
-            
-            <div class="consent-section">
-                <h3>11. Termination of Access</h3>
-                <p>The Developer may modify, suspend, disable, or terminate the Software at any time, without notice, and without liability.</p>
-            </div>
-            
-            <div class="consent-section section-warning">
-                <h3>12. If You Do Not Agree - Do Not Use This Software</h3>
-                <p>If you do not accept all terms above:</p>
-                <ul>
-                    <li>You must exit the application immediately</li>
-                    <li>You must delete all files associated with this Software</li>
-                    <li>You must stop using all functionality immediately</li>
-                </ul>
-                <p style="margin-top: 10px; color: #ff6b6b; font-weight: 600;">Continuing to use the Software constitutes full legal acceptance.</p>
-            </div>
-            
-            <div class="consent-final">
-                <h3>13. Final Acknowledgment</h3>
-                <p>By clicking "I Agree" below, you affirm that:</p>
-                <ul style="text-align: left; padding-left: 40px; margin-top: 10px;">
-                    <li>You read and understood this entire agreement</li>
-                    <li>You fully accept all risks associated with automated trading</li>
-                    <li>You acknowledge the Developer is not liable for anything</li>
-                    <li>You waive all legal rights to sue the Developer</li>
-                    <li>You voluntarily choose to proceed at your own risk</li>
+                    <li>You have read and understood this entire agreement</li>
+                    <li>You accept all risks of automated trading</li>
+                    <li>You waive all legal rights to sue the developer</li>
                     <li>You are solely responsible for all consequences</li>
                 </ul>
             </div>
         </div>
         
-        <div class="checkbox-container" onclick="document.getElementById('agree-checkbox').click()">
-            <input type="checkbox" id="agree-checkbox" onchange="updateAgreeButton()">
-            <label for="agree-checkbox">I have read, understood, and agree to ALL terms in the User Agreement & Liability Waiver above</label>
+        <div class="checkbox-section">
+            <label class="checkbox-wrapper" id="checkbox-wrapper">
+                <input type="checkbox" id="agree-checkbox" onchange="updateAgreeButton()">
+                <div class="checkbox-inner">
+                    <div class="custom-checkbox">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    </div>
+                    <span class="checkbox-label">I have read, understood, and agree to ALL terms in the User Agreement & Liability Waiver</span>
+                </div>
+            </label>
         </div>
         
         <div class="consent-footer">
-            <button class="btn btn-decline" onclick="declineAgreement()">Decline & Exit</button>
+            <button class="btn btn-decline" onclick="declineAgreement()">Decline</button>
             <button class="btn btn-agree" id="agree-btn" disabled onclick="acceptAgreement()">I Agree</button>
         </div>
         
@@ -521,7 +529,15 @@
         function updateAgreeButton() {
             const checkbox = document.getElementById('agree-checkbox');
             const agreeBtn = document.getElementById('agree-btn');
+            const wrapper = document.getElementById('checkbox-wrapper');
+            
             agreeBtn.disabled = !checkbox.checked;
+            
+            if (checkbox.checked) {
+                wrapper.classList.add('checked');
+            } else {
+                wrapper.classList.remove('checked');
+            }
         }
         
         async function acceptAgreement() {
