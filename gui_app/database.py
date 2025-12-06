@@ -2388,6 +2388,10 @@ class Database:
     def __init__(self):
         init_db()
     
+    def get_connection(self):
+        """Get thread-safe database connection"""
+        return get_connection()
+    
     def get_channels(self, category=None):
         return get_channels(category)
     
