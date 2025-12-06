@@ -130,3 +130,4 @@ def get_version_info() -> Dict:
         'display': f"v{current}",
         'app_version': APP_VERSION
     }
+
