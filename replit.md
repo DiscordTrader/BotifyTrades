@@ -20,6 +20,7 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 4. **PLUGGABLE MODULES**: Self-contained modules in `src/`, communicate via callbacks
 5. **STRICT BUILD SEPARATION**: Admin build has NO trading features; User build requires license
 6. **CONSISTENCY CHECK**: Run `python scripts/check_consistency.py --quick` after changes
+7. **NO NAME CONFLICTS**: Never name local modules the same as third-party packages (e.g., `src/webull_auth/` not `src/webull/`)
 
 ### Module Structure
 ```
