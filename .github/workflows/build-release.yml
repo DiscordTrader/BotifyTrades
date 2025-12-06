@@ -1,0 +1,284 @@
+name: Build BotifyTrades
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pyarmor certifi
+          pip install discord.py-self webull flask cryptography requests openai aiohttp yfinance pandas numpy ta alpaca-py
+          pip install oauthlib requests-oauthlib python-dotenv ib_insync
+
+      - name: Obfuscate license code with PyArmor
+        run: |
+          mkdir -p dist_obf/src
+          pyarmor gen --output dist_obf/src src/license_client.py
+          pyarmor gen --output dist_obf/src src/license_manager.py
+          pyarmor gen --output dist_obf/src src/license_manager_secure.py
+          pyarmor gen --output dist_obf/src src/license_manager_activation.py
+          
+          mkdir -p src_backup
+          Copy-Item src/license_client.py src_backup/
+          Copy-Item src/license_manager.py src_backup/
+          Copy-Item src/license_manager_secure.py src_backup/
+          Copy-Item src/license_manager_activation.py src_backup/
+          
+          Copy-Item dist_obf/src/license_client.py src/ -Force
+          Copy-Item dist_obf/src/license_manager.py src/ -Force
+          Copy-Item dist_obf/src/license_manager_secure.py src/ -Force
+          Copy-Item dist_obf/src/license_manager_activation.py src/ -Force
+          
+          if (Test-Path "dist_obf/src/pyarmor_runtime_000000") {
+            Copy-Item -Recurse dist_obf/src/pyarmor_runtime_000000 src/
+          }
+
+      - name: Build Windows EXE
+        run: |
+          python -m PyInstaller --clean --noconfirm `
+            --distpath "packaging/windows/dist" `
+            --workpath "packaging/windows/build_temp" `
+            packaging/windows/specs/botifytrades.spec
+          
+      - name: Restore original source files
+        run: |
+          Copy-Item src_backup/license_client.py src/ -Force
+          Copy-Item src_backup/license_manager.py src/ -Force
+          Copy-Item src_backup/license_manager_secure.py src/ -Force
+          Copy-Item src_backup/license_manager_activation.py src/ -Force
+          Remove-Item -Recurse -Force src_backup
+          Remove-Item -Recurse -Force dist_obf
+          if (Test-Path "src/pyarmor_runtime_000000") {
+            Remove-Item -Recurse -Force src/pyarmor_runtime_000000
+          }
+
+      - name: Prepare distribution
+        shell: bash
+        run: |
+          mkdir -p packaging/windows/dist/BotifyTrades
+          if [ -f "packaging/windows/dist/BotifyTrades.exe" ]; then
+            mv packaging/windows/dist/BotifyTrades.exe packaging/windows/dist/BotifyTrades/
+          fi
+          cp config.ini.example packaging/windows/dist/BotifyTrades/ 2>/dev/null || true
+          cp GET_DISCORD_TOKEN.html packaging/windows/dist/BotifyTrades/ 2>/dev/null || true
+          cp GET_WEBULL_TOKENS.html packaging/windows/dist/BotifyTrades/ 2>/dev/null || true
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-Windows
+          path: packaging/windows/dist/BotifyTrades/
+          retention-days: 30
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pyarmor certifi
+          pip install discord.py-self webull flask cryptography requests openai aiohttp yfinance pandas numpy ta alpaca-py
+          pip install oauthlib requests-oauthlib python-dotenv ib_insync
+
+      - name: Obfuscate license code with PyArmor
+        run: |
+          mkdir -p dist_obf/src
+          pyarmor gen --output dist_obf/src src/license_client.py
+          pyarmor gen --output dist_obf/src src/license_manager.py
+          pyarmor gen --output dist_obf/src src/license_manager_secure.py
+          pyarmor gen --output dist_obf/src src/license_manager_activation.py
+          
+          mkdir -p src_backup
+          cp src/license_client.py src_backup/
+          cp src/license_manager.py src_backup/
+          cp src/license_manager_secure.py src_backup/
+          cp src/license_manager_activation.py src_backup/
+          
+          cp dist_obf/src/license_client.py src/
+          cp dist_obf/src/license_manager.py src/
+          cp dist_obf/src/license_manager_secure.py src/
+          cp dist_obf/src/license_manager_activation.py src/
+          
+          if [ -d "dist_obf/src/pyarmor_runtime_000000" ]; then
+            cp -r dist_obf/src/pyarmor_runtime_000000 src/
+          fi
+
+      - name: Build macOS app
+        run: |
+          python -m PyInstaller --clean --noconfirm \
+            --distpath "packaging/macos/dist" \
+            --workpath "packaging/macos/build_temp" \
+            packaging/macos/specs/botifytrades.spec
+          
+      - name: Restore original source files
+        run: |
+          cp src_backup/license_client.py src/
+          cp src_backup/license_manager.py src/
+          cp src_backup/license_manager_secure.py src/
+          cp src_backup/license_manager_activation.py src/
+          rm -rf src_backup dist_obf
+          rm -rf src/pyarmor_runtime_000000 2>/dev/null || true
+
+      - name: Prepare distribution
+        run: |
+          if [ -f "packaging/macos/dist/BotifyTrades" ]; then
+            mkdir -p packaging/macos/dist/BotifyTrades_dist
+            mv packaging/macos/dist/BotifyTrades packaging/macos/dist/BotifyTrades_dist/
+          elif [ ! -d "packaging/macos/dist/BotifyTrades" ]; then
+            mkdir -p packaging/macos/dist/BotifyTrades
+          fi
+          DIST_DIR="packaging/macos/dist/BotifyTrades"
+          if [ -d "packaging/macos/dist/BotifyTrades_dist" ]; then
+            DIST_DIR="packaging/macos/dist/BotifyTrades_dist"
+          fi
+          cp config.ini.example "$DIST_DIR/" 2>/dev/null || true
+          if [ -d "packaging/macos/dist/BotifyTrades_dist" ]; then
+            rm -rf packaging/macos/dist/BotifyTrades 2>/dev/null || true
+            mv packaging/macos/dist/BotifyTrades_dist packaging/macos/dist/BotifyTrades
+          fi
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-macOS
+          path: packaging/macos/dist/BotifyTrades/
+          retention-days: 30
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pyarmor certifi
+          pip install discord.py-self webull flask cryptography requests openai aiohttp yfinance pandas numpy ta alpaca-py
+          pip install oauthlib requests-oauthlib python-dotenv ib_insync
+
+      - name: Obfuscate license code with PyArmor
+        run: |
+          mkdir -p dist_obf/src
+          pyarmor gen --output dist_obf/src src/license_client.py
+          pyarmor gen --output dist_obf/src src/license_manager.py
+          pyarmor gen --output dist_obf/src src/license_manager_secure.py
+          pyarmor gen --output dist_obf/src src/license_manager_activation.py
+          
+          mkdir -p src_backup
+          cp src/license_client.py src_backup/
+          cp src/license_manager.py src_backup/
+          cp src/license_manager_secure.py src_backup/
+          cp src/license_manager_activation.py src_backup/
+          
+          cp dist_obf/src/license_client.py src/
+          cp dist_obf/src/license_manager.py src/
+          cp dist_obf/src/license_manager_secure.py src/
+          cp dist_obf/src/license_manager_activation.py src/
+          
+          if [ -d "dist_obf/src/pyarmor_runtime_000000" ]; then
+            cp -r dist_obf/src/pyarmor_runtime_000000 src/
+          fi
+
+      - name: Build Linux binary
+        run: |
+          python -m PyInstaller --clean --noconfirm \
+            --distpath "packaging/linux/dist" \
+            --workpath "packaging/linux/build_temp" \
+            packaging/linux/specs/botifytrades.spec
+          
+      - name: Restore original source files
+        run: |
+          cp src_backup/license_client.py src/
+          cp src_backup/license_manager.py src/
+          cp src_backup/license_manager_secure.py src/
+          cp src_backup/license_manager_activation.py src/
+          rm -rf src_backup dist_obf
+          rm -rf src/pyarmor_runtime_000000 2>/dev/null || true
+
+      - name: Prepare distribution
+        run: |
+          if [ -f "packaging/linux/dist/BotifyTrades" ]; then
+            mkdir -p packaging/linux/dist/BotifyTrades_dist
+            mv packaging/linux/dist/BotifyTrades packaging/linux/dist/BotifyTrades_dist/
+          elif [ ! -d "packaging/linux/dist/BotifyTrades" ]; then
+            mkdir -p packaging/linux/dist/BotifyTrades
+          fi
+          DIST_DIR="packaging/linux/dist/BotifyTrades"
+          if [ -d "packaging/linux/dist/BotifyTrades_dist" ]; then
+            DIST_DIR="packaging/linux/dist/BotifyTrades_dist"
+          fi
+          cp config.ini.example "$DIST_DIR/" 2>/dev/null || true
+          if [ -d "packaging/linux/dist/BotifyTrades_dist" ]; then
+            rm -rf packaging/linux/dist/BotifyTrades 2>/dev/null || true
+            mv packaging/linux/dist/BotifyTrades_dist packaging/linux/dist/BotifyTrades
+          fi
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-Linux
+          path: packaging/linux/dist/BotifyTrades/
+          retention-days: 30
+
+  create-release:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create ZIP archives
+        run: |
+          cd artifacts
+          zip -r BotifyTrades-Windows.zip BotifyTrades-Windows/
+          zip -r BotifyTrades-macOS.zip BotifyTrades-macOS/
+          zip -r BotifyTrades-Linux.zip BotifyTrades-Linux/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/BotifyTrades-Windows.zip
+            artifacts/BotifyTrades-macOS.zip
+            artifacts/BotifyTrades-Linux.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
