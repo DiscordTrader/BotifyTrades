@@ -8557,15 +8557,18 @@ def register_routes(app):
         """Run comprehensive system diagnostics"""
         try:
             import sys
-            sys.path.insert(0, 'scripts')
+            from pathlib import Path
+            scripts_path = Path(__file__).parent.parent / 'scripts'
+            if scripts_path.exists():
+                sys.path.insert(0, str(scripts_path))
             from system_diagnostics import run_diagnostics
             
             results = run_diagnostics()
             return jsonify({'success': True, **results})
+        except ImportError:
+            return jsonify({'success': False, 'error': 'Diagnostics not available in packaged build', 'packaged': True})
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return jsonify({'success': False, 'error': str(e)}), 500
+            return jsonify({'success': False, 'error': str(e)})
     
     @app.route('/api/health/run-tests', methods=['POST'])
     @login_required  
@@ -8603,7 +8606,10 @@ def register_routes(app):
         """Get database migration status"""
         try:
             import sys
-            sys.path.insert(0, 'scripts')
+            from pathlib import Path
+            scripts_path = Path(__file__).parent.parent / 'scripts'
+            if scripts_path.exists():
+                sys.path.insert(0, str(scripts_path))
             from migrations import MigrationManager
             
             manager = MigrationManager()
@@ -8618,8 +8624,10 @@ def register_routes(app):
                 'schema_validation': validation,
                 'needs_upgrade': len(missing) > 0
             })
+        except ImportError:
+            return jsonify({'success': False, 'error': 'Migrations not available in packaged build', 'packaged': True})
         except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
+            return jsonify({'success': False, 'error': str(e)})
     
     @app.route('/api/health/migrations/upgrade', methods=['POST'])
     @login_required
@@ -8627,17 +8635,20 @@ def register_routes(app):
         """Run database migration to create missing tables"""
         try:
             import sys
-            sys.path.insert(0, 'scripts')
+            from pathlib import Path
+            scripts_path = Path(__file__).parent.parent / 'scripts'
+            if scripts_path.exists():
+                sys.path.insert(0, str(scripts_path))
             from migrations import MigrationManager
             
             manager = MigrationManager()
             result = manager.upgrade()
             
             return jsonify({'success': True, **result})
+        except ImportError:
+            return jsonify({'success': False, 'error': 'Migrations not available in packaged build', 'packaged': True})
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return jsonify({'success': False, 'error': str(e)}), 500
+            return jsonify({'success': False, 'error': str(e)})
     
     # ============ AUTO-UPDATE SYSTEM ============
     
