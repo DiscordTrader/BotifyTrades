@@ -260,6 +260,82 @@ def create_app():
         
         return jsonify(result)
     
+    @app.route('/api/v1/license/activate', methods=['POST'])
+    def api_activate_license():
+        """Client activation endpoint - activates a license on a device"""
+        data = request.get_json() or {}
+        license_key = data.get('license_key')
+        machine_id = data.get('machine_id')
+        machine_info = data.get('machine_info', {})
+        
+        if not license_key:
+            return jsonify({'success': False, 'is_valid': False, 'error': 'License key required'}), 400
+        if not machine_id:
+            return jsonify({'success': False, 'is_valid': False, 'error': 'Machine ID required'}), 400
+        
+        result = db.activate_license(license_key, machine_id, machine_info)
+        
+        if result.get('success'):
+            db.add_audit_log('license_activated',
+                           license_key=license_key,
+                           details=f"Machine: {machine_id[:16]}...",
+                           ip_address=request.remote_addr)
+        
+        return jsonify(result)
+    
+    @app.route('/api/v1/license/validate', methods=['POST'])
+    def api_validate_license_v1():
+        """Client validation endpoint - validates a license"""
+        data = request.get_json() or {}
+        license_key = data.get('license_key')
+        machine_id = data.get('machine_id')
+        
+        if not license_key:
+            return jsonify({'success': False, 'is_valid': False, 'error': 'License key required'}), 400
+        
+        result = db.validate_license_for_client(license_key, machine_id)
+        return jsonify(result)
+    
+    @app.route('/api/v1/license/trial', methods=['POST'])
+    def api_request_trial():
+        """Client trial request endpoint"""
+        data = request.get_json() or {}
+        machine_id = data.get('machine_id')
+        machine_info = data.get('machine_info', {})
+        
+        if not machine_id:
+            return jsonify({'success': False, 'error': 'Machine ID required'}), 400
+        
+        result = db.create_trial_license(machine_id, machine_info)
+        
+        if result.get('success'):
+            db.add_audit_log('trial_created',
+                           license_key=result.get('license_key'),
+                           details=f"Machine: {machine_id[:16]}...",
+                           ip_address=request.remote_addr)
+        
+        return jsonify(result)
+    
+    @app.route('/api/v1/license/deactivate', methods=['POST'])
+    def api_deactivate_license():
+        """Client deactivation endpoint"""
+        data = request.get_json() or {}
+        license_key = data.get('license_key')
+        machine_id = data.get('machine_id')
+        
+        if not license_key or not machine_id:
+            return jsonify({'success': False, 'error': 'License key and machine ID required'}), 400
+        
+        result = db.deactivate_device(license_key, machine_id)
+        
+        if result.get('success'):
+            db.add_audit_log('device_deactivated',
+                           license_key=license_key,
+                           details=f"Machine: {machine_id[:16]}...",
+                           ip_address=request.remote_addr)
+        
+        return jsonify(result)
+    
     @app.after_request
     def add_cache_headers(response):
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'

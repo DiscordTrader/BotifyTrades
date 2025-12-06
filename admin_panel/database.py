@@ -417,4 +417,184 @@ def add_audit_log(action: str, license_key: str = None, admin_user: str = None,
         ''', (action, license_key, admin_user, details, ip_address))
 
 
+def activate_license(license_key: str, machine_id: str, machine_info: Dict = None) -> Dict:
+    """Activate a license on a device - called by client"""
+    import json
+    import base64
+    import hmac
+    import hashlib
+    
+    license_data = get_license(license_key)
+    
+    if not license_data:
+        return {'success': False, 'is_valid': False, 'error': 'Invalid license key'}
+    
+    if license_data['revoked']:
+        return {'success': False, 'is_valid': False, 'error': 'License has been revoked'}
+    
+    if license_data['expires_at']:
+        expires = datetime.fromisoformat(license_data['expires_at'])
+        if expires < datetime.now():
+            return {'success': False, 'is_valid': False, 'error': 'License has expired'}
+    
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            'SELECT COUNT(*) FROM device_activations WHERE license_key = ?',
+            (license_key,)
+        )
+        active_count = cursor.fetchone()[0]
+        
+        cursor.execute(
+            'SELECT * FROM device_activations WHERE license_key = ? AND device_id = ?',
+            (license_key, machine_id)
+        )
+        existing = cursor.fetchone()
+        
+        if not existing and active_count >= license_data['max_devices']:
+            return {'success': False, 'is_valid': False, 
+                    'error': f'Maximum devices ({license_data["max_devices"]}) reached'}
+        
+        now = datetime.now()
+        if existing:
+            cursor.execute(
+                'UPDATE device_activations SET last_seen = ?, machine_info = ? WHERE license_key = ? AND device_id = ?',
+                (now.isoformat(), json.dumps(machine_info) if machine_info else None, license_key, machine_id)
+            )
+        else:
+            cursor.execute('''
+                INSERT INTO device_activations (license_key, device_id, activated_at, last_seen, machine_info)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (license_key, machine_id, now.isoformat(), now.isoformat(), 
+                  json.dumps(machine_info) if machine_info else None))
+    
+    days_remaining = 0
+    expires_str = None
+    if license_data['expires_at']:
+        expires = datetime.fromisoformat(license_data['expires_at'])
+        expires_str = expires.strftime('%Y-%m-%d %H:%M:%S')
+        days_remaining = max(0, (expires - datetime.now()).days)
+    
+    customer_id = f"customer_{license_key[-8:]}"
+    
+    signed_payload = {
+        'machine_id': machine_id,
+        'customer_id': customer_id,
+        'license_type': license_data['license_type'],
+        'days_remaining': days_remaining,
+        'expires': expires_str,
+        'is_valid': True,
+        'signed_at': now.isoformat(),
+        'offline_grace_expires': (now + timedelta(hours=48)).isoformat()
+    }
+    
+    payload_json = json.dumps(signed_payload, sort_keys=True)
+    payload_b64 = base64.b64encode(payload_json.encode()).decode()
+    signature = hmac.new(b'license_server_secret', payload_b64.encode(), hashlib.sha256).hexdigest()
+    signed_token = f"{payload_b64}.{signature}"
+    
+    return {
+        'success': True,
+        'is_valid': True,
+        'customer_id': customer_id,
+        'license_type': license_data['license_type'],
+        'days_remaining': days_remaining,
+        'expires': expires_str,
+        'message': 'License activated',
+        'signed_token': signed_token
+    }
+
+
+def validate_license_for_client(license_key: str, machine_id: str) -> Dict:
+    """Validate a license for client - returns client-compatible response"""
+    license_data = get_license(license_key)
+    
+    if not license_data:
+        return {'success': False, 'is_valid': False, 'error': 'Invalid license key'}
+    
+    if license_data['revoked']:
+        return {'success': False, 'is_valid': False, 'error': 'License has been revoked'}
+    
+    if license_data['expires_at']:
+        expires = datetime.fromisoformat(license_data['expires_at'])
+        if expires < datetime.now():
+            return {'success': False, 'is_valid': False, 'error': 'License has expired'}
+    
+    if machine_id:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'UPDATE device_activations SET last_seen = ? WHERE license_key = ? AND device_id = ?',
+                (datetime.now().isoformat(), license_key, machine_id)
+            )
+    
+    days_remaining = 0
+    if license_data['expires_at']:
+        expires = datetime.fromisoformat(license_data['expires_at'])
+        days_remaining = max(0, (expires - datetime.now()).days)
+    
+    return {
+        'success': True,
+        'is_valid': True,
+        'license_type': license_data['license_type'],
+        'days_remaining': days_remaining,
+        'expires': license_data['expires_at']
+    }
+
+
+def create_trial_license(machine_id: str, machine_info: Dict = None) -> Dict:
+    """Create a trial license for a machine"""
+    import json
+    
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT license_key FROM device_activations WHERE device_id = ?',
+            (machine_id,)
+        )
+        existing = cursor.fetchone()
+        if existing:
+            lic = get_license(existing['license_key'])
+            if lic and lic['license_type'] == 'trial':
+                return {'success': False, 'error': 'Trial already used on this device'}
+    
+    license_key = f"BT-TRIAL-{secrets.token_hex(4).upper()}"
+    expires_at = (datetime.now() + timedelta(days=7)).isoformat()
+    
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO licenses (license_key, license_type, max_devices, expires_at, notes)
+            VALUES (?, 'trial', 1, ?, 'Auto-generated trial')
+        ''', (license_key, expires_at))
+        
+        cursor.execute('''
+            INSERT INTO device_activations (license_key, device_id, activated_at, last_seen, machine_info)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (license_key, machine_id, datetime.now().isoformat(), datetime.now().isoformat(),
+              json.dumps(machine_info) if machine_info else None))
+    
+    return {
+        'success': True,
+        'license_key': license_key,
+        'expires_at': expires_at,
+        'days_remaining': 7,
+        'license_type': 'trial'
+    }
+
+
+def deactivate_device(license_key: str, machine_id: str) -> Dict:
+    """Deactivate a device from a license"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'DELETE FROM device_activations WHERE license_key = ? AND device_id = ?',
+            (license_key, machine_id)
+        )
+        if cursor.rowcount > 0:
+            return {'success': True, 'message': 'Device deactivated'}
+        return {'success': False, 'error': 'Device not found'}
+
+
 init_database()
