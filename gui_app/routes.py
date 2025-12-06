@@ -1451,7 +1451,7 @@ def register_routes(app):
         else:
             # Fallback: Use WebullAuth directly when bot is not running
             try:
-                from src.webull import WebullAuth
+                from src.webull_auth import WebullAuth
                 from .broker_credentials_service import webull_credentials_adapter, get_webull_credentials
                 
                 creds = get_webull_credentials()
@@ -1732,7 +1732,7 @@ def register_routes(app):
         if not _bot_instance or not hasattr(_bot_instance, 'broker'):
             # Fallback: Use WebullAuth directly when bot is not running
             try:
-                from src.webull import WebullAuth
+                from src.webull_auth import WebullAuth
                 from .broker_credentials_service import webull_credentials_adapter, get_webull_credentials
                 
                 creds = get_webull_credentials()
@@ -6140,7 +6140,7 @@ def register_routes(app):
     def api_webull_auth_login():
         """Login to Webull with MFA support using WebullAuth module"""
         try:
-            from src.webull import WebullAuth
+            from src.webull_auth import WebullAuth
             from .broker_credentials_service import webull_credentials_adapter, get_webull_credentials
             
             data = request.json
@@ -6203,7 +6203,7 @@ def register_routes(app):
     def api_webull_request_mfa():
         """Request MFA code to be sent to email/phone"""
         try:
-            from src.webull import WebullAuth
+            from src.webull_auth import WebullAuth
             from .broker_credentials_service import get_webull_credentials
             
             data = request.json
@@ -6236,7 +6236,7 @@ def register_routes(app):
     def api_webull_security_question():
         """Get security question for MFA"""
         try:
-            from src.webull import WebullAuth
+            from src.webull_auth import WebullAuth
             from .broker_credentials_service import get_webull_credentials
             
             data = request.json
@@ -6270,7 +6270,7 @@ def register_routes(app):
     def api_webull_session_login():
         """Login using saved session tokens"""
         try:
-            from src.webull import WebullAuth
+            from src.webull_auth import WebullAuth
             from .broker_credentials_service import webull_credentials_adapter, get_webull_credentials
             
             data = request.json
@@ -6465,7 +6465,7 @@ def register_routes(app):
                     return jsonify({'success': False, 'error': 'Please enter your Webull password and 6-digit Trade PIN'}), 400
                 
                 try:
-                    from src.webull import WebullAuth
+                    from src.webull_auth import WebullAuth
                     from .broker_credentials_service import webull_credentials_adapter
                     
                     is_paper = broker_id == 'webull_paper'
