@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuantumPulse UI Mockups - Gallery</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="mockup-styles.css">
+    <style>
+        .gallery-container { max-width: 1400px; margin: 40px auto; padding: 20px; }
+        .gallery-header { text-align: center; margin-bottom: 48px; }
+        .gallery-title {
+            font-size: 3rem;
+            font-family: 'Orbitron', sans-serif;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 16px;
+        }
+        .gallery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 32px; }
+        .mockup-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 20px; transition: all 0.3s ease; }
+        .mockup-card:hover { transform: translateY(-4px); border-color: var(--accent-teal); box-shadow: var(--shadow-glow); }
+        .mockup-thumbnail {
+            width: 100%;
+            height: 240px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            overflow: hidden;
+        }
+        .mockup-thumbnail iframe { width: 100%; height: 800px; transform: scale(0.3); transform-origin: top left; pointer-events: none; }
+        .mockup-name { font-size: 1.125rem; font-weight: 700; margin-bottom: 8px; }
+        .mockup-desc { font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 16px; }
+        .mockup-link { display: inline-block; padding: 8px 20px; background: var(--accent-gradient); color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 0.875rem; }
+        .mockup-link:hover { box-shadow: var(--shadow-glow); }
+    </style>
+</head>
+<body>
+    <div class="gallery-container">
+        <div class="gallery-header">
+            <h1 class="gallery-title">Ψ∿ QuantumPulse</h1>
+            <h2 style="font-size: 1.5rem; color: var(--text-secondary); margin-bottom: 8px;">UI Mockups Gallery</h2>
+            <p style="color: var(--text-muted);">Professional trading platform interface screenshots</p>
+        </div>
+
+        <div class="gallery-grid">
+            <!-- Mockup 1 -->
+            <div class="mockup-card">
+                <div class="mockup-thumbnail">📡</div>
+                <h3 class="mockup-name">Discord Signal Monitor</h3>
+                <p class="mockup-desc">
+                    Live Discord signal monitoring with 24/7 automation, channel tracking, and AI pre-trade validation (premium feature).
+                </p>
+                <a href="1-discord-signals.html" class="mockup-link" target="_blank">View Mockup →</a>
+            </div>
+
+            <!-- Mockup 2 -->
+            <div class="mockup-card">
+                <div class="mockup-thumbnail">⚡</div>
+                <h3 class="mockup-name">Automated Trade Execution</h3>
+                <p class="mockup-desc">
+                    Multi-broker execution panel showing trades across Webull, Alpaca, and IBKR with price slippage protection.
+                </p>
+                <a href="2-trade-execution.html" class="mockup-link" target="_blank">View Mockup →</a>
+            </div>
+
+            <!-- Mockup 3 -->
+            <div class="mockup-card">
+                <div class="mockup-thumbnail">📊</div>
+                <h3 class="mockup-name">Live Trading Positions</h3>
+                <p class="mockup-desc">
+                    Real-time position tracking with P/L monitoring, risk level indicators, and AI risk analysis (premium).
+                </p>
+                <a href="3-live-positions.html" class="mockup-link" target="_blank">View Mockup →</a>
+            </div>
+
+            <!-- Mockup 4 -->
+            <div class="mockup-card">
+                <div class="mockup-thumbnail">📈</div>
+                <h3 class="mockup-name">Options Chain Preview</h3>
+                <p class="mockup-desc">
+                    Live options chain with Greeks, IV tracking, and AI-powered strike selection recommendations (premium).
+                </p>
+                <a href="4-options-chain.html" class="mockup-link" target="_blank">View Mockup →</a>
+            </div>
+
+            <!-- Mockup 5 -->
+            <div class="mockup-card">
+                <div class="mockup-thumbnail">🏆</div>
+                <h3 class="mockup-name">Performance Leaderboard</h3>
+                <p class="mockup-desc">
+                    User and channel rankings with win rates, P/L tracking, and historical analytics (premium feature).
+                </p>
+                <a href="5-leaderboard.html" class="mockup-link" target="_blank">View Mockup →</a>
+            </div>
+
+            <!-- Mockup 6 -->
+            <div class="mockup-card">
+                <div class="mockup-thumbnail">🤖</div>
+                <h3 class="mockup-name">AI Trade Analysis</h3>
+                <p class="mockup-desc">
+                    GPT-powered analysis with probability models, technical indicators, and smart recommendations (locked for trial).
+                </p>
+                <a href="6-ai-analysis.html" class="mockup-link" target="_blank">View Mockup →</a>
+            </div>
+
+            <!-- Mockup 7 -->
+            <div class="mockup-card">
+                <div class="mockup-thumbnail">🛡️</div>
+                <h3 class="mockup-name">Risk Management Panel</h3>
+                <p class="mockup-desc">
+                    Automated profit targets, stop losses, trailing stops, and real-time risk scoring (AI engine premium).
+                </p>
+                <a href="7-risk-management.html" class="mockup-link" target="_blank">View Mockup →</a>
+            </div>
+
+            <!-- Mockup 8 -->
+            <div class="mockup-card">
+                <div class="mockup-thumbnail">🖥️</div>
+                <h3 class="mockup-name">Full Dashboard Composite</h3>
+                <p class="mockup-desc">
+                    Complete dashboard view combining all panels - positions, signals, leaderboard, AI analysis, and controls.
+                </p>
+                <a href="8-dashboard-composite.html" class="mockup-link" target="_blank">View Mockup →</a>
+            </div>
+        </div>
+
+        <div style="margin-top: 64px; text-align: center; padding: 32px; background: var(--bg-card); border-radius: 16px; border: 1px solid var(--border-color);">
+            <h3 style="font-size: 1.25rem; margin-bottom: 16px;">Ready to Use These Mockups?</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 24px;">
+                These mockups are perfect for your landing page, marketing materials, and pitch decks.
+            </p>
+            <div style="display: flex; gap: 16px; justify-content: center;">
+                <a href="../index.html" class="mockup-link" style="padding: 12px 32px; font-size: 1rem;">View Landing Page</a>
+                <a href="../auth.html" class="mockup-link" style="padding: 12px 32px; font-size: 1rem; background: transparent; border: 2px solid var(--accent-teal); color: var(--accent-teal);">Sign Up</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

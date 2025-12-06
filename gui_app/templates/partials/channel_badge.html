@@ -1,0 +1,31 @@
+{# 
+  Channel Source Badge Component
+  
+  Usage: {% include 'partials/channel_badge.html' with context %}
+  
+  Required context:
+    - source_info: Dict from get_trade_source_display() with keys:
+      - name: Display name (e.g., "#2k-forged-by-steel")
+      - type: 'execute', 'track', 'manual', 'sync', 'risk', or 'unknown'
+      - color: 'blue', 'purple', 'orange', 'gray', or 'dark'
+      - icon: Icon/emoji for display
+      - full_name: Full tooltip text
+  
+  Alternative usage with trade object:
+    - trade: Trade dict with 'channel_id' and 'source' fields
+      (will auto-generate source_info if not provided)
+#}
+
+{% if source_info %}
+<span class="channel-badge channel-badge--{{ source_info.color }}" 
+      title="{{ source_info.full_name }}"
+      data-channel-type="{{ source_info.type }}">
+    <span class="channel-badge__icon">{{ source_info.icon }}</span>
+    <span class="channel-badge__name">{{ source_info.name }}</span>
+</span>
+{% else %}
+<span class="channel-badge channel-badge--dark" title="Unknown source">
+    <span class="channel-badge__icon">#</span>
+    <span class="channel-badge__name">Unknown</span>
+</span>
+{% endif %}

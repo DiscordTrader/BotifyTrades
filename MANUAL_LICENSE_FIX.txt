@@ -1,0 +1,89 @@
+╔══════════════════════════════════════════════════════════════════╗
+║   LICENSE KEY COPY/PASTE CORRUPTION FIX - MANUAL METHOD         ║
+╚══════════════════════════════════════════════════════════════════╝
+
+PROBLEM:
+The :: (double colon) separator in your license key is being stripped
+or corrupted when you copy/paste it into the terminal or text fields.
+
+YOUR LICENSE KEY HAS TWO PARTS:
+════════════════════════════════════════════════════════════════════
+
+Part 1 (Payload - Base64 JSON):
+   eyJjdXN0b21lcl9pZCI6ICIwNWRiNDc5MzFjNmE4YzllIiwgImRheXMiOiA3LCAiZXhwaXJlcyI6ICIyMDI1LTExLTI0VDAxOjEyOjExLjE2OTgzNiIsICJpc3N1ZWQiOiAiMjAyNS0xMS0xN1QwMToxMjoxMS4xNjk4MzYifQ
+
+Part 2 (Signature - Base64 HMAC):
+   Vs2j4trBJxOjBUZrbpXnEPT0HBik5wdxBNVaBlx/iuo=
+
+COMPLETE KEY (with :: separator):
+   Part1::Part2
+
+
+SOLUTION 1: Edit config.ini Directly
+════════════════════════════════════════════════════════════════════
+
+1. Open config.ini in Notepad:
+   notepad config.ini
+
+2. Find the [License] section:
+   [License]
+   LICENSE_KEY = 
+
+3. Paste this COMPLETE reconstructed key:
+   LICENSE_KEY = eyJjdXN0b21lcl9pZCI6ICIwNWRiNDc5MzFjNmE4YzllIiwgImRheXMiOiA3LCAiZXhwaXJlcyI6ICIyMDI1LTExLTI0VDAxOjEyOjExLjE2OTgzNiIsICJpc3N1ZWQiOiAiMjAyNS0xMS0xN1QwMToxMjoxMS4xNjk4MzYifQ::Vs2j4trBJxOjBUZrbpXnEPT0HBik5wdxBNVaBlx/iuo=
+
+4. Save and close Notepad
+
+5. Test the license:
+   python TEST_LICENSE_KEY.py
+
+
+SOLUTION 2: Use .env File
+════════════════════════════════════════════════════════════════════
+
+1. Create/edit .env file:
+   notepad .env
+
+2. Add this line:
+   LICENSE_KEY=eyJjdXN0b21lcl9pZCI6ICIwNWRiNDc5MzFjNmE4YzllIiwgImRheXMiOiA3LCAiZXhwaXJlcyI6ICIyMDI1LTExLTI0VDAxOjEyOjExLjE2OTgzNiIsICJpc3N1ZWQiOiAiMjAyNS0xMS0xN1QwMToxMjoxMS4xNjk4MzYifQ::Vs2j4trBJxOjBUZrbpXnEPT0HBik5wdxBNVaBlx/iuo=
+
+3. Save and close
+
+4. The bot will automatically load this on startup
+
+
+SOLUTION 3: Use the Automated Fixer Script
+════════════════════════════════════════════════════════════════════
+
+1. Run: FIX_LICENSE_KEY.bat
+
+2. It will ask you to paste Part 1 and Part 2 separately
+
+3. It automatically reconstructs the key with :: and saves to .env
+
+
+VERIFICATION:
+════════════════════════════════════════════════════════════════════
+
+After applying any solution, test with:
+   python TEST_LICENSE_KEY.py
+
+You should see:
+   ✅ LICENSE IS VALID!
+   Customer ID: 05db47931c6a8c9e
+   Expires: 2025-11-24 01:12
+   Days Remaining: 7
+
+
+WHY THIS HAPPENS:
+════════════════════════════════════════════════════════════════════
+
+Some terminals and text fields have special handling for the colon
+character ":" which can cause it to be stripped, escaped, or
+converted when copy/pasting. By editing the file directly with
+Notepad, you bypass this issue.
+
+
+═══════════════════════════════════════════════════════════════════
+                        READY TO USE! ✅
+═══════════════════════════════════════════════════════════════════

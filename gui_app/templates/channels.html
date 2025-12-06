@@ -1,0 +1,1347 @@
+{% extends "base.html" %}
+
+{% block title %}Channel Configuration{% endblock %}
+
+{% block extra_css %}
+<style>
+    :root {
+        --mint: #0FF0B3;
+        --violet: #7C3AED;
+        --charcoal: #0E1117;
+        --card-bg: rgba(20, 24, 33, 0.85);
+        --card-border: rgba(255, 255, 255, 0.08);
+        --text-primary: #FFFFFF;
+        --text-secondary: rgba(255, 255, 255, 0.6);
+        --text-muted: rgba(255, 255, 255, 0.4);
+        --success: #10B981;
+        --warning: #F59E0B;
+        --danger: #EF4444;
+    }
+
+    .channels-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 0 20px;
+    }
+
+    .page-header {
+        text-align: center;
+        margin-bottom: 40px;
+        padding: 30px 0;
+    }
+
+    .page-header h1 {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 2.5rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, var(--mint) 0%, var(--violet) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 10px;
+    }
+
+    .page-header p {
+        color: var(--text-secondary);
+        font-size: 1.1rem;
+    }
+
+    .stats-bar {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        margin-bottom: 40px;
+        flex-wrap: wrap;
+    }
+
+    .stat-pill {
+        background: var(--card-bg);
+        backdrop-filter: blur(20px);
+        border: 1px solid var(--card-border);
+        border-radius: 50px;
+        padding: 12px 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .stat-pill .icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+    }
+
+    .stat-pill .icon.execute { background: linear-gradient(135deg, var(--success), #059669); }
+    .stat-pill .icon.track { background: linear-gradient(135deg, var(--mint), #06B6D4); }
+    .stat-pill .icon.dual { background: linear-gradient(135deg, var(--warning), #D97706); }
+    .stat-pill .icon.total { background: linear-gradient(135deg, var(--violet), #9333EA); }
+
+    .stat-pill .value {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .stat-pill .label {
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+    }
+
+    .add-channel-card {
+        background: var(--card-bg);
+        backdrop-filter: blur(20px);
+        border: 2px dashed rgba(15, 240, 179, 0.3);
+        border-radius: 20px;
+        padding: 30px;
+        margin-bottom: 40px;
+        transition: all 0.3s ease;
+    }
+
+    .add-channel-card:hover {
+        border-color: var(--mint);
+        box-shadow: 0 0 30px rgba(15, 240, 179, 0.1);
+    }
+
+    .add-channel-card h3 {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.3rem;
+        color: var(--mint);
+        margin-bottom: 25px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .form-row {
+        display: grid;
+        grid-template-columns: 2fr 1.5fr 1fr 1fr auto;
+        gap: 20px;
+        align-items: end;
+    }
+
+    @media (max-width: 992px) {
+        .form-row {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+
+    @media (max-width: 576px) {
+        .form-row {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .form-group label {
+        display: block;
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        font-weight: 500;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .form-input {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--card-border);
+        border-radius: 12px;
+        padding: 14px 18px;
+        color: var(--text-primary);
+        font-size: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .form-input:focus {
+        outline: none;
+        border-color: var(--mint);
+        box-shadow: 0 0 0 3px rgba(15, 240, 179, 0.1);
+    }
+
+    .form-input::placeholder {
+        color: var(--text-muted);
+    }
+
+    .mode-toggle-group {
+        display: flex;
+        gap: 15px;
+    }
+
+    .mode-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+
+    .mode-toggle input {
+        display: none;
+    }
+
+    .mode-toggle .toggle-box {
+        width: 44px;
+        height: 24px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        position: relative;
+        transition: all 0.3s ease;
+    }
+
+    .mode-toggle .toggle-box::after {
+        content: '';
+        position: absolute;
+        width: 18px;
+        height: 18px;
+        background: white;
+        border-radius: 50%;
+        top: 3px;
+        left: 3px;
+        transition: all 0.3s ease;
+    }
+
+    .mode-toggle input:checked + .toggle-box {
+        background: linear-gradient(135deg, var(--mint) 0%, var(--violet) 100%);
+    }
+
+    .mode-toggle input:checked + .toggle-box::after {
+        left: 23px;
+    }
+
+    .mode-toggle span {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+    }
+
+    .btn-add {
+        background: linear-gradient(135deg, var(--mint) 0%, var(--violet) 100%);
+        border: none;
+        border-radius: 12px;
+        padding: 14px 28px;
+        color: #000;
+        font-weight: 600;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+    }
+
+    .btn-add:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 30px rgba(15, 240, 179, 0.3);
+    }
+
+    .channels-section h2 {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.5rem;
+        color: var(--text-primary);
+        margin-bottom: 25px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .channels-section h2 .count {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 20px;
+        padding: 4px 14px;
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
+
+    .channels-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+        gap: 24px;
+    }
+
+    @media (max-width: 480px) {
+        .channels-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .channel-card {
+        background: var(--card-bg);
+        backdrop-filter: blur(20px);
+        border: 1px solid var(--card-border);
+        border-radius: 20px;
+        padding: 24px;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .channel-card:hover {
+        border-color: rgba(15, 240, 179, 0.3);
+        transform: translateY(-4px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .channel-card.inactive {
+        opacity: 0.6;
+        border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .channel-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 20px;
+    }
+
+    .channel-info {
+        flex: 1;
+    }
+
+    .channel-name {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .channel-name .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--success);
+    }
+
+    .channel-name .status-dot.inactive {
+        background: var(--danger);
+    }
+
+    .channel-id {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        background: rgba(255, 255, 255, 0.05);
+        padding: 4px 10px;
+        border-radius: 6px;
+        display: inline-block;
+    }
+
+    .channel-mode-badge {
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .channel-mode-badge.execute {
+        background: rgba(16, 185, 129, 0.2);
+        color: var(--success);
+        border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .channel-mode-badge.track {
+        background: rgba(15, 240, 179, 0.15);
+        color: var(--mint);
+        border: 1px solid rgba(15, 240, 179, 0.3);
+    }
+
+    .channel-mode-badge.dual {
+        background: rgba(245, 158, 11, 0.2);
+        color: var(--warning);
+        border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .channel-mode-badge.none {
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text-muted);
+        border: 1px solid var(--card-border);
+    }
+
+    .channel-controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+
+    .control-group {
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 12px;
+        padding: 14px;
+    }
+
+    .control-group label {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        margin-bottom: 10px;
+    }
+
+    .control-group .toggle-switch {
+        position: relative;
+        width: 44px;
+        height: 24px;
+    }
+
+    .control-group .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .control-group .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 24px;
+        transition: 0.3s;
+    }
+
+    .control-group .slider::before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background: white;
+        border-radius: 50%;
+        transition: 0.3s;
+    }
+
+    .control-group input:checked + .slider {
+        background: linear-gradient(135deg, var(--mint) 0%, #06B6D4 100%);
+    }
+
+    .control-group input:checked + .slider::before {
+        transform: translateX(20px);
+    }
+
+    .control-group.execute input:checked + .slider {
+        background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
+    }
+
+    .position-size-input {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .position-size-input input {
+        width: 70px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--card-border);
+        border-radius: 8px;
+        padding: 8px 12px;
+        color: var(--text-primary);
+        font-size: 0.9rem;
+        text-align: center;
+    }
+
+    .position-size-input input:focus {
+        outline: none;
+        border-color: var(--mint);
+    }
+
+    .position-size-input input.exec-input {
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .position-size-input input.exec-input:focus {
+        border-color: var(--success);
+    }
+
+    .position-size-input span {
+        color: var(--text-muted);
+        font-size: 0.85rem;
+    }
+
+    .channel-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-top: 16px;
+        border-top: 1px solid var(--card-border);
+    }
+
+    .user-filter-btn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--card-border);
+        border-radius: 10px;
+        padding: 10px 16px;
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .user-filter-btn:hover {
+        background: rgba(15, 240, 179, 0.1);
+        border-color: var(--mint);
+        color: var(--mint);
+    }
+
+    .user-filter-btn .user-count {
+        background: var(--mint);
+        color: #000;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 0.75rem;
+    }
+
+    .user-filter-btn .user-count.all {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text-muted);
+    }
+
+    .delete-btn {
+        background: transparent;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        border-radius: 10px;
+        padding: 10px 16px;
+        color: var(--danger);
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .delete-btn:hover {
+        background: rgba(239, 68, 68, 0.1);
+        border-color: var(--danger);
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 80px 40px;
+        background: var(--card-bg);
+        backdrop-filter: blur(20px);
+        border: 2px dashed var(--card-border);
+        border-radius: 20px;
+    }
+
+    .empty-state .icon {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
+
+    .empty-state h3 {
+        font-family: 'Space Grotesk', sans-serif;
+        color: var(--text-primary);
+        margin-bottom: 10px;
+    }
+
+    .empty-state p {
+        color: var(--text-secondary);
+        max-width: 400px;
+        margin: 0 auto;
+    }
+
+    .help-card {
+        background: linear-gradient(135deg, rgba(15, 240, 179, 0.05) 0%, rgba(124, 58, 237, 0.05) 100%);
+        border: 1px solid rgba(15, 240, 179, 0.2);
+        border-radius: 16px;
+        padding: 24px;
+        margin-top: 40px;
+    }
+
+    .help-card h4 {
+        font-family: 'Space Grotesk', sans-serif;
+        color: var(--mint);
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .help-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+    }
+
+    .help-item {
+        display: flex;
+        gap: 12px;
+    }
+
+    .help-item .badge {
+        flex-shrink: 0;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .help-item .badge.execute { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+    .help-item .badge.track { background: rgba(15, 240, 179, 0.15); color: var(--mint); }
+    .help-item .badge.dual { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+    .help-item .badge.percent { background: rgba(124, 58, 237, 0.2); color: var(--violet); }
+
+    .help-item p {
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        margin: 0;
+        line-height: 1.5;
+    }
+
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(10px);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+    }
+
+    .modal-overlay.active {
+        display: flex;
+    }
+
+    .modal-content {
+        background: var(--charcoal);
+        border: 1px solid var(--card-border);
+        border-radius: 24px;
+        max-width: 600px;
+        width: 100%;
+        max-height: 80vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .modal-header {
+        background: linear-gradient(135deg, var(--mint) 0%, var(--violet) 100%);
+        padding: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .modal-header h3 {
+        font-family: 'Space Grotesk', sans-serif;
+        color: #000;
+        font-size: 1.25rem;
+        margin: 0;
+    }
+
+    .modal-close {
+        background: rgba(0, 0, 0, 0.2);
+        border: none;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        color: #000;
+        font-size: 1.2rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+    }
+
+    .modal-close:hover {
+        background: rgba(0, 0, 0, 0.3);
+    }
+
+    .modal-body {
+        padding: 24px;
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    .add-user-form {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: 12px;
+        margin-bottom: 24px;
+    }
+
+    @media (max-width: 576px) {
+        .add-user-form {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .user-list {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    .user-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 12px;
+        margin-bottom: 10px;
+    }
+
+    .user-item .user-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .user-item .avatar {
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(135deg, var(--mint) 0%, var(--violet) 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        color: #000;
+    }
+
+    .user-item .user-name {
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    .user-item .user-id {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+    }
+
+    .user-item .remove-btn {
+        background: transparent;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        color: var(--danger);
+        padding: 8px 14px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .user-item .remove-btn:hover {
+        background: rgba(239, 68, 68, 0.1);
+    }
+
+    .notification {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: var(--card-bg);
+        border: 1px solid var(--mint);
+        border-radius: 12px;
+        padding: 16px 24px;
+        color: var(--text-primary);
+        z-index: 2000;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        animation: slideIn 0.3s ease;
+        max-width: 400px;
+    }
+
+    .notification.error {
+        border-color: var(--danger);
+    }
+
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="channels-container">
+    <div class="page-header">
+        <h1>Channel Configuration</h1>
+        <p>Manage Discord channels for signal monitoring and trade execution</p>
+    </div>
+
+    <div class="stats-bar" id="statsBar">
+        <div class="stat-pill">
+            <div class="icon total">📊</div>
+            <div>
+                <div class="value" id="totalChannels">0</div>
+                <div class="label">Total Channels</div>
+            </div>
+        </div>
+        <div class="stat-pill">
+            <div class="icon execute">🚀</div>
+            <div>
+                <div class="value" id="executeCount">0</div>
+                <div class="label">Execute Mode</div>
+            </div>
+        </div>
+        <div class="stat-pill">
+            <div class="icon track">📈</div>
+            <div>
+                <div class="value" id="trackCount">0</div>
+                <div class="label">Track Mode</div>
+            </div>
+        </div>
+        <div class="stat-pill">
+            <div class="icon dual">⚡</div>
+            <div>
+                <div class="value" id="dualCount">0</div>
+                <div class="label">Dual Mode</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="add-channel-card">
+        <h3><span>➕</span> Add New Channel</h3>
+        <form id="addChannelForm">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Discord Channel ID</label>
+                    <input type="text" class="form-input" id="newChannelId" 
+                           placeholder="123456789012345678" required>
+                </div>
+                <div class="form-group">
+                    <label>Channel Name</label>
+                    <input type="text" class="form-input" id="newChannelName" 
+                           placeholder="my-signals" required>
+                </div>
+                <div class="form-group">
+                    <label>Execute Trades</label>
+                    <label class="mode-toggle">
+                        <input type="checkbox" id="newExecuteEnabled">
+                        <div class="toggle-box"></div>
+                        <span>Live</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>Track Signals</label>
+                    <label class="mode-toggle">
+                        <input type="checkbox" id="newTrackEnabled">
+                        <div class="toggle-box"></div>
+                        <span>Paper</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn-add">
+                        <span>✓</span> Add Channel
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="channels-section">
+        <h2>
+            <span>📋</span> Active Channels 
+            <span class="count" id="channelCount">0 channels</span>
+        </h2>
+        
+        <div class="channels-grid" id="channelsGrid">
+            <div class="empty-state">
+                <div class="icon">📭</div>
+                <h3>No Channels Configured</h3>
+                <p>Add your first Discord channel above to start monitoring trading signals.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-card">
+        <h4><span>💡</span> Quick Guide</h4>
+        <div class="help-grid">
+            <div class="help-item">
+                <span class="badge execute">Execute</span>
+                <p>Signals trigger real trades on connected brokers (Webull, Alpaca, IBKR)</p>
+            </div>
+            <div class="help-item">
+                <span class="badge track">Track</span>
+                <p>Signals are logged for paper trading and performance analysis only</p>
+            </div>
+            <div class="help-item">
+                <span class="badge dual">Dual</span>
+                <p>Both modes active - execute real trades while also tracking performance</p>
+            </div>
+            <div class="help-item">
+                <span class="badge percent">Position %</span>
+                <p>Set per-channel position sizing as percentage of buying power</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="userModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>👥 Manage Users - <span id="modalChannelName"></span></h3>
+            <button class="modal-close" onclick="closeUserModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div style="background: rgba(15, 240, 179, 0.1); border-radius: 12px; padding: 14px; margin-bottom: 20px;">
+                <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 0;">
+                    <strong style="color: var(--mint);">User Filtering:</strong> Add specific Discord users whose signals will be executed. 
+                    Leave empty to execute signals from <strong>all users</strong> in this channel.
+                </p>
+            </div>
+            
+            <div class="add-user-form">
+                <input type="text" class="form-input" id="newUserId" 
+                       placeholder="Discord User ID">
+                <input type="text" class="form-input" id="newUsername" 
+                       placeholder="Username (optional)">
+                <button class="btn-add" onclick="addAllowedUser()">Add</button>
+            </div>
+            
+            <div class="user-list" id="allowedUsersList">
+                <div style="text-align: center; color: var(--text-muted); padding: 40px;">
+                    Loading users...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let allChannels = [];
+let currentChannelId = null;
+let currentChannelName = '';
+let channelUserCounts = {};
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadChannels();
+    
+    document.getElementById('addChannelForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        addChannel();
+    });
+
+    document.getElementById('userModal').addEventListener('click', function(e) {
+        if (e.target === this) closeUserModal();
+    });
+});
+
+async function loadChannels() {
+    try {
+        const response = await fetch('/api/channels');
+        allChannels = await response.json();
+        
+        for (const channel of allChannels) {
+            try {
+                const usersResponse = await fetch(`/api/channels/${channel.id}/allowed_users`);
+                const users = await usersResponse.json();
+                channelUserCounts[channel.id] = users.length;
+            } catch (e) {
+                channelUserCounts[channel.id] = 0;
+            }
+        }
+        
+        updateStats();
+        renderChannels();
+    } catch (error) {
+        console.error('Error loading channels:', error);
+        document.getElementById('channelsGrid').innerHTML = `
+            <div class="empty-state">
+                <div class="icon">❌</div>
+                <h3>Error Loading Channels</h3>
+                <p>${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+function updateStats() {
+    const total = allChannels.length;
+    const execute = allChannels.filter(c => c.execute_enabled && !c.track_enabled).length;
+    const track = allChannels.filter(c => c.track_enabled && !c.execute_enabled).length;
+    const dual = allChannels.filter(c => c.execute_enabled && c.track_enabled).length;
+    
+    document.getElementById('totalChannels').textContent = total;
+    document.getElementById('executeCount').textContent = execute;
+    document.getElementById('trackCount').textContent = track;
+    document.getElementById('dualCount').textContent = dual;
+    document.getElementById('channelCount').textContent = `${total} channel${total !== 1 ? 's' : ''}`;
+}
+
+function renderChannels() {
+    const grid = document.getElementById('channelsGrid');
+    
+    if (allChannels.length === 0) {
+        grid.innerHTML = `
+            <div class="empty-state" style="grid-column: 1 / -1;">
+                <div class="icon">📭</div>
+                <h3>No Channels Configured</h3>
+                <p>Add your first Discord channel above to start monitoring trading signals.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    grid.innerHTML = allChannels.map(channel => {
+        const executeEnabled = channel.execute_enabled === 1;
+        const trackEnabled = channel.track_enabled === 1;
+        const isActive = channel.is_active === 1;
+        const userCount = channelUserCounts[channel.id] || 0;
+        
+        let modeClass = 'none';
+        let modeText = 'Inactive';
+        if (executeEnabled && trackEnabled) {
+            modeClass = 'dual';
+            modeText = 'Dual Mode';
+        } else if (executeEnabled) {
+            modeClass = 'execute';
+            modeText = 'Execute';
+        } else if (trackEnabled) {
+            modeClass = 'track';
+            modeText = 'Track';
+        }
+        
+        return `
+            <div class="channel-card ${isActive ? '' : 'inactive'}">
+                <div class="channel-card-header">
+                    <div class="channel-info">
+                        <div class="channel-name">
+                            <span class="status-dot ${isActive ? '' : 'inactive'}"></span>
+                            ${channel.name}
+                        </div>
+                        <span class="channel-id">${channel.discord_channel_id}</span>
+                    </div>
+                    <span class="channel-mode-badge ${modeClass}">${modeText}</span>
+                </div>
+                
+                <div class="channel-controls">
+                    <div class="control-group execute">
+                        <label>
+                            Execute Trades
+                            <label class="toggle-switch">
+                                <input type="checkbox" ${executeEnabled ? 'checked' : ''} 
+                                       onchange="toggleExecute(${channel.id}, this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </label>
+                        <div class="position-size-input">
+                            <input type="number" 
+                                   value="${channel.position_size_pct || ''}" 
+                                   placeholder="Auto"
+                                   min="0.1" max="100" step="0.1"
+                                   class="exec-input"
+                                   onchange="updatePositionSize(${channel.id}, this.value, 'execution')">
+                            <span>% position</span>
+                        </div>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>
+                            Track Signals
+                            <label class="toggle-switch">
+                                <input type="checkbox" ${trackEnabled ? 'checked' : ''} 
+                                       onchange="toggleTrack(${channel.id}, this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </label>
+                        <div class="position-size-input">
+                            <input type="number" 
+                                   value="${channel.tracking_position_size_pct || ''}" 
+                                   placeholder="Auto"
+                                   min="0.1" max="100" step="0.1"
+                                   onchange="updatePositionSize(${channel.id}, this.value, 'tracking')">
+                            <span>% position</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="channel-footer">
+                    <button class="user-filter-btn" onclick="openUserModal(${channel.id}, '${channel.name}')">
+                        👥 Users
+                        <span class="user-count ${userCount > 0 ? '' : 'all'}">${userCount > 0 ? userCount : 'All'}</span>
+                    </button>
+                    <button class="delete-btn" onclick="deleteChannel(${channel.id})">
+                        🗑️ Delete
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function addChannel() {
+    const channelId = document.getElementById('newChannelId').value.trim();
+    const name = document.getElementById('newChannelName').value.trim();
+    const executeEnabled = document.getElementById('newExecuteEnabled').checked ? 1 : 0;
+    const trackEnabled = document.getElementById('newTrackEnabled').checked ? 1 : 0;
+    
+    if (!channelId || !name) {
+        showNotification('Please fill in all required fields', 'error');
+        return;
+    }
+    
+    if (!executeEnabled && !trackEnabled) {
+        showNotification('Please enable at least one mode (Execute or Track)', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/channels', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                discord_channel_id: channelId,
+                name: name,
+                execute_enabled: executeEnabled,
+                track_enabled: trackEnabled
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            document.getElementById('addChannelForm').reset();
+            await loadChannels();
+            showNotification('Channel added successfully!');
+        } else {
+            showNotification('Error: ' + (result.error || 'Failed to add channel'), 'error');
+        }
+    } catch (error) {
+        showNotification('Error adding channel: ' + error.message, 'error');
+    }
+}
+
+async function toggleExecute(channelId, enabled) {
+    try {
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ execute_enabled: enabled ? 1 : 0 })
+        });
+        
+        if (response.ok) {
+            await loadChannels();
+            showNotification(`Execute mode ${enabled ? 'enabled' : 'disabled'}`);
+        } else {
+            showNotification('Error updating channel', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function toggleTrack(channelId, enabled) {
+    try {
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ track_enabled: enabled ? 1 : 0 })
+        });
+        
+        if (response.ok) {
+            await loadChannels();
+            showNotification(`Track mode ${enabled ? 'enabled' : 'disabled'}`);
+        } else {
+            showNotification('Error updating channel', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function updatePositionSize(channelId, value, sizeType = 'execution') {
+    try {
+        const positionSizePct = value === '' ? null : parseFloat(value);
+        
+        if (positionSizePct !== null && (positionSizePct < 0.1 || positionSizePct > 100)) {
+            showNotification('Position size must be between 0.1% and 100%', 'error');
+            await loadChannels();
+            return;
+        }
+        
+        const fieldName = sizeType === 'tracking' ? 'tracking_position_size_pct' : 'position_size_pct';
+        
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [fieldName]: positionSizePct })
+        });
+        
+        if (response.ok) {
+            const displayValue = positionSizePct ? `${positionSizePct}%` : 'Auto';
+            showNotification(`${sizeType === 'tracking' ? 'Track' : 'Execute'} position size set to ${displayValue}`);
+        } else {
+            showNotification('Error updating position size', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function deleteChannel(channelId) {
+    if (!confirm('Are you sure you want to delete this channel? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/channels/${channelId}`, { method: 'DELETE' });
+        
+        if (response.ok) {
+            await loadChannels();
+            showNotification('Channel deleted successfully');
+        } else {
+            showNotification('Error deleting channel', 'error');
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+    }
+}
+
+function openUserModal(channelId, channelName) {
+    currentChannelId = channelId;
+    currentChannelName = channelName;
+    document.getElementById('modalChannelName').textContent = channelName;
+    document.getElementById('userModal').classList.add('active');
+    loadAllowedUsers();
+}
+
+function closeUserModal() {
+    document.getElementById('userModal').classList.remove('active');
+    currentChannelId = null;
+}
+
+async function loadAllowedUsers() {
+    const container = document.getElementById('allowedUsersList');
+    
+    try {
+        const response = await fetch(`/api/channels/${currentChannelId}/allowed_users`);
+        const users = await response.json();
+        
+        if (users.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; color: var(--text-muted); padding: 40px;">
+                    <div style="font-size: 2rem; margin-bottom: 10px;">👥</div>
+                    <p>No users added. Signals from <strong>all users</strong> will be processed.</p>
+                </div>
+            `;
+        } else {
+            container.innerHTML = users.map(user => {
+                const displayName = user.discord_username || 'Unknown User';
+                const initial = displayName[0].toUpperCase();
+                return `
+                <div class="user-item">
+                    <div class="user-info">
+                        <div class="avatar">${initial}</div>
+                        <div>
+                            <div class="user-name">${displayName}</div>
+                            <div class="user-id">${user.discord_user_id}</div>
+                        </div>
+                    </div>
+                    <button class="remove-btn" onclick="removeAllowedUser('${user.discord_user_id}')">
+                        Remove
+                    </button>
+                </div>
+            `}).join('');
+        }
+    } catch (error) {
+        container.innerHTML = `<div style="color: var(--danger); text-align: center;">Error loading users</div>`;
+    }
+}
+
+async function addAllowedUser() {
+    const userId = document.getElementById('newUserId').value.trim();
+    const username = document.getElementById('newUsername').value.trim() || userId;
+    
+    if (!userId) {
+        showNotification('Please enter a Discord User ID', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/channels/${currentChannelId}/allowed_users`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ discord_user_id: userId, discord_username: username })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            document.getElementById('newUserId').value = '';
+            document.getElementById('newUsername').value = '';
+            await loadAllowedUsers();
+            await loadChannels();
+            showNotification('User added successfully');
+        } else {
+            showNotification(result.error || 'Failed to add user', 'error');
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+    }
+}
+
+async function removeAllowedUser(userId) {
+    try {
+        const response = await fetch(`/api/channels/${currentChannelId}/allowed_users/${userId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            await loadAllowedUsers();
+            await loadChannels();
+            showNotification('User removed');
+        } else {
+            showNotification('Error removing user', 'error');
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+    }
+}
+
+function showNotification(message, type = 'success') {
+    const existing = document.querySelector('.notification');
+    if (existing) existing.remove();
+    
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.innerHTML = `
+        <span>${type === 'success' ? '✓' : '⚠'}</span>
+        <span>${message}</span>
+    `;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => notification.remove(), 4000);
+}
+</script>
+{% endblock %}

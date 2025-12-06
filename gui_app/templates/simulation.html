@@ -1,0 +1,1473 @@
+{% extends "base.html" %}
+
+{% block title %}Simulation Engine - Ψ∿ BotifyTrades{% endblock %}
+
+{% block content %}
+
+<div class="simulation-header" style="margin-bottom: 32px;">
+    <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+        <div style="flex: 1;">
+            <h1 style="font-size: 1.75rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 2rem;">🎯</span>
+                Portfolio Simulation Engine
+            </h1>
+            <p style="color: var(--text-secondary); margin-top: 8px; font-size: 0.9375rem;">
+                Project future portfolio growth based on trader performance statistics
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="simulation-layout" style="display: grid; grid-template-columns: 400px 1fr; gap: 24px;">
+    
+    <div class="simulation-form-container">
+        <div class="card" style="padding: 24px;">
+            <h3 style="margin: 0 0 20px 0; font-size: 1.125rem; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                <span>⚙️</span> Configuration
+            </h3>
+            
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label class="form-label">Simulation Target</label>
+                <div class="tabs" style="margin-bottom: 12px;">
+                    <button class="tab active" id="tab-user" onclick="switchEntityType('user', event)">👤 User</button>
+                    <button class="tab" id="tab-channel" onclick="switchEntityType('channel', event)">📊 Channel</button>
+                </div>
+                <div style="position: relative;">
+                    <input type="text" id="entity-id" class="form-input" placeholder="Start typing to search..." style="padding-right: 40px;" oninput="handleAutocomplete(this.value)" autocomplete="off">
+                    <button onclick="loadEntityStats()" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: var(--info); border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 0.75rem; color: white;">Load</button>
+                    <div id="autocomplete-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; margin-top: 4px; max-height: 250px; overflow-y: auto; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+                    </div>
+                </div>
+                <div id="stats-preview" style="display: none; margin-top: 12px; padding: 12px; background: var(--bg-darker); border-radius: 8px; font-size: 0.8125rem;">
+                </div>
+                <div id="quick-simulate-section" style="display: none; margin-top: 12px; padding: 12px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(59, 130, 246, 0.1)); border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.3);">
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 10px;">
+                        ✨ <strong>Simulation Modes</strong>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+                        <button onclick="runHistoricalSimulation()" class="btn" style="width: 100%; padding: 10px; font-size: 0.8125rem; font-weight: 600; background: linear-gradient(135deg, #8b5cf6, #6366f1); border: none;">
+                            📜 Replay Actual Trades
+                        </button>
+                        <button onclick="runExactTradesSimulation()" class="btn" style="width: 100%; padding: 10px; font-size: 0.8125rem; font-weight: 600; background: linear-gradient(135deg, #10b981, #059669); border: none;">
+                            🎯 Simulate Averages
+                        </button>
+                    </div>
+                    
+                    <div style="font-size: 0.6875rem; color: var(--text-muted); margin-bottom: 8px; padding: 6px; background: rgba(139, 92, 246, 0.1); border-radius: 4px;">
+                        <strong>📜 Replay Actual</strong>: Uses each trade's real P&L % (e.g., AAPL +25%, TSLA -8%)
+                    </div>
+                    <div style="font-size: 0.6875rem; color: var(--text-muted); margin-bottom: 10px; padding: 6px; background: rgba(16, 185, 129, 0.1); border-radius: 4px;">
+                        <strong>🎯 Simulate Averages</strong>: Uses avg win/loss % with optional overrides below
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                        <div>
+                            <label style="font-size: 0.6875rem; color: var(--text-muted); display: block; margin-bottom: 3px;">Win % Override</label>
+                            <input type="number" id="exact-win-rate-override" placeholder="From stats" step="0.1" min="0" max="100" style="width: 100%; padding: 6px 8px; background: var(--bg-darker); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 0.8125rem;">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.6875rem; color: var(--text-muted); display: block; margin-bottom: 3px;">Avg Loss % Override</label>
+                            <input type="number" id="exact-avg-loss-override" placeholder="e.g. 30 = -30%" step="0.1" style="width: 100%; padding: 6px 8px; background: var(--bg-darker); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 0.8125rem;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-divider" style="border-top: 1px solid var(--border-color); margin: 20px 0;"></div>
+            
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label">Starting Portfolio</label>
+                <div style="position: relative;">
+                    <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary);">$</span>
+                    <input type="number" id="portfolio-start" class="form-input" value="3000" min="100" step="100" style="padding-left: 28px;">
+                </div>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label">Simulation Period (Days)</label>
+                <input type="number" id="sim-days" class="form-input" value="30" min="1" max="365">
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label">Trades Per Day <span style="color: var(--text-muted); font-weight: 400;">(leave empty for auto)</span></label>
+                <input type="number" id="trades-per-day" class="form-input" placeholder="From stats" min="0" step="0.1">
+            </div>
+            
+            <div class="form-divider" style="border-top: 1px solid var(--border-color); margin: 20px 0;"></div>
+            
+            <h4 style="margin: 0 0 12px 0; font-size: 0.9375rem; font-weight: 600; color: var(--text-secondary);">Risk Management</h4>
+            
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label">Risk Per Trade</label>
+                <div style="display: grid; grid-template-columns: 1fr 120px; gap: 8px;">
+                    <input type="number" id="risk-value" class="form-input" value="300" min="1" step="10">
+                    <select id="risk-mode" class="form-select" onchange="updateRiskPlaceholder()">
+                        <option value="fixed">$ Fixed</option>
+                        <option value="percent">% of Balance</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="compound" checked style="width: 18px; height: 18px; cursor: pointer;">
+                    <span>Compound Returns</span>
+                    <span style="color: var(--text-muted); font-weight: 400; font-size: 0.75rem;">(reinvest profits daily)</span>
+                </label>
+            </div>
+            
+            <div class="form-divider" style="border-top: 1px solid var(--border-color); margin: 20px 0;"></div>
+            
+            <details style="margin-bottom: 16px;">
+                <summary style="cursor: pointer; font-size: 0.9375rem; font-weight: 600; color: var(--text-secondary); padding: 8px 0;">
+                    ⚡ Override Stats (Advanced)
+                </summary>
+                <div style="padding-top: 12px;">
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label class="form-label">Win Rate Override (%)</label>
+                        <input type="number" id="win-rate-override" class="form-input" placeholder="From stats" min="0" max="100" step="1">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label class="form-label">Avg Win % Override</label>
+                        <input type="number" id="avg-win-override" class="form-input" placeholder="From stats" step="1">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label">Avg Loss % Override</label>
+                        <input type="number" id="avg-loss-override" class="form-input" placeholder="From stats (negative)" step="1">
+                    </div>
+                </div>
+            </details>
+            
+            <button onclick="runSimulation()" id="run-btn" class="btn btn-primary" style="width: 100%; padding: 14px; font-size: 1rem; font-weight: 600; margin-top: 8px;">
+                🚀 Run Simulation
+            </button>
+        </div>
+        
+        <div class="card" style="padding: 16px; margin-top: 16px;">
+            <h4 style="margin: 0 0 12px 0; font-size: 0.875rem; font-weight: 600; color: var(--text-secondary);">Quick Presets</h4>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                <button onclick="applyPreset('conservative')" class="preset-btn">💎 Conservative</button>
+                <button onclick="applyPreset('moderate')" class="preset-btn">⚖️ Moderate</button>
+                <button onclick="applyPreset('aggressive')" class="preset-btn">🔥 Aggressive</button>
+                <button onclick="applyPreset('fixed300')" class="preset-btn">💵 Fixed $300</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="simulation-results">
+        <div id="results-placeholder" class="card" style="padding: 60px 40px; text-align: center;">
+            <div style="font-size: 4rem; margin-bottom: 16px; opacity: 0.3;">📊</div>
+            <h3 style="margin: 0 0 8px 0; font-size: 1.25rem; color: var(--text-secondary);">No Simulation Yet</h3>
+            <p style="color: var(--text-muted); margin: 0; font-size: 0.9375rem;">
+                Configure parameters and click "Run Simulation" to see projected results
+            </p>
+        </div>
+        
+        <div id="results-container" style="display: none;">
+            <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 24px;">
+                <div class="stat-card">
+                    <div class="stat-label">Final Balance</div>
+                    <div class="stat-value success" id="result-final-balance">$0.00</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Profit</div>
+                    <div class="stat-value" id="result-total-profit">$0.00</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Return</div>
+                    <div class="stat-value info" id="result-total-return">0%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Expected/Trade</div>
+                    <div class="stat-value" id="result-expected-trade">0%</div>
+                </div>
+            </div>
+            
+            <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 24px;">
+                <div class="stat-card">
+                    <div class="stat-label">Avg Daily Profit</div>
+                    <div class="stat-value" id="result-avg-daily">$0.00</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Weekly Estimate</div>
+                    <div class="stat-value" id="result-weekly">$0.00</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Monthly Estimate</div>
+                    <div class="stat-value" id="result-monthly">$0.00</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Edge Quality</div>
+                    <div class="stat-value" id="result-edge">-</div>
+                </div>
+            </div>
+            
+            <div class="card-grid" style="margin-bottom: 24px;">
+                <div class="card">
+                    <h4 class="card-header" style="display: flex; align-items: center; gap: 8px;">
+                        <span>📈</span> Portfolio Growth Chart
+                    </h4>
+                    <div id="chart-container" style="height: 280px; position: relative;">
+                        <canvas id="growth-chart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h4 class="card-header" style="display: flex; align-items: center; gap: 8px;">
+                        <span>💡</span> Strategy Recommendation
+                    </h4>
+                    <div id="warnings-section" style="display: none; background: rgba(255, 193, 7, 0.15); border: 1px solid rgba(255, 193, 7, 0.4); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+                        <div style="display: flex; align-items: center; gap: 8px; color: #ffc107; font-weight: 600; margin-bottom: 8px;">
+                            <span>⚠️</span> Data Quality Warnings
+                        </div>
+                        <ul id="warnings-list" style="font-size: 0.8125rem; line-height: 1.6; margin: 0; padding-left: 20px; color: rgba(255, 255, 255, 0.85);">
+                        </ul>
+                    </div>
+                    <div id="strategy-text" style="font-size: 0.9375rem; line-height: 1.7; white-space: pre-wrap; padding: 8px 0;">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card" id="daily-breakdown-card">
+                <h4 class="card-header" style="display: flex; align-items: center; justify-content: space-between;">
+                    <span style="display: flex; align-items: center; gap: 8px;">
+                        <span>📋</span> Daily Breakdown
+                    </span>
+                    <button onclick="toggleBreakdown()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;">
+                        Toggle Table
+                    </button>
+                </h4>
+                <div id="daily-breakdown" style="display: none; max-height: 400px; overflow-y: auto;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 60px;">Day</th>
+                                <th style="text-align: right;">Start Balance</th>
+                                <th style="text-align: right;">Position Size</th>
+                                <th style="text-align: right;">Trades</th>
+                                <th style="text-align: right;">Exp. Wins</th>
+                                <th style="text-align: right;">Exp. Losses</th>
+                                <th style="text-align: right;">Daily P/L</th>
+                                <th style="text-align: right;">End Balance</th>
+                                <th style="text-align: right;">Cum. Return</th>
+                            </tr>
+                        </thead>
+                        <tbody id="breakdown-body">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="card" id="historical-breakdown-card" style="display: none;">
+                <h4 class="card-header" style="display: flex; align-items: center; justify-content: space-between;">
+                    <span style="display: flex; align-items: center; gap: 8px;">
+                        <span>📜</span> Actual Trade History
+                    </span>
+                    <button onclick="toggleHistoricalBreakdown()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;">
+                        Toggle Table
+                    </button>
+                </h4>
+                <div id="historical-breakdown" style="display: none; max-height: 400px; overflow-y: auto;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">#</th>
+                                <th>Ticker</th>
+                                <th style="text-align: center;">Date</th>
+                                <th style="text-align: right;">Actual Position</th>
+                                <th style="text-align: right;">Sim Position</th>
+                                <th style="text-align: center;">Result</th>
+                                <th style="text-align: right;">P&L %</th>
+                                <th style="text-align: right;">Sim P&L</th>
+                                <th style="text-align: right;">Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historical-breakdown-body">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="card" style="margin-top: 24px; background: var(--bg-darker);">
+                <h4 class="card-header" style="display: flex; align-items: center; gap: 8px;">
+                    <span>📊</span> Simulation Parameters Used
+                </h4>
+                <div id="params-used" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; font-size: 0.875rem;">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.form-label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.form-input, .form-select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-darker);
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-input:focus, .form-select:focus {
+    outline: none;
+    border-color: var(--info);
+    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.15);
+}
+
+.form-input::placeholder {
+    color: var(--text-muted);
+}
+
+.preset-btn {
+    padding: 10px 12px;
+    background: var(--bg-darker);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.preset-btn:hover {
+    background: var(--card-hover);
+    border-color: var(--info);
+}
+
+.stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-family: 'Space Grotesk', monospace;
+}
+
+.stat-value.success { color: var(--success); }
+.stat-value.danger { color: var(--danger); }
+.stat-value.info { color: var(--info); }
+.stat-value.warning { color: var(--warning); }
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+}
+
+.data-table th, .data-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.data-table th {
+    background: var(--bg-darker);
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    font-size: 0.6875rem;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+}
+
+.data-table tbody tr:hover {
+    background: var(--card-hover);
+}
+
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+}
+
+@media (max-width: 1200px) {
+    .simulation-layout {
+        grid-template-columns: 1fr !important;
+    }
+    
+    .card-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+}
+
+@media (max-width: 600px) {
+    .stats-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+#run-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.param-item {
+    padding: 8px 12px;
+    background: var(--card-bg);
+    border-radius: 6px;
+}
+
+.param-label {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.param-value {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 2px;
+}
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let currentEntityType = 'user';
+let growthChart = null;
+let lastSimulationResult = null;
+
+let autocompleteTimeout = null;
+
+function switchEntityType(type, event) {
+    currentEntityType = type;
+    document.querySelectorAll('.simulation-form-container .tabs .tab').forEach(t => t.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('entity-id').placeholder = 'Start typing to search...';
+    document.getElementById('entity-id').value = '';
+    document.getElementById('stats-preview').style.display = 'none';
+    document.getElementById('quick-simulate-section').style.display = 'none';
+    document.getElementById('autocomplete-dropdown').style.display = 'none';
+}
+
+async function handleAutocomplete(query) {
+    const dropdown = document.getElementById('autocomplete-dropdown');
+    
+    // Clear previous timeout
+    if (autocompleteTimeout) {
+        clearTimeout(autocompleteTimeout);
+    }
+    
+    // Hide dropdown if query is empty
+    if (!query || query.length < 1) {
+        dropdown.style.display = 'none';
+        return;
+    }
+    
+    // Debounce - wait 200ms before searching
+    autocompleteTimeout = setTimeout(async () => {
+        try {
+            const response = await fetch(`/api/simulate/autocomplete/${currentEntityType}?q=${encodeURIComponent(query)}`);
+            const data = await response.json();
+            
+            if (!data.success || !data.results.length) {
+                dropdown.style.display = 'none';
+                return;
+            }
+            
+            // Build dropdown HTML
+            dropdown.innerHTML = data.results.map(item => `
+                <div class="autocomplete-item" onclick="selectAutocomplete('${item.name.replace(/'/g, "\\'")}')" 
+                     style="padding: 10px 14px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color);"
+                     onmouseover="this.style.background='var(--bg-hover)'" 
+                     onmouseout="this.style.background='transparent'">
+                    <span style="font-weight: 500;">${currentEntityType === 'user' ? '👤' : '📊'} ${item.name}</span>
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">${item.trades} trades</span>
+                </div>
+            `).join('');
+            
+            dropdown.style.display = 'block';
+            
+        } catch (error) {
+            console.error('Autocomplete error:', error);
+            dropdown.style.display = 'none';
+        }
+    }, 200);
+}
+
+function selectAutocomplete(name) {
+    document.getElementById('entity-id').value = name;
+    document.getElementById('autocomplete-dropdown').style.display = 'none';
+    loadEntityStats(); // Auto-load stats when selected
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    const dropdown = document.getElementById('autocomplete-dropdown');
+    const input = document.getElementById('entity-id');
+    if (dropdown && !dropdown.contains(e.target) && e.target !== input) {
+        dropdown.style.display = 'none';
+    }
+});
+
+async function loadEntityStats() {
+    const entityId = document.getElementById('entity-id').value.trim();
+    if (!entityId) {
+        showToast('Please enter a ' + currentEntityType + ' name', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/simulate/stats/${currentEntityType}/${encodeURIComponent(entityId)}`);
+        const data = await response.json();
+        
+        if (!data.success) {
+            showToast(data.error || 'Failed to load stats', 'error');
+            document.getElementById('stats-preview').style.display = 'none';
+            return;
+        }
+        
+        const stats = data.stats;
+        const preview = document.getElementById('stats-preview');
+        preview.innerHTML = `
+            <div style="font-weight: 600; margin-bottom: 8px; color: var(--info);">📊 ${stats.name}</div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                <div><span style="color: var(--text-muted);">Trades:</span> ${stats.total_trades}</div>
+                <div><span style="color: var(--text-muted);">Win Rate:</span> ${stats.win_rate}%</div>
+                <div><span style="color: var(--text-muted);">Avg Win:</span> ${stats.avg_win_pct > 0 ? '+' : ''}${stats.avg_win_pct}%</div>
+                <div><span style="color: var(--text-muted);">Avg Loss:</span> ${stats.avg_loss_pct}%</div>
+                <div><span style="color: var(--text-muted);">Total P/L:</span> <span class="${stats.total_pnl >= 0 ? 'success' : 'danger'}">$${stats.total_pnl.toLocaleString()}</span></div>
+                <div><span style="color: var(--text-muted);">Trades/Day:</span> ${stats.trades_per_day}</div>
+            </div>
+        `;
+        preview.style.display = 'block';
+        document.getElementById('quick-simulate-section').style.display = 'block';
+        
+        document.getElementById('trades-per-day').placeholder = stats.trades_per_day;
+        document.getElementById('win-rate-override').placeholder = stats.win_rate;
+        document.getElementById('avg-win-override').placeholder = stats.avg_win_pct;
+        document.getElementById('avg-loss-override').placeholder = stats.avg_loss_pct;
+        
+    } catch (error) {
+        console.error('Error loading stats:', error);
+        showToast('Error loading stats: ' + error.message, 'error');
+    }
+}
+
+async function runHistoricalSimulation() {
+    const entityId = document.getElementById('entity-id').value.trim();
+    if (!entityId) {
+        showToast('Please enter a ' + currentEntityType + ' name first', 'warning');
+        return;
+    }
+    
+    const btns = document.querySelectorAll('#quick-simulate-section button');
+    btns.forEach(btn => btn.disabled = true);
+    const btn = btns[0];
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></span> Loading...';
+    
+    try {
+        const payload = {
+            entity_type: currentEntityType,
+            entity_id: entityId,
+            portfolio_start: parseFloat(document.getElementById('portfolio-start').value) || 3000,
+            risk_per_trade_mode: document.getElementById('risk-mode').value,
+            risk_per_trade_value: parseFloat(document.getElementById('risk-value').value) || 300,
+        };
+        
+        const response = await fetch('/api/simulate/historical', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            showToast(data.error || 'Simulation failed', 'error');
+            return;
+        }
+        
+        lastSimulationResult = data;
+        displayHistoricalResults(data);
+        showToast('Historical trades simulation complete!', 'success');
+        
+    } catch (error) {
+        console.error('Historical simulation error:', error);
+        showToast('Error running simulation: ' + error.message, 'error');
+    } finally {
+        btns.forEach(btn => btn.disabled = false);
+        btn.innerHTML = originalText;
+    }
+}
+
+async function runExactTradesSimulation() {
+    const entityId = document.getElementById('entity-id').value.trim();
+    if (!entityId) {
+        showToast('Please enter a ' + currentEntityType + ' name first', 'warning');
+        return;
+    }
+    
+    const btns = document.querySelectorAll('#quick-simulate-section button');
+    btns.forEach(btn => btn.disabled = true);
+    const btn = btns[1];
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></span> Simulating...';
+    
+    try {
+        const payload = {
+            entity_type: currentEntityType,
+            entity_id: entityId,
+            portfolio_start: parseFloat(document.getElementById('portfolio-start').value) || 3000,
+            risk_per_trade_mode: document.getElementById('risk-mode').value,
+            risk_per_trade_value: parseFloat(document.getElementById('risk-value').value) || 300,
+        };
+        
+        // Add overrides if provided
+        const winRateOverride = document.getElementById('exact-win-rate-override').value;
+        const avgLossOverride = document.getElementById('exact-avg-loss-override').value;
+        
+        if (winRateOverride !== '') {
+            payload.win_rate_override = parseFloat(winRateOverride);
+        }
+        if (avgLossOverride !== '') {
+            payload.avg_loss_pct_override = parseFloat(avgLossOverride);
+        }
+        
+        const response = await fetch('/api/simulate/exact', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            showToast(data.error || 'Simulation failed', 'error');
+            return;
+        }
+        
+        lastSimulationResult = data;
+        displayExactTradesResults(data);
+        showToast('Exact trades simulation complete!', 'success');
+        
+    } catch (error) {
+        console.error('Exact trades simulation error:', error);
+        showToast('Error running simulation: ' + error.message, 'error');
+    } finally {
+        btns.forEach(btn => btn.disabled = false);
+        btn.innerHTML = originalText;
+    }
+}
+
+function displayHistoricalResults(data) {
+    document.getElementById('results-placeholder').style.display = 'none';
+    document.getElementById('results-container').style.display = 'block';
+    
+    // Show historical table, hide daily table
+    document.getElementById('daily-breakdown-card').style.display = 'none';
+    document.getElementById('historical-breakdown-card').style.display = 'block';
+    document.getElementById('historical-breakdown').style.display = 'block';
+    
+    const summary = data.summary;
+    const stats = data.stats_used;
+    const params = data.params_used;
+    
+    // Update summary stats
+    document.getElementById('result-final-balance').textContent = '$' + summary.final_balance.toLocaleString(undefined, {minimumFractionDigits: 2});
+    document.getElementById('result-final-balance').className = 'stat-value ' + (summary.total_profit >= 0 ? 'success' : 'danger');
+    
+    const profitEl = document.getElementById('result-total-profit');
+    profitEl.textContent = (summary.total_profit >= 0 ? '+$' : '-$') + Math.abs(summary.total_profit).toLocaleString(undefined, {minimumFractionDigits: 2});
+    profitEl.className = 'stat-value ' + (summary.total_profit >= 0 ? 'success' : 'danger');
+    
+    document.getElementById('result-total-return').textContent = (summary.total_return_pct >= 0 ? '+' : '') + summary.total_return_pct.toFixed(1) + '%';
+    document.getElementById('result-total-return').className = 'stat-value ' + (summary.total_return_pct >= 0 ? 'success' : 'danger');
+    
+    document.getElementById('result-expected-trade').textContent = summary.wins + ' wins';
+    document.getElementById('result-expected-trade').className = 'stat-value success';
+    
+    document.getElementById('result-avg-daily').textContent = summary.losses + ' losses';
+    document.getElementById('result-avg-daily').className = 'stat-value danger';
+    
+    document.getElementById('result-weekly').textContent = summary.total_trades + ' trades';
+    document.getElementById('result-weekly').className = 'stat-value info';
+    
+    document.getElementById('result-monthly').textContent = stats.win_rate + '%';
+    document.getElementById('result-monthly').className = 'stat-value ' + (stats.win_rate >= 50 ? 'success' : 'warning');
+    
+    const edgeEl = document.getElementById('result-edge');
+    edgeEl.textContent = summary.is_profitable ? '✅ Profitable' : '⚠️ Loss';
+    edgeEl.className = 'stat-value ' + (summary.is_profitable ? 'success' : 'danger');
+    
+    // Strategy text with position size suggestion
+    const suggestedSize = stats.suggested_position_size || stats.median_position_size || 0;
+    document.getElementById('strategy-text').textContent = 
+        `ACTUAL HISTORICAL TRADES REPLAY\n\nReplayed ${summary.total_trades} real trades from ${stats.first_trade_date} to ${stats.last_trade_date}:\n` +
+        `• ${summary.wins} wins totaling +$${summary.total_win_pnl.toLocaleString()}\n` +
+        `• ${summary.losses} losses totaling $${summary.total_loss_pnl.toLocaleString()}\n\n` +
+        `Each trade used its ACTUAL P&L % from the database.\n` +
+        `With $${params.portfolio_start.toLocaleString()} starting and $${params.risk_per_trade_value} per trade, ` +
+        `you would have ${summary.is_profitable ? 'made' : 'lost'} $${Math.abs(summary.total_profit).toLocaleString()}.\n\n` +
+        `💡 Suggested Position Size: $${suggestedSize.toLocaleString()} (based on their median trade size)`;
+    
+    // Hide warnings for historical
+    document.getElementById('warnings-section').style.display = 'none';
+    
+    // Render chart
+    renderHistoricalChart(data.trade_breakdown, params.portfolio_start);
+    
+    // Render breakdown table with ticker info
+    renderHistoricalTable(data.trade_breakdown);
+    
+    // Render params
+    renderHistoricalParams(data);
+}
+
+function renderHistoricalChart(breakdown, startBalance) {
+    const ctx = document.getElementById('growth-chart').getContext('2d');
+    
+    if (growthChart) {
+        growthChart.destroy();
+    }
+    
+    const labels = breakdown.map(d => d.ticker);
+    const balances = breakdown.map(d => d.end_balance);
+    
+    const finalBalance = balances[balances.length - 1];
+    const isProfitable = finalBalance >= startBalance;
+    
+    const pointColors = breakdown.map(d => d.result === 'WIN' ? '#10b981' : '#ef4444');
+    
+    growthChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Portfolio Balance',
+                    data: balances,
+                    borderColor: isProfitable ? '#10b981' : '#ef4444',
+                    backgroundColor: isProfitable ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: breakdown.length > 50 ? 2 : 5,
+                    pointBackgroundColor: pointColors,
+                    pointHoverRadius: 7
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: function(context) {
+                            const trade = breakdown[context[0].dataIndex];
+                            return `Trade ${trade.trade_num}: ${trade.ticker}`;
+                        },
+                        label: function(context) {
+                            const trade = breakdown[context.dataIndex];
+                            return [
+                                'Balance: $' + context.parsed.y.toLocaleString(undefined, {minimumFractionDigits: 2}),
+                                trade.result + ': ' + (trade.pnl_pct >= 0 ? '+' : '') + trade.pnl_pct + '%',
+                                'P&L: ' + (trade.trade_pnl >= 0 ? '+' : '') + '$' + trade.trade_pnl.toFixed(2),
+                                'Date: ' + trade.closed_at
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { 
+                        color: '#9ca3af', 
+                        maxTicksLimit: 12,
+                        maxRotation: 45
+                    }
+                },
+                y: {
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: {
+                        color: '#9ca3af',
+                        callback: function(value) { return '$' + value.toLocaleString(); }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderHistoricalTable(breakdown) {
+    const tbody = document.getElementById('historical-breakdown-body');
+    tbody.innerHTML = breakdown.map(d => `
+        <tr>
+            <td style="font-weight: 600;">${d.trade_num}</td>
+            <td style="font-weight: 600; color: var(--primary);">${d.ticker}</td>
+            <td style="text-align: center; font-size: 0.75rem; color: var(--text-muted);">${d.closed_at}</td>
+            <td style="text-align: right; font-size: 0.8125rem; color: var(--text-secondary);">$${(d.actual_position_value || 0).toLocaleString(undefined, {minimumFractionDigits: 0})}</td>
+            <td style="text-align: right;">$${d.position_size.toLocaleString(undefined, {minimumFractionDigits: 0})}</td>
+            <td style="text-align: center;">
+                <span style="padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; background: ${d.result === 'WIN' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${d.result === 'WIN' ? 'var(--success)' : 'var(--danger)'};">
+                    ${d.result}
+                </span>
+            </td>
+            <td style="text-align: right; color: ${d.pnl_pct >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                ${d.pnl_pct >= 0 ? '+' : ''}${d.pnl_pct}%
+            </td>
+            <td style="text-align: right; color: ${d.trade_pnl >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                ${d.trade_pnl >= 0 ? '+' : ''}$${d.trade_pnl.toLocaleString(undefined, {minimumFractionDigits: 2})}
+            </td>
+            <td style="text-align: right; font-weight: 600;">$${d.end_balance.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+        </tr>
+    `).join('');
+}
+
+function toggleHistoricalBreakdown() {
+    const el = document.getElementById('historical-breakdown');
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function renderHistoricalParams(data) {
+    const container = document.getElementById('params-used');
+    const params = data.params_used;
+    const stats = data.stats_used;
+    
+    container.innerHTML = `
+        <div class="param-item">
+            <div class="param-label">Entity</div>
+            <div class="param-value">${data.entity_type === 'user' ? '👤' : '📊'} ${stats.name}</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Mode</div>
+            <div class="param-value" style="color: #8b5cf6;">📜 Actual Trades</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Starting Portfolio</div>
+            <div class="param-value">$${params.portfolio_start.toLocaleString()}</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Position Size</div>
+            <div class="param-value">${params.risk_per_trade_mode === 'fixed' ? '$' + params.risk_per_trade_value : params.risk_per_trade_value + '%'}</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Total Trades</div>
+            <div class="param-value">${stats.total_trades}</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Date Range</div>
+            <div class="param-value">${stats.first_trade_date} to ${stats.last_trade_date}</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Win Rate</div>
+            <div class="param-value">${stats.win_rate}%</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Wins / Losses</div>
+            <div class="param-value"><span class="success">${stats.wins}</span> / <span class="danger">${stats.losses}</span></div>
+        </div>
+    `;
+}
+
+function displayExactTradesResults(data) {
+    document.getElementById('results-placeholder').style.display = 'none';
+    document.getElementById('results-container').style.display = 'block';
+    
+    // Show daily table, hide historical table
+    document.getElementById('daily-breakdown-card').style.display = 'block';
+    document.getElementById('historical-breakdown-card').style.display = 'none';
+    
+    const summary = data.summary;
+    const stats = data.stats_used;
+    const params = data.params_used;
+    
+    // Update summary stats
+    document.getElementById('result-final-balance').textContent = '$' + summary.final_balance.toLocaleString(undefined, {minimumFractionDigits: 2});
+    document.getElementById('result-final-balance').className = 'stat-value ' + (summary.total_profit >= 0 ? 'success' : 'danger');
+    
+    const profitEl = document.getElementById('result-total-profit');
+    profitEl.textContent = (summary.total_profit >= 0 ? '+$' : '-$') + Math.abs(summary.total_profit).toLocaleString(undefined, {minimumFractionDigits: 2});
+    profitEl.className = 'stat-value ' + (summary.total_profit >= 0 ? 'success' : 'danger');
+    
+    document.getElementById('result-total-return').textContent = (summary.total_return_pct >= 0 ? '+' : '') + summary.total_return_pct.toFixed(1) + '%';
+    document.getElementById('result-total-return').className = 'stat-value ' + (summary.total_return_pct >= 0 ? 'success' : 'danger');
+    
+    // For exact trades, show avg win/loss in dollars
+    const avgWin = summary.avg_win_dollar || 0;
+    document.getElementById('result-expected-trade').textContent = '+$' + avgWin.toFixed(2) + '/win';
+    document.getElementById('result-expected-trade').className = 'stat-value success';
+    
+    // Update time-based stats with trade counts
+    document.getElementById('result-avg-daily').textContent = summary.wins + ' wins';
+    document.getElementById('result-avg-daily').className = 'stat-value success';
+    
+    document.getElementById('result-weekly').textContent = summary.losses + ' losses';
+    document.getElementById('result-weekly').className = 'stat-value danger';
+    
+    document.getElementById('result-monthly').textContent = summary.total_trades + ' trades';
+    document.getElementById('result-monthly').className = 'stat-value info';
+    
+    const edgeEl = document.getElementById('result-edge');
+    edgeEl.textContent = summary.is_profitable ? '✅ Profitable' : '⚠️ Loss';
+    edgeEl.className = 'stat-value ' + (summary.is_profitable ? 'success' : 'danger');
+    
+    // Strategy text
+    document.getElementById('strategy-text').textContent = 
+        `EXACT TRADES REPLAY\n\nReplayed ${summary.total_trades} historical trades:\n` +
+        `• ${summary.wins} wins totaling +$${summary.total_win_pnl.toLocaleString()}\n` +
+        `• ${summary.losses} losses totaling $${summary.total_loss_pnl.toLocaleString()}\n` +
+        `• Avg win: +$${summary.avg_win_dollar.toFixed(2)}\n` +
+        `• Avg loss: $${summary.avg_loss_dollar.toFixed(2)}\n\n` +
+        `With $${params.portfolio_start.toLocaleString()} starting and $${params.risk_per_trade_value} per trade, ` +
+        `you would have ${summary.is_profitable ? 'made' : 'lost'} $${Math.abs(summary.total_profit).toLocaleString()}.`;
+    
+    // Hide warnings for exact trades
+    document.getElementById('warnings-section').style.display = 'none';
+    
+    // Render chart with trade breakdown
+    renderExactTradesChart(data.trade_breakdown, params.portfolio_start);
+    
+    // Render breakdown table
+    renderExactTradesTable(data.trade_breakdown);
+    
+    // Render params
+    renderExactTradesParams(data);
+}
+
+function renderExactTradesChart(breakdown, startBalance) {
+    const ctx = document.getElementById('growth-chart').getContext('2d');
+    
+    if (growthChart) {
+        growthChart.destroy();
+    }
+    
+    const labels = breakdown.map(d => 'Trade ' + d.trade_num);
+    const balances = breakdown.map(d => d.end_balance);
+    
+    const finalBalance = balances[balances.length - 1];
+    const isProfitable = finalBalance >= startBalance;
+    
+    // Color points based on win/loss
+    const pointColors = breakdown.map(d => d.result === 'WIN' ? '#10b981' : '#ef4444');
+    
+    growthChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Portfolio Balance',
+                    data: balances,
+                    borderColor: isProfitable ? '#10b981' : '#ef4444',
+                    backgroundColor: isProfitable ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: breakdown.length > 50 ? 2 : 5,
+                    pointBackgroundColor: pointColors,
+                    pointHoverRadius: 7
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const trade = breakdown[context.dataIndex];
+                            return [
+                                '$' + context.parsed.y.toLocaleString(undefined, {minimumFractionDigits: 2}),
+                                trade.result + ': ' + (trade.trade_pnl >= 0 ? '+' : '') + '$' + trade.trade_pnl.toFixed(2)
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { color: '#9ca3af', maxTicksLimit: 10 }
+                },
+                y: {
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: {
+                        color: '#9ca3af',
+                        callback: function(value) { return '$' + value.toLocaleString(); }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderExactTradesTable(breakdown) {
+    const tbody = document.getElementById('breakdown-body');
+    tbody.innerHTML = breakdown.map(d => `
+        <tr>
+            <td style="font-weight: 600;">${d.trade_num}</td>
+            <td style="text-align: right;">$${d.start_balance.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+            <td style="text-align: right;">$${d.position_size.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+            <td style="text-align: center;">
+                <span style="padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; background: ${d.result === 'WIN' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${d.result === 'WIN' ? 'var(--success)' : 'var(--danger)'};">
+                    ${d.result}
+                </span>
+            </td>
+            <td style="text-align: right; color: ${d.pnl_pct >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                ${d.pnl_pct >= 0 ? '+' : ''}${d.pnl_pct}%
+            </td>
+            <td style="text-align: right; color: ${d.trade_pnl >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                ${d.trade_pnl >= 0 ? '+' : ''}$${d.trade_pnl.toLocaleString(undefined, {minimumFractionDigits: 2})}
+            </td>
+            <td style="text-align: right; font-weight: 600;">$${d.end_balance.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+            <td style="text-align: right; color: ${d.cumulative_return_pct >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                ${d.cumulative_return_pct >= 0 ? '+' : ''}${d.cumulative_return_pct}%
+            </td>
+        </tr>
+    `).join('');
+}
+
+function renderExactTradesParams(data) {
+    const container = document.getElementById('params-used');
+    const params = data.params_used;
+    const stats = data.stats_used;
+    
+    // Build win rate display with override indicator
+    let winRateDisplay = `${stats.win_rate}%`;
+    if (stats.win_rate_overridden) {
+        winRateDisplay = `<span style="color: var(--warning);">${stats.win_rate}%</span> <span style="font-size: 0.6875rem; color: var(--text-muted);">(was ${stats.original_win_rate}%)</span>`;
+    }
+    
+    // Build avg loss display with override indicator
+    let avgLossDisplay = `${stats.avg_loss_pct}%`;
+    if (stats.avg_loss_overridden) {
+        avgLossDisplay = `<span style="color: var(--warning);">${stats.avg_loss_pct}%</span> <span style="font-size: 0.6875rem; color: var(--text-muted);">(was ${stats.original_avg_loss_pct}%)</span>`;
+    }
+    
+    container.innerHTML = `
+        <div class="param-item">
+            <div class="param-label">Entity</div>
+            <div class="param-value">${data.entity_type === 'user' ? '👤' : '📊'} ${stats.name}</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Starting Portfolio</div>
+            <div class="param-value">$${params.portfolio_start.toLocaleString()}</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Position Size</div>
+            <div class="param-value">${params.risk_per_trade_mode === 'fixed' ? '$' + params.risk_per_trade_value : params.risk_per_trade_value + '%'}</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Total Trades</div>
+            <div class="param-value">${stats.total_trades}</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Win Rate ${stats.win_rate_overridden ? '⚠️' : ''}</div>
+            <div class="param-value">${winRateDisplay}</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Wins / Losses</div>
+            <div class="param-value"><span class="success">${stats.wins}</span> / <span class="danger">${stats.losses}</span></div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Avg Win %</div>
+            <div class="param-value">${stats.avg_win_pct > 0 ? '+' : ''}${stats.avg_win_pct}%</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Avg Loss % ${stats.avg_loss_overridden ? '⚠️' : ''}</div>
+            <div class="param-value">${avgLossDisplay}</div>
+        </div>
+    `;
+}
+
+function applyPreset(preset) {
+    const presets = {
+        conservative: { portfolio: 3000, days: 30, riskMode: 'percent', riskValue: 0.03, compound: true },
+        moderate: { portfolio: 5000, days: 30, riskMode: 'percent', riskValue: 0.05, compound: true },
+        aggressive: { portfolio: 10000, days: 30, riskMode: 'percent', riskValue: 0.10, compound: true },
+        fixed300: { portfolio: 3000, days: 30, riskMode: 'fixed', riskValue: 300, compound: true }
+    };
+    
+    const p = presets[preset];
+    if (!p) return;
+    
+    document.getElementById('portfolio-start').value = p.portfolio;
+    document.getElementById('sim-days').value = p.days;
+    document.getElementById('risk-mode').value = p.riskMode;
+    document.getElementById('risk-value').value = p.riskValue;
+    document.getElementById('compound').checked = p.compound;
+    
+    updateRiskPlaceholder();
+    showToast('Preset applied: ' + preset.charAt(0).toUpperCase() + preset.slice(1), 'info');
+}
+
+function updateRiskPlaceholder() {
+    const mode = document.getElementById('risk-mode').value;
+    const input = document.getElementById('risk-value');
+    if (mode === 'percent') {
+        if (input.value > 1) {
+            input.value = input.value / 100;
+        }
+        input.step = '0.01';
+        input.placeholder = '0.05 = 5%';
+    } else {
+        if (input.value < 1) {
+            input.value = input.value * 1000;
+        }
+        input.step = '10';
+        input.placeholder = '300';
+    }
+}
+
+async function runSimulation() {
+    const entityId = document.getElementById('entity-id').value.trim();
+    if (!entityId) {
+        showToast('Please enter a ' + currentEntityType + ' name', 'warning');
+        return;
+    }
+    
+    const btn = document.getElementById('run-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></span> Running...';
+    
+    try {
+        const payload = {
+            entity_type: currentEntityType,
+            entity_id: entityId,
+            portfolio_start: parseFloat(document.getElementById('portfolio-start').value) || 3000,
+            days: parseInt(document.getElementById('sim-days').value) || 30,
+            risk_per_trade_mode: document.getElementById('risk-mode').value,
+            risk_per_trade_value: parseFloat(document.getElementById('risk-value').value) || 300,
+            compound: document.getElementById('compound').checked
+        };
+        
+        const tradesPerDay = document.getElementById('trades-per-day').value;
+        if (tradesPerDay) payload.trades_per_day = parseFloat(tradesPerDay);
+        
+        const winRateOverride = document.getElementById('win-rate-override').value;
+        if (winRateOverride) payload.win_rate_override = parseFloat(winRateOverride) / 100;
+        
+        const avgWinOverride = document.getElementById('avg-win-override').value;
+        if (avgWinOverride) payload.avg_win_pct_override = parseFloat(avgWinOverride) / 100;
+        
+        const avgLossOverride = document.getElementById('avg-loss-override').value;
+        if (avgLossOverride) payload.avg_loss_pct_override = parseFloat(avgLossOverride) / 100;
+        
+        const response = await fetch('/api/simulate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            showToast(data.error || 'Simulation failed', 'error');
+            return;
+        }
+        
+        lastSimulationResult = data;
+        displayResults(data);
+        
+    } catch (error) {
+        console.error('Simulation error:', error);
+        showToast('Error running simulation: ' + error.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '🚀 Run Simulation';
+    }
+}
+
+function displayResults(data) {
+    document.getElementById('results-placeholder').style.display = 'none';
+    document.getElementById('results-container').style.display = 'block';
+    
+    // Show daily table, hide historical table
+    document.getElementById('daily-breakdown-card').style.display = 'block';
+    document.getElementById('historical-breakdown-card').style.display = 'none';
+    
+    const summary = data.summary;
+    const params = data.params_used;
+    
+    document.getElementById('result-final-balance').textContent = '$' + summary.final_balance.toLocaleString(undefined, {minimumFractionDigits: 2});
+    document.getElementById('result-final-balance').className = 'stat-value ' + (summary.total_profit >= 0 ? 'success' : 'danger');
+    
+    const profitEl = document.getElementById('result-total-profit');
+    profitEl.textContent = (summary.total_profit >= 0 ? '+$' : '-$') + Math.abs(summary.total_profit).toLocaleString(undefined, {minimumFractionDigits: 2});
+    profitEl.className = 'stat-value ' + (summary.total_profit >= 0 ? 'success' : 'danger');
+    
+    document.getElementById('result-total-return').textContent = (summary.total_return_pct >= 0 ? '+' : '') + summary.total_return_pct.toFixed(1) + '%';
+    document.getElementById('result-total-return').className = 'stat-value ' + (summary.total_return_pct >= 0 ? 'success' : 'danger');
+    
+    document.getElementById('result-expected-trade').textContent = (params.expected_pct_per_trade >= 0 ? '+' : '') + params.expected_pct_per_trade.toFixed(2) + '%';
+    document.getElementById('result-expected-trade').className = 'stat-value ' + (params.expected_pct_per_trade >= 0 ? 'success' : 'danger');
+    
+    const avgDailyEl = document.getElementById('result-avg-daily');
+    avgDailyEl.textContent = (summary.avg_daily_profit >= 0 ? '+$' : '-$') + Math.abs(summary.avg_daily_profit).toLocaleString(undefined, {minimumFractionDigits: 2});
+    avgDailyEl.className = 'stat-value ' + (summary.avg_daily_profit >= 0 ? 'success' : 'danger');
+    
+    const weeklyEst = summary.weekly_profit_est;
+    document.getElementById('result-weekly').textContent = weeklyEst !== null ? ((weeklyEst >= 0 ? '+$' : '-$') + Math.abs(weeklyEst).toLocaleString(undefined, {minimumFractionDigits: 2})) : 'N/A';
+    document.getElementById('result-weekly').className = 'stat-value ' + (weeklyEst >= 0 ? 'success' : 'danger');
+    
+    const monthlyEst = summary.monthly_profit_est;
+    document.getElementById('result-monthly').textContent = monthlyEst !== null ? ((monthlyEst >= 0 ? '+$' : '-$') + Math.abs(monthlyEst).toLocaleString(undefined, {minimumFractionDigits: 2})) : 'N/A';
+    document.getElementById('result-monthly').className = 'stat-value ' + (monthlyEst >= 0 ? 'success' : 'danger');
+    
+    const edgeEl = document.getElementById('result-edge');
+    if (summary.edge_quality === 'positive') {
+        edgeEl.textContent = '✅ Positive';
+        edgeEl.className = 'stat-value success';
+    } else {
+        edgeEl.textContent = '⚠️ Negative';
+        edgeEl.className = 'stat-value danger';
+    }
+    
+    document.getElementById('strategy-text').textContent = data.strategy_text;
+    
+    // Display warnings if any
+    const warningsSection = document.getElementById('warnings-section');
+    const warningsList = document.getElementById('warnings-list');
+    if (data.warnings && data.warnings.length > 0) {
+        warningsList.innerHTML = data.warnings.map(w => `<li>${w}</li>`).join('');
+        warningsSection.style.display = 'block';
+    } else {
+        warningsSection.style.display = 'none';
+    }
+    
+    renderChart(data.daily_breakdown, params.portfolio_start);
+    
+    renderBreakdownTable(data.daily_breakdown);
+    
+    renderParamsUsed(data);
+}
+
+function renderChart(breakdown, startBalance) {
+    const ctx = document.getElementById('growth-chart').getContext('2d');
+    
+    if (growthChart) {
+        growthChart.destroy();
+    }
+    
+    const labels = breakdown.map(d => 'Day ' + d.day);
+    const balances = breakdown.map(d => d.end_balance);
+    const profits = breakdown.map(d => d.daily_profit);
+    
+    const finalBalance = balances[balances.length - 1];
+    const isProfitable = finalBalance >= startBalance;
+    
+    growthChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Portfolio Balance',
+                    data: balances,
+                    borderColor: isProfitable ? '#10b981' : '#ef4444',
+                    backgroundColor: isProfitable ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: breakdown.length > 30 ? 0 : 3,
+                    pointHoverRadius: 5
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return '$' + context.parsed.y.toLocaleString(undefined, {minimumFractionDigits: 2});
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { color: '#9ca3af', maxTicksLimit: 10 }
+                },
+                y: {
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: {
+                        color: '#9ca3af',
+                        callback: function(value) {
+                            return '$' + value.toLocaleString();
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderBreakdownTable(breakdown) {
+    const tbody = document.getElementById('breakdown-body');
+    tbody.innerHTML = breakdown.map(d => `
+        <tr>
+            <td style="font-weight: 600;">${d.day}</td>
+            <td style="text-align: right;">$${d.start_balance.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+            <td style="text-align: right;">$${d.position_size.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+            <td style="text-align: right;">${d.trades.toFixed(1)}</td>
+            <td style="text-align: right; color: var(--success);">${d.expected_wins.toFixed(1)}</td>
+            <td style="text-align: right; color: var(--danger);">${d.expected_losses.toFixed(1)}</td>
+            <td style="text-align: right; color: ${d.daily_profit >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                ${d.daily_profit >= 0 ? '+' : ''}$${d.daily_profit.toLocaleString(undefined, {minimumFractionDigits: 2})}
+            </td>
+            <td style="text-align: right; font-weight: 600;">$${d.end_balance.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+            <td style="text-align: right; color: ${d.cumulative_return_pct >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                ${d.cumulative_return_pct >= 0 ? '+' : ''}${d.cumulative_return_pct}%
+            </td>
+        </tr>
+    `).join('');
+}
+
+function renderParamsUsed(data) {
+    const container = document.getElementById('params-used');
+    const params = data.params_used;
+    const stats = data.stats_used;
+    
+    container.innerHTML = `
+        <div class="param-item">
+            <div class="param-label">Entity</div>
+            <div class="param-value">${data.entity_type === 'user' ? '👤' : '📊'} ${stats.name}</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Starting Portfolio</div>
+            <div class="param-value">$${params.portfolio_start.toLocaleString()}</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Simulation Days</div>
+            <div class="param-value">${params.days} days</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Trades/Day</div>
+            <div class="param-value">${params.trades_per_day}</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Win Rate</div>
+            <div class="param-value">${params.win_rate}%</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Avg Win %</div>
+            <div class="param-value">${params.avg_win_pct > 0 ? '+' : ''}${params.avg_win_pct}%</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Avg Loss %</div>
+            <div class="param-value">${params.avg_loss_pct}%</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Risk Mode</div>
+            <div class="param-value">${params.risk_per_trade_mode === 'fixed' ? '$' + params.risk_per_trade_value : (params.risk_per_trade_value * 100) + '% of balance'}</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Compounding</div>
+            <div class="param-value">${params.compound ? '✅ Yes' : '❌ No'}</div>
+        </div>
+        <div class="param-item">
+            <div class="param-label">Expected %/Trade</div>
+            <div class="param-value" style="color: ${params.expected_pct_per_trade >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                ${params.expected_pct_per_trade >= 0 ? '+' : ''}${params.expected_pct_per_trade}%
+            </div>
+        </div>
+    `;
+}
+
+function toggleBreakdown() {
+    const el = document.getElementById('daily-breakdown');
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        border-radius: 8px;
+        color: white;
+        font-size: 0.9375rem;
+        z-index: 10000;
+        animation: slideIn 0.3s ease;
+        max-width: 400px;
+    `;
+    
+    const colors = {
+        info: '#3b82f6',
+        success: '#10b981',
+        warning: '#f59e0b',
+        error: '#ef4444'
+    };
+    toast.style.backgroundColor = colors[type] || colors.info;
+    toast.textContent = message;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+const urlParams = new URLSearchParams(window.location.search);
+const entityType = urlParams.get('type');
+const entityId = urlParams.get('id');
+
+if (entityType && entityId) {
+    currentEntityType = entityType;
+    document.getElementById('entity-id').value = entityId;
+    
+    if (entityType === 'channel') {
+        document.getElementById('tab-channel').click();
+    }
+    
+    setTimeout(() => loadEntityStats(), 100);
+}
+</script>
+
+<style>
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideOut {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(100%); opacity: 0; }
+}
+</style>
+{% endblock %}

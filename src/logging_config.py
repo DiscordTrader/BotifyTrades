@@ -1,0 +1,213 @@
+"""
+Logging configuration for QuantumPulse Discord Trading Bot
+- Clean console output (signals, channels, balance only)
+- Detailed logs saved to rotating files (max 10MB, keep 5 files)
+"""
+
+import logging
+from logging.handlers import RotatingFileHandler
+import os
+from pathlib import Path
+
+# Create logs directory
+LOGS_DIR = Path(__file__).parent.parent / 'logs'
+LOGS_DIR.mkdir(exist_ok=True)
+
+# Log file paths
+BOT_LOG_FILE = LOGS_DIR / 'bot.log'
+TRADES_LOG_FILE = LOGS_DIR / 'trades.log'
+ERRORS_LOG_FILE = LOGS_DIR / 'errors.log'
+
+# Log rotation settings
+MAX_LOG_SIZE = 10 * 1024 * 1024  # 10 MB
+BACKUP_COUNT = 5  # Keep last 5 files
+
+
+class CleanConsoleFormatter(logging.Formatter):
+    """Custom formatter for clean console output - ONLY signals, channels, balance"""
+    
+    # STRICT WHITELIST - only these messages show in console
+    CONSOLE_WHITELIST = [
+        '[Signal]', '[BTO]', '[STC]', '[EXECUTE]',
+        '[Channel]', '[Balance]', '[Position]', '[P&L]',
+        '[ORDER]', '[FILLED]', '[CANCELLED]',
+        '[ERROR]', '[CRITICAL]',
+        '[Webull]', '[PAPER]', '[LIVE]', '[ASYNC]', '[Init]', '[Discord]',  # Broker initialization
+        '[DEBUG]', '[API]', '[ROUTE]'  # Debug messages
+    ]
+    
+    def format(self, record):
+        msg = record.getMessage()
+        
+        # STRICT: Only show whitelisted messages in console
+        if any(msg.startswith(prefix) for prefix in self.CONSOLE_WHITELIST):
+            return msg
+        
+        # Everything else is suppressed from console (but goes to files)
+        return None
+
+
+class DetailedFileFormatter(logging.Formatter):
+    """Formatter for detailed file logs with timestamps"""
+    
+    def format(self, record):
+        return f"{self.formatTime(record)} - {record.levelname} - {record.getMessage()}"
+
+
+def setup_logging():
+    """Configure logging with clean console and detailed rotating file logs"""
+    
+    # Root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    
+    # Remove existing handlers
+    root_logger.handlers.clear()
+    
+    # ========================================
+    # CONSOLE HANDLER (Debug mode enabled)
+    # ========================================
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)  # Changed to DEBUG for detailed output
+    console_handler.setFormatter(CleanConsoleFormatter())
+    
+    # Custom filter to suppress verbose messages
+    class ConsoleFilter(logging.Filter):
+        def filter(self, record):
+            formatted = CleanConsoleFormatter().format(record)
+            return formatted is not None
+    
+    console_handler.addFilter(ConsoleFilter())
+    root_logger.addHandler(console_handler)
+    
+    # ========================================
+    # BOT LOG FILE (All detailed logs)
+    # ========================================
+    bot_file_handler = RotatingFileHandler(
+        BOT_LOG_FILE,
+        maxBytes=MAX_LOG_SIZE,
+        backupCount=BACKUP_COUNT,
+        encoding='utf-8'
+    )
+    bot_file_handler.setLevel(logging.DEBUG)
+    bot_file_handler.setFormatter(DetailedFileFormatter())
+    root_logger.addHandler(bot_file_handler)
+    
+    # ========================================
+    # TRADES LOG FILE (Trade-specific logs)
+    # ========================================
+    trades_file_handler = RotatingFileHandler(
+        TRADES_LOG_FILE,
+        maxBytes=MAX_LOG_SIZE,
+        backupCount=BACKUP_COUNT,
+        encoding='utf-8'
+    )
+    trades_file_handler.setLevel(logging.INFO)
+    
+    # Filter for trade-related messages only
+    class TradeFilter(logging.Filter):
+        def filter(self, record):
+            msg = record.getMessage()
+            return any(keyword in msg for keyword in ['[Signal]', '[BTO]', '[STC]', '[ORDER]', 
+                                                       '[FILLED]', '[Position]', '[P&L]'])
+    
+    trades_file_handler.addFilter(TradeFilter())
+    trades_file_handler.setFormatter(DetailedFileFormatter())
+    root_logger.addHandler(trades_file_handler)
+    
+    # ========================================
+    # ERROR LOG FILE (Errors and warnings only)
+    # ========================================
+    error_file_handler = RotatingFileHandler(
+        ERRORS_LOG_FILE,
+        maxBytes=MAX_LOG_SIZE,
+        backupCount=BACKUP_COUNT,
+        encoding='utf-8'
+    )
+    error_file_handler.setLevel(logging.WARNING)
+    error_file_handler.setFormatter(DetailedFileFormatter())
+    root_logger.addHandler(error_file_handler)
+    
+    # ========================================
+    # Suppress verbose third-party loggers (console + files)
+    # ========================================
+    logging.getLogger('discord').setLevel(logging.WARNING)
+    logging.getLogger('discord.http').setLevel(logging.WARNING)
+    logging.getLogger('discord.gateway').setLevel(logging.WARNING)
+    logging.getLogger('discord.client').setLevel(logging.WARNING)
+    logging.getLogger('discord.state').setLevel(logging.WARNING)
+    logging.getLogger('websockets').setLevel(logging.WARNING)
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)  # Suppress Flask HTTP logs
+    logging.getLogger('flask').setLevel(logging.WARNING)   # Suppress Flask logs
+    logging.getLogger('aiohttp').setLevel(logging.WARNING)
+    
+    return root_logger
+
+
+def get_logger(name: str = __name__):
+    """Get a logger instance"""
+    return logging.getLogger(name)
+
+
+# Initialize logging when module is imported
+logger = setup_logging()
+
+# Export logger for external use
+__all__ = ['logger', 'log_signal', 'log_execution', 'log_balance', 'log_channel', 
+           'log_position', 'log_debug', 'log_error', 'log_warning', 'log_startup']
+
+
+# Helper functions for clean console output
+def log_signal(action: str, symbol: str, details: str = ""):
+    """Log trading signal - shows in console"""
+    logger.info(f"[Signal] {action} {symbol} {details}")
+
+
+def log_execution(action: str, symbol: str, qty: int, price: float, status: str = ""):
+    """Log order execution - shows in console"""
+    logger.info(f"[EXECUTE] {action} {qty} {symbol} @ ${price} {status}")
+
+
+def log_balance(buying_power: float, net_liq: float = None):
+    """Log account balance - shows in console"""
+    if net_liq:
+        logger.info(f"[Balance] Buying Power: ${buying_power:.2f} | Net Liq: ${net_liq:.2f}")
+    else:
+        logger.info(f"[Balance] Buying Power: ${buying_power:.2f}")
+
+
+def log_channel(channel_name: str, status: str):
+    """Log channel status - shows in console"""
+    logger.info(f"[Channel] {channel_name} - {status}")
+
+
+def log_position(symbol: str, qty: int, pnl: float = None):
+    """Log position update - shows in console"""
+    if pnl is not None:
+        logger.info(f"[Position] {symbol} x{qty} | P&L: ${pnl:.2f}")
+    else:
+        logger.info(f"[Position] {symbol} x{qty}")
+
+
+def log_debug(message: str):
+    """Log debug message - only goes to file, not console"""
+    logger.debug(f"[DEBUG] {message}")
+
+
+def log_error(message: str, exception: Exception = None):
+    """Log error - shows in console and error log"""
+    if exception:
+        logger.error(f"[ERROR] {message}: {exception}", exc_info=True)
+    else:
+        logger.error(f"[ERROR] {message}")
+
+
+def log_warning(message: str):
+    """Log warning - shows in console"""
+    logger.warning(f"[WARNING] {message}")
+
+
+def log_startup(message: str):
+    """Log startup message - shows in console"""
+    logger.info(f"[Init] {message}")

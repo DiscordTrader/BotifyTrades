@@ -1,0 +1,71 @@
+============================================================
+DISCORD WEBULL BOT - QUICK START GUIDE
+============================================================
+
+STEP 1: EXTRACT THE FILES
+--------------------------
+Windows:
+  - Right-click "DiscordWebullBot_LocalPackage.tar.gz"
+  - Extract using WinRAR, 7-Zip, or built-in Windows extractor
+  - Extract to: C:\Docs\Trading\DiscordWebullBot (or anywhere you want)
+
+Mac/Linux:
+  - Open Terminal
+  - Navigate to download folder: cd ~/Downloads
+  - Extract: tar -xzf DiscordWebullBot_LocalPackage.tar.gz
+  - Move to preferred location if needed
+
+
+STEP 2: INSTALL PYTHON DEPENDENCIES
+------------------------------------
+Open Command Prompt (Windows) or Terminal (Mac/Linux):
+
+  cd C:\Docs\Trading\DiscordWebullBot  (or your folder)
+  pip install -r requirements.txt
+
+
+STEP 3: SETUP YOUR CREDENTIALS
+-------------------------------
+Copy .env.example to .env:
+
+Windows:
+  copy .env.example .env
+
+Mac/Linux:
+  cp .env.example .env
+
+Then edit .env with your credentials (use Notepad or any text editor)
+
+
+STEP 4: VALIDATE SETUP
+-----------------------
+  python test_setup.py
+
+Fix any errors shown before proceeding.
+
+
+STEP 5: RUN THE BOT
+-------------------
+Windows:
+  run.bat
+
+Mac/Linux:
+  chmod +x run.sh
+  ./run.sh
+
+Or manually:
+  python src/selfbot_webull.py
+
+
+============================================================
+IMPORTANT NOTES
+============================================================
+- Bot is in LIVE TRADING mode by default
+- Monitors 4 channels (see config.ini)
+- Keep terminal window open for bot to run
+- Close terminal to stop bot
+- For 24/7 operation: keep computer on
+
+Need help? Check TROUBLESHOOTING.md
+
+============================================================

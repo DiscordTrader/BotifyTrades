@@ -1,0 +1,1351 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Ψ∿ BotifyTrades{% endblock %}
+
+{% block content %}
+<!-- Stats Grid -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Execution Channels</div>
+        <div class="stat-value info" id="exec-channels-count">0</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-label">Tracking Channels</div>
+        <div class="stat-value info" id="track-channels-count">0</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-label">Open Positions</div>
+        <div class="stat-value warning" id="open-positions">0</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-label">Position P&L</div>
+        <div class="stat-value" id="today-pnl">$0.00</div>
+    </div>
+</div>
+
+<!-- Account Balance Section -->
+<div class="table-container" style="margin-bottom: 32px;">
+    <div class="table-header">
+        <h3 class="table-title">💰 Account Balance</h3>
+        <div style="display: flex; align-items: center; gap: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="font-size: 0.875rem; color: var(--text-secondary);">Broker:</label>
+                <select id="broker-filter" onchange="onBrokerChange(this.value)" class="form-select" style="min-width: 140px;">
+                    <option value="">All Brokers</option>
+                    <option value="Webull" selected>Webull LIVE</option>
+                    <option value="WEBULL_PAPER">Webull PAPER</option>
+                    <option value="ALPACA">Alpaca LIVE</option>
+                    <option value="ALPACA_PAPER">Alpaca PAPER</option>
+                    <option value="IBKR">IBKR LIVE</option>
+                    <option value="IBKR_PAPER">IBKR PAPER</option>
+                </select>
+            </div>
+            <div class="toggle-switch">
+                <span style="font-size: 0.875rem; color: var(--text-secondary);">Hide Balance</span>
+                <div class="toggle" id="privacy-toggle" onclick="togglePrivacy()"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+        <div class="card">
+            <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 8px;">Buying Power</div>
+            <div style="font-size: 1.75rem; font-weight: 700; color: var(--success);" class="sensitive-data" id="buying-power" data-value="$0.00">$0.00</div>
+        </div>
+        <div class="card">
+            <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 8px;">Net Liquidation</div>
+            <div style="font-size: 1.75rem; font-weight: 700; color: var(--accent-teal);" class="sensitive-data" id="net-liquidation" data-value="$0.00">$0.00</div>
+        </div>
+        <div class="card">
+            <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 8px;">Unrealized P&L</div>
+            <div style="font-size: 1.75rem; font-weight: 700;" class="sensitive-data" id="unrealized-pnl" data-value="$0.00">$0.00</div>
+        </div>
+        <div class="card">
+            <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 8px;">Cash Balance</div>
+            <div style="font-size: 1.75rem; font-weight: 700; color: var(--warning);" class="sensitive-data" id="cash-balance" data-value="$0.00">$0.00</div>
+        </div>
+    </div>
+</div>
+
+<!-- Live Trades Section -->
+<div class="table-container">
+    <div class="table-header">
+        <h3 class="table-title">📈 Live Trading Monitor</h3>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <span id="summary-text" style="color: var(--text-secondary); font-size: 0.875rem;">Loading...</span>
+            <button onclick="refreshPrices()" class="btn btn-primary btn-small">
+                🔄 Refresh Prices
+            </button>
+        </div>
+    </div>
+    
+    <!-- Tabs -->
+    <div class="tabs">
+        <button id="tab-live" class="tab active" onclick="switchTab('live')">
+            📊 Live Positions
+        </button>
+        <button id="tab-pending" class="tab" onclick="switchTab('pending')">
+            ⏳ Pending Orders
+        </button>
+        <button id="tab-filled" class="tab" onclick="switchTab('filled')">
+            ✅ Filled Orders
+        </button>
+    </div>
+    
+    <div id="trades-table-container">
+        <div style="text-align: center; padding: 60px 20px;">
+            <div class="spinner" style="margin: 0 auto 20px;"></div>
+            <div style="color: var(--text-secondary); font-size: 0.9375rem;">Loading trades...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Inline Close Controls - No Modal Needed -->
+
+<!-- Quick Actions -->
+<div class="card-grid" style="margin-top: 32px;">
+    <a href="/execution" class="card" style="text-decoration: none; text-align: center; padding: 32px;">
+        <div style="font-size: 3rem; margin-bottom: 12px;">⚡</div>
+        <div style="font-size: 1.125rem; font-weight: 700; margin-bottom: 8px; color: var(--text-primary);">Add Execution Channel</div>
+        <div style="font-size: 0.875rem; color: var(--text-secondary);">Start auto-executing signals</div>
+    </a>
+    
+    <a href="/tracking" class="card" style="text-decoration: none; text-align: center; padding: 32px;">
+        <div style="font-size: 3rem; margin-bottom: 12px;">📡</div>
+        <div style="font-size: 1.125rem; font-weight: 700; margin-bottom: 8px; color: var(--text-primary);">Add Tracking Channel</div>
+        <div style="font-size: 0.875rem; color: var(--text-secondary);">Monitor signal performance</div>
+    </a>
+    
+    <a href="/leaderboard" class="card" style="text-decoration: none; text-align: center; padding: 32px;">
+        <div style="font-size: 3rem; margin-bottom: 12px;">🏆</div>
+        <div style="font-size: 1.125rem; font-weight: 700; margin-bottom: 8px; color: var(--text-primary);">View Leaderboard</div>
+        <div style="font-size: 0.875rem; color: var(--text-secondary);">Compare channel performance</div>
+    </a>
+    
+    <a href="/settings" class="card" style="text-decoration: none; text-align: center; padding: 32px;">
+        <div style="font-size: 3rem; margin-bottom: 12px;">⚙️</div>
+        <div style="font-size: 1.125rem; font-weight: 700; margin-bottom: 8px; color: var(--text-primary);">Configure Settings</div>
+        <div style="font-size: 0.875rem; color: var(--text-secondary);">Manage credentials & preferences</div>
+    </a>
+</div>
+
+<style>
+.sensitive-data {
+    transition: all 0.3s ease;
+}
+
+.sensitive-data.hidden {
+    filter: blur(8px);
+    user-select: none;
+}
+
+/* Position Card System */
+.positions-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.position-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.position-card:hover {
+    border-color: rgba(15, 240, 179, 0.3);
+}
+
+.position-card.profit {
+    border-left: 3px solid #22c55e;
+}
+
+.position-card.loss {
+    border-left: 3px solid #ef4444;
+}
+
+.position-main {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto auto;
+    gap: 16px;
+    padding: 16px 20px;
+    align-items: center;
+    min-height: 72px;
+}
+
+.position-symbol {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.position-symbol .symbol-name {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.position-symbol .symbol-details {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.position-metrics {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+.position-metrics .metric-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.position-metrics .metric-value {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.position-pnl {
+    min-width: 100px;
+    text-align: right;
+}
+
+.position-pnl .pnl-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.position-pnl .pnl-percent {
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.pnl-positive { color: #22c55e; }
+.pnl-negative { color: #ef4444; }
+
+.position-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.btn-expand {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    font-size: 0.875rem;
+}
+
+.btn-expand:hover {
+    background: var(--bg-secondary);
+    border-color: var(--accent-teal);
+    color: var(--accent-teal);
+}
+
+.btn-expand.expanded {
+    background: rgba(15, 240, 179, 0.1);
+    border-color: var(--accent-teal);
+    color: var(--accent-teal);
+    transform: rotate(180deg);
+}
+
+/* Risk Drawer */
+.position-drawer {
+    display: none;
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid var(--border);
+    padding: 16px 20px;
+    animation: slideDown 0.2s ease;
+}
+
+.position-drawer.open {
+    display: block;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.drawer-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+/* Risk Panel */
+.risk-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.risk-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.channel-badge {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.2), rgba(15, 240, 179, 0.2));
+    border: 1px solid rgba(124, 58, 237, 0.3);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #a78bfa;
+}
+
+.tier-targets {
+    display: flex;
+    gap: 8px;
+}
+
+.tier-item {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+}
+
+.tier-item.active {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.tier-item.hit {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.2);
+}
+
+.tier-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.tier-value {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #22c55e;
+}
+
+.tier-price {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.stop-loss-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: rgba(239, 68, 68, 0.05);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 8px;
+}
+
+.stop-loss-row .sl-label {
+    font-size: 0.75rem;
+    color: #ef4444;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.stop-loss-row .sl-value {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #ef4444;
+}
+
+.progress-section {
+    margin-top: 8px;
+}
+
+.progress-bar {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.progress-fill.profit {
+    background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+
+.progress-fill.loss {
+    background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+.progress-markers {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+}
+
+/* Close Panel */
+.close-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.close-header {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.quote-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-quote {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: center;
+}
+
+.btn-quote .quote-label {
+    display: block;
+    font-size: 0.65rem;
+    opacity: 0.8;
+    margin-bottom: 2px;
+}
+
+.btn-quote .quote-price {
+    display: block;
+    font-size: 0.9rem;
+}
+
+.btn-quote.bid {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.btn-quote.bid:hover {
+    background: rgba(34, 197, 94, 0.25);
+    transform: translateY(-2px);
+}
+
+.btn-quote.mid {
+    background: rgba(168, 85, 247, 0.15);
+    color: #a855f7;
+    border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.btn-quote.mid:hover {
+    background: rgba(168, 85, 247, 0.25);
+    transform: translateY(-2px);
+}
+
+.btn-quote.ask {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.btn-quote.ask:hover {
+    background: rgba(239, 68, 68, 0.25);
+    transform: translateY(-2px);
+}
+
+.close-inputs {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.close-inputs input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    text-align: center;
+}
+
+.close-inputs input:focus {
+    outline: none;
+    border-color: var(--accent-teal);
+}
+
+.close-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-close {
+    flex: 1;
+    padding: 12px 16px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-transform: uppercase;
+}
+
+.btn-close.limit {
+    background: linear-gradient(135deg, #0ff0b3, #0cc99a);
+    color: #0e1117;
+}
+
+.btn-close.limit:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(15, 240, 179, 0.4);
+}
+
+.btn-close.market {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+}
+
+.btn-close.market:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.btn-close:disabled, .btn-quote:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.btn-close.loading, .btn-quote.loading {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+/* Cancel button for pending orders */
+.btn-cancel {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.btn-cancel:hover {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: rgba(239, 68, 68, 0.5);
+    transform: translateY(-1px);
+}
+
+.btn-cancel:active {
+    transform: translateY(0);
+}
+
+/* Empty state */
+.empty-positions {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.empty-positions .empty-icon {
+    font-size: 3rem;
+    margin-bottom: 16px;
+    opacity: 0.3;
+}
+
+.empty-positions .empty-text {
+    color: var(--text-secondary);
+    font-size: 1rem;
+}
+
+/* Broker Badge */
+.broker-badge {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.broker-badge.webull { background: rgba(0, 128, 255, 0.2); color: #0080ff; }
+.broker-badge.alpaca { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
+.broker-badge.ibkr { background: rgba(220, 53, 69, 0.2); color: #dc3545; }
+
+/* Closing overlay */
+.position-card.closing {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.position-card.closing::after {
+    content: 'Closing...';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    padding: 8px 16px;
+    border-radius: 8px;
+    color: white;
+    font-weight: 600;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentTab = 'live';
+let currentBroker = 'Webull';  // Default to Webull LIVE
+let isPrivacyMode = false;
+let isClosingPosition = false;
+
+function onBrokerChange(value) {
+    currentBroker = value;
+    loadTrades();
+    loadStats();
+}
+
+function togglePrivacy() {
+    isPrivacyMode = !isPrivacyMode;
+    const toggle = document.getElementById('privacy-toggle');
+    const sensitiveElements = document.querySelectorAll('.sensitive-data');
+    
+    if (isPrivacyMode) {
+        toggle.classList.add('active');
+        sensitiveElements.forEach(el => {
+            el.classList.add('hidden');
+            el.textContent = '••••••';
+        });
+    } else {
+        toggle.classList.remove('active');
+        sensitiveElements.forEach(el => {
+            el.classList.remove('hidden');
+            el.textContent = el.getAttribute('data-value') || '$0.00';
+        });
+    }
+}
+
+async function switchTab(tab) {
+    currentTab = tab;
+    
+    // Update tab buttons
+    document.querySelectorAll('.tab').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.getElementById(`tab-${tab}`).classList.add('active');
+    
+    // Load trades - use order history API for filled orders
+    if (tab === 'filled') {
+        await loadFilledOrderHistory();
+    } else {
+        loadTrades();
+    }
+}
+
+async function loadFilledOrderHistory() {
+    console.log('[loadFilledOrderHistory] Starting...');
+    const container = document.getElementById('trades-table-container');
+    if (!container) {
+        console.error('[loadFilledOrderHistory] Container element not found!');
+        return;
+    }
+    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading Webull order history...</div></div>';
+    
+    try {
+        // Fetch ONLY Webull order history
+        const response = await fetch('/api/webull/order-history?count=50&status=Filled');
+        const data = await response.json();
+        
+        console.log('[loadFilledOrderHistory] Webull orders:', data.orders?.length || 0);
+        
+        if (data.error) {
+            container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">${data.error}</div>`;
+            return;
+        }
+        
+        const orders = data.orders || [];
+        
+        // Update summary
+        const summaryEl = document.getElementById('summary-text');
+        if (summaryEl) {
+            summaryEl.textContent = `${orders.length} filled order${orders.length !== 1 ? 's' : ''} from Webull`;
+        }
+        
+        if (orders.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 60px 20px;">
+                    <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">📋</div>
+                    <div style="color: var(--text-secondary); font-size: 1rem;">No filled orders from Webull</div>
+                </div>
+            `;
+            return;
+        }
+        
+        // Build table HTML for Webull orders only
+        let tableHTML = '<table class="data-table"><thead><tr>';
+        tableHTML += '<th>Symbol</th><th>Action</th><th>Qty</th><th>Filled Qty</th><th>Avg Price</th><th>Order Type</th><th>Status</th><th>Time</th>';
+        tableHTML += '</tr></thead><tbody>';
+        
+        orders.forEach(order => {
+            const qty = parseInt(order.quantity) || 0;
+            const filledQty = parseInt(order.filled_quantity) || qty;
+            const avgPrice = parseFloat(order.avg_filled_price) || parseFloat(order.limit_price) || 0;
+            
+            let symbolDisplay = order.symbol;
+            if (order.asset_type === 'option' && order.strike) {
+                symbolDisplay += ` ${order.expiry || ''} $${order.strike} ${order.option_type || ''}`;
+            }
+            
+            const actionBadge = order.action === 'BUY' ? 
+                '<span style="background: rgba(0,255,136,0.2); color: #0f8; padding: 2px 8px; border-radius: 4px; font-weight: 600;">BUY</span>' : 
+                '<span style="background: rgba(255,68,68,0.2); color: #f44; padding: 2px 8px; border-radius: 4px; font-weight: 600;">SELL</span>';
+            
+            const filledTime = order.filled_time ? new Date(order.filled_time).toLocaleString() : (order.created_time ? new Date(order.created_time).toLocaleString() : 'N/A');
+            
+            tableHTML += `<tr>
+                <td><strong>${symbolDisplay}</strong></td>
+                <td>${actionBadge}</td>
+                <td>${qty}</td>
+                <td>${filledQty}</td>
+                <td>$${avgPrice.toFixed(2)}</td>
+                <td>${order.order_type || 'N/A'}</td>
+                <td><span class="badge" style="background: rgba(0,255,136,0.2); color: #0f8;">${order.status || 'Filled'}</span></td>
+                <td style="color: var(--text-secondary); font-size: 0.85rem;">${filledTime}</td>
+            </tr>`;
+        });
+        
+        tableHTML += '</tbody></table>';
+        container.innerHTML = tableHTML;
+        console.log('[loadFilledOrderHistory] Done!');
+        
+    } catch (error) {
+        console.error('[loadFilledOrderHistory] Error:', error);
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load Webull order history</div>';
+    }
+}
+
+async function loadTrades() {
+    console.log('[loadTrades] Starting...');
+    const container = document.getElementById('trades-table-container');
+    if (!container) {
+        console.error('[loadTrades] Container element not found!');
+        return;
+    }
+    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading...</div></div>';
+    
+    try {
+        const statusMap = { 'live': 'OPEN', 'pending': 'PENDING', 'filled': 'CLOSED' };
+        const statusFilter = statusMap[currentTab] || '';
+        
+        let url = '/api/trades/merged?';
+        if (statusFilter) url += `status=${statusFilter}&`;
+        if (currentBroker) url += `broker=${currentBroker}`;
+        url = url.replace(/[&?]$/, '');
+        
+        const response = await fetch(url);
+        const mergedResponse = await response.json();
+        let filteredTrades = mergedResponse.trades || [];
+        
+        const count = filteredTrades.length;
+        const totalPnl = filteredTrades.reduce((sum, t) => sum + (parseFloat(t.pnl) || 0), 0);
+        
+        let summaryText = '';
+        if (currentTab === 'live') {
+            summaryText = `${count} position${count !== 1 ? 's' : ''} | $${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)} P/L`;
+        } else if (currentTab === 'pending') {
+            summaryText = `${count} pending order${count !== 1 ? 's' : ''}`;
+        } else if (currentTab === 'filled') {
+            summaryText = `${count} filled trade${count !== 1 ? 's' : ''} | $${totalPnl.toFixed(2)} realized`;
+        }
+        const summaryEl = document.getElementById('summary-text');
+        if (summaryEl) summaryEl.textContent = summaryText;
+        
+        if (filteredTrades.length === 0) {
+            container.innerHTML = `
+                <div class="empty-positions">
+                    <div class="empty-icon">📊</div>
+                    <div class="empty-text">No ${currentTab} positions</div>
+                </div>
+            `;
+            return;
+        }
+        
+        // Use card layout for live positions, table for others
+        if (currentTab === 'live') {
+            container.innerHTML = renderPositionCards(filteredTrades);
+        } else {
+            container.innerHTML = renderTradesTable(filteredTrades);
+        }
+        
+    } catch (err) {
+        console.error('[loadTrades] Error:', err);
+        container.innerHTML = `
+            <div style="text-align: center; padding: 40px;">
+                <div style="color: var(--error);">Error loading trades</div>
+                <div style="color: var(--text-secondary); margin-top: 8px;">${err.message}</div>
+            </div>
+        `;
+    }
+}
+
+function renderPositionCards(trades) {
+    let html = '<div class="positions-grid">';
+    
+    trades.forEach(trade => {
+        const pnl = parseFloat(trade.pnl) || 0;
+        const pnlPercent = parseFloat(trade.pnl_percent) || 0;
+        const entryPrice = parseFloat(trade.entry_price) || 0;
+        const currentPrice = parseFloat(trade.current_price) || entryPrice;
+        const bidPrice = parseFloat(trade.bid_price) || (currentPrice * 0.995);
+        const askPrice = parseFloat(trade.ask_price) || (currentPrice * 1.005);
+        const midPrice = (bidPrice + askPrice) / 2;
+        
+        const pnlClass = pnl >= 0 ? 'profit' : 'loss';
+        const pnlSign = pnl >= 0 ? '+' : '';
+        
+        let symbolDisplay = trade.symbol;
+        let optionDetails = '';
+        if (trade.asset_type === 'option') {
+            if (trade.strike) optionDetails += `$${trade.strike}`;
+            if (trade.call_put) optionDetails += ` ${trade.call_put}`;
+            if (trade.expiry) optionDetails += ` ${trade.expiry}`;
+        }
+        
+        const brokerClass = (trade.broker || '').toLowerCase().includes('alpaca') ? 'alpaca' : 
+                           (trade.broker || '').toLowerCase().includes('ibkr') ? 'ibkr' : 'webull';
+        const brokerLabel = (trade.broker || '').toUpperCase().replace('_PAPER', ' Paper').replace('_', ' ') || 'WEBULL';
+        
+        // Build source badge for position card
+        const sourceDisplay = trade.source_display || { name: 'Unknown', color: 'dark', icon: '#', full_name: 'Unknown source' };
+        const channelName = sourceDisplay.name || trade.channel_name || 'Global';
+        
+        const tier1 = parseFloat(trade.profit_target_1_pct) || 20;
+        const tier2 = parseFloat(trade.profit_target_2_pct) || 50;
+        const tier3 = parseFloat(trade.profit_target_3_pct) || 100;
+        const stopLoss = parseFloat(trade.stop_loss_pct) || 10;
+        
+        const tier1Price = entryPrice * (1 + tier1/100);
+        const tier2Price = entryPrice * (1 + tier2/100);
+        const tier3Price = entryPrice * (1 + tier3/100);
+        const slPrice = entryPrice * (1 - stopLoss/100);
+        
+        const progressPercent = Math.min(Math.max((pnlPercent / tier1) * 100, -100), 150);
+        
+        html += `
+        <div class="position-card ${pnlClass}" id="position-${trade.id}">
+            <div class="position-main">
+                <div class="position-symbol">
+                    <div class="symbol-name">
+                        ${symbolDisplay}
+                        <span class="broker-badge ${brokerClass}">${brokerLabel}</span>
+                        <span class="channel-badge channel-badge--${sourceDisplay.color}" title="${sourceDisplay.full_name}">
+                            <span class="channel-badge__icon">${sourceDisplay.icon}</span>
+                            <span class="channel-badge__name">${sourceDisplay.name}</span>
+                        </span>
+                    </div>
+                    <div class="symbol-details">
+                        ${optionDetails ? `<span>${optionDetails}</span>` : ''}
+                        <span>${trade.quantity} ${trade.asset_type || 'shares'}</span>
+                    </div>
+                </div>
+                
+                <div class="position-metrics">
+                    <div class="metric-label">Entry</div>
+                    <div class="metric-value">$${entryPrice.toFixed(2)}</div>
+                </div>
+                
+                <div class="position-metrics">
+                    <div class="metric-label">Current</div>
+                    <div class="metric-value" style="color: ${pnl >= 0 ? '#22c55e' : '#ef4444'}">$${currentPrice.toFixed(2)}</div>
+                </div>
+                
+                <div class="position-pnl">
+                    <div class="pnl-value ${pnlClass === 'profit' ? 'pnl-positive' : 'pnl-negative'}">${pnlSign}$${Math.abs(pnl).toFixed(2)}</div>
+                    <div class="pnl-percent ${pnlClass === 'profit' ? 'pnl-positive' : 'pnl-negative'}">${pnlSign}${pnlPercent.toFixed(1)}%</div>
+                </div>
+                
+                <div class="position-actions">
+                    <button class="btn-expand" onclick="toggleDrawer('${trade.id}')" title="Expand risk & close panel">▼</button>
+                </div>
+            </div>
+            
+            <div class="position-drawer" id="drawer-${trade.id}">
+                <div class="drawer-grid">
+                    <div class="risk-panel">
+                        <div class="risk-header">
+                            Risk Settings
+                            <span class="channel-badge channel-badge--${sourceDisplay.color}" title="${sourceDisplay.full_name}">
+                                <span class="channel-badge__icon">${sourceDisplay.icon}</span>
+                                <span class="channel-badge__name">${sourceDisplay.name}</span>
+                            </span>
+                        </div>
+                        
+                        <div class="tier-targets">
+                            <div class="tier-item ${pnlPercent >= tier1 ? 'hit' : ''}">
+                                <div class="tier-label">T1</div>
+                                <div class="tier-value">+${tier1}%</div>
+                                <div class="tier-price">$${tier1Price.toFixed(2)}</div>
+                            </div>
+                            <div class="tier-item ${pnlPercent >= tier2 ? 'hit' : ''}">
+                                <div class="tier-label">T2</div>
+                                <div class="tier-value">+${tier2}%</div>
+                                <div class="tier-price">$${tier2Price.toFixed(2)}</div>
+                            </div>
+                            <div class="tier-item ${pnlPercent >= tier3 ? 'hit' : ''}">
+                                <div class="tier-label">T3</div>
+                                <div class="tier-value">+${tier3}%</div>
+                                <div class="tier-price">$${tier3Price.toFixed(2)}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="stop-loss-row">
+                            <span class="sl-label">Stop Loss</span>
+                            <span class="sl-value">-${stopLoss}%</span>
+                            <span style="color: var(--text-muted); font-size: 0.75rem;">($${slPrice.toFixed(2)})</span>
+                        </div>
+                        
+                        <div class="progress-section">
+                            <div class="progress-bar">
+                                <div class="progress-fill ${pnlClass}" style="width: ${Math.abs(progressPercent)}%; ${pnlPercent < 0 ? 'margin-left: auto;' : ''}"></div>
+                            </div>
+                            <div class="progress-markers">
+                                <span>-${stopLoss}%</span>
+                                <span>0%</span>
+                                <span>+${tier1}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="close-panel">
+                        <div class="close-header">Close Position</div>
+                        
+                        <div class="quote-buttons">
+                            <button class="btn-quote bid" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', ${bidPrice.toFixed(2)})">
+                                <span class="quote-label">BID</span>
+                                <span class="quote-price">$${bidPrice.toFixed(2)}</span>
+                            </button>
+                            <button class="btn-quote mid" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', ${midPrice.toFixed(2)})">
+                                <span class="quote-label">MID</span>
+                                <span class="quote-price">$${midPrice.toFixed(2)}</span>
+                            </button>
+                            <button class="btn-quote ask" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', ${askPrice.toFixed(2)})">
+                                <span class="quote-label">ASK</span>
+                                <span class="quote-price">$${askPrice.toFixed(2)}</span>
+                            </button>
+                        </div>
+                        
+                        <div class="close-inputs">
+                            <input type="number" id="qty-${trade.id}" value="${trade.quantity}" min="1" max="${trade.quantity}" placeholder="Qty">
+                            <input type="number" id="limit-${trade.id}" value="${currentPrice.toFixed(2)}" step="0.01" placeholder="Limit $">
+                        </div>
+                        
+                        <div class="close-buttons">
+                            <button class="btn-close limit" onclick="closeLimitOrder('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}')">
+                                LIMIT
+                            </button>
+                            <button class="btn-close market" onclick="closeMarketOrder('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}')">
+                                MARKET
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+function renderTradesTable(trades) {
+    const isPending = currentTab === 'pending';
+    let html = '<table class="data-table"><thead><tr>';
+    html += '<th>Symbol</th><th>Source</th><th>Broker</th><th>Type</th><th>Qty</th><th>Entry</th><th>Current</th><th>P/L</th><th>Status</th>';
+    if (isPending) html += '<th>Action</th>';
+    html += '</tr></thead><tbody>';
+    
+    trades.forEach(trade => {
+        const pnl = parseFloat(trade.pnl) || 0;
+        const pnlPercent = parseFloat(trade.pnl_percent) || 0;
+        const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+        const entryPrice = parseFloat(trade.entry_price) || 0;
+        const currentPrice = parseFloat(trade.current_price) || entryPrice;
+        
+        let symbolDisplay = trade.symbol;
+        if (trade.asset_type === 'option' && trade.strike) {
+            symbolDisplay += ` $${trade.strike}${trade.call_put || ''}`;
+        }
+        
+        // Fix UNKNOWN broker - default to Webull
+        const effectiveBroker = (trade.broker && trade.broker !== 'UNKNOWN') ? trade.broker : 'Webull';
+        const brokerClass = effectiveBroker.toLowerCase().includes('alpaca') ? 'alpaca' : 
+                           effectiveBroker.toLowerCase().includes('ibkr') ? 'ibkr' : 'webull';
+        const brokerLabel = effectiveBroker.toUpperCase().replace('_PAPER', ' Paper').replace('_', ' ');
+        
+        // Build source badge HTML
+        const sourceDisplay = trade.source_display || { name: 'Unknown', color: 'dark', icon: '#', full_name: 'Unknown source' };
+        const sourceBadge = `<span class="channel-badge channel-badge--${sourceDisplay.color}" title="${sourceDisplay.full_name}">
+            <span class="channel-badge__icon">${sourceDisplay.icon}</span>
+            <span class="channel-badge__name">${sourceDisplay.name}</span>
+        </span>`;
+        
+        html += `<tr>
+            <td><strong>${symbolDisplay}</strong></td>
+            <td class="source-column">${sourceBadge}</td>
+            <td><span class="broker-badge ${brokerClass}" style="font-size: 0.7rem;">${brokerLabel}</span></td>
+            <td>${trade.asset_type || 'stock'}</td>
+            <td>${trade.quantity || 0}</td>
+            <td>$${entryPrice.toFixed(2)}</td>
+            <td>$${currentPrice.toFixed(2)}</td>
+            <td class="${pnlClass}"><strong>$${pnl.toFixed(2)}</strong> (${pnlPercent.toFixed(1)}%)</td>
+            <td><span class="badge">${trade.status || 'UNKNOWN'}</span></td>`;
+        
+        if (isPending) {
+            const orderId = trade.order_id || trade.id;
+            html += `<td>
+                <button class="btn-cancel" onclick="cancelOrder('${orderId}', '${trade.symbol}', '${effectiveBroker}')">
+                    ✕ Cancel
+                </button>
+            </td>`;
+        }
+        
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table>';
+    return html;
+}
+
+function toggleDrawer(tradeId) {
+    const drawer = document.getElementById(`drawer-${tradeId}`);
+    const button = drawer?.previousElementSibling?.querySelector('.btn-expand');
+    
+    if (drawer) {
+        drawer.classList.toggle('open');
+        if (button) button.classList.toggle('expanded');
+    }
+}
+
+// ============== POSITION CLOSE FUNCTIONS ==============
+
+// Close at a specific price (BID/MID/ASK buttons from card)
+async function closePosition(tradeId, symbol, maxQuantity, broker, limitPrice) {
+    const qtyInput = document.getElementById(`qty-${tradeId}`);
+    const qty = qtyInput ? parseInt(qtyInput.value) : maxQuantity;
+    
+    if (qty <= 0 || qty > maxQuantity) {
+        alert(`Invalid quantity. Must be between 1 and ${maxQuantity}`);
+        return;
+    }
+    
+    await executeClose(tradeId, symbol, qty, broker, limitPrice, 'limit');
+}
+
+// Close at limit price from input field
+async function closeLimitOrder(tradeId, symbol, maxQuantity, broker) {
+    const qtyInput = document.getElementById(`qty-${tradeId}`);
+    const limitInput = document.getElementById(`limit-${tradeId}`);
+    
+    const qty = qtyInput ? parseInt(qtyInput.value) : maxQuantity;
+    const limitPrice = limitInput ? parseFloat(limitInput.value) : null;
+    
+    if (qty <= 0 || qty > maxQuantity) {
+        alert(`Invalid quantity. Must be between 1 and ${maxQuantity}`);
+        return;
+    }
+    
+    if (!limitPrice || limitPrice <= 0) {
+        alert('Please enter a valid limit price');
+        return;
+    }
+    
+    await executeClose(tradeId, symbol, qty, broker, limitPrice, 'limit');
+}
+
+// Close at market price
+async function closeMarketOrder(tradeId, symbol, maxQuantity, broker) {
+    const qtyInput = document.getElementById(`qty-${tradeId}`);
+    const qty = qtyInput ? parseInt(qtyInput.value) : maxQuantity;
+    
+    if (qty <= 0 || qty > maxQuantity) {
+        alert(`Invalid quantity. Must be between 1 and ${maxQuantity}`);
+        return;
+    }
+    
+    if (!confirm(`Close ${qty} ${symbol} at MARKET price?\n\nThis will execute immediately at the best available price.`)) {
+        return;
+    }
+    
+    await executeClose(tradeId, symbol, qty, broker, null, 'market');
+}
+
+// Core close execution function
+async function executeClose(tradeId, symbol, quantity, broker, limitPrice, orderType) {
+    if (isClosingPosition) {
+        console.log('[CLOSE] Blocked: Another close in progress');
+        alert('Please wait, another close operation is in progress');
+        return;
+    }
+    
+    isClosingPosition = true;
+    
+    // Add closing state to card (no DOM manipulation that causes shake)
+    const card = document.getElementById(`position-${tradeId}`);
+    if (card) {
+        card.classList.add('closing');
+    }
+    
+    // Disable buttons in drawer
+    const drawer = document.getElementById(`drawer-${tradeId}`);
+    const buttons = drawer?.querySelectorAll('button');
+    buttons?.forEach(btn => {
+        btn.disabled = true;
+        btn.classList.add('loading');
+    });
+    
+    const effectiveBroker = broker || currentBroker || '';
+    const isAlpaca = effectiveBroker.toLowerCase().includes('alpaca');
+    
+    try {
+        let url, body;
+        if (isAlpaca) {
+            // Alpaca uses symbol-based close
+            url = `/api/alpaca/positions/${encodeURIComponent(symbol)}/close`;
+            body = JSON.stringify({ 
+                quantity: quantity,
+                limit_price: limitPrice
+            });
+        } else {
+            // Webull uses trade ID-based close
+            url = `/api/trades/${tradeId}/close`;
+            body = JSON.stringify({ 
+                quantity: quantity,
+                limit_price: limitPrice
+            });
+        }
+        
+        console.log(`[CLOSE] ${isAlpaca ? 'ALPACA' : 'WEBULL'} ${orderType.toUpperCase()}: ${quantity} ${symbol} @ ${limitPrice ? '$' + limitPrice : 'MKT'}`);
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const priceStr = limitPrice ? `LIMIT @ $${limitPrice}` : 'MARKET';
+            alert(`Close order submitted!\n\n${data.message || `${quantity} ${symbol} @ ${priceStr}`}`);
+            
+            // Delay reload to let broker process
+            setTimeout(() => {
+                loadTrades();
+                loadStats();
+            }, 1000);
+        } else {
+            const errorMsg = data.error || 'Failed to close position';
+            alert(`Close Failed\n\n${errorMsg}`);
+        }
+    } catch (err) {
+        console.error('[CLOSE] Error:', err);
+        alert(`Network Error: ${err.message}`);
+    } finally {
+        isClosingPosition = false;
+        
+        // Remove closing state
+        if (card) {
+            card.classList.remove('closing');
+        }
+        
+        // Re-enable buttons
+        buttons?.forEach(btn => {
+            btn.disabled = false;
+            btn.classList.remove('loading');
+        });
+    }
+}
+
+async function cancelOrder(orderId, symbol, broker) {
+    // Determine broker from trade data or current selection
+    const effectiveBroker = broker || currentBroker || '';
+    const isAlpaca = effectiveBroker.toLowerCase().includes('alpaca');
+    const brokerName = isAlpaca ? 'Alpaca' : 'Webull';
+    
+    if (!confirm(`⚠️ Cancel pending order for ${symbol}?\n\nOrder ID: ${orderId}\n\nThis will cancel the order at ${brokerName}.`)) {
+        return;
+    }
+    
+    try {
+        // Route to correct endpoint based on broker
+        const url = isAlpaca 
+            ? `/api/alpaca/orders/${orderId}/cancel`
+            : `/api/webull/orders/${orderId}/cancel`;
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+            alert(`✅ Order cancelled successfully!\n\nOrder ID: ${orderId}`);
+            loadTrades();
+            loadStats();
+        } else {
+            alert(`❌ Failed to cancel order: ${result.error || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('Failed to cancel order:', error);
+        alert(`❌ Failed to cancel order: ${error.message}`);
+    }
+}
+
+function refreshPrices() {
+    document.getElementById('summary-text').textContent = 'Refreshing...';
+    fetch('/api/refresh_prices', { method: 'POST' })
+        .then(() => {
+            loadTrades();
+            loadStats();
+        });
+}
+
+async function loadStats() {
+    try {
+        const brokerParam = currentBroker ? `?broker=${currentBroker}` : '';
+        const data = await fetch(`/api/stats${brokerParam}`).then(r => r.json());
+        
+        document.getElementById('exec-channels-count').textContent = data.exec_channels || 0;
+        document.getElementById('track-channels-count').textContent = data.track_channels || 0;
+        document.getElementById('open-positions').textContent = data.open_positions || 0;
+        
+        // Position P&L from unrealized profit/loss
+        const pnl = parseFloat(data.unrealized_pnl) || 0;
+        const pnlElement = document.getElementById('today-pnl');
+        pnlElement.textContent = `$${pnl.toFixed(2)}`;
+        pnlElement.className = pnl >= 0 ? 'stat-value pnl-positive' : 'stat-value pnl-negative';
+        
+        document.getElementById('summary-text').textContent = data.summary || 'No data';
+        
+        // Fetch account balance based on selected broker
+        try {
+            let balanceUrl = '/api/webull/balance';
+            if (currentBroker && currentBroker.startsWith('ALPACA')) {
+                balanceUrl = '/api/alpaca/balance';
+            } else if (currentBroker && currentBroker.startsWith('IBKR')) {
+                balanceUrl = '/api/ibkr/balance';
+            }
+            
+            const balance = await fetch(balanceUrl).then(r => r.json());
+            
+            if (balance && balance.status !== 'error') {
+                const buyingPowerValue = parseFloat(balance.buying_power) || 0;
+                const netLiqValue = parseFloat(balance.net_liquidation) || parseFloat(balance.equity) || 0;
+                const cashValue = parseFloat(balance.cash_balance) || parseFloat(balance.cash) || 0;
+                const unrealizedValue = parseFloat(balance.total_profit_loss) || parseFloat(balance.unrealized_pnl) || 0;
+                
+                const bp = document.getElementById('buying-power');
+                bp.textContent = `$${buyingPowerValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                bp.setAttribute('data-value', bp.textContent);
+                
+                const nl = document.getElementById('net-liquidation');
+                nl.textContent = `$${netLiqValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                nl.setAttribute('data-value', nl.textContent);
+                
+                const cb = document.getElementById('cash-balance');
+                cb.textContent = `$${cashValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                cb.setAttribute('data-value', cb.textContent);
+                
+                const upnl = document.getElementById('unrealized-pnl');
+                upnl.textContent = `$${unrealizedValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                upnl.setAttribute('data-value', upnl.textContent);
+                upnl.style.color = unrealizedValue >= 0 ? 'var(--success)' : 'var(--error)';
+                
+                // Re-apply privacy mode if active
+                if (isPrivacyMode) {
+                    document.querySelectorAll('.sensitive-data').forEach(el => {
+                        el.textContent = '••••••';
+                    });
+                }
+            }
+        } catch (balanceErr) {
+            console.log('Balance not available yet:', balanceErr);
+        }
+    } catch (err) {
+        console.error('Error loading stats:', err);
+    }
+}
+
+// Load initial data with startup delay
+document.addEventListener('DOMContentLoaded', () => {
+    // Delay initial data loading to allow bot initialization (3 second startup window for testing)
+    setTimeout(() => {
+        console.log('Loading trades and stats...');
+        loadTrades();
+        loadStats();
+        
+        // Refresh every 30 seconds (after initial delay)
+        setInterval(() => {
+            loadTrades();
+            loadStats();
+        }, 30000);
+    }, 3000);  // Reduced from 15s to 3s for faster testing
+});
+</script>
+{% endblock %}

@@ -1,0 +1,561 @@
+{% extends "base.html" %}
+
+{% block title %}PNL Tracker - BotifyTrades{% endblock %}
+
+{% block content %}
+<div class="filters-bar" style="margin-bottom: 24px; display: flex; gap: 12px; align-items: center; background: #2C2C2E; padding: 16px; border-radius: 12px; flex-wrap: wrap;">
+    <label style="color: #fff; font-weight: 500;">Date Range:</label>
+    <select id="dateFilter" style="padding: 8px 16px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px; min-width: 140px;">
+        <option value="all">All Time</option>
+        <option value="today">Today</option>
+        <option value="7days">Last 7 Days</option>
+        <option value="30days">Last 30 Days</option>
+        <option value="yearly">This Year</option>
+        <option value="custom">Custom Range</option>
+    </select>
+    
+    <div id="customDateRange" style="display: none; gap: 8px; align-items: center;">
+        <input type="date" id="startDate" style="padding: 8px 12px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px;">
+        <span style="color: #8E8E93;">to</span>
+        <input type="date" id="endDate" style="padding: 8px 12px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px;">
+    </div>
+    
+    <label style="color: #fff; font-weight: 500;">Channel:</label>
+    <select id="channelFilter" style="padding: 8px 16px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px; min-width: 180px;">
+        <option value="">All Channels</option>
+    </select>
+    
+    <label style="color: #fff; font-weight: 500;">User:</label>
+    <select id="userFilter" style="padding: 8px 16px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px; min-width: 150px;">
+        <option value="">All Users</option>
+    </select>
+    
+    <label style="color: #fff; font-weight: 500;">Status:</label>
+    <select id="statusFilter" style="padding: 8px 16px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px; min-width: 130px;">
+        <option value="">All Status</option>
+        <option value="OPEN">🟦 OPEN</option>
+        <option value="PARTIAL">🟧 PARTIAL</option>
+        <option value="CLOSED">🟩 CLOSED</option>
+    </select>
+    
+    <button onclick="loadPNLData()" style="padding: 8px 20px; background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%); color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-left: auto;">
+        🔄 Refresh
+    </button>
+    
+    <button onclick="resetPNLData()" style="padding: 8px 20px; background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%); color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+        🗑️ Reset All Data
+    </button>
+</div>
+
+<div id="summary-stats" style="display: flex; gap: 24px; margin-bottom: 24px; padding: 16px 20px; background: #2C2C2E; border-radius: 12px; font-size: 14px; flex-wrap: wrap;">
+    <div style="color: #00d4ff;">
+        <strong>Total Positions:</strong> <span id="totalPositions">0</span>
+    </div>
+    <div style="color: #00ff88;">
+        <strong>Total P/L:</strong> <span id="totalPNL">$0.00</span>
+    </div>
+    <div style="color: #ffaa00;">
+        <strong>Avg Return:</strong> <span id="avgReturn">0%</span>
+    </div>
+    <div style="color: #8E8E93;" id="dateRangeDisplay">
+        <strong>Period:</strong> <span>All Time</span>
+    </div>
+</div>
+
+<div id="loading" style="text-align: center; padding: 40px; color: #888; display: none;">
+    <div style="font-size: 48px;">⏳</div>
+    <p>Loading PNL data...</p>
+</div>
+
+<div id="pnl-container"></div>
+
+<style>
+.position-card {
+    background: #2C2C2E;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    overflow: hidden;
+    border-left: 4px solid #3A3A3C;
+    transition: all 0.3s ease;
+}
+
+.position-card.profit {
+    border-left-color: #00ff88;
+}
+
+.position-card.loss {
+    border-left-color: #ff3b30;
+}
+
+.position-header {
+    padding: 16px 20px;
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr auto;
+    gap: 16px;
+    align-items: center;
+    transition: background 0.2s;
+}
+
+.position-header:hover {
+    background: #3A3A3C;
+}
+
+.position-header .col {
+    color: #fff;
+}
+
+.position-header .label {
+    font-size: 11px;
+    color: #8E8E93;
+    font-weight: 500;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.position-header .value {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.profit-text {
+    color: #00ff88 !important;
+}
+
+.loss-text {
+    color: #ff3b30 !important;
+}
+
+.neutral-text {
+    color: #ffaa00 !important;
+}
+
+.closures-detail {
+    display: none;
+    background: #1C1C1E;
+    padding: 0;
+    border-top: 1px solid #3A3A3C;
+}
+
+.closures-detail.expanded {
+    display: block;
+}
+
+.closure-row {
+    display: grid;
+    grid-template-columns: 0.5fr 1fr 1fr 1fr 1fr 1fr;
+    gap: 16px;
+    padding: 12px 20px;
+    border-bottom: 1px solid #2C2C2E;
+    align-items: center;
+    font-size: 14px;
+}
+
+.closure-row:last-child {
+    border-bottom: none;
+}
+
+.closure-row .stc-badge {
+    background: #ff9500;
+    color: #000;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 12px;
+    text-align: center;
+}
+
+.expand-icon {
+    font-size: 20px;
+    transition: transform 0.3s;
+}
+
+.expand-icon.expanded {
+    transform: rotate(90deg);
+}
+
+.user-badge {
+    background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%);
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 12px;
+    display: inline-block;
+}
+
+.status-badge {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.status-open {
+    background: #00d4ff;
+    color: #000;
+}
+
+.status-partial {
+    background: #ffaa00;
+    color: #000;
+}
+
+.status-closed {
+    background: #00ff88;
+    color: #000;
+}
+
+.aggregate-footer {
+    background: #3A3A3C;
+    padding: 12px 20px;
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr auto;
+    gap: 16px;
+    align-items: center;
+    font-weight: 700;
+    font-size: 14px;
+    border-top: 2px solid #00d4ff;
+}
+
+.no-data {
+    text-align: center;
+    padding: 60px;
+    color: #8E8E93;
+}
+
+.no-data-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+}
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let positionsData = [];
+let channelsData = [];
+
+// Get date range based on filter selection
+function getDateRange() {
+    const dateFilter = document.getElementById('dateFilter').value;
+    const today = new Date();
+    let startDate = null;
+    let endDate = null;
+    
+    switch(dateFilter) {
+        case 'today':
+            startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+            break;
+        case '7days':
+            startDate = new Date(today);
+            startDate.setDate(startDate.getDate() - 7);
+            endDate = today;
+            break;
+        case '30days':
+            startDate = new Date(today);
+            startDate.setDate(startDate.getDate() - 30);
+            endDate = today;
+            break;
+        case 'yearly':
+            startDate = new Date(today.getFullYear(), 0, 1);
+            endDate = today;
+            break;
+        case 'custom':
+            const startInput = document.getElementById('startDate').value;
+            const endInput = document.getElementById('endDate').value;
+            if (startInput) startDate = new Date(startInput);
+            if (endInput) {
+                endDate = new Date(endInput);
+                endDate.setHours(23, 59, 59);
+            }
+            break;
+        default:
+            return { startDate: null, endDate: null };
+    }
+    
+    return {
+        startDate: startDate ? startDate.toISOString().split('T')[0] : null,
+        endDate: endDate ? endDate.toISOString().split('T')[0] : null
+    };
+}
+
+// Update date range display
+function updateDateRangeDisplay() {
+    const dateFilter = document.getElementById('dateFilter').value;
+    const displaySpan = document.querySelector('#dateRangeDisplay span');
+    const labels = {
+        'all': 'All Time',
+        'today': 'Today',
+        '7days': 'Last 7 Days',
+        '30days': 'Last 30 Days',
+        'yearly': 'This Year',
+        'custom': 'Custom Range'
+    };
+    
+    if (dateFilter === 'custom') {
+        const start = document.getElementById('startDate').value;
+        const end = document.getElementById('endDate').value;
+        if (start && end) {
+            displaySpan.textContent = `${start} to ${end}`;
+        } else {
+            displaySpan.textContent = 'Custom Range (select dates)';
+        }
+    } else {
+        displaySpan.textContent = labels[dateFilter] || 'All Time';
+    }
+}
+
+// Toggle custom date inputs visibility
+function toggleCustomDateInputs() {
+    const dateFilter = document.getElementById('dateFilter').value;
+    const customRange = document.getElementById('customDateRange');
+    customRange.style.display = dateFilter === 'custom' ? 'flex' : 'none';
+    updateDateRangeDisplay();
+}
+
+// Load channels for filter
+async function loadChannels() {
+    try {
+        const response = await fetch('/api/channels');
+        const channels = await response.json();
+        const select = document.getElementById('channelFilter');
+        
+        channels.forEach(channel => {
+            const option = document.createElement('option');
+            option.value = channel.id;
+            option.textContent = channel.name;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading channels:', error);
+    }
+}
+
+// Load unique users for filter
+async function loadUsers() {
+    try {
+        const response = await fetch('/api/pnl/users');
+        const data = await response.json();
+        const select = document.getElementById('userFilter');
+        
+        if (data.success && data.users) {
+            data.users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user;
+                option.textContent = user;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading users:', error);
+    }
+}
+
+// Load detailed PNL data
+async function loadPNLData() {
+    const channelId = document.getElementById('channelFilter').value;
+    const userFilter = document.getElementById('userFilter').value;
+    const statusFilter = document.getElementById('statusFilter').value;
+    const { startDate, endDate } = getDateRange();
+    const loading = document.getElementById('loading');
+    const container = document.getElementById('pnl-container');
+    
+    loading.style.display = 'block';
+    container.innerHTML = '';
+    updateDateRangeDisplay();
+    
+    try {
+        let url = '/api/pnl/detailed?';
+        const params = [];
+        if (channelId) params.push(`channel_id=${channelId}`);
+        if (userFilter) params.push(`author=${encodeURIComponent(userFilter)}`);
+        if (statusFilter) params.push(`status=${statusFilter}`);
+        if (startDate) params.push(`start_date=${startDate}`);
+        if (endDate) params.push(`end_date=${endDate}`);
+        url += params.join('&');
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to load PNL data');
+        }
+        
+        positionsData = data.positions;
+        renderPNLData(positionsData);
+        updateSummaryStats(positionsData);
+        
+    } catch (error) {
+        console.error('Error loading PNL data:', error);
+        container.innerHTML = `<div class="no-data"><div class="no-data-icon">⚠️</div><p>Error loading PNL data: ${error.message}</p></div>`;
+    } finally {
+        loading.style.display = 'none';
+    }
+}
+
+// Render PNL data
+function renderPNLData(positions) {
+    const container = document.getElementById('pnl-container');
+    
+    if (!positions || positions.length === 0) {
+        container.innerHTML = '<div class="no-data"><div class="no-data-icon">📊</div><p>No positions found. Start trading to see PNL data!</p></div>';
+        return;
+    }
+    
+    container.innerHTML = positions.map((pos, index) => {
+        const profitClass = pos.total_pnl > 0 ? 'profit' : (pos.total_pnl < 0 ? 'loss' : '');
+        const profitTextClass = pos.total_pnl > 0 ? 'profit-text' : (pos.total_pnl < 0 ? 'loss-text' : 'neutral-text');
+        const statusClass = `status-${pos.status.toLowerCase()}`;
+        
+        return `
+            <div class="position-card ${profitClass}">
+                <div class="position-header" onclick="toggleClosures(${index})">
+                    <div class="col">
+                        <div class="label">Position</div>
+                        <div class="value">${pos.description}</div>
+                        <span class="user-badge">${pos.author}</span>
+                    </div>
+                    <div class="col">
+                        <div class="label">BTO Qty</div>
+                        <div class="value">${pos.bto_qty}</div>
+                    </div>
+                    <div class="col">
+                        <div class="label">Entry Price</div>
+                        <div class="value">$${pos.entry_price.toFixed(2)}</div>
+                    </div>
+                    <div class="col">
+                        <div class="label">Closed Qty</div>
+                        <div class="value">${pos.total_closed_qty} / ${pos.bto_qty}</div>
+                    </div>
+                    <div class="col">
+                        <div class="label">Total P/L</div>
+                        <div class="value ${profitTextClass}">$${pos.total_pnl.toFixed(2)}</div>
+                    </div>
+                    <div class="col">
+                        <div class="label">Avg Return</div>
+                        <div class="value ${profitTextClass}">${pos.avg_pnl_percent.toFixed(1)}%</div>
+                    </div>
+                    <div class="col">
+                        <span class="status-badge ${statusClass}">${pos.status}</span>
+                        <span class="expand-icon" id="expand-${index}">▶</span>
+                    </div>
+                </div>
+                
+                <div class="closures-detail" id="closures-${index}">
+                    ${pos.closures.length > 0 ? `
+                        <div style="padding: 16px 20px; background: #2C2C2E; font-weight: 700; font-size: 13px; color: #8E8E93; text-transform: uppercase;">
+                            Individual STC Closures (${pos.closures.length})
+                        </div>
+                        ${pos.closures.map((closure, cIndex) => {
+                            const cProfitClass = closure.pnl > 0 ? 'profit-text' : (closure.pnl < 0 ? 'loss-text' : 'neutral-text');
+                            const closedDate = new Date(closure.closed_at).toLocaleString();
+                            return `
+                                <div class="closure-row">
+                                    <div><span class="stc-badge">STC #${cIndex + 1}</span></div>
+                                    <div style="color: #fff;">Qty: <strong>${closure.stc_qty}</strong></div>
+                                    <div style="color: #fff;">Exit: <strong>$${closure.exit_price.toFixed(2)}</strong></div>
+                                    <div class="${cProfitClass}"><strong>$${closure.pnl.toFixed(2)}</strong></div>
+                                    <div class="${cProfitClass}"><strong>${closure.pnl_percent.toFixed(1)}%</strong></div>
+                                    <div style="color: #8E8E93; font-size: 12px;">${closedDate}</div>
+                                </div>
+                            `;
+                        }).join('')}
+                        
+                        <div class="aggregate-footer">
+                            <div style="color: #00d4ff;">AGGREGATE TOTALS</div>
+                            <div></div>
+                            <div></div>
+                            <div style="color: #fff;">Total Closed: ${pos.total_closed_qty}</div>
+                            <div class="${profitTextClass}">$${pos.total_pnl.toFixed(2)}</div>
+                            <div class="${profitTextClass}">${pos.avg_pnl_percent.toFixed(1)}%</div>
+                            <div></div>
+                        </div>
+                    ` : '<div style="padding: 20px; text-align: center; color: #8E8E93;">No closures yet</div>'}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Toggle closures expansion
+function toggleClosures(index) {
+    const closures = document.getElementById(`closures-${index}`);
+    const icon = document.getElementById(`expand-${index}`);
+    
+    closures.classList.toggle('expanded');
+    icon.classList.toggle('expanded');
+}
+
+// Update summary statistics
+function updateSummaryStats(positions) {
+    const totalPositions = positions.length;
+    const totalPNL = positions.reduce((sum, pos) => sum + pos.total_pnl, 0);
+    const closedPositions = positions.filter(pos => pos.total_closed_qty > 0);
+    const avgReturn = closedPositions.length > 0
+        ? closedPositions.reduce((sum, pos) => sum + pos.avg_pnl_percent, 0) / closedPositions.length
+        : 0;
+    
+    document.getElementById('totalPositions').textContent = totalPositions;
+    document.getElementById('totalPNL').textContent = `$${totalPNL.toFixed(2)}`;
+    document.getElementById('totalPNL').className = totalPNL > 0 ? 'profit-text' : (totalPNL < 0 ? 'loss-text' : 'neutral-text');
+    document.getElementById('avgReturn').textContent = `${avgReturn.toFixed(1)}%`;
+    document.getElementById('avgReturn').className = avgReturn > 0 ? 'profit-text' : (avgReturn < 0 ? 'loss-text' : 'neutral-text');
+}
+
+// Reset all PNL data
+async function resetPNLData() {
+    if (!confirm('⚠️ WARNING: This will permanently delete ALL PNL tracking data including signals, positions, and closures.\n\nThis action cannot be undone. Are you sure?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/reset/pnl', {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('✅ All PNL data has been reset successfully!');
+            loadPNLData();
+        } else {
+            alert('❌ Error: ' + (data.error || 'Failed to reset data'));
+        }
+    } catch (error) {
+        console.error('Error resetting PNL data:', error);
+        alert('❌ Error resetting data. Check console for details.');
+    }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    loadChannels();
+    loadUsers();
+    loadPNLData();
+    
+    // Set default dates for custom range
+    const today = new Date().toISOString().split('T')[0];
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    document.getElementById('endDate').value = today;
+    document.getElementById('startDate').value = thirtyDaysAgo;
+    
+    // Auto-refresh every 30 seconds
+    setInterval(loadPNLData, 30000);
+});
+
+// Filter change event listeners
+document.getElementById('channelFilter').addEventListener('change', loadPNLData);
+document.getElementById('userFilter').addEventListener('change', loadPNLData);
+document.getElementById('statusFilter').addEventListener('change', loadPNLData);
+document.getElementById('dateFilter').addEventListener('change', () => {
+    toggleCustomDateInputs();
+    loadPNLData();
+});
+document.getElementById('startDate').addEventListener('change', loadPNLData);
+document.getElementById('endDate').addEventListener('change', loadPNLData);
+</script>
+{% endblock %}

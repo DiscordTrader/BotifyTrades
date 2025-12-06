@@ -1,0 +1,117 @@
+================================================================================
+  QuantumPulse Trading Bot - QUICK BUILD GUIDE
+================================================================================
+
+📦 BUILD TYPES AVAILABLE:
+
+1. STANDARD BUILD (Fast, Basic Protection)
+   - Protection: 15-30 minutes to reverse engineer
+   - Technologies: PyInstaller + AES-256 + UPX
+   - Use: Quick testing, personal use
+
+2. HARDENED BUILD (Slow, Advanced Protection)  
+   - Protection: 40+ hours to reverse engineer
+   - Technologies: PyArmor BCC + RFT + AES-256 + UPX
+   - Use: Commercial distribution, IP protection
+
+================================================================================
+🪟 WINDOWS
+================================================================================
+
+STANDARD BUILD:
+  build\windows\build_standard.bat
+  → Output: build\windows\dist_standard\QuantumPulse_Trading_Bot.exe
+
+HARDENED BUILD:
+  build\windows\build_hardened.bat
+  → Output: build\windows\dist_hardened\QuantumPulse_Trading_Bot_Pro.exe
+
+================================================================================
+🐧 LINUX
+================================================================================
+
+STANDARD BUILD:
+  ./build/linux/build_standard.sh
+  → Output: build/linux/dist_standard/QuantumPulse_Trading_Bot
+
+HARDENED BUILD:
+  ./build/linux/build_hardened.sh
+  → Output: build/linux/dist_hardened/QuantumPulse_Trading_Bot_Pro
+
+================================================================================
+⚙️ PREREQUISITES
+================================================================================
+
+BOTH PLATFORMS:
+  - Python 3.8 or higher
+  - pip install pyinstaller pycryptodome
+
+HARDENED BUILD ONLY:
+  - pip install pyarmor
+
+OPTIONAL (RECOMMENDED):
+  - UPX compressor for smaller file size
+    Windows: https://upx.github.io/
+    Linux: sudo apt install upx-ucl
+
+================================================================================
+🚀 FASTEST PATH TO BUILD
+================================================================================
+
+WINDOWS (Hardened):
+  1. Open Command Prompt in project folder
+  2. Run: pip install pyinstaller pycryptodome pyarmor
+  3. Run: build\windows\build_hardened.bat
+  4. Wait ~5 minutes
+  5. Done! Exe at: build\windows\dist_hardened\
+
+LINUX (Hardened):
+  1. Open Terminal in project folder
+  2. Run: pip3 install pyinstaller pycryptodome pyarmor
+  3. Run: chmod +x build/linux/build_hardened.sh
+  4. Run: ./build/linux/build_hardened.sh
+  5. Wait ~5 minutes
+  6. Done! Binary at: build/linux/dist_hardened/
+
+================================================================================
+🔧 TROUBLESHOOTING
+================================================================================
+
+ERROR: "python not recognized"
+FIX: Install Python or use full path to python.exe
+
+ERROR: "UPX not found"
+FIX: Skip UPX (builds work without it), or download from https://upx.github.io/
+
+ERROR: "PyArmor license error"  
+FIX: Use standard build, or purchase PyArmor license
+
+ERROR: "Permission denied" (Linux)
+FIX: chmod +x build/linux/*.sh
+
+================================================================================
+📊 PROTECTION COMPARISON
+================================================================================
+
+FEATURE                  | STANDARD | HARDENED
+-------------------------|----------|----------
+Decompilation Time       | 15-30min | 40+ hours
+String Encryption        | ❌       | ✅
+Function Renaming        | ❌       | ✅
+C-Level Compilation      | ❌       | ✅
+Build Time               | ~2 min   | ~5 min
+Recommended For          | Testing  | Production
+
+================================================================================
+📝 NOTES
+================================================================================
+
+- Build Windows exe on Windows, Linux binary on Linux (no cross-compile)
+- Each build generates random encryption key (keep builds separate)
+- PyArmor free tier: Limited to 10 registration uses
+- UPX reduces file size by 30-50%
+- Code signing not included (add separately for production)
+
+================================================================================
+For detailed documentation, see: build/README.md
+================================================================================

@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Options Trading - BotifyTrades</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}?v=3">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0E1117;
+            --bg-secondary: #161B22;
+            --bg-tertiary: #1C2128;
+            --bg-card: #21262D;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #E6EDF3;
+            --text-secondary: #8B949E;
+            --text-muted: #6E7681;
+            --accent-mint: #0FF0B3;
+            --accent-violet: #7C3AED;
+            --accent-blue: #58A6FF;
+            --success: #3FB950;
+            --danger: #F85149;
+            --warning: #D29922;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        
+        .navbar {
+            background: rgba(14, 17, 23, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            height: 70px;
+        }
+        
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-decoration: none;
+        }
+        
+        .logo-mark {
+            position: relative;
+            width: 46px;
+            height: 46px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #00F5FF 0%, #8B5CF6 100%);
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 0 60px rgba(0, 245, 255, 0.4), inset 0 1px 1px rgba(255,255,255,0.3);
+        }
+        
+        .logo-mark::before {
+            content: '';
+            position: absolute;
+            inset: 2px;
+            background: #070B14;
+            border-radius: 12px;
+        }
+        
+        .logo-mark::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.2) 50%, transparent 60%);
+            animation: logoShine 3s ease-in-out infinite;
+        }
+        
+        @keyframes logoShine {
+            0%, 100% { transform: translateX(-100%) rotate(45deg); }
+            50% { transform: translateX(100%) rotate(45deg); }
+        }
+        
+        .logo-text {
+            position: relative;
+            z-index: 1;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #00F5FF 0%, #0FF0B3 25%, #8B5CF6 50%, #EC4899 75%, #F43F5E 100%);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: textGradient 4s ease infinite;
+        }
+        
+        @keyframes textGradient {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        
+        .brand-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        
+        .brand-name {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.8) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .brand-tagline {
+            font-size: 10px;
+            font-weight: 600;
+            color: #00F5FF;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 10px 16px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .nav-links a:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+        
+        .nav-links a.active {
+            background: linear-gradient(135deg, rgba(15, 240, 179, 0.15), rgba(124, 58, 237, 0.15));
+            color: var(--accent-mint);
+        }
+        
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        
+        .page-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        
+        .page-subtitle {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+        
+        .broker-selector {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .broker-selector label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        
+        .broker-select {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            min-width: 160px;
+        }
+        
+        .broker-select:focus {
+            outline: none;
+            border-color: var(--accent-mint);
+        }
+
+        .options-table {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .option-row {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px 16px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .option-row:hover {
+            border-color: rgba(15, 240, 179, 0.3);
+        }
+
+        .option-row.has-data {
+            border-color: rgba(15, 240, 179, 0.2);
+            background: linear-gradient(135deg, rgba(15, 240, 179, 0.02), rgba(124, 58, 237, 0.02));
+        }
+
+        .row-number {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-muted);
+            width: 20px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .input-section {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .input-small {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .input-small:focus {
+            outline: none;
+            border-color: var(--accent-mint);
+        }
+
+        .input-small::placeholder {
+            color: var(--text-muted);
+        }
+
+        .input-symbol {
+            width: 70px;
+            text-transform: uppercase;
+        }
+
+        .input-strike {
+            width: 70px;
+        }
+
+        .input-expiry {
+            width: 130px;
+            cursor: pointer;
+        }
+
+        .type-toggle-mini {
+            display: flex;
+            gap: 2px;
+        }
+
+        .type-btn-mini {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-muted);
+            border-radius: 5px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .type-btn-mini.active.call {
+            background: rgba(63, 185, 80, 0.2);
+            border-color: var(--success);
+            color: var(--success);
+        }
+
+        .type-btn-mini.active.put {
+            background: rgba(248, 81, 73, 0.2);
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        .load-btn-mini {
+            padding: 8px 14px;
+            background: linear-gradient(135deg, var(--accent-mint), var(--accent-violet));
+            border: none;
+            border-radius: 6px;
+            color: #0E1117;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .load-btn-mini:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(15, 240, 179, 0.3);
+        }
+
+        .load-btn-mini:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .divider {
+            width: 1px;
+            height: 28px;
+            background: var(--border-color);
+            flex-shrink: 0;
+        }
+
+        .quote-section {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .quote-box {
+            background: var(--bg-primary);
+            border-radius: 6px;
+            padding: 6px 10px;
+            text-align: center;
+            min-width: 58px;
+        }
+
+        .quote-label {
+            font-size: 8px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin-bottom: 1px;
+        }
+
+        .quote-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .quote-value.bid { color: var(--success); }
+        .quote-value.ask { color: var(--danger); }
+        .quote-value.mid { color: var(--accent-blue); }
+
+        .quote-placeholder {
+            color: var(--text-muted);
+            font-size: 11px;
+            font-style: italic;
+            white-space: nowrap;
+        }
+
+        .greeks-inline {
+            display: flex;
+            gap: 8px;
+            font-size: 10px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        .greek-item {
+            display: flex;
+            gap: 2px;
+            white-space: nowrap;
+        }
+
+        .greek-label {
+            font-weight: 500;
+            color: var(--text-muted);
+        }
+
+        .greek-value {
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .data-source-badge {
+            font-size: 9px;
+            font-weight: 600;
+            padding: 3px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            flex-shrink: 0;
+        }
+
+        .data-source-badge.webull {
+            background: rgba(63, 185, 80, 0.15);
+            color: var(--success);
+        }
+
+        .data-source-badge.alpaca {
+            background: rgba(210, 153, 34, 0.15);
+            color: var(--warning);
+        }
+
+        .order-section {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-shrink: 0;
+            margin-left: auto;
+        }
+
+        .stepper-input {
+            display: flex;
+            align-items: center;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .stepper-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            padding: 6px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .stepper-btn:hover {
+            background: var(--bg-tertiary);
+            color: var(--accent-mint);
+        }
+
+        .stepper-value {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            width: 50px;
+            padding: 6px 2px;
+        }
+
+        .stepper-value:focus {
+            outline: none;
+        }
+
+        .stepper-value.qty {
+            width: 30px;
+        }
+
+        .total-display {
+            background: var(--bg-primary);
+            border-radius: 5px;
+            padding: 6px 10px;
+            text-align: center;
+            min-width: 65px;
+        }
+
+        .total-label {
+            font-size: 8px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .total-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--accent-mint);
+        }
+
+        .action-section {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .order-btn {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .order-btn.buy {
+            background: var(--success);
+            color: #0E1117;
+        }
+
+        .order-btn.sell {
+            background: var(--danger);
+            color: #fff;
+        }
+
+        .order-btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .order-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .clear-row-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px 6px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .clear-row-btn:hover {
+            color: var(--danger);
+            background: rgba(248, 81, 73, 0.1);
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 16px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 14px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        .toast.success {
+            background: rgba(63, 185, 80, 0.95);
+            color: #fff;
+        }
+
+        .toast.error {
+            background: rgba(248, 81, 73, 0.95);
+            color: #fff;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                padding: 16px;
+            }
+            
+            .option-row {
+                padding: 12px;
+            }
+            
+            .input-symbol { width: 70px; }
+            .input-strike { width: 70px; }
+            .input-expiry { width: 120px; }
+            
+            .order-btn {
+                padding: 8px 12px;
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="nav-brand">
+            <div class="logo-mark">
+                <span class="logo-text">BT</span>
+            </div>
+            <div class="brand-text">
+                <span class="brand-name">BotifyTrades</span>
+                <span class="brand-tagline">AUTOMATED TRADING</span>
+            </div>
+        </a>
+        <div class="nav-links">
+            <a href="/">Dashboard</a>
+            <a href="/channels">Channels</a>
+            <a href="/pnl">P&L</a>
+            <a href="/options" class="active">Options</a>
+            <a href="/settings">Settings</a>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Options Trading</h1>
+                <p class="page-subtitle">Enter strike prices to get quotes - up to 4 options at once</p>
+            </div>
+            <div class="broker-selector">
+                <label>Execute On:</label>
+                <select class="broker-select" id="brokerSelect">
+                    <option value="WEBULL">Webull</option>
+                    <option value="ALPACA_PAPER">Alpaca Paper</option>
+                    <option value="ALPACA_LIVE">Alpaca Live</option>
+                    <option value="IB">Interactive Brokers</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="options-table">
+            {% for i in range(1, 5) %}
+            <div class="option-row" id="optionRow{{ i }}" data-row="{{ i }}">
+                <div class="row-number">{{ i }}</div>
+                
+                <div class="input-section">
+                    <input type="text" class="input-small input-symbol" id="symbol{{ i }}" placeholder="SPY" maxlength="5">
+                    <input type="text" class="input-small input-strike" id="strike{{ i }}" placeholder="Strike">
+                    <select class="input-small input-expiry" id="expiry{{ i }}">
+                        <option value="">Expiry...</option>
+                    </select>
+                    <div class="type-toggle-mini">
+                        <button class="type-btn-mini active call" id="callBtn{{ i }}" onclick="setType({{ i }}, 'CALL')">C</button>
+                        <button class="type-btn-mini" id="putBtn{{ i }}" onclick="setType({{ i }}, 'PUT')">P</button>
+                    </div>
+                    <button class="load-btn-mini" onclick="loadQuote({{ i }})">Load</button>
+                </div>
+
+                <div class="divider" id="divider{{ i }}" style="display: none;"></div>
+
+                <div class="quote-section" id="quoteSection{{ i }}">
+                    <span class="quote-placeholder">Enter details & click Load</span>
+                </div>
+
+                <div class="order-section" id="orderSection{{ i }}" style="display: none;">
+                    <div class="stepper-input">
+                        <button class="stepper-btn" onclick="adjustPrice({{ i }}, -0.05)">−</button>
+                        <input type="text" class="stepper-value" id="limitPrice{{ i }}" value="0.00">
+                        <button class="stepper-btn" onclick="adjustPrice({{ i }}, 0.05)">+</button>
+                    </div>
+                    <div class="stepper-input">
+                        <button class="stepper-btn" onclick="adjustQty({{ i }}, -1)">−</button>
+                        <input type="text" class="stepper-value qty" id="qty{{ i }}" value="1">
+                        <button class="stepper-btn" onclick="adjustQty({{ i }}, 1)">+</button>
+                    </div>
+                    <div class="total-display">
+                        <div class="total-label">Total</div>
+                        <div class="total-value" id="totalCost{{ i }}">$0</div>
+                    </div>
+                    <button class="order-btn buy" onclick="placeOrder({{ i }}, 'BUY')">BUY</button>
+                    <button class="order-btn sell" onclick="placeOrder({{ i }}, 'SELL')">SELL</button>
+                    <button class="clear-row-btn" onclick="clearRow({{ i }})" title="Clear">✕</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+        const rowData = {};
+        const expiryCache = {};
+
+        for (let i = 1; i <= 4; i++) {
+            rowData[i] = {
+                type: 'CALL',
+                quote: null,
+                optionId: ''
+            };
+        }
+
+        function setType(row, type) {
+            rowData[row].type = type;
+            const callBtn = document.getElementById(`callBtn${row}`);
+            const putBtn = document.getElementById(`putBtn${row}`);
+            
+            if (type === 'CALL') {
+                callBtn.classList.add('active', 'call');
+                callBtn.classList.remove('put');
+                putBtn.classList.remove('active', 'put', 'call');
+            } else {
+                putBtn.classList.add('active', 'put');
+                putBtn.classList.remove('call');
+                callBtn.classList.remove('active', 'call', 'put');
+            }
+        }
+
+        async function loadExpirations(row) {
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const broker = document.getElementById('brokerSelect').value;
+            if (!symbol) return;
+
+            const expirySelect = document.getElementById(`expiry${row}`);
+            const cacheKey = `${broker}_${symbol}`;
+            
+            if (expiryCache[cacheKey]) {
+                populateExpiries(row, expiryCache[cacheKey]);
+                return;
+            }
+
+            expirySelect.innerHTML = `<option value="">Loading from ${broker}...</option>`;
+            
+            try {
+                const response = await fetch(`/api/options/expirations?symbol=${symbol}&broker=${broker}`);
+                const data = await response.json();
+                
+                if (data.expirations && data.expirations.length > 0) {
+                    expiryCache[cacheKey] = data.expirations;
+                    populateExpiries(row, data.expirations);
+                } else {
+                    expirySelect.innerHTML = '<option value="">No expirations</option>';
+                }
+            } catch (error) {
+                console.error('Error loading expirations:', error);
+                expirySelect.innerHTML = '<option value="">Error loading</option>';
+            }
+        }
+
+        function populateExpiries(row, expirations) {
+            const expirySelect = document.getElementById(`expiry${row}`);
+            expirySelect.innerHTML = '<option value="">Expiry...</option>';
+            
+            expirations.forEach(exp => {
+                const option = document.createElement('option');
+                // API returns objects: {date: "2025-12-20", label: "Dec 20, 2025"}
+                if (typeof exp === 'object' && exp.date) {
+                    option.value = exp.date;
+                    option.textContent = exp.label || exp.date;
+                } else {
+                    // Fallback for string format
+                    option.value = exp;
+                    const date = new Date(exp + 'T12:00:00');
+                    option.textContent = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                }
+                expirySelect.appendChild(option);
+            });
+        }
+
+        for (let i = 1; i <= 4; i++) {
+            document.getElementById(`symbol${i}`).addEventListener('blur', () => loadExpirations(i));
+            document.getElementById(`symbol${i}`).addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') loadExpirations(i);
+            });
+        }
+
+        async function loadQuote(row) {
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const strike = document.getElementById(`strike${row}`).value.trim();
+            const expiry = document.getElementById(`expiry${row}`).value;
+            const type = rowData[row].type;
+            const broker = document.getElementById('brokerSelect').value;
+
+            if (!symbol || !strike || !expiry) {
+                showToast('Please fill in Symbol, Strike, and Expiry', 'error');
+                return;
+            }
+
+            const quoteSection = document.getElementById(`quoteSection${row}`);
+            quoteSection.innerHTML = `<span class="quote-placeholder">Loading from ${broker}...</span>`;
+
+            try {
+                const response = await fetch('/api/options/strike-quote', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        strike: parseFloat(strike),
+                        expiry: expiry,
+                        option_type: type,
+                        broker: broker
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    quoteSection.innerHTML = `<span class="quote-placeholder" style="color: var(--danger);">${data.error}</span>`;
+                    return;
+                }
+
+                rowData[row].quote = data;
+                rowData[row].optionId = data.option_id || '';
+
+                const optionRow = document.getElementById(`optionRow${row}`);
+                optionRow.classList.add('has-data');
+
+                const dataSource = data.data_source || 'Unknown';
+                const sourceClass = dataSource === 'Webull' ? 'webull' : 'alpaca';
+                
+                quoteSection.innerHTML = `
+                    <div class="quote-box">
+                        <div class="quote-label">BID</div>
+                        <div class="quote-value bid">$${data.bid.toFixed(2)}</div>
+                    </div>
+                    <div class="quote-box">
+                        <div class="quote-label">ASK</div>
+                        <div class="quote-value ask">$${data.ask.toFixed(2)}</div>
+                    </div>
+                    <div class="quote-box">
+                        <div class="quote-label">MID</div>
+                        <div class="quote-value mid">$${data.mid.toFixed(2)}</div>
+                    </div>
+                    <div class="greeks-inline">
+                        <div class="greek-item"><span class="greek-label">IV:</span><span class="greek-value">${data.iv ? (data.iv * 100).toFixed(1) + '%' : 'N/A'}</span></div>
+                        <div class="greek-item"><span class="greek-label">Δ:</span><span class="greek-value">${data.delta ? data.delta.toFixed(3) : 'N/A'}</span></div>
+                    </div>
+                    <span class="data-source-badge ${sourceClass}">${dataSource}</span>
+                `;
+
+                document.getElementById(`limitPrice${row}`).value = data.mid.toFixed(2);
+                document.getElementById(`divider${row}`).style.display = 'block';
+                document.getElementById(`orderSection${row}`).style.display = 'flex';
+                updateTotal(row);
+
+            } catch (error) {
+                console.error('Error loading quote:', error);
+                quoteSection.innerHTML = `<span class="quote-placeholder" style="color: var(--danger);">Error: ${error.message}</span>`;
+            }
+        }
+
+        function adjustPrice(row, delta) {
+            const input = document.getElementById(`limitPrice${row}`);
+            let value = parseFloat(input.value) || 0;
+            value = Math.max(0.01, value + delta);
+            input.value = value.toFixed(2);
+            updateTotal(row);
+        }
+
+        function adjustQty(row, delta) {
+            const input = document.getElementById(`qty${row}`);
+            let value = parseInt(input.value) || 1;
+            value = Math.max(1, value + delta);
+            input.value = value;
+            updateTotal(row);
+        }
+
+        function updateTotal(row) {
+            const price = parseFloat(document.getElementById(`limitPrice${row}`).value) || 0;
+            const qty = parseInt(document.getElementById(`qty${row}`).value) || 1;
+            const total = price * qty * 100;
+            document.getElementById(`totalCost${row}`).textContent = '$' + total.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        }
+
+        for (let i = 1; i <= 4; i++) {
+            document.getElementById(`limitPrice${i}`).addEventListener('input', () => updateTotal(i));
+            document.getElementById(`qty${i}`).addEventListener('input', () => updateTotal(i));
+        }
+
+        function clearRow(row) {
+            document.getElementById(`symbol${row}`).value = '';
+            document.getElementById(`strike${row}`).value = '';
+            document.getElementById(`expiry${row}`).innerHTML = '<option value="">Expiry...</option>';
+            document.getElementById(`quoteSection${row}`).innerHTML = '<span class="quote-placeholder">Enter details & click Load</span>';
+            document.getElementById(`divider${row}`).style.display = 'none';
+            document.getElementById(`orderSection${row}`).style.display = 'none';
+            document.getElementById(`optionRow${row}`).classList.remove('has-data');
+            setType(row, 'CALL');
+            rowData[row] = { type: 'CALL', quote: null, optionId: '' };
+        }
+
+        async function placeOrder(row, side) {
+            const data = rowData[row];
+            if (!data.quote) {
+                showToast('Please load a quote first', 'error');
+                return;
+            }
+
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const strike = parseFloat(document.getElementById(`strike${row}`).value);
+            const expiry = document.getElementById(`expiry${row}`).value;
+            const price = parseFloat(document.getElementById(`limitPrice${row}`).value);
+            const qty = parseInt(document.getElementById(`qty${row}`).value);
+            const broker = document.getElementById('brokerSelect').value;
+
+            try {
+                const response = await fetch('/api/options/order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        strike: strike,
+                        expiry: expiry,
+                        option_type: data.type,
+                        side: side,
+                        quantity: qty,
+                        price: price,
+                        option_id: data.optionId,
+                        broker: broker
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast(`${side} order placed: ${qty}x ${symbol} $${strike}${data.type[0]} @ $${price}`, 'success');
+                } else {
+                    showToast(result.error || 'Order failed', 'error');
+                }
+            } catch (error) {
+                showToast('Order failed: ' + error.message, 'error');
+            }
+        }
+
+        function showToast(message, type) {
+            const existing = document.querySelector('.toast');
+            if (existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => toast.remove(), 4000);
+        }
+    </script>
+</body>
+</html>

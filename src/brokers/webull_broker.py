@@ -1,0 +1,793 @@
+"""
+Webull Broker Implementation
+"""
+
+import sys
+import os
+import asyncio
+from typing import Optional, Dict, Any
+from webull import webull, paper_webull
+from datetime import datetime
+
+# Add parent directory to path for absolute imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+from broker_interface import BrokerInterface, OrderResult, BrokerFactory
+
+
+class WebullBroker(BrokerInterface):
+    """Webull broker implementation using webull package"""
+    
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self.name = "WEBULL"
+        self.wb = None
+        self.paper_trade = config.get('paper_trade', False)
+    
+    async def connect(self) -> bool:
+        """Connect to Webull"""
+        try:
+            # Initialize Webull object
+            if self.paper_trade:
+                self.wb = paper_webull()
+                print(f"[{self.name}] Using paper trading mode")
+            else:
+                self.wb = webull()
+                print(f"[{self.name}] Using LIVE trading mode")
+            
+            # Try token-based authentication first
+            access_token = self.config.get('access_token')
+            refresh_token = self.config.get('refresh_token')
+            did = self.config.get('did')
+            
+            if access_token and refresh_token:
+                print(f"[{self.name}] Using saved tokens for authentication")
+                self.wb.access_token = access_token
+                self.wb.refresh_token = refresh_token
+                if did:
+                    self.wb.did = did
+                
+                # Verify connection
+                account = await asyncio.to_thread(self.wb.get_account)
+                if account:
+                    self.connected = True
+                    print(f"[{self.name}] ✓ Connected successfully (token auth)")
+                    return True
+            
+            # Fall back to username/password
+            username = self.config.get('username')
+            password = self.config.get('password')
+            
+            if username and password:
+                print(f"[{self.name}] Attempting username/password login")
+                def login():
+                    return self.wb.login(username, password)
+                
+                result = await asyncio.to_thread(login)
+                if result:
+                    self.connected = True
+                    print(f"[{self.name}] ✓ Connected successfully (password auth)")
+                    return True
+            
+            print(f"[{self.name}] ❌ Failed to connect - no valid credentials")
+            return False
+            
+        except Exception as e:
+            print(f"[{self.name}] ❌ Connection error: {e}")
+            return False
+    
+    async def disconnect(self):
+        """Disconnect from Webull"""
+        self.connected = False
+        print(f"[{self.name}] Disconnected")
+    
+    async def get_account_info(self) -> Dict[str, Any]:
+        """Get account information"""
+        try:
+            account_response = await asyncio.to_thread(self.wb.get_account)
+            
+            # Unwrap API response if it has 'data' key
+            if isinstance(account_response, dict) and 'data' in account_response:
+                account = account_response['data']
+            else:
+                account = account_response
+            
+            # Parse accountMembers list into a dict (Webull returns {'key': 'name', 'value': 'val'} items)
+            account_data = {}
+            account_members = account.get('accountMembers', []) if isinstance(account, dict) else []
+            if account_members and isinstance(account_members, list):
+                for item in account_members:
+                    if isinstance(item, dict) and 'key' in item and 'value' in item:
+                        account_data[item['key']] = item['value']
+            
+            # Merge direct fields with parsed accountMembers (accountMembers takes priority)
+            if isinstance(account, dict):
+                for k, v in account.items():
+                    if k != 'accountMembers' and k not in account_data:
+                        account_data[k] = v
+            
+            # DEBUG: Print ALL fields from Webull API so we can map them correctly
+            print(f"[{self.name}] [DEBUG] ========== WEBULL ACCOUNT DATA ==========")
+            print(f"[{self.name}] [DEBUG] All parsed fields ({len(account_data)} total):")
+            for key, val in sorted(account_data.items()):
+                # Only print scalar values, skip nested objects
+                if isinstance(val, (int, float, str)) and val:
+                    print(f"[{self.name}] [DEBUG]   {key}: {val}")
+            print(f"[{self.name}] [DEBUG] ==========================================")
+            
+            # Try multiple field name variations for buying power
+            buying_power = 0.0
+            for field in ['buyingPower', 'dayBuyingPower', 'cashAvailableForTrade', 'settledFunds']:
+                if field in account_data:
+                    try:
+                        buying_power = float(account_data[field])
+                        if buying_power > 0:
+                            print(f"[{self.name}] [DEBUG] Using '{field}' for buying_power: ${buying_power:.2f}")
+                            break
+                    except (ValueError, TypeError):
+                        pass
+            
+            # Get options-specific buying power (critical for options trading)
+            options_buying_power = 0.0
+            if 'optionBuyingPower' in account_data:
+                try:
+                    options_buying_power = float(account_data['optionBuyingPower'])
+                    print(f"[{self.name}] [DEBUG] Found optionBuyingPower: ${options_buying_power:.2f}")
+                except (ValueError, TypeError):
+                    pass
+            # Fallback to regular buying power if no options BP
+            if options_buying_power == 0:
+                options_buying_power = buying_power
+            
+            # Try multiple field name variations for cash
+            cash = 0.0
+            for field in ['settledCash', 'cashBalance', 'settledFunds']:
+                if field in account_data:
+                    try:
+                        cash = float(account_data[field])
+                        if cash > 0:
+                            break
+                    except (ValueError, TypeError):
+                        pass
+            
+            # Try multiple field name variations for portfolio value (market value)
+            portfolio_value = 0.0
+            for field in ['netLiquidation', 'totalMarketValue', 'accountValue', 'totalAccountValue']:
+                if field in account_data:
+                    try:
+                        portfolio_value = float(account_data[field])
+                        if portfolio_value > 0:
+                            break
+                    except (ValueError, TypeError):
+                        pass
+            
+            result = {
+                'buying_power': buying_power,
+                'options_buying_power': options_buying_power,
+                'cash': cash,
+                'portfolio_value': portfolio_value
+            }
+            print(f"[{self.name}] [DEBUG] Final account info: BP=${buying_power:.2f}, OptBP=${options_buying_power:.2f}, Cash=${cash:.2f}, PortValue=${portfolio_value:.2f}")
+            return result
+        except Exception as e:
+            print(f"[{self.name}] Error getting account info: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+    
+    async def get_positions(self) -> Dict[str, Any]:
+        """Get current positions"""
+        try:
+            positions = await asyncio.to_thread(self.wb.get_positions)
+            result = {}
+            for pos in positions:
+                symbol = pos.get('ticker', {}).get('symbol', '')
+                quantity = int(pos.get('position', 0))
+                if symbol:
+                    result[symbol] = quantity
+            return result
+        except Exception as e:
+            print(f"[{self.name}] Error getting positions: {e}")
+            return {}
+    
+    async def get_positions_detailed(self) -> list:
+        """Get detailed positions with full information"""
+        try:
+            positions_raw = await asyncio.to_thread(self.wb.get_positions)
+            positions = []
+            
+            for pos in positions_raw:
+                # Skip closed positions
+                position_qty = float(pos.get('position', 0))
+                if position_qty <= 0:
+                    continue
+                
+                symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
+                asset_type = pos.get('assetType', 'unknown')
+                
+                # Check if this is an option
+                is_option = (
+                    'optionId' in pos or 
+                    'strikePrice' in pos or 
+                    asset_type.lower() in ('option', 'opt')
+                )
+                
+                if is_option:
+                    # Option position
+                    strike = float(pos.get('strikePrice', 0))
+                    direction = pos.get('direction', '').upper()
+                    expiry = pos.get('expireDate', '')
+                    
+                    # Format expiry from YYYY-MM-DD to MM/DD
+                    expiry_mmdd = ''
+                    if expiry and '-' in expiry:
+                        from datetime import datetime
+                        try:
+                            exp_date = datetime.strptime(expiry, '%Y-%m-%d')
+                            expiry_mmdd = exp_date.strftime('%m/%d')
+                        except:
+                            expiry_mmdd = expiry
+                    
+                    positions.append({
+                        'asset': 'option',
+                        'symbol': symbol,
+                        'quantity': position_qty,
+                        'avg_cost': float(pos.get('costPrice', 0)),
+                        'current_price': float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0)),
+                        'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
+                        'option_id': pos.get('optionId', 0),
+                        'strike': strike,
+                        'expiry': expiry_mmdd,
+                        'expiry_full': expiry,
+                        'direction': 'C' if direction == 'CALL' else ('P' if direction == 'PUT' else ''),
+                        'ticker_id': pos.get('ticker', {}).get('tickerId', 0)
+                    })
+                else:
+                    # Stock position
+                    quantity = position_qty
+                    market_value = float(pos.get('marketValue', 0))
+                    current_price = market_value / quantity if quantity > 0 else 0
+                    
+                    positions.append({
+                        'asset': 'stock',
+                        'symbol': symbol,
+                        'quantity': quantity,
+                        'avg_cost': float(pos.get('costPrice', 0)),
+                        'current_price': current_price,
+                        'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
+                        'ticker_id': pos.get('ticker', {}).get('tickerId', 0)
+                    })
+            
+            return positions
+        except Exception as e:
+            print(f"[{self.name}] Error getting detailed positions: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
+    async def get_pending_orders(self) -> list:
+        """Get all pending/open orders from Webull
+        
+        Returns:
+            List of order dicts with keys: orderId, symbol, quantity, limit_price, action, status
+        """
+        try:
+            orders_raw = await asyncio.to_thread(self.wb.get_current_orders)
+            orders = []
+            
+            if not orders_raw:
+                return []
+            
+            for order in orders_raw:
+                # Extract order details
+                ticker = order.get('ticker', {})
+                symbol = ticker.get('symbol', '') if ticker else ''
+                
+                orders.append({
+                    'order_id': str(order.get('orderId', '')),
+                    'symbol': symbol,
+                    'quantity': int(order.get('totalQuantity', 0)),
+                    'limit_price': float(order.get('lmtPrice', 0)) if order.get('lmtPrice') else None,
+                    'action': order.get('action', ''),  # BUY/SELL
+                    'status': order.get('status', ''),
+                    'order_type': order.get('orderType', ''),
+                    'filled_quantity': int(order.get('filledQuantity', 0))
+                })
+            
+            return orders
+        except Exception as e:
+            print(f"[{self.name}] Error getting pending orders: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
+    async def place_stock_order(
+        self,
+        symbol: str,
+        action: str,
+        quantity: int,
+        price: Optional[float] = None
+    ) -> OrderResult:
+        """Place a stock order"""
+        try:
+            side = 'BUY' if action == 'BTO' else 'SELL'
+            
+            def execute_order():
+                if price is None:
+                    # Market order
+                    return self.wb.place_order(
+                        stock=symbol,
+                        price=0.0,
+                        action=side,
+                        orderType='MKT',
+                        enforce='GTC',
+                        quant=quantity
+                    )
+                else:
+                    # Limit order
+                    return self.wb.place_order(
+                        stock=symbol,
+                        price=price,
+                        action=side,
+                        orderType='LMT',
+                        enforce='GTC',
+                        quant=quantity
+                    )
+            
+            response = await asyncio.to_thread(execute_order)
+            
+            if response and not response.get('msg'):
+                # Send Discord notification
+                try:
+                    from gui_app.discord_notifier import send_bto_notification, send_stc_notification
+                    
+                    executed_price = price if price else 0.0  # For market orders, we don't know exact price yet
+                    
+                    if action == "BTO":
+                        send_bto_notification(
+                            symbol=symbol,
+                            quantity=quantity,
+                            price=executed_price
+                        )
+                    elif action == "STC":
+                        # TODO: Look up entry price from database for P&L calculation
+                        send_stc_notification(
+                            symbol=symbol,
+                            quantity=quantity,
+                            price=executed_price,
+                            entry_price=0.0  # Placeholder - will need database lookup
+                        )
+                except Exception as e:
+                    print(f"[{self.name}] Failed to send Discord notification: {e}")
+                
+                return OrderResult(
+                    success=True,
+                    order_id=str(response.get('orderId', '')),
+                    message=f"Stock order placed: {action} {quantity} {symbol}",
+                    price=price,
+                    quantity=quantity,
+                    symbol=symbol,
+                    action=action
+                )
+            else:
+                error_msg = response.get('msg', 'Unknown error') if response else 'No response'
+                return OrderResult(
+                    success=False,
+                    message=f"Order failed: {error_msg}",
+                    symbol=symbol,
+                    action=action
+                )
+                
+        except Exception as e:
+            return OrderResult(
+                success=False,
+                message=f"Exception: {str(e)}",
+                symbol=symbol,
+                action=action
+            )
+    
+    async def place_bracket_order(
+        self,
+        symbol: str,
+        action: str,
+        quantity: int,
+        stop_loss_price: Optional[float] = None,
+        profit_target_price: Optional[float] = None,
+        entry_price: Optional[float] = None
+    ) -> OrderResult:
+        """Place a bracket order (entry + stop loss + profit target)
+        
+        ⚠️ WEBULL LIMITATION: This places 3 SEPARATE orders (not linked as OCO)
+        - Entry order (market or limit)
+        - Stop loss order (independent STP)
+        - Profit target order (independent LMT)
+        
+        Unlike Alpaca's true bracket orders, these orders are NOT automatically linked.
+        If one exit fills, the other will NOT auto-cancel. Manual monitoring required.
+        
+        For true OCO bracket orders, use Alpaca broker.
+        
+        Args:
+            symbol: Stock ticker
+            action: BTO (buy) or STC (sell)
+            quantity: Number of shares
+            stop_loss_price: Stop loss price (separate order)
+            profit_target_price: Profit target price (separate order)
+            entry_price: Entry limit price (None for market order)
+        """
+        try:
+            print(f"[{self.name}] ⚠️  BEST-EFFORT bracket order for {symbol} (not true OCO)...")
+            if stop_loss_price:
+                print(f"[{self.name}]   Stop Loss: ${stop_loss_price} (separate order)")
+            if profit_target_price:
+                print(f"[{self.name}]   Profit Target: ${profit_target_price} (separate order)")
+            
+            side = 'BUY' if action == 'BTO' else 'SELL'
+            
+            # Step 1: Place entry order
+            def execute_entry_order():
+                if entry_price is None:
+                    # Market order
+                    return self.wb.place_order(
+                        stock=symbol,
+                        price=0.0,
+                        action=side,
+                        orderType='MKT',
+                        enforce='DAY',
+                        quant=quantity
+                    )
+                else:
+                    # Limit order
+                    return self.wb.place_order(
+                        stock=symbol,
+                        price=entry_price,
+                        action=side,
+                        orderType='LMT',
+                        enforce='DAY',
+                        quant=quantity
+                    )
+            
+            entry_response = await asyncio.to_thread(execute_entry_order)
+            
+            if not entry_response or entry_response.get('msg'):
+                error_msg = entry_response.get('msg', 'Unknown error') if entry_response else 'No response'
+                return OrderResult(
+                    success=False,
+                    message=f"Entry order failed: {error_msg}",
+                    symbol=symbol,
+                    action=action
+                )
+            
+            entry_order_id = str(entry_response.get('orderId', ''))
+            print(f"[{self.name}] ✓ Entry order placed (ID: {entry_order_id})")
+            
+            # Step 2: Place exit orders (stop loss and profit target) as OCO
+            exit_order_ids = []
+            exit_side = 'SELL' if action == 'BTO' else 'BUY'  # Opposite of entry
+            
+            # Place stop loss order
+            if stop_loss_price:
+                try:
+                    def execute_stop_loss():
+                        return self.wb.place_order(
+                            stock=symbol,
+                            price=stop_loss_price,
+                            action=exit_side,
+                            orderType='STP',  # Stop order
+                            enforce='GTC',
+                            quant=quantity
+                        )
+                    
+                    stop_response = await asyncio.to_thread(execute_stop_loss)
+                    
+                    if stop_response and not stop_response.get('msg'):
+                        stop_order_id = str(stop_response.get('orderId', ''))
+                        exit_order_ids.append(stop_order_id)
+                        print(f"[{self.name}] ✓ Stop loss order placed (ID: {stop_order_id})")
+                    else:
+                        print(f"[{self.name}] ⚠️ Stop loss order failed: {stop_response.get('msg', 'Unknown')}")
+                except Exception as e:
+                    print(f"[{self.name}] ⚠️ Stop loss error: {e}")
+            
+            # Place profit target order
+            if profit_target_price:
+                try:
+                    def execute_profit_target():
+                        return self.wb.place_order(
+                            stock=symbol,
+                            price=profit_target_price,
+                            action=exit_side,
+                            orderType='LMT',  # Limit order
+                            enforce='GTC',
+                            quant=quantity
+                        )
+                    
+                    target_response = await asyncio.to_thread(execute_profit_target)
+                    
+                    if target_response and not target_response.get('msg'):
+                        target_order_id = str(target_response.get('orderId', ''))
+                        exit_order_ids.append(target_order_id)
+                        print(f"[{self.name}] ✓ Profit target order placed (ID: {target_order_id})")
+                    else:
+                        print(f"[{self.name}] ⚠️ Profit target order failed: {target_response.get('msg', 'Unknown')}")
+                except Exception as e:
+                    print(f"[{self.name}] ⚠️ Profit target error: {e}")
+            
+            # Build success message
+            message_parts = [f"Bracket order placed: {action} {quantity} {symbol}"]
+            if stop_loss_price:
+                message_parts.append(f"Stop Loss @ ${stop_loss_price}")
+            if profit_target_price:
+                message_parts.append(f"Target @ ${profit_target_price}")
+            
+            # Send Discord notification for entry order
+            try:
+                from gui_app.discord_notifier import send_bto_notification
+                
+                if action == "BTO":
+                    send_bto_notification(
+                        symbol=symbol,
+                        quantity=quantity,
+                        price=entry_price if entry_price else 0.0
+                    )
+            except Exception as e:
+                print(f"[{self.name}] Failed to send Discord notification: {e}")
+            
+            return OrderResult(
+                success=True,
+                order_id=entry_order_id,
+                message=" | ".join(message_parts) + f" (Exit orders: {len(exit_order_ids)})",
+                price=entry_price if entry_price else 0.0,
+                quantity=quantity,
+                symbol=symbol,
+                action=action
+            )
+                
+        except Exception as e:
+            error_msg = str(e)
+            print(f"[{self.name}] Bracket order exception: {error_msg}")
+            
+            return OrderResult(
+                success=False,
+                message=f"Exception: {error_msg}",
+                symbol=symbol,
+                action=action
+            )
+    
+    async def place_option_order(
+        self,
+        symbol: str,
+        strike: float,
+        expiry: str,
+        option_type: str,
+        action: str,
+        quantity: int,
+        price: Optional[float] = None,
+        option_id: Optional[str] = None
+    ) -> OrderResult:
+        """Place an options order"""
+        try:
+            side = 'BUY' if action == 'BTO' else 'SELL'
+            opt_type = 'call' if option_type.lower() in ['c', 'call'] else 'put'
+            
+            # CRITICAL: optionId is required by Webull API
+            if not option_id:
+                return OrderResult(
+                    success=False,
+                    message="Error: option_id is required for option orders",
+                    symbol=symbol,
+                    action=action
+                )
+            
+            def execute_order():
+                if price is None:
+                    # Market order
+                    return self.wb.place_order_option(
+                        optionId=option_id,
+                        lmtPrice=0.0,
+                        stpPrice=None,
+                        action=side,
+                        orderType='MKT',
+                        enforce='GTC',
+                        quant=quantity
+                    )
+                else:
+                    # Limit order
+                    return self.wb.place_order_option(
+                        optionId=option_id,
+                        lmtPrice=price,
+                        stpPrice=None,
+                        action=side,
+                        orderType='LMT',
+                        enforce='GTC',
+                        quant=quantity
+                    )
+            
+            response = await asyncio.to_thread(execute_order)
+            
+            if response and not response.get('msg'):
+                # Send Discord notification
+                try:
+                    from gui_app.discord_notifier import send_bto_notification, send_stc_notification
+                    
+                    executed_price = price if price else 0.0
+                    
+                    if action == "BTO":
+                        send_bto_notification(
+                            symbol=symbol,
+                            quantity=quantity,
+                            price=executed_price,
+                            strike=strike,
+                            expiry=expiry,
+                            call_put=option_type
+                        )
+                    elif action == "STC":
+                        send_stc_notification(
+                            symbol=symbol,
+                            quantity=quantity,
+                            price=executed_price,
+                            entry_price=0.0,  # TODO: Database lookup
+                            strike=strike,
+                            expiry=expiry,
+                            call_put=option_type
+                        )
+                except Exception as e:
+                    print(f"[{self.name}] Failed to send Discord notification: {e}")
+                
+                return OrderResult(
+                    success=True,
+                    order_id=str(response.get('orderId', '')),
+                    message=f"Option order placed: {action} {quantity} {symbol} ${strike}{option_type} {expiry}",
+                    price=price,
+                    quantity=quantity,
+                    symbol=symbol,
+                    action=action
+                )
+            else:
+                error_msg = response.get('msg', 'Unknown error') if response else 'No response'
+                return OrderResult(
+                    success=False,
+                    message=f"Order failed: {error_msg}",
+                    symbol=symbol,
+                    action=action
+                )
+                
+        except Exception as e:
+            return OrderResult(
+                success=False,
+                message=f"Exception: {str(e)}",
+                symbol=symbol,
+                action=action
+            )
+    
+    async def get_quote(self, symbol: str) -> Optional[float]:
+        """Get current price for a symbol"""
+        try:
+            quote = await asyncio.to_thread(self.wb.get_quote, symbol)
+            if quote:
+                return float(quote.get('close', 0))
+            return None
+        except Exception as e:
+            print(f"[{self.name}] Error getting quote for {symbol}: {e}")
+            return None
+    
+    async def get_options_expiration_dates(self, symbol: str) -> list:
+        """Get all available option expiration dates for a symbol"""
+        try:
+            result = await asyncio.to_thread(self.wb.get_options_expiration_dates, stock=symbol)
+            if result and 'expireDateList' in result:
+                return [
+                    {
+                        'date': exp['date'],
+                        'count': exp.get('count', 0),
+                        'label': exp.get('label', exp['date'])
+                    }
+                    for exp in result['expireDateList']
+                ]
+            return []
+        except Exception as e:
+            print(f"[{self.name}] Error getting expiration dates for {symbol}: {e}")
+            return []
+    
+    async def get_option_chain(self, symbol: str, expiration_date: str) -> Dict[str, Any]:
+        """Get option chain for a symbol and expiration date"""
+        try:
+            chain = await asyncio.to_thread(
+                self.wb.get_option_chain,
+                stock=symbol,
+                expiration_date=expiration_date
+            )
+            
+            if not chain:
+                return {'calls': [], 'puts': [], 'stock_price': None}
+            
+            # Get current stock price
+            stock_price = None
+            if 'stock' in chain and 'close' in chain['stock']:
+                stock_price = float(chain['stock']['close'])
+            
+            # Parse call options
+            calls = []
+            if 'call' in chain:
+                for call in chain['call']:
+                    calls.append({
+                        'strike': float(call.get('strikePrice', 0)),
+                        'bid': float(call.get('bidPrice', 0)),
+                        'ask': float(call.get('askPrice', 0)),
+                        'last': float(call.get('lastPrice', 0)),
+                        'volume': int(call.get('volume', 0)),
+                        'open_interest': int(call.get('openInterest', 0)),
+                        'delta': float(call.get('delta', 0)),
+                        'gamma': float(call.get('gamma', 0)),
+                        'theta': float(call.get('theta', 0)),
+                        'vega': float(call.get('vega', 0)),
+                        'iv': float(call.get('impliedVolatility', 0)),
+                        'option_id': call.get('optionId', ''),
+                        'symbol': call.get('symbol', '')
+                    })
+            
+            # Parse put options
+            puts = []
+            if 'put' in chain:
+                for put in chain['put']:
+                    puts.append({
+                        'strike': float(put.get('strikePrice', 0)),
+                        'bid': float(put.get('bidPrice', 0)),
+                        'ask': float(put.get('askPrice', 0)),
+                        'last': float(put.get('lastPrice', 0)),
+                        'volume': int(put.get('volume', 0)),
+                        'open_interest': int(put.get('openInterest', 0)),
+                        'delta': float(put.get('delta', 0)),
+                        'gamma': float(put.get('gamma', 0)),
+                        'theta': float(put.get('theta', 0)),
+                        'vega': float(put.get('vega', 0)),
+                        'iv': float(put.get('impliedVolatility', 0)),
+                        'option_id': put.get('optionId', ''),
+                        'symbol': put.get('symbol', '')
+                    })
+            
+            return {
+                'calls': calls,
+                'puts': puts,
+                'stock_price': stock_price,
+                'expiration': expiration_date,
+                'symbol': symbol
+            }
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting option chain for {symbol} {expiration_date}: {e}")
+            return {'calls': [], 'puts': [], 'stock_price': None}
+    
+    async def place_option_order_simple(self, symbol: str, strike: float, expiry: str, 
+                                       option_type: str, quantity: int, side: str, 
+                                       price: float, option_id: str) -> OrderResult:
+        """
+        Simplified option order placement - just specify price
+        
+        Args:
+            symbol: Stock symbol
+            strike: Strike price
+            expiry: Expiration date (YYYY-MM-DD format)
+            option_type: 'CALL' or 'PUT'
+            quantity: Number of contracts
+            side: 'BUY' or 'SELL'
+            price: Limit price per contract
+            option_id: Webull option contract ID (REQUIRED)
+        """
+        return await self.place_option_order(
+            symbol=symbol,
+            strike=strike,
+            expiry=expiry,
+            option_type=option_type,
+            quantity=quantity,
+            action='BTO' if side == 'BUY' else 'STC',
+            price=price,
+            option_id=option_id
+        )
+
+
+# Register this broker with the factory
+BrokerFactory.register_broker('WEBULL', WebullBroker)

@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - BotifyTrades</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}?v=2">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-dark: #0E1117;
+            --bg-card: rgba(26, 26, 46, 0.95);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --text-primary: #e0e0e0;
+            --text-secondary: #888;
+            --mint: #0FF0B3;
+            --violet: #7C3AED;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #0f0f1a 100%);
+            min-height: 100vh;
+            color: var(--text-primary);
+        }
+        .nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 40px;
+            background: rgba(14, 17, 23, 0.9);
+            border-bottom: 1px solid var(--border-color);
+            backdrop-filter: blur(20px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+        .logo-mark {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, var(--mint), var(--violet));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .logo-text {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--bg-dark);
+        }
+        .brand-name {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            color: white;
+        }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        .nav-link:hover, .nav-link.active {
+            color: var(--mint);
+        }
+        .nav-user {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--mint), var(--violet));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: var(--bg-dark);
+            font-size: 14px;
+        }
+        .logout-btn {
+            padding: 8px 16px;
+            background: transparent;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+        .logout-btn:hover {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+        .main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        .welcome-section {
+            margin-bottom: 40px;
+        }
+        .welcome-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .welcome-subtitle {
+            color: var(--text-secondary);
+            font-size: 16px;
+        }
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 40px;
+        }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 28px;
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+        .card-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-active {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--success);
+        }
+        .status-inactive {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger);
+        }
+        .status-pending {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--warning);
+        }
+        .subscription-details {
+            display: grid;
+            gap: 20px;
+        }
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+        .detail-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        .detail-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 600;
+            font-size: 15px;
+        }
+        .license-key {
+            font-family: monospace;
+            font-size: 13px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 12px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .license-key code {
+            color: var(--mint);
+        }
+        .copy-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 4px;
+            transition: color 0.3s;
+        }
+        .copy-btn:hover {
+            color: var(--mint);
+        }
+        .expiry-warning {
+            color: var(--warning);
+        }
+        .expiry-danger {
+            color: var(--danger);
+        }
+        .feature-card {
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .feature-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--mint);
+        }
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, rgba(15, 240, 179, 0.2), rgba(124, 58, 237, 0.2));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+        .feature-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .feature-desc {
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .action-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            background: linear-gradient(135deg, var(--mint), var(--violet));
+            border: none;
+            border-radius: 10px;
+            color: var(--bg-dark);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(15, 240, 179, 0.3);
+        }
+        .action-btn.secondary {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        .action-btn.secondary:hover {
+            border-color: var(--mint);
+            color: var(--mint);
+        }
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+        @media (max-width: 900px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            .quick-actions {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <a href="/user/dashboard" class="nav-brand">
+            <div class="logo-mark">
+                <span class="logo-text">BT</span>
+            </div>
+            <span class="brand-name">BotifyTrades</span>
+        </a>
+        <div class="nav-links">
+            <a href="/user/dashboard" class="nav-link active">Dashboard</a>
+            <a href="/user/simulation" class="nav-link">Simulation</a>
+            <a href="/user/subscription" class="nav-link">Subscription</a>
+        </div>
+        <div class="nav-user">
+            <div class="user-avatar">{{ user.first_name[0] if user.first_name else 'U' }}</div>
+            <a href="/user/logout" class="logout-btn">Sign Out</a>
+        </div>
+    </nav>
+    
+    <main class="main">
+        <section class="welcome-section">
+            <h1 class="welcome-title">Welcome back, {{ user.first_name or user.username }}!</h1>
+            <p class="welcome-subtitle">Manage your subscription and explore trading simulation tools</p>
+        </section>
+        
+        <div class="dashboard-grid">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <span>📋</span> Subscription Status
+                    </h2>
+                    {% if subscription.status == 'active' %}
+                    <span class="status-badge status-active">
+                        <span>●</span> Active
+                    </span>
+                    {% elif subscription.status == 'pending' %}
+                    <span class="status-badge status-pending">
+                        <span>●</span> Pending
+                    </span>
+                    {% else %}
+                    <span class="status-badge status-inactive">
+                        <span>●</span> Inactive
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="subscription-details">
+                    <div class="detail-row">
+                        <span class="detail-label">Subscription Plan</span>
+                        <span class="detail-value">{{ subscription.plan_name or 'Free Trial' }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Expires</span>
+                        <span class="detail-value {% if subscription.days_remaining <= 7 %}expiry-danger{% elif subscription.days_remaining <= 14 %}expiry-warning{% endif %}">
+                            {{ subscription.expiry_date or 'N/A' }}
+                            {% if subscription.days_remaining %}
+                            <span style="color: var(--text-secondary); font-weight: 400;">({{ subscription.days_remaining }} days)</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Member Since</span>
+                        <span class="detail-value">{{ user.created_at or 'N/A' }}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <span>🔑</span> License Information
+                    </h2>
+                </div>
+                <div class="subscription-details">
+                    <div class="detail-row">
+                        <span class="detail-label">License Key</span>
+                        <div class="license-key">
+                            <code id="license-key">{{ subscription.license_key or 'No license assigned' }}</code>
+                            {% if subscription.license_key %}
+                            <button class="copy-btn" onclick="copyLicenseKey()" title="Copy to clipboard">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">License Type</span>
+                        <span class="detail-value">{{ subscription.license_type or 'Standard' }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Machine Bound</span>
+                        <span class="detail-value">{{ 'Yes' if subscription.machine_bound else 'No' }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <h2 style="font-family: 'Space Grotesk'; font-size: 20px; margin-bottom: 20px;">Quick Actions</h2>
+        <div class="quick-actions">
+            <a href="/user/simulation" class="card feature-card" style="text-decoration: none;">
+                <div class="feature-icon">📊</div>
+                <h3 class="feature-title">Portfolio Simulation</h3>
+                <p class="feature-desc">Project future portfolio growth with custom parameters and trading strategies</p>
+            </a>
+            <a href="/user/subscription" class="card feature-card" style="text-decoration: none;">
+                <div class="feature-icon">💳</div>
+                <h3 class="feature-title">Manage Subscription</h3>
+                <p class="feature-desc">View billing history, upgrade plans, or manage payment methods</p>
+            </a>
+            <a href="/architecture" class="card feature-card" style="text-decoration: none;">
+                <div class="feature-icon">📖</div>
+                <h3 class="feature-title">Documentation</h3>
+                <p class="feature-desc">Learn about features, setup guides, and trading automation</p>
+            </a>
+        </div>
+    </main>
+    
+    <script>
+        function copyLicenseKey() {
+            const key = document.getElementById('license-key').textContent;
+            navigator.clipboard.writeText(key).then(() => {
+                alert('License key copied to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+    </script>
+</body>
+</html>

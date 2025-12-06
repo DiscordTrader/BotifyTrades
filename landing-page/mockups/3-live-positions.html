@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Positions - QuantumPulse</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="mockup-styles.css">
+</head>
+<body>
+    <div class="mockup-container">
+        <div class="mockup-header">
+            <h2 class="mockup-title">📊 Live Trading Positions</h2>
+            <div style="display: flex; gap: 16px; align-items: center;">
+                <div class="toggle-switch">
+                    <span style="font-size: 0.875rem; color: var(--text-secondary);">Hide Balance</span>
+                    <div class="toggle"></div>
+                </div>
+                <span class="mockup-badge locked">🔒 Real-time AI Risk Analysis - Pro Feature</span>
+            </div>
+        </div>
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th>Qty</th>
+                    <th>Avg Cost</th>
+                    <th>Last Price</th>
+                    <th>P/L %</th>
+                    <th>P/L $</th>
+                    <th>Risk Level</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>NVDA 120C 12/20</strong></td>
+                    <td>3</td>
+                    <td>$1.75</td>
+                    <td>$1.96</td>
+                    <td><span class="pnl-positive">+12.0%</span></td>
+                    <td><span class="pnl-positive">+$63</span></td>
+                    <td><span class="risk-indicator low">LOW</span></td>
+                    <td><span class="status-badge filled">Open</span></td>
+                </tr>
+                <tr>
+                    <td><strong>TSLA 260C 12/27</strong></td>
+                    <td>1</td>
+                    <td>$4.10</td>
+                    <td>$5.00</td>
+                    <td><span class="pnl-positive">+22.0%</span></td>
+                    <td><span class="pnl-positive">+$90</span></td>
+                    <td><span class="risk-indicator low">LOW</span></td>
+                    <td><span class="status-badge filled">Open</span></td>
+                </tr>
+                <tr>
+                    <td><strong>AAPL 195C 12/15</strong></td>
+                    <td>5</td>
+                    <td>$2.85</td>
+                    <td>$3.10</td>
+                    <td><span class="pnl-positive">+8.8%</span></td>
+                    <td><span class="pnl-positive">+$125</span></td>
+                    <td><span class="risk-indicator medium">MEDIUM</span></td>
+                    <td><span class="status-badge filled">Open</span></td>
+                </tr>
+                <tr>
+                    <td><strong>MSFT 380C 12/20</strong></td>
+                    <td>3</td>
+                    <td>$4.55</td>
+                    <td>$4.25</td>
+                    <td><span class="pnl-negative">-6.6%</span></td>
+                    <td><span class="pnl-negative">-$90</span></td>
+                    <td><span class="risk-indicator medium">MEDIUM</span></td>
+                    <td><span class="status-badge filled">Open</span></td>
+                </tr>
+                <tr>
+                    <td><strong>QQQ 425P 12/18</strong></td>
+                    <td>6</td>
+                    <td>$2.15</td>
+                    <td>$2.08</td>
+                    <td><span class="pnl-negative">-3.3%</span></td>
+                    <td><span class="pnl-negative">-$42</span></td>
+                    <td><span class="risk-indicator low">LOW</span></td>
+                    <td><span class="status-badge filled">Open</span></td>
+                </tr>
+                <tr>
+                    <td><strong>SPY 580C 12/22</strong></td>
+                    <td>4</td>
+                    <td>$3.20</td>
+                    <td>$3.75</td>
+                    <td><span class="pnl-positive">+17.2%</span></td>
+                    <td><span class="pnl-positive">+$220</span></td>
+                    <td><span class="risk-indicator low">LOW</span></td>
+                    <td><span class="status-badge filled">Open</span></td>
+                </tr>
+                <tr>
+                    <td><strong>AMD 145C 12/29</strong></td>
+                    <td>2</td>
+                    <td>$2.90</td>
+                    <td>$2.70</td>
+                    <td><span class="pnl-negative">-6.9%</span></td>
+                    <td><span class="pnl-negative">-$40</span></td>
+                    <td><span class="risk-indicator high">HIGH</span></td>
+                    <td><span class="status-badge filled">Open</span></td>
+                </tr>
+                <tr>
+                    <td><strong>META 490C 12/15</strong></td>
+                    <td>3</td>
+                    <td>$5.45</td>
+                    <td>$6.20</td>
+                    <td><span class="pnl-positive">+13.8%</span></td>
+                    <td><span class="pnl-positive">+$225</span></td>
+                    <td><span class="risk-indicator low">LOW</span></td>
+                    <td><span class="status-badge filled">Open</span></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 24px;">
+            <div class="info-card">
+                <div class="info-card-header">Total Positions</div>
+                <div class="info-card-value" style="color: var(--accent-teal); font-size: 1.5rem;">27</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-header">Total P/L</div>
+                <div class="info-card-value pnl-positive" style="font-size: 1.5rem;">+$551</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-header">Win Rate</div>
+                <div class="info-card-value" style="color: var(--success); font-size: 1.5rem;">62.5%</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-header">Avg Return</div>
+                <div class="info-card-value" style="color: var(--success); font-size: 1.5rem;">+8.1%</div>
+            </div>
+        </div>
+
+        <div class="premium-banner">
+            <div class="premium-banner-icon">🤖</div>
+            <div class="premium-banner-text">
+                <strong>Real-time AI Risk Analysis</strong> monitors position Greeks, IV changes, and market conditions to alert you before losses escalate. Pro feature only.
+            </div>
+            <a href="#" class="premium-banner-cta">Unlock AI Risk Analysis</a>
+        </div>
+    </div>
+</body>
+</html>

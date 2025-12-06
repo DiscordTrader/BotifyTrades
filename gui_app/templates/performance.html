@@ -1,0 +1,839 @@
+{% extends "base.html" %}
+{% block title %}Performance Dashboard{% endblock %}
+
+{% block content %}
+<style>
+:root {
+    --bg-primary: #0a0e17;
+    --bg-secondary: #0f1419;
+    --bg-card: #141a23;
+    --bg-elevated: #1a222d;
+    --border-color: #1e2a38;
+    --text-primary: #ffffff;
+    --text-secondary: #8899a6;
+    --text-muted: #536471;
+    --accent-green: #00c853;
+    --accent-red: #ff5252;
+    --accent-blue: #00d4ff;
+    --accent-gold: #ffc107;
+}
+
+.perf-container {
+    background: var(--bg-primary);
+    min-height: 100vh;
+    padding: 0;
+}
+
+.perf-header {
+    background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+    border-bottom: 1px solid var(--border-color);
+    padding: 20px 24px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.perf-header-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+.perf-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.perf-title-icon {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--accent-blue), #0099cc);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
+
+.controls-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.broker-select {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    min-width: 140px;
+}
+
+.broker-select:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+}
+
+.period-tabs {
+    display: flex;
+    background: var(--bg-card);
+    border-radius: 6px;
+    padding: 4px;
+    gap: 2px;
+}
+
+.period-tab {
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.period-tab:hover {
+    color: var(--text-primary);
+    background: var(--bg-elevated);
+}
+
+.period-tab.active {
+    background: var(--accent-blue);
+    color: var(--bg-primary);
+}
+
+.perf-content {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+.hero-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 24px;
+}
+
+.hero-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+}
+
+.hero-card.primary {
+    background: linear-gradient(135deg, var(--bg-card) 0%, #1a2533 100%);
+    border-color: var(--accent-blue);
+    border-width: 2px;
+}
+
+.hero-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.hero-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.hero-value.positive { color: var(--accent-green); }
+.hero-value.negative { color: var(--accent-red); }
+.hero-value.neutral { color: var(--text-primary); }
+
+.hero-subtext {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-top: 8px;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.metric-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+}
+
+.metric-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.metric-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.metric-value.positive { color: var(--accent-green); }
+.metric-value.negative { color: var(--accent-red); }
+
+.charts-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+    margin-bottom: 24px;
+}
+
+.chart-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.chart-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chart-body {
+    padding: 20px;
+    height: 280px;
+}
+
+.win-loss-chart-container {
+    height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tables-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 24px;
+}
+
+.table-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.table-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.perf-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.perf-table th {
+    background: var(--bg-elevated);
+    padding: 12px 16px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    text-align: left;
+    font-weight: 500;
+}
+
+.perf-table th:last-child { text-align: right; }
+
+.perf-table td {
+    padding: 12px 16px;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.perf-table td:last-child { text-align: right; }
+
+.perf-table tr:hover td {
+    background: var(--bg-elevated);
+}
+
+.symbol-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.symbol-badge {
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+}
+
+.pnl-positive { color: var(--accent-green); font-weight: 600; }
+.pnl-negative { color: var(--accent-red); font-weight: 600; }
+
+.source-badge {
+    font-size: 0.65rem;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.source-badge.gui { background: rgba(0, 212, 255, 0.2); color: var(--accent-blue); }
+.source-badge.discord { background: rgba(136, 153, 166, 0.2); color: var(--text-secondary); }
+.source-badge.risk { background: rgba(255, 193, 7, 0.2); color: var(--accent-gold); }
+
+.full-width-card {
+    grid-column: 1 / -1;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+}
+
+.empty-state-icon {
+    font-size: 2rem;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+
+.loading-skeleton {
+    background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-card) 50%, var(--bg-elevated) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 4px;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+@media (max-width: 1200px) {
+    .hero-stats { grid-template-columns: 1fr; }
+    .metrics-grid { grid-template-columns: repeat(3, 1fr); }
+    .charts-row { grid-template-columns: 1fr; }
+    .tables-row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+    .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    .perf-header-inner { flex-direction: column; gap: 16px; }
+    .controls-row { width: 100%; justify-content: center; flex-wrap: wrap; }
+}
+</style>
+
+<div class="perf-container">
+    <div class="perf-header">
+        <div class="perf-header-inner">
+            <div class="perf-title">
+                <div class="perf-title-icon">📊</div>
+                Performance Analytics
+            </div>
+            <div class="controls-row">
+                <select id="brokerFilter" class="broker-select">
+                    <option value="">All Brokers</option>
+                    <option value="Webull">Webull Live</option>
+                    <option value="ALPACA_PAPER">Alpaca Paper</option>
+                </select>
+                <div class="period-tabs">
+                    <button class="period-tab" data-period="today">1D</button>
+                    <button class="period-tab" data-period="7d">1W</button>
+                    <button class="period-tab active" data-period="30d">1M</button>
+                    <button class="period-tab" data-period="year">1Y</button>
+                    <button class="period-tab" data-period="all">ALL</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="perf-content">
+        <div class="hero-stats">
+            <div class="hero-card primary">
+                <div class="hero-label">Total P&L</div>
+                <div id="totalPnl" class="hero-value neutral">$0.00</div>
+                <div class="hero-subtext" id="pnlSubtext">Realized gains/losses</div>
+            </div>
+            <div class="hero-card">
+                <div class="hero-label">Win Rate</div>
+                <div id="winRate" class="hero-value neutral">0%</div>
+                <div class="hero-subtext" id="winLossCount">0W / 0L</div>
+            </div>
+            <div class="hero-card">
+                <div class="hero-label">Profit Factor</div>
+                <div id="profitFactor" class="hero-value neutral">0.00</div>
+                <div class="hero-subtext">Gross profit / loss ratio</div>
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Total Trades</div>
+                <div id="totalTrades" class="metric-value">0</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Gross Profit</div>
+                <div id="grossProfit" class="metric-value positive">$0</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Gross Loss</div>
+                <div id="grossLoss" class="metric-value negative">$0</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Avg P&L</div>
+                <div id="avgPnl" class="metric-value">$0</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Best Trade</div>
+                <div id="bestTrade" class="metric-value positive">$0</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Worst Trade</div>
+                <div id="worstTrade" class="metric-value negative">$0</div>
+            </div>
+        </div>
+
+        <div class="charts-row">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div class="chart-title">📈 Equity Curve</div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="equityChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div class="chart-title">🎯 Win/Loss Distribution</div>
+                </div>
+                <div class="chart-body win-loss-chart-container">
+                    <canvas id="winLossChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-card full-width-card" style="margin-bottom: 24px;">
+            <div class="chart-header">
+                <div class="chart-title">📊 Daily P&L</div>
+            </div>
+            <div class="chart-body">
+                <canvas id="dailyPnlChart"></canvas>
+            </div>
+        </div>
+
+        <div class="tables-row">
+            <div class="table-card">
+                <div class="table-header">
+                    <div class="table-title">🏆 Top Symbols</div>
+                </div>
+                <table class="perf-table">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Trades</th>
+                            <th>Win Rate</th>
+                            <th>P&L</th>
+                        </tr>
+                    </thead>
+                    <tbody id="topSymbolsTable">
+                        <tr><td colspan="4" class="empty-state"><div class="empty-state-icon">📭</div>No data</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="table-card">
+                <div class="table-header">
+                    <div class="table-title">📜 Recent Trades</div>
+                </div>
+                <table class="perf-table">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Date</th>
+                            <th>Source</th>
+                            <th>P&L</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentTradesTable">
+                        <tr><td colspan="4" class="empty-state"><div class="empty-state-icon">📭</div>No data</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let equityChart = null;
+let dailyPnlChart = null;
+let winLossChart = null;
+let currentPeriod = '30d';
+
+const chartColors = {
+    green: '#00c853',
+    red: '#ff5252',
+    blue: '#00d4ff',
+    grid: 'rgba(255, 255, 255, 0.05)',
+    text: '#8899a6'
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    initCharts();
+    loadPerformance(currentPeriod);
+    
+    document.querySelectorAll('.period-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.period-tab').forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            currentPeriod = this.dataset.period;
+            loadPerformance(currentPeriod);
+        });
+    });
+    
+    document.getElementById('brokerFilter').addEventListener('change', function() {
+        loadPerformance(currentPeriod);
+    });
+});
+
+function initCharts() {
+    Chart.defaults.color = chartColors.text;
+    Chart.defaults.borderColor = chartColors.grid;
+    
+    const ctx1 = document.getElementById('equityChart').getContext('2d');
+    equityChart = new Chart(ctx1, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Equity',
+                data: [],
+                borderColor: chartColors.blue,
+                backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 0,
+                pointHoverRadius: 6,
+                pointHoverBackgroundColor: chartColors.blue,
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { intersect: false, mode: 'index' },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1a222d',
+                    titleColor: '#fff',
+                    bodyColor: '#8899a6',
+                    borderColor: '#1e2a38',
+                    borderWidth: 1,
+                    padding: 12,
+                    displayColors: false,
+                    callbacks: {
+                        label: ctx => `P&L: $${ctx.raw.toLocaleString('en-US', {minimumFractionDigits: 2})}`
+                    }
+                }
+            },
+            scales: {
+                x: { 
+                    grid: { display: false },
+                    ticks: { maxTicksLimit: 8, font: { size: 11 } }
+                },
+                y: { 
+                    grid: { color: chartColors.grid },
+                    ticks: { 
+                        callback: v => '$' + v.toLocaleString(),
+                        font: { size: 11 }
+                    }
+                }
+            }
+        }
+    });
+    
+    const ctx2 = document.getElementById('dailyPnlChart').getContext('2d');
+    dailyPnlChart = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Daily P&L',
+                data: [],
+                backgroundColor: [],
+                borderRadius: 4,
+                borderSkipped: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1a222d',
+                    callbacks: {
+                        label: ctx => `P&L: $${ctx.raw.toLocaleString('en-US', {minimumFractionDigits: 2})}`
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { display: false }, ticks: { maxTicksLimit: 12, font: { size: 11 } } },
+                y: { 
+                    grid: { color: chartColors.grid },
+                    ticks: { callback: v => '$' + v.toLocaleString(), font: { size: 11 } }
+                }
+            }
+        }
+    });
+    
+    const ctx3 = document.getElementById('winLossChart').getContext('2d');
+    winLossChart = new Chart(ctx3, {
+        type: 'doughnut',
+        data: {
+            labels: ['Wins', 'Losses'],
+            datasets: [{
+                data: [0, 0],
+                backgroundColor: [chartColors.green, chartColors.red],
+                borderWidth: 0,
+                cutout: '70%'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { 
+                    position: 'bottom',
+                    labels: { 
+                        padding: 16,
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                        font: { size: 12 }
+                    }
+                }
+            }
+        }
+    });
+}
+
+async function loadPerformance(period) {
+    const broker = document.getElementById('brokerFilter').value;
+    
+    try {
+        const url = `/api/performance?period=${period}${broker ? '&broker=' + broker : ''}`;
+        console.log('Fetching performance from:', url);
+        const response = await fetch(url, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('HTTP error:', response.status, errorText);
+            return;
+        }
+        
+        const data = await response.json();
+        console.log('API Response:', JSON.stringify(data).substring(0, 500));
+        
+        if (data.success) {
+            console.log('Updating stats with performance data:', data.performance);
+            updateStats(data.performance);
+            updateCharts(data.daily_pnl, data.performance);
+            updateTopSymbols(data.top_symbols);
+            updateRecentTrades(data.recent_trades);
+        } else {
+            console.error('API returned error:', data.error || 'Unknown error');
+        }
+    } catch (error) {
+        console.error('Error loading performance:', error);
+    }
+}
+
+function updateStats(perf) {
+    const totalPnl = perf.total_pnl || 0;
+    const pnlEl = document.getElementById('totalPnl');
+    pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + '$' + Math.abs(totalPnl).toLocaleString('en-US', {minimumFractionDigits: 2});
+    pnlEl.className = 'hero-value ' + (totalPnl >= 0 ? 'positive' : 'negative');
+    
+    const winRate = perf.win_rate || 0;
+    const winRateEl = document.getElementById('winRate');
+    winRateEl.textContent = winRate.toFixed(1) + '%';
+    winRateEl.className = 'hero-value ' + (winRate >= 50 ? 'positive' : winRate > 0 ? 'neutral' : 'negative');
+    
+    document.getElementById('winLossCount').textContent = `${perf.wins || 0}W / ${perf.losses || 0}L`;
+    
+    const pf = perf.profit_factor || 0;
+    const pfEl = document.getElementById('profitFactor');
+    pfEl.textContent = pf.toFixed(2);
+    pfEl.className = 'hero-value ' + (pf >= 1 ? 'positive' : pf > 0 ? 'neutral' : 'negative');
+    
+    document.getElementById('totalTrades').textContent = perf.total_trades || 0;
+    document.getElementById('grossProfit').textContent = '+$' + (perf.gross_profit || 0).toLocaleString('en-US', {minimumFractionDigits: 0});
+    document.getElementById('grossLoss').textContent = '-$' + Math.abs(perf.gross_loss || 0).toLocaleString('en-US', {minimumFractionDigits: 0});
+    
+    const avgPnl = perf.avg_pnl || 0;
+    const avgEl = document.getElementById('avgPnl');
+    avgEl.textContent = (avgPnl >= 0 ? '+' : '') + '$' + avgPnl.toFixed(2);
+    avgEl.className = 'metric-value ' + (avgPnl >= 0 ? 'positive' : 'negative');
+    
+    document.getElementById('bestTrade').textContent = '+$' + (perf.best_trade || 0).toFixed(2);
+    document.getElementById('worstTrade').textContent = '-$' + Math.abs(perf.worst_trade || 0).toFixed(2);
+}
+
+function updateCharts(dailyPnl, perf) {
+    if (dailyPnl && dailyPnl.length > 0) {
+        equityChart.data.labels = dailyPnl.map(d => {
+            const date = new Date(d.date);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        });
+        equityChart.data.datasets[0].data = dailyPnl.map(d => d.cumulative_pnl);
+        
+        const lastPnl = dailyPnl[dailyPnl.length - 1]?.cumulative_pnl || 0;
+        equityChart.data.datasets[0].borderColor = lastPnl >= 0 ? chartColors.green : chartColors.red;
+        equityChart.data.datasets[0].backgroundColor = lastPnl >= 0 ? 'rgba(0, 200, 83, 0.1)' : 'rgba(255, 82, 82, 0.1)';
+        equityChart.update();
+        
+        dailyPnlChart.data.labels = dailyPnl.map(d => {
+            const date = new Date(d.date);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        });
+        dailyPnlChart.data.datasets[0].data = dailyPnl.map(d => d.pnl);
+        dailyPnlChart.data.datasets[0].backgroundColor = dailyPnl.map(d => d.pnl >= 0 ? chartColors.green : chartColors.red);
+        dailyPnlChart.update();
+    } else {
+        equityChart.data.labels = [];
+        equityChart.data.datasets[0].data = [];
+        equityChart.update();
+        dailyPnlChart.data.labels = [];
+        dailyPnlChart.data.datasets[0].data = [];
+        dailyPnlChart.update();
+    }
+    
+    winLossChart.data.datasets[0].data = [perf.wins || 0, perf.losses || 0];
+    winLossChart.update();
+}
+
+function updateTopSymbols(symbols) {
+    const tbody = document.getElementById('topSymbolsTable');
+    
+    if (!symbols || symbols.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><div class="empty-state-icon">📭</div>No trades yet</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = symbols.slice(0, 8).map(s => `
+        <tr>
+            <td>
+                <div class="symbol-cell">
+                    <strong>${s.symbol}</strong>
+                    <span class="symbol-badge">${s.asset_type === 'option' ? 'OPT' : 'STK'}</span>
+                </div>
+            </td>
+            <td>${s.trades}</td>
+            <td class="${s.win_rate >= 50 ? 'pnl-positive' : ''}">${s.win_rate.toFixed(0)}%</td>
+            <td class="${s.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                ${s.total_pnl >= 0 ? '+' : ''}$${s.total_pnl.toFixed(2)}
+            </td>
+        </tr>
+    `).join('');
+}
+
+function updateRecentTrades(trades) {
+    const tbody = document.getElementById('recentTradesTable');
+    
+    if (!trades || trades.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><div class="empty-state-icon">📭</div>No trades yet</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = trades.slice(0, 8).map(t => {
+        const date = t.closed_at ? new Date(t.closed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
+        const symbolStr = t.asset_type === 'option' ? 
+            `${t.symbol} $${t.strike}${t.call_put || ''}` : t.symbol;
+        
+        // Use source_display from API if available, otherwise build from source/risk_trigger
+        let sourceDisplay = t.source_display;
+        if (!sourceDisplay) {
+            // Fallback for old data format
+            if (t.source === 'gui') {
+                sourceDisplay = { name: 'GUI', color: 'gray', icon: '🖥️', full_name: 'Manual GUI execution' };
+            } else if (t.source === 'sync') {
+                sourceDisplay = { name: 'Sync', color: 'gray', icon: '🔄', full_name: 'Broker sync' };
+            } else if (t.risk_trigger) {
+                sourceDisplay = { name: t.risk_trigger.replace('_', ' '), color: 'orange', icon: '⚠️', full_name: 'Risk exit' };
+            } else {
+                sourceDisplay = { name: 'Signal', color: 'blue', icon: '📡', full_name: 'Discord signal' };
+            }
+        }
+        
+        const sourceBadge = `<span class="channel-badge channel-badge--${sourceDisplay.color} channel-badge--compact" title="${sourceDisplay.full_name}">
+            <span class="channel-badge__icon">${sourceDisplay.icon}</span>
+            <span class="channel-badge__name">${sourceDisplay.name}</span>
+        </span>`;
+        
+        return `
+            <tr>
+                <td><strong>${symbolStr}</strong></td>
+                <td>${date}</td>
+                <td>${sourceBadge}</td>
+                <td class="${t.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                    ${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(2)}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+</script>
+{% endblock %}

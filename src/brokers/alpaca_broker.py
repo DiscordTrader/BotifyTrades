@@ -1,0 +1,851 @@
+"""
+Alpaca Broker Implementation
+Commission-free trading with official API
+"""
+
+import sys
+import os
+import asyncio
+from typing import Optional, Dict, Any
+from alpaca.trading.client import TradingClient
+from alpaca.trading.requests import (
+    MarketOrderRequest,
+    LimitOrderRequest,
+    StopOrderRequest,
+    GetOrdersRequest,
+    GetOptionContractsRequest,
+    StopLossRequest,
+    TakeProfitRequest,
+)
+from alpaca.trading.enums import (
+    OrderSide,
+    TimeInForce,
+    QueryOrderStatus,
+    OrderClass,
+    AssetClass,
+    AssetStatus,
+    ExerciseStyle,
+    OrderType,
+    PositionIntent,
+)
+from alpaca.data.historical import StockHistoricalDataClient
+from alpaca.data.requests import StockLatestQuoteRequest
+
+# Add parent directory to path for absolute imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+from broker_interface import BrokerInterface, OrderResult, BrokerFactory
+
+
+class AlpacaBroker(BrokerInterface):
+    """Alpaca broker implementation using official alpaca-py SDK"""
+    
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self.name = "ALPACA"
+        self.trading_client = None
+        self.data_client = None
+        self.paper_trade = config.get('paper_trade', True)
+    
+    async def connect(self) -> bool:
+        """Connect to Alpaca"""
+        try:
+            api_key = self.config.get('api_key')
+            api_secret = self.config.get('api_secret')
+            
+            if not api_key or not api_secret:
+                print(f"[{self.name}] ❌ Missing API credentials")
+                return False
+            
+            # Show which mode and which key (first 10 chars)
+            mode = "PAPER" if self.paper_trade else "LIVE"
+            key_preview = api_key[:10] + "..." if len(api_key) > 10 else api_key
+            print(f"[{self.name}] Connecting to {mode} account with key: {key_preview}")
+            
+            # Initialize trading client
+            self.trading_client = TradingClient(
+                api_key=api_key,
+                secret_key=api_secret,
+                paper=self.paper_trade
+            )
+            
+            # Initialize data client
+            self.data_client = StockHistoricalDataClient(
+                api_key=api_key,
+                secret_key=api_secret
+            )
+            
+            # Verify connection
+            account = await asyncio.to_thread(self.trading_client.get_account)
+            
+            if account:
+                self.connected = True
+                account_id = str(getattr(account, 'id', 'N/A'))
+                account_number = str(getattr(account, 'account_number', 'N/A'))
+                self.account_id = account_id
+                self.account_number = account_number
+                print(f"[{self.name}] ✓ Connected successfully ({mode} trading)")
+                print(f"[{self.name}]   Account ID: {account_id}")
+                print(f"[{self.name}]   Account #: {account_number}")
+                print(f"[{self.name}]   Buying power: ${float(account.buying_power):,.2f}")
+                return True
+            
+            print(f"[{self.name}] ❌ Failed to verify connection")
+            return False
+            
+        except Exception as e:
+            import traceback
+            error_msg = str(e)
+            print(f"[{self.name}] ❌ Connection error: {error_msg}")
+            
+            # Check for authorization errors
+            if 'unauthorized' in error_msg.lower() or '401' in error_msg:
+                print(f"[{self.name}] ⚠️  AUTHORIZATION FAILED - Check that:")
+                print(f"[{self.name}]    1. API Key and Secret are CORRECT")
+                print(f"[{self.name}]    2. Keys are for PAPER trading (not LIVE)")
+                print(f"[{self.name}]    3. Keys have not been revoked")
+                print(f"[{self.name}]    4. Get new keys from: https://app.alpaca.markets/paper/dashboard/overview")
+            
+            # Print full traceback for debugging
+            traceback.print_exc()
+            return False
+    
+    async def disconnect(self):
+        """Disconnect from Alpaca"""
+        self.connected = False
+        self.trading_client = None
+        self.data_client = None
+        print(f"[{self.name}] Disconnected")
+    
+    async def get_account_info(self) -> Dict[str, Any]:
+        """Get account information"""
+        try:
+            account = await asyncio.to_thread(self.trading_client.get_account)
+            # Get options buying power if available (may be different from stock buying power)
+            options_bp = getattr(account, 'options_buying_power', None)
+            if options_bp is None:
+                options_bp = account.buying_power  # Fall back to regular buying power
+            return {
+                'buying_power': float(account.buying_power),
+                'options_buying_power': float(options_bp),
+                'cash': float(account.cash),
+                'portfolio_value': float(account.portfolio_value)
+            }
+        except Exception as e:
+            print(f"[{self.name}] Error getting account info: {e}")
+            return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+    
+    async def get_positions(self) -> Dict[str, Any]:
+        """Get current positions"""
+        try:
+            positions = await asyncio.to_thread(self.trading_client.get_all_positions)
+            result = {}
+            for pos in positions:
+                result[pos.symbol] = int(float(pos.qty))
+            return result
+        except Exception as e:
+            print(f"[{self.name}] Error getting positions: {e}")
+            return {}
+    
+    def get_all_positions(self) -> list:
+        """Get all positions as raw objects for sync service (synchronous)"""
+        try:
+            if not self.trading_client:
+                print(f"[{self.name}] Trading client not connected")
+                return []
+            positions = self.trading_client.get_all_positions()
+            print(f"[{self.name}] get_all_positions returned {len(positions)} positions")
+            return positions
+        except Exception as e:
+            print(f"[{self.name}] Error getting all positions: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
+    def get_orders(self, status: str = 'open') -> list:
+        """Get orders by status for sync service (synchronous)"""
+        try:
+            if not self.trading_client:
+                print(f"[{self.name}] Trading client not connected")
+                return []
+            from alpaca.trading.requests import GetOrdersRequest
+            from alpaca.trading.enums import QueryOrderStatus
+            
+            if status == 'open':
+                request = GetOrdersRequest(status=QueryOrderStatus.OPEN)
+            else:
+                request = GetOrdersRequest(status=QueryOrderStatus.ALL)
+            
+            orders = self.trading_client.get_orders(filter=request)
+            return orders
+        except Exception as e:
+            print(f"[{self.name}] Error getting orders: {e}")
+            return []
+    
+    async def place_stock_order(
+        self,
+        symbol: str,
+        action: str,
+        quantity: int,
+        price: Optional[float] = None,
+        stop_price: Optional[float] = None
+    ) -> OrderResult:
+        """Place a stock order
+        
+        Args:
+            symbol: Stock ticker
+            action: BTO (buy) or STC (sell)
+            quantity: Number of shares
+            price: Limit price (for limit orders)
+            stop_price: Stop price (for stop loss orders)
+        """
+        try:
+            side = OrderSide.BUY if action == 'BTO' else OrderSide.SELL
+            
+            # Create order request
+            if stop_price is not None:
+                # Stop order (for stop loss)
+                order_data = StopOrderRequest(
+                    symbol=symbol,
+                    qty=quantity,
+                    side=side,
+                    time_in_force=TimeInForce.GTC,  # Good till cancelled for stop orders
+                    stop_price=stop_price
+                )
+            elif price is None:
+                # Market order
+                order_data = MarketOrderRequest(
+                    symbol=symbol,
+                    qty=quantity,
+                    side=side,
+                    time_in_force=TimeInForce.DAY
+                )
+            else:
+                # Limit order
+                order_data = LimitOrderRequest(
+                    symbol=symbol,
+                    qty=quantity,
+                    side=side,
+                    time_in_force=TimeInForce.GTC,  # Good till cancelled for profit targets
+                    limit_price=price
+                )
+            
+            # Submit order
+            order = await asyncio.to_thread(
+                self.trading_client.submit_order,
+                order_data=order_data
+            )
+            
+            if order:
+                return OrderResult(
+                    success=True,
+                    order_id=str(order.id),
+                    message=f"Stock order placed: {action} {quantity} {symbol}",
+                    price=price if price else float(order.filled_avg_price or 0),
+                    quantity=quantity,
+                    symbol=symbol,
+                    action=action
+                )
+            else:
+                return OrderResult(
+                    success=False,
+                    message="Order submission failed - no response",
+                    symbol=symbol,
+                    action=action
+                )
+                
+        except Exception as e:
+            error_msg = str(e)
+            
+            # Handle insufficient funds - auto-adjust quantity
+            if 'insufficient' in error_msg.lower() or 'buying power' in error_msg.lower():
+                try:
+                    account_info = await self.get_account_info()
+                    buying_power = account_info['buying_power']
+                    
+                    # Get current price
+                    current_price = await self.get_quote(symbol)
+                    
+                    if current_price and buying_power > 0:
+                        # Calculate max quantity we can afford
+                        max_qty = int(buying_power / current_price)
+                        
+                        if max_qty > 0:
+                            print(f"[{self.name}] Auto-adjusting: {quantity} → {max_qty} shares (buying power: ${buying_power:.2f})")
+                            return await self.place_stock_order(symbol, action, max_qty, price)
+                except Exception as adjust_error:
+                    print(f"[{self.name}] Auto-adjust failed: {adjust_error}")
+            
+            return OrderResult(
+                success=False,
+                message=f"Exception: {error_msg}",
+                symbol=symbol,
+                action=action
+            )
+    
+    async def place_bracket_order(
+        self,
+        symbol: str,
+        action: str,
+        quantity: int,
+        stop_loss_price: Optional[float] = None,
+        profit_target_price: Optional[float] = None,
+        entry_price: Optional[float] = None
+    ) -> OrderResult:
+        """Place a bracket order (entry + stop loss + profit target)
+        
+        Args:
+            symbol: Stock ticker
+            action: BTO (buy) or STC (sell)
+            quantity: Number of shares
+            stop_loss_price: Stop loss price
+            profit_target_price: Profit target price
+            entry_price: Entry limit price (None for market order)
+        """
+        try:
+            side = OrderSide.BUY if action == 'BTO' else OrderSide.SELL
+            
+            # Build bracket order with stop loss and/or profit target
+            if entry_price is None:
+                # Market order with bracket
+                order_data = MarketOrderRequest(
+                    symbol=symbol,
+                    qty=quantity,
+                    side=side,
+                    time_in_force=TimeInForce.DAY,
+                    order_class=OrderClass.BRACKET,
+                    stop_loss=StopLossRequest(stop_price=stop_loss_price) if stop_loss_price else None,
+                    take_profit=TakeProfitRequest(limit_price=profit_target_price) if profit_target_price else None
+                )
+            else:
+                # Limit order with bracket
+                order_data = LimitOrderRequest(
+                    symbol=symbol,
+                    qty=quantity,
+                    side=side,
+                    time_in_force=TimeInForce.DAY,
+                    limit_price=entry_price,
+                    order_class=OrderClass.BRACKET,
+                    stop_loss=StopLossRequest(stop_price=stop_loss_price) if stop_loss_price else None,
+                    take_profit=TakeProfitRequest(limit_price=profit_target_price) if profit_target_price else None
+                )
+            
+            # Submit order
+            order = await asyncio.to_thread(
+                self.trading_client.submit_order,
+                order_data=order_data
+            )
+            
+            if order:
+                # Get the order IDs for all legs
+                order_ids = [str(order.id)]
+                if hasattr(order, 'legs') and order.legs:
+                    for leg in order.legs:
+                        order_ids.append(str(leg.id))
+                
+                message_parts = [f"Bracket order placed: {action} {quantity} {symbol}"]
+                if stop_loss_price:
+                    message_parts.append(f"Stop Loss @ ${stop_loss_price}")
+                if profit_target_price:
+                    message_parts.append(f"Target @ ${profit_target_price}")
+                
+                return OrderResult(
+                    success=True,
+                    order_id=str(order.id),
+                    message=" | ".join(message_parts),
+                    price=entry_price if entry_price else float(order.filled_avg_price or 0),
+                    quantity=quantity,
+                    symbol=symbol,
+                    action=action
+                )
+            else:
+                return OrderResult(
+                    success=False,
+                    message="Bracket order submission failed - no response",
+                    symbol=symbol,
+                    action=action
+                )
+                
+        except Exception as e:
+            error_msg = str(e)
+            
+            # Handle insufficient funds - auto-adjust quantity
+            if 'insufficient' in error_msg.lower() or 'buying power' in error_msg.lower():
+                try:
+                    account_info = await self.get_account_info()
+                    buying_power = account_info['buying_power']
+                    
+                    # Get current price
+                    current_price = await self.get_quote(symbol)
+                    
+                    if current_price and buying_power > 0:
+                        # Calculate max quantity we can afford
+                        max_qty = int(buying_power / current_price)
+                        
+                        if max_qty > 0:
+                            print(f"[{self.name}] Auto-adjusting bracket: {quantity} → {max_qty} shares (buying power: ${buying_power:.2f})")
+                            return await self.place_bracket_order(
+                                symbol, action, max_qty, 
+                                stop_loss_price, profit_target_price, entry_price
+                            )
+                except Exception as adjust_error:
+                    print(f"[{self.name}] Auto-adjust failed: {adjust_error}")
+            
+            return OrderResult(
+                success=False,
+                message=f"Exception: {error_msg}",
+                symbol=symbol,
+                action=action
+            )
+    
+    async def place_option_order(
+        self,
+        symbol: str,
+        strike: float,
+        expiry: str,
+        option_type: str,
+        action: str,
+        quantity: int,
+        price: Optional[float] = None
+    ) -> OrderResult:
+        """Place an options order using Alpaca's option contracts endpoint"""
+        try:
+            from datetime import datetime
+            
+            # Normalize expiry to YYYY-MM-DD
+            if "/" in expiry:
+                parts = expiry.split("/")
+                if len(parts) == 2:
+                    # MM/DD format
+                    m, d = parts
+                    y = datetime.now().year
+                    expiry_date = f"{y:04d}-{int(m):02d}-{int(d):02d}"
+                elif len(parts) == 3:
+                    # MM/DD/YY or MM/DD/YYYY
+                    m, d, y = parts
+                    if len(y) == 2:
+                        y = f"20{y}"
+                    expiry_date = f"{y}-{int(m):02d}-{int(d):02d}"
+                else:
+                    raise ValueError(f"Invalid expiry format: {expiry}")
+            else:
+                expiry_date = expiry  # assume already YYYY-MM-DD
+
+            # Resolve the option contract using Alpaca's endpoint
+            req = GetOptionContractsRequest(
+                underlying_symbols=[symbol],
+                status=AssetStatus.ACTIVE,
+                expiration_date=expiry_date,
+                type="call" if option_type.upper().startswith("C") else "put",
+                strike_price_gte=str(strike),  # Convert to string for Alpaca API
+                strike_price_lte=str(strike),  # Convert to string for Alpaca API
+                style=ExerciseStyle.AMERICAN,
+                limit=10,
+            )
+            
+            print(f"[{self.name}] Searching for option contract: {symbol} {strike}{option_type} {expiry_date}", flush=True)
+            contracts = await asyncio.to_thread(self.trading_client.get_option_contracts, req)
+            
+            if not contracts.option_contracts:
+                return OrderResult(
+                    success=False,
+                    message=f"No matching Alpaca option contract for {symbol} {strike}{option_type} {expiry_date}",
+                    symbol=symbol,
+                    action=action,
+                )
+
+            contract = contracts.option_contracts[0]
+            print(f"[{self.name}] Found contract: {contract.symbol}", flush=True)
+            
+            side = OrderSide.BUY if action.upper() == "BTO" else OrderSide.SELL
+            
+            # CRITICAL: For options, specify position_intent to avoid "uncovered option" errors
+            # BTO = Buy To Open (new long position)
+            # STC = Sell To Close (close existing long position)
+            # BTC = Buy To Close (close existing short position)
+            # STO = Sell To Open (new short position)
+            if action.upper() == "BTO":
+                position_intent = PositionIntent.BUY_TO_OPEN
+            elif action.upper() == "STC":
+                position_intent = PositionIntent.SELL_TO_CLOSE
+            elif action.upper() == "BTC":
+                position_intent = PositionIntent.BUY_TO_CLOSE
+            elif action.upper() == "STO":
+                position_intent = PositionIntent.SELL_TO_OPEN
+            else:
+                # Default based on side
+                position_intent = PositionIntent.BUY_TO_OPEN if side == OrderSide.BUY else PositionIntent.SELL_TO_CLOSE
+
+            if price is None or price <= 0:
+                order_req = MarketOrderRequest(
+                    symbol=contract.symbol,
+                    qty=quantity,
+                    side=side,
+                    time_in_force=TimeInForce.DAY,
+                    type=OrderType.MARKET,
+                    position_intent=position_intent,
+                )
+            else:
+                order_req = LimitOrderRequest(
+                    symbol=contract.symbol,
+                    qty=quantity,
+                    side=side,
+                    time_in_force=TimeInForce.DAY,
+                    limit_price=price,
+                    type=OrderType.LIMIT,
+                    position_intent=position_intent,
+                )
+
+            print(f"[{self.name}] Submitting option order: {action} {quantity} {contract.symbol} @ ${price or 'MARKET'} [position_intent={position_intent}]", flush=True)
+            print(f"[{self.name}] Order request: symbol={order_req.symbol}, side={order_req.side}, qty={order_req.qty}, intent={order_req.position_intent}", flush=True)
+            order = await asyncio.to_thread(self.trading_client.submit_order, order_data=order_req)
+            
+            print(f"[{self.name}] Option order response: {order}", flush=True)
+            
+            if order:
+                return OrderResult(
+                    success=True,
+                    order_id=str(order.id),
+                    message=f"Option order placed: {action} {quantity} {symbol} ${strike}{option_type} {expiry}",
+                    price=price if price else float(order.filled_avg_price or 0),
+                    quantity=quantity,
+                    symbol=symbol,
+                    action=action
+                )
+            else:
+                return OrderResult(
+                    success=False,
+                    message="Order submission failed - no response",
+                    symbol=symbol,
+                    action=action
+                )
+                
+        except Exception as e:
+            error_msg = str(e)
+            print(f"[{self.name}] ❌ Option order failed: {error_msg}", flush=True)
+            
+            # Check for specific error types and provide better messages
+            if 'uncovered' in error_msg.lower():
+                return OrderResult(
+                    success=False,
+                    message=f"⚠️  Alpaca uncovered option error. Make sure you have the position to close: {symbol} ${strike}{option_type}",
+                    symbol=symbol,
+                    action=action
+                )
+            elif 'expired' in error_msg.lower():
+                return OrderResult(
+                    success=False,
+                    message=f"⚠️  Option contract expired: {symbol} ${strike}{option_type}",
+                    symbol=symbol,
+                    action=action
+                )
+            elif 'insufficient' in error_msg.lower():
+                return OrderResult(
+                    success=False,
+                    message=f"⚠️  Insufficient quantity or already has pending order: {symbol} ${strike}{option_type}",
+                    symbol=symbol,
+                    action=action
+                )
+            elif 'not eligible' in error_msg.lower() or 'not enabled' in error_msg.lower():
+                return OrderResult(
+                    success=False,
+                    message=f"⚠️  Alpaca options not enabled for this account: {symbol} ${strike}{option_type}",
+                    symbol=symbol,
+                    action=action
+                )
+            
+            return OrderResult(
+                success=False,
+                message=f"Exception: {error_msg}",
+                symbol=symbol,
+                action=action
+            )
+    
+    async def place_option_order_simple(self, symbol: str, strike: float, expiry: str, 
+                                       option_type: str, quantity: int, side: str, 
+                                       price: float, option_id: str = None) -> OrderResult:
+        """
+        Simplified option order placement - wrapper for GUI API compatibility
+        
+        Args:
+            symbol: Stock symbol
+            strike: Strike price
+            expiry: Expiration date (YYYY-MM-DD format)
+            option_type: 'CALL' or 'PUT'
+            quantity: Number of contracts
+            side: 'BUY' or 'SELL'
+            price: Limit price per contract
+            option_id: Option contract ID (not used by Alpaca - we look up the contract)
+        
+        Returns:
+            OrderResult with success status and message
+        """
+        # Convert GUI-style side to action format
+        # BUY -> BTO (Buy To Open), SELL -> STC (Sell To Close)
+        if side.upper() == 'BUY':
+            action = 'BTO'
+        elif side.upper() == 'SELL':
+            action = 'STC'
+        else:
+            action = side.upper()
+        
+        # Convert option_type to single letter format
+        opt_type = 'C' if option_type.upper().startswith('C') else 'P'
+        
+        print(f"[{self.name}] place_option_order_simple: {side} {quantity} {symbol} ${strike}{opt_type} {expiry} @ ${price}")
+        
+        # Call the main option order method
+        return await self.place_option_order(
+            symbol=symbol,
+            strike=strike,
+            expiry=expiry,
+            option_type=opt_type,
+            action=action,
+            quantity=quantity,
+            price=price
+        )
+    
+    async def get_quote(self, symbol: str) -> Optional[float]:
+        """Get current price for a symbol"""
+        try:
+            request = StockLatestQuoteRequest(symbol_or_symbols=[symbol])
+            quotes = await asyncio.to_thread(
+                self.data_client.get_stock_latest_quote,
+                request
+            )
+            
+            if symbol in quotes:
+                quote = quotes[symbol]
+                # Return mid-price (average of bid and ask)
+                return float((quote.ask_price + quote.bid_price) / 2)
+            return None
+        except Exception as e:
+            print(f"[{self.name}] Error getting quote for {symbol}: {e}")
+            return None
+    
+    async def close_position(self, symbol: str, quantity: Optional[int] = None, limit_price: Optional[float] = None) -> OrderResult:
+        """Close a position (works for both LONG and SHORT positions)
+        
+        Args:
+            symbol: Stock ticker to close
+            quantity: Number of shares to close (None = close all)
+            limit_price: Optional limit price for the close order (None = market order)
+        """
+        try:
+            if not self.trading_client:
+                return OrderResult(
+                    success=False,
+                    message="Not connected to Alpaca",
+                    symbol=symbol,
+                    action='STC'
+                )
+            
+            # Get current position
+            try:
+                position = await asyncio.to_thread(
+                    self.trading_client.get_open_position,
+                    symbol
+                )
+            except Exception as e:
+                return OrderResult(
+                    success=False,
+                    message=f"No open position found for {symbol}",
+                    symbol=symbol,
+                    action='STC'
+                )
+            
+            if not position:
+                return OrderResult(
+                    success=False,
+                    message=f"No position found for {symbol}",
+                    symbol=symbol,
+                    action='STC'
+                )
+            
+            # Determine position type and quantity
+            position_qty = float(position.qty)
+            is_short = position_qty < 0
+            abs_qty = abs(int(position_qty))
+            qty_to_close = quantity if quantity else abs_qty
+            
+            if qty_to_close > abs_qty:
+                return OrderResult(
+                    success=False,
+                    message=f"Cannot close {qty_to_close} shares, only {abs_qty} available",
+                    symbol=symbol,
+                    action='BTC' if is_short else 'STC'
+                )
+            
+            # Determine order type based on limit_price
+            order_type_str = f"LIMIT @ ${limit_price}" if limit_price else "MARKET"
+            action = 'BTC' if is_short else 'STC'
+            
+            # Use Alpaca's close_position API only for full market orders
+            if qty_to_close == abs_qty and limit_price is None:
+                # Close entire position using Alpaca's API (handles both long/short)
+                result = await asyncio.to_thread(
+                    self.trading_client.close_position,
+                    symbol
+                )
+                
+                if result:
+                    action_word = "Covered" if is_short else "Sold"
+                    return OrderResult(
+                        success=True,
+                        order_id=str(result.id) if hasattr(result, 'id') else None,
+                        message=f"{action_word} {qty_to_close} {symbol} @ MARKET ({'SHORT' if is_short else 'LONG'} position closed)",
+                        quantity=qty_to_close,
+                        symbol=symbol,
+                        action=action
+                    )
+            else:
+                # Partial close OR limit order - place appropriate order
+                # For long positions: SELL (STC)
+                # For short positions: BUY (BTC - buy to cover)
+                side = OrderSide.BUY if is_short else OrderSide.SELL
+                
+                # Check if this is an options position
+                # Method 1: Check asset_class attribute
+                is_option = hasattr(position, 'asset_class') and str(getattr(position, 'asset_class', '')).lower() == 'us_option'
+                
+                # Method 2: Check symbol format - OCC options format: SYMBOL + YYMMDD + C/P + strike
+                # e.g., CLSK251205P00014000, AAPL240119C00150000
+                import re
+                if not is_option:
+                    # Options symbols are 15+ chars with embedded date and C/P indicator
+                    option_pattern = r'^[A-Z]{1,6}\d{6}[CP]\d{8}$'
+                    is_option = bool(re.match(option_pattern, symbol))
+                
+                # Use DAY for options (GTC not supported by Alpaca for options), GTC for stocks
+                tif = TimeInForce.DAY if is_option else TimeInForce.GTC
+                print(f"[{self.name}] Position type: {'OPTION' if is_option else 'STOCK'}, using TIF: {tif}")
+                
+                if limit_price:
+                    # Limit order
+                    order_data = LimitOrderRequest(
+                        symbol=symbol,
+                        qty=qty_to_close,
+                        side=side,
+                        time_in_force=tif,  # DAY for options, GTC for stocks
+                        limit_price=limit_price
+                    )
+                    print(f"[{self.name}] Closing position with LIMIT order: {action} {qty_to_close} {symbol} @ ${limit_price} (TIF: {tif})")
+                else:
+                    # Market order - always use DAY
+                    order_data = MarketOrderRequest(
+                        symbol=symbol,
+                        qty=qty_to_close,
+                        side=side,
+                        time_in_force=TimeInForce.DAY
+                    )
+                    print(f"[{self.name}] Closing position with MARKET order: {action} {qty_to_close} {symbol}")
+                
+                order = await asyncio.to_thread(
+                    self.trading_client.submit_order,
+                    order_data=order_data
+                )
+                
+                if order:
+                    action_word = "Cover" if is_short else "Sell"
+                    return OrderResult(
+                        success=True,
+                        order_id=str(order.id),
+                        message=f"{action_word} {qty_to_close} {symbol} @ {order_type_str} - Order submitted",
+                        price=limit_price if limit_price else float(order.filled_avg_price or 0),
+                        quantity=qty_to_close,
+                        symbol=symbol,
+                        action=action
+                    )
+            
+            return OrderResult(
+                success=False,
+                message=f"Failed to close position for {symbol}",
+                symbol=symbol,
+                action='BTC' if is_short else 'STC'
+            )
+            
+        except Exception as e:
+            error_msg = str(e)
+            print(f"[{self.name}] ❌ Close position failed for {symbol}: {error_msg}")
+            return OrderResult(
+                success=False,
+                message=f"Exception: {error_msg}",
+                symbol=symbol,
+                action='STC'
+            )
+    
+    async def cancel_order(self, order_id: str) -> Dict[str, Any]:
+        """Cancel an open order
+        
+        Args:
+            order_id: The Alpaca order ID to cancel
+        """
+        try:
+            if not self.trading_client:
+                return {'success': False, 'error': 'Not connected to Alpaca'}
+            
+            # Cancel the order
+            await asyncio.to_thread(
+                self.trading_client.cancel_order_by_id,
+                order_id
+            )
+            
+            print(f"[{self.name}] ✓ Order {order_id} cancelled successfully")
+            return {'success': True, 'message': f'Order {order_id} cancelled'}
+            
+        except Exception as e:
+            error_msg = str(e)
+            print(f"[{self.name}] ❌ Cancel order failed for {order_id}: {error_msg}")
+            
+            # Handle specific Alpaca error codes
+            if '42210000' in error_msg or 'pending cancel' in error_msg.lower():
+                return {
+                    'success': True,  # Treat as success - order is already being cancelled
+                    'message': 'Order is already being cancelled. Please wait a moment and refresh.'
+                }
+            elif 'order is not cancelable' in error_msg.lower() or 'filled' in error_msg.lower():
+                return {
+                    'success': False,
+                    'error': 'Order has already been filled and cannot be cancelled.'
+                }
+            
+            return {'success': False, 'error': error_msg}
+    
+    async def get_open_orders(self) -> list:
+        """Get all open orders"""
+        try:
+            if not self.trading_client:
+                return []
+            
+            request = GetOrdersRequest(status=QueryOrderStatus.OPEN)
+            orders = await asyncio.to_thread(
+                self.trading_client.get_orders,
+                request
+            )
+            
+            result = []
+            for order in orders:
+                result.append({
+                    'order_id': str(order.id),
+                    'symbol': order.symbol,
+                    'quantity': int(float(order.qty)),
+                    'side': str(order.side.value),
+                    'type': str(order.type.value),
+                    'status': str(order.status.value),
+                    'limit_price': float(order.limit_price) if order.limit_price else None,
+                    'stop_price': float(order.stop_price) if order.stop_price else None,
+                    'created_at': str(order.created_at)
+                })
+            
+            return result
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting open orders: {e}")
+            return []
+
+
+# Register this broker with the factory
+BrokerFactory.register_broker('ALPACA', AlpacaBroker)

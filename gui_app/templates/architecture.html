@@ -1,0 +1,2311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BotifyTrades - Automated Trading Platform</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}?v=2">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Premium Aurora Dark Theme */
+            --bg-void: #030308;
+            --bg-primary: #070B14;
+            --bg-secondary: #0C1220;
+            --bg-elevated: #111827;
+            --bg-card: rgba(17, 24, 39, 0.7);
+            
+            /* Iridescent Aurora Palette */
+            --aurora-cyan: #00F5FF;
+            --aurora-mint: #0FF0B3;
+            --aurora-blue: #3B82F6;
+            --aurora-violet: #8B5CF6;
+            --aurora-purple: #A855F7;
+            --aurora-pink: #EC4899;
+            --aurora-rose: #F43F5E;
+            
+            /* Premium Gradients */
+            --gradient-aurora: linear-gradient(135deg, #00F5FF 0%, #0FF0B3 25%, #8B5CF6 50%, #EC4899 75%, #F43F5E 100%);
+            --gradient-glass: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.02) 100%);
+            --gradient-glow: linear-gradient(135deg, rgba(0,245,255,0.4) 0%, rgba(139,92,246,0.4) 100%);
+            --gradient-hero: linear-gradient(180deg, rgba(0,245,255,0.15) 0%, rgba(139,92,246,0.1) 50%, transparent 100%);
+            
+            /* Status Colors */
+            --success: #10B981;
+            --warning: #F59E0B;
+            --danger: #EF4444;
+            
+            /* Text */
+            --text-primary: #FFFFFF;
+            --text-secondary: #94A3B8;
+            --text-muted: #64748B;
+            
+            /* Borders & Effects */
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-glow: rgba(0, 245, 255, 0.3);
+            --glow-cyan: 0 0 60px rgba(0, 245, 255, 0.4);
+            --glow-violet: 0 0 60px rgba(139, 92, 246, 0.4);
+            --glow-pink: 0 0 60px rgba(236, 72, 153, 0.3);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-void);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.7;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ===== PREMIUM ANIMATED BACKGROUND ===== */
+        .aurora-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -2;
+            overflow: hidden;
+            background: var(--bg-void);
+        }
+        
+        .aurora-bg::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                radial-gradient(ellipse 80% 50% at 20% 40%, rgba(0, 245, 255, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse 60% 40% at 80% 20%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse 50% 60% at 60% 80%, rgba(236, 72, 153, 0.1) 0%, transparent 50%),
+                radial-gradient(ellipse 40% 30% at 10% 70%, rgba(15, 240, 179, 0.1) 0%, transparent 50%);
+            animation: auroraShift 20s ease-in-out infinite;
+        }
+        
+        @keyframes auroraShift {
+            0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+            25% { transform: translate(3%, 2%) rotate(2deg) scale(1.02); }
+            50% { transform: translate(-2%, 4%) rotate(-1deg) scale(0.98); }
+            75% { transform: translate(2%, -3%) rotate(1deg) scale(1.01); }
+        }
+
+        /* Animated Particles */
+        .particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            pointer-events: none;
+        }
+        
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: var(--aurora-cyan);
+            border-radius: 50%;
+            opacity: 0;
+            animation: particleFloat 15s infinite;
+        }
+        
+        .particle:nth-child(1) { left: 10%; animation-delay: 0s; }
+        .particle:nth-child(2) { left: 20%; animation-delay: 2s; background: var(--aurora-violet); }
+        .particle:nth-child(3) { left: 30%; animation-delay: 4s; background: var(--aurora-pink); }
+        .particle:nth-child(4) { left: 40%; animation-delay: 1s; }
+        .particle:nth-child(5) { left: 50%; animation-delay: 3s; background: var(--aurora-mint); }
+        .particle:nth-child(6) { left: 60%; animation-delay: 5s; background: var(--aurora-violet); }
+        .particle:nth-child(7) { left: 70%; animation-delay: 2.5s; }
+        .particle:nth-child(8) { left: 80%; animation-delay: 1.5s; background: var(--aurora-pink); }
+        .particle:nth-child(9) { left: 90%; animation-delay: 3.5s; background: var(--aurora-mint); }
+        .particle:nth-child(10) { left: 15%; animation-delay: 4.5s; }
+        
+        @keyframes particleFloat {
+            0% { transform: translateY(100vh) scale(0); opacity: 0; }
+            10% { opacity: 0.8; }
+            90% { opacity: 0.8; }
+            100% { transform: translateY(-100vh) scale(1); opacity: 0; }
+        }
+        
+        /* Grid Pattern */
+        .grid-pattern {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background-image: 
+                linear-gradient(rgba(0, 245, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 245, 255, 0.03) 1px, transparent 1px);
+            background-size: 80px 80px;
+            mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 20%, transparent 70%);
+        }
+
+        /* ===== PREMIUM NAVIGATION ===== */
+        .nav-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            padding: 1rem 2rem;
+            background: rgba(3, 3, 8, 0.6);
+            backdrop-filter: blur(20px) saturate(180%);
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-bar.scrolled {
+            padding: 0.75rem 2rem;
+            background: rgba(3, 3, 8, 0.9);
+        }
+
+        /* Premium Logo */
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-decoration: none;
+        }
+        
+        .logo-mark {
+            position: relative;
+            width: 46px;
+            height: 46px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--aurora-cyan) 0%, var(--aurora-violet) 100%);
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: var(--glow-cyan), inset 0 1px 1px rgba(255,255,255,0.3);
+        }
+        
+        .logo-mark::before {
+            content: '';
+            position: absolute;
+            inset: 2px;
+            background: var(--bg-primary);
+            border-radius: 12px;
+        }
+        
+        .logo-mark::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.2) 50%, transparent 60%);
+            animation: logoShine 3s ease-in-out infinite;
+        }
+        
+        @keyframes logoShine {
+            0%, 100% { transform: translateX(-100%) rotate(45deg); }
+            50% { transform: translateX(100%) rotate(45deg); }
+        }
+        
+        .logo-text {
+            position: relative;
+            z-index: 1;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            color: #00F5FF;
+            background: var(--gradient-aurora);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: textGradient 4s ease infinite;
+        }
+        
+        @supports not (-webkit-background-clip: text) {
+            .logo-text {
+                color: #00F5FF;
+                -webkit-text-fill-color: #00F5FF;
+            }
+        }
+        
+        @keyframes textGradient {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        
+        .brand-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        
+        .brand-name {
+            font-family: 'Inter', sans-serif;
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.8) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .brand-tagline {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--aurora-cyan);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .nav-link {
+            padding: 10px 18px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .nav-link:hover {
+            color: var(--text-primary);
+            background: rgba(255,255,255,0.05);
+        }
+        
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: 6px;
+            left: 50%;
+            width: 0;
+            height: 2px;
+            background: var(--gradient-aurora);
+            transform: translateX(-50%);
+            transition: width 0.3s ease;
+            border-radius: 2px;
+        }
+        
+        .nav-link:hover::after {
+            width: 60%;
+        }
+        
+        .nav-cta {
+            position: relative;
+            padding: 12px 28px;
+            background: transparent;
+            border: none;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 14px;
+            color: var(--bg-void);
+            text-decoration: none;
+            cursor: pointer;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-cta::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--gradient-aurora);
+            background-size: 200% 200%;
+            animation: textGradient 3s ease infinite;
+            border-radius: 12px;
+        }
+        
+        .nav-cta::after {
+            content: '';
+            position: absolute;
+            inset: 2px;
+            background: var(--bg-void);
+            border-radius: 10px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .nav-cta span {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .nav-cta:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--glow-cyan);
+        }
+        
+        .nav-cta:hover::after {
+            opacity: 0;
+        }
+        
+        .nav-cta:hover span {
+            color: var(--bg-void);
+        }
+
+        /* ===== HERO SECTION ===== */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 10rem 2rem 6rem;
+            position: relative;
+        }
+        
+        /* Floating Orbs */
+        .hero-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            animation: orbFloat 8s ease-in-out infinite;
+        }
+        
+        .hero-orb.cyan {
+            width: 400px;
+            height: 400px;
+            background: rgba(0, 245, 255, 0.2);
+            top: 10%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+        
+        .hero-orb.violet {
+            width: 350px;
+            height: 350px;
+            background: rgba(139, 92, 246, 0.2);
+            top: 20%;
+            right: 15%;
+            animation-delay: 2s;
+        }
+        
+        .hero-orb.pink {
+            width: 300px;
+            height: 300px;
+            background: rgba(236, 72, 153, 0.15);
+            bottom: 20%;
+            left: 20%;
+            animation-delay: 4s;
+        }
+        
+        @keyframes orbFloat {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(30px, -30px) scale(1.1); }
+        }
+
+        /* Launch Badge */
+        .launch-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 24px;
+            background: linear-gradient(135deg, rgba(255, 170, 0, 0.15) 0%, rgba(255, 90, 0, 0.1) 100%);
+            border: 1px solid rgba(255, 170, 0, 0.4);
+            border-radius: 100px;
+            margin-bottom: 2rem;
+            animation: badgePulse 3s ease-in-out infinite, fadeInUp 0.8s ease;
+        }
+        
+        @keyframes badgePulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(255, 170, 0, 0.2); }
+            50% { box-shadow: 0 0 40px rgba(255, 170, 0, 0.4); }
+        }
+        
+        .badge-icon {
+            font-size: 22px;
+            animation: wiggle 2s ease-in-out infinite;
+        }
+        
+        @keyframes wiggle {
+            0%, 100% { transform: rotate(-5deg); }
+            50% { transform: rotate(5deg); }
+        }
+        
+        .badge-text {
+            font-size: 14px;
+            font-weight: 700;
+            color: #FFB800;
+            letter-spacing: 0.5px;
+        }
+
+        /* Status Pill */
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 20px;
+            background: rgba(0, 245, 255, 0.08);
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            border-radius: 100px;
+            margin-bottom: 2.5rem;
+            animation: fadeInUp 0.8s ease 0.1s both;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background: var(--aurora-mint);
+            border-radius: 50%;
+            box-shadow: 0 0 15px var(--aurora-mint);
+            animation: statusPulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes statusPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.3); }
+        }
+        
+        .status-text {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--aurora-cyan);
+        }
+
+        /* Hero Title */
+        .hero-title {
+            font-family: 'Inter', sans-serif;
+            font-size: clamp(3rem, 10vw, 6rem);
+            font-weight: 900;
+            line-height: 1.05;
+            margin-bottom: 1.5rem;
+            letter-spacing: -2px;
+            animation: fadeInUp 0.8s ease 0.2s both;
+        }
+        
+        .hero-title .line1 {
+            display: block;
+            background: var(--gradient-aurora);
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: gradientFlow 6s ease infinite;
+        }
+        
+        .hero-title .line2 {
+            display: block;
+            color: var(--text-primary);
+            text-shadow: 0 4px 30px rgba(0,0,0,0.3);
+        }
+        
+        @keyframes gradientFlow {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .hero-subtitle {
+            font-size: clamp(1.1rem, 2.5vw, 1.35rem);
+            color: var(--text-secondary);
+            max-width: 650px;
+            margin-bottom: 3rem;
+            line-height: 1.8;
+            animation: fadeInUp 0.8s ease 0.3s both;
+        }
+
+        /* Hero CTA Buttons */
+        .hero-cta {
+            display: flex;
+            gap: 1.25rem;
+            flex-wrap: wrap;
+            justify-content: center;
+            animation: fadeInUp 0.8s ease 0.4s both;
+        }
+        
+        .btn-primary {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 18px 36px;
+            background: var(--gradient-aurora);
+            background-size: 200% 200%;
+            border: none;
+            border-radius: 16px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--bg-void);
+            text-decoration: none;
+            cursor: pointer;
+            overflow: hidden;
+            transition: all 0.4s ease;
+            animation: textGradient 4s ease infinite;
+        }
+        
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transition: left 0.5s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 20px 50px rgba(0, 245, 255, 0.4), var(--glow-cyan);
+        }
+        
+        .btn-primary:hover::before {
+            left: 100%;
+        }
+        
+        .btn-outline {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 18px 36px;
+            background: transparent;
+            border: 2px solid var(--border-glow);
+            border-radius: 16px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--text-primary);
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-outline::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--gradient-aurora);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            border-radius: 14px;
+        }
+        
+        .btn-outline span {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .btn-outline:hover {
+            border-color: transparent;
+            transform: translateY(-4px);
+            box-shadow: var(--glow-violet);
+        }
+        
+        .btn-outline:hover::before {
+            opacity: 0.15;
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            display: flex;
+            justify-content: center;
+            gap: 4rem;
+            flex-wrap: wrap;
+            margin-top: 5rem;
+            padding-top: 4rem;
+            border-top: 1px solid var(--border-subtle);
+            animation: fadeInUp 0.8s ease 0.5s both;
+        }
+        
+        .stat-item {
+            text-align: center;
+            position: relative;
+        }
+        
+        .stat-value {
+            font-family: 'Inter', sans-serif;
+            font-size: 3rem;
+            font-weight: 900;
+            background: var(--gradient-aurora);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: textGradient 4s ease infinite;
+            line-height: 1.2;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 8px;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(40px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ===== SECTIONS ===== */
+        .section {
+            padding: 8rem 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            position: relative;
+        }
+        
+        .section-header {
+            text-align: center;
+            margin-bottom: 5rem;
+        }
+        
+        .section-label {
+            display: inline-block;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            background: var(--gradient-aurora);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: textGradient 4s ease infinite;
+            margin-bottom: 1rem;
+        }
+        
+        .section-title {
+            font-family: 'Inter', sans-serif;
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 900;
+            letter-spacing: -1px;
+            margin-bottom: 1.25rem;
+        }
+        
+        .section-desc {
+            font-size: 1.15rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* ===== PREMIUM FEATURE CARDS ===== */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 2rem;
+        }
+        
+        .feature-card {
+            position: relative;
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 2.5rem;
+            overflow: hidden;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        /* Animated Border */
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 24px;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(0,245,255,0.3) 0%, transparent 50%, rgba(139,92,246,0.3) 100%);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            opacity: 0.5;
+            transition: opacity 0.5s ease;
+        }
+        
+        /* Glow Effect */
+        .feature-card::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at center, var(--card-glow, rgba(0,245,255,0.1)) 0%, transparent 50%);
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            pointer-events: none;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-10px) scale(1.02);
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4);
+        }
+        
+        .feature-card:hover::before {
+            opacity: 1;
+            background: var(--gradient-aurora);
+        }
+        
+        .feature-card:hover::after {
+            opacity: 1;
+        }
+        
+        .feature-icon {
+            width: 72px;
+            height: 72px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin-bottom: 1.75rem;
+            position: relative;
+            z-index: 1;
+            transition: all 0.4s ease;
+        }
+        
+        .feature-icon.cyan {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.2) 0%, rgba(0, 200, 255, 0.1) 100%);
+            box-shadow: 0 0 40px rgba(0, 245, 255, 0.3);
+        }
+        
+        .feature-icon.violet {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(168, 85, 247, 0.1) 100%);
+            box-shadow: 0 0 40px rgba(139, 92, 246, 0.3);
+        }
+        
+        .feature-icon.mint {
+            background: linear-gradient(135deg, rgba(15, 240, 179, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%);
+            box-shadow: 0 0 40px rgba(15, 240, 179, 0.3);
+        }
+        
+        .feature-icon.pink {
+            background: linear-gradient(135deg, rgba(236, 72, 153, 0.2) 0%, rgba(244, 63, 94, 0.1) 100%);
+            box-shadow: 0 0 40px rgba(236, 72, 153, 0.3);
+        }
+        
+        .feature-icon.orange {
+            background: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(245, 158, 11, 0.1) 100%);
+            box-shadow: 0 0 40px rgba(249, 115, 22, 0.3);
+        }
+        
+        .feature-icon.blue {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(99, 102, 241, 0.1) 100%);
+            box-shadow: 0 0 40px rgba(59, 130, 246, 0.3);
+        }
+        
+        .feature-card:hover .feature-icon {
+            transform: scale(1.1) rotate(5deg);
+        }
+        
+        .feature-title {
+            font-family: 'Inter', sans-serif;
+            font-size: 1.4rem;
+            font-weight: 800;
+            margin-bottom: 0.75rem;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .feature-desc {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.7;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .feature-tags {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 1.5rem;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .feature-tag {
+            padding: 6px 14px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            transition: all 0.3s ease;
+        }
+        
+        .feature-card:hover .feature-tag {
+            background: rgba(0, 245, 255, 0.1);
+            border-color: rgba(0, 245, 255, 0.3);
+            color: var(--aurora-cyan);
+        }
+
+        /* ===== BROKER CARDS ===== */
+        .brokers-section {
+            background: linear-gradient(180deg, transparent 0%, rgba(0, 245, 255, 0.02) 50%, transparent 100%);
+        }
+        
+        .broker-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 2rem;
+        }
+        
+        .broker-card {
+            position: relative;
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 2.5rem;
+            text-align: center;
+            overflow: hidden;
+            transition: all 0.4s ease;
+        }
+        
+        .broker-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 24px;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 100%);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+        }
+        
+        .broker-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        .broker-logo {
+            width: 90px;
+            height: 90px;
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+            transition: all 0.4s ease;
+            overflow: hidden;
+        }
+        
+        .broker-logo svg {
+            width: 80px;
+            height: 80px;
+        }
+        
+        .broker-logo.webull {
+            background: transparent;
+            box-shadow: 0 10px 40px rgba(0, 212, 170, 0.3);
+        }
+        
+        .broker-logo.alpaca {
+            background: transparent;
+            box-shadow: 0 10px 40px rgba(255, 205, 0, 0.3);
+        }
+        
+        .broker-logo.ibkr {
+            background: transparent;
+            box-shadow: 0 10px 40px rgba(215, 25, 32, 0.3);
+        }
+        
+        .broker-card:hover .broker-logo {
+            transform: scale(1.1) rotate(-5deg);
+        }
+        
+        .broker-name {
+            font-family: 'Inter', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+        }
+        
+        .broker-modes {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 1rem;
+        }
+        
+        .mode-badge {
+            padding: 6px 16px;
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        
+        .mode-badge.live {
+            background: rgba(236, 72, 153, 0.15);
+            color: var(--aurora-pink);
+            border: 1px solid rgba(236, 72, 153, 0.3);
+        }
+        
+        .mode-badge.paper {
+            background: rgba(15, 240, 179, 0.15);
+            color: var(--aurora-mint);
+            border: 1px solid rgba(15, 240, 179, 0.3);
+        }
+        
+        .broker-features {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        /* ===== CAPABILITIES GRID ===== */
+        .capabilities-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.5rem;
+        }
+        
+        @media (max-width: 1000px) {
+            .capabilities-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        
+        @media (max-width: 600px) {
+            .capabilities-grid { grid-template-columns: 1fr; }
+        }
+        
+        .capability-item {
+            position: relative;
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 2rem 1.5rem;
+            text-align: center;
+            overflow: hidden;
+            transition: all 0.4s ease;
+        }
+        
+        .capability-item::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 20px;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 100%);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            transition: background 0.4s ease;
+        }
+        
+        .capability-item:hover {
+            transform: translateY(-6px) scale(1.03);
+        }
+        
+        .capability-item:hover::before {
+            background: var(--gradient-aurora);
+        }
+        
+        .capability-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            transition: transform 0.4s ease;
+        }
+        
+        .capability-item:hover .capability-icon {
+            transform: scale(1.2);
+        }
+        
+        .capability-text {
+            font-weight: 700;
+            font-size: 15px;
+        }
+
+        /* ===== CTA SECTION ===== */
+        .cta-section {
+            text-align: center;
+            padding: 10rem 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .cta-glow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 800px;
+            height: 500px;
+            background: radial-gradient(ellipse, rgba(0, 245, 255, 0.2) 0%, rgba(139, 92, 246, 0.1) 40%, transparent 70%);
+            filter: blur(100px);
+            animation: ctaPulse 5s ease-in-out infinite;
+        }
+        
+        @keyframes ctaPulse {
+            0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+            50% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+        }
+        
+        .cta-title {
+            font-family: 'Inter', sans-serif;
+            font-size: clamp(2.5rem, 6vw, 4rem);
+            font-weight: 900;
+            margin-bottom: 1.5rem;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .cta-desc {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            max-width: 550px;
+            margin: 0 auto 2.5rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ===== FOOTER ===== */
+        .footer {
+            text-align: center;
+            padding: 4rem 2rem;
+            border-top: 1px solid var(--border-subtle);
+        }
+        
+        .footer-logo {
+            font-family: 'Inter', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: var(--gradient-aurora);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: textGradient 4s ease infinite;
+            margin-bottom: 1rem;
+        }
+        
+        .footer-text {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        /* ===== SCROLL ANIMATIONS ===== */
+        .animate-on-scroll {
+            opacity: 0;
+            transform: translateY(50px);
+            transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .animate-on-scroll.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 768px) {
+            .nav-bar { padding: 1rem; }
+            .nav-links { display: none; }
+            .hero { padding: 7rem 1.5rem 4rem; }
+            .hero-title { letter-spacing: -1px; }
+            .stats-bar { gap: 2.5rem; }
+            .stat-value { font-size: 2.5rem; }
+            .section { padding: 5rem 1.5rem; }
+            .features-grid { grid-template-columns: 1fr; }
+            .broker-grid { grid-template-columns: 1fr; }
+        }
+
+        /* ===== PROMO BANNER ===== */
+        .promo-banner {
+            background: linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #ffd700 100%);
+            padding: 14px 24px;
+            text-align: center;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 2000;
+            overflow: hidden;
+        }
+        
+        .promo-banner::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 200%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: promoShine 2s infinite;
+        }
+        
+        @keyframes promoShine {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+        
+        .promo-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            position: relative;
+        }
+        
+        .promo-emoji {
+            font-size: 26px;
+            animation: bounce 1s ease infinite;
+        }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+        
+        .promo-text {
+            color: #1a1a1a;
+            font-weight: 800;
+            font-size: 15px;
+        }
+        
+        .promo-highlight {
+            background: rgba(0,0,0,0.15);
+            padding: 6px 16px;
+            border-radius: 100px;
+            font-weight: 900;
+            color: #1a1a1a;
+        }
+        
+        .promo-cta {
+            background: #1a1a1a;
+            color: #ffd700;
+            padding: 10px 24px;
+            border-radius: 100px;
+            text-decoration: none;
+            font-weight: 800;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+        }
+        
+        .promo-cta:hover {
+            background: #000;
+            transform: scale(1.05);
+        }
+        
+        .promo-close {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: rgba(0,0,0,0.5);
+            font-size: 24px;
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+        
+        .promo-close:hover {
+            color: rgba(0,0,0,0.8);
+        }
+        
+        body.has-promo .nav-bar {
+            top: 52px;
+        }
+        
+        body.has-promo .hero {
+            padding-top: 12rem;
+        }
+
+        /* ===== LEADERBOARD SHOWCASE ===== */
+        .showcase-section {
+            background: linear-gradient(180deg, transparent 0%, rgba(139, 92, 246, 0.03) 50%, transparent 100%);
+        }
+        
+        .showcase-mockup {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .mockup-window {
+            background: var(--bg-elevated);
+            border-radius: 16px;
+            border: 1px solid var(--border-subtle);
+            overflow: hidden;
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5), 0 0 60px rgba(139, 92, 246, 0.15);
+        }
+        
+        .mockup-header {
+            background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        
+        .mockup-dots {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .mockup-dots .dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+        }
+        
+        .mockup-dots .dot.red { background: #ff5f57; }
+        .mockup-dots .dot.yellow { background: #febc2e; }
+        .mockup-dots .dot.green { background: #28c840; }
+        
+        .mockup-title {
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
+        .mockup-content {
+            padding: 24px;
+        }
+        
+        .leaderboard-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 8px;
+        }
+        
+        .leaderboard-table th {
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--aurora-cyan);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            background: rgba(0, 245, 255, 0.08);
+        }
+        
+        .leaderboard-table th:first-child { border-radius: 10px 0 0 10px; }
+        .leaderboard-table th:last-child { border-radius: 0 10px 10px 0; }
+        
+        .leaderboard-table td {
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.02);
+            transition: all 0.3s ease;
+        }
+        
+        .leaderboard-table tr:hover td {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .leaderboard-table td:first-child { border-radius: 10px 0 0 10px; }
+        .leaderboard-table td:last-child { border-radius: 0 10px 10px 0; }
+        
+        .gold-row td { background: rgba(255, 215, 0, 0.08); border-left: 3px solid #ffd700; }
+        .silver-row td { background: rgba(192, 192, 192, 0.06); border-left: 3px solid #c0c0c0; }
+        .bronze-row td { background: rgba(205, 127, 50, 0.06); border-left: 3px solid #cd7f32; }
+        .you-row td { background: rgba(0, 245, 255, 0.08); border-left: 3px solid var(--aurora-cyan); }
+        
+        .rank {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            font-weight: 800;
+            font-size: 14px;
+        }
+        
+        .rank.gold { background: linear-gradient(135deg, #ffd700, #ffb700); color: #1a1a1a; }
+        .rank.silver { background: linear-gradient(135deg, #e8e8e8, #c0c0c0); color: #1a1a1a; }
+        .rank.bronze { background: linear-gradient(135deg, #cd7f32, #b87333); color: #fff; }
+        .rank.you { background: var(--gradient-aurora); color: #1a1a1a; }
+        
+        .trader-name {
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        
+        .pnl-positive { color: var(--aurora-mint); font-weight: 700; }
+        
+        .tqs-bar {
+            position: relative;
+            width: 60px;
+            height: 28px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        
+        .tqs-bar::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: var(--tqs);
+            background: var(--gradient-aurora);
+            border-radius: 6px;
+        }
+        
+        .tqs-bar span {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            font-weight: 700;
+            font-size: 12px;
+        }
+
+        /* ===== SIMULATION SECTION ===== */
+        .simulation-section {
+            background: linear-gradient(180deg, transparent 0%, rgba(15, 240, 179, 0.03) 50%, transparent 100%);
+        }
+        
+        .simulation-demo {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        .sim-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+        
+        @media (max-width: 768px) {
+            .sim-grid { grid-template-columns: 1fr; }
+        }
+        
+        .sim-input-card, .sim-results-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 2rem;
+            border: 1px solid var(--border-subtle);
+        }
+        
+        .sim-input-card h4, .sim-results-card h4 {
+            font-family: 'Inter', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: var(--aurora-cyan);
+        }
+        
+        .sim-field {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        
+        .sim-field label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        .sim-value {
+            font-weight: 700;
+            font-size: 16px;
+            background: var(--gradient-aurora);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .sim-modes {
+            display: flex;
+            gap: 10px;
+            margin-top: 1.5rem;
+        }
+        
+        .sim-mode {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .sim-mode:hover {
+            border-color: var(--aurora-cyan);
+        }
+        
+        .sim-mode.active {
+            background: rgba(0, 245, 255, 0.1);
+            border-color: var(--aurora-cyan);
+            box-shadow: 0 0 20px rgba(0, 245, 255, 0.2);
+        }
+        
+        .mode-icon { font-size: 1.5rem; }
+        
+        .sim-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.25rem;
+        }
+        
+        .sim-stat {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 1.25rem;
+            text-align: center;
+        }
+        
+        .sim-stat .stat-label {
+            display: block;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+        
+        .sim-stat .stat-value {
+            font-family: 'Inter', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
+        }
+        
+        .sim-stat .stat-value.positive { color: var(--aurora-mint); }
+        .sim-stat .stat-value.warning { color: var(--warning); }
+        
+        .sim-presets {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-subtle);
+        }
+        
+        .preset-tag {
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        
+        .sim-extras {
+            margin-top: 1.25rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-subtle);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .sim-extra-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            background: rgba(0, 245, 255, 0.08);
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--aurora-cyan);
+        }
+
+        /* ===== WAITLIST FORM ===== */
+        .waitlist-form {
+            position: relative;
+            z-index: 1;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .waitlist-form .form-row {
+            display: flex;
+            gap: 12px;
+        }
+        
+        @media (max-width: 600px) {
+            .waitlist-form .form-row {
+                flex-direction: column;
+            }
+        }
+        
+        .waitlist-input {
+            flex: 1;
+            padding: 18px 24px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid var(--border-subtle);
+            border-radius: 16px;
+            color: var(--text-primary);
+            font-size: 16px;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            transition: all 0.3s ease;
+        }
+        
+        .waitlist-input:focus {
+            outline: none;
+            border-color: var(--aurora-cyan);
+            box-shadow: 0 0 20px rgba(0, 245, 255, 0.2);
+        }
+        
+        .waitlist-input::placeholder {
+            color: var(--text-muted);
+        }
+        
+        .form-note {
+            margin-top: 1rem;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        /* ===== REFERRAL SECTION ===== */
+        .referral-section {
+            background: linear-gradient(180deg, transparent 0%, rgba(236, 72, 153, 0.03) 50%, transparent 100%);
+        }
+        
+        .referral-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+            max-width: 900px;
+            margin: 0 auto 3rem;
+        }
+        
+        @media (max-width: 768px) {
+            .referral-grid { grid-template-columns: 1fr; }
+        }
+        
+        .referral-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 2.5rem 2rem;
+            text-align: center;
+            border: 1px solid var(--border-subtle);
+            transition: all 0.4s ease;
+        }
+        
+        .referral-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+        }
+        
+        .referral-card.featured {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(236, 72, 153, 0.1) 100%);
+            border-color: rgba(139, 92, 246, 0.4);
+            transform: scale(1.05);
+        }
+        
+        .referral-card.featured:hover {
+            transform: scale(1.05) translateY(-8px);
+        }
+        
+        .reward-tier {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .reward-count {
+            font-family: 'Inter', sans-serif;
+            font-size: 3rem;
+            font-weight: 900;
+            background: var(--gradient-aurora);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .reward-label {
+            font-size: 14px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .reward-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        
+        .share-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .share-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 14px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .share-btn.twitter {
+            background: rgba(29, 161, 242, 0.15);
+            color: #1DA1F2;
+            border: 1px solid rgba(29, 161, 242, 0.3);
+        }
+        
+        .share-btn.linkedin {
+            background: rgba(0, 119, 181, 0.15);
+            color: #0077B5;
+            border: 1px solid rgba(0, 119, 181, 0.3);
+        }
+        
+        .share-btn.whatsapp {
+            background: rgba(37, 211, 102, 0.15);
+            color: #25D366;
+            border: 1px solid rgba(37, 211, 102, 0.3);
+        }
+        
+        .share-btn.email {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+            border: 1px solid var(--border-subtle);
+        }
+        
+        .share-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Print Styles */
+        @media print {
+            .nav-bar, .promo-banner, .cta-section, .aurora-bg, .particles, .grid-pattern { display: none; }
+            body { background: white; color: black; }
+            .section { padding: 2rem 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="aurora-bg"></div>
+    <div class="particles">
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+    </div>
+    <div class="grid-pattern"></div>
+
+    <!-- Navigation -->
+    <nav class="nav-bar">
+        <a href="/architecture" class="nav-brand">
+            <div class="logo-mark">
+                <span class="logo-text">BT</span>
+            </div>
+            <div class="brand-text">
+                <span class="brand-name">BotifyTrades</span>
+                <span class="brand-tagline">Automated Trading</span>
+            </div>
+        </a>
+        <div class="nav-links">
+            <a href="#features" class="nav-link">Features</a>
+            <a href="#waitlist" class="nav-link">Join Waitlist</a>
+            <a href="/login" class="nav-link nav-signin">Sign In</a>
+            <a href="/signup" class="nav-cta"><span>Sign Up</span></a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-orb cyan"></div>
+        <div class="hero-orb violet"></div>
+        <div class="hero-orb pink"></div>
+        
+        <div class="status-pill">
+            <span class="status-dot"></span>
+            <span class="status-text">Multi-Broker Trading Platform</span>
+        </div>
+        
+        <h1 class="hero-title">
+            <span class="line1">Automate Your</span>
+            <span class="line2">Trading Execution</span>
+        </h1>
+        
+        <p class="hero-subtitle">
+            Execute trades across multiple brokers simultaneously from Discord signals. 
+            Real-time monitoring, intelligent risk management, and AI-powered analysis.
+        </p>
+        
+        <div class="hero-cta">
+            <a href="/" class="btn-primary">
+                Open Dashboard
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+            </a>
+            <button class="btn-outline" onclick="window.print()">
+                <span>Save as PDF</span>
+            </button>
+        </div>
+
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-value">3</div>
+                <div class="stat-label">Supported Brokers</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">6</div>
+                <div class="stat-label">Account Types</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">24/7</div>
+                <div class="stat-label">Monitoring</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">&lt;1s</div>
+                <div class="stat-label">Execution Speed</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="section">
+        <div class="section-header animate-on-scroll">
+            <div class="section-label">Features</div>
+            <h2 class="section-title">Everything You Need</h2>
+            <p class="section-desc">
+                A complete trading automation platform with professional-grade tools
+            </p>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(0, 245, 255, 0.15);">
+                <div class="feature-icon cyan">🔀</div>
+                <h3 class="feature-title">Multi-Broker Execution</h3>
+                <p class="feature-desc">
+                    Execute trades on Webull, Alpaca, and Interactive Brokers simultaneously from a single signal. 
+                    Perfect for diversification and redundancy.
+                </p>
+                <div class="feature-tags">
+                    <span class="feature-tag">Simultaneous</span>
+                    <span class="feature-tag">LIVE + PAPER</span>
+                </div>
+            </div>
+
+            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(139, 92, 246, 0.15);">
+                <div class="feature-icon violet">📊</div>
+                <h3 class="feature-title">Options Chain Viewer</h3>
+                <p class="feature-desc">
+                    Real-time options chains with live price updates, ATM highlighting, and one-click order placement 
+                    directly from the web interface.
+                </p>
+                <div class="feature-tags">
+                    <span class="feature-tag">Live Prices</span>
+                    <span class="feature-tag">Greeks</span>
+                </div>
+            </div>
+
+            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(15, 240, 179, 0.15);">
+                <div class="feature-icon mint">🛡️</div>
+                <h3 class="feature-title">Risk Management</h3>
+                <p class="feature-desc">
+                    Automatic profit targets, stop losses, and trailing stops. Configure per-trade risk limits 
+                    and maximum position sizes.
+                </p>
+                <div class="feature-tags">
+                    <span class="feature-tag">Stop Loss</span>
+                    <span class="feature-tag">Take Profit</span>
+                    <span class="feature-tag">Trailing</span>
+                </div>
+            </div>
+
+            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(249, 115, 22, 0.15);">
+                <div class="feature-icon orange">🤖</div>
+                <h3 class="feature-title">AI-Powered Analysis</h3>
+                <p class="feature-desc">
+                    Pre-trade swing analysis using technical indicators. Post-execution AI insights 
+                    powered by GPT models for continuous improvement.
+                </p>
+                <div class="feature-tags">
+                    <span class="feature-tag">Technical Analysis</span>
+                    <span class="feature-tag">GPT-4</span>
+                </div>
+            </div>
+
+
+            <div class="feature-card animate-on-scroll" style="--card-glow: rgba(59, 130, 246, 0.15);">
+                <div class="feature-icon blue">🔔</div>
+                <h3 class="feature-title">Discord Notifications</h3>
+                <p class="feature-desc">
+                    Instant webhook notifications for order fills, P&L updates, and system alerts. 
+                    Never miss a trade execution.
+                </p>
+                <div class="feature-tags">
+                    <span class="feature-tag">Webhooks</span>
+                    <span class="feature-tag">Real-time</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Brokers Section -->
+    <section class="section brokers-section">
+        <div class="section-header animate-on-scroll">
+            <div class="section-label">Integrations</div>
+            <h2 class="section-title">Supported Brokers</h2>
+            <p class="section-desc">
+                Trade with your preferred broker or all of them at once
+            </p>
+        </div>
+
+        <div class="broker-grid">
+            <div class="broker-card animate-on-scroll">
+                <div class="broker-logo webull">
+                    <svg viewBox="0 0 200 200" width="60" height="60">
+                        <defs>
+                            <linearGradient id="webullGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#00D4AA"/>
+                                <stop offset="100%" style="stop-color:#00A080"/>
+                            </linearGradient>
+                        </defs>
+                        <circle cx="100" cy="100" r="90" fill="url(#webullGrad)"/>
+                        <text x="100" y="125" text-anchor="middle" fill="white" font-family="Arial Black, sans-serif" font-size="80" font-weight="900">W</text>
+                    </svg>
+                </div>
+                <h3 class="broker-name">Webull</h3>
+                <div class="broker-modes">
+                    <span class="mode-badge live">LIVE</span>
+                    <span class="mode-badge paper">PAPER</span>
+                </div>
+                <p class="broker-features">Stocks • Options • Index Options (SPX)</p>
+            </div>
+
+            <div class="broker-card animate-on-scroll">
+                <div class="broker-logo alpaca">
+                    <svg viewBox="0 0 200 200" width="60" height="60">
+                        <defs>
+                            <linearGradient id="alpacaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#FFCD00"/>
+                                <stop offset="100%" style="stop-color:#FFB700"/>
+                            </linearGradient>
+                        </defs>
+                        <circle cx="100" cy="100" r="90" fill="url(#alpacaGrad)"/>
+                        <ellipse cx="100" cy="75" rx="35" ry="30" fill="#1a1a1a"/>
+                        <circle cx="85" cy="70" r="8" fill="white"/>
+                        <circle cx="115" cy="70" r="8" fill="white"/>
+                        <circle cx="85" cy="70" r="4" fill="#1a1a1a"/>
+                        <circle cx="115" cy="70" r="4" fill="#1a1a1a"/>
+                        <ellipse cx="75" cy="55" rx="15" ry="25" fill="#1a1a1a"/>
+                        <ellipse cx="125" cy="55" rx="15" ry="25" fill="#1a1a1a"/>
+                        <ellipse cx="100" cy="130" rx="45" ry="35" fill="#F5F5DC"/>
+                        <ellipse cx="100" cy="145" rx="20" ry="12" fill="#1a1a1a"/>
+                    </svg>
+                </div>
+                <h3 class="broker-name">Alpaca</h3>
+                <div class="broker-modes">
+                    <span class="mode-badge live">LIVE</span>
+                    <span class="mode-badge paper">PAPER</span>
+                </div>
+                <p class="broker-features">Stocks • Options • Bracket Orders</p>
+            </div>
+
+            <div class="broker-card animate-on-scroll">
+                <div class="broker-logo ibkr">
+                    <svg viewBox="0 0 200 200" width="60" height="60">
+                        <defs>
+                            <linearGradient id="ibkrGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#D71920"/>
+                                <stop offset="100%" style="stop-color:#A01419"/>
+                            </linearGradient>
+                        </defs>
+                        <circle cx="100" cy="100" r="90" fill="url(#ibkrGrad)"/>
+                        <text x="100" y="120" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="48" font-weight="700">IBKR</text>
+                    </svg>
+                </div>
+                <h3 class="broker-name">Interactive Brokers</h3>
+                <div class="broker-modes">
+                    <span class="mode-badge live">LIVE</span>
+                    <span class="mode-badge paper">PAPER</span>
+                </div>
+                <p class="broker-features">Stocks • Options • Index Options • Futures</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Capabilities Section -->
+    <section class="section">
+        <div class="section-header animate-on-scroll">
+            <div class="section-label">Capabilities</div>
+            <h2 class="section-title">What You Can Do</h2>
+        </div>
+
+        <div class="capabilities-grid">
+            <div class="capability-item animate-on-scroll">
+                <div class="capability-icon">📈</div>
+                <div class="capability-text">Real-time P&L Tracking</div>
+            </div>
+            <div class="capability-item animate-on-scroll">
+                <div class="capability-icon">⚡</div>
+                <div class="capability-text">Instant Signal Execution</div>
+            </div>
+            <div class="capability-item animate-on-scroll">
+                <div class="capability-icon">🎯</div>
+                <div class="capability-text">Auto Bracket Orders</div>
+            </div>
+            <div class="capability-item animate-on-scroll">
+                <div class="capability-icon">📋</div>
+                <div class="capability-text">Trade History & Logs</div>
+            </div>
+            <div class="capability-item animate-on-scroll">
+                <div class="capability-icon">🔐</div>
+                <div class="capability-text">Secure Credential Storage</div>
+            </div>
+            <div class="capability-item animate-on-scroll">
+                <div class="capability-icon">📊</div>
+                <div class="capability-text">Technical Indicators</div>
+            </div>
+            <div class="capability-item animate-on-scroll">
+                <div class="capability-icon">🏆</div>
+                <div class="capability-text">Leaderboard & Stats</div>
+            </div>
+            <div class="capability-item animate-on-scroll">
+                <div class="capability-icon">⚙️</div>
+                <div class="capability-text">Dynamic Configuration</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Leaderboard Showcase Section -->
+    <section class="section showcase-section">
+        <div class="section-header animate-on-scroll">
+            <div class="section-label">Performance Tracking</div>
+            <h2 class="section-title">Leaderboard & P&L Analytics</h2>
+            <p class="section-desc">
+                Track your performance, compare with traders, and analyze every trade
+            </p>
+        </div>
+
+        <div class="showcase-mockup animate-on-scroll">
+            <div class="mockup-window">
+                <div class="mockup-header">
+                    <div class="mockup-dots">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                    </div>
+                    <span class="mockup-title">BotifyTrades - Leaderboard</span>
+                </div>
+                <div class="mockup-content">
+                    <table class="leaderboard-table">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Trader</th>
+                                <th>Total P&L</th>
+                                <th>Win Rate</th>
+                                <th>TQS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="gold-row">
+                                <td><span class="rank gold">1</span></td>
+                                <td><span class="trader-name">🏆 ████████</span></td>
+                                <td class="pnl-positive">+$47,892</td>
+                                <td>87.3%</td>
+                                <td><div class="tqs-bar" style="--tqs: 94%"><span>94</span></div></td>
+                            </tr>
+                            <tr class="silver-row">
+                                <td><span class="rank silver">2</span></td>
+                                <td><span class="trader-name">🥈 ██████████</span></td>
+                                <td class="pnl-positive">+$38,451</td>
+                                <td>82.1%</td>
+                                <td><div class="tqs-bar" style="--tqs: 89%"><span>89</span></div></td>
+                            </tr>
+                            <tr class="bronze-row">
+                                <td><span class="rank bronze">3</span></td>
+                                <td><span class="trader-name">🥉 ████████████</span></td>
+                                <td class="pnl-positive">+$31,204</td>
+                                <td>79.5%</td>
+                                <td><div class="tqs-bar" style="--tqs: 85%"><span>85</span></div></td>
+                            </tr>
+                            <tr class="you-row">
+                                <td><span class="rank you">5</span></td>
+                                <td><span class="trader-name">⭐ You</span></td>
+                                <td class="pnl-positive">+$18,934</td>
+                                <td>74.2%</td>
+                                <td><div class="tqs-bar" style="--tqs: 78%"><span>78</span></div></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Portfolio Simulation Section -->
+    <section class="section simulation-section">
+        <div class="section-header animate-on-scroll">
+            <div class="section-label">Projections</div>
+            <h2 class="section-title">Portfolio Simulation Engine</h2>
+            <p class="section-desc">
+                Project future portfolio growth based on trader performance statistics
+            </p>
+        </div>
+
+        <div class="simulation-demo animate-on-scroll">
+            <div class="sim-grid">
+                <div class="sim-input-card">
+                    <h4>Configuration</h4>
+                    <div class="sim-field">
+                        <label>Simulation Target</label>
+                        <div class="sim-value">👤 User / 📊 Channel</div>
+                    </div>
+                    <div class="sim-field">
+                        <label>Starting Portfolio</label>
+                        <div class="sim-value">$3,000</div>
+                    </div>
+                    <div class="sim-field">
+                        <label>Simulation Period</label>
+                        <div class="sim-value">30 Days</div>
+                    </div>
+                    <div class="sim-field">
+                        <label>Risk Per Trade</label>
+                        <div class="sim-value">$300 Fixed</div>
+                    </div>
+                    <div class="sim-modes">
+                        <div class="sim-mode active">
+                            <span class="mode-icon">📜</span>
+                            <span>Replay Trades</span>
+                        </div>
+                        <div class="sim-mode">
+                            <span class="mode-icon">🎯</span>
+                            <span>Sim Averages</span>
+                        </div>
+                    </div>
+                    <div class="sim-presets">
+                        <span class="preset-tag">💎 Conservative</span>
+                        <span class="preset-tag">⚖️ Moderate</span>
+                        <span class="preset-tag">🔥 Aggressive</span>
+                    </div>
+                </div>
+                <div class="sim-results-card">
+                    <h4>Projected Results</h4>
+                    <div class="sim-stats">
+                        <div class="sim-stat">
+                            <span class="stat-label">Final Balance</span>
+                            <span class="stat-value positive">$5,847</span>
+                        </div>
+                        <div class="sim-stat">
+                            <span class="stat-label">Total Return</span>
+                            <span class="stat-value positive">+94.9%</span>
+                        </div>
+                        <div class="sim-stat">
+                            <span class="stat-label">Monthly Est.</span>
+                            <span class="stat-value positive">$2,847</span>
+                        </div>
+                        <div class="sim-stat">
+                            <span class="stat-label">Edge Quality</span>
+                            <span class="stat-value warning">Strong</span>
+                        </div>
+                    </div>
+                    <div class="sim-extras">
+                        <div class="sim-extra-item">📈 Growth Chart</div>
+                        <div class="sim-extra-item">💡 Strategy Tips</div>
+                        <div class="sim-extra-item">📋 Daily Breakdown</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Waitlist CTA Section -->
+    <section class="cta-section" id="waitlist">
+        <div class="cta-glow"></div>
+        <h2 class="cta-title">Ready to Automate Your Trading?</h2>
+        <p class="cta-desc">
+            Join our waitlist for early access and exclusive launch pricing
+        </p>
+        <form class="waitlist-form" action="/waitlist/signup" method="POST" onsubmit="return handleWaitlistSubmit(event)">
+            <div class="form-row">
+                <input type="email" name="email" class="waitlist-input" placeholder="Enter your email address" required>
+                <button type="submit" class="btn-primary">
+                    Join Waitlist
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <!-- Referral Section -->
+    <section class="section referral-section">
+        <div class="section-header animate-on-scroll">
+            <div class="section-label">Earn Rewards</div>
+            <h2 class="section-title">Invite Friends, Get Free Access</h2>
+            <p class="section-desc">
+                Share your referral code and earn bonus days for every friend who joins
+            </p>
+        </div>
+
+        <div class="referral-grid animate-on-scroll">
+            <div class="referral-card">
+                <div class="reward-tier">
+                    <span class="reward-count">1</span>
+                    <span class="reward-label">Referral</span>
+                </div>
+                <div class="reward-value">+7 Days Free</div>
+            </div>
+            <div class="referral-card featured">
+                <div class="reward-tier">
+                    <span class="reward-count">3</span>
+                    <span class="reward-label">Referrals</span>
+                </div>
+                <div class="reward-value">+30 Days Free</div>
+            </div>
+            <div class="referral-card">
+                <div class="reward-tier">
+                    <span class="reward-count">5</span>
+                    <span class="reward-label">Referrals</span>
+                </div>
+                <div class="reward-value">+60 Days + Priority</div>
+            </div>
+        </div>
+
+        <div class="share-buttons animate-on-scroll">
+            <button class="share-btn twitter" onclick="shareTwitter()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                Twitter
+            </button>
+            <button class="share-btn linkedin" onclick="shareLinkedIn()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19a.66.66 0 000 .14V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"/></svg>
+                LinkedIn
+            </button>
+            <button class="share-btn whatsapp" onclick="shareWhatsApp()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                WhatsApp
+            </button>
+            <button class="share-btn email" onclick="shareEmail()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                Email
+            </button>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-logo">BotifyTrades</div>
+        <p class="footer-text">&copy; 2025 BotifyTrades. All rights reserved.</p>
+    </footer>
+
+    <script>
+        // Scroll animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.animate-on-scroll').forEach(el => {
+            observer.observe(el);
+        });
+
+        // Navbar scroll effect
+        window.addEventListener('scroll', () => {
+            const navbar = document.querySelector('.nav-bar');
+            if (window.scrollY > 100) {
+                navbar.classList.add('scrolled');
+            } else {
+                navbar.classList.remove('scrolled');
+            }
+        });
+
+        // Share functions
+        const shareUrl = window.location.origin;
+        const shareText = 'Check out BotifyTrades - Automate your trading execution across multiple brokers!';
+
+        function shareTwitter() {
+            window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`, '_blank');
+        }
+
+        function shareLinkedIn() {
+            window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`, '_blank');
+        }
+
+        function shareWhatsApp() {
+            window.open(`https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`, '_blank');
+        }
+
+        function shareEmail() {
+            window.location.href = `mailto:?subject=${encodeURIComponent('Check out BotifyTrades')}&body=${encodeURIComponent(shareText + '\n\n' + shareUrl)}`;
+        }
+
+        // Waitlist form handler
+        function handleWaitlistSubmit(event) {
+            event.preventDefault();
+            const form = event.target;
+            const email = form.querySelector('input[name="email"]').value;
+            
+            fetch('/waitlist/signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Welcome to BotifyTrades! Check your email for confirmation.');
+                    form.reset();
+                } else {
+                    alert(data.message || 'Something went wrong. Please try again.');
+                }
+            })
+            .catch(err => {
+                alert('Thanks for joining! We will be in touch soon.');
+                form.reset();
+            });
+            
+            return false;
+        }
+    </script>
+</body>
+</html>

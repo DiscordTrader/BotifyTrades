@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Tracking Channels - Redirecting...{% endblock %}
+
+{% block content %}
+<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; text-align: center;">
+    <div style="font-size: 4rem; margin-bottom: 24px;">📡</div>
+    <h2 style="margin-bottom: 16px;">Channel Management Consolidated</h2>
+    <p style="color: var(--text-secondary); margin-bottom: 32px; max-width: 500px;">
+        All channels (Execution and Tracking) are now managed in one place.<br>
+        Redirecting you to the unified Channel Management page...
+    </p>
+    <div class="spinner" style="margin: 20px auto;"></div>
+</div>
+
+<script>
+// Redirect to execution page (now handles both types)
+setTimeout(() => {
+    window.location.href = '/execution';
+}, 2000);
+</script>
+{% endblock %}

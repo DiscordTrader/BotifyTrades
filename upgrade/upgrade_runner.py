@@ -1,0 +1,503 @@
+"""
+Upgrade Runner
+==============
+Orchestrates the complete upgrade process: backup, download, verify, migrate, apply.
+"""
+
+import os
+import sys
+import json
+import hashlib
+import tempfile
+import shutil
+import zipfile
+from datetime import datetime
+from pathlib import Path
+from typing import Optional, Dict, Tuple, Callable
+from enum import Enum
+
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    requests = None
+    REQUESTS_AVAILABLE = False
+
+from .version import get_current_version, set_current_version, compare_versions
+from .version_checker import UpdateInfo
+from .backup_manager import get_backup_manager
+from .readiness import ReadinessChecker
+from .config import DEFAULT_CONFIG
+
+
+class UpgradeStatus(Enum):
+    """Status of the upgrade process."""
+    PENDING = "pending"
+    CHECKING = "checking_readiness"
+    BACKING_UP = "backing_up"
+    DOWNLOADING = "downloading"
+    VERIFYING = "verifying"
+    APPLYING = "applying"
+    MIGRATING = "migrating"
+    VALIDATING = "validating"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    ROLLED_BACK = "rolled_back"
+
+
+class UpgradeResult:
+    """Result of an upgrade attempt."""
+    
+    def __init__(
+        self,
+        success: bool,
+        status: UpgradeStatus,
+        message: str,
+        from_version: str = "",
+        to_version: str = "",
+        backup_path: str = "",
+        error: str = ""
+    ):
+        self.success = success
+        self.status = status
+        self.message = message
+        self.from_version = from_version
+        self.to_version = to_version
+        self.backup_path = backup_path
+        self.error = error
+        self.timestamp = datetime.now().isoformat()
+    
+    def to_dict(self) -> Dict:
+        return {
+            'success': self.success,
+            'status': self.status.value,
+            'message': self.message,
+            'from_version': self.from_version,
+            'to_version': self.to_version,
+            'backup_path': self.backup_path,
+            'error': self.error,
+            'timestamp': self.timestamp
+        }
+
+
+class UpgradeRunner:
+    """Orchestrates the upgrade process."""
+    
+    def __init__(self, config=None):
+        self.config = config or DEFAULT_CONFIG
+        self.backup_manager = get_backup_manager()
+        self.readiness_checker = ReadinessChecker()
+        self._status = UpgradeStatus.PENDING
+        self._progress = 0
+        self._progress_callback: Optional[Callable[[int, str], None]] = None
+        self._history_file = Path('upgrade/upgrade_history.json')
+    
+    def set_progress_callback(self, callback: Callable[[int, str], None]):
+        """Set a callback for progress updates."""
+        self._progress_callback = callback
+    
+    def _update_progress(self, percent: int, message: str):
+        """Update progress and notify callback."""
+        self._progress = percent
+        if self._progress_callback:
+            self._progress_callback(percent, message)
+        print(f"[UPGRADE] {percent}% - {message}")
+    
+    def run_upgrade(self, update_info: UpdateInfo) -> UpgradeResult:
+        """
+        Run the complete upgrade process.
+        
+        Args:
+            update_info: Information about the update to apply
+            
+        Returns:
+            UpgradeResult with success status and details
+        """
+        from_version = get_current_version()
+        to_version = update_info.version
+        backup_path = ""
+        patch_id = f"upgrade_{from_version}_to_{to_version}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        
+        if not REQUESTS_AVAILABLE:
+            result = UpgradeResult(
+                success=False,
+                status=UpgradeStatus.FAILED,
+                message="Cannot perform upgrade: requests library not available",
+                from_version=from_version,
+                to_version=to_version,
+                error="Missing dependency: requests"
+            )
+            self._record_patch_history(patch_id, to_version, 'upgrade', 'failed', result.error)
+            return result
+        
+        try:
+            self._record_patch_history(patch_id, to_version, 'upgrade', 'in_progress', '')
+            
+            self._status = UpgradeStatus.CHECKING
+            self._update_progress(5, "Checking upgrade readiness...")
+            
+            ready, checks = self.readiness_checker.run_all_checks()
+            if not ready:
+                failed = [c.name for c in checks if not c.passed and c.critical]
+                result = UpgradeResult(
+                    success=False,
+                    status=UpgradeStatus.FAILED,
+                    message=f"Readiness check failed: {', '.join(failed)}",
+                    from_version=from_version,
+                    to_version=to_version,
+                    error="System not ready for upgrade"
+                )
+                self._record_patch_history(patch_id, to_version, 'upgrade', 'failed', result.error)
+                return result
+            
+            self._status = UpgradeStatus.BACKING_UP
+            self._update_progress(15, "Creating database backup...")
+            
+            success, backup_path, error = self.backup_manager.create_backup(tag='pre-upgrade')
+            if not success:
+                result = UpgradeResult(
+                    success=False,
+                    status=UpgradeStatus.FAILED,
+                    message=f"Backup failed: {error}",
+                    from_version=from_version,
+                    to_version=to_version,
+                    error=error
+                )
+                self._record_patch_history(patch_id, to_version, 'upgrade', 'failed', error)
+                return result
+            
+            self._status = UpgradeStatus.DOWNLOADING
+            self._update_progress(30, "Downloading update...")
+            
+            download_path, error = self._download_update(update_info)
+            if not download_path:
+                self._update_progress(35, "Download failed, rolling back...")
+                self._rollback(backup_path, from_version)
+                result = UpgradeResult(
+                    success=False,
+                    status=UpgradeStatus.ROLLED_BACK,
+                    message=f"Download failed: {error}",
+                    from_version=from_version,
+                    to_version=to_version,
+                    backup_path=backup_path,
+                    error=error
+                )
+                self._record_patch_history(patch_id, to_version, 'upgrade', 'rolled_back', f"Download failed: {error}")
+                return result
+            
+            self._status = UpgradeStatus.VERIFYING
+            self._update_progress(50, "Verifying download...")
+            
+            if update_info.checksum:
+                valid, error = self._verify_checksum(download_path, update_info.checksum)
+                if not valid:
+                    self._update_progress(55, "Checksum failed, rolling back...")
+                    self._rollback(backup_path, from_version)
+                    result = UpgradeResult(
+                        success=False,
+                        status=UpgradeStatus.ROLLED_BACK,
+                        message=f"Checksum verification failed: {error}",
+                        from_version=from_version,
+                        to_version=to_version,
+                        backup_path=backup_path,
+                        error=error
+                    )
+                    self._record_patch_history(patch_id, to_version, 'upgrade', 'rolled_back', f"Checksum failed: {error}")
+                    return result
+            
+            self._status = UpgradeStatus.MIGRATING
+            self._update_progress(70, "Running database migrations...")
+            
+            success, error = self._run_migrations(to_version)
+            if not success:
+                self._update_progress(75, "Migration failed, rolling back...")
+                self._rollback(backup_path, from_version)
+                result = UpgradeResult(
+                    success=False,
+                    status=UpgradeStatus.ROLLED_BACK,
+                    message=f"Migration failed, rolled back: {error}",
+                    from_version=from_version,
+                    to_version=to_version,
+                    backup_path=backup_path,
+                    error=error
+                )
+                self._record_patch_history(patch_id, to_version, 'upgrade', 'rolled_back', f"Migration failed: {error}")
+                return result
+            
+            self._status = UpgradeStatus.VALIDATING
+            self._update_progress(90, "Validating upgrade...")
+            
+            success, error = self._validate_upgrade()
+            if not success:
+                self._update_progress(92, "Validation failed, rolling back...")
+                self._rollback(backup_path, from_version)
+                result = UpgradeResult(
+                    success=False,
+                    status=UpgradeStatus.ROLLED_BACK,
+                    message=f"Validation failed, rolled back: {error}",
+                    from_version=from_version,
+                    to_version=to_version,
+                    backup_path=backup_path,
+                    error=error
+                )
+                self._record_patch_history(patch_id, to_version, 'upgrade', 'rolled_back', f"Validation failed: {error}")
+                return result
+            
+            set_current_version(to_version)
+            
+            self._status = UpgradeStatus.COMPLETED
+            self._update_progress(100, "Upgrade completed successfully!")
+            
+            result = UpgradeResult(
+                success=True,
+                status=UpgradeStatus.COMPLETED,
+                message=f"Successfully upgraded from {from_version} to {to_version}",
+                from_version=from_version,
+                to_version=to_version,
+                backup_path=backup_path
+            )
+            
+            self._record_patch_history(patch_id, to_version, 'upgrade', 'completed', '')
+            self._record_upgrade(result)
+            
+            return result
+            
+        except Exception as e:
+            self._status = UpgradeStatus.FAILED
+            error_msg = str(e)
+            
+            if backup_path:
+                self._update_progress(0, "Unexpected error, rolling back...")
+                self._rollback(backup_path, from_version)
+            
+            self._record_patch_history(patch_id, to_version, 'upgrade', 'failed', error_msg)
+            
+            return UpgradeResult(
+                success=False,
+                status=UpgradeStatus.FAILED,
+                message=f"Upgrade failed: {error_msg}",
+                from_version=from_version,
+                to_version=to_version,
+                backup_path=backup_path,
+                error=error_msg
+            )
+    
+    def _download_update(self, update_info: UpdateInfo) -> Tuple[Optional[str], str]:
+        """Download the update package."""
+        if not requests:
+            return None, "requests library not available"
+        
+        if not update_info.download_url:
+            return None, "No download URL provided"
+        
+        try:
+            response = requests.get(
+                update_info.download_url,
+                stream=True,
+                timeout=self.config.download_timeout_seconds
+            )
+            
+            if response.status_code != 200:
+                return None, f"Download failed with status {response.status_code}"
+            
+            download_dir = Path('upgrade/downloads')
+            download_dir.mkdir(parents=True, exist_ok=True)
+            
+            filename = f"update_{update_info.version}.zip"
+            download_path = download_dir / filename
+            
+            with open(download_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            
+            return str(download_path), ""
+            
+        except requests.exceptions.Timeout:
+            return None, "Download timed out"
+        except Exception as e:
+            return None, str(e)
+    
+    def _verify_checksum(self, file_path: str, expected_checksum: str) -> Tuple[bool, str]:
+        """Verify file checksum."""
+        try:
+            sha256 = hashlib.sha256()
+            with open(file_path, 'rb') as f:
+                for chunk in iter(lambda: f.read(8192), b''):
+                    sha256.update(chunk)
+            
+            actual = sha256.hexdigest()
+            if actual.lower() == expected_checksum.lower():
+                return True, ""
+            else:
+                return False, f"Checksum mismatch: expected {expected_checksum}, got {actual}"
+        except Exception as e:
+            return False, str(e)
+    
+    def _run_migrations(self, target_version: str) -> Tuple[bool, str]:
+        """Run database migrations for the upgrade."""
+        try:
+            sys.path.insert(0, str(Path.cwd()))
+            from scripts.migrations import MigrationManager
+            
+            manager = MigrationManager()
+            result = manager.upgrade()
+            
+            if result.get('status') in ['current', 'upgraded']:
+                return True, ""
+            else:
+                return False, f"Migration returned: {result}"
+                
+        except Exception as e:
+            return False, str(e)
+    
+    def _validate_upgrade(self) -> Tuple[bool, str]:
+        """Validate the upgrade was successful."""
+        try:
+            sys.path.insert(0, str(Path.cwd()))
+            from scripts.migrations import MigrationManager
+            
+            manager = MigrationManager()
+            missing = manager.get_missing_tables()
+            
+            if missing:
+                return False, f"Missing tables after upgrade: {missing}"
+            
+            return True, ""
+            
+        except Exception as e:
+            return False, str(e)
+    
+    def _rollback(self, backup_path: str, original_version: str = "") -> bool:
+        """Rollback to the backup and restore version."""
+        if not backup_path:
+            return False
+        
+        success, error = self.backup_manager.restore_backup(backup_path)
+        
+        if success and original_version:
+            set_current_version(original_version)
+        
+        return success
+    
+    def _record_patch_history(self, patch_id: str, version: str, patch_type: str, status: str, error_msg: str):
+        """Record upgrade attempt in the database patch_history table."""
+        try:
+            import sqlite3
+            from pathlib import Path
+            
+            db_path = Path('bot_data.db')
+            if not db_path.exists():
+                print(f"[UPGRADE] Database not found for patch history")
+                return
+            
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS patch_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    version TEXT NOT NULL,
+                    patch_id TEXT UNIQUE NOT NULL,
+                    type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    error_message TEXT,
+                    applied_at TEXT NOT NULL
+                )
+            ''')
+            
+            applied_at = datetime.now().isoformat()
+            
+            cursor.execute('''
+                INSERT OR REPLACE INTO patch_history (version, patch_id, type, status, error_message, applied_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (version, patch_id, patch_type, status, error_msg, applied_at))
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"[UPGRADE] Recorded patch history: {patch_id} -> {status}")
+            
+        except Exception as e:
+            print(f"[UPGRADE] Failed to record patch history: {e}")
+    
+    def _record_upgrade(self, result: UpgradeResult):
+        """Record the upgrade in history."""
+        try:
+            history = []
+            if self._history_file.exists():
+                with open(self._history_file, 'r') as f:
+                    history = json.load(f)
+            
+            history.append(result.to_dict())
+            
+            history = history[-50:]
+            
+            self._history_file.parent.mkdir(exist_ok=True)
+            with open(self._history_file, 'w') as f:
+                json.dump(history, f, indent=2)
+                
+        except Exception as e:
+            print(f"[UPGRADE] Failed to record history: {e}")
+    
+    def get_upgrade_history(self) -> list:
+        """Get the upgrade history from JSON file."""
+        try:
+            if self._history_file.exists():
+                with open(self._history_file, 'r') as f:
+                    return json.load(f)
+        except:
+            pass
+        return []
+    
+    def get_patch_history(self) -> list:
+        """Get patch history from the database."""
+        try:
+            import sqlite3
+            from pathlib import Path
+            
+            db_path = Path('bot_data.db')
+            if not db_path.exists():
+                return []
+            
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT version, patch_id, type, status, error_message, applied_at
+                FROM patch_history
+                ORDER BY applied_at DESC
+                LIMIT 50
+            ''')
+            
+            rows = cursor.fetchall()
+            conn.close()
+            
+            return [dict(row) for row in rows]
+            
+        except Exception as e:
+            print(f"[UPGRADE] Failed to get patch history: {e}")
+            return []
+    
+    def get_status(self) -> Dict:
+        """Get current upgrade status."""
+        return {
+            'status': self._status.value,
+            'progress': self._progress
+        }
+
+
+_runner_instance: Optional[UpgradeRunner] = None
+
+
+def get_upgrade_runner() -> UpgradeRunner:
+    """Get or create the global upgrade runner instance."""
+    global _runner_instance
+    if _runner_instance is None:
+        _runner_instance = UpgradeRunner()
+    return _runner_instance
+
+
+def run_upgrade(update_info: UpdateInfo) -> UpgradeResult:
+    """Convenience function to run an upgrade."""
+    return get_upgrade_runner().run_upgrade(update_info)

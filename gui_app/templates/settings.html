@@ -1,0 +1,2155 @@
+{% extends "base.html" %}
+
+{% block title %}⚙️ Settings - Ψ∿ BotifyTrades{% endblock %}
+
+{% block content %}
+<style>
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+    gap: 24px;
+    margin-bottom: 32px;
+}
+
+.settings-card {
+    background: linear-gradient(135deg, #0d2a3a 0%, #0f3a4f 100%);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 12px;
+    padding: 28px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+}
+
+.settings-card:hover {
+    border-color: rgba(0, 212, 255, 0.4);
+    box-shadow: 0 6px 24px rgba(0, 212, 255, 0.1);
+}
+
+.settings-card h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 18px;
+    font-weight: 800;
+    color: #00d4ff;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+}
+
+.collapsible-header {
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+    transition: color 0.2s ease;
+}
+
+.collapsible-header:hover {
+    color: #00ffcc;
+}
+
+.collapse-icon {
+    font-size: 12px;
+    transition: transform 0.3s ease;
+}
+
+.collapse-icon.expanded {
+    transform: rotate(180deg);
+}
+
+.collapsible-content {
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.settings-card .description {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 18px;
+    line-height: 1.4;
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group:last-child {
+    margin-bottom: 0;
+}
+
+.form-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group input[type="password"],
+.form-group input[type="number"],
+.form-group select {
+    width: 100%;
+    background: rgba(0, 50, 80, 0.4);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.2s ease;
+}
+
+.form-group input[type="text"]:focus,
+.form-group input[type="email"]:focus,
+.form-group input[type="password"]:focus,
+.form-group select:focus {
+    background: rgba(0, 80, 120, 0.6);
+    border-color: rgba(0, 212, 255, 0.5);
+    outline: none;
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.2);
+}
+
+.form-group input[type="range"] {
+    width: 100%;
+    height: 4px;
+    background: rgba(0, 212, 255, 0.1);
+    border-radius: 2px;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.form-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
+}
+
+.form-group input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
+}
+
+.slider-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 0 2px;
+}
+
+.slider-value {
+    font-size: 18px;
+    font-weight: bold;
+    color: #00ff88;
+    display: inline-block;
+    margin-left: 6px;
+}
+
+.help-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    line-height: 1.3;
+}
+
+.help-text a {
+    color: #00d4ff;
+    text-decoration: none;
+    border-bottom: 1px dotted rgba(0, 212, 255, 0.5);
+}
+
+.help-text a:hover {
+    border-bottom: 1px solid #00d4ff;
+}
+
+.toggle-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 212, 255, 0.1);
+    transition: 0.3s;
+    border-radius: 24px;
+    border: 1px solid rgba(0, 212, 255, 0.2);
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 2px;
+    background-color: var(--text-secondary);
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: rgba(0, 212, 255, 0.2);
+    border-color: rgba(0, 212, 255, 0.5);
+}
+
+input:checked + .slider:before {
+    transform: translateX(20px);
+    background-color: #00d4ff;
+    box-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
+}
+
+.btn-group {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.btn {
+    flex: 1;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%);
+    color: white;
+}
+
+.btn-success:hover {
+    box-shadow: 0 0 16px rgba(0, 212, 255, 0.4);
+    transform: translateY(-2px);
+}
+
+.btn-success:active {
+    transform: translateY(0);
+}
+
+.message {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    text-align: center;
+}
+
+.message.success {
+    background: rgba(0, 255, 136, 0.1);
+    border: 1px solid rgba(0, 255, 136, 0.3);
+    color: #00ff88;
+}
+
+.message.error {
+    background: rgba(255, 107, 107, 0.1);
+    border: 1px solid rgba(255, 107, 107, 0.3);
+    color: #ff6b6b;
+}
+
+#save-message {
+    display: none;
+}
+
+#save-message:not(:empty) {
+    display: block;
+}
+
+.section-header {
+    margin-bottom: 32px;
+}
+
+.section-header h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 28px;
+    font-weight: 900;
+    background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 0;
+    letter-spacing: 1px;
+}
+
+.divider {
+    height: 1px;
+    background: linear-gradient(90deg, rgba(0,212,255,0), rgba(0,212,255,0.3), rgba(0,212,255,0));
+    margin: 32px 0;
+}
+</style>
+
+<!-- Section Header -->
+<div class="section-header">
+    <h2>⚙️ Configuration & Settings</h2>
+    <p style="color: var(--text-secondary); margin-top: 8px; font-size: 13px;">Manage your bot credentials, API keys, and trading parameters</p>
+</div>
+
+<!-- Global Status Message -->
+<div id="save-message" class="message" style="margin-bottom: 24px;"></div>
+
+<!-- Broker Connection Status Banner -->
+<div class="broker-status-banner" id="broker-status-banner" style="margin-bottom: 24px; padding: 16px; background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(124, 58, 237, 0.1)); border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 12px;">
+    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;">
+        <span style="font-weight: 600; color: var(--text-primary);">Broker Status:</span>
+        <span id="discord-status-badge" class="status-badge disconnected">Discord</span>
+        <span id="alpaca-paper-status-badge" class="status-badge disconnected">Alpaca Paper</span>
+        <span id="webull-live-status-badge" class="status-badge disconnected">Webull Live</span>
+        <span id="webull-paper-status-badge" class="status-badge disconnected">Webull Paper</span>
+        <span id="ibkr-status-badge" class="status-badge disconnected">IBKR</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid rgba(0, 212, 255, 0.2);">
+        <button id="btn-reload-credentials" onclick="reloadCredentials()" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px;">
+            🔄 Reload Credentials
+        </button>
+        <span id="reload-status" style="font-size: 12px; color: var(--text-secondary);"></span>
+        <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 12px; color: var(--text-secondary);">Debug Mode:</span>
+            <label class="toggle-switch" style="margin: 0;">
+                <input type="checkbox" id="debug-mode-toggle" onchange="toggleDebugMode(this.checked)">
+                <span class="toggle-slider"></span>
+            </label>
+            <span id="debug-status" style="font-size: 11px; font-weight: 600; color: #6c757d;">OFF</span>
+        </div>
+    </div>
+</div>
+
+<style>
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.status-badge::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+.status-badge.connected {
+    background: rgba(0, 255, 136, 0.15);
+    color: #00ff88;
+    border: 1px solid rgba(0, 255, 136, 0.3);
+}
+.status-badge.connected::before {
+    background: #00ff88;
+    box-shadow: 0 0 8px #00ff88;
+}
+.status-badge.connecting {
+    background: rgba(255, 193, 7, 0.15);
+    color: #ffc107;
+    border: 1px solid rgba(255, 193, 7, 0.3);
+}
+.status-badge.connecting::before {
+    background: #ffc107;
+    animation: pulse 1s infinite;
+}
+.status-badge.disconnected {
+    background: rgba(108, 117, 125, 0.15);
+    color: #6c757d;
+    border: 1px solid rgba(108, 117, 125, 0.3);
+}
+.status-badge.disconnected::before {
+    background: #6c757d;
+}
+.status-badge.error {
+    background: rgba(255, 107, 107, 0.15);
+    color: #ff6b6b;
+    border: 1px solid rgba(255, 107, 107, 0.3);
+}
+.status-badge.error::before {
+    background: #ff6b6b;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+.btn-connect {
+    background: linear-gradient(135deg, #00ff88 0%, #00d4ff 100%);
+    color: #0a0a0a;
+}
+.btn-connect:hover {
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
+}
+.btn-disconnect {
+    background: rgba(255, 107, 107, 0.2);
+    color: #ff6b6b;
+    border: 1px solid rgba(255, 107, 107, 0.3);
+}
+.btn-disconnect:hover {
+    background: rgba(255, 107, 107, 0.3);
+}
+.connection-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+}
+.connection-status.connected {
+    background: rgba(0, 255, 136, 0.1);
+    color: #00ff88;
+}
+.connection-status.disconnected {
+    background: rgba(108, 117, 125, 0.1);
+    color: #6c757d;
+}
+.connection-status.error {
+    background: rgba(255, 107, 107, 0.1);
+    color: #ff6b6b;
+}
+.account-info {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: rgba(0, 212, 255, 0.05);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+.account-info strong {
+    color: #00d4ff;
+}
+</style>
+
+<!-- Settings Grid -->
+<div class="settings-grid">
+    
+    <!-- License Status -->
+    <div class="settings-card" id="license-card">
+        <h3>🔐 License Status</h3>
+        <p class="description">Your BotifyTrades license information</p>
+        <div id="license-status" class="connection-status disconnected">
+            <span class="status-dot"></span>
+            <span id="license-status-text">Checking...</span>
+        </div>
+        <div id="license-details" style="margin-top: 12px; display: none;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
+                <div style="color: var(--text-secondary);">License Key:</div>
+                <div id="license-key-display" style="color: #00d4ff; font-family: monospace;">---</div>
+                <div style="color: var(--text-secondary);">Type:</div>
+                <div id="license-type-display" style="color: #00ff88;">---</div>
+                <div style="color: var(--text-secondary);">Expires:</div>
+                <div id="license-expires-display" style="color: var(--text-primary);">---</div>
+                <div style="color: var(--text-secondary);">Days Remaining:</div>
+                <div id="license-days-display" style="color: #00ff88; font-weight: bold;">---</div>
+            </div>
+        </div>
+        <div id="license-error" style="margin-top: 12px; padding: 8px 12px; background: rgba(255, 107, 107, 0.1); border-radius: 6px; color: #ff6b6b; font-size: 12px; display: none;"></div>
+    </div>
+    
+    <!-- Discord Configuration with Connect -->
+    <div class="settings-card">
+        <h3>🔑 Discord Self-Bot</h3>
+        <p class="description">Connect your Discord account to monitor trading signals</p>
+        <div id="discord-connection-status" class="connection-status disconnected">
+            <span class="status-dot"></span>
+            <span id="discord-status-text">Not connected</span>
+        </div>
+        <div class="form-group">
+            <label>Discord User Token</label>
+            <input type="password" id="discord-token" placeholder="Enter user token">
+            <p class="help-text">Copy from browser console (not bot token). <a href="https://www.androidauthority.com/get-discord-token-3149920/" target="_blank">How to get token</a></p>
+        </div>
+        <div class="btn-group">
+            <button id="save-discord-creds" class="btn btn-success">💾 Save</button>
+            <button id="connect-discord" class="btn btn-connect">🔌 Connect</button>
+        </div>
+        <div id="discord-account-info" class="account-info" style="display: none;"></div>
+    </div>
+
+    <!-- Alpaca Paper Trading with Connect -->
+    <div class="settings-card">
+        <h3>💹 Alpaca Paper Trading</h3>
+        <p class="description">Commission-free paper trading for testing strategies</p>
+        <div id="alpaca-paper-connection-status" class="connection-status disconnected">
+            <span class="status-dot"></span>
+            <span id="alpaca-paper-status-text">Not connected</span>
+        </div>
+        <div class="form-group">
+            <label>Alpaca API Key</label>
+            <input type="password" id="alpaca-api-key" placeholder="PKXXXXXXXXXXXXXXXX">
+            <p class="help-text">Get from <a href="https://app.alpaca.markets/paper/dashboard/overview" target="_blank">Alpaca Paper Dashboard</a></p>
+        </div>
+        <div class="form-group">
+            <label>Alpaca Secret Key</label>
+            <input type="password" id="alpaca-secret-key" placeholder="Secret key">
+        </div>
+        <div class="btn-group">
+            <button id="save-alpaca" class="btn btn-success">💾 Save</button>
+            <button id="connect-alpaca-paper" class="btn btn-connect">🔌 Connect</button>
+        </div>
+        <div id="alpaca-paper-account-info" class="account-info" style="display: none;"></div>
+    </div>
+
+    <!-- Alpaca Live Trading with Connect -->
+    <div class="settings-card">
+        <h3>📈 Alpaca Live Trading</h3>
+        <p class="description">Real money trading with Alpaca (use with caution)</p>
+        <div id="alpaca-live-connection-status" class="connection-status disconnected">
+            <span class="status-dot"></span>
+            <span id="alpaca-live-status-text">Not connected</span>
+        </div>
+        <div class="form-group">
+            <label>Alpaca Live API Key</label>
+            <input type="password" id="alpaca-live-api-key" placeholder="AKXXXXXXXXXXXXXXXX">
+            <p class="help-text">Get from <a href="https://app.alpaca.markets/dashboard/overview" target="_blank">Alpaca Live Dashboard</a></p>
+        </div>
+        <div class="form-group">
+            <label>Alpaca Live Secret Key</label>
+            <input type="password" id="alpaca-live-secret-key" placeholder="Secret key">
+        </div>
+        <div class="btn-group">
+            <button id="save-alpaca-live" class="btn btn-success">💾 Save</button>
+            <button id="connect-alpaca-live" class="btn btn-connect">🔌 Connect</button>
+        </div>
+        <div id="alpaca-live-account-info" class="account-info" style="display: none;"></div>
+    </div>
+    
+    <!-- Clear Stale Trades - Data Management -->
+    <div class="settings-card" style="background: linear-gradient(135deg, #2a1f0d 0%, #3d2a0f 100%); border-color: rgba(255, 170, 0, 0.3);">
+        <h3 style="color: #ffaa00;">🧹 Clear Stale Trades</h3>
+        <p class="description">Use this when you switch broker API keys. Clears old open/pending trades from the database that belong to a previous account.</p>
+        <div id="stale-trades-info" style="margin-bottom: 16px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 8px;">
+            <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+                <div>
+                    <span style="color: var(--text-secondary); font-size: 11px; text-transform: uppercase;">Alpaca Open Trades</span>
+                    <div id="alpaca-stale-count" style="font-size: 24px; font-weight: bold; color: #00d4ff;">-</div>
+                </div>
+                <div>
+                    <span style="color: var(--text-secondary); font-size: 11px; text-transform: uppercase;">Webull Open Trades</span>
+                    <div id="webull-stale-count" style="font-size: 24px; font-weight: bold; color: #00d4ff;">-</div>
+                </div>
+            </div>
+        </div>
+        <div class="btn-group" style="gap: 12px;">
+            <button id="clear-alpaca-trades" class="btn" style="background: linear-gradient(135deg, #ff6b00 0%, #ff4400 100%); border: none; color: white;">
+                🗑️ Clear Alpaca Trades
+            </button>
+            <button id="clear-webull-trades" class="btn" style="background: linear-gradient(135deg, #ff6b00 0%, #ff4400 100%); border: none; color: white;">
+                🗑️ Clear Webull Trades
+            </button>
+        </div>
+        <p style="margin-top: 12px; font-size: 11px; color: rgba(255, 170, 0, 0.7);">⚠️ This marks trades as CLOSED (ACCOUNT_RESET). Data is preserved for history but won't show as open positions.</p>
+    </div>
+    
+    <!-- Webull Broker with Connect -->
+    <div class="settings-card">
+        <h3>💼 Webull Broker</h3>
+        <p class="description">Connect Webull for options and stock trading</p>
+        <div id="webull-connection-status" class="connection-status disconnected">
+            <span class="status-dot"></span>
+            <span id="webull-status-text">Not connected</span>
+        </div>
+        <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="webull-email" placeholder="your@email.com">
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="webull-password" placeholder="Password">
+        </div>
+        <div class="form-group">
+            <label>Trade PIN (6 digits)</label>
+            <input type="password" id="webull-pin" placeholder="123456" maxlength="6">
+        </div>
+        <div class="form-group">
+            <label>Device ID (DID)</label>
+            <input type="text" id="webull-did" placeholder="Optional - auto-generated if blank">
+            <p class="help-text">Leave blank for new login, or paste existing DID</p>
+        </div>
+        <div class="form-group">
+            <label>Access Token</label>
+            <input type="password" id="webull-access-token" placeholder="Saved after successful login">
+            <p class="help-text">Auto-populated after login</p>
+        </div>
+        <div class="form-group">
+            <label>Refresh Token</label>
+            <input type="password" id="webull-refresh-token" placeholder="Saved after successful login">
+            <p class="help-text">Auto-populated after login</p>
+        </div>
+        <div class="form-group">
+            <label class="toggle-label">
+                <span>Paper Trading Mode</span>
+                <label class="switch">
+                    <input type="checkbox" id="webull-paper" checked>
+                    <span class="slider"></span>
+                </label>
+            </label>
+        </div>
+        <div class="btn-group">
+            <button id="save-webull-creds" class="btn btn-success">💾 Save</button>
+            <button id="connect-webull" class="btn btn-connect">🔌 Connect</button>
+        </div>
+        <div id="webull-account-info" class="account-info" style="display: none;"></div>
+    </div>
+    
+    <!-- Interactive Brokers with Connect -->
+    <div class="settings-card">
+        <h3>🏦 Interactive Brokers</h3>
+        <p class="description">Connect to TWS/Gateway for institutional trading</p>
+        <div id="ibkr-connection-status" class="connection-status disconnected">
+            <span class="status-dot"></span>
+            <span id="ibkr-status-text">Not connected</span>
+        </div>
+        <div class="form-group">
+            <label>TWS/Gateway Host</label>
+            <input type="text" id="ibkr-host" placeholder="127.0.0.1" value="127.0.0.1">
+        </div>
+        <div class="form-group">
+            <label>Paper Port</label>
+            <input type="number" id="ibkr-port-paper" placeholder="7497" value="7497">
+            <p class="help-text">Default paper trading port</p>
+        </div>
+        <div class="form-group">
+            <label>Live Port</label>
+            <input type="number" id="ibkr-port-live" placeholder="7496" value="7496">
+            <p class="help-text">Default live trading port</p>
+        </div>
+        <div class="form-group">
+            <label>Client ID</label>
+            <input type="number" id="ibkr-client-id" placeholder="1" value="1">
+        </div>
+        <div class="form-group">
+            <label class="toggle-label">
+                <span>Paper Trading Mode</span>
+                <label class="switch">
+                    <input type="checkbox" id="ibkr-paper" checked>
+                    <span class="slider"></span>
+                </label>
+            </label>
+        </div>
+        <div class="btn-group">
+            <button id="save-ibkr-creds" class="btn btn-success">💾 Save</button>
+            <button id="connect-ibkr" class="btn btn-connect">🔌 Connect</button>
+        </div>
+        <div id="ibkr-account-info" class="account-info" style="display: none;">
+            <strong>Note:</strong> Ensure TWS or IB Gateway is running on your local machine before connecting.
+        </div>
+    </div>
+
+    <!-- Discord Notifications -->
+    <div class="settings-card">
+        <h3>📢 Trade Notifications</h3>
+        <p class="description">Post trade signals to Discord webhook</p>
+        <div class="form-group">
+            <label class="toggle-label">
+                <span>Enable Notifications</span>
+                <label class="switch">
+                    <input type="checkbox" id="notifications-enabled" checked>
+                    <span class="slider"></span>
+                </label>
+            </label>
+        </div>
+        <div class="form-group">
+            <label>Webhook URL</label>
+            <input type="text" id="discord-webhook-url" placeholder="https://discord.com/api/webhooks/...">
+            <p class="help-text">Create in Server Settings → Integrations → Webhooks</p>
+        </div>
+        <div class="form-group">
+            <label>Channel ID (Optional)</label>
+            <input type="text" id="discord-webhook-channel" placeholder="1234567890123456789">
+            <p class="help-text">Right-click channel → Copy ID (enable Developer Mode)</p>
+        </div>
+        <div class="btn-group">
+            <button id="save-discord-notifications" class="btn btn-success">💾 Save Notifications</button>
+            <button id="test-webhook" class="btn btn-primary" style="background: #0A84FF;">🔔 Test Webhook</button>
+        </div>
+        <div id="webhook-test-result" style="margin-top: 10px; padding: 10px; border-radius: 6px; display: none;"></div>
+    </div>
+
+
+    <!-- API Keys -->
+    <div class="settings-card">
+        <h3>🤖 AI & Market Data APIs</h3>
+        <p class="description">External API credentials for analysis & data</p>
+        <div class="form-group">
+            <label>OpenAI API Key</label>
+            <input type="password" id="openai-key" placeholder="sk-...">
+            <p class="help-text">For AI trade analysis</p>
+        </div>
+        <div class="form-group">
+            <label>Alpha Vantage Key</label>
+            <input type="password" id="alphavantage-key" placeholder="API Key">
+            <p class="help-text">For option flow scanning</p>
+        </div>
+        <div class="form-group">
+            <label>Finnhub API Key</label>
+            <input type="password" id="finnhub-key" placeholder="API Key">
+            <p class="help-text">For market news & data</p>
+        </div>
+        <div class="btn-group">
+            <button id="save-api-keys" class="btn btn-success">💾 Save API Keys</button>
+        </div>
+    </div>
+
+    <!-- Price Slippage Protection -->
+    <div class="settings-card">
+        <h3>🛡️ Slippage Protection</h3>
+        <p class="description">Protect against bad fills with price limits</p>
+        <div class="form-group">
+            <label class="toggle-label">
+                <span>Enable Protection</span>
+                <label class="switch">
+                    <input type="checkbox" id="slippage-enabled" checked>
+                    <span class="slider"></span>
+                </label>
+            </label>
+        </div>
+        <div class="form-group" id="slippage-threshold-group">
+            <label>Maximum Threshold: <span class="slider-value" id="slippage-value">10.0</span>%</label>
+            <input type="range" id="slippage-threshold" min="1" max="50" step="0.5" value="10">
+            <div class="slider-labels">
+                <span>1%</span>
+                <span>25%</span>
+                <span>50%</span>
+            </div>
+            <p class="help-text">Reject trades if price differs from signal by more than this %</p>
+        </div>
+        <div class="btn-group">
+            <button id="save-slippage" class="btn btn-success">💾 Save Settings</button>
+        </div>
+    </div>
+
+    <!-- Risk Management -->
+    <div class="settings-card">
+        <h3>📊 Risk Management</h3>
+        <p class="description">Position monitoring & automated exits</p>
+        <div class="form-group">
+            <label class="toggle-label">
+                <span>Enable Monitoring</span>
+                <label class="switch">
+                    <input type="checkbox" id="risk-enabled">
+                    <span class="slider"></span>
+                </label>
+            </label>
+        </div>
+        <div id="risk-settings-group">
+            <div class="form-group">
+                <label>Profit Target: <span class="slider-value" id="profit-target-value">20.0</span>%</label>
+                <input type="range" id="profit-target" min="0" max="100" step="5" value="20">
+                <div class="slider-labels">
+                    <span>0%</span>
+                    <span>50%</span>
+                    <span>100%</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Stop Loss: <span class="slider-value" id="stop-loss-value">10.0</span>%</label>
+                <input type="range" id="stop-loss" min="0" max="100" step="5" value="10">
+                <div class="slider-labels">
+                    <span>0%</span>
+                    <span>50%</span>
+                    <span>100%</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Trailing Stop: <span class="slider-value" id="trailing-stop-value">5.0</span>%</label>
+                <input type="range" id="trailing-stop" min="0" max="50" step="1" value="5">
+                <div class="slider-labels">
+                    <span>0%</span>
+                    <span>25%</span>
+                    <span>50%</span>
+                </div>
+            </div>
+        </div>
+        <div class="btn-group">
+            <button id="save-risk" class="btn btn-success">💾 Save Settings</button>
+        </div>
+    </div>
+
+    <!-- AI Analysis Settings -->
+    <div class="settings-card">
+        <h3>🧠 AI Analysis</h3>
+        <p class="description">Post-trade analysis & market sentiment</p>
+        <div class="form-group">
+            <label class="toggle-label">
+                <span>Enable AI Analysis</span>
+                <label class="switch">
+                    <input type="checkbox" id="ai-enabled">
+                    <span class="slider"></span>
+                </label>
+            </label>
+        </div>
+        <div id="ai-settings-group">
+            <div class="form-group">
+                <label>AI Model</label>
+                <select id="ai-model">
+                    <option value="gpt-4o-mini">GPT-4o Mini (Recommended - Fast & Cheap)</option>
+                    <option value="gpt-4o">GPT-4o (Slower - More Detailed)</option>
+                </select>
+                <p class="help-text">Model selection affects analysis depth & cost</p>
+            </div>
+            <div class="form-group">
+                <label class="toggle-label">
+                    <span>Sentiment Analysis</span>
+                    <label class="switch">
+                        <input type="checkbox" id="sentiment-enabled">
+                        <span class="slider"></span>
+                    </label>
+                </label>
+                <p class="help-text">Analyze market sentiment from channel messages (expensive)</p>
+            </div>
+        </div>
+        <div class="btn-group">
+            <button id="save-ai" class="btn btn-success">💾 Save Settings</button>
+        </div>
+    </div>
+
+    <!-- Trading Settings -->
+    <div class="settings-card">
+        <h3>💰 Trading Limits</h3>
+        <p class="description">Position sizing and trading constraints</p>
+        <div class="form-group">
+            <label>Max Position Size: $<span class="slider-value" id="max-position-value">600</span></label>
+            <input type="range" id="max-position-size" min="100" max="10000" step="100" value="600">
+            <div class="slider-labels">
+                <span>$100</span>
+                <span>$5,500</span>
+                <span>$10,000</span>
+            </div>
+            <p class="help-text">Maximum capital per trade for auto-quantity calculation</p>
+        </div>
+        <div class="btn-group">
+            <button id="save-trading" class="btn btn-success">💾 Save Settings</button>
+        </div>
+    </div>
+
+    <!-- Advanced Settings -->
+    <div class="settings-card">
+        <h3>🔧 Advanced Settings</h3>
+        <p class="description">Debugging and diagnostic options</p>
+        <div class="form-group">
+            <label class="toggle-label">
+                <span>Debug Mode</span>
+                <label class="switch">
+                    <input type="checkbox" id="debug-mode-toggle">
+                    <span class="slider"></span>
+                </label>
+            </label>
+            <p class="help-text">Show detailed CONFIG/LICENSE info in console. Restart required after change.</p>
+        </div>
+        <p class="help-text" style="margin-top: 12px; font-size: 11px; color: #888;">
+            Log files location: <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px;">logs/bot.log</code> (all logs), <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px;">logs/errors.log</code> (errors only)
+        </p>
+    </div>
+
+    <!-- Discord Bot Settings (Collapsible) -->
+    <div class="settings-card">
+        <h3 class="collapsible-header" onclick="toggleSection('discord-settings-content')">
+            ⚙️ Discord Bot Settings
+            <span class="collapse-icon" id="discord-settings-icon">▼</span>
+        </h3>
+        <p class="description">Signal patterns, message filtering, and bot behavior</p>
+        <div id="discord-settings-content" class="collapsible-content" style="display: none;">
+            <div class="form-group">
+                <label class="toggle-label">
+                    <span>Allow Self Messages</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <label class="switch">
+                            <input type="checkbox" id="discord-allow-self" onchange="updateDiscordToggleStatus('discord-allow-self', 'allow-self-status')">
+                            <span class="slider"></span>
+                        </label>
+                        <span id="allow-self-status" style="font-size: 11px; font-weight: 600; color: #6c757d;">OFF</span>
+                    </div>
+                </label>
+                <p class="help-text">Process signals from your own Discord account (for testing)</p>
+            </div>
+            <div class="form-group">
+                <label class="toggle-label">
+                    <span>Discovery Mode</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <label class="switch">
+                            <input type="checkbox" id="discord-discovery-mode" onchange="updateDiscordToggleStatus('discord-discovery-mode', 'discovery-mode-status')">
+                            <span class="slider"></span>
+                        </label>
+                        <span id="discovery-mode-status" style="font-size: 11px; font-weight: 600; color: #6c757d;">OFF</span>
+                    </div>
+                </label>
+                <p class="help-text">Log all incoming messages to help discover channel IDs</p>
+            </div>
+            <div class="form-group">
+                <label>Option Signal Pattern (Regex)</label>
+                <input type="text" id="discord-option-pattern" placeholder="^(BTO|STC)\s+...">
+                <p class="help-text">Regex pattern to match option signals. Example: BTO 3 CLSK 14p 12/5 @ 0.50</p>
+            </div>
+            <div class="form-group">
+                <label>Stock Signal Pattern (Regex)</label>
+                <input type="text" id="discord-stock-pattern" placeholder="^(BTO|STC)\s+...">
+                <p class="help-text">Regex pattern to match stock signals. Example: BTO 100 AAPL @ 150.25</p>
+            </div>
+            <div class="form-group">
+                <label>Allowed Author IDs</label>
+                <input type="text" id="discord-allowed-authors" placeholder="123456789,987654321">
+                <p class="help-text">Comma-separated Discord user IDs. Leave empty to allow all authors.</p>
+            </div>
+            <div class="form-group">
+                <label>Allowed Guild (Server) IDs</label>
+                <input type="text" id="discord-allowed-guilds" placeholder="123456789,987654321">
+                <p class="help-text">Comma-separated Discord server IDs. Leave empty to allow all servers.</p>
+            </div>
+            <div class="btn-group">
+                <button id="save-discord-settings" class="btn btn-success">💾 Save Discord Settings</button>
+                <button id="reset-discord-patterns" class="btn btn-secondary">🔄 Reset Patterns to Default</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Signal Conversion Settings -->
+    <div class="settings-card">
+        <h3>🔄 Signal Conversion</h3>
+        <p class="description">Automatically convert stock alerts to trading signals (zero AI cost - regex parsing)</p>
+        <div class="form-group">
+            <label>Conversion Channel ID</label>
+            <input type="text" id="conversion-channel-id" placeholder="e.g., 1338406540494766110">
+            <p class="help-text">Discord channel ID where stock alerts are posted (ENTRY/S.L/TARGET format)</p>
+        </div>
+        <div class="form-group">
+            <label>Forward to Execution Channel</label>
+            <select id="target-execution-channel-id">
+                <option value="">-- Select Execution Channel --</option>
+            </select>
+            <p class="help-text">Choose which execution channel receives converted signals</p>
+        </div>
+        <div class="btn-group">
+            <button id="save-signal-conversion" class="btn btn-success">💾 Save Settings</button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+// ========== COLLAPSIBLE SECTIONS ==========
+
+function toggleSection(sectionId) {
+    const content = document.getElementById(sectionId);
+    const icon = document.getElementById(sectionId.replace('-content', '-icon'));
+    
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        if (icon) icon.classList.add('expanded');
+    } else {
+        content.style.display = 'none';
+        if (icon) icon.classList.remove('expanded');
+    }
+}
+
+// ========== DISCORD BOT SETTINGS ==========
+
+const DEFAULT_OPTION_PATTERN = '^(BTO|STC)\\s+(?:(\\d+)\\s+)?\\$?([A-Za-z]+)\\s+\\$?([\\d.]+)\\s*([CPcp])\\s*(\\d{1,2}/\\d{1,2})\\s*@?\\s*([\\d.]+|[mM])';
+const DEFAULT_STOCK_PATTERN = '^(BTO|STC)\\s+(?:(\\d+)\\s+)?\\$?([A-Za-z]+)\\s*@?\\s*([\\d.]+|[mM])';
+
+function updateDiscordToggleStatus(checkboxId, statusId) {
+    const checkbox = document.getElementById(checkboxId);
+    const status = document.getElementById(statusId);
+    if (checkbox && status) {
+        status.textContent = checkbox.checked ? 'ON' : 'OFF';
+        status.style.color = checkbox.checked ? '#00ff88' : '#6c757d';
+    }
+}
+
+async function loadDiscordSettings() {
+    try {
+        const response = await fetch('/api/settings/discord');
+        const settings = await response.json();
+        
+        document.getElementById('discord-allow-self').checked = settings.allow_self_messages;
+        document.getElementById('discord-discovery-mode').checked = settings.discovery_mode;
+        document.getElementById('discord-option-pattern').value = settings.option_pattern || DEFAULT_OPTION_PATTERN;
+        document.getElementById('discord-stock-pattern').value = settings.stock_pattern || DEFAULT_STOCK_PATTERN;
+        document.getElementById('discord-allowed-authors').value = settings.allowed_author_ids || '';
+        document.getElementById('discord-allowed-guilds').value = settings.allowed_guild_ids || '';
+        
+        // Update status indicators
+        updateDiscordToggleStatus('discord-allow-self', 'allow-self-status');
+        updateDiscordToggleStatus('discord-discovery-mode', 'discovery-mode-status');
+    } catch (error) {
+        console.error('Failed to load Discord settings:', error);
+    }
+}
+
+async function saveDiscordSettings() {
+    const btn = document.getElementById('save-discord-settings');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ Saving...';
+    
+    try {
+        const response = await fetch('/api/settings/discord', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                allow_self_messages: document.getElementById('discord-allow-self').checked,
+                discovery_mode: document.getElementById('discord-discovery-mode').checked,
+                option_pattern: document.getElementById('discord-option-pattern').value,
+                stock_pattern: document.getElementById('discord-stock-pattern').value,
+                allowed_author_ids: document.getElementById('discord-allowed-authors').value,
+                allowed_guild_ids: document.getElementById('discord-allowed-guilds').value
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            btn.textContent = '✓ Saved!';
+            btn.style.background = 'linear-gradient(135deg, #00ff88 0%, #00cc6a 100%)';
+            
+            const msg = document.getElementById('save-message');
+            if (msg) {
+                msg.textContent = result.message;
+                msg.className = 'message success';
+                setTimeout(() => msg.textContent = '', 5000);
+            }
+        } else {
+            btn.textContent = '✗ Error';
+            btn.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #cc0000 100%)';
+            alert('Error: ' + (result.error || 'Failed to save'));
+        }
+    } catch (error) {
+        btn.textContent = '✗ Error';
+        btn.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #cc0000 100%)';
+        alert('Error: ' + error.message);
+    }
+    
+    setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        btn.style.background = '';
+    }, 2000);
+}
+
+function resetDiscordPatterns() {
+    document.getElementById('discord-option-pattern').value = DEFAULT_OPTION_PATTERN;
+    document.getElementById('discord-stock-pattern').value = DEFAULT_STOCK_PATTERN;
+    
+    const msg = document.getElementById('save-message');
+    if (msg) {
+        msg.textContent = 'Patterns reset to default. Click Save to apply.';
+        msg.className = 'message';
+        setTimeout(() => msg.textContent = '', 3000);
+    }
+}
+
+// ========== RELOAD CREDENTIALS & DEBUG MODE ==========
+
+async function reloadCredentials() {
+    const btn = document.getElementById('btn-reload-credentials');
+    const status = document.getElementById('reload-status');
+    
+    btn.disabled = true;
+    btn.textContent = '⏳ Reloading...';
+    status.textContent = '';
+    
+    try {
+        const response = await fetch('/api/brokers/reload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            status.innerHTML = '<span style="color: #00ff88;">✓ ' + result.message + '</span>';
+            // Refresh broker status badges
+            loadBrokerStatus();
+        } else {
+            status.innerHTML = '<span style="color: #ff6b6b;">✗ ' + (result.error || 'Failed to reload') + '</span>';
+        }
+    } catch (error) {
+        status.innerHTML = '<span style="color: #ff6b6b;">✗ Error: ' + error.message + '</span>';
+    }
+    
+    btn.disabled = false;
+    btn.textContent = '🔄 Reload Credentials';
+    
+    setTimeout(() => { status.textContent = ''; }, 8000);
+}
+
+async function toggleDebugMode(enabled) {
+    try {
+        const response = await fetch('/api/settings/debug', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: enabled })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(enabled ? 'Debug mode enabled - restart bot to apply' : 'Debug mode disabled - restart bot to apply', 'success');
+        } else {
+            document.getElementById('debug-mode-toggle').checked = !enabled;
+            showToast('Failed to update debug mode', 'error');
+        }
+    } catch (error) {
+        document.getElementById('debug-mode-toggle').checked = !enabled;
+        showToast('Error updating debug mode', 'error');
+    }
+}
+
+async function loadDebugMode() {
+    try {
+        const response = await fetch('/api/settings/debug');
+        const result = await response.json();
+        
+        const toggle = document.getElementById('debug-mode-toggle');
+        if (toggle) {
+            toggle.checked = result.enabled || false;
+            toggle.addEventListener('change', (e) => toggleDebugMode(e.target.checked));
+        }
+    } catch (error) {
+        console.error('Error loading debug mode:', error);
+    }
+}
+
+// Load license status
+async function loadLicenseStatus() {
+    try {
+        const response = await fetch('/api/license/status');
+        const result = await response.json();
+        
+        const statusEl = document.getElementById('license-status');
+        const statusText = document.getElementById('license-status-text');
+        const detailsEl = document.getElementById('license-details');
+        const errorEl = document.getElementById('license-error');
+        
+        if (result.is_valid) {
+            statusEl.className = 'connection-status connected';
+            statusText.textContent = `License Active - ${result.days_remaining} days remaining`;
+            
+            document.getElementById('license-key-display').textContent = 
+                result.license_key ? '***' + result.license_key.slice(-8) : (result.customer_id || '---');
+            document.getElementById('license-type-display').textContent = 
+                result.license_type || 'subscription';
+            document.getElementById('license-expires-display').textContent = 
+                result.expires || '---';
+            document.getElementById('license-days-display').textContent = 
+                result.days_remaining + ' days';
+            
+            if (result.days_remaining <= 7) {
+                document.getElementById('license-days-display').style.color = '#ff6b6b';
+            }
+            
+            detailsEl.style.display = 'block';
+            errorEl.style.display = 'none';
+        } else {
+            statusEl.className = 'connection-status error';
+            statusText.textContent = 'License Invalid';
+            detailsEl.style.display = 'none';
+            errorEl.textContent = result.error || 'License validation failed';
+            errorEl.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Error loading license status:', error);
+        document.getElementById('license-status').className = 'connection-status disconnected';
+        document.getElementById('license-status-text').textContent = 'Could not check license';
+    }
+}
+
+// Load debug mode on page load
+document.addEventListener('DOMContentLoaded', loadDebugMode);
+document.addEventListener('DOMContentLoaded', loadDiscordSettings);
+document.addEventListener('DOMContentLoaded', loadLicenseStatus);
+
+// Discord Bot Settings event listeners
+document.getElementById('save-discord-settings').addEventListener('click', saveDiscordSettings);
+document.getElementById('reset-discord-patterns').addEventListener('click', resetDiscordPatterns);
+
+// Update slider value displays in real-time
+document.getElementById('slippage-threshold').addEventListener('input', (e) => {
+    document.getElementById('slippage-value').textContent = e.target.value;
+});
+
+document.getElementById('profit-target').addEventListener('input', (e) => {
+    document.getElementById('profit-target-value').textContent = e.target.value;
+});
+
+document.getElementById('stop-loss').addEventListener('input', (e) => {
+    document.getElementById('stop-loss-value').textContent = e.target.value;
+});
+
+document.getElementById('trailing-stop').addEventListener('input', (e) => {
+    document.getElementById('trailing-stop-value').textContent = e.target.value;
+});
+
+document.getElementById('max-position-size').addEventListener('input', (e) => {
+    document.getElementById('max-position-value').textContent = e.target.value;
+});
+
+// ========== ALPACA SETTINGS ==========
+
+async function loadAlpacaSettings() {
+    try {
+        const response = await fetch('/api/brokers/credentials/alpaca');
+        const data = await response.json();
+        
+        if (data.success) {
+            if (data.has_api_key && data.api_key_preview) {
+                document.getElementById('alpaca-api-key').placeholder = data.api_key_preview;
+            }
+            
+            const status = data.paper_status;
+            updateConnectionStatus('alpaca-paper-connection-status',
+                status.connected ? 'connected' : 'disconnected',
+                status.connected ? 'Connected' : 'Not connected',
+                status.account_info);
+        }
+    } catch (error) {
+        console.error('Error loading Alpaca settings:', error);
+    }
+}
+
+document.getElementById('save-alpaca').addEventListener('click', async () => {
+    const api_key = document.getElementById('alpaca-api-key').value.trim();
+    const secret_key = document.getElementById('alpaca-secret-key').value.trim();
+    
+    if (!api_key || !secret_key) {
+        const msg = document.getElementById('save-message');
+        msg.textContent = '❌ Both API Key and Secret Key are required';
+        msg.className = 'message error';
+        setTimeout(() => msg.textContent = '', 3000);
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/brokers/credentials/alpaca', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                api_key: api_key,
+                secret_key: secret_key,
+                paper_mode: true
+            })
+        });
+        
+        const result = await response.json();
+        const msg = document.getElementById('save-message');
+        if (result.success) {
+            msg.textContent = '✅ Alpaca credentials saved! Use Connect button to test.';
+            msg.className = 'message success';
+        } else {
+            msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');
+            msg.className = 'message error';
+        }
+        setTimeout(() => msg.textContent = '', 5000);
+    } catch (error) {
+        const msg = document.getElementById('save-message');
+        msg.textContent = '❌ Error: ' + error.message;
+        msg.className = 'message error';
+        setTimeout(() => msg.textContent = '', 3000);
+    }
+});
+
+// ========== AI & MARKET DATA API KEYS ==========
+
+async function loadApiKeys() {
+    try {
+        const response = await fetch('/api/settings/api_keys');
+        if (response.ok) {
+            const data = await response.json();
+            if (data.openai_key) document.getElementById('openai-key').value = data.openai_key;
+            if (data.alphavantage_key) document.getElementById('alphavantage-key').value = data.alphavantage_key;
+            if (data.finnhub_key) document.getElementById('finnhub-key').value = data.finnhub_key;
+        }
+    } catch (error) {
+        console.error('Error loading API keys:', error);
+    }
+}
+
+document.getElementById('save-api-keys').addEventListener('click', async () => {
+    const data = {
+        openai_key: document.getElementById('openai-key').value.trim(),
+        alphavantage_key: document.getElementById('alphavantage-key').value.trim(),
+        finnhub_key: document.getElementById('finnhub-key').value.trim()
+    };
+    
+    try {
+        const response = await fetch('/api/settings/api_keys', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        const msg = document.getElementById('save-message');
+        if (result.success) {
+            msg.textContent = '✅ API keys saved!';
+            msg.className = 'message success';
+        } else {
+            msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');
+            msg.className = 'message error';
+        }
+        setTimeout(() => msg.textContent = '', 3000);
+    } catch (error) {
+        const msg = document.getElementById('save-message');
+        msg.textContent = '❌ Error: ' + error.message;
+        msg.className = 'message error';
+        setTimeout(() => msg.textContent = '', 3000);
+    }
+});
+
+// ========== SLIPPAGE SETTINGS ==========
+
+async function loadSlippageSettings() {
+    try {
+        const response = await fetch('/api/settings/slippage');
+        const settings = await response.json();
+        
+        document.getElementById('slippage-enabled').checked = settings.enabled;
+        document.getElementById('slippage-threshold').value = settings.threshold_percent;
+        document.getElementById('slippage-value').textContent = settings.threshold_percent;
+    } catch (error) {
+        console.error('Error loading slippage settings:', error);
+    }
+}
+
+document.getElementById('save-slippage').addEventListener('click', async () => {
+    const data = {
+        enabled: document.getElementById('slippage-enabled').checked,
+        threshold_percent: parseFloat(document.getElementById('slippage-threshold').value)
+    };
+    
+    try {
+        const response = await fetch('/api/settings/slippage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        const msg = document.getElementById('save-message');
+        if (result.success) {
+            msg.textContent = '✅ Slippage settings saved!';
+            msg.className = 'message success';
+        } else {
+            msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');
+            msg.className = 'message error';
+        }
+        setTimeout(() => msg.textContent = '', 3000);
+    } catch (error) {
+        const msg = document.getElementById('save-message');
+        msg.textContent = '❌ Error: ' + error.message;
+        msg.className = 'message error';
+        setTimeout(() => msg.textContent = '', 3000);
+    }
+});
+
+// ========== RISK MANAGEMENT SETTINGS ==========
+
+async function loadRiskSettings() {
+    try {
+        const response = await fetch('/api/settings/risk_management');
+        const settings = await response.json();
+        
+        document.getElementById('risk-enabled').checked = settings.enabled;
+        document.getElementById('profit-target').value = settings.profit_target_percent;
+        document.getElementById('profit-target-value').textContent = settings.profit_target_percent;
+        document.getElementById('stop-loss').value = settings.stop_loss_percent;
+        document.getElementById('stop-loss-value').textContent = settings.stop_loss_percent;
+        document.getElementById('trailing-stop').value = settings.trailing_stop_percent;
+        document.getElementById('trailing-stop-value').textContent = settings.trailing_stop_percent;
+    } catch (error) {
+        console.error('Error loading risk settings:', error);
+    }
+}
+
+document.getElementById('save-risk').addEventListener('click', async () => {
+    const data = {
+        enabled: document.getElementById('risk-enabled').checked,
+        profit_target_percent: parseFloat(document.getElementById('profit-target').value),
+        stop_loss_percent: parseFloat(document.getElementById('stop-loss').value),
+        trailing_stop_percent: parseFloat(document.getElementById('trailing-stop').value)
+    };
+    
+    try {
+        const response = await fetch('/api/settings/risk_management', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        const msg = document.getElementById('save-message');
+        if (result.success) {
+            msg.textContent = '✅ Risk management settings saved!';
+            msg.className = 'message success';
+        } else {
+            msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');
+            msg.className = 'message error';
+        }
+        setTimeout(() => msg.textContent = '', 3000);
+    } catch (error) {
+        const msg = document.getElementById('save-message');
+        msg.textContent = '❌ Error: ' + error.message;
+        msg.className = 'message error';
+        setTimeout(() => msg.textContent = '', 3000);
+    }
+});
+
+// ========== AI ANALYSIS SETTINGS ==========
+
+async function loadAISettings() {
+    try {
+        const response = await fetch('/api/settings/ai_analysis');
+        const settings = await response.json();
+        
+        document.getElementById('ai-enabled').checked = settings.enabled;
+        document.getElementById('ai-model').value = settings.model;
+        document.getElementById('sentiment-enabled').checked = settings.sentiment_enabled;
+    } catch (error) {
+        console.error('Error loading AI settings:', error);
+    }
+}
+
+document.getElementById('save-ai').addEventListener('click', async () => {
+    const data = {
+        enabled: document.getElementById('ai-enabled').checked,
+        model: document.getElementById('ai-model').value,
+        sentiment_enabled: document.getElementById('sentiment-enabled').checked
+    };
+    
+    try {
+        const response = await fetch('/api/settings/ai_analysis', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        const msg = document.getElementById('save-message');
+        if (result.success) {
+            msg.textContent = '✅ AI settings saved!';
+            msg.className = 'message success';
+        } else {
+            msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');
+            msg.className = 'message error';
+        }
+        setTimeout(() => msg.textContent = '', 3000);
+    } catch (error) {
+        const msg = document.getElementById('save-message');
+        msg.textContent = '❌ Error: ' + error.message;
+        msg.className = 'message error';
+        setTimeout(() => msg.textContent = '', 3000);
+    }
+});
+
+// ========== DISCORD NOTIFICATIONS ==========
+
+async function loadDiscordNotifications() {
+    try {
+        const response = await fetch('/api/settings/discord_notifications');
+        const settings = await response.json();
+        
+        document.getElementById('notifications-enabled').checked = settings.enabled;
+        document.getElementById('discord-webhook-url').value = settings.webhook_url || '';
+        document.getElementById('discord-webhook-channel').value = settings.channel_id || '';
+    } catch (error) {
+        console.error('Error loading Discord notifications:', error);
+    }
+}
+
+document.getElementById('save-discord-notifications').addEventListener('click', async () => {
+    const data = {
+        enabled: document.getElementById('notifications-enabled').checked,
+        webhook_url: document.getElementById('discord-webhook-url').value.trim(),
+        channel_id: document.getElementById('discord-webhook-channel').value.trim()
+    };
+    
+    try {
+        const response = await fetch('/api/settings/discord_notifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        const msg = document.getElementById('save-message');
+        if (result.success) {
+            msg.textContent = '✅ Discord notifications saved!';
+            msg.className = 'message success';
+        } else {
+            msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');
+            msg.className = 'message error';
+        }
+        setTimeout(() => msg.textContent = '', 3000);
+    } catch (error) {
+        const msg = document.getElementById('save-message');
+        msg.textContent = '❌ Error: ' + error.message;
+        msg.className = 'message error';
+        setTimeout(() => msg.textContent = '', 3000);
+    }
+});
+
+document.getElementById('test-webhook').addEventListener('click', async () => {
+    const webhookUrl = document.getElementById('discord-webhook-url').value.trim();
+    const resultDiv = document.getElementById('webhook-test-result');
+    
+    if (!webhookUrl) {
+        resultDiv.textContent = '❌ Please enter a webhook URL first';
+        resultDiv.style.background = 'rgba(255, 59, 48, 0.1)';
+        resultDiv.style.color = '#FF3B30';
+        resultDiv.style.border = '1px solid #FF3B30';
+        resultDiv.style.display = 'block';
+        setTimeout(() => resultDiv.style.display = 'none', 3000);
+        return;
+    }
+    
+    resultDiv.textContent = '⏳ Sending test message...';
+    resultDiv.style.background = 'rgba(10, 132, 255, 0.1)';
+    resultDiv.style.color = '#0A84FF';
+    resultDiv.style.border = '1px solid #0A84FF';
+    resultDiv.style.display = 'block';
+    
+    try {
+        const response = await fetch('/api/settings/test_webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ webhook_url: webhookUrl })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            resultDiv.innerHTML = `✅ Webhook test successful!<br><strong>Channel:</strong> ${result.channel_name || 'Unknown'}<br><strong>Guild:</strong> ${result.guild_name || 'Unknown'}`;
+            resultDiv.style.background = 'rgba(0, 200, 83, 0.1)';
+            resultDiv.style.color = '#00C853';
+            resultDiv.style.border = '1px solid #00C853';
+        } else {
+            resultDiv.textContent = '❌ ' + (result.error || 'Webhook test failed');
+            resultDiv.style.background = 'rgba(255, 59, 48, 0.1)';
+            resultDiv.style.color = '#FF3B30';
+            resultDiv.style.border = '1px solid #FF3B30';
+        }
+        
+        setTimeout(() => resultDiv.style.display = 'none', 10000);
+    } catch (error) {
+        resultDiv.textContent = '❌ Error: ' + error.message;
+        resultDiv.style.background = 'rgba(255, 59, 48, 0.1)';
+        resultDiv.style.color = '#FF3B30';
+        resultDiv.style.border = '1px solid #FF3B30';
+        setTimeout(() => resultDiv.style.display = 'none', 5000);
+    }
+});
+
+// ========== TRADING SETTINGS ==========
+
+async function loadTradingSettings() {
+    try {
+        const response = await fetch('/api/settings/trading');
+        const settings = await response.json();
+        
+        document.getElementById('max-position-size').value = settings.max_position_size;
+        document.getElementById('max-position-value').textContent = settings.max_position_size;
+    } catch (error) {
+        console.error('Error loading trading settings:', error);
+    }
+}
+
+document.getElementById('save-trading').addEventListener('click', async () => {
+    const data = {
+        max_position_size: parseInt(document.getElementById('max-position-size').value)
+    };
+    
+    try {
+        const response = await fetch('/api/settings/trading', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        const msg = document.getElementById('save-message');
+        if (result.success) {
+            msg.textContent = '✅ Trading settings saved!';
+            msg.className = 'message success';
+        } else {
+            msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');
+            msg.className = 'message error';
+        }
+        setTimeout(() => msg.textContent = '', 3000);
+    } catch (error) {
+        const msg = document.getElementById('save-message');
+        msg.textContent = '❌ Error: ' + error.message;
+        msg.className = 'message error';
+        setTimeout(() => msg.textContent = '', 3000);
+    }
+});
+
+// ========== SIGNAL CONVERSION SETTINGS ==========
+
+async function loadSignalConversionSettings() {
+    try {
+        // Load execution channels for dropdown
+        const channelsResponse = await fetch('/api/channels');
+        const channels = await channelsResponse.json();
+        const executionChannels = channels.filter(ch => ch.execute_enabled);
+        
+        const dropdown = document.getElementById('target-execution-channel-id');
+        dropdown.innerHTML = '<option value="">-- Select Execution Channel --</option>';
+        executionChannels.forEach(ch => {
+            const option = document.createElement('option');
+            option.value = ch.discord_channel_id;
+            option.textContent = ch.name;
+            dropdown.appendChild(option);
+        });
+        
+        // Load current settings
+        const response = await fetch('/api/settings/signal_conversion');
+        const settings = await response.json();
+        
+        if (settings.success) {
+            document.getElementById('conversion-channel-id').value = settings.conversion_channel_id || '';
+            document.getElementById('target-execution-channel-id').value = settings.target_execution_channel_id || '';
+        }
+    } catch (error) {
+        console.error('Error loading signal conversion settings:', error);
+    }
+}
+
+document.getElementById('save-signal-conversion').addEventListener('click', async () => {
+    const data = {
+        conversion_channel_id: document.getElementById('conversion-channel-id').value.trim(),
+        target_execution_channel_id: document.getElementById('target-execution-channel-id').value
+    };
+    
+    console.log('[Signal Conversion] Saving settings:', data);
+    
+    try {
+        const response = await fetch('/api/settings/signal_conversion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        console.log('[Signal Conversion] API response:', result);
+        
+        const msg = document.getElementById('save-message');
+        if (result.success) {
+            msg.textContent = '✅ Signal conversion settings saved successfully!';
+            msg.className = 'message success';
+            msg.style.display = 'block';
+            
+            // Scroll message into view
+            msg.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            
+            console.log('[Signal Conversion] ✓ Settings saved successfully');
+        } else {
+            msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');
+            msg.className = 'message error';
+            msg.style.display = 'block';
+        }
+        setTimeout(() => {
+            msg.textContent = '';
+            msg.style.display = 'none';
+        }, 4000);
+    } catch (error) {
+        console.error('[Signal Conversion] Save error:', error);
+        const msg = document.getElementById('save-message');
+        msg.textContent = '❌ Error: ' + error.message;
+        msg.className = 'message error';
+        msg.style.display = 'block';
+        setTimeout(() => {
+            msg.textContent = '';
+            msg.style.display = 'none';
+        }, 4000);
+    }
+});
+
+// ========== BROKER CONNECTION MANAGEMENT ==========
+
+async function loadBrokerStatus() {
+    try {
+        const response = await fetch('/api/brokers/status');
+        const data = await response.json();
+        
+        if (data.success) {
+            updateStatusBadge('discord', data.status.discord);
+            updateStatusBadge('alpaca_paper', data.status.alpaca_paper);
+            updateStatusBadge('webull_live', data.status.webull_live);
+            updateStatusBadge('webull_paper', data.status.webull_paper);
+            updateStatusBadge('ibkr_paper', data.status.ibkr_paper);
+        }
+    } catch (error) {
+        console.error('Error loading broker status:', error);
+    }
+}
+
+function updateStatusBadge(brokerId, status) {
+    const badgeMap = {
+        'discord': 'discord-status-badge',
+        'alpaca_paper': 'alpaca-paper-status-badge',
+        'webull_live': 'webull-live-status-badge',
+        'webull_paper': 'webull-paper-status-badge',
+        'ibkr_paper': 'ibkr-status-badge'
+    };
+    
+    const badge = document.getElementById(badgeMap[brokerId]);
+    if (!badge) return;
+    
+    badge.className = 'status-badge ' + (status.status || 'disconnected');
+}
+
+function updateConnectionStatus(elementId, status, message, accountInfo) {
+    const statusDiv = document.getElementById(elementId);
+    const textSpan = document.getElementById(elementId.replace('-connection-status', '-status-text'));
+    
+    if (statusDiv) {
+        statusDiv.className = 'connection-status ' + status;
+    }
+    if (textSpan) {
+        textSpan.textContent = message;
+    }
+    
+    const infoDiv = document.getElementById(elementId.replace('-connection-status', '-account-info'));
+    if (infoDiv && accountInfo) {
+        infoDiv.style.display = 'block';
+        if (accountInfo.buying_power !== undefined) {
+            infoDiv.innerHTML = `<strong>Buying Power:</strong> $${accountInfo.buying_power.toLocaleString()} | <strong>Portfolio:</strong> $${accountInfo.portfolio_value.toLocaleString()}`;
+        } else if (accountInfo.note) {
+            infoDiv.innerHTML = `<strong>Note:</strong> ${accountInfo.note}`;
+        }
+    }
+}
+
+// Discord credentials
+async function loadDiscordCredentials() {
+    try {
+        const response = await fetch('/api/brokers/credentials/discord');
+        const data = await response.json();
+        
+        if (data.success) {
+            if (data.has_token) {
+                document.getElementById('discord-token').placeholder = data.token_preview;
+            }
+            updateConnectionStatus('discord-connection-status', 
+                data.connection_status.connected ? 'connected' : 'disconnected',
+                data.connection_status.connected ? 'Connected' : 'Not connected',
+                data.connection_status.account_info);
+        }
+    } catch (error) {
+        console.error('Error loading Discord credentials:', error);
+    }
+}
+
+document.getElementById('save-discord-creds').addEventListener('click', async () => {
+    const token = document.getElementById('discord-token').value.trim();
+    
+    if (!token) {
+        showMessage('error', 'Discord token is required');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/brokers/credentials/discord', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+        });
+        
+        const result = await response.json();
+        showMessage(result.success ? 'success' : 'error', result.message || result.error);
+    } catch (error) {
+        showMessage('error', error.message);
+    }
+});
+
+document.getElementById('connect-discord').addEventListener('click', async () => {
+    updateConnectionStatus('discord-connection-status', 'connecting', 'Connecting...');
+    
+    try {
+        const response = await fetch('/api/brokers/connect/discord', { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.success) {
+            updateConnectionStatus('discord-connection-status', 'connected', 'Connected', result.account);
+            updateStatusBadge('discord', { status: 'connected' });
+            showMessage('success', result.message);
+        } else {
+            updateConnectionStatus('discord-connection-status', 'error', result.error);
+            showMessage('error', result.error);
+        }
+    } catch (error) {
+        updateConnectionStatus('discord-connection-status', 'error', error.message);
+        showMessage('error', error.message);
+    }
+});
+
+// Alpaca Paper connect
+document.getElementById('connect-alpaca-paper').addEventListener('click', async () => {
+    updateConnectionStatus('alpaca-paper-connection-status', 'connecting', 'Connecting...');
+    
+    try {
+        const response = await fetch('/api/brokers/connect/alpaca_paper', { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.success) {
+            updateConnectionStatus('alpaca-paper-connection-status', 'connected', 'Connected', result.account);
+            updateStatusBadge('alpaca_paper', { status: 'connected' });
+            showMessage('success', result.message);
+            
+            if (result.account) {
+                const infoDiv = document.getElementById('alpaca-paper-account-info');
+                infoDiv.style.display = 'block';
+                infoDiv.innerHTML = `<strong>Buying Power:</strong> $${result.account.buying_power.toLocaleString(undefined, {minimumFractionDigits: 2})} | <strong>Portfolio:</strong> $${result.account.portfolio_value.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            }
+        } else {
+            updateConnectionStatus('alpaca-paper-connection-status', 'error', result.error);
+            showMessage('error', result.error);
+        }
+    } catch (error) {
+        updateConnectionStatus('alpaca-paper-connection-status', 'error', error.message);
+        showMessage('error', error.message);
+    }
+});
+
+// Alpaca Live save
+document.getElementById('save-alpaca-live').addEventListener('click', async () => {
+    const api_key = document.getElementById('alpaca-live-api-key').value.trim();
+    const secret_key = document.getElementById('alpaca-live-secret-key').value.trim();
+    
+    if (!api_key || !secret_key) {
+        showMessage('error', 'Both API Key and Secret Key are required');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/brokers/credentials/alpaca_live', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                api_key: api_key,
+                secret_key: secret_key,
+                paper_mode: false
+            })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            showMessage('success', 'Alpaca Live credentials saved! Use Connect button to test.');
+        } else {
+            showMessage('error', result.error || 'Failed to save');
+        }
+    } catch (error) {
+        showMessage('error', error.message);
+    }
+});
+
+// Alpaca Live connect
+document.getElementById('connect-alpaca-live').addEventListener('click', async () => {
+    updateConnectionStatus('alpaca-live-connection-status', 'connecting', 'Connecting...');
+    
+    try {
+        const response = await fetch('/api/brokers/connect/alpaca_live', { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.success) {
+            updateConnectionStatus('alpaca-live-connection-status', 'connected', 'Connected', result.account);
+            updateStatusBadge('alpaca_live', { status: 'connected' });
+            showMessage('success', result.message);
+            
+            if (result.account) {
+                const infoDiv = document.getElementById('alpaca-live-account-info');
+                infoDiv.style.display = 'block';
+                infoDiv.innerHTML = `<strong>Buying Power:</strong> $${result.account.buying_power.toLocaleString(undefined, {minimumFractionDigits: 2})} | <strong>Portfolio:</strong> $${result.account.portfolio_value.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            }
+        } else {
+            updateConnectionStatus('alpaca-live-connection-status', 'error', result.error);
+            showMessage('error', result.error);
+        }
+    } catch (error) {
+        updateConnectionStatus('alpaca-live-connection-status', 'error', error.message);
+        showMessage('error', error.message);
+    }
+});
+
+// Webull credentials
+async function loadWebullCredentials() {
+    try {
+        const response = await fetch('/api/brokers/credentials/webull');
+        const data = await response.json();
+        
+        if (data.success) {
+            document.getElementById('webull-email').value = data.email || '';
+            document.getElementById('webull-did').value = data.device_id || '';
+            document.getElementById('webull-access-token').value = data.access_token || '';
+            document.getElementById('webull-refresh-token').value = data.refresh_token || '';
+            document.getElementById('webull-paper').checked = data.paper_mode;
+            
+            const status = data.paper_mode ? data.paper_status : data.live_status;
+            updateConnectionStatus('webull-connection-status',
+                status.connected ? 'connected' : 'disconnected',
+                status.connected ? 'Connected' : 'Not connected',
+                status.account_info);
+        }
+    } catch (error) {
+        console.error('Error loading Webull credentials:', error);
+    }
+}
+
+document.getElementById('save-webull-creds').addEventListener('click', async () => {
+    const data = {
+        email: document.getElementById('webull-email').value.trim(),
+        password: document.getElementById('webull-password').value,
+        trade_pin: document.getElementById('webull-pin').value,
+        device_id: document.getElementById('webull-did').value.trim(),
+        access_token: document.getElementById('webull-access-token').value.trim(),
+        refresh_token: document.getElementById('webull-refresh-token').value.trim(),
+        paper_mode: document.getElementById('webull-paper').checked
+    };
+    
+    try {
+        const response = await fetch('/api/brokers/credentials/webull', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        showMessage(result.success ? 'success' : 'error', result.message || result.error);
+    } catch (error) {
+        showMessage('error', error.message);
+    }
+});
+
+document.getElementById('connect-webull').addEventListener('click', async () => {
+    const isPaper = document.getElementById('webull-paper').checked;
+    const brokerId = isPaper ? 'webull_paper' : 'webull_live';
+    
+    updateConnectionStatus('webull-connection-status', 'connecting', 'Connecting...');
+    
+    try {
+        const response = await fetch(`/api/brokers/connect/${brokerId}`, { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.success) {
+            updateConnectionStatus('webull-connection-status', 'connected', 'Connected', result.account);
+            updateStatusBadge(brokerId, { status: 'connected' });
+            showMessage('success', result.message);
+        } else {
+            updateConnectionStatus('webull-connection-status', 'error', result.error);
+            showMessage('error', result.error);
+        }
+    } catch (error) {
+        updateConnectionStatus('webull-connection-status', 'error', error.message);
+        showMessage('error', error.message);
+    }
+});
+
+// IBKR credentials
+async function loadIBKRCredentials() {
+    try {
+        const response = await fetch('/api/brokers/credentials/ibkr');
+        const data = await response.json();
+        
+        if (data.success) {
+            document.getElementById('ibkr-host').value = data.host || '127.0.0.1';
+            document.getElementById('ibkr-port-paper').value = data.port_paper || 7497;
+            document.getElementById('ibkr-port-live').value = data.port_live || 7496;
+            document.getElementById('ibkr-client-id').value = data.client_id || 1;
+            document.getElementById('ibkr-paper').checked = data.paper_mode;
+        }
+    } catch (error) {
+        console.error('Error loading IBKR credentials:', error);
+    }
+}
+
+document.getElementById('save-ibkr-creds').addEventListener('click', async () => {
+    const data = {
+        host: document.getElementById('ibkr-host').value.trim(),
+        port_paper: parseInt(document.getElementById('ibkr-port-paper').value),
+        port_live: parseInt(document.getElementById('ibkr-port-live').value),
+        client_id: parseInt(document.getElementById('ibkr-client-id').value),
+        paper_mode: document.getElementById('ibkr-paper').checked
+    };
+    
+    try {
+        const response = await fetch('/api/brokers/credentials/ibkr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        showMessage(result.success ? 'success' : 'error', result.message || result.error);
+    } catch (error) {
+        showMessage('error', error.message);
+    }
+});
+
+document.getElementById('connect-ibkr').addEventListener('click', async () => {
+    const isPaper = document.getElementById('ibkr-paper').checked;
+    const brokerId = isPaper ? 'ibkr_paper' : 'ibkr_live';
+    
+    updateConnectionStatus('ibkr-connection-status', 'connecting', 'Connecting...');
+    
+    try {
+        const response = await fetch(`/api/brokers/connect/${brokerId}`, { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.success) {
+            updateConnectionStatus('ibkr-connection-status', result.status === 'connected' ? 'connected' : 'pending', 
+                result.status === 'connected' ? 'Connected' : 'Pending - Start TWS');
+            showMessage('success', result.message);
+        } else {
+            updateConnectionStatus('ibkr-connection-status', 'error', result.error);
+            showMessage('error', result.error);
+        }
+    } catch (error) {
+        updateConnectionStatus('ibkr-connection-status', 'error', error.message);
+        showMessage('error', error.message);
+    }
+});
+
+function showMessage(type, message) {
+    const msg = document.getElementById('save-message');
+    msg.textContent = (type === 'success' ? '✅ ' : '❌ ') + message;
+    msg.className = 'message ' + type;
+    msg.style.display = 'block';
+    setTimeout(() => {
+        msg.textContent = '';
+        msg.style.display = 'none';
+    }, 5000);
+}
+
+// Load stale trade counts
+async function loadStaleTradeCounts() {
+    try {
+        const response = await fetch('/api/trades/stale-count');
+        const result = await response.json();
+        
+        if (result.success) {
+            document.getElementById('alpaca-stale-count').textContent = result.counts.ALPACA || 0;
+            document.getElementById('webull-stale-count').textContent = result.counts.WEBULL || 0;
+        }
+    } catch (error) {
+        console.error('Error loading stale counts:', error);
+    }
+}
+
+// Clear stale trades handlers
+document.getElementById('clear-alpaca-trades').addEventListener('click', async () => {
+    const count = document.getElementById('alpaca-stale-count').textContent;
+    if (count === '0' || count === '-') {
+        showMessage('info', 'No Alpaca trades to clear');
+        return;
+    }
+    
+    if (!confirm(`Are you sure you want to close ${count} Alpaca open/pending trades? This is useful when you switched to a new Alpaca account.`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/trades/clear-stale', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ broker: 'ALPACA' })
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            showMessage('success', result.message);
+            loadStaleTradeCounts();
+        } else {
+            showMessage('error', result.error || 'Failed to clear trades');
+        }
+    } catch (error) {
+        showMessage('error', error.message);
+    }
+});
+
+document.getElementById('clear-webull-trades').addEventListener('click', async () => {
+    const count = document.getElementById('webull-stale-count').textContent;
+    if (count === '0' || count === '-') {
+        showMessage('info', 'No Webull trades to clear');
+        return;
+    }
+    
+    if (!confirm(`Are you sure you want to close ${count} Webull open/pending trades? This is useful when you switched to a new Webull account.`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/trades/clear-stale', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ broker: 'WEBULL' })
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            showMessage('success', result.message);
+            loadStaleTradeCounts();
+        } else {
+            showMessage('error', result.error || 'Failed to clear trades');
+        }
+    } catch (error) {
+        showMessage('error', error.message);
+    }
+});
+
+// Load all settings on page load
+loadBrokerStatus();
+loadDiscordCredentials();
+loadWebullCredentials();
+loadIBKRCredentials();
+loadAlpacaSettings();
+loadStaleTradeCounts();
+loadApiKeys();
+loadSlippageSettings();
+loadRiskSettings();
+loadAISettings();
+loadTradingSettings();
+loadSignalConversionSettings();
+loadDiscordNotifications();
+
+// Refresh broker status every 30 seconds
+setInterval(loadBrokerStatus, 30000);
+</script>
+{% endblock %}

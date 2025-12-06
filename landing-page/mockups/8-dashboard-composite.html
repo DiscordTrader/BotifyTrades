@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuantumPulse Dashboard - Full View</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="mockup-styles.css">
+    <style>
+        body { padding: 0; background: var(--bg-primary); }
+        .dashboard-composite { max-width: 1600px; margin: 0 auto; padding: 20px; }
+        .dashboard-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+        .mini-panel { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; }
+        .mini-header { font-size: 0.875rem; font-weight: 700; color: var(--accent-teal); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+    </style>
+</head>
+<body>
+    <div class="dashboard-composite">
+        <!-- Top Stats Bar -->
+        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 20px;">
+            <div class="info-card">
+                <div class="info-card-header">Open Positions</div>
+                <div class="info-card-value" style="color: var(--accent-teal); font-size: 1.75rem;">27</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-header">Total P/L</div>
+                <div class="info-card-value pnl-positive" style="font-size: 1.75rem;">+$10,619</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-header">Win Rate</div>
+                <div class="info-card-value" style="color: var(--success); font-size: 1.75rem;">87.5%</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-header">Active Channels</div>
+                <div class="info-card-value" style="color: var(--warning); font-size: 1.75rem;">8</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-header">Signals Today</div>
+                <div class="info-card-value" style="color: var(--info); font-size: 1.75rem;">47</div>
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            <!-- Left Column -->
+            <div style="display: grid; gap: 20px;">
+                <!-- Recent Positions -->
+                <div class="mini-panel">
+                    <div class="mini-header">📊 Live Positions</div>
+                    <table class="data-table" style="font-size: 0.875rem;">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Qty</th>
+                                <th>P/L %</th>
+                                <th>P/L $</th>
+                                <th>Risk</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>NVDA 120C</strong></td>
+                                <td>3</td>
+                                <td><span class="pnl-positive">+12.0%</span></td>
+                                <td><span class="pnl-positive">+$63</span></td>
+                                <td><span class="risk-indicator low">LOW</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>TSLA 260C</strong></td>
+                                <td>1</td>
+                                <td><span class="pnl-positive">+22.0%</span></td>
+                                <td><span class="pnl-positive">+$90</span></td>
+                                <td><span class="risk-indicator low">LOW</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>SPY 580C</strong></td>
+                                <td>4</td>
+                                <td><span class="pnl-positive">+17.2%</span></td>
+                                <td><span class="pnl-positive">+$220</span></td>
+                                <td><span class="risk-indicator low">LOW</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>AAPL 195C</strong></td>
+                                <td>5</td>
+                                <td><span class="pnl-positive">+8.8%</span></td>
+                                <td><span class="pnl-positive">+$125</span></td>
+                                <td><span class="risk-indicator medium">MED</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Recent Trade Execution -->
+                <div class="mini-panel">
+                    <div class="mini-header">⚡ Recent Executions</div>
+                    <table class="data-table" style="font-size: 0.875rem;">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Action</th>
+                                <th>Price</th>
+                                <th>Broker</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>NVDA 120C</strong></td>
+                                <td><span class="status-badge bto">BTO</span></td>
+                                <td>$1.75</td>
+                                <td>Webull</td>
+                                <td><span class="status-badge filled">Filled</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>SPY 500P</strong></td>
+                                <td><span class="status-badge stc">STC</span></td>
+                                <td>$2.40</td>
+                                <td>Alpaca</td>
+                                <td><span class="status-badge filled">Filled</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>TSLA 260C</strong></td>
+                                <td><span class="status-badge bto">BTO</span></td>
+                                <td>$4.10</td>
+                                <td>IBKR</td>
+                                <td><span class="status-badge pending">Pending</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- AI Analysis Preview (Locked) -->
+                <div class="mini-panel locked-overlay" style="min-height: 200px; filter: blur(2px);">
+                    <div class="mini-header">🤖 AI Trade Analysis</div>
+                    <div style="padding: 16px; background: rgba(0, 212, 255, 0.05); border-radius: 8px; margin-bottom: 12px;">
+                        <h4 style="margin-bottom: 8px;">NVDA 120C 12/20</h4>
+                        <div style="display: grid; gap: 8px; font-size: 0.875rem;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--text-secondary);">Success Probability</span>
+                                <span style="color: var(--success); font-weight: 600;">72%</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--text-secondary);">RSI (14)</span>
+                                <span style="color: var(--success); font-weight: 600;">67.4 (Bullish)</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--text-secondary);">MACD</span>
+                                <span style="color: var(--success); font-weight: 600;">Positive Cross</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="lock-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px; max-width: 280px;">
+                    <div class="lock-icon" style="font-size: 1.5rem;">🔒</div>
+                    <div class="lock-title" style="font-size: 0.9375rem;">AI Analysis - Pro Feature</div>
+                    <div class="lock-subtitle" style="font-size: 0.8125rem;">Upgrade to unlock</div>
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div style="display: grid; gap: 20px;">
+                <!-- Discord Signals -->
+                <div class="mini-panel">
+                    <div class="mini-header">📡 Live Discord Signals</div>
+                    <div style="display: grid; gap: 8px;">
+                        <div class="discord-message bto" style="padding: 10px; margin: 0;">
+                            <div class="message-avatar" style="width: 32px; height: 32px; font-size: 0.875rem;">AT</div>
+                            <div class="message-content">
+                                <div class="message-header">
+                                    <span class="message-username" style="font-size: 0.875rem;">AlphaTrades</span>
+                                    <span class="message-timestamp" style="font-size: 0.6875rem;">2m</span>
+                                </div>
+                                <div class="message-text" style="font-size: 0.8125rem;">
+                                    <span class="status-badge bto" style="font-size: 0.6875rem; padding: 2px 8px;">BTO</span> 
+                                    3 NVDA 120C @ 1.75
+                                </div>
+                            </div>
+                        </div>
+                        <div class="discord-message stc" style="padding: 10px; margin: 0;">
+                            <div class="message-avatar" style="width: 32px; height: 32px; font-size: 0.875rem; background: linear-gradient(135deg, #ff6b6b 0%, #ff4757 100%);">SM</div>
+                            <div class="message-content">
+                                <div class="message-header">
+                                    <span class="message-username" style="font-size: 0.875rem;">SignalMaster</span>
+                                    <span class="message-timestamp" style="font-size: 0.6875rem;">8m</span>
+                                </div>
+                                <div class="message-text" style="font-size: 0.8125rem;">
+                                    <span class="status-badge stc" style="font-size: 0.6875rem; padding: 2px 8px;">STC</span> 
+                                    2 SPY 500P @ 2.40
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mini Leaderboard -->
+                <div class="mini-panel">
+                    <div class="mini-header">🏆 Top Performers</div>
+                    <div style="display: grid; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background: rgba(255, 215, 0, 0.05); border-radius: 6px;">
+                            <span class="rank-medal gold" style="width: 24px; height: 24px; font-size: 0.75rem;">1</span>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; font-size: 0.875rem;">@AlphaTrader</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">78% WR</div>
+                            </div>
+                            <div class="pnl-positive" style="font-weight: 700; font-size: 0.9375rem;">+32.4%</div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background: rgba(192, 192, 192, 0.05); border-radius: 6px;">
+                            <span class="rank-medal silver" style="width: 24px; height: 24px; font-size: 0.75rem;">2</span>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; font-size: 0.875rem;">@SignalMaster</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">65% WR</div>
+                            </div>
+                            <div class="pnl-positive" style="font-weight: 700; font-size: 0.9375rem;">+18.7%</div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background: rgba(205, 127, 50, 0.05); border-radius: 6px;">
+                            <span class="rank-medal bronze" style="width: 24px; height: 24px; font-size: 0.75rem;">3</span>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; font-size: 0.875rem;">@NovaBot</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">55% WR</div>
+                            </div>
+                            <div class="pnl-positive" style="font-weight: 700; font-size: 0.9375rem;">+9.3%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Risk Management Mini -->
+                <div class="mini-panel">
+                    <div class="mini-header">🛡️ Risk Controls</div>
+                    <div style="display: grid; gap: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(0, 255, 136, 0.05); border-radius: 6px;">
+                            <div>
+                                <div style="font-size: 0.875rem; font-weight: 600; color: var(--success);">Profit Target</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">20% auto-exit</div>
+                            </div>
+                            <div class="toggle active" style="width: 36px; height: 20px;"></div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255, 107, 107, 0.05); border-radius: 6px;">
+                            <div>
+                                <div style="font-size: 0.875rem; font-weight: 600; color: var(--error);">Stop Loss</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">10% protection</div>
+                            </div>
+                            <div class="toggle active" style="width: 36px; height: 20px;"></div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255, 215, 0, 0.05); border-radius: 6px;">
+                            <div>
+                                <div style="font-size: 0.875rem; font-weight: 600; color: var(--warning);">Trailing Stop</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">5% trailing</div>
+                            </div>
+                            <div class="toggle active" style="width: 36px; height: 20px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Options Chain Mini -->
+                <div class="mini-panel">
+                    <div class="mini-header">📈 Options Chain (NVDA)</div>
+                    <div style="margin-bottom: 12px; padding: 12px; background: rgba(0, 212, 255, 0.05); border-radius: 6px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="font-size: 0.875rem; color: var(--text-muted);">Stock Price</span>
+                            <span style="font-size: 1.125rem; font-weight: 700; color: var(--success);">$485.20</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-size: 0.875rem; color: var(--text-muted);">IV Rank</span>
+                            <span style="font-size: 0.9375rem; font-weight: 600; color: var(--warning);">47.3%</span>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.8125rem;">
+                        <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border-color);">
+                            <span style="color: var(--text-muted);">480C (ATM)</span>
+                            <span style="color: var(--success);">$13.70</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border-color);">
+                            <span style="color: var(--text-muted);">490C</span>
+                            <span style="color: var(--success);">$8.95</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 6px 0;">
+                            <span style="color: var(--text-muted);">500C</span>
+                            <span style="color: var(--success);">$5.60</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

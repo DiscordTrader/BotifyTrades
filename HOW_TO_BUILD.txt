@@ -1,0 +1,162 @@
+================================================================================
+  QuantumPulse Trading Bot - BUILD INSTRUCTIONS
+================================================================================
+
+⚠️ IMPORTANT: BUILD FOLDER DOWNLOAD ISSUE WORKAROUND ⚠️
+
+The build scripts are NOW IN THE ROOT DIRECTORY so they download correctly!
+
+================================================================================
+📥 AFTER DOWNLOADING THIS PROJECT
+================================================================================
+
+You should see these 4 build scripts in the root folder:
+
+  ✅ BUILD_WINDOWS_STANDARD.bat    (Windows, 15-30 min protection)
+  ✅ BUILD_WINDOWS_HARDENED.bat    (Windows, 40+ hour protection)
+  ✅ BUILD_LINUX_STANDARD.sh       (Linux, 15-30 min protection)
+  ✅ BUILD_LINUX_HARDENED.sh       (Linux, 40+ hour protection)
+
+If you don't see them, download this project again from Replit.
+
+================================================================================
+🪟 WINDOWS BUILD
+================================================================================
+
+QUICK BUILD (Recommended for distribution):
+  1. Open Command Prompt in project folder
+  2. Run: BUILD_WINDOWS_HARDENED.bat
+  3. Wait ~5 minutes
+  4. Find exe in: dist_windows_hardened\QuantumPulse_Trading_Bot_Pro.exe
+
+FAST BUILD (For testing only):
+  1. Open Command Prompt in project folder
+  2. Run: BUILD_WINDOWS_STANDARD.bat
+  3. Wait ~2 minutes
+  4. Find exe in: dist_windows_standard\QuantumPulse_Trading_Bot.exe
+
+================================================================================
+🐧 LINUX BUILD
+================================================================================
+
+QUICK BUILD (Recommended for distribution):
+  1. Open Terminal in project folder
+  2. Run: chmod +x BUILD_LINUX_HARDENED.sh
+  3. Run: ./BUILD_LINUX_HARDENED.sh
+  4. Wait ~5 minutes
+  5. Find binary in: dist_linux_hardened/QuantumPulse_Trading_Bot_Pro
+
+FAST BUILD (For testing only):
+  1. Open Terminal in project folder
+  2. Run: chmod +x BUILD_LINUX_STANDARD.sh
+  3. Run: ./BUILD_LINUX_STANDARD.sh
+  4. Wait ~2 minutes
+  5. Find binary in: dist_linux_standard/QuantumPulse_Trading_Bot
+
+================================================================================
+⚙️ PREREQUISITES
+================================================================================
+
+ALL BUILDS REQUIRE:
+  pip install pyinstaller pycryptodome
+
+HARDENED BUILDS ALSO REQUIRE:
+  pip install pyarmor
+
+OPTIONAL (RECOMMENDED):
+  UPX compressor for smaller file size
+    Windows: https://upx.github.io/
+    Linux: sudo apt install upx-ucl
+
+================================================================================
+🛡️ PROTECTION LEVELS
+================================================================================
+
+STANDARD BUILD:
+  - PyInstaller single-file packaging
+  - AES-256 bytecode encryption
+  - UPX compression
+  - Reverse engineering time: 15-30 minutes
+  - Build time: ~2 minutes
+  - Use for: Quick testing, personal use
+
+HARDENED BUILD:
+  - PyArmor BCC Mode (Python→C compilation)
+  - PyArmor RFT Mode (function/variable renaming)
+  - String encryption
+  - Import/call assertions
+  - AES-256 bytecode encryption
+  - UPX ultra compression
+  - Reverse engineering time: 40+ hours
+  - Build time: ~5 minutes
+  - Use for: Commercial distribution, customer sales
+
+================================================================================
+📦 OUTPUT STRUCTURE
+================================================================================
+
+After build, you'll get a distribution folder with:
+
+dist_windows_hardened/  (or dist_linux_hardened/)
+├── QuantumPulse_Trading_Bot_Pro.exe (or .bin)
+├── config.ini.example
+├── GET_DISCORD_TOKEN.html
+├── GET_WEBULL_TOKENS.html
+└── RUN.bat (or run.sh)
+
+This folder is ready to distribute to customers!
+
+================================================================================
+🚀 RUNNING THE BUILT EXECUTABLE
+================================================================================
+
+WINDOWS:
+  1. Navigate to dist_windows_hardened\
+  2. Double-click QuantumPulse_Trading_Bot_Pro.exe
+  
+LINUX:
+  1. Navigate to dist_linux_hardened/
+  2. Run: ./QuantumPulse_Trading_Bot_Pro
+
+FIRST TIME SETUP:
+  1. Copy config.ini.example to config.ini
+  2. Edit config.ini with your settings
+  3. Use GET_DISCORD_TOKEN.html to get your Discord token
+  4. Use GET_WEBULL_TOKENS.html to get Webull tokens
+  5. Run the executable
+
+================================================================================
+🔧 TROUBLESHOOTING
+================================================================================
+
+ERROR: "python not recognized"
+FIX: Install Python 3.8+ from python.org
+
+ERROR: "UPX not found"
+FIX: This is optional - build will work without it, just larger file size
+
+ERROR: "PyArmor license error"
+FIX: Use standard build, or purchase PyArmor license for commercial use
+
+ERROR: "Permission denied" (Linux)
+FIX: chmod +x BUILD_LINUX_*.sh
+
+ERROR: Build scripts not found after download
+FIX: They're in the ROOT folder, not in build/ folder
+     Look for: BUILD_WINDOWS_HARDENED.bat, BUILD_LINUX_HARDENED.sh, etc.
+
+================================================================================
+📝 NOTES
+================================================================================
+
+- Build on Windows to create .exe, build on Linux to create Linux binary
+- No cross-compilation supported
+- Each build generates a random encryption key (don't mix builds)
+- PyArmor free tier: Limited to 10 registration uses
+- For production: Add code signing certificate separately
+- The build/ folder has additional scripts but may not download - use these
+  root-level scripts instead!
+
+================================================================================
+For more help, see: README.md or contact support
+================================================================================

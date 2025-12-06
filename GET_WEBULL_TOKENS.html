@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Webull Token Helper - Step-by-Step Guide</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .step {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 5px solid #4CAF50;
+        }
+        .step h3 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        code {
+            background: #000;
+            padding: 2px 8px;
+            border-radius: 3px;
+            color: #4CAF50;
+        }
+        .warning {
+            background: #f44336;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .info {
+            background: #2196F3;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        img {
+            max-width: 100%;
+            border: 2px solid #4CAF50;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .token-box {
+            background: #000;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            word-break: break-all;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔐 Webull Token Extraction Guide</h1>
+    
+    <div class="warning">
+        <strong>⚠️ SECURITY WARNING:</strong><br>
+        Your Webull tokens = full trading account access. NEVER share them with anyone except your own bot!
+    </div>
+
+    <div class="info">
+        <strong>📝 What You'll Extract:</strong>
+        <ul>
+            <li><strong>access_token</strong> - API authentication</li>
+            <li><strong>refresh_token</strong> - Renew expired access tokens</li>
+            <li><strong>uuid</strong> - User identifier</li>
+            <li><strong>did</strong> (Device ID) - Device fingerprint</li>
+        </ul>
+    </div>
+
+    <div class="step">
+        <h3>Step 1: Open Webull in Incognito Mode</h3>
+        <p>This ensures clean session without cached data interference.</p>
+        <ul>
+            <li><strong>Chrome/Edge:</strong> Press <code>Ctrl+Shift+N</code> (Windows) or <code>Cmd+Shift+N</code> (Mac)</li>
+            <li><strong>Firefox:</strong> Press <code>Ctrl+Shift+P</code> (Windows) or <code>Cmd+Shift+P</code> (Mac)</li>
+        </ul>
+    </div>
+
+    <div class="step">
+        <h3>Step 2: Open Developer Tools BEFORE Login</h3>
+        <p><strong>IMPORTANT:</strong> Must open DevTools BEFORE logging in to capture the tokens!</p>
+        <ul>
+            <li>Press <code>F12</code> or <code>Ctrl+Shift+J</code> (Windows) or <code>Cmd+Option+J</code> (Mac)</li>
+            <li>Click the <strong>Network</strong> tab</li>
+            <li>Make sure "Preserve log" checkbox is CHECKED ✅</li>
+        </ul>
+    </div>
+
+    <div class="step">
+        <h3>Step 3: Login to Webull</h3>
+        <ul>
+            <li>Navigate to <a href="https://app.webull.com/" target="_blank" style="color: #4CAF50;">https://app.webull.com/</a></li>
+            <li>Enter your credentials</li>
+            <li>Complete MFA/security checks if prompted</li>
+            <li>Wait for page to fully load</li>
+        </ul>
+    </div>
+
+    <div class="step">
+        <h3>Step 4: Find the Login Response</h3>
+        <p>In the Network tab (with Preserve log enabled):</p>
+        <ol>
+            <li>In the filter box, type: <code>login</code> or <code>passport</code></li>
+            <li>Look for entries like <code>/passport/login/v5</code> or <code>/account/login</code></li>
+            <li>Click on the request that returned <strong>status 200</strong> (green)</li>
+        </ol>
+    </div>
+
+    <div class="step">
+        <h3>Step 5: Extract Tokens from Response</h3>
+        <ol>
+            <li>Click the <strong>Response</strong> tab (or <strong>Preview</strong> tab)</li>
+            <li>Look for JSON containing these fields:</li>
+        </ol>
+        <div class="token-box">
+{
+  "accessToken": "dc_us1.188awefa4-xxxxx...",
+  "refreshToken": "188a0awef2444-xxxxx...",
+  "tokenExpireTime": "2025-12-15T13:35:35.780+0000",
+  "uuid": "165dbaa7333aeawf312151ar1f1dc804b9b"
+}
+        </div>
+        <p><strong>Copy all four values!</strong></p>
+    </div>
+
+    <div class="step">
+        <h3>Step 6: Extract Device ID (DID)</h3>
+        <p><strong>Method A: From Console (Easiest)</strong></p>
+        <ol>
+            <li>Click the <strong>Console</strong> tab in DevTools</li>
+            <li>Paste this code and press Enter:</li>
+        </ol>
+        <div class="token-box">
+document.cookie.match(/web_did=([^;]+)/)[1]
+        </div>
+        <ol start="3">
+            <li>Copy the hex string that appears (this is your DID)</li>
+        </ol>
+        
+        <p><strong>Method B: From Cookies</strong></p>
+        <ol>
+            <li>Click <strong>Application</strong> tab → <strong>Cookies</strong> → <code>https://app.webull.com</code></li>
+            <li>Find the <code>web_did</code> cookie</li>
+            <li>Copy its value</li>
+        </ol>
+    </div>
+
+    <div class="step">
+        <h3>Step 7: Paste into Bot Setup Wizard</h3>
+        <p>When the bot asks for Webull credentials, paste:</p>
+        <ul>
+            <li><strong>Access Token:</strong> The <code>accessToken</code> value</li>
+            <li><strong>Refresh Token:</strong> The <code>refreshToken</code> value</li>
+            <li><strong>UUID:</strong> The <code>uuid</code> value</li>
+            <li><strong>Device ID:</strong> The <code>web_did</code> cookie value</li>
+        </ul>
+    </div>
+
+    <div class="warning">
+        <strong>🛡️ Security Tips:</strong>
+        <ul>
+            <li>Tokens are stored encrypted on your computer (Windows DPAPI)</li>
+            <li>Access tokens expire after ~7-10 days (bot auto-refreshes using refresh token)</li>
+            <li>If tokens are compromised, change your Webull password immediately</li>
+            <li>Never commit tokens to GitHub or share publicly</li>
+        </ul>
+    </div>
+
+    <div class="info">
+        <strong>❓ Troubleshooting:</strong>
+        <ul>
+            <li><strong>Can't find login response:</strong> Make sure "Preserve log" is checked BEFORE logging in</li>
+            <li><strong>Response is empty:</strong> Try clicking different requests with status 200</li>
+            <li><strong>DID not in cookies:</strong> Make sure you're fully logged in to Webull first</li>
+            <li><strong>Tokens don't work:</strong> They may have expired - extract fresh ones</li>
+        </ul>
+    </div>
+</body>
+</html>

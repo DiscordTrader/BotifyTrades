@@ -1,0 +1,682 @@
+{% extends "base.html" %}
+
+{% block title %}Trades - Ψ∿ BotifyTrades{% endblock %}
+
+{% block content %}
+<!-- Stats Summary -->
+<div class="stats-grid" style="margin-bottom: 24px;">
+    <div class="stat-card">
+        <div class="stat-label">Open Positions</div>
+        <div class="stat-value warning" id="open-count">0</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Unrealized P&L</div>
+        <div class="stat-value" id="unrealized-pnl">$0.00</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Closed Today</div>
+        <div class="stat-value info" id="closed-count">0</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Realized P&L</div>
+        <div class="stat-value" id="realized-pnl">$0.00</div>
+    </div>
+</div>
+
+<!-- Live Trades Section -->
+<div class="table-container">
+    <div class="table-header">
+        <h3 class="table-title">📈 Trade Monitor</h3>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <label style="font-size: 0.875rem; color: var(--text-secondary);">Broker:</label>
+            <select id="broker-filter" onchange="onBrokerChange(this.value)" class="form-select" style="min-width: 140px;">
+                <option value="">All Brokers</option>
+                <option value="WEBULL">Webull LIVE</option>
+                <option value="WEBULL_PAPER">Webull PAPER</option>
+                <option value="ALPACA">Alpaca LIVE</option>
+                <option value="ALPACA_PAPER">Alpaca PAPER</option>
+                <option value="IBKR">IBKR LIVE</option>
+                <option value="IBKR_PAPER">IBKR PAPER</option>
+            </select>
+            <button onclick="refreshPrices()" class="btn btn-primary btn-small">
+                🔄 Refresh Prices
+            </button>
+        </div>
+    </div>
+    
+    <!-- Tabs -->
+    <div class="tabs">
+        <button id="tab-live" class="tab active" onclick="switchTab('live')">
+            📊 Live Positions
+        </button>
+        <button id="tab-pending" class="tab" onclick="switchTab('pending')">
+            ⏳ Pending Orders
+        </button>
+        <button id="tab-filled" class="tab" onclick="switchTab('filled')">
+            ✅ Filled Orders
+        </button>
+    </div>
+    
+    <div id="trades-table-container">
+        <div style="text-align: center; padding: 60px 20px;">
+            <div class="spinner" style="margin: 0 auto 20px;"></div>
+            <div style="color: var(--text-secondary); font-size: 0.9375rem;">Loading trades...</div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentTab = 'live';
+let currentBroker = '';
+let allTrades = [];
+let currentTrades = [];
+let priceRefreshInterval = null;
+let isClosingPosition = false;
+
+function onBrokerChange(value) {
+    currentBroker = value;
+    loadTrades();
+}
+
+async function switchTab(tab) {
+    console.log('[DEBUG] switchTab called with tab:', tab);
+    currentTab = tab;
+    
+    document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(`tab-${tab}`).classList.add('active');
+    
+    if (tab === 'filled') {
+        console.log('[DEBUG] Loading filled orders from API...');
+        await loadFilledOrders();
+    } else {
+        filterAndDisplayTrades();
+    }
+}
+
+async function loadFilledOrders() {
+    const container = document.getElementById('trades-table-container');
+    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading order history...</div></div>';
+    
+    try {
+        const response = await fetch('/api/webull/order-history?count=50&status=Filled');
+        const data = await response.json();
+        
+        if (data.error) {
+            container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">${data.error}</div>`;
+            return;
+        }
+        
+        const orders = data.orders || [];
+        currentTrades = orders;
+        displayFilledOrdersTable(orders);
+        
+    } catch (error) {
+        console.error('Failed to load filled orders:', error);
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load order history</div>';
+    }
+}
+
+function filterAndDisplayTrades() {
+    let filteredTrades = [];
+    
+    if (currentTab === 'live') {
+        filteredTrades = allTrades.filter(t => t.status === 'OPEN' || t.source === 'live_brokerage');
+    } else if (currentTab === 'pending') {
+        filteredTrades = allTrades.filter(t => {
+            const fillStatus = t.fill_status || '';
+            const status = t.status || '';
+            return status === 'PENDING' || 
+                   fillStatus === 'Submitted' || 
+                   fillStatus === 'Working' ||
+                   fillStatus === 'Partially Filled';
+        });
+    } else if (currentTab === 'filled') {
+        return;
+    }
+    
+    currentTrades = filteredTrades;
+    displayTradesTable(filteredTrades);
+    
+    if (currentTab === 'live' && filteredTrades.length > 0) {
+        refreshPrices();
+    }
+}
+
+async function loadTrades() {
+    const container = document.getElementById('trades-table-container');
+    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading...</div></div>';
+    
+    try {
+        const brokerParam = currentBroker ? `?broker=${currentBroker}` : '';
+        const mergedResponse = await fetch(`/api/trades/merged${brokerParam}`).then(r => r.json());
+        const trades = mergedResponse.trades || [];
+        
+        allTrades = trades;
+        filterAndDisplayTrades();
+        updateSummaryStats();
+        
+    } catch (error) {
+        console.error('Failed to load trades:', error);
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load trades</div>';
+    }
+}
+
+function updateSummaryStats() {
+    const openTrades = allTrades.filter(t => t.status === 'OPEN' || t.source === 'live_brokerage');
+    const closedTrades = allTrades.filter(t => t.status === 'CLOSED');
+    
+    let unrealizedPnl = 0;
+    openTrades.forEach(t => {
+        const entry = parseFloat(t.entry_price) || parseFloat(t.executed_price) || 0;
+        const current = parseFloat(t.current_price) || entry;
+        const qty = parseInt(t.quantity) || 0;
+        const multiplier = t.asset_type === 'option' ? 100 : 1;
+        unrealizedPnl += (current - entry) * qty * multiplier;
+    });
+    
+    const realizedPnl = closedTrades.reduce((sum, t) => sum + (parseFloat(t.pnl) || 0), 0);
+    
+    document.getElementById('open-count').textContent = openTrades.length;
+    document.getElementById('closed-count').textContent = closedTrades.length;
+    
+    const unrealizedEl = document.getElementById('unrealized-pnl');
+    unrealizedEl.textContent = `$${unrealizedPnl.toFixed(2)}`;
+    unrealizedEl.className = 'stat-value ' + (unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+    
+    const realizedEl = document.getElementById('realized-pnl');
+    realizedEl.textContent = `$${realizedPnl.toFixed(2)}`;
+    realizedEl.className = 'stat-value ' + (realizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+}
+
+async function refreshPrices() {
+    const openTrades = currentTrades.filter(t => t.status === 'OPEN');
+    if (openTrades.length === 0) return;
+    
+    // Prepare positions payload
+    const positions = openTrades.map(t => ({
+        trade_id: t.id,
+        symbol: t.symbol,
+        asset_type: t.asset_type,
+        strike: t.strike,
+        expiry: t.expiry,
+        call_put: t.call_put
+    }));
+    
+    try {
+        const response = await fetch('/api/trades/realtime-prices', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ positions })
+        });
+        
+        const data = await response.json();
+        
+        if (data.prices) {
+            updatePricesInTable(data.prices);
+        }
+    } catch (error) {
+        console.error('Failed to refresh prices:', error);
+    }
+}
+
+function updatePricesInTable(prices) {
+    for (const [tradeId, priceData] of Object.entries(prices)) {
+        const row = document.querySelector(`tr[data-trade-id="${tradeId}"]`);
+        if (!row) continue;
+        
+        // Update bid/ask/mid/last
+        const bidCell = row.querySelector('.price-bid');
+        const askCell = row.querySelector('.price-ask');
+        const midCell = row.querySelector('.price-mid');
+        const lastCell = row.querySelector('.price-last');
+        
+        if (bidCell) bidCell.textContent = `$${priceData.bid.toFixed(2)}`;
+        if (askCell) askCell.textContent = `$${priceData.ask.toFixed(2)}`;
+        if (midCell) midCell.textContent = `$${priceData.mid.toFixed(2)}`;
+        if (lastCell) lastCell.textContent = `$${priceData.last.toFixed(2)}`;
+        
+        // Calculate and update P&L using mid price
+        const trade = currentTrades.find(t => t.id == tradeId);
+        if (trade) {
+            // Use entry_price for live brokerage positions, executed_price for bot-tracked trades
+            const entryPrice = trade.entry_price || trade.executed_price;
+            if (entryPrice) {
+                const currentPrice = priceData.mid;
+                const quantity = trade.quantity;
+                
+                const pnl = (currentPrice - entryPrice) * quantity * (trade.asset_type === 'option' ? 100 : 1);
+                const pnlPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
+                
+                const pnlCashCell = row.querySelector('.pnl-cash');
+                const pnlPercentCell = row.querySelector('.pnl-percent');
+                
+                if (pnlCashCell) {
+                    pnlCashCell.textContent = `$${pnl.toFixed(2)}`;
+                    pnlCashCell.className = 'pnl-cash ' + (pnl >= 0 ? 'profit' : 'loss');
+                }
+                
+                if (pnlPercentCell) {
+                    pnlPercentCell.textContent = `${pnlPercent.toFixed(1)}%`;
+                    pnlPercentCell.className = 'pnl-percent ' + (pnl >= 0 ? 'profit' : 'loss');
+                }
+            }
+        }
+    }
+}
+
+function displayTradesTable(trades) {
+    const container = document.getElementById('trades-table-container');
+    
+    if (trades.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px;">
+                <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">📊</div>
+                <div style="color: var(--text-secondary); font-size: 1rem;">No ${currentTab} trades found</div>
+            </div>
+        `;
+        return;
+    }
+    
+    let tableHTML = '<table class="data-table"><thead><tr>';
+    tableHTML += '<th>Symbol</th><th>Type</th><th>Qty</th><th>Entry</th><th>Current</th><th>P/L</th><th>P/L%</th><th>Status</th><th>Actions</th>';
+    tableHTML += '</tr></thead><tbody>';
+    
+    trades.forEach(trade => {
+        const entry = parseFloat(trade.entry_price) || parseFloat(trade.executed_price) || 0;
+        const current = parseFloat(trade.current_price) || entry;
+        const qty = parseInt(trade.quantity) || 0;
+        const multiplier = trade.asset_type === 'option' ? 100 : 1;
+        const pnl = (current - entry) * qty * multiplier;
+        const pnlPercent = entry > 0 ? ((current - entry) / entry) * 100 : 0;
+        const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+        
+        let symbolDisplay = trade.symbol;
+        if (trade.asset_type === 'option' && trade.strike) {
+            symbolDisplay += ` ${trade.expiry || ''} $${trade.strike}${trade.call_put || ''}`;
+        }
+        
+        const sourceTag = trade.source === 'live_brokerage' ? '<span class="badge" style="background: #0080ff; margin-left: 4px; font-size: 0.7rem;">LIVE</span>' : '';
+        
+        tableHTML += `<tr data-trade-id="${trade.id}">
+            <td><strong>${symbolDisplay}</strong>${sourceTag}</td>
+            <td>${trade.asset_type || 'stock'}</td>
+            <td>${qty}</td>
+            <td>$${entry.toFixed(2)}</td>
+            <td class="price-last">$${current.toFixed(2)}</td>
+            <td class="${pnlClass} pnl-cash"><strong>$${pnl.toFixed(2)}</strong></td>
+            <td class="${pnlClass} pnl-percent">${pnlPercent.toFixed(1)}%</td>
+            <td><span class="badge">${trade.status || 'UNKNOWN'}</span></td>
+            <td>
+                ${trade.status === 'OPEN' ? `
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <input type="number" id="qty-${trade.id}" value="${qty}" min="1" max="${qty}" 
+                               style="width: 50px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-size: 11px; text-align: center;">
+                        <button id="close-btn-${trade.id}" class="btn btn-danger btn-small" onclick="closePosition(event, '${trade.id}', '${trade.symbol}', ${qty}, '${trade.asset_type}')">Close</button>
+                    </div>
+                ` : trade.status === 'PENDING' ? `<button class="btn btn-danger btn-small" onclick="cancelOrder('${trade.order_id}', '${trade.symbol}')">Cancel</button>` : '-'}
+            </td>
+        </tr>`;
+    });
+    
+    tableHTML += '</tbody></table>';
+    container.innerHTML = tableHTML;
+}
+
+function displayFilledOrdersTable(orders) {
+    const container = document.getElementById('trades-table-container');
+    
+    if (orders.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px;">
+                <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">📋</div>
+                <div style="color: var(--text-secondary); font-size: 1rem;">No filled orders found</div>
+            </div>
+        `;
+        return;
+    }
+    
+    let tableHTML = '<table class="data-table"><thead><tr>';
+    tableHTML += '<th>Symbol</th><th>Action</th><th>Qty</th><th>Filled Qty</th><th>Avg Price</th><th>Order Type</th><th>Status</th><th>Filled Time</th>';
+    tableHTML += '</tr></thead><tbody>';
+    
+    orders.forEach(order => {
+        const qty = parseInt(order.quantity) || 0;
+        const filledQty = parseInt(order.filled_quantity) || qty;
+        const avgPrice = parseFloat(order.avg_filled_price) || parseFloat(order.limit_price) || 0;
+        
+        let symbolDisplay = order.symbol;
+        if (order.asset_type === 'option' && order.strike) {
+            symbolDisplay += ` ${order.expiry || ''} $${order.strike} ${order.option_type || ''}`;
+        }
+        
+        const actionClass = order.action === 'BUY' ? 'pnl-positive' : 'pnl-negative';
+        const actionBadge = order.action === 'BUY' ? 
+            '<span style="background: rgba(0,255,136,0.2); color: #0f8; padding: 2px 8px; border-radius: 4px; font-weight: 600;">BUY</span>' : 
+            '<span style="background: rgba(255,68,68,0.2); color: #f44; padding: 2px 8px; border-radius: 4px; font-weight: 600;">SELL</span>';
+        
+        const filledTime = order.filled_time ? new Date(order.filled_time).toLocaleString() : (order.created_time ? new Date(order.created_time).toLocaleString() : 'N/A');
+        
+        tableHTML += `<tr>
+            <td><strong>${symbolDisplay}</strong></td>
+            <td>${actionBadge}</td>
+            <td>${qty}</td>
+            <td>${filledQty}</td>
+            <td>$${avgPrice.toFixed(2)}</td>
+            <td>${order.order_type || 'N/A'}</td>
+            <td><span class="badge" style="background: rgba(0,255,136,0.2); color: #0f8;">${order.status || 'Filled'}</span></td>
+            <td style="color: var(--text-secondary); font-size: 0.85rem;">${filledTime}</td>
+        </tr>`;
+    });
+    
+    tableHTML += '</tbody></table>';
+    container.innerHTML = tableHTML;
+}
+
+function generateTradeRow(trade) {
+    const isOpen = trade.status === 'OPEN';
+    const pnl = trade.pnl || 0;
+    const pnlPercent = trade.pnl_percent || 0;
+    const pnlClass = pnl >= 0 ? 'profit' : 'loss';
+    const tradeId = trade.id;  // Backend now provides stable IDs for all trades
+    const isLiveBrokerage = trade.source === 'live_brokerage';
+    
+    let symbol = trade.symbol;
+    if (trade.asset_type === 'option') {
+        symbol += ` ${trade.expiry} $${trade.strike}${trade.call_put}`;
+    }
+    
+    // Add source indicator badge
+    const sourceIndicator = isLiveBrokerage ? 
+        '<span style="padding: 2px 6px; margin-left: 6px; border-radius: 3px; font-size: 10px; font-weight: 600; background: #0A84FF; color: white;" title="Live brokerage position">LIVE</span>' : 
+        '';
+    
+    return `
+        <tr data-trade-id="${tradeId}" style="border-bottom: 1px solid var(--border-color);">
+            <td style="padding: 10px 8px; font-weight: 600; color: var(--text-primary);">${symbol}${sourceIndicator}</td>
+            <td style="padding: 10px 8px; text-align: center;">
+                <span style="padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: ${trade.side === 'BTO' ? 'var(--success-bg)' : 'var(--danger-bg)'}; color: ${trade.side === 'BTO' ? 'var(--success-color)' : 'var(--danger-color)'};">
+                    ${trade.side || 'BTO'}
+                </span>
+            </td>
+            <td style="padding: 10px 8px; text-align: right; color: var(--text-primary);">${trade.quantity}</td>
+            <td style="padding: 10px 8px; text-align: right; font-weight: 600; color: var(--text-primary);">$${(trade.entry_price || trade.executed_price || 0).toFixed(2)}</td>
+            <td style="padding: 10px 8px; text-align: right; color: var(--text-secondary);" class="price-bid">
+                ${isOpen ? (trade.current_price ? `$${(trade.current_price - 0.01).toFixed(2)}` : '<span style="color: #888;">Loading...</span>') : '-'}
+            </td>
+            <td style="padding: 10px 8px; text-align: right; color: var(--text-secondary);" class="price-ask">
+                ${isOpen ? (trade.current_price ? `$${(trade.current_price + 0.01).toFixed(2)}` : '<span style="color: #888;">Loading...</span>') : '-'}
+            </td>
+            <td style="padding: 10px 8px; text-align: right; color: var(--text-secondary);" class="price-mid">
+                ${isOpen ? (trade.current_price ? `$${trade.current_price.toFixed(2)}` : '<span style="color: #888;">Loading...</span>') : '-'}
+            </td>
+            <td style="padding: 10px 8px; text-align: right; font-weight: 600; color: var(--text-primary);" class="price-last">
+                ${isOpen ? `$${(trade.current_price || trade.executed_price || 0).toFixed(2)}` : `$${(trade.current_price || trade.executed_price || 0).toFixed(2)}`}
+            </td>
+            <td style="padding: 10px 8px; text-align: right; font-weight: 600;" class="pnl-cash ${pnlClass}">
+                $${pnl.toFixed(2)}
+            </td>
+            <td style="padding: 10px 8px; text-align: right; font-weight: 600;" class="pnl-percent ${pnlClass}">
+                ${pnlPercent.toFixed(1)}%
+            </td>
+            <td style="padding: 10px 8px; text-align: center;">
+                ${isOpen && !isLiveBrokerage ? (trade.profit_target_percent != null ? `
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+                        <input type="number" 
+                               id="profit-${tradeId}" 
+                               value="${trade.profit_target_percent}" 
+                               step="1" 
+                               min="0" 
+                               max="1000"
+                               style="width: 50px; padding: 4px; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); text-align: center; font-size: 12px;">
+                        <span style="color: var(--text-secondary); font-size: 11px;">%</span>
+                    </div>
+                ` : '<span style="color: #888; font-size: 11px;">None</span>') : (isLiveBrokerage ? '<span style="color: #888; font-size: 11px;">N/A</span>' : '-')}
+            </td>
+            <td style="padding: 10px 8px; text-align: center;">
+                ${isOpen && !isLiveBrokerage ? (trade.stop_loss_percent != null ? `
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+                        <input type="number" 
+                               id="stop-${tradeId}" 
+                               value="${trade.stop_loss_percent}" 
+                               step="1" 
+                               min="0" 
+                               max="100"
+                               style="width: 50px; padding: 4px; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); text-align: center; font-size: 12px;">
+                        <span style="color: var(--text-secondary); font-size: 11px;">%</span>
+                    </div>
+                ` : '<span style="color: #888; font-size: 11px;">None</span>') : (isLiveBrokerage ? '<span style="color: #888; font-size: 11px;">N/A</span>' : '-')}
+            </td>
+            <td style="padding: 10px 8px; text-align: center;">
+                ${isOpen && !isLiveBrokerage ? (trade.trailing_stop_percent != null ? `
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" id="trailing-${tradeId}" ${trade.trailing_stop_enabled ? 'checked' : ''} style="margin: 0; cursor: pointer;">
+                        </label>
+                        <input type="number" 
+                               id="trailing-pct-${tradeId}" 
+                               value="${trade.trailing_stop_percent}" 
+                               step="0.5" 
+                               min="0.5" 
+                               max="50"
+                               ${trade.trailing_stop_enabled ? '' : 'disabled'}
+                               style="width: 45px; padding: 4px; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); text-align: center; font-size: 12px;">
+                        <span style="color: var(--text-secondary); font-size: 11px;">%</span>
+                    </div>
+                ` : '<span style="color: #888; font-size: 11px;">None</span>') : (isLiveBrokerage ? '<span style="color: #888; font-size: 11px;">N/A</span>' : '-')}
+            </td>
+            <td style="padding: 10px 8px; text-align: center;">
+                <span style="padding: 3px 8px; border-radius: 4px; font-size: 11px; background: ${isOpen ? '#fff3cd' : (pnl >= 0 ? '#d1f2eb' : '#f8d7da')}; color: ${isOpen ? '#856404' : (pnl >= 0 ? '#0c5c4c' : '#721c24')};">
+                    ${trade.status}
+                </span>
+            </td>
+            <td style="padding: 10px 8px; text-align: center;">
+                <div style="display: flex; gap: 6px; justify-content: center;">
+                    ${trade.status === 'PENDING' ? `
+                        <button onclick="cancelOrder('${trade.order_id}', '${trade.symbol}')" 
+                                style="padding: 5px 10px; background: var(--danger-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">
+                            ❌ Cancel
+                        </button>
+                    ` : isOpen ? `
+                        ${!isLiveBrokerage ? `<button onclick="saveRiskSettings('${tradeId}')" 
+                                style="padding: 5px 10px; background: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">
+                            💾 Save
+                        </button>` : ''}
+                        <input type="number" id="qty-${tradeId}" value="${trade.quantity}" min="1" max="${trade.quantity}" 
+                               style="width: 50px; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-primary); font-size: 11px; text-align: center;">
+                        <button id="close-btn-${tradeId}" onclick="closePosition(event, '${tradeId}', '${trade.symbol}', ${trade.quantity}, '${trade.asset_type}')" 
+                                style="padding: 5px 10px; background: var(--danger-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">
+                            🔒 Close
+                        </button>
+                    ` : `
+                        <span style="color: var(--text-secondary); font-size: 11px;">-</span>
+                    `}
+                </div>
+            </td>
+        </tr>
+    `;
+}
+
+async function saveRiskSettings(tradeId) {
+    const profitTarget = parseFloat(document.getElementById(`profit-${tradeId}`).value);
+    const stopLoss = parseFloat(document.getElementById(`stop-${tradeId}`).value);
+    const trailingEnabled = document.getElementById(`trailing-${tradeId}`).checked;
+    const trailingPct = parseFloat(document.getElementById(`trailing-pct-${tradeId}`).value);
+    
+    try {
+        const response = await fetch(`/api/trades/${tradeId}/risk-settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                profit_target: profitTarget,
+                stop_loss: stopLoss,
+                trailing_stop_enabled: trailingEnabled,
+                trailing_stop: trailingPct
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            alert(`✅ Risk settings saved!\n\nProfit Target: ${profitTarget}%\nStop Loss: ${stopLoss}%\nTrailing Stop: ${trailingEnabled ? 'ON (' + trailingPct + '%)' : 'OFF'}`);
+        } else {
+            alert(`❌ Failed to save: ${result.error || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('Failed to save risk settings:', error);
+        alert(`❌ Failed to save: ${error.message}`);
+    }
+}
+
+async function closePosition(evt, tradeId, symbol, maxQuantity, assetType) {
+    // Prevent default and stop propagation
+    if (evt) {
+        evt.preventDefault();
+        evt.stopPropagation();
+    }
+    
+    // GLOBAL LOCK: Prevent any close operation if one is already in progress
+    if (isClosingPosition) {
+        console.log('[CLOSE] Blocked: Another close operation is in progress');
+        return;
+    }
+    
+    // Get button and input elements
+    const closeBtn = document.getElementById(`close-btn-${tradeId}`);
+    const qtyInput = document.getElementById(`qty-${tradeId}`);
+    
+    if (!qtyInput || !closeBtn) {
+        alert('❌ Controls not found');
+        return;
+    }
+    
+    // Check if already closing
+    if (closeBtn.disabled) {
+        return; // Already processing
+    }
+    
+    const qtyToClose = parseInt(qtyInput.value);
+    
+    if (isNaN(qtyToClose) || qtyToClose <= 0) {
+        alert('❌ Invalid quantity. Please enter a positive number.');
+        return;
+    }
+    
+    if (qtyToClose > maxQuantity) {
+        alert(`❌ Cannot close ${qtyToClose}. You only have ${maxQuantity}.`);
+        return;
+    }
+    
+    if (!confirm(`⚠️ Close ${qtyToClose} of ${symbol}?\n\nThis will immediately execute a SELL order.`)) {
+        return;
+    }
+
+    // SET GLOBAL LOCK before any async operations
+    isClosingPosition = true;
+    console.log('[CLOSE] Global lock acquired');
+
+    // Disable input and button to prevent duplicate submissions
+    const originalText = closeBtn.textContent;
+    closeBtn.disabled = true;
+    closeBtn.textContent = '⏳ Closing...';
+    qtyInput.disabled = true;
+
+    try {
+        const response = await fetch(`/api/trades/${tradeId}/close`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                quantity: qtyToClose
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            alert(`✅ ${result.message || 'Position closed successfully!'}`);
+            if (typeof loadTrades === 'function') {
+                loadTrades();
+            }
+        } else {
+            alert(`❌ Failed to close position: ${result.error || 'Unknown error'}`);
+            // Re-enable on error
+            closeBtn.disabled = false;
+            closeBtn.textContent = originalText;
+            qtyInput.disabled = false;
+        }
+    } catch (err) {
+        console.error('Error calling closePosition API:', err);
+        alert('❌ Network or server error while closing position. Check console/logs.');
+        // Re-enable on error
+        closeBtn.disabled = false;
+        closeBtn.textContent = originalText;
+        qtyInput.disabled = false;
+    } finally {
+        // ALWAYS release global lock
+        isClosingPosition = false;
+        console.log('[CLOSE] Global lock released');
+    }
+}
+
+async function cancelOrder(orderId, symbol) {
+    if (!confirm(`⚠️ Cancel pending order for ${symbol}?\n\nOrder ID: ${orderId}\n\nThis will cancel the order at Webull.`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/webull/orders/${orderId}/cancel`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            alert(`✅ Order cancelled successfully!\n\nOrder ID: ${orderId}`);
+            loadTrades();
+        } else {
+            alert(`❌ Failed to cancel order: ${result.error || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('Failed to cancel order:', error);
+        alert(`❌ Failed to cancel order: ${error.message}`);
+    }
+}
+
+function displaySummary(summary) {
+    const botText = `Bot: ${summary.open_positions} Open | ${summary.closed_trades} Closed | P&L: $${summary.total_pnl.toFixed(2)} | Win Rate: ${summary.win_rate.toFixed(1)}%`;
+    const liveText = summary.live_positions > 0 ? ` | Live Portfolio: ${summary.live_positions} Positions (P&L: $${summary.live_pnl.toFixed(2)})` : '';
+    document.getElementById('summary-text').textContent = botText + liveText;
+}
+
+// Enable/disable trailing stop percentage input based on checkbox
+document.addEventListener('change', (e) => {
+    if (e.target.id.startsWith('trailing-')) {
+        const tradeId = e.target.id.split('-')[1];
+        const trailingPctInput = document.getElementById(`trailing-pct-${tradeId}`);
+        if (trailingPctInput) {
+            trailingPctInput.disabled = !e.target.checked;
+        }
+    }
+});
+
+// Load trades initially
+loadTrades();
+
+// Auto-refresh prices every 10 seconds for open positions
+priceRefreshInterval = setInterval(() => {
+    if (currentTrades.filter(t => t.status === 'OPEN').length > 0) {
+        refreshPrices();
+    }
+}, 10000);
+
+// Clean up interval on page unload
+window.addEventListener('beforeunload', () => {
+    if (priceRefreshInterval) {
+        clearInterval(priceRefreshInterval);
+    }
+});
+</script>
+{% endblock %}

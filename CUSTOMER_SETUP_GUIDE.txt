@@ -1,0 +1,230 @@
+=======================================================================
+Discord Trading Bot - Setup Instructions
+=======================================================================
+
+Welcome! This bot automates trading based on Discord signals.
+Follow these simple steps to get started.
+
+=======================================================================
+STEP 1: GET YOUR MACHINE ID
+=======================================================================
+
+1. Double-click "GET_MACHINE_ID.bat"
+2. You will see something like this:
+
+   ============================================================
+   Discord Trading Bot - Machine ID Lookup
+   ============================================================
+   
+   YOUR MACHINE ID: abc123def456ghi7
+   
+   ============================================================
+
+3. COPY that 16-character Machine ID
+4. Send it to: support@yourcompany.com
+   Subject: "License Request - [Your Name]"
+
+5. Wait for your license key (usually within 24 hours)
+
+💡 TIP: Save your Machine ID somewhere safe! You'll need it for renewals.
+
+
+=======================================================================
+STEP 2: ACTIVATE YOUR LICENSE
+=======================================================================
+
+Once you receive your license key via email:
+
+1. Double-click "DiscordTradingBot.exe"
+
+2. The setup wizard will show your Machine ID again:
+
+   ╔═════════════════════════════════════════════════════════╗
+   ║  🔑 YOUR MACHINE ID (Copy this!)                       ║
+   ║  abc123def456ghi7                                      ║
+   ╚═════════════════════════════════════════════════════════╝
+   
+   📋 INSTRUCTIONS:
+   1. Copy your Machine ID above
+   2. Send it to the bot provider via email/support
+   3. You will receive a license key bound to THIS computer
+   4. Paste the license key below
+
+3. Paste your license key when prompted:
+
+   Enter your license key: [paste here]
+
+4. If successful, you'll see:
+
+   ✅ LICENSE ACTIVATED SUCCESSFULLY!
+   ✓ Customer: your_name
+   ✓ Bound to machine: abc123def456ghi7
+   ✓ Expires: 2025-12-15 12:30
+   ✓ Days Remaining: 30
+
+
+=======================================================================
+STEP 3: CONFIGURE DISCORD
+=======================================================================
+
+The wizard will ask for your Discord token.
+
+🎯 EASY METHOD (Recommended):
+-------------------------------
+1. Double-click "GET_DISCORD_TOKEN.html"
+2. Drag the green button to your browser's bookmarks bar
+3. Open https://discord.com/app and log in
+4. Click the bookmarklet you added
+5. Token automatically copied to clipboard!
+6. Paste it into the bot setup wizard
+
+💡 This is a one-click solution - much easier than manual extraction!
+
+
+🔧 MANUAL METHOD (Alternative):
+-------------------------------
+1. Open Discord in Chrome/Firefox (NOT the app!)
+2. Press F12 to open Developer Tools
+3. Click the "Console" tab
+4. Paste this command and press Enter:
+
+   const iframe = document.createElement('iframe');
+   document.body.appendChild(iframe);
+   const token = iframe.contentWindow.localStorage.token.replace(/"/g, '');
+   copy(token);
+   iframe.remove();
+   alert('Token copied to clipboard!');
+
+5. Token is now in your clipboard
+6. Paste it into the bot (it will be hidden for security)
+
+
+=======================================================================
+STEP 4: CONFIGURE WEBULL
+=======================================================================
+
+You can use either saved tokens OR username/password:
+
+OPTION A: Saved Tokens (Recommended for Advanced Users)
+--------------------------------------------------------
+If you have Webull tokens from previous login:
+
+🎯 EASY METHOD: Use GET_WEBULL_TOKENS.html
+1. Double-click "GET_WEBULL_TOKENS.html"
+2. Follow the step-by-step visual guide
+3. Extract tokens using browser DevTools Network tab
+4. Paste into bot setup wizard
+
+Tokens needed:
+- Access Token
+- Refresh Token
+- UUID
+- Device ID (DID)
+
+💡 The HTML guide has screenshots and troubleshooting tips!
+
+
+OPTION B: Username/Password (Easier for Beginners)
+---------------------------------------------------
+The bot will log in and save tokens automatically:
+- Email/Username
+- Password
+- Device Name
+- MFA/Trading PIN (if enabled)
+
+💡 Choose this if you don't want to extract tokens manually!
+
+
+=======================================================================
+STEP 5: CONFIGURE TRADING
+=======================================================================
+
+The wizard will ask you to edit config.ini:
+
+IMPORTANT SETTINGS:
+-------------------
+1. channel_ids = YOUR_DISCORD_CHANNEL_IDS
+   (Copy channel IDs from Discord)
+
+2. paper_trade = true
+   (START WITH PAPER TRADING!)
+   (Change to false only when you're confident)
+
+3. profit_target_percent = 20
+   (Take profit at 20% gain)
+
+4. stop_loss_percent = 10
+   (Cut losses at 10%)
+
+
+=======================================================================
+STEP 6: START TRADING!
+=======================================================================
+
+After configuration:
+- Bot will start automatically
+- Monitor Discord channels for BTO/STC signals
+- Execute trades on Webull
+- Apply risk management (profit targets, stop losses)
+
+💡 FIRST RUN: Use paper_trade = true to test without real money!
+
+
+=======================================================================
+IMPORTANT NOTES
+=======================================================================
+
+⚠️  LICENSE:
+   - Your license is HARDWARE-LOCKED to this computer
+   - It will NOT work on any other machine
+   - If you upgrade/change hardware, contact support for new license
+
+⚠️  SECURITY:
+   - Never share your Discord token or Webull credentials
+   - Keep config.ini secure
+   - Don't share your license key
+
+⚠️  TRADING:
+   - Start with paper trading to learn the system
+   - Test with small positions first
+   - Always monitor the bot's activity
+   - Never risk more than you can afford to lose
+
+
+=======================================================================
+TROUBLESHOOTING
+=======================================================================
+
+Problem: "License machine mismatch"
+Solution: You're using the wrong license for this computer.
+          Send your Machine ID to get correct license.
+
+Problem: "License expired"
+Solution: Your license period ended. Contact support for renewal.
+
+Problem: "Discord token invalid"
+Solution: Token may have expired. Get new token from Discord.
+
+Problem: "Webull login failed"
+Solution: Check username/password or refresh your tokens.
+
+
+=======================================================================
+SUPPORT
+=======================================================================
+
+Email: support@yourcompany.com
+Hours: Monday-Friday, 9 AM - 5 PM EST
+
+When contacting support, please include:
+- Your Machine ID
+- Error messages (if any)
+- Screenshot of the issue
+
+=======================================================================
+ENJOY AUTOMATED TRADING!
+=======================================================================
+
+Questions? Don't hesitate to reach out to support!
+
+Happy Trading! 🚀

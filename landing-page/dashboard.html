@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - QuantumPulse</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card" style="max-width: 700px; text-align: center;">
+            <h1 style="font-family: var(--font-heading); background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: var(--spacing-md);">
+                Ψ∿ QuantumPulse
+            </h1>
+            <h2 style="margin-bottom: var(--spacing-lg);">Dashboard (Placeholder)</h2>
+            
+            <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: var(--spacing-xl); margin-bottom: var(--spacing-lg);">
+                <p style="color: var(--text-secondary); margin-bottom: var(--spacing-md);">
+                    This is a placeholder dashboard page. The actual QuantumPulse dashboard will be integrated 
+                    with your backend when you connect the authentication system.
+                </p>
+                
+                <div id="guest-notice" style="background: rgba(255, 215, 0, 0.1); border: 1px solid rgba(255, 215, 0, 0.3); border-radius: var(--radius-sm); padding: var(--spacing-md); margin-top: var(--spacing-md); display: none;">
+                    <p style="color: var(--warning); font-weight: 600; margin-bottom: 0;">
+                        🔒 Guest Mode - Limited Access
+                    </p>
+                    <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: var(--spacing-xs);">
+                        Sign up for a free trial to access all features
+                    </p>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: var(--spacing-md); justify-content: center; flex-wrap: wrap;">
+                <a href="index.html" class="btn btn-primary">Back to Home</a>
+                <a href="auth.html" class="btn btn-secondary">Sign In / Sign Up</a>
+            </div>
+
+            <div style="margin-top: var(--spacing-xl); padding-top: var(--spacing-lg); border-top: 1px solid var(--border-color);">
+                <p style="color: var(--text-muted); font-size: 0.875rem;">
+                    Ready to connect your actual dashboard? Integrate with your backend authentication.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check if guest mode
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('guest')) {
+            document.getElementById('guest-notice').style.display = 'block';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+================================================================================
+ACTIVATION LICENSE KEY
+================================================================================
+Customer ID: test_user
+Activation Code: a27fa8ac20ad0ffe
+Duration: 30 days
+Issued: 2025-11-30 19:26:21
+Expires: 2025-12-30 19:26:21
+
+License Key:
+--------------------------------------------------------------------------------
+eyJhY3RpdmF0aW9uX2NvZGUiOiAiYTI3ZmE4YWMyMGFkMGZmZSIsICJjdXN0b21lcl9pZCI6ICJ0ZXN0X3VzZXIiLCAiZXhwaXJlcyI6IDE3NjcxMjI3ODEsICJpc3N1ZWQiOiAxNzY0NTMwNzgxfQ==:d54516d81b59e3dbad452cc5f084b4d8b9f56e0b142a03a031bd0a15d60caff1
+--------------------------------------------------------------------------------
+
+HOW IT WORKS:
+1. Customer receives this license key
+2. Customer runs the bot and enters the license key
+3. Bot AUTOMATICALLY binds to their machine on first run
+4. License works ONLY on that machine from then on
+
+BENEFITS:
+- Customer doesn't need to share Machine ID
+- Simple activation process (just paste license key)
+- License auto-binds to their hardware
+- Cannot be transferred to another machine
+
+SUPPORT:
+- If customer changes hardware, generate new license
+- Track by Activation Code: a27fa8ac20ad0ffe
+================================================================================

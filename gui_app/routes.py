@@ -1,0 +1,9061 @@
+"""
+Flask Routes
+Web API endpoints for the control panel
+"""
+import asyncio
+import time
+import json
+import os
+from pathlib import Path
+from typing import Optional, Any, Dict, Callable
+from functools import wraps
+from flask import render_template, jsonify, request, make_response, session, redirect, url_for, send_from_directory
+from . import database as db
+
+# Admin password from environment (set via Replit Secrets)
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
+
+# Public routes that don't require authentication
+PUBLIC_ROUTES = ['/login', '/architecture', '/static', '/signup', '/user/login', '/google_login', '/consent', '/api/consent']
+
+# Rate limiting for login attempts (brute force protection)
+_login_attempts: Dict[str, list] = {}  # {ip: [timestamp1, timestamp2, ...]}
+_max_attempts = 5  # Max attempts per window
+_lockout_window = 300  # 5 minutes in seconds
+
+def _check_rate_limit(ip: str) -> tuple:
+    """Check if IP is rate limited. Returns (is_allowed, seconds_remaining)"""
+    now = time.time()
+    
+    if ip not in _login_attempts:
+        _login_attempts[ip] = []
+    
+    # Clean old attempts outside the window
+    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < _lockout_window]
+    
+    if len(_login_attempts[ip]) >= _max_attempts:
+        oldest = min(_login_attempts[ip])
+        remaining = int(_lockout_window - (now - oldest))
+        return False, remaining
+    
+    return True, 0
+
+def _record_failed_attempt(ip: str):
+    """Record a failed login attempt"""
+    now = time.time()
+    if ip not in _login_attempts:
+        _login_attempts[ip] = []
+    _login_attempts[ip].append(now)
+
+def _clear_attempts(ip: str):
+    """Clear login attempts after successful login"""
+    if ip in _login_attempts:
+        del _login_attempts[ip]
+
+def check_consent_accepted():
+    """Check if user has accepted the agreement."""
+    try:
+        consent_accepted = db.get_setting('user_consent_accepted', 'false')
+        consent_version = db.get_setting('user_consent_version', None)
+        return consent_accepted.lower() == 'true' and consent_version == '1.0'
+    except:
+        return False
+
+def login_required(f):
+    """Decorator to require login for protected routes"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            if request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Authentication required'}), 401
+            return redirect(url_for('login'))
+        if not check_consent_accepted() and request.path not in ['/consent', '/consent/declined']:
+            return redirect(url_for('consent_page'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def admin_required(f):
+    """Decorator to require admin access for protected routes"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            if request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Authentication required'}), 401
+            return redirect(url_for('login'))
+        if not session.get('is_admin'):
+            if request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Admin access required'}), 403
+            return render_template('error.html', 
+                                   error_title='Access Denied',
+                                   error_message='This page requires administrator access.'), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Import Alpaca data provider for option chains
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from src.data_providers.alpaca_data_provider import get_alpaca_provider
+
+# Global variable to store bot instance reference (set by main bot)
+_bot_instance: Optional[Any] = None
+
+# Cache for API responses to prevent rate limiting
+_api_cache: Dict[str, tuple] = {}  # {key: (value, timestamp)}
+
+# Option chain cache to avoid re-fetching for same symbol/expiry
+_option_chain_cache: Dict[str, tuple] = {}  # {symbol_expiry: (chain_data, timestamp)}
+_CHAIN_CACHE_TTL = 30  # Cache for 30 seconds
+
+def get_webull_broker():
+    """Get the Webull broker instance from the bot for option data"""
+    global _bot_instance
+    if _bot_instance and hasattr(_bot_instance, 'broker') and _bot_instance.broker:
+        return _bot_instance.broker
+    return None
+
+def get_webull_loop():
+    """Get the bot's event loop for async calls"""
+    global _bot_instance
+    if _bot_instance and hasattr(_bot_instance, 'loop'):
+        return _bot_instance.loop
+    return None
+
+def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
+    """Get option chain from Webull with caching to prevent repeated API calls.
+    Returns chain data with 'data_source' field indicating 'Webull' or 'Alpaca (fallback)'
+    """
+    import sys
+    cache_key = f"{symbol}_{expiry}"
+    now = time.time()
+    
+    print(f"[OPTIONS] get_cached_option_chain_webull called for {symbol} {expiry}", flush=True)
+    sys.stdout.flush()
+    
+    if cache_key in _option_chain_cache:
+        cached_data, cached_time = _option_chain_cache[cache_key]
+        if now - cached_time < _CHAIN_CACHE_TTL:
+            print(f"[OPTIONS] Using cached option chain for {cache_key} (source: {cached_data.get('data_source', 'unknown')})", flush=True)
+            return cached_data
+    
+    broker = get_webull_broker()
+    loop = get_webull_loop()
+    
+    print(f"[OPTIONS] Broker available: {broker is not None}, Loop available: {loop is not None}", flush=True)
+    
+    # Try Webull first
+    # Note: For index options like SPX, Webull uses the same symbol for all expirations
+    # (SPXW is not a valid ticker in Webull - all SPX options use "SPX")
+    if broker and loop:
+        try:
+            print(f"[OPTIONS] Calling Webull broker.get_option_chain({symbol}, {expiry})", flush=True)
+            future = asyncio.run_coroutine_threadsafe(
+                broker.get_option_chain(symbol, expiry),
+                loop
+            )
+            chain = future.result(timeout=15)
+            calls_count = len(chain.get('calls', [])) if chain else 0
+            puts_count = len(chain.get('puts', [])) if chain else 0
+            print(f"[OPTIONS] Webull returned: {calls_count} calls, {puts_count} puts for {symbol}", flush=True)
+            
+            if chain and (chain.get('calls') or chain.get('puts')):
+                chain['data_source'] = 'Webull'
+                _option_chain_cache[cache_key] = (chain, now)
+                print(f"[OPTIONS] ✓ Using Webull data for {cache_key}", flush=True)
+                return chain
+            else:
+                print(f"[OPTIONS] Webull returned empty chain for {symbol}, trying Alpaca fallback...", flush=True)
+        except Exception as e:
+            print(f"[OPTIONS] Webull option chain error for {symbol}: {e}, trying Alpaca fallback", flush=True)
+    else:
+        print(f"[OPTIONS] Webull broker or loop not available, trying Alpaca fallback", flush=True)
+    
+    # Alpaca fallback
+    alpaca = get_alpaca_provider()
+    if alpaca:
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        try:
+            chain = new_loop.run_until_complete(alpaca.get_option_chain(symbol, expiry))
+            chain['data_source'] = 'Alpaca (fallback)'
+            _option_chain_cache[cache_key] = (chain, now)
+            print(f"[CACHE] Fetched Alpaca fallback option chain for {cache_key}")
+            return chain
+        except Exception as e:
+            print(f"[CACHE] Alpaca fallback also failed: {e}")
+        finally:
+            new_loop.close()
+    
+    return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Error'}
+
+def get_cached_option_chain(symbol: str, expiry: str, alpaca) -> dict:
+    """Get option chain with caching to prevent repeated API calls (legacy Alpaca fallback)"""
+    cache_key = f"{symbol}_{expiry}"
+    now = time.time()
+    
+    if cache_key in _option_chain_cache:
+        cached_data, cached_time = _option_chain_cache[cache_key]
+        if now - cached_time < _CHAIN_CACHE_TTL:
+            print(f"[CACHE] Using cached option chain for {cache_key}")
+            return cached_data
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        chain = loop.run_until_complete(alpaca.get_option_chain(symbol, expiry))
+        _option_chain_cache[cache_key] = (chain, now)
+        print(f"[CACHE] Fetched and cached option chain for {cache_key}")
+        return chain
+    finally:
+        loop.close()
+
+def get_cached_option_chain_alpaca(symbol: str, expiry: str) -> dict:
+    """Get option chain from Alpaca with caching.
+    Returns chain data with 'data_source' field indicating 'Alpaca'
+    """
+    cache_key = f"ALPACA_{symbol}_{expiry}"
+    now = time.time()
+    
+    print(f"[OPTIONS] get_cached_option_chain_alpaca called for {symbol} {expiry}", flush=True)
+    
+    if cache_key in _option_chain_cache:
+        cached_data, cached_time = _option_chain_cache[cache_key]
+        if now - cached_time < _CHAIN_CACHE_TTL:
+            print(f"[OPTIONS] Using cached Alpaca option chain for {cache_key}", flush=True)
+            return cached_data
+    
+    alpaca = get_alpaca_provider()
+    if not alpaca:
+        print(f"[OPTIONS] Alpaca provider not available", flush=True)
+        return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Error: Alpaca not configured'}
+    
+    new_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(new_loop)
+    try:
+        chain = new_loop.run_until_complete(alpaca.get_option_chain(symbol, expiry))
+        chain['data_source'] = 'Alpaca'
+        _option_chain_cache[cache_key] = (chain, now)
+        print(f"[OPTIONS] ✓ Using Alpaca data for {symbol} {expiry}", flush=True)
+        return chain
+    except Exception as e:
+        print(f"[OPTIONS] Alpaca option chain error: {e}", flush=True)
+        return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': f'Error: {str(e)}'}
+    finally:
+        new_loop.close()
+
+def get_option_chain_for_broker(symbol: str, expiry: str, broker: str = 'WEBULL') -> dict:
+    """Get option chain from the specified broker.
+    
+    Args:
+        symbol: The stock symbol
+        expiry: Expiration date (YYYY-MM-DD)
+        broker: One of 'WEBULL', 'ALPACA', 'ALPACA_PAPER', etc.
+    
+    Returns:
+        Chain data with 'data_source' field indicating the source
+    """
+    broker_upper = broker.upper() if broker else 'WEBULL'
+    
+    if 'ALPACA' in broker_upper:
+        return get_cached_option_chain_alpaca(symbol, expiry)
+    else:
+        return get_cached_option_chain_webull(symbol, expiry)
+_cache_ttl: int = 5  # 5 second cache
+
+# Startup delay flag to prevent API calls during bot initialization
+_startup_time: float = time.time()
+_startup_delay_seconds: int = 5  # Wait 5 seconds before allowing API calls
+
+def run_blocking_call_safely(blocking_func: Callable) -> Any:
+    """
+    Execute a blocking function safely, handling closed event loops.
+    Tries bot's event loop first, falls back to running directly in thread pool.
+    """
+    import concurrent.futures
+    
+    # Try using bot's event loop if available
+    if _bot_instance is not None and hasattr(_bot_instance, 'loop'):
+        try:
+            loop = _bot_instance.loop
+            if loop and not loop.is_closed():
+                future = loop.run_in_executor(None, blocking_func)
+                # Wait for result with timeout
+                return asyncio.run_coroutine_threadsafe(
+                    asyncio.wait_for(asyncio.wrap_future(future), timeout=30.0),
+                    loop
+                ).result(timeout=35)
+        except RuntimeError as e:
+            if "cannot schedule new futures after shutdown" in str(e):
+                pass
+            else:
+                raise
+    
+    # Fallback: run directly in a thread pool
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(blocking_func)
+        return future.result(timeout=30)
+
+async def run_async_safely(blocking_func: Callable) -> Any:
+    """
+    Async version: Execute a blocking function safely in executor.
+    Falls back to running in new thread if bot loop is closed.
+    """
+    import concurrent.futures
+    
+    if _bot_instance is not None and hasattr(_bot_instance, 'loop'):
+        try:
+            loop = _bot_instance.loop
+            if loop and not loop.is_closed():
+                return await loop.run_in_executor(None, blocking_func)
+        except RuntimeError as e:
+            if "cannot schedule new futures after shutdown" not in str(e):
+                raise
+    
+    # Fallback: use thread pool directly
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(blocking_func)
+        return future.result(timeout=30)
+
+def set_bot_instance(bot: Any) -> None:
+    """Set the bot instance for API access"""
+    global _bot_instance
+    _bot_instance = bot
+
+def cached_api_call(cache_key: str, ttl: Optional[int] = None) -> Callable:
+    """Decorator to cache API responses with TTL"""
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            nonlocal ttl
+            ttl = ttl or _cache_ttl
+            
+            # Check cache
+            if cache_key in _api_cache:
+                cached_value, timestamp = _api_cache[cache_key]
+                if time.time() - timestamp < ttl:
+                    return cached_value
+            
+            # Call function and cache result
+            result = func(*args, **kwargs)
+            _api_cache[cache_key] = (result, time.time())
+            return result
+        return wrapper
+    return decorator
+
+def _sign_license_token(result: dict, machine_id: str) -> str:
+    """
+    Sign license validation result with RSA private key.
+    This creates a tamper-proof token that clients can verify.
+    Returns: base64(payload).base64(signature)
+    """
+    import os
+    import json
+    import base64
+    from datetime import datetime, timedelta
+    
+    private_key_pem = os.getenv('LICENSE_RSA_PRIVATE_KEY', '')
+    if not private_key_pem:
+        print("[LICENSE SERVER] Warning: LICENSE_RSA_PRIVATE_KEY not set, cannot sign tokens")
+        return None
+    
+    try:
+        from cryptography.hazmat.primitives import serialization, hashes
+        from cryptography.hazmat.primitives.asymmetric import padding
+        from cryptography.hazmat.backends import default_backend
+        
+        # Fix common issue: literal \n instead of actual newlines
+        if '\\n' in private_key_pem and '\n' not in private_key_pem:
+            private_key_pem = private_key_pem.replace('\\n', '\n')
+        
+        # Load private key
+        private_key = serialization.load_pem_private_key(
+            private_key_pem.encode(),
+            password=None,
+            backend=default_backend()
+        )
+        
+        # Create payload with expiration (48 hours for offline grace period)
+        payload = {
+            'machine_id': machine_id,
+            'customer_id': result.get('customer_id'),
+            'license_type': result.get('license_type', 'subscription'),
+            'days_remaining': result.get('days_remaining', 0),
+            'expires': result.get('expires'),
+            'is_valid': True,
+            'signed_at': datetime.now().isoformat(),
+            'offline_grace_expires': (datetime.now() + timedelta(hours=48)).isoformat()
+        }
+        
+        # Encode payload
+        payload_json = json.dumps(payload, separators=(',', ':'))
+        payload_bytes = payload_json.encode('utf-8')
+        payload_b64 = base64.urlsafe_b64encode(payload_bytes).decode('utf-8').rstrip('=')
+        
+        # Sign with RSA private key
+        signature = private_key.sign(
+            payload_bytes,
+            padding.PKCS1v15(),
+            hashes.SHA256()
+        )
+        signature_b64 = base64.urlsafe_b64encode(signature).decode('utf-8').rstrip('=')
+        
+        return f"{payload_b64}.{signature_b64}"
+        
+    except Exception as e:
+        print(f"[LICENSE SERVER] Error signing token: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def register_routes(app):
+    """Register all Flask routes"""
+    
+    # Register Google OAuth blueprint
+    from .google_auth import google_auth
+    app.register_blueprint(google_auth)
+    
+    # Inject config variables into all templates
+    @app.context_processor
+    def inject_config():
+        """Make config variables available in all templates"""
+        return {
+            'config': {
+                'LICENSE_SERVER_MODE': os.getenv('LICENSE_SERVER_MODE', 'false').lower() == 'true'
+            }
+        }
+    
+    # ============ GLOBAL ERROR HANDLERS ============
+    
+    @app.errorhandler(404)
+    def not_found(e):
+        """Handle 404 errors with JSON for API routes"""
+        if request.path.startswith('/api/'):
+            return jsonify({'success': False, 'error': f'Endpoint not found: {request.path}'}), 404
+        # For non-API routes, return normal 404
+        return str(e), 404
+    
+    @app.errorhandler(500)
+    def internal_error(e):
+        """Handle 500 errors with JSON"""
+        print(f"[500 ERROR] {e}")
+        import traceback
+        traceback.print_exc()
+        if request.path.startswith('/api/'):
+            return jsonify({'success': False, 'error': 'Internal server error'}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        """Catch all unhandled exceptions and return JSON for API routes"""
+        print(f"[EXCEPTION] Unhandled exception: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Return JSON for API routes
+        if request.path.startswith('/api/'):
+            return jsonify({'success': False, 'error': str(e)}), 500
+        
+        # For non-API routes, re-raise to let Flask handle it normally
+        raise e
+    
+    # ============ PUBLIC LANDING PAGE ============
+    
+    LANDING_PAGE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'landing-page')
+    
+    @app.route('/public/')
+    @app.route('/public/<path:filename>')
+    def serve_landing_page(filename='index.html'):
+        """Serve public landing page files"""
+        return send_from_directory(LANDING_PAGE_DIR, filename)
+    
+    # ============ AUTHENTICATION ============
+    
+    @app.before_request
+    def check_auth():
+        """Check authentication before each request"""
+        # Allow static files
+        if request.path.startswith('/static'):
+            return None
+        # Allow public landing page
+        if request.path.startswith('/public'):
+            return None
+        # Allow public pages (setup wizard, login, forgot password, reset password, signup, google auth)
+        public_routes = ['/login', '/setup', '/forgot-password', '/architecture', '/signup', '/user/login', '/google_login', '/consent']
+        if any(request.path == route or request.path.startswith(route + '/') for route in public_routes):
+            return None
+        if request.path.startswith('/reset-password'):
+            return None
+        # Allow public access to waitlist signup API (no auth required)
+        if request.path.startswith('/api/waitlist/signup'):
+            return None
+        # Allow license server API (public endpoints for EXE clients)
+        if request.path.startswith('/api/v1/license/'):
+            return None
+        # Allow user dashboard routes (handled by user_login_required decorator)
+        if request.path.startswith('/user/') or request.path.startswith('/api/user/'):
+            return None
+        # For root path "/" - redirect to setup if no users, otherwise show architecture (public landing)
+        if request.path == '/' and not session.get('logged_in'):
+            if not db.user_exists():
+                return redirect(url_for('setup'))
+            return redirect(url_for('architecture'))
+        # Require auth for all other routes
+        if not session.get('logged_in'):
+            if request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Authentication required'}), 401
+            return redirect(url_for('login'))
+        
+        # Check consent after authentication (but allow consent-related routes)
+        if not check_consent_accepted():
+            if request.path.startswith('/api/consent'):
+                return None  # Allow consent API
+            if request.path not in ['/consent', '/consent/declined', '/logout']:
+                return redirect(url_for('consent_page'))
+        
+        return None
+    
+    @app.route('/setup', methods=['GET', 'POST'])
+    def setup():
+        """Setup wizard for first-time users"""
+        # Redirect if user already exists
+        if db.user_exists():
+            return redirect(url_for('login'))
+        
+        error = None
+        if request.method == 'POST':
+            username = request.form.get('username', '').strip()
+            email = request.form.get('email', '').strip()
+            password = request.form.get('password', '')
+            password_confirm = request.form.get('password_confirm', '')
+            
+            # Validation
+            if not username or len(username) < 3:
+                error = 'Username must be at least 3 characters'
+            elif not email or '@' not in email:
+                error = 'Valid email is required'
+            elif password != password_confirm:
+                error = 'Passwords do not match'
+            elif len(password) < 8:
+                error = 'Password must be at least 8 characters'
+            else:
+                # Create user
+                if db.create_user(username, email, password):
+                    # Send welcome email
+                    from .email_service import get_email_service
+                    email_service = get_email_service()
+                    if email_service.is_configured():
+                        email_service.send_welcome_email(email, username)
+                    
+                    # Get the created user to retrieve user_id
+                    user = db.get_user_by_username(username)
+                    session['logged_in'] = True
+                    session.permanent = True
+                    session['username'] = username
+                    session['user_id'] = user.get('id') if user else None
+                    session['is_admin'] = True
+                    return redirect(url_for('index'))
+                else:
+                    error = 'Username or email already exists'
+        
+        return render_template('setup.html', error=error)
+    
+    @app.route('/login', methods=['GET', 'POST'])
+    def login():
+        """Login page with username/password and rate limiting"""
+        error = None
+        client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if client_ip and ',' in client_ip:
+            client_ip = client_ip.split(',')[0].strip()
+        
+        # Redirect to setup if no users exist
+        if not db.user_exists():
+            return redirect(url_for('setup'))
+        
+        # Check rate limit
+        is_allowed, seconds_remaining = _check_rate_limit(client_ip)
+        if not is_allowed:
+            minutes = seconds_remaining // 60
+            seconds = seconds_remaining % 60
+            error = f'Too many failed attempts. Try again in {minutes}m {seconds}s'
+            return render_template('login.html', error=error, locked=True)
+        
+        if request.method == 'POST':
+            username = request.form.get('username', '').strip()
+            password = request.form.get('password', '')
+            
+            if db.verify_password(username, password):
+                user = db.get_user_by_username(username)
+                if user:
+                    session['logged_in'] = True
+                    session.permanent = True
+                    session['username'] = username
+                    session['user_id'] = user.get('id')
+                    session['is_admin'] = bool(user.get('is_admin', 0))
+                    _clear_attempts(client_ip)
+                    return redirect(url_for('index'))
+                else:
+                    error = 'User not found'
+            else:
+                _record_failed_attempt(client_ip)
+                attempts_left = _max_attempts - len(_login_attempts.get(client_ip, []))
+                if attempts_left > 0:
+                    error = f'Invalid credentials. {attempts_left} attempts remaining.'
+                else:
+                    error = 'Too many failed attempts. Account locked for 5 minutes.'
+        
+        return render_template('login.html', error=error)
+    
+    # ============ USER CONSENT / AGREEMENT ============
+    
+    @app.route('/consent')
+    def consent_page():
+        """Show the user agreement / risk disclosure page"""
+        if check_consent_accepted():
+            return redirect(url_for('index'))
+        next_url = request.args.get('next', '/')
+        return render_template('consent.html', version='1.0', next_url=next_url)
+    
+    @app.route('/consent/declined')
+    def consent_declined():
+        """Page shown when user declines the agreement"""
+        return '''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Agreement Declined - BotifyTrades</title>
+            <style>
+                body {
+                    font-family: 'Space Grotesk', sans-serif;
+                    background: linear-gradient(135deg, #0a1628 0%, #0d2847 100%);
+                    min-height: 100vh;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    margin: 0;
+                    color: #e0e6ed;
+                }
+                .message-box {
+                    background: rgba(13, 42, 58, 0.9);
+                    border: 1px solid rgba(255, 107, 107, 0.3);
+                    border-radius: 12px;
+                    padding: 40px;
+                    text-align: center;
+                    max-width: 500px;
+                }
+                h1 { color: #ff6b6b; font-size: 24px; margin-bottom: 20px; }
+                p { color: #8899a6; line-height: 1.6; margin-bottom: 20px; }
+                a {
+                    color: #00d4ff;
+                    text-decoration: none;
+                }
+                a:hover { text-decoration: underline; }
+            </style>
+        </head>
+        <body>
+            <div class="message-box">
+                <h1>Agreement Declined</h1>
+                <p>You have declined the User Agreement. The application cannot be used without accepting the terms.</p>
+                <p>If you change your mind, you can <a href="/consent">review the agreement again</a>.</p>
+                <p style="font-size: 12px; margin-top: 30px;">You may close this window.</p>
+            </div>
+        </body>
+        </html>
+        '''
+    
+    @app.route('/api/consent/accept', methods=['POST'])
+    def api_accept_consent():
+        """API endpoint to accept the user agreement"""
+        try:
+            from datetime import datetime
+            timestamp = datetime.now().isoformat()
+            
+            db.save_setting('user_consent_accepted', 'true')
+            db.save_setting('user_consent_version', '1.0')
+            db.save_setting('user_consent_timestamp', timestamp)
+            
+            print(f"[CONSENT] User accepted agreement v1.0 at {timestamp}")
+            return jsonify({'success': True, 'message': 'Agreement accepted'})
+        except Exception as e:
+            print(f"[CONSENT] Error saving consent: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/consent/status', methods=['GET'])
+    def api_consent_status():
+        """API endpoint to check consent status"""
+        try:
+            accepted = db.get_setting('user_consent_accepted', 'false')
+            version = db.get_setting('user_consent_version', None)
+            timestamp = db.get_setting('user_consent_timestamp', None)
+            
+            is_accepted = accepted.lower() == 'true' and version == '1.0'
+            
+            return jsonify({
+                'accepted': is_accepted,
+                'version': version,
+                'accepted_at': timestamp,
+                'current_version': '1.0'
+            })
+        except Exception as e:
+            return jsonify({'accepted': False, 'error': str(e)})
+    
+    @app.route('/forgot-password', methods=['GET', 'POST'])
+    def forgot_password():
+        """Forgot password form - send reset link to email"""
+        error = None
+        success = False
+        
+        if request.method == 'POST':
+            username = request.form.get('username', '').strip()
+            
+            user = db.get_user_by_username(username)
+            if user:
+                # Create reset token
+                token = db.create_password_reset_token(user['id'])
+                
+                # Send email
+                from .email_service import get_email_service
+                email_service = get_email_service()
+                
+                base_url = request.host_url.rstrip('/')
+                result = email_service.send_password_reset_email(user['email'], username, token, base_url)
+                
+                if result['success']:
+                    success = True
+                else:
+                    # Token created but email failed - still show success to user for security
+                    success = True
+                    print(f"[AUTH] Email service issue: {result['error']}")
+            else:
+                # Don't reveal if user exists (security best practice)
+                success = True
+        
+        return render_template('forgot-password.html', error=error, success=success)
+    
+    @app.route('/reset-password/<token>', methods=['GET', 'POST'])
+    def reset_password(token):
+        """Reset password with token"""
+        error = None
+        success = False
+        
+        # Verify token
+        user_id = db.verify_reset_token(token)
+        if not user_id:
+            error = 'This password reset link is invalid or has expired'
+        
+        if request.method == 'POST' and not error:
+            password = request.form.get('password', '')
+            password_confirm = request.form.get('password_confirm', '')
+            
+            if password != password_confirm:
+                error = 'Passwords do not match'
+            elif len(password) < 8:
+                error = 'Password must be at least 8 characters'
+            else:
+                if db.reset_password(token, password):
+                    success = True
+                else:
+                    error = 'Failed to reset password. Please try again.'
+        
+        return render_template('reset-password.html', error=error, success=success)
+    
+    @app.route('/logout')
+    def logout():
+        """Logout and clear session"""
+        session.clear()
+        return redirect(url_for('login'))
+    
+    # ============ USER SIGNUP & DASHBOARD (END USERS) ============
+    
+    # User session management (separate from admin session)
+    def user_login_required(f):
+        """Decorator to require user login for user dashboard routes"""
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not session.get('user_logged_in'):
+                if request.path.startswith('/api/'):
+                    return jsonify({'success': False, 'error': 'Authentication required'}), 401
+                return redirect(url_for('user_login_page'))
+            return f(*args, **kwargs)
+        return decorated_function
+    
+    @app.route('/signup', methods=['GET', 'POST'])
+    def user_signup():
+        """User signup page for end users"""
+        error = None
+        success = None
+        
+        if request.method == 'POST':
+            first_name = request.form.get('first_name', '').strip()
+            last_name = request.form.get('last_name', '').strip()
+            email = request.form.get('email', '').strip().lower()
+            username = request.form.get('username', '').strip().lower()
+            password = request.form.get('password', '')
+            confirm_password = request.form.get('confirm_password', '')
+            
+            # Validation
+            if not first_name or not last_name:
+                error = 'First and last name are required'
+            elif not email or '@' not in email:
+                error = 'Valid email is required'
+            elif not username or len(username) < 3:
+                error = 'Username must be at least 3 characters'
+            elif len(password) < 8:
+                error = 'Password must be at least 8 characters'
+            elif password != confirm_password:
+                error = 'Passwords do not match'
+            else:
+                # Check if email or username already exists
+                existing = db.get_end_user_by_email(email) or db.get_end_user_by_username(username)
+                if existing:
+                    error = 'Email or username already registered'
+                else:
+                    # Create end user account
+                    user_id = db.create_end_user(
+                        username=username,
+                        email=email,
+                        password=password,
+                        first_name=first_name,
+                        last_name=last_name
+                    )
+                    if user_id:
+                        # Auto login after signup
+                        session['user_logged_in'] = True
+                        session['user_id'] = user_id
+                        session['user_email'] = email
+                        session.permanent = True
+                        return redirect(url_for('user_dashboard'))
+                    else:
+                        error = 'Failed to create account. Please try again.'
+        
+        # Check if Google auth is enabled
+        from .google_auth import is_google_auth_configured
+        google_auth_enabled = is_google_auth_configured()
+        
+        return render_template('signup.html', error=error, success=success, google_auth_enabled=google_auth_enabled)
+    
+    @app.route('/user/login', methods=['GET', 'POST'])
+    def user_login_page():
+        """User login page (redirects to /login for now, or can have separate login)"""
+        error = None
+        client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if client_ip and ',' in client_ip:
+            client_ip = client_ip.split(',')[0].strip()
+        
+        # Check rate limit
+        is_allowed, seconds_remaining = _check_rate_limit(client_ip)
+        if not is_allowed:
+            minutes = seconds_remaining // 60
+            seconds = seconds_remaining % 60
+            error = f'Too many failed attempts. Try again in {minutes}m {seconds}s'
+            return render_template('login.html', error=error, locked=True, user_mode=True)
+        
+        if request.method == 'POST':
+            email_or_username = request.form.get('username', '').strip().lower()
+            password = request.form.get('password', '')
+            
+            # Try to find user by email or username
+            user = db.get_end_user_by_email(email_or_username) or db.get_end_user_by_username(email_or_username)
+            
+            if user and db.verify_end_user_password(user['id'], password):
+                session['user_logged_in'] = True
+                session['user_id'] = user['id']
+                session['user_email'] = user['email']
+                session.permanent = True
+                _clear_attempts(client_ip)
+                return redirect(url_for('user_dashboard'))
+            else:
+                _record_failed_attempt(client_ip)
+                attempts_left = _max_attempts - len(_login_attempts.get(client_ip, []))
+                if attempts_left > 0:
+                    error = f'Invalid credentials. {attempts_left} attempts remaining.'
+                else:
+                    error = 'Too many failed attempts. Account locked for 5 minutes.'
+        
+        # Check if Google auth is enabled
+        from .google_auth import is_google_auth_configured
+        google_auth_enabled = is_google_auth_configured()
+        
+        return render_template('login.html', error=error, user_mode=True, google_auth_enabled=google_auth_enabled)
+    
+    @app.route('/user/dashboard')
+    @user_login_required
+    def user_dashboard():
+        """User dashboard showing subscription info"""
+        user_id = session.get('user_id')
+        user = db.get_end_user_by_id(user_id)
+        
+        if not user:
+            session.clear()
+            return redirect(url_for('user_login_page'))
+        
+        # Get subscription info
+        subscription = db.get_user_subscription(user_id)
+        
+        return render_template('user_dashboard.html', user=user, subscription=subscription)
+    
+    @app.route('/user/simulation')
+    @user_login_required
+    def user_simulation():
+        """User simulation page"""
+        user_id = session.get('user_id')
+        user = db.get_end_user_by_id(user_id)
+        
+        if not user:
+            session.clear()
+            return redirect(url_for('user_login_page'))
+        
+        return render_template('user_simulation.html', user=user)
+    
+    @app.route('/user/subscription')
+    @user_login_required
+    def user_subscription():
+        """User subscription management page"""
+        user_id = session.get('user_id')
+        user = db.get_end_user_by_id(user_id)
+        subscription = db.get_user_subscription(user_id)
+        
+        return render_template('user_dashboard.html', user=user, subscription=subscription)
+    
+    @app.route('/user/logout')
+    def user_logout():
+        """User logout"""
+        session.pop('user_logged_in', None)
+        session.pop('user_id', None)
+        session.pop('user_email', None)
+        return redirect(url_for('architecture'))
+    
+    @app.route('/api/user/simulate', methods=['POST'])
+    @user_login_required
+    def api_user_simulate():
+        """API endpoint for user simulation with manual data input"""
+        try:
+            data = request.get_json() or {}
+            
+            # Extract parameters
+            portfolio_start = float(data.get('portfolio_start', 3000))
+            days = int(data.get('days', 30))
+            win_rate = float(data.get('win_rate', 0.65))
+            trades_per_day = float(data.get('trades_per_day', 3))
+            avg_win_pct = float(data.get('avg_win_pct', 0.25))
+            avg_loss_pct = float(data.get('avg_loss_pct', -0.15))
+            risk_per_trade_mode = data.get('risk_per_trade_mode', 'fixed')
+            risk_per_trade_value = float(data.get('risk_per_trade_value', 300))
+            compound = data.get('compound', True)
+            
+            # Validate parameters
+            if portfolio_start < 100:
+                return jsonify({'success': False, 'error': 'Starting portfolio must be at least $100'})
+            if days < 1 or days > 365:
+                return jsonify({'success': False, 'error': 'Days must be between 1 and 365'})
+            if win_rate < 0 or win_rate > 1:
+                return jsonify({'success': False, 'error': 'Win rate must be between 0 and 100%'})
+            
+            # Calculate expected value per trade
+            expected_pct_per_trade = (win_rate * avg_win_pct) + ((1 - win_rate) * avg_loss_pct)
+            
+            # Cap extreme expected returns
+            MAX_EXPECTED_PCT = 0.50
+            if expected_pct_per_trade > MAX_EXPECTED_PCT:
+                expected_pct_per_trade = MAX_EXPECTED_PCT
+            
+            # Run simulation
+            balance = portfolio_start
+            daily_breakdown = []
+            
+            for day in range(1, days + 1):
+                day_start_balance = balance
+                
+                if risk_per_trade_mode == 'fixed':
+                    position_size = min(risk_per_trade_value, balance)
+                else:
+                    position_size = balance * (risk_per_trade_value / 100)
+                
+                # Cap position size at 50% of balance
+                position_size = min(position_size, balance * 0.5)
+                
+                # Expected daily results
+                expected_wins = trades_per_day * win_rate
+                expected_losses = trades_per_day * (1 - win_rate)
+                daily_profit = trades_per_day * position_size * expected_pct_per_trade
+                
+                if compound:
+                    balance += daily_profit
+                else:
+                    balance = portfolio_start + (daily_profit * day)
+                
+                balance = max(0, balance)
+                
+                daily_breakdown.append({
+                    'day': day,
+                    'start_balance': round(day_start_balance, 2),
+                    'position_size': round(position_size, 2),
+                    'trades': round(trades_per_day),
+                    'expected_wins': round(expected_wins, 1),
+                    'expected_losses': round(expected_losses, 1),
+                    'daily_profit': round(daily_profit, 2),
+                    'end_balance': round(balance, 2),
+                    'cumulative_return_pct': round(((balance - portfolio_start) / portfolio_start) * 100, 2)
+                })
+            
+            # Calculate summary stats
+            final_balance = balance
+            total_profit = final_balance - portfolio_start
+            total_return_pct = (total_profit / portfolio_start) * 100 if portfolio_start > 0 else 0
+            
+            daily_profits = [d['daily_profit'] for d in daily_breakdown]
+            avg_daily_profit = sum(daily_profits) / len(daily_profits) if daily_profits else 0
+            
+            # Estimates
+            weekly_profit_est = avg_daily_profit * 5
+            monthly_profit_est = avg_daily_profit * 22
+            
+            # Generate strategy recommendation
+            if expected_pct_per_trade < 0:
+                strategy_text = (
+                    "NEGATIVE EDGE DETECTED\n\n"
+                    f"Your current parameters show a negative expected value ({expected_pct_per_trade*100:.1f}% per trade). "
+                    "This configuration will likely result in losses over time.\n\n"
+                    "Recommendations:\n"
+                    "- Increase your win rate\n"
+                    "- Improve your risk/reward ratio (higher avg win, lower avg loss)\n"
+                    "- Consider paper trading to refine your strategy"
+                )
+            elif win_rate > 0.85 and expected_pct_per_trade > 0.15:
+                strategy_text = (
+                    "HIGH-QUALITY EDGE\n\n"
+                    f"Exceptional parameters: {win_rate*100:.0f}% win rate with {expected_pct_per_trade*100:.1f}% expected return per trade.\n\n"
+                    "Recommendations:\n"
+                    "- Risk 7-10% of portfolio per trade\n"
+                    "- Consider scaling up gradually\n"
+                    "- Maintain strict discipline"
+                )
+            elif win_rate >= 0.55:
+                strategy_text = (
+                    "PROFITABLE CONFIGURATION\n\n"
+                    f"Solid edge: {win_rate*100:.0f}% win rate with {expected_pct_per_trade*100:.1f}% expected return per trade.\n\n"
+                    "Recommendations:\n"
+                    "- Risk 3-5% of portfolio per trade\n"
+                    "- Use stop losses to protect gains\n"
+                    "- Track your actual results vs projections"
+                )
+            else:
+                strategy_text = (
+                    "MARGINAL EDGE - USE CAUTION\n\n"
+                    f"Parameters show small edge: {win_rate*100:.0f}% win rate with {expected_pct_per_trade*100:.1f}% expected return per trade.\n\n"
+                    "Recommendations:\n"
+                    "- Risk only 2-3% of portfolio per trade\n"
+                    "- Paper trade before using real capital\n"
+                    "- Be prepared for variance and drawdowns"
+                )
+            
+            return jsonify({
+                'success': True,
+                'summary': {
+                    'final_balance': round(final_balance, 2),
+                    'total_profit': round(total_profit, 2),
+                    'total_return_pct': round(total_return_pct, 2),
+                    'avg_daily_profit': round(avg_daily_profit, 2),
+                    'weekly_profit_est': round(weekly_profit_est, 2),
+                    'monthly_profit_est': round(monthly_profit_est, 2)
+                },
+                'params_used': {
+                    'portfolio_start': portfolio_start,
+                    'days': days,
+                    'win_rate': win_rate,
+                    'trades_per_day': trades_per_day,
+                    'avg_win_pct': avg_win_pct,
+                    'avg_loss_pct': avg_loss_pct,
+                    'risk_per_trade_mode': risk_per_trade_mode,
+                    'risk_per_trade_value': risk_per_trade_value,
+                    'compound': compound,
+                    'expected_pct_per_trade': expected_pct_per_trade
+                },
+                'strategy_text': strategy_text,
+                'daily_breakdown': daily_breakdown
+            })
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # ============ WAITLIST API (PUBLIC SIGNUP) ============
+    
+    @app.route('/api/waitlist/signup', methods=['POST'])
+    def api_waitlist_signup():
+        """Public endpoint for waitlist signup"""
+        data = request.get_json() or {}
+        email = data.get('email', '').strip()
+        name = data.get('name', '').strip()
+        referral_code = data.get('referral_code', '').strip()
+        
+        if not email:
+            return jsonify({'success': False, 'error': 'Email is required'}), 400
+        
+        # Basic email validation
+        import re
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+            return jsonify({'success': False, 'error': 'Invalid email format'}), 400
+        
+        result = db.add_to_waitlist(email, name, 'docs_page', referral_code or None)
+        return jsonify(result)
+    
+    @app.route('/api/waitlist', methods=['GET'])
+    @admin_required
+    def api_get_waitlist():
+        """Get waitlist entries (admin only - protected by auth)"""
+        status = request.args.get('status')
+        limit = int(request.args.get('limit', 100))
+        entries = db.get_waitlist(status, limit)
+        stats = db.get_waitlist_stats()
+        return jsonify({'success': True, 'entries': entries, 'stats': stats})
+    
+    @app.route('/api/waitlist/<int:waitlist_id>/status', methods=['PUT'])
+    @admin_required
+    def api_update_waitlist_status(waitlist_id):
+        """Update waitlist entry status (admin only)"""
+        data = request.get_json() or {}
+        status = data.get('status')
+        
+        if status not in ['pending', 'invited', 'registered', 'rejected', 'notified']:
+            return jsonify({'success': False, 'error': 'Invalid status'}), 400
+        
+        success = db.update_waitlist_status(waitlist_id, status)
+        return jsonify({'success': success})
+    
+    @app.route('/api/waitlist/<int:waitlist_id>', methods=['DELETE'])
+    @admin_required
+    def api_delete_waitlist(waitlist_id):
+        """Delete waitlist entry (admin only)"""
+        success = db.delete_from_waitlist(waitlist_id)
+        return jsonify({'success': success})
+    
+    @app.route('/api/waitlist/notify', methods=['POST'])
+    @admin_required
+    def api_notify_waitlist():
+        """Send email notifications to waitlist users (admin only)"""
+        import asyncio
+        from services.gmail_service import get_gmail_service
+        
+        data = request.get_json() or {}
+        ids = data.get('ids', [])
+        subject = data.get('subject', '')
+        body = data.get('body', '')
+        email_type = data.get('type', 'update')
+        
+        if not ids:
+            return jsonify({'success': False, 'error': 'No users selected'}), 400
+        
+        entries = db.get_waitlist(limit=500)
+        recipients = []
+        for entry in entries:
+            if entry['id'] in ids:
+                recipients.append({
+                    'email': entry['email'],
+                    'name': entry.get('name'),
+                    'queue_position': entry.get('queue_position', 0),
+                    'referral_code': entry.get('referral_code', '')
+                })
+        
+        if not recipients:
+            return jsonify({'success': False, 'error': 'No matching recipients found'}), 400
+        
+        try:
+            gmail = get_gmail_service()
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                results = loop.run_until_complete(
+                    gmail.send_bulk_emails(recipients, subject, body, email_type)
+                )
+            finally:
+                loop.close()
+            
+            for waitlist_id in ids:
+                if email_type == 'invite':
+                    db.update_waitlist_status(waitlist_id, 'invited')
+                else:
+                    db.update_waitlist_status(waitlist_id, 'notified')
+            
+            return jsonify({
+                'success': True, 
+                'count': results['sent'],
+                'failed': results['failed'],
+                'message': f"Sent {results['sent']} email(s). {results['failed']} failed.",
+                'errors': results.get('errors', [])[:5]
+            })
+        except Exception as e:
+            print(f"[EMAIL] Error sending notifications: {e}")
+            return jsonify({
+                'success': False, 
+                'error': f'Email service error: {str(e)}'
+            }), 500
+    
+    # ============ PAGES ============
+    
+    @app.route('/')
+    def index():
+        """Dashboard home page"""
+        response = make_response(render_template('index.html'))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    
+    @app.route('/execution')
+    def execution_channels():
+        """Execution channels page"""
+        # Get all channels and filter on the fly (shows channels with execute_enabled flag)
+        all_channels = db.get_channels()
+        channels = [c for c in all_channels if c.get('execute_enabled', 0)]
+        return render_template('execution.html', channels=channels)
+    
+    @app.route('/tracking')
+    def tracking_channels():
+        """Tracking channels page"""
+        # Get all channels and filter on the fly (shows channels with track_enabled flag)
+        all_channels = db.get_channels()
+        channels = [c for c in all_channels if c.get('track_enabled', 0)]
+        return render_template('tracking.html', channels=channels)
+    
+    @app.route('/trades')
+    def live_trades():
+        """Live trades monitor page"""
+        response = make_response(render_template('trades.html'))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    
+    @app.route('/settings')
+    def settings():
+        """Settings page"""
+        return render_template('settings.html')
+    
+    @app.route('/signals')
+    def signal_history():
+        """Signal history page"""
+        return render_template('signals.html')
+    
+    @app.route('/leaderboard')
+    def leaderboard():
+        """Channel performance leaderboard page"""
+        return render_template('leaderboard.html')
+    
+    @app.route('/pnl')
+    def pnl_tracker():
+        """Comprehensive PNL tracking page"""
+        return render_template('pnl_tracker.html')
+    
+    @app.route('/options')
+    def options():
+        """Option chain viewer and trading page"""
+        return render_template('options.html')
+    
+    @app.route('/channels')
+    def channels():
+        """Channel management page"""
+        return render_template('channels.html')
+    
+    @app.route('/architecture')
+    def architecture():
+        """System architecture presentation page (PUBLIC - no auth required)"""
+        return render_template('architecture.html')
+    
+    @app.route('/waitlist')
+    @admin_required
+    def waitlist_admin():
+        """Waitlist management page (LICENSE SERVER ONLY)"""
+        if not LICENSE_SERVER_MODE:
+            flash('Waitlist management is only available on the License Server.', 'error')
+            return redirect(url_for('index'))
+        return render_template('waitlist.html')
+    
+    # ============ API ENDPOINTS ============
+    
+    # Channel management
+    @app.route('/api/channels', methods=['GET'])
+    def api_get_channels():
+        """Get all channels"""
+        category = request.args.get('category')
+        channels = db.get_channels(category=category)
+        return jsonify(channels)
+    
+    @app.route('/api/channels', methods=['POST'])
+    def api_add_channel():
+        """Add a new channel with dual-mode and multi-broker support"""
+        data = request.json
+        
+        # Support both old API (category) and new API (flags)
+        if 'execute_enabled' in data or 'track_enabled' in data:
+            # New API: use flags directly
+            channel_id = db.add_channel(
+                discord_channel_id=data['discord_channel_id'],
+                name=data['name'],
+                execute_enabled=data.get('execute_enabled', 0),
+                track_enabled=data.get('track_enabled', 0),
+                broker_override=data.get('broker_override'),
+                enabled_brokers=data.get('enabled_brokers')
+            )
+        else:
+            # Old API: use category (backwards compatible)
+            channel_id = db.add_channel(
+                discord_channel_id=data['discord_channel_id'],
+                name=data['name'],
+                category=data.get('category', 'EXECUTE'),
+                broker_override=data.get('broker_override'),
+                enabled_brokers=data.get('enabled_brokers')
+            )
+        
+        if channel_id:
+            return jsonify({'success': True, 'id': channel_id})
+        else:
+            return jsonify({'success': False, 'error': 'Channel already exists or invalid configuration'}), 400
+    
+    @app.route('/api/channels/<int:channel_id>', methods=['PUT'])
+    def api_update_channel(channel_id):
+        """Update a channel"""
+        data = request.json
+        db.update_channel(channel_id, **data)
+        return jsonify({'success': True})
+    
+    @app.route('/api/channels/<int:channel_id>', methods=['DELETE'])
+    def api_delete_channel(channel_id):
+        """Delete a channel"""
+        db.delete_channel(channel_id)
+        return jsonify({'success': True})
+    
+    @app.route('/api/channels/<int:channel_id>/reset', methods=['POST'])
+    def api_reset_channel_tracking(channel_id):
+        """Reset channel tracking - clear all signals, lots, and closures"""
+        try:
+            # Get channel name for confirmation message
+            channels = db.get_channels()
+            channel = next((c for c in channels if c['id'] == channel_id), None)
+            if not channel:
+                return jsonify({'error': 'Channel not found'}), 404
+            
+            # Delete all data for this channel
+            deleted_counts = db.reset_channel_tracking(channel_id)
+            
+            return jsonify({
+                'success': True,
+                'message': f"Reset complete: {deleted_counts['signals']} signals, {deleted_counts['lots']} lots, {deleted_counts['closures']} closures deleted"
+            })
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
+    # Channel allowed users management
+    @app.route('/api/channels/<int:channel_id>/allowed_users', methods=['GET'])
+    def api_get_allowed_users(channel_id):
+        """Get list of allowed users for a channel"""
+        try:
+            users = db.get_allowed_users(channel_id)
+            return jsonify(users)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/channels/<int:channel_id>/allowed_users', methods=['POST'])
+    def api_add_allowed_user(channel_id):
+        """Add a user to the channel's allowed list"""
+        try:
+            data = request.json
+            discord_user_id = data.get('discord_user_id')
+            discord_username = data.get('discord_username')
+            
+            if not discord_user_id or not discord_username:
+                return jsonify({'error': 'Missing discord_user_id or discord_username'}), 400
+            
+            success = db.add_allowed_user(channel_id, discord_user_id, discord_username)
+            
+            if success:
+                return jsonify({'success': True, 'message': 'User added successfully'})
+            else:
+                return jsonify({'success': False, 'error': 'User already in allowed list'}), 400
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/channels/<int:channel_id>/allowed_users/<user_id>', methods=['DELETE'])
+    def api_remove_allowed_user(channel_id, user_id):
+        """Remove a user from the channel's allowed list"""
+        try:
+            success = db.remove_allowed_user(channel_id, user_id)
+            
+            if success:
+                return jsonify({'success': True, 'message': 'User removed successfully'})
+            else:
+                return jsonify({'success': False, 'error': 'User not found in allowed list'}), 404
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
+    # Dashboard stats
+    @app.route('/api/stats', methods=['GET'])
+    def api_get_stats():
+        """Get dashboard statistics"""
+        from datetime import datetime
+        
+        # Clear cache to ensure fresh data
+        global _api_cache
+        _api_cache.clear()
+        
+        # Get channel counts
+        all_channels = db.get_channels()
+        exec_channels = [c for c in all_channels if c.get('execute_enabled')]
+        track_channels = [c for c in all_channels if c.get('track_enabled')]
+        
+        # Get today's trades - filter by CLOSED_AT for closed trades, not executed_at
+        all_trades = db.get_trades(limit=1000)
+        today = datetime.now().date()
+        
+        # For closed trades, use closed_at date (when the trade was closed)
+        closed_today = []
+        for t in all_trades:
+            if t.get('status') == 'CLOSED':
+                closed_at = t.get('closed_at')
+                if closed_at:
+                    try:
+                        closed_date = datetime.fromisoformat(closed_at.replace('Z', '+00:00')).date()
+                        if closed_date == today:
+                            closed_today.append(t)
+                    except (ValueError, AttributeError):
+                        pass
+        
+        open_positions = [t for t in all_trades if t['status'] == 'OPEN']
+        
+        # Get account balance info from Webull if available
+        buying_power = 0
+        net_liquidation = 0
+        cash_balance = 0
+        unrealized_pnl = 0
+        today_pnl = 0  # Webull's Day P&L
+        
+        if _bot_instance and hasattr(_bot_instance, 'loop'):
+            try:
+                # Use the existing _get_webull_account helper which handles all field names properly
+                future = asyncio.run_coroutine_threadsafe(
+                    _get_webull_account(),
+                    _bot_instance.loop
+                )
+                account_data = future.result(timeout=5)
+                if account_data:
+                    buying_power = float(account_data.get('buying_power', 0) or 0)
+                    net_liquidation = float(account_data.get('net_liquidation', 0) or 0)
+                    cash_balance = float(account_data.get('cash_balance', 0) or 0)
+                    unrealized_pnl = float(account_data.get('total_profit_loss', 0) or 0)
+                    # Today's P&L = Webull's Day P&L (realized + unrealized for the day)
+                    today_pnl = float(account_data.get('day_profit_loss', 0) or 0)
+            except Exception as e:
+                print(f"[STATS] Error fetching account balance: {e}")
+        else:
+            # Fallback: Use WebullAuth directly when bot is not running
+            try:
+                from src.webull import WebullAuth
+                from .broker_credentials_service import webull_credentials_adapter, get_webull_credentials
+                
+                creds = get_webull_credentials()
+                if creds.get('email') and creds.get('password') and creds.get('trade_pin'):
+                    auth = WebullAuth(paper_trading=creds.get('paper_mode', True), credentials_adapter=webull_credentials_adapter)
+                    result = auth.login(
+                        email=creds.get('email'),
+                        password=creds.get('password'),
+                        trading_pin=creds.get('trade_pin'),
+                        device_id=creds.get('device_id')
+                    )
+                    if result.get('success'):
+                        account_result = auth.get_account_info()
+                        if account_result.get('success'):
+                            account = account_result.get('account', {})
+                            buying_power = float(account.get('dayBuyingPower', 0) or account.get('usableCash', 0) or 0)
+                            net_liquidation = float(account.get('netLiquidation', 0) or account.get('totalMarketValue', 0) or 0)
+                            cash_balance = float(account.get('cashBalance', 0) or account.get('usableCash', 0) or 0)
+                            unrealized_pnl = float(account.get('unrealizedProfitLoss', 0) or 0)
+                            today_pnl = float(account.get('dayProfitLoss', 0) or 0)
+            except Exception as e:
+                print(f"[STATS] WebullAuth fallback error: {e}")
+        
+        response = make_response(jsonify({
+            'exec_channels': len(exec_channels),
+            'track_channels': len(track_channels),
+            'open_positions': len(open_positions),
+            'today_pnl': round(today_pnl, 2),
+            'buying_power': round(buying_power, 2),
+            'net_liquidation': round(net_liquidation, 2),
+            'unrealized_pnl': round(unrealized_pnl, 2),
+            'cash_balance': round(cash_balance, 2),
+            'summary': f"{len(open_positions)} open positions • ${unrealized_pnl:.2f} unrealized P/L"
+        }))
+        
+        # Prevent browser caching
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    
+    # Trade monitoring
+    @app.route('/api/trades', methods=['GET'])
+    def api_get_trades():
+        """Get trades with optional filters and tab support"""
+        # Clear cache for this request to ensure fresh data
+        global _api_cache
+        _api_cache.clear()
+        
+        tab = request.args.get('tab', 'live')
+        status = request.args.get('status')
+        broker = request.args.get('broker')
+        limit = int(request.args.get('limit', 100))
+        
+        # Map tabs to status filters
+        if tab == 'live':
+            status = 'OPEN'
+        elif tab == 'pending':
+            status = 'PENDING'
+        elif tab == 'filled':
+            status = 'CLOSED'
+        
+        trades = db.get_trades(status=status, broker=broker, limit=limit)
+        
+        # Format trades for frontend
+        formatted_trades = []
+        for trade in trades:
+            entry_price = float(trade.get('price', 0) or 0)
+            current_price = float(trade.get('current_price', 0) or 0) or entry_price
+            pnl = float(trade.get('pnl', 0) or 0)
+            pnl_percent = float(trade.get('pnl_percent', 0) or 0)
+            
+            formatted_trades.append({
+                'id': trade.get('id'),
+                'symbol': trade.get('symbol'),
+                'action': trade.get('action'),
+                'qty': trade.get('quantity', 0),
+                'price': entry_price,
+                'current_price': current_price,
+                'pnl': pnl,
+                'pnl_percent': pnl_percent,
+                'status': trade.get('status'),
+                'time': trade.get('executed_at', ''),
+                'broker': trade.get('broker', 'Webull'),
+                'asset_type': trade.get('asset_type', 'option'),
+                'strike': trade.get('strike'),
+                'expiry': trade.get('expiry'),
+                'call_put': trade.get('call_put'),
+                'option_id': trade.get('option_id'),
+            })
+        
+        response = make_response(jsonify(formatted_trades))
+        
+        # Prevent browser caching
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    
+    @app.route('/api/trades/summary', methods=['GET'])
+    def api_trades_summary():
+        """Get today's trade summary including bot-tracked and live positions"""
+        from datetime import datetime, timedelta
+        
+        # Get broker filter
+        broker_filter = request.args.get('broker')
+        
+        # Get bot-tracked trades (with broker filter if specified)
+        all_trades = db.get_trades(broker=broker_filter, limit=1000)
+        today = datetime.now().date()
+        
+        today_trades = [t for t in all_trades if t.get('executed_at') and 
+                       datetime.fromisoformat(t['executed_at']).date() == today]
+        
+        bot_open = [t for t in today_trades if t['status'] == 'OPEN']
+        closed_trades = [t for t in today_trades if t['status'] == 'CLOSED']
+        
+        bot_total_pnl = sum(t.get('pnl', 0) or 0 for t in closed_trades)
+        wins = len([t for t in closed_trades if (t.get('pnl', 0) or 0) > 0])
+        losses = len([t for t in closed_trades if (t.get('pnl', 0) or 0) < 0])
+        win_rate = (wins / len(closed_trades) * 100) if closed_trades else 0
+        
+        # Get live brokerage positions count based on broker filter
+        live_count = 0
+        live_pnl = 0.0
+        
+        if _bot_instance is not None:
+            try:
+                # Determine which broker's live positions to fetch
+                if not broker_filter or broker_filter in ['WEBULL', 'WEBULL_PAPER']:
+                    # Fetch Webull live positions (default behavior)
+                    future = asyncio.run_coroutine_threadsafe(
+                        _get_webull_positions(),
+                        _bot_instance.loop
+                    )
+                    live_positions = future.result(timeout=5)
+                    live_count = len(live_positions)
+                    live_pnl = sum(p.get('unrealized_pl', 0) for p in live_positions)
+                # For other brokers (ALPACA, IBKR), don't show Webull positions
+                # Could extend this to fetch positions from other brokers in future
+            except:
+                pass  # Silently fail if we can't fetch live positions
+        
+        return jsonify({
+            # Bot-tracked metrics
+            'total_trades': len(today_trades),
+            'open_positions': len(bot_open),
+            'closed_trades': len(closed_trades),
+            'total_pnl': round(bot_total_pnl, 2),
+            'wins': wins,
+            'losses': losses,
+            'win_rate': round(win_rate, 1),
+            # Live brokerage metrics
+            'live_positions': live_count,
+            'live_pnl': round(live_pnl, 2),
+            # Include broker filter in response
+            'broker_filter': broker_filter or 'All'
+        })
+    
+    # Channel Leaderboard
+    @app.route('/api/leaderboard', methods=['GET'])
+    def api_get_leaderboard():
+        """
+        Get channel performance leaderboard with TQS (Trader Quality Score) ranking.
+        
+        Query params:
+            - period: 'today', '7d', '30d', 'year', 'all', or 'custom'
+            - start_date: For custom period (YYYY-MM-DD)
+            - end_date: For custom period (YYYY-MM-DD)
+        """
+        try:
+            time_period = request.args.get('period', 'all')
+            start_date = request.args.get('start_date')
+            end_date = request.args.get('end_date')
+            
+            leaderboard = db.get_channel_leaderboard(
+                time_period=time_period,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
+            # Calculate aggregates using totals (not averages of averages)
+            total_channels = len(leaderboard)
+            total_wins = sum(ch['win_count'] for ch in leaderboard)
+            total_losses = sum(ch['loss_count'] for ch in leaderboard)
+            total_closed = sum(ch['total_closed'] for ch in leaderboard)
+            total_pnl = sum(ch['total_pnl'] for ch in leaderboard)
+            
+            # Calculate global win rate from total wins/closures
+            avg_win_rate = (total_wins / total_closed * 100) if total_closed > 0 else 0
+            
+            # Rename fields for frontend compatibility
+            channels_formatted = []
+            for ch in leaderboard:
+                channels_formatted.append({
+                    **ch,
+                    'total_trades': ch['total_closed'],
+                    'wins': ch['win_count'],
+                    'losses': ch['loss_count'],
+                    'avg_return': ch['avg_pnl_percent']
+                })
+            
+            return jsonify({
+                'channels': channels_formatted,
+                'total_channels': total_channels,
+                'total_trades': total_closed,
+                'total_pnl': round(total_pnl, 2),
+                'avg_win_rate': round(avg_win_rate, 1)
+            })
+        except Exception as e:
+            print(f"[API] Error getting leaderboard: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    # Signal history with PNL
+    @app.route('/api/signals', methods=['GET'])
+    def api_get_signals():
+        """Get signal history with PNL data"""
+        channel_id = request.args.get('channel_id', type=int)
+        period = request.args.get('period', 'all')  # weekly, monthly, yearly, all
+        limit = request.args.get('limit', 100, type=int)
+        
+        signals = db.get_signal_history(
+            channel_id=channel_id,
+            period=period,
+            limit=limit
+        )
+        
+        # Format for frontend
+        formatted_signals = []
+        for signal in signals:
+            formatted_signals.append({
+                'id': signal['id'],
+                'direction': signal['direction'],
+                'symbol': signal['symbol'],
+                'asset_type': signal['asset_type'],
+                'quantity': signal['quantity'],
+                'price': signal['price'],
+                'received_at': signal['received_at'],
+                'channel_name': signal['channel_name'],
+                'pnl_cash': round(signal['final_pnl'], 2),
+                'pnl_percent': round(signal['final_pnl_percent'], 2),
+                'closed_qty': signal.get('closed_qty', 0),
+                'remaining_qty': signal.get('remaining_qty', 0),
+                'status': signal['status']
+            })
+        
+        return jsonify(formatted_signals)
+    
+    # Bot status
+    @app.route('/api/status', methods=['GET'])
+    def api_bot_status():
+        """Get bot status"""
+        bot_user = 'Loading...'
+        if _bot_instance and hasattr(_bot_instance, 'user'):
+            bot_user = str(_bot_instance.user) if _bot_instance.user else 'Not connected'
+        
+        return jsonify({
+            'status': 'running',
+            'connected': bool(_bot_instance and _bot_instance.is_ready()),
+            'bot_user': bot_user
+        })
+    
+    # Webull account balance
+    @app.route('/api/webull/balance', methods=['GET'])
+    def api_webull_balance() -> Any:
+        """Get Webull account balance"""
+        import asyncio
+        
+        # Check cache first (5 second TTL)
+        cache_key = 'webull_balance'
+        if cache_key in _api_cache:
+            cached_value, timestamp = _api_cache[cache_key]
+            if time.time() - timestamp < 5:
+                return cached_value
+        
+        if not _bot_instance or not hasattr(_bot_instance, 'broker'):
+            # Fallback: Use WebullAuth directly when bot is not running
+            try:
+                from src.webull import WebullAuth
+                from .broker_credentials_service import webull_credentials_adapter, get_webull_credentials
+                
+                creds = get_webull_credentials()
+                if creds.get('email') and creds.get('password') and creds.get('trade_pin'):
+                    auth = WebullAuth(paper_trading=creds.get('paper_mode', True), credentials_adapter=webull_credentials_adapter)
+                    login_result = auth.login(
+                        email=creds.get('email'),
+                        password=creds.get('password'),
+                        trading_pin=creds.get('trade_pin'),
+                        device_id=creds.get('device_id')
+                    )
+                    if login_result.get('success'):
+                        account_result = auth.get_account_info()
+                        if account_result.get('success'):
+                            account = account_result.get('account', {})
+                            result = jsonify({
+                                'buying_power': float(account.get('dayBuyingPower', 0) or account.get('usableCash', 0) or 0),
+                                'cash_balance': float(account.get('cashBalance', 0) or account.get('usableCash', 0) or 0),
+                                'net_liquidation': float(account.get('netLiquidation', 0) or account.get('totalMarketValue', 0) or 0),
+                                'total_profit_loss': float(account.get('unrealizedProfitLoss', 0) or 0),
+                                'day_profit_loss': float(account.get('dayProfitLoss', 0) or 0),
+                                'status': 'ok'
+                            })
+                            _api_cache[cache_key] = (result, time.time())
+                            return result
+            except Exception as e:
+                print(f"[WEBULL_BALANCE] WebullAuth fallback error: {e}")
+            
+            result = jsonify({
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'total_profit_loss': 0,
+                'day_profit_loss': 0,
+                'status': 'initializing'
+            })
+            _api_cache[cache_key] = (result, time.time())
+            return result
+        
+        try:
+            # Run async get_account in the bot's event loop
+            future = asyncio.run_coroutine_threadsafe(
+                _get_webull_account(),
+                _bot_instance.loop
+            )
+            account_data = future.result(timeout=10)
+            
+            if account_data:
+                result = jsonify({
+                    'buying_power': account_data.get('buying_power', 0),
+                    'cash_balance': account_data.get('cash_balance', 0),
+                    'net_liquidation': account_data.get('net_liquidation', 0),
+                    'total_profit_loss': account_data.get('total_profit_loss', 0),
+                    'day_profit_loss': account_data.get('day_profit_loss', 0),
+                    'status': 'ok'
+                })
+                _api_cache[cache_key] = (result, time.time())
+                return result
+            else:
+                result = jsonify({
+                    'buying_power': 0,
+                    'cash_balance': 0,
+                    'net_liquidation': 0,
+                    'total_profit_loss': 0,
+                    'day_profit_loss': 0,
+                    'status': 'loading'
+                })
+                _api_cache[cache_key] = (result, time.time())
+                return result
+                
+        except Exception as e:
+            print(f"[API] Exception in balance endpoint: {e}")
+            result = jsonify({
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'total_profit_loss': 0,
+                'day_profit_loss': 0,
+                'status': 'error',
+                'error': str(e)
+            })
+            _api_cache[cache_key] = (result, time.time())
+            return result
+    
+    @app.route('/api/alpaca/balance', methods=['GET'])
+    def api_alpaca_balance() -> Any:
+        """Get Alpaca paper account balance for Dashboard"""
+        import asyncio
+        
+        # Check cache first (5 second TTL)
+        cache_key = 'alpaca_balance'
+        if cache_key in _api_cache:
+            cached_value, timestamp = _api_cache[cache_key]
+            if time.time() - timestamp < 5:
+                return cached_value
+        
+        if not _bot_instance or not hasattr(_bot_instance, 'paper_broker') or not _bot_instance.paper_broker:
+            result = jsonify({
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'equity': 0,
+                'unrealized_pnl': 0,
+                'status': 'not_initialized'
+            })
+            _api_cache[cache_key] = (result, time.time())
+            return result
+        
+        try:
+            # Run async get paper account in the bot's event loop
+            future = asyncio.run_coroutine_threadsafe(
+                _get_paper_account_data(),
+                _bot_instance.loop
+            )
+            account_data = future.result(timeout=10)
+            
+            if account_data and account_data.get('balance'):
+                balance = account_data.get('balance', {})
+                result = jsonify({
+                    'buying_power': balance.get('buying_power', 0),
+                    'cash_balance': balance.get('cash_balance', 0),
+                    'net_liquidation': balance.get('net_liquidation', 0),
+                    'equity': balance.get('net_liquidation', 0),
+                    'unrealized_pnl': balance.get('unrealized_pnl', 0),
+                    'positions': account_data.get('positions', []),
+                    'orders': account_data.get('orders', []),
+                    'status': 'ok'
+                })
+                _api_cache[cache_key] = (result, time.time())
+                return result
+            else:
+                result = jsonify({
+                    'buying_power': 0,
+                    'cash_balance': 0,
+                    'net_liquidation': 0,
+                    'equity': 0,
+                    'unrealized_pnl': 0,
+                    'status': 'loading'
+                })
+                _api_cache[cache_key] = (result, time.time())
+                return result
+                
+        except Exception as e:
+            print(f"[API] Exception in Alpaca balance endpoint: {e}")
+            result = jsonify({
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'equity': 0,
+                'unrealized_pnl': 0,
+                'status': 'error',
+                'error': str(e)
+            })
+            _api_cache[cache_key] = (result, time.time())
+            return result
+    
+    @app.route('/api/alpaca/positions/<symbol>/close', methods=['POST'])
+    def api_alpaca_close_position(symbol: str) -> Any:
+        """Close an Alpaca position by symbol with optional limit price and partial quantity"""
+        import asyncio
+        
+        if not _bot_instance or not hasattr(_bot_instance, 'paper_broker') or not _bot_instance.paper_broker:
+            return jsonify({'success': False, 'error': 'Alpaca broker not initialized'}), 500
+        
+        try:
+            data = request.get_json(silent=True) or {}
+            quantity = data.get('quantity')
+            limit_price = data.get('limit_price')
+            
+            # Convert limit_price to float if provided
+            if limit_price is not None:
+                try:
+                    limit_price = float(limit_price)
+                    if limit_price <= 0:
+                        return jsonify({'success': False, 'error': 'Limit price must be positive'}), 400
+                except (ValueError, TypeError):
+                    return jsonify({'success': False, 'error': 'Invalid limit price format'}), 400
+            
+            order_type = f"LIMIT @ ${limit_price}" if limit_price else "MARKET"
+            print(f"[API] Closing Alpaca position: {symbol}, qty={quantity}, {order_type}")
+            
+            # Run close_position in the bot's event loop
+            async def _close():
+                return await _bot_instance.paper_broker.close_position(symbol, quantity, limit_price)
+            
+            future = asyncio.run_coroutine_threadsafe(_close(), _bot_instance.loop)
+            result = future.result(timeout=15)
+            
+            if result.success:
+                return jsonify({
+                    'success': True,
+                    'message': result.message,
+                    'order_id': result.order_id
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': result.message
+                }), 400
+                
+        except Exception as e:
+            print(f"[API] Exception closing Alpaca position {symbol}: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/alpaca/orders/<order_id>/cancel', methods=['POST'])
+    def api_alpaca_cancel_order(order_id: str) -> Any:
+        """Cancel an Alpaca order by order ID"""
+        import asyncio
+        
+        if not _bot_instance or not hasattr(_bot_instance, 'paper_broker') or not _bot_instance.paper_broker:
+            return jsonify({'success': False, 'error': 'Alpaca broker not initialized'}), 500
+        
+        try:
+            # Run cancel_order in the bot's event loop
+            async def _cancel():
+                return await _bot_instance.paper_broker.cancel_order(order_id)
+            
+            future = asyncio.run_coroutine_threadsafe(_cancel(), _bot_instance.loop)
+            result = future.result(timeout=15)
+            
+            if result.get('success'):
+                return jsonify({
+                    'success': True,
+                    'message': result.get('message', 'Order cancelled')
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': result.get('error', 'Failed to cancel order')
+                }), 400
+                
+        except Exception as e:
+            print(f"[API] Exception cancelling Alpaca order {order_id}: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/all_accounts', methods=['GET'])
+    def api_all_broker_accounts():
+        """Get all broker accounts (Webull LIVE + Alpaca PAPER)"""
+        import asyncio
+        
+        accounts = {
+            'webull_live': {
+                'status': 'not_initialized',
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'total_profit_loss': 0,
+                'day_profit_loss': 0
+            },
+            'alpaca_paper': {
+                'status': 'not_initialized',
+                'balance': {},
+                'positions': [],
+                'orders': []
+            }
+        }
+        
+        # Fetch Webull LIVE account
+        if _bot_instance and hasattr(_bot_instance, 'broker') and _bot_instance.broker:
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    _get_webull_account(),
+                    _bot_instance.loop
+                )
+                webull_data = future.result(timeout=10)
+                if webull_data:
+                    accounts['webull_live'] = {
+                        'status': 'ok',
+                        'buying_power': webull_data.get('buying_power', 0),
+                        'cash_balance': webull_data.get('cash_balance', 0),
+                        'net_liquidation': webull_data.get('net_liquidation', 0),
+                        'total_profit_loss': webull_data.get('total_profit_loss', 0),
+                        'day_profit_loss': webull_data.get('day_profit_loss', 0)
+                    }
+            except Exception as e:
+                print(f"[API] Error fetching Webull LIVE account: {e}")
+                accounts['webull_live']['status'] = 'error'
+        
+        # Fetch Alpaca PAPER account
+        if _bot_instance and hasattr(_bot_instance, 'paper_broker') and _bot_instance.paper_broker:
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    _get_paper_account_data(),
+                    _bot_instance.loop
+                )
+                alpaca_data = future.result(timeout=10)
+                if alpaca_data:
+                    accounts['alpaca_paper'] = {
+                        'status': 'ok',
+                        'balance': alpaca_data.get('balance', {}),
+                        'positions': alpaca_data.get('positions', []),
+                        'orders': alpaca_data.get('orders', [])
+                    }
+            except Exception as e:
+                print(f"[API] Error fetching Alpaca PAPER account: {e}")
+                accounts['alpaca_paper']['status'] = 'error'
+        
+        return jsonify(accounts)
+    
+    @app.route('/api/webull/paper_account', methods=['GET'])
+    def api_webull_paper_account():
+        """Get Webull paper trading account balance, positions, and orders"""
+        import asyncio
+        
+        if not _bot_instance or not hasattr(_bot_instance, 'paper_broker'):
+            return jsonify({
+                'status': 'not_initialized',
+                'balance': {},
+                'positions': [],
+                'orders': [],
+                'error': 'Bot not initialized'
+            })
+        
+        if not _bot_instance.paper_broker:
+            return jsonify({
+                'status': 'paper_broker_unavailable',
+                'balance': {},
+                'positions': [],
+                'orders': [],
+                'error': 'Paper trading broker not available'
+            })
+        
+        if not hasattr(_bot_instance, 'loop') or not _bot_instance.loop:
+            return jsonify({
+                'status': 'error',
+                'balance': {},
+                'positions': [],
+                'orders': [],
+                'error': 'Event loop not available'
+            })
+        
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                _get_paper_account_data(),
+                _bot_instance.loop
+            )
+            data = future.result(timeout=10)
+            
+            if data:
+                return jsonify({
+                    'status': 'ok',
+                    'balance': data.get('balance', {}),
+                    'positions': data.get('positions', []),
+                    'orders': data.get('orders', [])
+                })
+            else:
+                return jsonify({
+                    'status': 'loading',
+                    'balance': {},
+                    'positions': [],
+                    'orders': []
+                })
+        except Exception as e:
+            print(f"[API] Exception in paper account endpoint: {e}")
+            return jsonify({
+                'status': 'error',
+                'error': str(e),
+                'balance': {},
+                'positions': [],
+                'orders': []
+            })
+    
+    async def _get_paper_account_data():
+        """Helper to get paper account balance, positions, and orders (Alpaca)"""
+        # Skip during startup to prevent initialization hang
+        elapsed = time.time() - _startup_time
+        if elapsed < _startup_delay_seconds:
+            return None
+        
+        try:
+            if not hasattr(_bot_instance, 'paper_broker') or _bot_instance.paper_broker is None:
+                print("[API] Paper broker not initialized")
+                return None
+            
+            paper_broker = _bot_instance.paper_broker
+            if not hasattr(paper_broker, 'trading_client') or not paper_broker.trading_client:
+                print("[API] Alpaca trading client not available")
+                return None
+            
+            def _blocking_call():
+                try:
+                    from pydantic import ValidationError
+                    
+                    # Get account balance from Alpaca
+                    try:
+                        account = paper_broker.trading_client.get_account()
+                    except ValidationError as ve:
+                        # Account status enum validation failed (e.g., ACCOUNT_CLOSED_PENDING not recognized)
+                        print(f"[API] ⚠️ Account validation error - status may be pending closure or unusual state")
+                        print(f"[API] This is usually temporary - account will recover")
+                        return None
+                    
+                    buying_power = float(account.buying_power)
+                    cash = float(account.cash)
+                    equity = float(account.equity)
+                    
+                    # Get unrealized P&L (Alpaca uses unrealized_plpc for percent, calculate dollar amount)
+                    unrealized_pnl = 0.0
+                    if hasattr(account, 'unrealized_plpc') and account.unrealized_plpc:
+                        # Calculate dollar amount from percent
+                        unrealized_pnl = float(equity) * (float(account.unrealized_plpc) / 100.0)
+                    
+                    balance = {
+                        'buying_power': buying_power,
+                        'cash_balance': cash,
+                        'net_liquidation': equity,
+                        'unrealized_pnl': unrealized_pnl
+                    }
+                    
+                    # Get positions from Alpaca
+                    positions_raw = paper_broker.trading_client.get_all_positions()
+                    positions = []
+                    for pos in positions_raw:
+                        qty = float(pos.qty)
+                        is_short = qty < 0
+                        positions.append({
+                            'symbol': pos.symbol,
+                            'quantity': abs(qty),  # Always positive for display
+                            'raw_quantity': qty,   # Original value for close logic
+                            'side': 'SHORT' if is_short else 'LONG',
+                            'asset_type': 'stock',
+                            'avg_price': float(pos.avg_entry_price),
+                            'current_price': float(pos.current_price),
+                            'pnl': float(pos.unrealized_pl)
+                        })
+                    
+                    # Get orders from Alpaca
+                    from alpaca.trading.enums import QueryOrderStatus
+                    from alpaca.trading.requests import GetOrdersRequest
+                    
+                    request = GetOrdersRequest(status=QueryOrderStatus.OPEN)
+                    orders_raw = paper_broker.trading_client.get_orders(filter=request)
+                    orders = []
+                    for order in orders_raw:
+                        orders.append({
+                            'order_id': order.id,
+                            'symbol': order.symbol,
+                            'action': 'BUY' if order.side.value == 'buy' else 'SELL',
+                            'quantity': float(order.qty),
+                            'filled': float(order.filled_qty or 0),
+                            'status': order.status.value,
+                            'price': float(order.limit_price) if order.limit_price else 0
+                        })
+                    
+                    print(f"[API] ✓ Alpaca paper account fetched - Balance: ${equity:,.2f}, Positions: {len(positions)}, Orders: {len(orders)}")
+                    
+                    return {
+                        'balance': balance,
+                        'positions': positions,
+                        'orders': orders
+                    }
+                except Exception as inner_e:
+                    print(f"[API] ❌ Error in Alpaca paper account _blocking_call: {type(inner_e).__name__}: {inner_e}")
+                    import traceback
+                    traceback.print_exc()
+                    return None
+            
+            return await run_async_safely(_blocking_call)
+        except Exception as e:
+            print(f"[API] Error fetching paper account: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    async def _get_webull_account():
+        """Helper to get Webull account data"""
+        # Skip during startup to prevent initialization hang
+        elapsed = time.time() - _startup_time
+        if elapsed < _startup_delay_seconds:
+            return None
+        
+        try:
+            # Check if broker is initialized
+            if not hasattr(_bot_instance, 'broker') or _bot_instance.broker is None:
+                print("[API] Broker not initialized yet")
+                return None
+            
+            wb = _bot_instance.broker._client
+            if not wb:
+                print("[API] Webull client not available")
+                return None
+            
+            # Get account data
+            def _blocking_call():
+                try:
+                    account_info = wb.get_account()
+                    
+                    # Check if token is expired and refresh if needed
+                    if isinstance(account_info, dict) and account_info.get('code') == 'auth.token.expire':
+                        print(f"[API] Webull token expired - attempting refresh...")
+                        # Refresh the token
+                        try:
+                            if hasattr(wb, 'refresh_login'):
+                                new_token_data = wb.refresh_login()
+                                print(f"[API] Refresh response type: {type(new_token_data)}")
+                                print(f"[API] Refresh response: {str(new_token_data)[:200]}")
+                                
+                                if new_token_data and isinstance(new_token_data, dict):
+                                    new_access = new_token_data.get('accessToken')
+                                    new_refresh = new_token_data.get('refreshToken')
+                                    
+                                    if new_access:
+                                        # Update the tokens
+                                        for attr in ['_access_token', 'access_token']:
+                                            try:
+                                                setattr(wb, attr, new_access)
+                                            except:
+                                                pass
+                                        
+                                        if new_refresh:
+                                            for attr in ['_refresh_token', 'refresh_token']:
+                                                try:
+                                                    setattr(wb, attr, new_refresh)
+                                                except:
+                                                    pass
+                                        
+                                        if hasattr(wb, '_headers'):
+                                            wb._headers['Authorization'] = f'Bearer {new_access}'
+                                        if hasattr(wb, '_session'):
+                                            wb._session.headers['Authorization'] = f'Bearer {new_access}'
+                                        
+                                        print(f"[API] ✓ Token refreshed successfully - Access: {new_access[:20]}...")
+                                        
+                                        # Retry getting account info with new token
+                                        account_info = wb.get_account()
+                                    else:
+                                        print(f"[API] ⚠️  Refresh failed - no new access token in response")
+                                        print(f"[API]    Response keys: {list(new_token_data.keys()) if isinstance(new_token_data, dict) else 'N/A'}")
+                                else:
+                                    print(f"[API] ⚠️  Refresh failed - invalid response (not a dict or None)")
+                            else:
+                                print(f"[API] ⚠️  Client doesn't have refresh_login method")
+                        except json.JSONDecodeError as json_err:
+                            print(f"[API] ⚠️  Token refresh JSON error: {json_err}")
+                            print(f"[API]    This usually means the refresh token is also expired - need to re-login")
+                        except Exception as refresh_err:
+                            print(f"[API] ⚠️  Token refresh error: {type(refresh_err).__name__}: {refresh_err}")
+                            import traceback
+                            traceback.print_exc()
+                    
+                    # Check if we still have an auth error after refresh attempt
+                    if isinstance(account_info, dict) and account_info.get('code') == 'auth.token.expire':
+                        print(f"[API] ❌ Webull auth failed - both access and refresh tokens are expired")
+                        print(f"[API]    User must re-authenticate via Webull to get fresh tokens")
+                        return None  # Return None instead of fake $0.00 data
+                    
+                    # Log response structure for debugging
+                    if isinstance(account_info, dict):
+                        if not account_info.get('success', True):
+                            print(f"[API] Webull API error - Code: {account_info.get('code')}, Message: {account_info.get('msg')}")
+                            return None  # Return None for any API error
+                    
+                    # Unwrap API response if it has 'data' key
+                    if isinstance(account_info, dict) and 'data' in account_info:
+                        account_data = account_info['data']
+                    else:
+                        account_data = account_info
+                    
+                    # Try to extract buying power from multiple possible field names
+                    buying_power = 0.0
+                    net_liq = 0.0
+                    cash_balance = 0.0
+                    
+                    # Try direct fields first
+                    for field in ['buyingPower', 'dayBuyingPower', 'cashAvailableForTrade', 'accountMembers']:
+                        if field in account_data:
+                            val = account_data[field]
+                            if field == 'accountMembers' and isinstance(val, list) and len(val) > 0:
+                                # accountMembers is a list of {'key': name, 'value': val} dicts
+                                # Parse the whole list to find optionBuyingPower or dayBuyingPower
+                                member_dict = {}
+                                for member in val:
+                                    if isinstance(member, dict) and 'key' in member and 'value' in member:
+                                        member_dict[member['key']] = member['value']
+                                
+                                # Try optionBuyingPower first (for options), then dayBuyingPower
+                                for bp_field in ['optionBuyingPower', 'dayBuyingPower', 'cashBalance']:
+                                    if bp_field in member_dict:
+                                        try:
+                                            buying_power = float(member_dict[bp_field])
+                                            if buying_power > 0:
+                                                print(f"[API] Using '{bp_field}' from accountMembers: ${buying_power:,.2f}")
+                                                break
+                                        except:
+                                            pass
+                                if buying_power > 0:
+                                    break
+                            else:
+                                try:
+                                    buying_power = float(val)
+                                    if buying_power > 0:
+                                        break
+                                except:
+                                    pass
+                    
+                    # Try net liquidation fields
+                    for field in ['netLiquidation', 'totalAccountValue', 'accountValue']:
+                        if field in account_data:
+                            try:
+                                net_liq = float(account_data[field])
+                                if net_liq > 0:
+                                    break
+                            except:
+                                pass
+                    
+                    # Try cash balance fields
+                    for field in ['cashBalance', 'cash']:
+                        if field in account_data:
+                            try:
+                                cash_balance = float(account_data[field])
+                                if cash_balance >= 0:
+                                    break
+                            except:
+                                pass
+                    
+                    unrealized_pl = float(account_data.get('unrealizedProfitLoss', 0))
+                    
+                    # Get Day's P&L from positions data
+                    # Day P&L = sum of unrealizedProfitLoss from all open positions
+                    # This represents today's change in value for current holdings
+                    day_pl = 0.0
+                    positions = account_data.get('positions', [])
+                    if positions:
+                        for pos in positions:
+                            try:
+                                pos_pnl = float(pos.get('unrealizedProfitLoss', 0) or 0)
+                                day_pl += pos_pnl
+                            except:
+                                pass
+                        print(f"[API] Day P/L calculated from {len(positions)} positions: ${day_pl:,.2f}")
+                    else:
+                        # Fallback to account-level unrealized P&L
+                        day_pl = unrealized_pl
+                        print(f"[API] Day P/L from account unrealizedProfitLoss: ${day_pl:,.2f}")
+                    
+                    print(f"[API] ✓ Webull Balance - Buying Power: ${buying_power:,.2f}, Net Liq: ${net_liq:,.2f}, Day P/L: ${day_pl:,.2f}")
+                    
+                    return {
+                        'buying_power': buying_power,
+                        'cash_balance': cash_balance,
+                        'net_liquidation': net_liq,
+                        'total_profit_loss': unrealized_pl,
+                        'day_profit_loss': day_pl
+                    }
+                except Exception as inner_e:
+                    print(f"[API] Error in _blocking_call: {type(inner_e).__name__}: {inner_e}")
+                    import traceback
+                    traceback.print_exc()
+                    return None
+            
+            return await run_async_safely(_blocking_call)
+        except Exception as e:
+            print(f"[API] Error fetching Webull account: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    @app.route('/api/webull/orders')
+    def get_open_orders():
+        """Get open orders from Webull"""
+        if _bot_instance is None:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        try:
+            # Run async call in executor
+            future = asyncio.run_coroutine_threadsafe(
+                _get_webull_open_orders(),
+                _bot_instance.loop
+            )
+            orders_data = future.result(timeout=10)
+            
+            if orders_data is not None:
+                return jsonify(orders_data)
+            else:
+                return jsonify({'error': 'Failed to fetch open orders'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error fetching open orders: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    async def _get_webull_open_orders():
+        """Helper to get Webull open orders"""
+        # Check if broker is initialized
+        if not hasattr(_bot_instance, 'broker') or _bot_instance.broker is None:
+            return None
+        
+        wb = _bot_instance.broker._client
+        if not wb:
+            return None
+        
+        # Get open orders
+        def _blocking_call():
+            account_info = wb.get_account()
+            open_orders = account_info.get('openOrders', [])
+            
+            # Format orders for frontend
+            formatted_orders = []
+            for order in open_orders:
+                # Convert numeric fields to proper types
+                quantity = order.get('totalQuantity', 0)
+                filled_quantity = order.get('filledQuantity', 0)
+                limit_price = order.get('lmtPrice', 0)
+                
+                # Ensure numeric fields are floats/ints
+                try:
+                    quantity = int(quantity) if quantity else 0
+                except (ValueError, TypeError):
+                    quantity = 0
+                
+                try:
+                    filled_quantity = int(filled_quantity) if filled_quantity else 0
+                except (ValueError, TypeError):
+                    filled_quantity = 0
+                
+                try:
+                    limit_price = float(limit_price) if limit_price else 0.0
+                except (ValueError, TypeError):
+                    limit_price = 0.0
+                
+                # Detect asset type (option vs stock)
+                asset_type = 'option' if order.get('optionId') or order.get('optionType') else 'stock'
+                
+                formatted_orders.append({
+                    'order_id': order.get('orderId', 'N/A'),
+                    'symbol': order.get('ticker', {}).get('symbol', 'N/A'),
+                    'action': order.get('action', 'N/A'),
+                    'quantity': quantity,
+                    'filled_quantity': filled_quantity,
+                    'limit_price': limit_price,
+                    'order_type': order.get('orderType', 'N/A'),
+                    'status': order.get('status', 'N/A'),
+                    'created_time': order.get('createTime0', 'N/A'),
+                    'asset_type': asset_type
+                })
+            
+            return formatted_orders
+        
+        return await run_async_safely(_blocking_call)
+    
+    @app.route('/api/webull/order-history')
+    def get_webull_order_history():
+        """Get filled/executed order history from Webull"""
+        print(f"[API] /api/webull/order-history called")
+        if _bot_instance is None:
+            print("[API] Bot not initialized")
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        try:
+            count = int(request.args.get('count', 50))
+            status = request.args.get('status', 'Filled')  # Default to filled orders
+            print(f"[API] Fetching order history: status={status}, count={count}")
+            
+            future = asyncio.run_coroutine_threadsafe(
+                _get_webull_order_history(status=status, count=count),
+                _bot_instance.loop
+            )
+            orders_data = future.result(timeout=15)
+            
+            if orders_data is not None:
+                return jsonify({'orders': orders_data})
+            else:
+                return jsonify({'error': 'Failed to fetch order history'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error fetching order history: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    async def _get_webull_order_history(status='Filled', count=50):
+        """Helper to get Webull order history (filled/executed orders)"""
+        if not hasattr(_bot_instance, 'broker') or _bot_instance.broker is None:
+            return None
+        
+        wb = _bot_instance.broker._client
+        if not wb:
+            return None
+        
+        def _blocking_call():
+            try:
+                print(f"[API] Calling wb.get_history_orders(status={status}, count={count})")
+                history_orders = wb.get_history_orders(status=status, count=count)
+                print(f"[API] Raw history_orders response: {type(history_orders)} - {len(history_orders) if history_orders else 0} items")
+                
+                # If Filled returns nothing, try All status
+                if not history_orders and status == 'Filled':
+                    print("[API] No Filled orders, trying status='All'...")
+                    history_orders = wb.get_history_orders(status='All', count=count)
+                    print(f"[API] All orders response: {len(history_orders) if history_orders else 0} items")
+                
+                if history_orders:
+                    print(f"[API] First order sample: {history_orders[0] if len(history_orders) > 0 else 'N/A'}")
+                
+                if not history_orders:
+                    print("[API] No history orders returned from Webull")
+                    return []
+                
+                formatted_orders = []
+                for order in history_orders:
+                    # Extract order details
+                    ticker_info = order.get('ticker', {})
+                    symbol = ticker_info.get('symbol', 'N/A')
+                    
+                    # Get quantities
+                    quantity = order.get('totalQuantity', 0)
+                    filled_quantity = order.get('filledQuantity', 0)
+                    
+                    try:
+                        quantity = int(quantity) if quantity else 0
+                        filled_quantity = int(filled_quantity) if filled_quantity else 0
+                    except (ValueError, TypeError):
+                        quantity = 0
+                        filled_quantity = 0
+                    
+                    # Get prices
+                    limit_price = order.get('lmtPrice', 0)
+                    avg_filled_price = order.get('avgFilledPrice', 0)
+                    
+                    try:
+                        limit_price = float(limit_price) if limit_price else 0.0
+                        avg_filled_price = float(avg_filled_price) if avg_filled_price else 0.0
+                    except (ValueError, TypeError):
+                        limit_price = 0.0
+                        avg_filled_price = 0.0
+                    
+                    # Detect asset type
+                    is_option = bool(order.get('optionId') or order.get('optionType'))
+                    asset_type = 'option' if is_option else 'stock'
+                    
+                    # Get action (BUY/SELL)
+                    action = order.get('action', 'N/A')
+                    
+                    # Get timestamps
+                    create_time = order.get('createTime0', '')
+                    filled_time = order.get('filledTime0', '') or order.get('updateTime0', '')
+                    
+                    # Option-specific fields
+                    option_info = {}
+                    if is_option:
+                        option_info = {
+                            'strike': order.get('optionExercisePrice', ''),
+                            'expiry': order.get('optionExpireDate', ''),
+                            'option_type': order.get('optionType', ''),  # call/put
+                            'option_id': order.get('optionId', '')
+                        }
+                    
+                    formatted_orders.append({
+                        'order_id': order.get('orderId', 'N/A'),
+                        'symbol': symbol,
+                        'action': action,
+                        'side': 'BTO' if action == 'BUY' else 'STC',
+                        'quantity': quantity,
+                        'filled_quantity': filled_quantity,
+                        'limit_price': limit_price,
+                        'avg_filled_price': avg_filled_price,
+                        'order_type': order.get('orderType', 'N/A'),
+                        'status': order.get('status', 'N/A'),
+                        'fill_status': order.get('status', 'Filled'),
+                        'created_time': create_time,
+                        'filled_time': filled_time,
+                        'asset_type': asset_type,
+                        'broker': 'WEBULL',
+                        'source': 'webull_history',
+                        **option_info
+                    })
+                
+                return formatted_orders
+                
+            except Exception as e:
+                print(f"[API] Error in _get_webull_order_history: {e}")
+                import traceback
+                traceback.print_exc()
+                return []
+        
+        return await run_async_safely(_blocking_call)
+    
+    @app.route('/api/webull/orders/<order_id>/cancel', methods=['POST'])
+    def cancel_webull_order(order_id):
+        """Cancel an open order at Webull"""
+        if _bot_instance is None:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        try:
+            # Run async call in executor
+            future = asyncio.run_coroutine_threadsafe(
+                _cancel_webull_order(order_id),
+                _bot_instance.loop
+            )
+            result = future.result(timeout=10)
+            
+            if result['success']:
+                return jsonify({'success': True, 'message': f"Order {order_id} cancelled successfully"})
+            else:
+                return jsonify({'error': result.get('error', 'Failed to cancel order')}), 500
+                
+        except Exception as e:
+            print(f"[API] Error cancelling order: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    async def _cancel_webull_order(order_id):
+        """Helper to cancel Webull order"""
+        if not hasattr(_bot_instance, 'broker') or _bot_instance.broker is None:
+            return {'success': False, 'error': 'Broker not initialized'}
+        
+        wb = _bot_instance.broker._client
+        if not wb:
+            return {'success': False, 'error': 'Webull client not available'}
+        
+        def _blocking_call():
+            try:
+                # Get order details first (for Discord notification)
+                order_details = None
+                try:
+                    orders = wb.get_current_orders()
+                    if orders:
+                        for order in orders:
+                            if order.get('orderId') == order_id:
+                                order_details = order
+                                break
+                except Exception as e:
+                    print(f"[API] Warning: Could not fetch order details: {e}")
+                
+                # Cancel order using Webull API
+                result = wb.cancel_order(order_id)
+                
+                # Send Discord notification for canceled order
+                if order_details:
+                    try:
+                        from gui_app.discord_notifier import send_cancel_notification
+                        
+                        symbol = order_details.get('ticker', {}).get('symbol', 'UNKNOWN')
+                        action = order_details.get('action', 'BUY')
+                        quantity = int(order_details.get('totalQuantity', 0))
+                        limit_price = float(order_details.get('lmtPrice', 0))
+                        
+                        # Check if option or stock
+                        option_id = order_details.get('optionId')
+                        if option_id:
+                            # Option order - extract option details
+                            option_symbol = order_details.get('ticker', {}).get('symbol', symbol)
+                            # Try to parse option details from symbol or order data
+                            send_cancel_notification(
+                                symbol=option_symbol,
+                                quantity=quantity,
+                                price=limit_price,
+                                is_option=True,
+                                order_id=order_id
+                            )
+                        else:
+                            # Stock order
+                            send_cancel_notification(
+                                symbol=symbol,
+                                quantity=quantity,
+                                price=limit_price,
+                                is_option=False,
+                                order_id=order_id
+                            )
+                    except Exception as e:
+                        print(f"[NOTIFICATION] Failed to send cancel notification: {e}")
+                
+                return {'success': True, 'result': result}
+            except Exception as e:
+                print(f"[API] Error in cancel_order: {e}")
+                return {'success': False, 'error': str(e)}
+        
+        return await run_async_safely(_blocking_call)
+    
+    @app.route('/api/webull/positions/close', methods=['POST'])
+    def close_webull_position():
+        """Close a position at Webull immediately."""
+        try:
+            if _bot_instance is None:
+                return jsonify({'success': False, 'error': 'Bot not initialized'}), 500
+
+            data = request.get_json(silent=True) or {}
+            symbol = data.get('symbol')
+            quantity = data.get('quantity')
+            asset_type = (data.get('asset_type') or '').lower()
+
+            # Validate input
+            if not symbol or quantity is None:
+                return jsonify({'success': False, 'error': 'Symbol and quantity are required'}), 400
+
+            if asset_type not in ('stock', 'option'):
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid or missing asset_type. Must be "stock" or "option".'
+                }), 400
+
+            # Make sure quantity is an integer
+            try:
+                qty = int(quantity)
+            except (TypeError, ValueError):
+                return jsonify({'success': False, 'error': f'Invalid quantity: {quantity}'}), 400
+
+            if qty <= 0:
+                return jsonify({'success': False, 'error': f'Quantity must be positive, got {qty}'}), 400
+
+            # Call async helper on the bot loop
+            future = asyncio.run_coroutine_threadsafe(
+                _close_webull_position(symbol, qty, asset_type),
+                _bot_instance.loop
+            )
+            result = future.result(timeout=20)
+
+            if result.get('success'):
+                return jsonify({
+                    'success': True,
+                    'message': f"Position closed: {qty} {symbol}"
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': result.get('error', 'Failed to close position')
+                }), 500
+
+        except Exception as e:
+            # This ensures even unexpected errors return JSON, not HTML
+            print(f"[API] Error closing position: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    async def _close_webull_position(symbol: str, quantity: int, asset_type: str, option_id=None, user_limit_price=None):
+        """
+        Helper to close a position at Webull.
+        - Stocks: market SELL (or limit if user_limit_price provided).
+        - Options: limit SELL using optionId and user price or small discount to last price.
+        For options, requires option_id to match the correct position.
+        user_limit_price: If provided, use this as the limit price. None = market/auto-calculated.
+        """
+        # Ensure we have a broker and client
+        if not hasattr(_bot_instance, 'broker') or _bot_instance.broker is None:
+            return {'success': False, 'error': 'Broker not initialized'}
+
+        broker = _bot_instance.broker
+        wb = getattr(broker, '_client', None) or getattr(broker, 'wb', None)
+
+        if wb is None:
+            return {'success': False, 'error': 'Webull client not available'}
+
+        def _blocking_call():
+            try:
+                # ---------- STOCK CLOSE: market or limit SELL ----------
+                if asset_type == 'stock':
+                    ticker = wb.get_ticker(symbol)
+                    if not ticker:
+                        return {'success': False, 'error': f'Symbol {symbol} not found'}
+
+                    # get_ticker can return int or dict depending on webull version
+                    if isinstance(ticker, int):
+                        ticker_id = ticker
+                    elif isinstance(ticker, dict):
+                        ticker_id = ticker.get('tickerId') or ticker.get('ticker_id')
+                    else:
+                        return {'success': False, 'error': f'Unexpected ticker format for {symbol}: {ticker}'}
+
+                    if not ticker_id:
+                        return {'success': False, 'error': f'Ticker ID not found for {symbol}'}
+
+                    if user_limit_price:
+                        # Limit order
+                        print(f"[DEBUG] Closing stock {symbol} with LIMIT @ ${user_limit_price}")
+                        result = wb.place_order(
+                            stock=ticker_id,
+                            price=float(user_limit_price),
+                            action='SELL',
+                            orderType='LMT',
+                            enforce='GTC',
+                            quant=quantity
+                        )
+                    else:
+                        # Market order
+                        result = wb.place_order(
+                            stock=ticker_id,
+                            price=0,            # market order
+                            action='SELL',
+                            orderType='MKT',
+                            enforce='GTC',
+                            quant=quantity
+                        )
+                    return {'success': True, 'result': result}
+
+                # ---------- OPTION CLOSE: limit SELL using optionId ----------
+                elif asset_type == 'option':
+                    account = wb.get_account()
+                    positions = account.get('positions', []) or []
+
+                    print(f"[DEBUG] Searching for option: {symbol} optionId={option_id}")
+                    print(f"[DEBUG] Found {len(positions)} total positions")
+
+                    option_position = None
+                    ticker_id = None
+                    for p in positions:
+                        p_asset = (p.get('assetType') or p.get('assetClass') or '').lower()
+                        ticker_data = p.get('ticker', {}) or {}
+                        pos_symbol = ticker_data.get('symbol', '')
+                        pos_ticker_id = p.get('tickerId')
+                        
+                        if p_asset == 'option' and pos_ticker_id == option_id and float(p.get('position', 0)) > 0:
+                            print(f"[DEBUG] MATCH FOUND! {pos_symbol} optionId={pos_ticker_id}")
+                            option_position = p
+                            ticker_id = ticker_data.get('tickerId')
+                            break
+
+                    if not option_position:
+                        return {'success': False, 'error': f'Option position not found for {symbol} (optionId={option_id})'}
+
+                    last_price = float(
+                        option_position.get('lastPrice')
+                        or option_position.get('price')
+                        or option_position.get('avgPrice')
+                        or 0
+                    )
+
+                    if last_price <= 0:
+                        last_price = 0.01
+
+                    # Use user-provided limit price, or fallback to auto-calculated
+                    if user_limit_price:
+                        limit_price = float(user_limit_price)
+                        print(f"[DEBUG] Using USER limit price: ${limit_price}")
+                    else:
+                        limit_price = max(0.01, round(last_price * 0.95, 2))
+                        print(f"[DEBUG] Using AUTO limit price: ${limit_price} (95% of last)")
+
+                    print(f"[DEBUG] Closing option {symbol} | optionId={option_id}, qty={quantity}, "
+                          f"last={last_price}, limit={limit_price}")
+
+                    result = None
+                    
+                    # Try DIRECT API call first (same as working selfbot implementation)
+                    import requests
+                    import uuid
+                    import time
+                    
+                    # Refresh trade token before placing order
+                    try:
+                        wb.get_trade_token(password=wb._trading_pin)
+                        print(f"[DEBUG] Trade token refreshed")
+                    except Exception as token_err:
+                        print(f"[DEBUG] Could not refresh trade token: {token_err}")
+                    
+                    # First, check and cancel any pending orders for this option
+                    try:
+                        pending_orders = wb.get_current_orders() or []
+                        print(f"[DEBUG] Found {len(pending_orders)} total pending orders")
+                        for order in pending_orders:
+                            order_ticker_id = order.get('ticker', {}).get('tickerId')
+                            order_status = order.get('status', '')
+                            print(f"[DEBUG] Order tickerId={order_ticker_id}, status={order_status}")
+                            if order_ticker_id == option_id:
+                                order_id = order.get('orderId')
+                                print(f"[DEBUG] Found pending order {order_id} for optionId={option_id}, cancelling...")
+                                try:
+                                    wb.cancel_order(order_id)
+                                    print(f"[DEBUG] Cancelled pending order {order_id}")
+                                    time.sleep(1)  # Wait for cancellation to process
+                                except Exception as cancel_err:
+                                    print(f"[DEBUG] Cancel failed: {cancel_err}")
+                    except Exception as pending_err:
+                        print(f"[DEBUG] Could not check pending orders: {pending_err}")
+                    
+                    # Retry logic for "system is busy" errors
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            headers = wb.build_req_headers(include_trade_token=True, include_time=True)
+                            api_payload = {
+                                'orderType': 'LMT',
+                                'serialId': str(uuid.uuid4()),
+                                'timeInForce': 'GTC',
+                                'orders': [{'quantity': int(quantity), 'action': 'SELL', 'tickerId': int(option_id), 'tickerType': 'OPTION'}],
+                                'lmtPrice': float(limit_price)
+                            }
+                            print(f"[DEBUG] Attempt {attempt+1}/{max_retries} - Direct API payload: {api_payload}")
+                            
+                            api_url = wb._urls.place_option_orders(wb._account_id)
+                            print(f"[DEBUG] API URL: {api_url}")
+                            
+                            api_response = requests.post(api_url, json=api_payload, headers=headers, timeout=wb.timeout)
+                            print(f"[DEBUG] API Response Status: {api_response.status_code}")
+                            
+                            if api_response.status_code == 200:
+                                result = api_response.json()
+                                print(f"[DEBUG] Direct API success: {result}")
+                                return {'success': True, 'result': result}
+                            else:
+                                response_text = api_response.text
+                                print(f"[DEBUG] Direct API failed: {api_response.status_code} - {response_text}")
+                                
+                                # Check if it's a "system is busy" error - retry after delay
+                                if 'system is busy' in response_text.lower() and attempt < max_retries - 1:
+                                    print(f"[DEBUG] System busy, waiting 2 seconds before retry...")
+                                    time.sleep(2)
+                                    continue
+                                else:
+                                    break
+                        except Exception as direct_error:
+                            print(f"[DEBUG] Direct API exception: {direct_error}")
+                            if attempt < max_retries - 1:
+                                time.sleep(1)
+                                continue
+                            break
+                    
+                    # Fallback: Try MARKET order if limit orders keep failing
+                    print(f"[DEBUG] Trying MARKET order as fallback...")
+                    try:
+                        headers = wb.build_req_headers(include_trade_token=True, include_time=True)
+                        market_payload = {
+                            'orderType': 'MKT',
+                            'serialId': str(uuid.uuid4()),
+                            'timeInForce': 'DAY',
+                            'orders': [{'quantity': int(quantity), 'action': 'SELL', 'tickerId': int(option_id), 'tickerType': 'OPTION'}],
+                        }
+                        print(f"[DEBUG] Market order payload: {market_payload}")
+                        
+                        api_url = wb._urls.place_option_orders(wb._account_id)
+                        api_response = requests.post(api_url, json=market_payload, headers=headers, timeout=wb.timeout)
+                        print(f"[DEBUG] Market order response: {api_response.status_code} - {api_response.text}")
+                        
+                        if api_response.status_code == 200:
+                            result = api_response.json()
+                            print(f"[DEBUG] Market order success: {result}")
+                            return {'success': True, 'result': result}
+                    except Exception as market_err:
+                        print(f"[DEBUG] Market order exception: {market_err}")
+                    
+                    # Final fallback to library method
+                    try:
+                        result = wb.place_order_option(
+                            optionId=int(option_id),
+                            lmtPrice=float(limit_price),
+                            stpPrice=None,
+                            action='SELL',
+                            orderType='LMT',
+                            enforce='GTC',
+                            quant=int(quantity)
+                        )
+                        print(f"[DEBUG] place_order_option result: {result}")
+                        
+                        if result and isinstance(result, dict):
+                            if result.get('orderId'):
+                                return {'success': True, 'result': result}
+                            if result.get('msg'):
+                                return {'success': False, 'error': f"Webull error: {result.get('msg')}"}
+                        
+                        return {'success': True, 'result': result}
+                    except Exception as e:
+                        print(f"[DEBUG] place_order_option exception: {e}")
+                        return {'success': False, 'error': f"Webull API error: The system is busy for this option. Please try closing directly in the Webull app, or wait a few minutes and try again."}
+
+                else:
+                    return {'success': False, 'error': f'Unsupported asset_type: {asset_type}'}
+
+            except Exception as e:
+                print(f"[API] Error in _close_webull_position blocking call: {e}")
+                import traceback
+                traceback.print_exc()
+                return {'success': False, 'error': str(e)}
+
+        # Run the blocking webull calls in a thread so we don't block the event loop
+        return await run_async_safely(_blocking_call)
+    
+    @app.route('/api/trades/<int:trade_id>/close', methods=['POST'])
+    def close_position_by_id(trade_id):
+        """Close a position by trade ID (used by Dashboard) - Uses LIVE broker quantity"""
+        print(f"[API] ========== CLOSE ENDPOINT CALLED FOR TRADE ID {trade_id} ==========")
+        try:
+            if _bot_instance is None:
+                print(f"[API] ERROR: Bot instance is None!")
+                return jsonify({'success': False, 'error': 'Bot not initialized'}), 500
+            
+            # Get custom quantity and limit price from request body (optional)
+            data = request.get_json(silent=True) or {}
+            requested_quantity = data.get('quantity')
+            requested_limit_price = data.get('limit_price')
+            
+            # Convert limit_price to float if provided
+            if requested_limit_price is not None:
+                try:
+                    requested_limit_price = float(requested_limit_price)
+                    if requested_limit_price <= 0:
+                        return jsonify({'success': False, 'error': 'Limit price must be positive'}), 400
+                except (ValueError, TypeError):
+                    return jsonify({'success': False, 'error': 'Invalid limit price format'}), 400
+            
+            order_type = f"LIMIT @ ${requested_limit_price}" if requested_limit_price else "MARKET"
+            print(f"[API] Close request: qty={requested_quantity}, order_type={order_type}")
+            
+            print(f"[API] Bot instance OK, fetching trade {trade_id} from database...")
+            # Get trade from database
+            trade = db.get_trade_by_id(trade_id)
+            print(f"[API] Trade data: {trade}")
+            if not trade:
+                return jsonify({'success': False, 'error': f'Trade {trade_id} not found'}), 404
+            
+            # Extract trade details
+            symbol = trade.get('symbol')
+            asset_type = (trade.get('asset_type') or 'stock').lower()
+            strike = trade.get('strike')
+            expiry = trade.get('expiry')
+            call_put = (trade.get('call_put') or '').upper()
+            entry_price = float(trade.get('entry_price', 0))
+            
+            if not symbol:
+                return jsonify({'success': False, 'error': 'Invalid trade data - missing symbol'}), 400
+            
+            # For options, we need the optionId to match positions
+            # The trades table might not have option_id, so get it from live positions
+            option_id = trade.get('option_id')
+            
+            # If option_id is missing from database, get it from live broker positions
+            if asset_type == 'option' and not option_id:
+                print(f"[CLOSE] option_id missing in database, fetching from live positions...")
+                positions_future = asyncio.run_coroutine_threadsafe(
+                    _get_webull_positions(),
+                    _bot_instance.loop
+                )
+                live_positions = positions_future.result(timeout=10) or []
+                
+                # Find the position by symbol + strike + expiry + direction
+                for pos in live_positions:
+                    if (pos.get('asset') == 'option' and 
+                        pos.get('symbol') == symbol and
+                        pos.get('strike') == strike and
+                        pos.get('expiry') == expiry and
+                        pos.get('direction') == call_put):
+                        option_id = pos.get('option_id')
+                        print(f"[CLOSE] Found option_id={option_id} from live positions")
+                        break
+                
+                if not option_id:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Could not find option_id for {symbol} {strike}{call_put} {expiry}'
+                    }), 404
+            
+            print(f"[CLOSE] Looking for option_id={option_id} in live positions")
+            
+            # Get LIVE broker position to get actual quantity
+            # This prevents trying to close more contracts than exist
+            positions_future = asyncio.run_coroutine_threadsafe(
+                _get_webull_positions(),
+                _bot_instance.loop
+            )
+            live_positions = positions_future.result(timeout=10) or []
+            
+            print(f"[CLOSE] Got {len(live_positions)} live positions")
+            for i, pos in enumerate(live_positions):
+                print(f"[CLOSE] Position {i}: asset={pos.get('asset')}, symbol={pos.get('symbol')}, option_id={pos.get('option_id')}, qty={pos.get('quantity')}")
+            
+            # Find matching live position
+            live_quantity = None
+            for pos in live_positions:
+                if asset_type == 'option':
+                    # Match by optionId (stored as tickerId in Webull positions)
+                    pos_asset = (pos.get('asset') or '').lower()
+                    pos_option_id = pos.get('option_id')  # This is tickerId from Webull
+                    
+                    if pos_asset == 'option' and pos_option_id == option_id:
+                        print(f"[CLOSE] FOUND MATCH! option_id={option_id}")
+                        live_quantity = int(pos.get('quantity', 0))
+                        break
+                else:
+                    # Stock - match by symbol only
+                    if pos.get('symbol') == symbol and pos.get('asset') == 'stock':
+                        live_quantity = int(pos.get('quantity', 0))
+                        break
+            
+            if live_quantity is None or live_quantity <= 0:
+                return jsonify({
+                    'success': False,
+                    'error': f'No live position found for {symbol}. Position may already be closed.'
+                }), 404
+            
+            # Use requested quantity if provided, otherwise use full live quantity
+            quantity_to_close = live_quantity
+            if requested_quantity is not None:
+                try:
+                    requested_qty = int(requested_quantity)
+                    if requested_qty <= 0:
+                        return jsonify({'success': False, 'error': 'Quantity must be positive'}), 400
+                    if requested_qty > live_quantity:
+                        return jsonify({
+                            'success': False,
+                            'error': f'Cannot close {requested_qty}. Only {live_quantity} available.'
+                        }), 400
+                    quantity_to_close = requested_qty
+                except (ValueError, TypeError):
+                    return jsonify({'success': False, 'error': 'Invalid quantity format'}), 400
+            
+            print(f"[CLOSE] Closing {quantity_to_close} of {live_quantity} for {symbol} optionId={option_id}")
+            
+            # ========== CRITICAL: CHECK FOR EXISTING PENDING ORDERS ==========
+            # This prevents duplicate SELL orders that accumulate at Webull
+            print(f"[CLOSE] Checking for existing pending SELL orders for {symbol}...")
+            pending_orders_future = asyncio.run_coroutine_threadsafe(
+                _get_webull_open_orders(),
+                _bot_instance.loop
+            )
+            pending_orders = pending_orders_future.result(timeout=10) or []
+            
+            # Filter for SELL orders matching this position
+            matching_pending = []
+            for order in pending_orders:
+                # Match by symbol and action=SELL
+                if (order.get('symbol') == symbol and 
+                    order.get('action') == 'SELL' and
+                    order.get('status') in ['Submitted', 'Working', 'Pending', 'Accepted']):
+                    
+                    # For options, also check option_id if available
+                    if asset_type == 'option':
+                        if order.get('option_id') == option_id or order.get('ticker_id') == option_id:
+                            matching_pending.append(order)
+                    else:
+                        matching_pending.append(order)
+            
+            if matching_pending:
+                # Found existing pending SELL orders - REJECT this request
+                order_count = len(matching_pending)
+                order_ids = [o.get('order_id', 'Unknown') for o in matching_pending]
+                print(f"[CLOSE] BLOCKED: Found {order_count} existing pending SELL order(s): {order_ids}")
+                return jsonify({
+                    'success': False,
+                    'error': f'⚠️ Cannot close position - {order_count} pending SELL order(s) already exist.\n\nGo to "⏳ Pending Orders" tab and cancel existing orders first.\n\nOrder IDs: {", ".join(order_ids[:3])}'
+                }), 409  # 409 Conflict
+            
+            print(f"[CLOSE] ✓ No pending orders found, proceeding with close...")
+            # ==================================================================
+            
+            # Call the close position helper with quantity, optionId, and limit price
+            future = asyncio.run_coroutine_threadsafe(
+                _close_webull_position(symbol, quantity_to_close, asset_type, option_id=option_id, user_limit_price=requested_limit_price),
+                _bot_instance.loop
+            )
+            result = future.result(timeout=20)
+            
+            if result.get('success'):
+                # Send STC webhook notification
+                try:
+                    from gui_app.discord_notifier import send_stc_notification
+                    
+                    # Get current price (use last traded price from result or fetch live price)
+                    current_price = 0.0
+                    if asset_type == 'option':
+                        # For options, try to get last price from position
+                        for pos in live_positions:
+                            if pos.get('asset') == 'option' and pos.get('option_id') == option_id:
+                                current_price = float(pos.get('current_price', 0) or pos.get('last_price', 0))
+                                break
+                    else:
+                        # For stocks, try to get last price from position
+                        for pos in live_positions:
+                            if pos.get('symbol') == symbol and pos.get('asset') == 'stock':
+                                current_price = float(pos.get('current_price', 0) or pos.get('last_price', 0))
+                                break
+                    
+                    # Send notification with option details if available
+                    send_stc_notification(
+                        symbol=symbol,
+                        quantity=quantity_to_close,
+                        price=current_price,
+                        entry_price=entry_price,
+                        strike=strike if asset_type == 'option' else None,
+                        expiry=expiry if asset_type == 'option' else None,
+                        call_put=call_put if asset_type == 'option' else None
+                    )
+                    print(f"[CLOSE] STC webhook notification sent for {symbol}")
+                except Exception as e:
+                    print(f"[CLOSE] Failed to send STC notification: {e}")
+                    # Don't fail the whole operation if notification fails
+                
+                return jsonify({
+                    'success': True,
+                    'message': f"Position closed: {quantity_to_close} {symbol} @ {order_type}"
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': result.get('error', 'Failed to close position')
+                }), 500
+        
+        except Exception as e:
+            print(f"[API] Error closing position by ID: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # Real-time pricing and risk management endpoints
+    @app.route('/api/refresh_prices', methods=['POST'])
+    def api_refresh_prices():
+        """Refresh current prices for all open positions and update database"""
+        if _bot_instance is None or not hasattr(_bot_instance, 'loop'):
+            return jsonify({'success': False, 'error': 'Bot not initialized'})
+        
+        try:
+            # Get all open trades
+            open_trades = db.get_trades(status='OPEN', limit=100)
+            
+            if not open_trades:
+                return jsonify({'success': True, 'updated': 0, 'message': 'No open positions'})
+            
+            updated_count = 0
+            
+            # Prepare positions for price fetch
+            positions = []
+            for trade in open_trades:
+                positions.append({
+                    'trade_id': trade.get('id'),
+                    'symbol': trade.get('symbol'),
+                    'asset_type': trade.get('asset_type', 'option'),
+                    'option_id': trade.get('option_id'),
+                    'strike': trade.get('strike'),
+                    'expiry': trade.get('expiry'),
+                    'call_put': trade.get('call_put'),
+                    'entry_price': trade.get('price', 0),
+                    'quantity': trade.get('quantity', 1),
+                    'broker': trade.get('broker', 'Webull')
+                })
+            
+            # Fetch real-time prices
+            future = asyncio.run_coroutine_threadsafe(
+                _get_realtime_prices(positions),
+                _bot_instance.loop
+            )
+            result = future.result(timeout=30)
+            prices = result.get('prices', {})
+            
+            # Update database with new prices
+            for trade in open_trades:
+                trade_id = str(trade.get('id'))
+                if trade_id in prices:
+                    price_data = prices[trade_id]
+                    # Use mid price, fallback to last
+                    current_price = price_data.get('mid') or price_data.get('last') or price_data.get('bid') or 0
+                    
+                    if current_price > 0:
+                        entry_price = float(trade.get('price', 0) or 0)
+                        quantity = float(trade.get('quantity', 1) or 1)
+                        
+                        # Calculate P&L
+                        pnl = (current_price - entry_price) * quantity * 100  # Options are x100
+                        pnl_percent = ((current_price - entry_price) / entry_price * 100) if entry_price > 0 else 0
+                        
+                        # Update trade in database
+                        db.update_trade_price(trade.get('id'), current_price, pnl, pnl_percent)
+                        updated_count += 1
+            
+            print(f"[API] Refreshed prices for {updated_count}/{len(open_trades)} positions")
+            return jsonify({
+                'success': True,
+                'updated': updated_count,
+                'total': len(open_trades)
+            })
+            
+        except Exception as e:
+            print(f"[API] Error refreshing prices: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/trades/realtime-prices', methods=['POST'])
+    def get_realtime_prices():
+        """Get real-time bid/ask/mid prices for multiple positions"""
+        if _bot_instance is None or not hasattr(_bot_instance, 'loop'):
+            return jsonify({'prices': {}})
+        
+        try:
+            data = request.json
+            if not data:
+                return jsonify({'prices': {}})
+                
+            positions = data.get('positions', [])
+            
+            if not positions:
+                return jsonify({'prices': {}})
+            
+            # Run async call in executor
+            future = asyncio.run_coroutine_threadsafe(
+                _get_realtime_prices(positions),
+                _bot_instance.loop
+            )
+            result = future.result(timeout=15)
+            return jsonify(result)
+                
+        except Exception as e:
+            print(f"[API] Error fetching real-time prices: {e}")
+            return jsonify({'prices': {}})
+    
+    async def _get_realtime_prices(positions):
+        """Helper to fetch real-time prices from Webull"""
+        if not hasattr(_bot_instance, 'broker') or _bot_instance.broker is None:
+            return {'prices': {}}
+        
+        wb = _bot_instance.broker._client
+        if not wb:
+            return {'prices': {}}
+        
+        def _blocking_call():
+            prices = {}
+            for pos in positions:
+                try:
+                    trade_id = pos['trade_id']
+                    symbol = pos['symbol']
+                    asset_type = pos['asset_type']
+                    
+                    if asset_type == 'option':
+                        # Get option quote
+                        option_id = pos.get('option_id')
+                        strike = pos.get('strike')
+                        expiry = pos.get('expiry')
+                        call_put = pos.get('call_put')
+                        
+                        # If option_id not provided, search for it
+                        if not option_id and strike and expiry and call_put:
+                            # Get option chain
+                            option_data = wb.get_options(symbol, count=-1)
+                            if option_data and 'data' in option_data:
+                                for date_obj in option_data['data']:
+                                    if date_obj.get('expireDate') == expiry:
+                                        call_list = date_obj.get('call', []) if call_put.upper() == 'C' else []
+                                        put_list = date_obj.get('put', []) if call_put.upper() == 'P' else []
+                                        
+                                        for opt in call_list + put_list:
+                                            if opt.get('strikePrice') == strike:
+                                                option_id = opt.get('tickerId')
+                                                break
+                        
+                        if option_id:
+                            quote = wb.get_option_quote(optionId=option_id)
+                            if quote:
+                                prices[str(trade_id)] = {
+                                    'bid': float(quote.get('bidPrice', 0) or 0),
+                                    'ask': float(quote.get('askPrice', 0) or 0),
+                                    'mid': float((float(quote.get('bidPrice', 0) or 0) + float(quote.get('askPrice', 0) or 0)) / 2),
+                                    'last': float(quote.get('lastPrice', 0) or quote.get('close', 0) or 0)
+                                }
+                    else:
+                        # Get stock quote
+                        ticker_id = wb.get_ticker(symbol)
+                        if ticker_id:
+                            quote = wb.get_quote(ticker_id)
+                            if quote:
+                                prices[str(trade_id)] = {
+                                    'bid': float(quote.get('bidPrice', 0) or 0),
+                                    'ask': float(quote.get('askPrice', 0) or 0),
+                                    'mid': float((float(quote.get('bidPrice', 0) or 0) + float(quote.get('askPrice', 0) or 0)) / 2),
+                                    'last': float(quote.get('lastPrice', 0) or quote.get('close', 0) or 0)
+                                }
+                except Exception as e:
+                    print(f"[API] Error fetching price for {pos.get('symbol')}: {e}")
+                    continue
+            
+            return {'prices': prices}
+        
+        return await run_async_safely(_blocking_call)
+    
+    @app.route('/api/channels/<channel_id>/users', methods=['GET'])
+    def get_channel_user_performance(channel_id):
+        """Get user performance for a channel with leaderboard-style metrics"""
+        try:
+            internal_channel_id = int(channel_id)
+            users = db.get_channel_user_performance(channel_id=internal_channel_id)
+            return jsonify({'users': users})
+            
+        except Exception as e:
+            print(f"[API] Error fetching channel user performance: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e), 'users': []}), 500
+    
+    @app.route('/api/trades/<int:trade_id>/risk-settings', methods=['GET'])
+    def get_trade_risk_settings(trade_id):
+        """Get risk management settings for a specific trade"""
+        try:
+            settings = db.get_position_risk_settings(trade_id)
+            return jsonify(settings)
+        except Exception as e:
+            print(f"[API] Error fetching risk settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/trades/<int:trade_id>/risk-settings', methods=['PUT'])
+    def update_trade_risk_settings(trade_id):
+        """Update risk management settings for a specific trade"""
+        data = request.json
+        
+        profit_target = data.get('profit_target')
+        stop_loss = data.get('stop_loss')
+        trailing_stop_enabled = data.get('trailing_stop_enabled')
+        trailing_stop = data.get('trailing_stop')
+        
+        try:
+            success = db.update_position_risk_settings(
+                trade_id=trade_id,
+                profit_target=profit_target,
+                stop_loss=stop_loss,
+                trailing_stop_enabled=trailing_stop_enabled,
+                trailing_stop=trailing_stop
+            )
+            
+            if success:
+                return jsonify({'success': True, 'message': 'Risk settings updated'})
+            else:
+                return jsonify({'error': 'Failed to update risk settings'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error updating risk settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/trades/merged', methods=['GET'])
+    def get_merged_trades():
+        """Get trades merged with live Webull positions"""
+        if _bot_instance is None:
+            return jsonify({'trades': []})
+        
+        # Get filter parameters
+        status_filter = request.args.get('status')
+        broker_filter = request.args.get('broker')
+        limit = int(request.args.get('limit', 1000))
+        
+        try:
+            # Get database trades with filters
+            db_trades = db.get_trades(status=status_filter, broker=broker_filter, limit=limit)
+            
+            # Get live positions based on broker filter
+            live_positions = []
+            webull_orders = []
+            alpaca_positions = []
+            alpaca_orders = []
+            
+            # Normalize broker filter for case-insensitive comparison
+            broker_filter_upper = broker_filter.upper() if broker_filter else None
+            
+            if not broker_filter_upper or broker_filter_upper in ['WEBULL', 'WEBULL_PAPER']:
+                # Get live Webull positions AND open orders
+                positions_future = asyncio.run_coroutine_threadsafe(
+                    _get_webull_positions(),
+                    _bot_instance.loop
+                )
+                live_positions = positions_future.result(timeout=15)
+                
+                # Get Webull open orders to determine fill status
+                orders_future = asyncio.run_coroutine_threadsafe(
+                    _get_webull_open_orders(),
+                    _bot_instance.loop
+                )
+                webull_orders = orders_future.result(timeout=10) or []
+            
+            # Fetch Alpaca positions if broker filter is ALPACA or ALPACA_PAPER
+            if broker_filter_upper in ['ALPACA', 'ALPACA_PAPER']:
+                try:
+                    alpaca_future = asyncio.run_coroutine_threadsafe(
+                        _get_paper_account_data(),
+                        _bot_instance.loop
+                    )
+                    alpaca_data = alpaca_future.result(timeout=15)
+                    if alpaca_data:
+                        alpaca_positions = alpaca_data.get('positions', [])
+                        alpaca_orders = alpaca_data.get('orders', [])
+                except Exception as e:
+                    print(f"[API] Error fetching Alpaca positions: {e}")
+            
+            # Create order_id -> status mapping for quick lookup
+            order_status_map = {order['order_id']: order['status'] for order in webull_orders}
+            
+            # Create a merged list
+            merged = []
+            tracked_positions = set()
+            
+            # Create position key -> live position mapping for merging prices
+            live_position_map = {}
+            for pos in live_positions:
+                direction_normalized = (pos.get('direction') or '').upper()
+                if pos['asset'] == 'option':
+                    pos_key = f"{pos['symbol']}_{pos.get('strike', '')}_{pos.get('expiry', '')}_{direction_normalized}"
+                else:
+                    pos_key = f"{pos['symbol']}_stock"
+                live_position_map[pos_key] = pos
+            
+            # Group database trades by position key for consolidation
+            position_groups = {}
+            for trade in db_trades:
+                # Normalize call_put to uppercase for consistent matching
+                call_put_normalized = (trade.get('call_put') or '').upper()
+                
+                # Create position key for matching
+                if trade['asset_type'] == 'option':
+                    pos_key = f"{trade['symbol']}_{trade.get('strike', '')}_{trade.get('expiry', '')}_{call_put_normalized}"
+                else:
+                    pos_key = f"{trade['symbol']}_stock"
+                
+                if pos_key not in position_groups:
+                    position_groups[pos_key] = []
+                position_groups[pos_key].append(trade)
+            
+            # Process each position group and enrich with source_display
+            for pos_key, trades in position_groups.items():
+                # Enrich trades with source_display for UI badges
+                for trade in trades:
+                    trade['source_display'] = db.get_trade_source_display(trade)
+                tracked_positions.add(pos_key)
+                
+                # Check if this position has a live broker match
+                has_live_position = pos_key in live_position_map
+                
+                if has_live_position:
+                    # CONSOLIDATE: Show single row with LIVE broker quantity and current price
+                    live_pos = live_position_map[pos_key]
+                    first_trade = trades[0]  # Use first trade for metadata
+                    
+                    # Calculate average entry price from all lots
+                    total_qty = sum(t.get('quantity', 0) for t in trades if t['status'] == 'OPEN')
+                    total_cost = sum(t.get('quantity', 0) * (t.get('executed_price') or t.get('intended_price', 0)) 
+                                   for t in trades if t['status'] == 'OPEN')
+                    avg_entry = (total_cost / total_qty) if total_qty > 0 else 0
+                    
+                    # Get channel info for risk settings
+                    channel_id = first_trade.get('channel_id')
+                    channel_info = None
+                    if channel_id:
+                        try:
+                            channel_info = db.get_channel_by_id(channel_id)
+                        except:
+                            pass
+                    
+                    merged.append({
+                        **first_trade,
+                        'quantity': int(live_pos['quantity']),
+                        'entry_price': avg_entry or live_pos['avg_cost'],
+                        'current_price': live_pos['current_price'],
+                        'pnl': live_pos['unrealized_pl'],
+                        'pnl_percent': ((live_pos['current_price'] - (avg_entry or live_pos['avg_cost'])) / (avg_entry or live_pos['avg_cost']) * 100) if (avg_entry or live_pos['avg_cost']) > 0 else 0,
+                        'source': 'live_brokerage',
+                        'fill_status': 'Filled',
+                        'option_id': live_pos.get('option_id') or first_trade.get('option_id'),
+                        'channel_name': channel_info.get('name') if channel_info else 'Global',
+                        'profit_target_1_pct': channel_info.get('profit_target_1_pct', 20) if channel_info else 20,
+                        'profit_target_2_pct': channel_info.get('profit_target_2_pct', 50) if channel_info else 50,
+                        'profit_target_3_pct': channel_info.get('profit_target_3_pct', 100) if channel_info else 100,
+                        'stop_loss_pct': channel_info.get('stop_loss_pct', 10) if channel_info else 10
+                    })
+                elif not has_live_position:
+                    # No live position: Add each database trade separately
+                    for trade in trades:
+                        fill_status = 'Filled'
+                        order_id = trade.get('order_id')
+                        
+                        if order_id and order_id in order_status_map:
+                            fill_status = order_status_map[order_id]
+                        elif trade['status'] == 'OPEN':
+                            fill_status = 'Filled'
+                        
+                        # Get channel info for risk settings
+                        channel_id = trade.get('channel_id')
+                        channel_info = None
+                        if channel_id:
+                            try:
+                                channel_info = db.get_channel_by_id(channel_id)
+                            except:
+                                pass
+                        
+                        merged.append({
+                            **trade,
+                            'entry_price': trade.get('executed_price') or trade.get('intended_price'),
+                            'source': 'bot_tracked',
+                            'fill_status': fill_status,
+                            'channel_name': channel_info.get('name') if channel_info else 'Global',
+                            'profit_target_1_pct': channel_info.get('profit_target_1_pct', 20) if channel_info else 20,
+                            'profit_target_2_pct': channel_info.get('profit_target_2_pct', 50) if channel_info else 50,
+                            'profit_target_3_pct': channel_info.get('profit_target_3_pct', 100) if channel_info else 100,
+                            'stop_loss_pct': channel_info.get('stop_loss_pct', 10) if channel_info else 10
+                        })
+            
+            # Add live positions not tracked by bot (only if broker filter matches or is empty)
+            if not broker_filter_upper or broker_filter_upper == 'WEBULL':
+                for pos in live_positions:
+                    # Normalize direction to uppercase
+                    direction_normalized = (pos.get('direction') or '').upper()
+                    
+                    if pos['asset'] == 'option':
+                        pos_key = f"{pos['symbol']}_{pos.get('strike', '')}_{pos.get('expiry', '')}_{direction_normalized}"
+                    else:
+                        pos_key = f"{pos['symbol']}_stock"
+                    
+                    # Only add if not already tracked and status filter allows (OPEN positions only)
+                    if pos_key not in tracked_positions and (not status_filter or status_filter == 'OPEN'):
+                        # Generate stable deterministic ID from position key
+                        import hashlib
+                        stable_id = 'live_' + hashlib.md5(pos_key.encode()).hexdigest()[:12]
+                        
+                        # Convert live position to trade format
+                        live_pos_trade = {
+                            'id': stable_id,  # Stable ID for price tracking
+                            'symbol': pos['symbol'],
+                            'asset_type': pos['asset'],
+                            'side': 'BTO',  # Assume long position
+                            'quantity': int(pos['quantity']),
+                            'entry_price': pos['avg_cost'],
+                            'current_price': pos['current_price'],
+                            'pnl': pos['unrealized_pl'],
+                            'pnl_percent': ((pos['current_price'] - pos['avg_cost']) / pos['avg_cost'] * 100) if pos['avg_cost'] > 0 else 0,
+                            'status': 'OPEN',
+                            'broker': 'Webull',
+                            'executed_at': None,
+                            'strike': pos.get('strike'),
+                            'expiry': pos.get('expiry'),
+                            'call_put': direction_normalized,
+                            'option_id': pos.get('option_id'),
+                            'source': 'sync',  # Broker-synced position
+                            'fill_status': 'Filled',  # Live positions are already filled
+                            'channel_name': 'Global',
+                            'profit_target_1_pct': 20,
+                            'profit_target_2_pct': 50,
+                            'profit_target_3_pct': 100,
+                            'stop_loss_pct': 10,
+                        }
+                        # Add source_display badge for UI
+                        live_pos_trade['source_display'] = {
+                            'name': 'Webull Sync',
+                            'color': 'gray',
+                            'icon': '🔄',
+                            'full_name': 'Position from Webull'
+                        }
+                        merged.append(live_pos_trade)
+            
+            # Add pending Webull orders not tracked in database (only if status filter allows)
+            if not status_filter or status_filter == 'PENDING':
+                tracked_order_ids = {trade.get('order_id') for trade in db_trades if trade.get('order_id')}
+                # Also track pending symbols to avoid duplicates
+                tracked_pending_symbols = {(trade.get('symbol'), trade.get('quantity')) 
+                                           for trade in merged 
+                                           if trade.get('status') == 'PENDING'}
+                
+                for order in webull_orders:
+                    order_id = order.get('order_id')
+                    symbol_qty_key = (order['symbol'], order['quantity'])
+                    
+                    # Skip if already tracked by order_id OR by symbol+quantity
+                    if order_id in tracked_order_ids:
+                        continue
+                    if symbol_qty_key in tracked_pending_symbols:
+                        continue
+                    if order['status'] not in ['Submitted', 'Working']:
+                        continue
+                        
+                    # Generate stable ID for pending order
+                    import hashlib
+                    stable_id = 'pending_' + hashlib.md5(order_id.encode()).hexdigest()[:12]
+                    
+                    merged.append({
+                        'id': stable_id,
+                        'symbol': order['symbol'],
+                        'asset_type': order['asset_type'],
+                        'side': order['action'],
+                        'quantity': order['quantity'],
+                        'entry_price': order['limit_price'],
+                        'current_price': order['limit_price'],
+                        'pnl': 0,
+                        'pnl_percent': 0,
+                        'status': 'PENDING',
+                        'fill_status': order['status'],
+                        'broker': 'Webull',
+                        'executed_at': None,
+                        'order_id': order_id,
+                        'source': 'pending_order',
+                        'profit_target_percent': None,
+                        'stop_loss_percent': None,
+                        'trailing_stop_enabled': False,
+                        'trailing_stop_percent': None
+                    })
+            
+            # Alpaca positions are already synced to database by BrokerSyncService
+            # No need to add live positions again from API - they would show as duplicates
+            # Only add Alpaca pending orders if broker filter matches
+            if broker_filter in ['ALPACA', 'ALPACA_PAPER']:
+                import hashlib
+                if not status_filter or status_filter == 'PENDING':
+                    for order in alpaca_orders:
+                        order_id = str(order.get('order_id', ''))
+                        stable_id = 'alpaca_order_' + hashlib.md5(order_id.encode()).hexdigest()[:12]
+                        
+                        merged.append({
+                            'id': stable_id,
+                            'symbol': order['symbol'],
+                            'asset_type': 'stock',
+                            'side': order.get('action', 'BUY'),
+                            'quantity': int(float(order.get('quantity', 0))),
+                            'entry_price': float(order.get('price', 0)),
+                            'current_price': float(order.get('price', 0)),
+                            'pnl': 0,
+                            'pnl_percent': 0,
+                            'status': 'PENDING',
+                            'fill_status': order.get('status', 'pending'),
+                            'broker': 'Alpaca',
+                            'executed_at': None,
+                            'order_id': order_id,
+                            'source': 'pending_order',
+                            'profit_target_percent': None,
+                            'stop_loss_percent': None,
+                            'trailing_stop_enabled': False,
+                            'trailing_stop_percent': None
+                        })
+            
+            # Safety net: Ensure all trades have a fill_status field
+            for trade in merged:
+                if 'fill_status' not in trade or trade['fill_status'] is None:
+                    # Default based on status
+                    if trade.get('status') == 'OPEN':
+                        trade['fill_status'] = 'Filled'  # Open positions are filled
+                    elif trade.get('status') == 'CLOSED':
+                        trade['fill_status'] = 'Filled'  # Closed positions were filled
+                    elif trade.get('status') == 'PENDING':
+                        trade['fill_status'] = 'Submitted'  # Pending orders are submitted
+                    else:
+                        trade['fill_status'] = 'Unknown'  # Unknown status
+            
+            # Enrich trades with source display info for UI
+            for trade in merged:
+                source_display = db.get_trade_source_display(trade)
+                trade['source_display'] = source_display
+            
+            return jsonify({'trades': merged})
+            
+        except Exception as e:
+            print(f"[API] Error fetching merged trades: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e), 'trades': []}), 500
+    
+    async def _get_webull_positions():
+        """Helper to fetch live Webull positions"""
+        if not hasattr(_bot_instance, 'broker') or _bot_instance.broker is None:
+            return []
+        
+        # Get the Webull broker instance
+        broker = _bot_instance.broker
+        
+        # Check if it's the multi-broker manager
+        if hasattr(broker, 'brokers'):
+            # Find Webull broker
+            webull_broker = broker.brokers.get('Webull')
+            if webull_broker and hasattr(webull_broker, 'get_positions_detailed'):
+                return await webull_broker.get_positions_detailed()
+        elif hasattr(broker, 'get_positions_detailed'):
+            # Direct broker instance
+            return await broker.get_positions_detailed()
+        
+        return []
+    
+    # NOTE: /api/signals route consolidated at line ~1644 (api_get_signals)
+    # Duplicate removed during route audit - 2024-12
+    
+    @app.route('/api/performance/pnl')
+    def get_pnl_performance():
+        """Get PNL performance metrics with filters"""
+        from datetime import datetime, timedelta
+        
+        channel_id = request.args.get('channel_id', type=int)
+        period = request.args.get('period', 'all')  # weekly, monthly, yearly, all
+        
+        # Calculate period boundaries
+        period_start = None
+        period_end = datetime.now()
+        
+        if period == 'weekly':
+            period_start = period_end - timedelta(days=7)
+        elif period == 'monthly':
+            period_start = period_end - timedelta(days=30)
+        elif period == 'yearly':
+            period_start = period_end - timedelta(days=365)
+        
+        try:
+            from . import database as db_module
+            
+            # Parse channel_id from query parameter (already retrieved above)
+            metrics = db_module.get_performance_metrics(
+                channel_id=channel_id,
+                period_start=period_start,
+                period_end=period_end
+            )
+            
+            # Format results
+            results = []
+            for row in metrics:
+                # Calculate win rate
+                total_trades = row['total_trades'] or 0
+                wins = row['wins'] or 0
+                win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
+                
+                # Format symbol display
+                symbol_display = row['symbol']
+                if row['asset_type'] == 'option' and row['strike']:
+                    symbol_display += f" ${row['strike']}{row['call_put']} {row['expiry']}"
+                
+                results.append({
+                    'symbol': symbol_display,
+                    'asset_type': row['asset_type'],
+                    'total_trades': total_trades,
+                    'wins': wins,
+                    'losses': row['losses'] or 0,
+                    'win_rate': round(win_rate, 1),
+                    'total_pnl': round(row['total_pnl'] or 0, 2),
+                    'avg_pnl': round(row['avg_pnl'] or 0, 2),
+                    'avg_pnl_percent': round(row['avg_pnl_percent'] or 0, 1),
+                    'avg_holding_days': round(row['avg_holding_days'] or 0, 1)
+                })
+            
+            # Calculate summary
+            summary = {
+                'total_symbols': len(results),
+                'total_trades': sum(r['total_trades'] for r in results),
+                'total_pnl': round(sum(r['total_pnl'] for r in results), 2),
+                'avg_win_rate': round(sum(r['win_rate'] for r in results) / len(results), 1) if results else 0
+            }
+            
+            return jsonify({
+                'results': results,
+                'summary': summary,
+                'period': period,
+                'period_start': period_start.isoformat() if period_start else None,
+                'period_end': period_end.isoformat()
+            })
+            
+        except Exception as e:
+            print(f"[API] Error fetching PNL performance: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/performance/pnl/users')
+    def get_pnl_performance_by_user():
+        """Get PNL performance metrics grouped by user"""
+        from datetime import datetime, timedelta
+        
+        channel_id = request.args.get('channel_id', type=int)
+        period = request.args.get('period', 'all')
+        
+        # Build date filter based on period
+        date_filter = ""
+        if period == 'weekly':
+            date_filter = "AND lc.closed_at >= datetime('now', '-7 days')"
+        elif period == 'monthly':
+            date_filter = "AND lc.closed_at >= datetime('now', '-30 days')"
+        elif period == 'yearly':
+            date_filter = "AND lc.closed_at >= datetime('now', '-365 days')"
+        
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            # Build channel filter
+            channel_filter = ""
+            params = []
+            if channel_id:
+                channel_filter = "AND s.channel_id = ?"
+                params.append(channel_id)
+            
+            # Query to get user-level performance from lot_closures
+            query = f"""
+                SELECT 
+                    s.author_name as author,
+                    COUNT(DISTINCT lc.id) as total_closures,
+                    SUM(CASE WHEN lc.pnl > 0 THEN 1 ELSE 0 END) as wins,
+                    SUM(CASE WHEN lc.pnl <= 0 THEN 1 ELSE 0 END) as losses,
+                    SUM(lc.pnl) as total_pnl,
+                    AVG(lc.pnl) as avg_pnl,
+                    AVG(lc.pnl_percent) as avg_pnl_percent,
+                    MAX(lc.pnl) as best_trade,
+                    MIN(lc.pnl) as worst_trade,
+                    AVG(lc.holding_days) as avg_holding_days
+                FROM lot_closures lc
+                JOIN signal_lots sl ON lc.lot_id = sl.id
+                JOIN signals s ON sl.signal_id = s.id
+                WHERE 1=1 {date_filter} {channel_filter}
+                GROUP BY s.author_name
+                ORDER BY total_pnl DESC
+            """
+            
+            cursor.execute(query, params)
+            users = cursor.fetchall()
+            conn.close()
+            
+            # Format results with all necessary fields
+            results = []
+            for user in users:
+                total_closures = user['total_closures'] or 0
+                wins = user['wins'] or 0
+                win_rate = (wins / total_closures * 100) if total_closures > 0 else 0
+                
+                results.append({
+                    'author_name': user['author'] or 'Unknown',
+                    'total_trades': total_closures,
+                    'wins': wins,
+                    'losses': user['losses'] or 0,
+                    'win_rate': round(win_rate, 1),
+                    'total_pnl': round(user['total_pnl'] or 0, 2),
+                    'avg_pnl': round(user['avg_pnl'] or 0, 2),
+                    'avg_pnl_percent': round(user['avg_pnl_percent'] or 0, 1),
+                    'best_trade': round(user['best_trade'] or 0, 2),
+                    'worst_trade': round(user['worst_trade'] or 0, 2),
+                    'avg_holding_days': round(user['avg_holding_days'] or 0, 1)
+                })
+            
+            # Calculate summary with proper aggregation
+            total_wins = sum(r['wins'] for r in results)
+            total_trades = sum(r['total_trades'] for r in results)
+            
+            summary = {
+                'total_users': len(results),
+                'total_trades': total_trades,
+                'total_pnl': round(sum(r['total_pnl'] for r in results), 2),
+                'avg_win_rate': round((total_wins / total_trades * 100) if total_trades > 0 else 0, 1)
+            }
+            
+            return jsonify({
+                'results': results,
+                'summary': summary,
+                'period': period
+            })
+            
+        except Exception as e:
+            print(f"[API] Error fetching user PNL performance: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    # General settings (Discord, Webull, API keys)
+    @app.route('/api/settings', methods=['GET'])
+    def api_get_settings():
+        """Get all settings"""
+        try:
+            from .config_service import load_config
+            
+            discord_config = load_config('discord') or {}
+            webull_config = load_config('webull') or {}
+            api_keys = load_config('api_keys') or {}
+            notifications = load_config('discord_notifications') or {}
+            
+            return jsonify({
+                'discord_token': discord_config.get('token', ''),
+                'webhook_url': notifications.get('webhook_url', ''),
+                'webhook_channel': notifications.get('channel_id', ''),
+                'notifications_enabled': notifications.get('enabled', True),
+                'webull_email': webull_config.get('email', ''),
+                'webull_did': webull_config.get('did', ''),
+                'webull_paper': webull_config.get('paper_trading', True),
+                'openai_key': api_keys.get('openai', ''),
+                'alphavantage_key': api_keys.get('alpha_vantage', ''),
+                'finnhub_key': api_keys.get('finnhub', '')
+            })
+        except Exception as e:
+            print(f"[API] Error fetching settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/settings', methods=['POST'])
+    def api_save_settings():
+        """Save all settings"""
+        try:
+            from .config_service import save_discord_config, save_webull_config, save_api_keys, save_discord_notifications, load_config
+            
+            data = request.json
+            
+            # Save Discord token
+            if data.get('discord_token'):
+                save_discord_config(data['discord_token'])
+            
+            # Save Discord notifications
+            save_discord_notifications(
+                webhook_url=data.get('webhook_url', ''),
+                channel_id=data.get('webhook_channel', ''),
+                enabled=data.get('notifications_enabled', True)
+            )
+            
+            # Save Webull config
+            if data.get('webull_email'):
+                webull_config = load_config('webull') or {}
+                save_webull_config(
+                    email=data.get('webull_email', ''),
+                    password=data.get('webull_password', webull_config.get('password', '')),
+                    did=data.get('webull_did', ''),
+                    access_token=webull_config.get('access_token', ''),
+                    refresh_token=webull_config.get('refresh_token', ''),
+                    paper_trading=data.get('webull_paper', True)
+                )
+            
+            # Save API keys
+            save_api_keys(
+                openai=data.get('openai_key', ''),
+                alpha_vantage=data.get('alphavantage_key', ''),
+                finnhub=data.get('finnhub_key', '')
+            )
+            
+            return jsonify({'success': True, 'message': 'Settings saved successfully'})
+            
+        except Exception as e:
+            print(f"[API] Error saving settings: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    # Debug mode settings
+    @app.route('/api/settings/debug', methods=['GET'])
+    def api_get_debug_mode():
+        """Get debug mode setting"""
+        try:
+            value = db.get_setting('debug_mode', 'false')
+            return jsonify({'enabled': value.lower() == 'true'})
+        except Exception as e:
+            return jsonify({'enabled': False})
+    
+    @app.route('/api/settings/debug', methods=['POST'])
+    def api_set_debug_mode():
+        """Toggle debug mode"""
+        try:
+            data = request.json
+            enabled = data.get('enabled', False)
+            db.save_setting('debug_mode', 'true' if enabled else 'false')
+            return jsonify({'success': True, 'enabled': enabled})
+        except Exception as e:
+            print(f"[API] Error saving debug mode: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    # Slippage protection settings
+    @app.route('/api/settings/slippage', methods=['GET'])
+    def api_get_slippage_settings():
+        """Get slippage protection settings"""
+        try:
+            settings = db.get_slippage_settings()
+            return jsonify(settings)
+        except Exception as e:
+            print(f"[API] Error fetching slippage settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/settings/slippage', methods=['POST'])
+    def api_update_slippage_settings():
+        """Update slippage protection settings"""
+        try:
+            data = request.json
+            enabled = data.get('enabled', True)
+            threshold_percent = data.get('threshold_percent', 10.0)
+            
+            # Validate threshold
+            if not (0 <= threshold_percent <= 100):
+                return jsonify({'error': 'Threshold must be between 0 and 100'}), 400
+            
+            success = db.update_slippage_settings(enabled, threshold_percent)
+            
+            if success:
+                return jsonify({
+                    'success': True,
+                    'message': 'Slippage settings updated successfully',
+                    'settings': {
+                        'enabled': enabled,
+                        'threshold_percent': threshold_percent
+                    }
+                })
+            else:
+                return jsonify({'error': 'Failed to update settings'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error updating slippage settings: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    # Risk Management Settings
+    @app.route('/api/settings/risk_management', methods=['GET'])
+    def api_get_risk_management_settings():
+        """Get risk management settings"""
+        try:
+            settings = db.get_risk_management_settings()
+            return jsonify(settings)
+        except Exception as e:
+            print(f"[API] Error fetching risk management settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/settings/risk_management', methods=['POST'])
+    def api_update_risk_management_settings():
+        """Update risk management settings"""
+        try:
+            data = request.json
+            enabled = data.get('enabled', False)
+            profit_target = data.get('profit_target_percent', 20.0)
+            stop_loss = data.get('stop_loss_percent', 10.0)
+            trailing_stop = data.get('trailing_stop_percent', 5.0)
+            
+            # Validate percentages
+            if not (0 <= profit_target <= 100):
+                return jsonify({'error': 'Profit target must be between 0 and 100'}), 400
+            if not (0 <= stop_loss <= 100):
+                return jsonify({'error': 'Stop loss must be between 0 and 100'}), 400
+            if not (0 <= trailing_stop <= 100):
+                return jsonify({'error': 'Trailing stop must be between 0 and 100'}), 400
+            
+            success = db.update_risk_management_settings(enabled, profit_target, stop_loss, trailing_stop)
+            
+            if success:
+                return jsonify({
+                    'success': True,
+                    'message': 'Risk management settings updated successfully',
+                    'settings': {
+                        'enabled': enabled,
+                        'profit_target_percent': profit_target,
+                        'stop_loss_percent': stop_loss,
+                        'trailing_stop_percent': trailing_stop
+                    }
+                })
+            else:
+                return jsonify({'error': 'Failed to update settings'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error updating risk management settings: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    # AI Analysis Settings
+    @app.route('/api/settings/ai_analysis', methods=['GET'])
+    def api_get_ai_settings():
+        """Get AI analysis settings"""
+        try:
+            settings = db.get_ai_settings()
+            return jsonify(settings)
+        except Exception as e:
+            print(f"[API] Error fetching AI settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/settings/ai_analysis', methods=['POST'])
+    def api_update_ai_settings():
+        """Update AI analysis settings"""
+        try:
+            data = request.json
+            enabled = data.get('enabled', True)
+            model = data.get('model', 'gpt-4o-mini')
+            sentiment_enabled = data.get('sentiment_enabled', False)
+            
+            # Validate model
+            valid_models = ['gpt-4o-mini', 'gpt-4o', 'gpt-5-mini', 'gpt-5']
+            if model not in valid_models:
+                return jsonify({'error': f'Invalid model. Must be one of: {", ".join(valid_models)}'}), 400
+            
+            success = db.update_ai_settings(enabled, model, sentiment_enabled)
+            
+            if success:
+                return jsonify({
+                    'success': True,
+                    'message': 'AI settings updated successfully',
+                    'settings': {
+                        'enabled': enabled,
+                        'model': model,
+                        'sentiment_enabled': sentiment_enabled
+                    }
+                })
+            else:
+                return jsonify({'error': 'Failed to update settings'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error updating AI settings: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    # API Keys Settings (OpenAI, Alpha Vantage, Finnhub)
+    @app.route('/api/settings/api_keys', methods=['GET'])
+    def api_get_api_keys_settings():
+        """Get API keys (masked for display)"""
+        try:
+            from .broker_credentials_service import get_api_keys_extended
+            
+            keys = get_api_keys_extended()
+            
+            # Return masked keys for display (show last 4 chars only)
+            def mask_key(key):
+                if not key or len(key) < 8:
+                    return ''
+                return '••••••••' + key[-4:]
+            
+            return jsonify({
+                'success': True,
+                'openai_key': mask_key(keys.get('openai', '')),
+                'alphavantage_key': mask_key(keys.get('alpha_vantage', '')),
+                'finnhub_key': mask_key(keys.get('finnhub', ''))
+            })
+        except Exception as e:
+            print(f"[API] Error getting API keys: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/settings/api_keys', methods=['POST'])
+    def api_save_api_keys_settings():
+        """Save API keys"""
+        try:
+            from .broker_credentials_service import save_api_keys_extended, get_api_keys_extended
+            
+            data = request.json
+            existing = get_api_keys_extended()
+            
+            # Only update if new value provided (not masked value)
+            openai = data.get('openai_key', '')
+            alpha_vantage = data.get('alphavantage_key', '')
+            finnhub = data.get('finnhub_key', '')
+            
+            # If value starts with masked chars, keep existing
+            if openai.startswith('••••'):
+                openai = existing.get('openai', '')
+            if alpha_vantage.startswith('••••'):
+                alpha_vantage = existing.get('alpha_vantage', '')
+            if finnhub.startswith('••••'):
+                finnhub = existing.get('finnhub', '')
+            
+            save_api_keys_extended(
+                openai=openai or existing.get('openai', ''),
+                alpha_vantage=alpha_vantage or existing.get('alpha_vantage', ''),
+                finnhub=finnhub or existing.get('finnhub', ''),
+                license_key=existing.get('license_key', '')
+            )
+            
+            return jsonify({
+                'success': True,
+                'message': 'API keys saved successfully'
+            })
+        except Exception as e:
+            print(f"[API] Error saving API keys: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # Trading Settings
+    @app.route('/api/settings/trading', methods=['GET'])
+    def api_get_trading_settings():
+        """Get trading settings"""
+        try:
+            settings = db.get_trading_settings()
+            return jsonify(settings)
+        except Exception as e:
+            print(f"[API] Error fetching trading settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/settings/trading', methods=['POST'])
+    def api_update_trading_settings():
+        """Update trading settings"""
+        try:
+            data = request.json
+            max_position_size = data.get('max_position_size', 600)
+            
+            # Validate max position size
+            if not (100 <= max_position_size <= 10000):
+                return jsonify({'error': 'Max position size must be between 100 and 10000'}), 400
+            
+            success = db.update_trading_settings(max_position_size)
+            
+            if success:
+                return jsonify({
+                    'success': True,
+                    'message': 'Trading settings updated successfully',
+                    'settings': {
+                        'max_position_size': max_position_size
+                    }
+                })
+            else:
+                return jsonify({'error': 'Failed to update settings'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error updating trading settings: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    # Discord Bot Settings (allow_self_messages, patterns, etc.)
+    @app.route('/api/settings/discord', methods=['GET'])
+    def api_get_discord_settings():
+        """Get Discord bot settings"""
+        try:
+            settings = db.get_discord_settings()
+            return jsonify(settings)
+        except Exception as e:
+            print(f"[API] Error fetching Discord settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/settings/discord', methods=['POST'])
+    def api_update_discord_settings():
+        """Update Discord bot settings"""
+        try:
+            data = request.json
+            
+            allow_self_messages = data.get('allow_self_messages', False)
+            discovery_mode = data.get('discovery_mode', False)
+            option_pattern = data.get('option_pattern', '').strip()
+            stock_pattern = data.get('stock_pattern', '').strip()
+            allowed_author_ids = data.get('allowed_author_ids', '').strip()
+            allowed_guild_ids = data.get('allowed_guild_ids', '').strip()
+            
+            # Default patterns - used if user clears the field
+            DEFAULT_OPTION_PATTERN = r'^(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s+\$?([\d.]+)\s*([CPcp])\s*(\d{1,2}/\d{1,2})\s*@?\s*([\d.]+|[mM])'
+            DEFAULT_STOCK_PATTERN = r'^(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s*@?\s*([\d.]+|[mM])'
+            
+            # Ensure patterns are not empty - fall back to defaults
+            if not option_pattern:
+                option_pattern = DEFAULT_OPTION_PATTERN
+            if not stock_pattern:
+                stock_pattern = DEFAULT_STOCK_PATTERN
+            
+            # Validate regex patterns are compilable
+            import re
+            try:
+                re.compile(option_pattern)
+            except re.error as e:
+                return jsonify({'error': f'Invalid option pattern regex: {e}'}), 400
+            
+            try:
+                re.compile(stock_pattern)
+            except re.error as e:
+                return jsonify({'error': f'Invalid stock pattern regex: {e}'}), 400
+            
+            success = db.update_discord_settings(
+                allow_self_messages=allow_self_messages,
+                discovery_mode=discovery_mode,
+                option_pattern=option_pattern,
+                stock_pattern=stock_pattern,
+                allowed_author_ids=allowed_author_ids,
+                allowed_guild_ids=allowed_guild_ids
+            )
+            
+            if success:
+                return jsonify({
+                    'success': True,
+                    'message': 'Discord settings updated successfully. Restart the bot for changes to take effect.',
+                    'settings': {
+                        'allow_self_messages': allow_self_messages,
+                        'discovery_mode': discovery_mode,
+                        'option_pattern': option_pattern,
+                        'stock_pattern': stock_pattern,
+                        'allowed_author_ids': allowed_author_ids,
+                        'allowed_guild_ids': allowed_guild_ids
+                    }
+                })
+            else:
+                return jsonify({'error': 'Failed to update Discord settings'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error updating Discord settings: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    # Discord Notifications Settings
+    @app.route('/api/settings/discord_notifications', methods=['GET'])
+    def api_get_discord_notifications():
+        """Get Discord notification settings"""
+        try:
+            from .config_service import get_discord_notifications
+            settings = get_discord_notifications()
+            return jsonify(settings)
+        except Exception as e:
+            print(f"[API] Error fetching Discord notifications: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/settings/discord_notifications', methods=['POST'])
+    def api_update_discord_notifications():
+        """Update Discord notification settings"""
+        try:
+            from .config_service import save_discord_notifications
+            data = request.json
+            
+            webhook_url = data.get('webhook_url', '').strip()
+            channel_id = data.get('channel_id', '').strip()
+            enabled = data.get('enabled', True)
+            
+            save_discord_notifications(webhook_url, channel_id, enabled)
+            
+            return jsonify({
+                'success': True,
+                'message': 'Discord notifications saved successfully'
+            })
+        except Exception as e:
+            print(f"[API] Error saving Discord notifications: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/settings/test_webhook', methods=['POST'])
+    def api_test_webhook():
+        """Test Discord webhook and return channel information"""
+        try:
+            data = request.json
+            webhook_url = data.get('webhook_url', '').strip()
+            
+            if not webhook_url:
+                return jsonify({'success': False, 'error': 'Webhook URL is required'}), 400
+            
+            # Send test message
+            import requests
+            from datetime import datetime
+            
+            embed = {
+                "title": "🔔 Webhook Test",
+                "description": "**Test notification from QuantumPulse**\n\nYour webhook is configured correctly!",
+                "color": 0x0A84FF,  # Blue
+                "timestamp": datetime.utcnow().isoformat(),
+                "footer": {
+                    "text": "Ψ∿ QuantumPulse Trading Bot"
+                }
+            }
+            
+            payload = {"embeds": [embed]}
+            response = requests.post(webhook_url, json=payload, timeout=5)
+            
+            if response.status_code == 204:
+                # Get channel information from webhook URL
+                # Webhook URL format: https://discord.com/api/webhooks/{webhook_id}/{webhook_token}
+                # We need to query the webhook info to get channel name
+                try:
+                    # Extract webhook ID and token from URL
+                    parts = webhook_url.rstrip('/').split('/')
+                    if len(parts) >= 2:
+                        webhook_id = parts[-2]
+                        webhook_token = parts[-1]
+                        
+                        # Get webhook info (doesn't require auth)
+                        info_url = f"https://discord.com/api/v10/webhooks/{webhook_id}/{webhook_token}"
+                        info_response = requests.get(info_url, timeout=5)
+                        
+                        if info_response.status_code == 200:
+                            webhook_info = info_response.json()
+                            channel_name = webhook_info.get('channel_id', 'Unknown')
+                            guild_name = webhook_info.get('guild_id', 'Unknown')
+                            webhook_name = webhook_info.get('name', 'Unknown')
+                            
+                            return jsonify({
+                                'success': True,
+                                'message': 'Webhook test successful',
+                                'channel_name': f"#{webhook_name}" if webhook_name != 'Unknown' else 'Unknown',
+                                'guild_name': f"Server ID: {guild_name}",
+                                'channel_id': channel_name
+                            })
+                except Exception as info_error:
+                    print(f"[WEBHOOK] Could not fetch webhook info: {info_error}")
+                
+                # Fallback if we can't get detailed info
+                return jsonify({
+                    'success': True,
+                    'message': 'Webhook test successful',
+                    'channel_name': 'Test message sent successfully',
+                    'guild_name': 'Check your Discord channel'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': f'Webhook returned status {response.status_code}: {response.text}'
+                }), 400
+                
+        except Exception as e:
+            print(f"[API] Error testing webhook: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # Alpaca Settings
+    @app.route('/api/settings/alpaca', methods=['GET'])
+    def api_get_alpaca_settings():
+        """Get Alpaca settings"""
+        try:
+            settings = db.get_alpaca_settings()
+            return jsonify(settings)
+        except Exception as e:
+            print(f"[API] Error fetching Alpaca settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/settings/alpaca', methods=['POST'])
+    def api_update_alpaca_settings():
+        """Update Alpaca settings"""
+        try:
+            data = request.json
+            api_key = data.get('alpaca_api_key', '').strip()
+            secret_key = data.get('alpaca_secret_key', '').strip()
+            
+            if not api_key or not secret_key:
+                return jsonify({'success': False, 'error': 'Both API key and secret key are required'}), 400
+            
+            print(f"[API] Saving Alpaca credentials - API Key length: {len(api_key)}, Secret length: {len(secret_key)}")
+            success = db.update_alpaca_settings(api_key, secret_key)
+            if success:
+                print(f"[API] ✓ Alpaca credentials saved successfully")
+                return jsonify({'success': True, 'message': 'Alpaca credentials saved successfully'})
+            else:
+                print(f"[API] ✗ Failed to save Alpaca credentials")
+                return jsonify({'success': False, 'error': 'Failed to save credentials'}), 500
+        except Exception as e:
+            print(f"[API] ✗ Error updating Alpaca settings: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/trades/clear-stale', methods=['POST'])
+    @login_required
+    def api_clear_stale_trades():
+        """Clear stale trades for a specific broker - useful when switching API keys"""
+        try:
+            data = request.json or {}
+            broker = data.get('broker', '').strip().upper()
+            
+            if not broker:
+                return jsonify({'success': False, 'error': 'Broker name is required'}), 400
+            
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            if 'ALPACA' in broker:
+                cursor.execute("""
+                    UPDATE trades 
+                    SET status = 'CLOSED', 
+                        close_reason = 'ACCOUNT_RESET',
+                        closed_at = datetime('now')
+                    WHERE broker LIKE '%ALPACA%' 
+                    AND status IN ('OPEN', 'PENDING')
+                """)
+            elif 'WEBULL' in broker:
+                cursor.execute("""
+                    UPDATE trades 
+                    SET status = 'CLOSED', 
+                        close_reason = 'ACCOUNT_RESET',
+                        closed_at = datetime('now')
+                    WHERE broker LIKE '%Webull%' 
+                    AND status IN ('OPEN', 'PENDING')
+                """)
+            else:
+                cursor.execute("""
+                    UPDATE trades 
+                    SET status = 'CLOSED', 
+                        close_reason = 'ACCOUNT_RESET',
+                        closed_at = datetime('now')
+                    WHERE broker = ? 
+                    AND status IN ('OPEN', 'PENDING')
+                """, (broker,))
+            
+            affected = cursor.rowcount
+            conn.commit()
+            conn.close()
+            
+            print(f"[API] ✓ Cleared {affected} stale {broker} trades (marked as CLOSED with ACCOUNT_RESET)")
+            
+            return jsonify({
+                'success': True, 
+                'message': f'Cleared {affected} stale {broker} trades',
+                'trades_closed': affected
+            })
+            
+        except Exception as e:
+            print(f"[API] Error clearing stale trades: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/trades/stale-count', methods=['GET'])
+    def api_get_stale_count():
+        """Get count of open/pending trades by broker - for showing in settings"""
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT 
+                    CASE 
+                        WHEN broker LIKE '%ALPACA%' THEN 'ALPACA'
+                        WHEN broker LIKE '%Webull%' THEN 'WEBULL'
+                        ELSE broker 
+                    END as broker_group,
+                    COUNT(*) as count
+                FROM trades 
+                WHERE status IN ('OPEN', 'PENDING')
+                GROUP BY broker_group
+            """)
+            
+            counts = {}
+            for row in cursor.fetchall():
+                counts[row[0]] = row[1]
+            
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'counts': counts,
+                'total': sum(counts.values())
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting stale count: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # Option Chain Endpoints - routes to selected broker
+    @app.route('/api/options/expirations', methods=['GET'])
+    def api_get_option_expirations():
+        """Get available option expiration dates for a symbol - routes to selected broker"""
+        try:
+            symbol = request.args.get('symbol', '').upper()
+            selected_broker = request.args.get('broker', 'WEBULL').upper()
+            if not symbol:
+                return jsonify({'error': 'Symbol is required'}), 400
+            
+            print(f"[OPTIONS API] Fetching expirations for {symbol} from broker: {selected_broker}")
+            
+            # Route to Alpaca if selected
+            if 'ALPACA' in selected_broker:
+                alpaca = get_alpaca_provider()
+                if not alpaca:
+                    return jsonify({'error': 'Alpaca data provider not configured.'}), 503
+                
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                try:
+                    expirations_list = new_loop.run_until_complete(
+                        alpaca.get_options_expiration_dates(symbol)
+                    )
+                    
+                    from datetime import datetime
+                    expirations = []
+                    for exp_str in expirations_list:
+                        try:
+                            exp_date = datetime.strptime(exp_str, '%Y-%m-%d')
+                            expirations.append({
+                                'date': exp_str,
+                                'label': exp_date.strftime('%b %d, %Y')
+                            })
+                        except Exception as e:
+                            print(f"[API] Warning: Could not format expiration {exp_str}: {e}")
+                            continue
+                    
+                    return jsonify({
+                        'symbol': symbol,
+                        'expirations': expirations,
+                        'data_source': 'Alpaca'
+                    })
+                finally:
+                    new_loop.close()
+            
+            # Default: Use Webull
+            broker = get_webull_broker()
+            loop = get_webull_loop()
+            
+            # For index options (SPX, NDX, etc.), use Alpaca which has better support for daily expirations
+            # Webull only returns monthly expirations for these symbols
+            index_symbols = ['SPX', 'NDX', 'RUT', 'VIX', 'DJX', 'XSP']
+            use_alpaca_for_expirations = symbol in index_symbols
+            
+            if use_alpaca_for_expirations:
+                print(f"[API] Using Alpaca for {symbol} expirations (index option with daily expirations)")
+            
+            if broker and loop and not use_alpaca_for_expirations:
+                try:
+                    from datetime import datetime
+                    
+                    # Fetch expirations from Webull for non-index symbols
+                    future = asyncio.run_coroutine_threadsafe(
+                        broker.get_options_expiration_dates(symbol),
+                        loop
+                    )
+                    expirations_raw = future.result(timeout=10)
+                    
+                    if expirations_raw:
+                        expirations = []
+                        for exp in expirations_raw:
+                            if isinstance(exp, dict):
+                                exp_date = exp.get('date', '')
+                                exp_label = exp.get('label', exp_date)
+                            else:
+                                exp_date = str(exp)
+                                try:
+                                    dt = datetime.strptime(exp_date, '%Y-%m-%d')
+                                    exp_label = dt.strftime('%b %d, %Y')
+                                except:
+                                    exp_label = exp_date
+                            
+                            if exp_date:
+                                expirations.append({
+                                    'date': exp_date,
+                                    'label': exp_label
+                                })
+                        
+                        print(f"[API] Loaded {len(expirations)} Webull expirations for {symbol}")
+                        return jsonify({
+                            'symbol': symbol,
+                            'expirations': expirations,
+                            'data_source': 'Webull'
+                        })
+                except Exception as e:
+                    print(f"[API] Webull expiration fetch failed: {e}, trying Alpaca fallback")
+            
+            # Fallback to Alpaca if Webull not available
+            alpaca = get_alpaca_provider()
+            if not alpaca:
+                return jsonify({'error': 'No data provider available. Webull broker not connected and Alpaca not configured.'}), 503
+            
+            # Fetch expiration dates using Alpaca
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                expirations_list = new_loop.run_until_complete(
+                    alpaca.get_options_expiration_dates(symbol)
+                )
+                
+                from datetime import datetime
+                expirations = []
+                for exp_str in expirations_list:
+                    try:
+                        exp_date = datetime.strptime(exp_str, '%Y-%m-%d')
+                        expirations.append({
+                            'date': exp_str,
+                            'label': exp_date.strftime('%b %d, %Y')
+                        })
+                    except Exception as e:
+                        print(f"[API] Warning: Could not format expiration {exp_str}: {e}")
+                        continue
+                
+                return jsonify({
+                    'symbol': symbol,
+                    'expirations': expirations,
+                    'data_source': 'Alpaca (fallback)'
+                })
+            finally:
+                new_loop.close()
+                
+        except Exception as e:
+            print(f"[API] Error fetching option expirations for {symbol}: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/options/chain', methods=['GET'])
+    def api_get_option_chain():
+        """Get option chain for a symbol and expiration date - routes to selected broker"""
+        try:
+            symbol = request.args.get('symbol', '').upper()
+            expiry = request.args.get('expiry', '')
+            broker = request.args.get('broker', 'WEBULL').upper()
+            
+            # Validate inputs
+            if not symbol or not expiry:
+                return jsonify({'error': 'Symbol and expiry are required'}), 400
+            
+            # Catch JavaScript undefined converted to string
+            if expiry == 'undefined' or expiry == 'null':
+                return jsonify({'error': 'Please select a valid expiration date'}), 400
+            
+            # Validate date format (YYYY-MM-DD)
+            try:
+                from datetime import datetime
+                datetime.strptime(expiry, '%Y-%m-%d')
+            except ValueError:
+                return jsonify({'error': f'Invalid date format: {expiry}. Expected YYYY-MM-DD'}), 400
+            
+            # Route to appropriate broker for option chain data
+            print(f"[OPTIONS API] Fetching chain for {symbol} {expiry} from broker: {broker}")
+            chain = get_option_chain_for_broker(symbol, expiry, broker)
+            
+            if not chain or (not chain.get('calls') and not chain.get('puts')):
+                data_source = chain.get('data_source', 'Unknown') if chain else 'Unknown'
+                return jsonify({
+                    'error': f'No option chain data found for {symbol} {expiry}',
+                    'data_source': data_source
+                }), 404
+            
+            # Sort option chain around ATM (at-the-money)
+            stock_price = chain.get('stock_price')
+            if stock_price and stock_price > 0:
+                # Find ATM strike (closest to stock price)
+                all_strikes = sorted(set([opt['strike'] for opt in chain.get('calls', [])] + 
+                                         [opt['strike'] for opt in chain.get('puts', [])]))
+                
+                if all_strikes:
+                    # Find closest strike to current price
+                    atm_strike = min(all_strikes, key=lambda x: abs(x - stock_price))
+                    atm_index = all_strikes.index(atm_strike)
+                    
+                    # Add ATM metadata to response
+                    chain['atm_strike'] = atm_strike
+                    chain['atm_index'] = atm_index
+                    chain['all_strikes'] = all_strikes
+            
+            # data_source already set by get_cached_option_chain_webull
+            return jsonify(chain)
+                
+        except Exception as e:
+            print(f"[API] Error fetching option chain for {symbol} {expiry}: {e}")
+            db.log_error('data_provider', f"Option chain error: {str(e)}", 
+                        'OptionsAPI', context=f'Symbol: {symbol}, Expiry: {expiry}')
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/options/strike-quote', methods=['POST'])
+    def api_get_strike_quote():
+        """Get option quote for a specific strike - routes to selected broker"""
+        try:
+            data = request.json
+            symbol = data.get('symbol', '').upper().strip()
+            strike = data.get('strike')
+            expiry = data.get('expiry', '').strip()
+            option_type = data.get('option_type', 'CALL').upper()
+            broker = data.get('broker', 'WEBULL').upper()
+            
+            if not symbol:
+                return jsonify({'error': 'Symbol is required'}), 400
+            if strike is None:
+                return jsonify({'error': 'Strike price is required'}), 400
+            if not expiry or expiry in ['undefined', 'null', '']:
+                return jsonify({'error': 'Expiration date is required'}), 400
+            
+            try:
+                strike = float(strike)
+            except (ValueError, TypeError):
+                return jsonify({'error': 'Invalid strike price format'}), 400
+            
+            # Route to appropriate broker for option chain data
+            print(f"[OPTIONS API] Fetching strike quote for {symbol} ${strike} from broker: {broker}")
+            chain = get_option_chain_for_broker(symbol, expiry, broker)
+            
+            if not chain:
+                return jsonify({'error': 'Failed to fetch option chain data'}), 503
+            
+            stock_price = chain.get('stock_price', 0)
+            
+            options_list = chain.get('calls' if option_type == 'CALL' else 'puts', [])
+            
+            target_option = None
+            for opt in options_list:
+                if abs(opt.get('strike', 0) - strike) < 0.01:
+                    target_option = opt
+                    break
+            
+            if not target_option:
+                available_strikes = sorted(set([o.get('strike', 0) for o in options_list]))[:10]
+                return jsonify({
+                    'error': f'Strike ${strike} not found for {symbol} {expiry} {option_type}',
+                    'available_strikes': available_strikes[:10]
+                }), 404
+            
+            bid = float(target_option.get('bid', 0) or 0)
+            ask = float(target_option.get('ask', 0) or 0)
+            mid = round((bid + ask) / 2, 2) if bid > 0 and ask > 0 else 0
+            last = float(target_option.get('last', 0) or 0)
+            
+            return jsonify({
+                'success': True,
+                'symbol': symbol,
+                'strike': strike,
+                'expiry': expiry,
+                'option_type': option_type,
+                'stock_price': stock_price,
+                'bid': bid,
+                'ask': ask,
+                'mid': mid,
+                'last': last,
+                'volume': target_option.get('volume', 0),
+                'open_interest': target_option.get('open_interest', 0),
+                'iv': target_option.get('iv', 0),
+                'delta': target_option.get('delta'),
+                'gamma': target_option.get('gamma'),
+                'theta': target_option.get('theta'),
+                'vega': target_option.get('vega'),
+                'option_id': target_option.get('option_id', ''),
+                'data_source': chain.get('data_source', 'Webull')
+            })
+                
+        except Exception as e:
+            print(f"[API] Error fetching strike quote: {e}")
+            db.log_error('data_provider', f"Strike quote error: {str(e)}", 
+                        'OptionsAPI', context=f'Symbol: {symbol}, Strike: {strike}')
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/options/order', methods=['POST'])
+    def api_place_option_order():
+        """Place an option order (buy call/put) - routes to selected broker"""
+        try:
+            data = request.json
+            symbol = data.get('symbol', '').upper()
+            strike = float(data.get('strike', 0))
+            expiry = data.get('expiry', '')
+            option_type = data.get('option_type', '').upper()  # CALL or PUT
+            quantity = int(data.get('quantity', 1))
+            side = data.get('side', 'BUY').upper()  # BUY or SELL
+            price = float(data.get('price', 0))
+            option_id = data.get('option_id', '')  # REQUIRED: Webull option contract ID
+            selected_broker = data.get('broker', 'WEBULL').upper()  # NEW: Broker selection
+            
+            # Validate inputs
+            if not all([symbol, strike, expiry, option_type, price, option_id]):
+                return jsonify({'error': 'Missing required fields (symbol, strike, expiry, option_type, price, option_id)'}), 400
+            
+            if option_type not in ['CALL', 'PUT']:
+                return jsonify({'error': 'option_type must be CALL or PUT'}), 400
+            
+            if side not in ['BUY', 'SELL']:
+                return jsonify({'error': 'side must be BUY or SELL'}), 400
+            
+            if quantity <= 0:
+                return jsonify({'error': 'quantity must be positive'}), 400
+            
+            # Get bot instance
+            if not _bot_instance:
+                return jsonify({'error': 'Bot not initialized'}), 503
+            
+            # Route to appropriate broker based on selection
+            broker_to_use = None
+            broker_name = selected_broker
+            
+            if selected_broker == 'WEBULL':
+                if hasattr(_bot_instance, 'broker') and _bot_instance.broker:
+                    broker_to_use = _bot_instance.broker
+                else:
+                    return jsonify({'error': 'Webull LIVE broker not connected'}), 503
+                    
+            elif selected_broker == 'WEBULL_PAPER':
+                return jsonify({'error': 'Webull PAPER trading not supported for options'}), 400
+                
+            elif selected_broker == 'ALPACA':
+                return jsonify({'error': 'Alpaca LIVE not configured. Use Alpaca PAPER for testing.'}), 400
+                
+            elif selected_broker == 'ALPACA_PAPER':
+                if hasattr(_bot_instance, 'paper_broker') and _bot_instance.paper_broker:
+                    broker_to_use = _bot_instance.paper_broker
+                else:
+                    return jsonify({'error': 'Alpaca PAPER broker not connected'}), 503
+                    
+            elif selected_broker == 'IBKR':
+                return jsonify({'error': 'IBKR LIVE requires TWS connection. Please ensure TWS is running.'}), 400
+                
+            elif selected_broker == 'IBKR_PAPER':
+                return jsonify({'error': 'IBKR PAPER requires TWS Paper Trading connection. Please ensure TWS Paper is running.'}), 400
+                
+            else:
+                return jsonify({'error': f'Unknown broker: {selected_broker}'}), 400
+            
+            print(f"[OPTIONS API] Routing order to {broker_name}: {side} {quantity} {symbol} ${strike}{option_type[0]} @ ${price}")
+            
+            # Place option order
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    broker_to_use.place_option_order_simple(
+                        symbol=symbol,
+                        strike=strike,
+                        expiry=expiry,
+                        option_type=option_type,
+                        quantity=quantity,
+                        side=side,
+                        price=price,
+                        option_id=option_id
+                    )
+                )
+                
+                # Debug: Print the actual result from Webull
+                print(f"[DEBUG] Order result type: {type(result)}")
+                print(f"[DEBUG] Order result: {result}")
+                
+                # Handle OrderResult object (from Alpaca) - convert to dict format
+                from broker_interface import OrderResult
+                if isinstance(result, OrderResult):
+                    # Convert OrderResult to dict for uniform handling
+                    result = {
+                        'success': result.success,
+                        'order_id': result.order_id,
+                        'message': result.message,
+                        'price': result.price,
+                        'quantity': result.quantity,
+                        'symbol': result.symbol,
+                        'action': result.action
+                    }
+                    print(f"[DEBUG] Converted OrderResult to dict: {result}")
+                
+                # result is a dict, not an object
+                if isinstance(result, dict):
+                    # Check for success - Webull might use different field names
+                    is_success = result.get('success', False)
+                    
+                    # If no 'success' field, check if there's an order ID or other success indicators
+                    if 'success' not in result:
+                        # Check for Webull success indicators
+                        if 'orderId' in result or 'clientOrderId' in result:
+                            is_success = True
+                        # Check for error indicators
+                        elif 'error' in result or 'msg' in result:
+                            is_success = False
+                    
+                    print(f"[DEBUG] Interpreted success: {is_success}")
+                    
+                    if is_success:
+                        action = "BTO" if side == "BUY" else "STC"
+                        order_id = result.get('orderId') or result.get('clientOrderId') or result.get('order_id', 'UNKNOWN')
+                        
+                        # Get logged-in user ID for performance tracking
+                        user_id = session.get('user_id')
+                        
+                        # Get risk settings from request (if provided)
+                        stop_loss_pct = data.get('stop_loss_pct')
+                        profit_target_pct = data.get('profit_target_pct')
+                        trailing_stop_pct = data.get('trailing_stop_pct')
+                        enable_risk_management = data.get('enable_risk_management', False)
+                        
+                        # Calculate stop/target prices if risk management enabled
+                        stop_loss_price = None
+                        profit_target_price = None
+                        if enable_risk_management and price > 0:
+                            if stop_loss_pct:
+                                stop_loss_price = round(price * (1 - float(stop_loss_pct) / 100), 2)
+                            if profit_target_pct:
+                                profit_target_price = round(price * (1 + float(profit_target_pct) / 100), 2)
+                        
+                        # ====== TRACK TRADE IN DATABASE FOR PNL/LEADERBOARD ======
+                        try:
+                            from datetime import datetime
+                            from gui_app.lot_matcher import get_matcher
+                            
+                            # Get the GUI_EXEC channel ID for tracking
+                            gui_channel_id = db.get_gui_exec_channel_id()
+                            if not gui_channel_id:
+                                print("[OPTIONS API] Warning: GUI_EXEC channel not found, trade won't be tracked")
+                            else:
+                                # Generate a unique message ID for tracking
+                                msg_id = f"GUI_{datetime.now().strftime('%Y%m%d%H%M%S')}_{order_id}"
+                                
+                                # Save signal to database
+                                db.add_signal(
+                                    discord_channel_id='GUI_EXEC',
+                                    message_id=msg_id,
+                                    signal_type=action,
+                                    symbol=symbol,
+                                    quantity=quantity,
+                                    price=price,
+                                    asset_type='option',
+                                    author_name=session.get('username', 'GUI User'),
+                                    strike=strike,
+                                    expiry=expiry,
+                                    call_put=option_type[0]  # 'C' or 'P'
+                                )
+                                
+                                # Save trade record
+                                trade_data = {
+                                    'channel_id': 'GUI_EXEC',
+                                    'message_id': msg_id,
+                                    'direction': action,
+                                    'asset_type': 'option',
+                                    'symbol': symbol,
+                                    'strike': strike,
+                                    'expiry': expiry,
+                                    'call_put': option_type[0],
+                                    'quantity': quantity,
+                                    'intended_price': price,
+                                    'executed_price': price,
+                                    'executed': True,
+                                    'broker': broker_name,
+                                    'order_id': str(order_id),
+                                    'stop_loss_price': stop_loss_price,
+                                    'profit_target_price': profit_target_price,
+                                    'user_id': user_id,
+                                    'source': 'gui'
+                                }
+                                trade_id = db.add_trade(trade_data)
+                                print(f"[OPTIONS API] ✓ Trade #{trade_id} saved to database for tracking")
+                                
+                                # Process through lot_matcher for PNL tracking
+                                matcher = get_matcher()
+                                lot_signal = {
+                                    'action': action,
+                                    'symbol': symbol,
+                                    'asset': 'option',
+                                    'qty': quantity,
+                                    'price': price,
+                                    'strike': strike,
+                                    'expiry': expiry,
+                                    'opt_type': option_type[0],
+                                    'channel_id': 'GUI_EXEC',
+                                    'db_channel_id': gui_channel_id,
+                                    'received_at': datetime.now(),
+                                    'author_name': session.get('username', 'GUI User'),
+                                    'user_id': user_id
+                                }
+                                lot_result = matcher.process_signal(lot_signal)
+                                if lot_result:
+                                    if action == 'BTO':
+                                        print(f"[OPTIONS API] ✓ Created lot #{lot_result[0]} for position tracking")
+                                    else:
+                                        print(f"[OPTIONS API] ✓ Closed {len(lot_result)} lot(s) for PNL calculation")
+                                
+                        except Exception as track_err:
+                            print(f"[OPTIONS API] ⚠️ Trade tracking error: {track_err}")
+                            import traceback
+                            traceback.print_exc()
+                        
+                        # Send Discord notification for successful order
+                        try:
+                            from gui_app.discord_notifier import send_bto_notification, send_stc_notification
+                            
+                            if action == "BTO":
+                                send_bto_notification(
+                                    symbol=symbol,
+                                    quantity=quantity,
+                                    price=price,
+                                    strike=strike,
+                                    expiry=expiry,
+                                    call_put=option_type
+                                )
+                            elif action == "STC":
+                                send_stc_notification(
+                                    symbol=symbol,
+                                    quantity=quantity,
+                                    price=price,
+                                    entry_price=0.0,  # TODO: Database lookup
+                                    strike=strike,
+                                    expiry=expiry,
+                                    call_put=option_type
+                                )
+                        except Exception as e:
+                            print(f"[NOTIFICATION] Failed to send Discord notification: {e}")
+                        
+                        return jsonify({
+                            'success': True,
+                            'order_id': order_id,
+                            'trade_id': trade_id if 'trade_id' in dir() else None,
+                            'broker': broker_name,
+                            'message': f'Order placed on {broker_name}: {side} {quantity} {symbol} ${strike}{option_type[0]}',
+                            'tracked': gui_channel_id is not None if 'gui_channel_id' in dir() else False,
+                            'risk_management': {
+                                'enabled': enable_risk_management,
+                                'stop_loss_price': stop_loss_price,
+                                'profit_target_price': profit_target_price
+                            } if enable_risk_management else None,
+                            'details': {
+                                'symbol': symbol,
+                                'strike': strike,
+                                'expiry': expiry,
+                                'option_type': option_type,
+                                'quantity': quantity,
+                                'side': side,
+                                'price': price,
+                                'option_id': option_id,
+                                'broker': broker_name
+                            },
+                            'raw_response': result  # Include full response for debugging
+                        })
+                    else:
+                        error_msg = result.get('msg') or result.get('error') or result.get('message') or 'Order placement failed'
+                        print(f"[ERROR] Order failed: {error_msg}")
+                        return jsonify({
+                            'success': False,
+                            'error': error_msg,
+                            'raw_response': result
+                        }), 400
+                else:
+                    # Unexpected response type
+                    print(f"[ERROR] Unexpected result type: {type(result)}")
+                    return jsonify({
+                        'success': False,
+                        'error': f'Unexpected response type: {type(result)}'
+                    }), 500
+                    
+            finally:
+                loop.close()
+                
+        except Exception as e:
+            print(f"[API] Error placing option order: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    # ============ ENHANCED PNL TRACKING & LEADERBOARD ============
+    
+    @app.route('/api/pnl/detailed', methods=['GET'])
+    def api_get_detailed_pnl():
+        """
+        Get detailed PNL breakdown showing:
+        - Individual STC closures with PNL and PNL%
+        - Grouped by position (BTO → multiple STCs)
+        - User attribution
+        - Aggregate P/L per position
+        
+        Query params:
+            - channel_id: Filter by channel
+            - author: Filter by author/user name
+            - status: Filter by position status (OPEN, PARTIAL, CLOSED)
+            - start_date: Filter positions opened on or after this date (YYYY-MM-DD)
+            - end_date: Filter positions opened on or before this date (YYYY-MM-DD)
+        """
+        channel_id = request.args.get('channel_id', type=int)
+        author_filter = request.args.get('author', '').strip()
+        status_filter = request.args.get('status', '').strip().upper()
+        start_date = request.args.get('start_date', '').strip()
+        end_date = request.args.get('end_date', '').strip()
+        
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            # Query to get all positions with their closures
+            query = '''
+                SELECT 
+                    sl.id as lot_id,
+                    sl.symbol,
+                    sl.asset_type,
+                    sl.strike,
+                    sl.expiry,
+                    sl.call_put,
+                    sl.original_qty,
+                    sl.open_price,
+                    sl.opened_at,
+                    sl.author_name,
+                    sl.status,
+                    
+                    -- Closure details
+                    lc.id as closure_id,
+                    lc.closed_qty,
+                    lc.close_price,
+                    lc.closed_at,
+                    lc.pnl,
+                    lc.pnl_percent,
+                    lc.holding_days,
+                    
+                    -- Channel info
+                    c.name as channel_name,
+                    c.discord_channel_id
+                    
+                FROM signal_lots sl
+                LEFT JOIN lot_closures lc ON sl.id = lc.lot_id
+                LEFT JOIN channels c ON sl.channel_id = c.id
+                WHERE 1=1
+            '''
+            
+            params = []
+            if channel_id:
+                query += ' AND sl.channel_id = ?'
+                params.append(channel_id)
+            
+            if author_filter:
+                query += ' AND sl.author_name = ?'
+                params.append(author_filter)
+            
+            if status_filter in ('OPEN', 'PARTIAL', 'CLOSED'):
+                query += ' AND sl.status = ?'
+                params.append(status_filter)
+            
+            # Date range filtering
+            if start_date:
+                query += ' AND DATE(sl.opened_at) >= ?'
+                params.append(start_date)
+            
+            if end_date:
+                query += ' AND DATE(sl.opened_at) <= ?'
+                params.append(end_date)
+            
+            query += ' ORDER BY sl.opened_at DESC, lc.closed_at ASC'
+            
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            
+            # Group by position (lot_id)
+            positions = {}
+            for row in rows:
+                lot_id = row['lot_id']
+                
+                if lot_id not in positions:
+                    # Create position entry
+                    option_desc = ''
+                    if row['asset_type'] == 'option':
+                        option_desc = f" {row['strike']}{row['call_put']} {row['expiry']}"
+                    
+                    positions[lot_id] = {
+                        'lot_id': lot_id,
+                        'symbol': row['symbol'],
+                        'asset_type': row['asset_type'],
+                        'description': f"{row['symbol']}{option_desc}",
+                        'strike': row['strike'],
+                        'expiry': row['expiry'],
+                        'call_put': row['call_put'],
+                        'bto_qty': row['original_qty'],
+                        'entry_price': row['open_price'],
+                        'opened_at': row['opened_at'],
+                        'author': row['author_name'] or 'Unknown',
+                        'status': row['status'],
+                        'channel_name': row['channel_name'],
+                        'closures': [],
+                        'total_closed_qty': 0,
+                        'remaining_qty': 0,
+                        'total_pnl': 0,
+                        'avg_pnl_percent': 0,
+                        'total_holding_days': 0
+                    }
+                
+                # Add closure if exists
+                if row['closure_id']:
+                    positions[lot_id]['closures'].append({
+                        'closure_id': row['closure_id'],
+                        'stc_qty': row['closed_qty'],
+                        'exit_price': row['close_price'],
+                        'closed_at': row['closed_at'],
+                        'pnl': row['pnl'],
+                        'pnl_percent': row['pnl_percent'],
+                        'holding_days': row['holding_days']
+                    })
+                    positions[lot_id]['total_closed_qty'] += row['closed_qty']
+                    positions[lot_id]['total_pnl'] += row['pnl']
+                    positions[lot_id]['total_holding_days'] = row['holding_days']  # Latest holding days
+            
+            # Calculate aggregates
+            for lot_id, pos in positions.items():
+                pos['remaining_qty'] = pos['bto_qty'] - pos['total_closed_qty']
+                if pos['closures']:
+                    # Weighted average PNL%
+                    total_pnl_weighted = sum(c['pnl_percent'] * c['stc_qty'] for c in pos['closures'])
+                    pos['avg_pnl_percent'] = total_pnl_weighted / pos['total_closed_qty'] if pos['total_closed_qty'] > 0 else 0
+            
+            # Convert to list and sort
+            positions_list = list(positions.values())
+            positions_list.sort(key=lambda x: x['opened_at'], reverse=True)
+            
+            return jsonify({
+                'success': True,
+                'positions': positions_list,
+                'total_positions': len(positions_list)
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting detailed PNL: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/pnl/users', methods=['GET'])
+    def api_get_pnl_users():
+        """
+        Get unique list of users/authors from PNL data for filtering.
+        """
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT DISTINCT author_name 
+                FROM signal_lots 
+                WHERE author_name IS NOT NULL AND author_name != ''
+                ORDER BY author_name ASC
+            ''')
+            
+            users = [row['author_name'] for row in cursor.fetchall()]
+            
+            return jsonify({
+                'success': True,
+                'users': users
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting PNL users: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/leaderboard/users', methods=['GET'])
+    def api_get_user_leaderboard():
+        """
+        Get user performance leaderboard with Trader Quality Score (TQS) ranking.
+        
+        TQS Formula: (0.40 × Normalized PNL) + (0.25 × Profit Factor) + (0.20 × Win Rate) + (0.15 × Avg %PNL)
+        
+        Query params:
+            - channel_id: Optional channel filter
+            - period: 'today', '7d', '30d', 'year', 'all', or 'custom'
+            - start_date: For custom period (YYYY-MM-DD)
+            - end_date: For custom period (YYYY-MM-DD)
+        """
+        channel_id = request.args.get('channel_id', type=int)
+        time_period = request.args.get('period', 'all')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            # Get date bounds based on period (filters by close_date)
+            date_start, date_end = db.get_date_filter_bounds(time_period, start_date, end_date)
+            
+            # Build date filter SQL
+            date_filter = ""
+            date_params = []
+            if date_start and date_end:
+                date_filter = "AND lc.closed_at >= ? AND lc.closed_at <= ?"
+                date_params = [date_start, date_end]
+            
+            # Query to get user performance with gross profit/loss for TQS calculation
+            # Using weighted average % based on position cost basis for accurate returns
+            query = f'''
+                SELECT 
+                    sl.author_name,
+                    COUNT(DISTINCT sl.id) as total_positions,
+                    SUM(sl.original_qty) as total_contracts,
+                    
+                    -- Closures stats
+                    COUNT(lc.id) as total_closures,
+                    SUM(lc.closed_qty) as total_closed_qty,
+                    SUM(CASE WHEN lc.pnl > 0 THEN 1 ELSE 0 END) as wins,
+                    SUM(CASE WHEN lc.pnl <= 0 THEN 1 ELSE 0 END) as losses,
+                    
+                    -- P/L stats
+                    SUM(lc.pnl) as total_pnl,
+                    AVG(lc.pnl) as avg_pnl,
+                    MAX(lc.pnl) as best_trade,
+                    MIN(lc.pnl) as worst_trade,
+                    
+                    -- Cost basis: multiply by 100 only for options, not stocks
+                    SUM(sl.open_price * lc.closed_qty * CASE WHEN sl.asset_type = 'option' THEN 100 ELSE 1 END) as total_cost_basis,
+                    
+                    AVG(lc.holding_days) as avg_holding_days,
+                    
+                    -- Gross profit/loss for TQS calculation
+                    SUM(CASE WHEN lc.pnl > 0 THEN lc.pnl ELSE 0 END) as gross_profit,
+                    SUM(CASE WHEN lc.pnl < 0 THEN lc.pnl ELSE 0 END) as gross_loss
+                    
+                FROM signal_lots sl
+                LEFT JOIN lot_closures lc ON sl.id = lc.lot_id
+                WHERE sl.author_name IS NOT NULL {date_filter}
+            '''
+            
+            params = date_params.copy()
+            if channel_id:
+                query += ' AND sl.channel_id = ?'
+                params.append(channel_id)
+            
+            query += ' GROUP BY sl.author_name'
+            query += ' HAVING COUNT(lc.id) > 0'
+            
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            
+            users = []
+            for row in rows:
+                win_count = row['wins'] or 0
+                loss_count = row['losses'] or 0
+                total_closures = row['total_closures'] or 0
+                win_rate = (win_count / total_closures * 100) if total_closures > 0 else 0
+                
+                # Calculate weighted average % return based on cost basis
+                total_pnl = row['total_pnl'] or 0
+                total_cost_basis = row['total_cost_basis'] or 0
+                if total_cost_basis > 0:
+                    weighted_avg_pnl_percent = (total_pnl / total_cost_basis) * 100
+                else:
+                    weighted_avg_pnl_percent = 0
+                
+                users.append({
+                    'author': row['author_name'],
+                    'total_positions': row['total_positions'],
+                    'total_contracts': row['total_contracts'],
+                    'total_closures': total_closures,
+                    'wins': win_count,
+                    'losses': loss_count,
+                    'win_rate': round(win_rate, 1),
+                    'total_pnl': round(total_pnl, 2),
+                    'avg_pnl': round(row['avg_pnl'] or 0, 2),
+                    'best_trade': round(row['best_trade'] or 0, 2),
+                    'worst_trade': round(row['worst_trade'] or 0, 2),
+                    'avg_pnl_percent': round(weighted_avg_pnl_percent, 1),
+                    'avg_holding_days': round(row['avg_holding_days'] or 0, 1),
+                    'gross_profit': round(row['gross_profit'] or 0, 2),
+                    'gross_loss': round(row['gross_loss'] or 0, 2)
+                })
+            
+            # Calculate min/max total_pnl for TQS normalization (handles negative values)
+            if users:
+                max_total_pnl = max((u['total_pnl'] for u in users), default=0)
+                min_total_pnl = min((u['total_pnl'] for u in users), default=0)
+            else:
+                max_total_pnl = 1
+                min_total_pnl = 0
+            
+            # Calculate TQS score for each user
+            for user in users:
+                # Calculate profit factor for display (not capped for display)
+                if user['gross_loss'] == 0:
+                    user['profit_factor'] = 2.0 if user['gross_profit'] > 0 else 0.0
+                else:
+                    user['profit_factor'] = round(min(user['gross_profit'] / abs(user['gross_loss']), 10.0), 2)
+                
+                tqs_stats = {
+                    'total_pnl': user['total_pnl'],
+                    'gross_profit': user['gross_profit'],
+                    'gross_loss': user['gross_loss'],
+                    'win_trades': user['wins'],
+                    'loss_trades': user['losses'],
+                    'avg_pct_pnl': user['avg_pnl_percent']
+                }
+                user['score'] = db.calculate_trader_quality_score(tqs_stats, max_total_pnl, min_total_pnl)
+            
+            # Sort by TQS score (primary), then total_pnl (secondary)
+            users.sort(key=lambda u: (-u['score'], -u['total_pnl']))
+            
+            # Add rankings based on new sort order
+            for i, user in enumerate(users, 1):
+                user['rank'] = i
+            
+            # Calculate aggregates
+            total_users = len(users)
+            total_wins_all = sum(u['wins'] for u in users)
+            total_closures_all = sum(u['total_closures'] for u in users)
+            total_pnl_all = sum(u['total_pnl'] for u in users)
+            
+            avg_win_rate_all = (total_wins_all / total_closures_all * 100) if total_closures_all > 0 else 0
+            
+            # Rename author to author_name for frontend consistency
+            for user in users:
+                user['author_name'] = user.pop('author')
+                user['total_trades'] = user['total_closures']
+                user['avg_return'] = user['avg_pnl']
+            
+            return jsonify({
+                'success': True,
+                'users': users,
+                'total_users': total_users,
+                'total_trades': total_closures_all,
+                'total_pnl': round(total_pnl_all, 2),
+                'avg_win_rate': round(avg_win_rate_all, 1)
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting user leaderboard: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/leaderboard/enhanced', methods=['GET'])
+    def api_get_enhanced_leaderboard():
+        """
+        Get enhanced channel leaderboard with comprehensive metrics:
+        - Win rate, total P/L, avg return
+        - Best/worst trades
+        - Top performers (users) per channel
+        - Recent activity
+        """
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            # Get channel performance
+            query = '''
+                SELECT 
+                    c.id as channel_id,
+                    c.name as channel_name,
+                    c.discord_channel_id,
+                    
+                    -- Position stats
+                    COUNT(DISTINCT sl.id) as total_positions,
+                    SUM(sl.original_qty) as total_contracts,
+                    COUNT(DISTINCT sl.author_name) as total_users,
+                    
+                    -- Closure stats
+                    COUNT(lc.id) as total_closures,
+                    SUM(CASE WHEN lc.pnl > 0 THEN 1 ELSE 0 END) as wins,
+                    SUM(CASE WHEN lc.pnl <= 0 THEN 1 ELSE 0 END) as losses,
+                    
+                    -- P/L stats
+                    SUM(lc.pnl) as total_pnl,
+                    AVG(lc.pnl) as avg_pnl,
+                    MAX(lc.pnl) as best_trade,
+                    MIN(lc.pnl) as worst_trade,
+                    AVG(lc.pnl_percent) as avg_return,
+                    
+                    -- Recent activity
+                    MAX(lc.closed_at) as last_activity,
+                    AVG(lc.holding_days) as avg_holding_days
+                    
+                FROM channels c
+                LEFT JOIN signal_lots sl ON c.id = sl.channel_id
+                LEFT JOIN lot_closures lc ON sl.id = lc.lot_id
+                WHERE c.is_active = 1
+                GROUP BY c.id, c.name, c.discord_channel_id
+                HAVING COUNT(lc.id) > 0
+            '''
+            
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            
+            channels = []
+            for row in rows:
+                win_count = row['wins'] or 0
+                total_closures = row['total_closures'] or 0
+                win_rate = (win_count / total_closures * 100) if total_closures > 0 else 0
+                
+                # Get top user for this channel
+                cursor.execute('''
+                    SELECT 
+                        sl.author_name,
+                        SUM(lc.pnl) as user_pnl,
+                        COUNT(lc.id) as user_trades
+                    FROM signal_lots sl
+                    JOIN lot_closures lc ON sl.id = lc.lot_id
+                    WHERE sl.channel_id = ? AND sl.author_name IS NOT NULL
+                    GROUP BY sl.author_name
+                    ORDER BY user_pnl DESC
+                    LIMIT 1
+                ''', (row['channel_id'],))
+                top_user_row = cursor.fetchone()
+                top_user = top_user_row['author_name'] if top_user_row else None
+                
+                channels.append({
+                    'channel_id': row['channel_id'],
+                    'channel_name': row['channel_name'],
+                    'discord_channel_id': row['discord_channel_id'],
+                    'total_positions': row['total_positions'],
+                    'total_contracts': row['total_contracts'],
+                    'total_users': row['total_users'],
+                    'total_closures': total_closures,
+                    'wins': win_count,
+                    'losses': row['losses'] or 0,
+                    'win_rate': round(win_rate, 1),
+                    'total_pnl': round(row['total_pnl'] or 0, 2),
+                    'avg_pnl': round(row['avg_pnl'] or 0, 2),
+                    'best_trade': round(row['best_trade'] or 0, 2),
+                    'worst_trade': round(row['worst_trade'] or 0, 2),
+                    'avg_return': round(row['avg_return'] or 0, 1),
+                    'last_activity': row['last_activity'],
+                    'avg_holding_days': round(row['avg_holding_days'] or 0, 1),
+                    'top_user': top_user
+                })
+            
+            # Sort by total P/L descending
+            channels.sort(key=lambda x: x['total_pnl'], reverse=True)
+            
+            # Add rankings
+            for i, channel in enumerate(channels, 1):
+                channel['rank'] = i
+            
+            return jsonify({
+                'success': True,
+                'channels': channels,
+                'total_channels': len(channels)
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting enhanced leaderboard: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/reset/pnl', methods=['POST'])
+    def api_reset_pnl_data():
+        """Reset all PNL tracking data (signals, lots, closures)"""
+        try:
+            import sqlite3
+            conn = sqlite3.connect(db.get_db_path())
+            cursor = conn.cursor()
+            
+            # Delete in correct order (foreign key constraints)
+            cursor.execute('DELETE FROM lot_closures')
+            cursor.execute('DELETE FROM signal_lots')
+            cursor.execute('DELETE FROM signals')
+            
+            conn.commit()
+            
+            deleted_closures = cursor.rowcount if cursor.rowcount > 0 else 0
+            
+            conn.close()
+            
+            print(f"[API] Reset PNL data - cleared all signals, lots, and closures")
+            
+            return jsonify({
+                'success': True,
+                'message': 'All PNL tracking data has been reset successfully'
+            })
+            
+        except Exception as e:
+            print(f"[API] Error resetting PNL data: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/settings/signal_conversion', methods=['GET'])
+    def api_get_signal_conversion_settings():
+        """Get signal conversion settings"""
+        try:
+            settings = db.get_signal_conversion_settings()
+            return jsonify({
+                'success': True,
+                'conversion_channel_id': settings.get('conversion_channel_id', ''),
+                'target_execution_channel_id': settings.get('target_execution_channel_id', '')
+            })
+        except Exception as e:
+            print(f"[API] Error getting signal conversion settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/settings/signal_conversion', methods=['POST'])
+    def api_save_signal_conversion_settings():
+        """Save signal conversion settings"""
+        try:
+            data = request.json
+            conversion_channel_id = data.get('conversion_channel_id', '').strip()
+            target_execution_channel_id = data.get('target_execution_channel_id', '').strip()
+            
+            success = db.save_signal_conversion_settings(conversion_channel_id, target_execution_channel_id)
+            
+            if success:
+                return jsonify({
+                    'success': True,
+                    'message': 'Signal conversion settings saved successfully'
+                })
+            else:
+                return jsonify({'error': 'Failed to save settings'}), 500
+        except Exception as e:
+            print(f"[API] Error saving signal conversion settings: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    # ============ SIMULATION ENGINE ============
+    
+    @app.route('/simulation')
+    def simulation_page():
+        """Simulation Engine page"""
+        response = make_response(render_template('simulation.html'))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    
+    @app.route('/api/simulate', methods=['POST'])
+    def api_run_simulation():
+        """
+        Run a portfolio simulation for a user or channel.
+        
+        Request JSON:
+        {
+            "entity_type": "user" | "channel",
+            "entity_id": "username or channel name",
+            "portfolio_start": 3000,
+            "days": 30,
+            "trades_per_day": null (optional, use stats if null),
+            "win_rate_override": null (optional, 0-1 decimal),
+            "avg_win_pct_override": null (optional, e.g. 0.5 for 50%),
+            "avg_loss_pct_override": null (optional, e.g. -0.3 for -30%),
+            "risk_per_trade_mode": "fixed" | "percent",
+            "risk_per_trade_value": 300 (dollars if fixed, decimal if percent),
+            "compound": true
+        }
+        """
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from services.simulation import run_simulation
+            
+            data = request.json or {}
+            
+            entity_type = data.get('entity_type', 'user')
+            if entity_type not in ['user', 'channel']:
+                return jsonify({'success': False, 'error': 'entity_type must be "user" or "channel"'}), 400
+            
+            entity_id = data.get('entity_id', '')
+            if not entity_id:
+                return jsonify({'success': False, 'error': 'entity_id is required'}), 400
+            
+            portfolio_start = float(data.get('portfolio_start', 3000))
+            if portfolio_start <= 0:
+                return jsonify({'success': False, 'error': 'portfolio_start must be positive'}), 400
+            
+            days = int(data.get('days', 30))
+            if days < 1 or days > 365:
+                return jsonify({'success': False, 'error': 'days must be between 1 and 365'}), 400
+            
+            trades_per_day = data.get('trades_per_day')
+            if trades_per_day is not None:
+                trades_per_day = float(trades_per_day)
+                if trades_per_day < 0:
+                    return jsonify({'success': False, 'error': 'trades_per_day cannot be negative'}), 400
+            
+            win_rate_override = data.get('win_rate_override')
+            if win_rate_override is not None:
+                win_rate_override = float(win_rate_override)
+                if not 0 <= win_rate_override <= 1:
+                    return jsonify({'success': False, 'error': 'win_rate_override must be between 0 and 1'}), 400
+            
+            avg_win_pct_override = data.get('avg_win_pct_override')
+            if avg_win_pct_override is not None:
+                avg_win_pct_override = float(avg_win_pct_override)
+            
+            avg_loss_pct_override = data.get('avg_loss_pct_override')
+            if avg_loss_pct_override is not None:
+                avg_loss_pct_override = float(avg_loss_pct_override)
+            
+            risk_per_trade_mode = data.get('risk_per_trade_mode', 'fixed')
+            if risk_per_trade_mode not in ['fixed', 'percent']:
+                return jsonify({'success': False, 'error': 'risk_per_trade_mode must be "fixed" or "percent"'}), 400
+            
+            risk_per_trade_value = float(data.get('risk_per_trade_value', 300))
+            if risk_per_trade_value <= 0:
+                return jsonify({'success': False, 'error': 'risk_per_trade_value must be positive'}), 400
+            
+            if risk_per_trade_mode == 'percent' and risk_per_trade_value > 1:
+                return jsonify({'success': False, 'error': 'For percent mode, risk_per_trade_value should be a decimal (e.g., 0.1 for 10%)'}), 400
+            
+            compound = bool(data.get('compound', True))
+            
+            result = run_simulation(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                portfolio_start=portfolio_start,
+                days=days,
+                trades_per_day=trades_per_day,
+                win_rate_override=win_rate_override,
+                avg_win_pct_override=avg_win_pct_override,
+                avg_loss_pct_override=avg_loss_pct_override,
+                risk_per_trade_mode=risk_per_trade_mode,
+                risk_per_trade_value=risk_per_trade_value,
+                compound=compound
+            )
+            
+            return jsonify(result)
+            
+        except ValueError as ve:
+            return jsonify({'success': False, 'error': f'Invalid parameter value: {str(ve)}'}), 400
+        except Exception as e:
+            print(f"[API] Error running simulation: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/simulate/presets', methods=['GET'])
+    def api_get_simulation_presets():
+        """Get available simulation presets"""
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from services.simulation import get_simulation_presets
+            
+            presets = get_simulation_presets()
+            return jsonify({
+                'success': True,
+                'presets': presets
+            })
+        except Exception as e:
+            print(f"[API] Error getting simulation presets: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/simulate/stats/<entity_type>/<entity_id>', methods=['GET'])
+    def api_get_entity_stats(entity_type, entity_id):
+        """Get stats for a user or channel to pre-populate simulation form"""
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from services.simulation import get_user_stats, get_channel_stats
+            
+            if entity_type == 'user':
+                stats = get_user_stats(entity_id)
+            elif entity_type == 'channel':
+                stats = get_channel_stats(entity_id)
+            else:
+                return jsonify({'success': False, 'error': 'entity_type must be "user" or "channel"'}), 400
+            
+            if stats is None:
+                return jsonify({'success': False, 'error': f'{entity_type.capitalize()} not found'}), 404
+            
+            return jsonify({
+                'success': True,
+                'stats': {
+                    'name': stats.name,
+                    'total_trades': stats.total_trades,
+                    'wins': stats.wins,
+                    'losses': stats.losses,
+                    'win_rate': round(stats.win_rate, 1),
+                    'total_pnl': round(stats.total_pnl, 2),
+                    'avg_win_pct': round(stats.avg_win_pct, 1),
+                    'avg_loss_pct': round(stats.avg_loss_pct, 1),
+                    'avg_pnl_percent': round(stats.avg_pnl_percent, 1),
+                    'trading_days': stats.trading_days,
+                    'trades_per_day': round(stats.total_trades / max(stats.trading_days, 1), 2)
+                }
+            })
+        except Exception as e:
+            print(f"[API] Error getting entity stats: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/simulate/exact', methods=['POST'])
+    def api_simulate_exact_trades():
+        """Run exact trades simulation - replays historical trades with custom portfolio/position size"""
+        try:
+            data = request.get_json()
+            
+            entity_type = data.get('entity_type', 'user')
+            entity_id = data.get('entity_id', '')
+            
+            if not entity_id:
+                return jsonify({'success': False, 'error': 'entity_id is required'}), 400
+            
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from services.simulation import run_exact_trades_simulation
+            
+            result = run_exact_trades_simulation(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                portfolio_start=float(data.get('portfolio_start', 3000)),
+                risk_per_trade_mode=data.get('risk_per_trade_mode', 'fixed'),
+                risk_per_trade_value=float(data.get('risk_per_trade_value', 300)),
+                win_rate_override=float(data['win_rate_override']) if data.get('win_rate_override') is not None else None,
+                avg_loss_pct_override=float(data['avg_loss_pct_override']) if data.get('avg_loss_pct_override') is not None else None,
+            )
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            print(f"[API] Exact trades simulation error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/simulate/historical', methods=['POST'])
+    def api_simulate_historical():
+        """Run exact historical simulation - replays ACTUAL individual trades from database"""
+        try:
+            data = request.get_json()
+            
+            entity_type = data.get('entity_type', 'user')
+            entity_id = data.get('entity_id', '')
+            
+            if not entity_id:
+                return jsonify({'success': False, 'error': 'entity_id is required'}), 400
+            
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from services.simulation import run_exact_historical_simulation
+            
+            result = run_exact_historical_simulation(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                portfolio_start=float(data.get('portfolio_start', 3000)),
+                risk_per_trade_mode=data.get('risk_per_trade_mode', 'fixed'),
+                risk_per_trade_value=float(data.get('risk_per_trade_value', 300)),
+            )
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            print(f"[API] Historical simulation error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/simulate/autocomplete/<entity_type>', methods=['GET'])
+    def api_simulate_autocomplete(entity_type):
+        """Autocomplete search for users or channels"""
+        try:
+            query = request.args.get('q', '').strip().lower()
+            limit = min(int(request.args.get('limit', 10)), 20)
+            
+            if len(query) < 1:
+                return jsonify({'success': True, 'results': []})
+            
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            if entity_type == 'user':
+                cursor.execute('''
+                    SELECT DISTINCT author_name, COUNT(*) as trade_count
+                    FROM signal_lots 
+                    WHERE author_name IS NOT NULL 
+                    AND LOWER(author_name) LIKE ?
+                    GROUP BY author_name
+                    ORDER BY trade_count DESC
+                    LIMIT ?
+                ''', (f'%{query}%', limit))
+                
+                results = [{'name': row[0], 'trades': row[1]} for row in cursor.fetchall()]
+                
+            elif entity_type == 'channel':
+                cursor.execute('''
+                    SELECT c.name, COUNT(sl.id) as trade_count
+                    FROM channels c
+                    LEFT JOIN signal_lots sl ON c.id = sl.channel_id
+                    WHERE LOWER(c.name) LIKE ?
+                    GROUP BY c.id, c.name
+                    ORDER BY trade_count DESC
+                    LIMIT ?
+                ''', (f'%{query}%', limit))
+                
+                results = [{'name': row[0], 'trades': row[1]} for row in cursor.fetchall()]
+            else:
+                return jsonify({'success': False, 'error': 'entity_type must be "user" or "channel"'}), 400
+            
+            return jsonify({'success': True, 'results': results})
+            
+        except Exception as e:
+            print(f"[API] Autocomplete error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # ============ BROKER CONNECTION MANAGEMENT API ============
+    
+    @app.route('/api/brokers/status', methods=['GET'])
+    def api_get_broker_status():
+        """Get connection status of all brokers"""
+        try:
+            from .broker_credentials_service import get_all_broker_status, get_enabled_brokers
+            
+            status = get_all_broker_status()
+            enabled = get_enabled_brokers()
+            
+            return jsonify({
+                'success': True,
+                'status': status,
+                'enabled': enabled
+            })
+        except Exception as e:
+            print(f"[API] Error getting broker status: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/credentials/discord', methods=['GET'])
+    def api_get_discord_credentials():
+        """Get Discord credentials (token masked)"""
+        try:
+            from .broker_credentials_service import get_discord_credentials, get_broker_status
+            
+            creds = get_discord_credentials()
+            status = get_broker_status('discord')
+            token = creds.get('token', '')
+            
+            return jsonify({
+                'success': True,
+                'has_token': bool(token),
+                'token_preview': f"{token[:20]}...{token[-10:]}" if len(token) > 30 else '(not set)',
+                'allowed_authors': creds.get('allowed_authors', []),
+                'allowed_guilds': creds.get('allowed_guilds', []),
+                'connection_status': status
+            })
+        except Exception as e:
+            print(f"[API] Error getting Discord credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/credentials/discord', methods=['POST'])
+    def api_save_discord_credentials():
+        """Save Discord credentials"""
+        try:
+            from .broker_credentials_service import save_discord_credentials
+            
+            data = request.json
+            token = data.get('token', '').strip()
+            
+            if not token:
+                return jsonify({'success': False, 'error': 'Discord token is required'}), 400
+            
+            save_discord_credentials(
+                token=token,
+                allowed_authors=data.get('allowed_authors', []),
+                allowed_guilds=data.get('allowed_guilds', [])
+            )
+            
+            return jsonify({
+                'success': True,
+                'message': 'Discord credentials saved. Use Connect button to connect.'
+            })
+        except Exception as e:
+            print(f"[API] Error saving Discord credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/credentials/webull', methods=['GET'])
+    def api_get_webull_credentials():
+        """Get Webull credentials (sensitive data masked)"""
+        try:
+            from .broker_credentials_service import get_webull_credentials, get_broker_status
+            
+            creds = get_webull_credentials()
+            live_status = get_broker_status('webull_live')
+            paper_status = get_broker_status('webull_paper')
+            
+            return jsonify({
+                'success': True,
+                'email': creds.get('email', ''),
+                'has_password': bool(creds.get('password')),
+                'has_trade_pin': bool(creds.get('trade_pin')),
+                'device_id': creds.get('device_id', ''),
+                'access_token': creds.get('access_token', ''),
+                'refresh_token': creds.get('refresh_token', ''),
+                'has_tokens': bool(creds.get('access_token') and creds.get('refresh_token')),
+                'paper_mode': creds.get('paper_mode', True),
+                'live_status': live_status,
+                'paper_status': paper_status
+            })
+        except Exception as e:
+            print(f"[API] Error getting Webull credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/credentials/webull', methods=['POST'])
+    def api_save_webull_credentials():
+        """Save Webull credentials"""
+        try:
+            from .broker_credentials_service import save_webull_credentials, get_webull_credentials
+            
+            data = request.json
+            
+            existing = get_webull_credentials()
+            
+            save_webull_credentials(
+                email=data.get('email', existing.get('email', '')),
+                password=data.get('password', existing.get('password', '')),
+                trade_pin=data.get('trade_pin', existing.get('trade_pin', '')),
+                device_id=data.get('device_id', existing.get('device_id', '')),
+                access_token=data.get('access_token', existing.get('access_token', '')),
+                refresh_token=data.get('refresh_token', existing.get('refresh_token', '')),
+                paper_mode=data.get('paper_mode', existing.get('paper_mode', True))
+            )
+            
+            return jsonify({
+                'success': True,
+                'message': 'Webull credentials saved. Use Connect button to connect.'
+            })
+        except Exception as e:
+            print(f"[API] Error saving Webull credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/webull/auth/login', methods=['POST'])
+    def api_webull_auth_login():
+        """Login to Webull with MFA support using WebullAuth module"""
+        try:
+            from src.webull import WebullAuth
+            from .broker_credentials_service import webull_credentials_adapter, get_webull_credentials
+            
+            data = request.json
+            creds = get_webull_credentials()
+            
+            email = data.get('email', creds.get('email', ''))
+            password = data.get('password', creds.get('password', ''))
+            trade_pin = data.get('trade_pin', creds.get('trade_pin', ''))
+            device_id = data.get('device_id', creds.get('device_id', ''))
+            paper_mode = data.get('paper_mode', creds.get('paper_mode', True))
+            mfa_code = data.get('mfa_code')
+            security_qid = data.get('security_qid')
+            security_answer = data.get('security_answer')
+            
+            if not email or not password or not trade_pin:
+                return jsonify({
+                    'success': False,
+                    'error': 'Email, password, and trading PIN are required'
+                }), 400
+            
+            auth = WebullAuth(paper_trading=paper_mode, credentials_adapter=webull_credentials_adapter)
+            
+            result = auth.login(
+                email=email,
+                password=password,
+                trading_pin=trade_pin,
+                device_id=device_id,
+                mfa_code=mfa_code,
+                security_qid=security_qid,
+                security_answer=security_answer
+            )
+            
+            if result.get('success'):
+                return jsonify({
+                    'success': True,
+                    'account_id': result.get('account_id'),
+                    'method': result.get('method', 'direct_login'),
+                    'message': 'Webull login successful! Tokens saved to database.'
+                })
+            elif result.get('needs_mfa'):
+                return jsonify({
+                    'success': False,
+                    'needs_mfa': True,
+                    'error': result.get('error', 'MFA required'),
+                    'message': 'MFA verification required. Request MFA code and try again.'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': result.get('error', 'Login failed')
+                }), 401
+                
+        except Exception as e:
+            print(f"[API] Webull auth login error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/webull/auth/request-mfa', methods=['POST'])
+    def api_webull_request_mfa():
+        """Request MFA code to be sent to email/phone"""
+        try:
+            from src.webull import WebullAuth
+            from .broker_credentials_service import get_webull_credentials
+            
+            data = request.json
+            creds = get_webull_credentials()
+            email = data.get('email', creds.get('email', ''))
+            paper_mode = data.get('paper_mode', creds.get('paper_mode', True))
+            
+            if not email:
+                return jsonify({'success': False, 'error': 'Email is required'}), 400
+            
+            auth = WebullAuth(paper_trading=paper_mode)
+            result = auth.request_mfa(email)
+            
+            if result.get('success'):
+                return jsonify({
+                    'success': True,
+                    'message': 'MFA code sent to your email/phone'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': result.get('error', 'Failed to send MFA code')
+                }), 400
+                
+        except Exception as e:
+            print(f"[API] Webull MFA request error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/webull/auth/security-question', methods=['POST'])
+    def api_webull_security_question():
+        """Get security question for MFA"""
+        try:
+            from src.webull import WebullAuth
+            from .broker_credentials_service import get_webull_credentials
+            
+            data = request.json
+            creds = get_webull_credentials()
+            email = data.get('email', creds.get('email', ''))
+            paper_mode = data.get('paper_mode', creds.get('paper_mode', True))
+            
+            if not email:
+                return jsonify({'success': False, 'error': 'Email is required'}), 400
+            
+            auth = WebullAuth(paper_trading=paper_mode)
+            result = auth.get_security_question(email)
+            
+            if result.get('success'):
+                return jsonify({
+                    'success': True,
+                    'question_id': result.get('question_id'),
+                    'question': result.get('question')
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': result.get('error', 'Failed to get security question')
+                }), 400
+                
+        except Exception as e:
+            print(f"[API] Webull security question error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/webull/auth/session-login', methods=['POST'])
+    def api_webull_session_login():
+        """Login using saved session tokens"""
+        try:
+            from src.webull import WebullAuth
+            from .broker_credentials_service import webull_credentials_adapter, get_webull_credentials
+            
+            data = request.json
+            creds = get_webull_credentials()
+            trade_pin = data.get('trade_pin', creds.get('trade_pin', ''))
+            paper_mode = data.get('paper_mode', creds.get('paper_mode', True))
+            
+            if not trade_pin:
+                return jsonify({'success': False, 'error': 'Trading PIN is required'}), 400
+            
+            auth = WebullAuth(paper_trading=paper_mode, credentials_adapter=webull_credentials_adapter)
+            result = auth.login_with_saved_session(trade_pin)
+            
+            if result.get('success'):
+                return jsonify({
+                    'success': True,
+                    'account_id': result.get('account_id'),
+                    'message': 'Session restored successfully'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': result.get('error', 'Session expired or not found')
+                }), 401
+                
+        except Exception as e:
+            print(f"[API] Webull session login error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/credentials/alpaca', methods=['GET'])
+    def api_get_alpaca_credentials():
+        """Get Alpaca credentials (keys masked)"""
+        try:
+            from .broker_credentials_service import get_alpaca_credentials, get_broker_status
+            
+            creds = get_alpaca_credentials()
+            live_status = get_broker_status('alpaca_live')
+            paper_status = get_broker_status('alpaca_paper')
+            
+            api_key = creds.get('api_key', '')
+            
+            return jsonify({
+                'success': True,
+                'has_api_key': bool(api_key),
+                'api_key_preview': f"{api_key[:10]}..." if len(api_key) > 10 else '(not set)',
+                'has_secret_key': bool(creds.get('secret_key')),
+                'paper_mode': creds.get('paper_mode', True),
+                'live_status': live_status,
+                'paper_status': paper_status
+            })
+        except Exception as e:
+            print(f"[API] Error getting Alpaca credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/credentials/alpaca', methods=['POST'])
+    def api_save_alpaca_credentials():
+        """Save Alpaca credentials"""
+        try:
+            from .broker_credentials_service import save_alpaca_credentials
+            
+            data = request.json
+            api_key = data.get('api_key', '').strip()
+            secret_key = data.get('secret_key', '').strip()
+            
+            if not api_key or not secret_key:
+                return jsonify({'success': False, 'error': 'Both API key and secret key are required'}), 400
+            
+            # Save to broker_credentials_service (for backwards compatibility)
+            save_alpaca_credentials(
+                api_key=api_key,
+                secret_key=secret_key,
+                paper_mode=data.get('paper_mode', True)
+            )
+            
+            # ALSO save to database (where bot and connect button read from)
+            db.update_alpaca_settings(api_key, secret_key)
+            print(f"[API] ✓ Alpaca credentials saved to both credential service and database")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Alpaca credentials saved. Use Connect button to connect.'
+            })
+        except Exception as e:
+            print(f"[API] Error saving Alpaca credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/credentials/alpaca_live', methods=['POST'])
+    def api_save_alpaca_live_credentials():
+        """Save Alpaca Live credentials"""
+        try:
+            data = request.json
+            api_key = data.get('api_key', '').strip()
+            secret_key = data.get('secret_key', '').strip()
+            
+            if not api_key or not secret_key:
+                return jsonify({'success': False, 'error': 'Both API key and secret key are required'}), 400
+            
+            # Save to database
+            db.update_alpaca_live_settings(api_key, secret_key)
+            print(f"[API] ✓ Alpaca Live credentials saved to database")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Alpaca Live credentials saved. Use Connect button to connect.'
+            })
+        except Exception as e:
+            print(f"[API] Error saving Alpaca Live credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/brokers/credentials/ibkr', methods=['GET'])
+    def api_get_ibkr_credentials():
+        """Get IBKR credentials"""
+        try:
+            from .broker_credentials_service import get_ibkr_credentials, get_broker_status
+            
+            creds = get_ibkr_credentials()
+            live_status = get_broker_status('ibkr_live')
+            paper_status = get_broker_status('ibkr_paper')
+            
+            return jsonify({
+                'success': True,
+                'host': creds.get('host', '127.0.0.1'),
+                'port_live': creds.get('port_live', 7496),
+                'port_paper': creds.get('port_paper', 7497),
+                'client_id': creds.get('client_id', 1),
+                'paper_mode': creds.get('paper_mode', True),
+                'live_status': live_status,
+                'paper_status': paper_status
+            })
+        except Exception as e:
+            print(f"[API] Error getting IBKR credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/credentials/ibkr', methods=['POST'])
+    def api_save_ibkr_credentials():
+        """Save IBKR credentials"""
+        try:
+            from .broker_credentials_service import save_ibkr_credentials
+            
+            data = request.json
+            
+            save_ibkr_credentials(
+                host=data.get('host', '127.0.0.1'),
+                port_live=int(data.get('port_live', 7496)),
+                port_paper=int(data.get('port_paper', 7497)),
+                client_id=int(data.get('client_id', 1)),
+                paper_mode=data.get('paper_mode', True)
+            )
+            
+            return jsonify({
+                'success': True,
+                'message': 'IBKR credentials saved. Use Connect button to connect.'
+            })
+        except Exception as e:
+            print(f"[API] Error saving IBKR credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/connect/<broker_id>', methods=['POST'])
+    def api_connect_broker(broker_id):
+        """Connect to a specific broker"""
+        try:
+            from .broker_credentials_service import set_broker_status, get_discord_credentials, get_webull_credentials, get_alpaca_credentials, get_ibkr_credentials
+            
+            valid_brokers = ['discord', 'webull_live', 'webull_paper', 'alpaca_live', 'alpaca_paper', 'ibkr_live', 'ibkr_paper']
+            
+            if broker_id not in valid_brokers:
+                return jsonify({'success': False, 'error': f'Invalid broker ID: {broker_id}'}), 400
+            
+            set_broker_status(broker_id, False, 'connecting')
+            
+            if broker_id == 'discord':
+                creds = get_discord_credentials()
+                if not creds.get('token'):
+                    set_broker_status(broker_id, False, 'error', 'No Discord token configured')
+                    return jsonify({'success': False, 'error': 'No Discord token configured'}), 400
+                
+                set_broker_status(broker_id, True, 'connected', account_info={'note': 'Discord connection managed by bot runtime'})
+                return jsonify({
+                    'success': True,
+                    'message': 'Discord credentials validated. Bot will connect on next restart.',
+                    'status': 'connected'
+                })
+            
+            elif broker_id.startswith('webull'):
+                creds = get_webull_credentials()
+                if not creds.get('email') and not creds.get('access_token'):
+                    set_broker_status(broker_id, False, 'error', 'No Webull credentials configured')
+                    return jsonify({'success': False, 'error': 'No Webull credentials configured'}), 400
+                
+                if not creds.get('password') or not creds.get('trade_pin'):
+                    set_broker_status(broker_id, False, 'error', 'Password and Trade PIN required')
+                    return jsonify({'success': False, 'error': 'Please enter your Webull password and 6-digit Trade PIN'}), 400
+                
+                try:
+                    from src.webull import WebullAuth
+                    from .broker_credentials_service import webull_credentials_adapter
+                    
+                    is_paper = broker_id == 'webull_paper'
+                    auth = WebullAuth(paper_trading=is_paper, credentials_adapter=webull_credentials_adapter)
+                    
+                    result = auth.login(
+                        email=creds.get('email'),
+                        password=creds.get('password'),
+                        trading_pin=creds.get('trade_pin'),
+                        device_id=creds.get('device_id')
+                    )
+                    
+                    print(f"[WEBULL] Login result: {result}")
+                    
+                    if result.get('success'):
+                        account_info = {
+                            'account_id': result.get('account_id'),
+                            'method': result.get('method', 'direct_login'),
+                            'paper_mode': is_paper
+                        }
+                        set_broker_status(broker_id, True, 'connected', account_info=account_info)
+                        print(f"[WEBULL] ✓ Connected successfully: {account_info}")
+                        return jsonify({
+                            'success': True,
+                            'message': f'Webull {"Paper" if is_paper else "Live"} connected successfully!',
+                            'status': 'connected',
+                            'account': account_info
+                        })
+                    elif result.get('needs_mfa'):
+                        set_broker_status(broker_id, False, 'mfa_required', 'MFA verification required')
+                        print(f"[WEBULL] MFA required")
+                        return jsonify({
+                            'success': False,
+                            'needs_mfa': True,
+                            'error': 'MFA required. Use /api/webull/auth/request-mfa to get code, then login with mfa_code parameter.',
+                            'message': 'Multi-factor authentication required. Check your email/phone for verification code.'
+                        }), 401
+                    else:
+                        error_msg = result.get('error', 'Login failed')
+                        set_broker_status(broker_id, False, 'error', error_msg)
+                        print(f"[WEBULL] ✗ Login failed: {error_msg}")
+                        return jsonify({'success': False, 'error': error_msg}), 401
+                        
+                except Exception as webull_err:
+                    error_msg = str(webull_err)
+                    set_broker_status(broker_id, False, 'error', error_msg)
+                    return jsonify({'success': False, 'error': f'Webull connection failed: {error_msg}'}), 400
+            
+            elif broker_id.startswith('alpaca'):
+                # Load from DATABASE based on paper vs live
+                is_paper = broker_id == 'alpaca_paper'
+                
+                if is_paper:
+                    alpaca_settings = db.get_alpaca_settings()
+                    api_key = alpaca_settings.get('alpaca_api_key', '')
+                    secret_key = alpaca_settings.get('alpaca_secret_key', '')
+                else:
+                    alpaca_settings = db.get_alpaca_live_settings()
+                    api_key = alpaca_settings.get('alpaca_live_api_key', '')
+                    secret_key = alpaca_settings.get('alpaca_live_secret_key', '')
+                
+                if not api_key or not secret_key:
+                    set_broker_status(broker_id, False, 'error', 'No Alpaca credentials configured')
+                    mode_name = "Paper" if is_paper else "Live"
+                    return jsonify({'success': False, 'error': f'No Alpaca {mode_name} credentials configured. Please save API keys first.'}), 400
+                
+                try:
+                    from alpaca.trading.client import TradingClient
+                    
+                    client = TradingClient(
+                        api_key=api_key,
+                        secret_key=secret_key,
+                        paper=is_paper
+                    )
+                    
+                    account = client.get_account()
+                    
+                    account_info = {
+                        'buying_power': float(account.buying_power),
+                        'portfolio_value': float(account.portfolio_value),
+                        'cash': float(account.cash),
+                        'status': account.status
+                    }
+                    
+                    set_broker_status(broker_id, True, 'connected', account_info=account_info)
+                    
+                    return jsonify({
+                        'success': True,
+                        'message': f'Alpaca {"Paper" if is_paper else "Live"} connected successfully!',
+                        'status': 'connected',
+                        'account': account_info
+                    })
+                    
+                except Exception as alpaca_err:
+                    error_msg = str(alpaca_err)
+                    set_broker_status(broker_id, False, 'error', error_msg)
+                    return jsonify({'success': False, 'error': f'Alpaca connection failed: {error_msg}'}), 400
+            
+            elif broker_id.startswith('ibkr'):
+                creds = get_ibkr_credentials()
+                set_broker_status(broker_id, False, 'pending', 'IBKR requires TWS/Gateway running locally')
+                return jsonify({
+                    'success': True,
+                    'message': 'IBKR credentials saved. Ensure TWS/Gateway is running on your local machine.',
+                    'status': 'pending'
+                })
+            
+            return jsonify({'success': False, 'error': 'Broker connection not implemented'}), 501
+            
+        except Exception as e:
+            print(f"[API] Error connecting to broker {broker_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/disconnect/<broker_id>', methods=['POST'])
+    def api_disconnect_broker(broker_id):
+        """Disconnect from a specific broker"""
+        try:
+            from .broker_credentials_service import set_broker_status
+            
+            set_broker_status(broker_id, False, 'disconnected')
+            
+            return jsonify({
+                'success': True,
+                'message': f'{broker_id} disconnected',
+                'status': 'disconnected'
+            })
+        except Exception as e:
+            print(f"[API] Error disconnecting broker {broker_id}: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/reload', methods=['POST'])
+    def api_reload_credentials():
+        """Reload all broker credentials from database and reconnect brokers"""
+        try:
+            from .broker_credentials_service import get_webull_credentials, get_alpaca_credentials, get_discord_credentials
+            import asyncio
+            
+            reload_results = {
+                'webull': False,
+                'alpaca': False,
+                'discord': False,
+                'webull_reconnected': False,
+                'alpaca_reconnected': False,
+                'errors': []
+            }
+            
+            # Get bot instance
+            bot = _bot_instance
+            if not bot:
+                return jsonify({
+                    'success': False,
+                    'error': 'Bot not initialized. Please wait for bot to start.'
+                }), 400
+            
+            import sys
+            module = None
+            for mod_name in ['src.selfbot_webull', 'selfbot_webull']:
+                if mod_name in sys.modules:
+                    module = sys.modules[mod_name]
+                    break
+            
+            # Reload Webull credentials and reconnect
+            try:
+                webull_creds = get_webull_credentials()
+                if webull_creds:
+                    if module:
+                        if webull_creds.get('access_token'):
+                            module.WB_ACCESS_TOKEN = webull_creds.get('access_token', '')
+                            module.WB_REFRESH_TOKEN = webull_creds.get('refresh_token', '')
+                        if webull_creds.get('email'):
+                            module.WB_USER = webull_creds.get('email', '')
+                            module.WB_PASS = webull_creds.get('password', '')
+                        module.WB_PIN = webull_creds.get('trade_pin', '')
+                        module.WB_DID = webull_creds.get('device_id', '')
+                        module.WEBULL_CREDENTIALS_MISSING = False
+                        reload_results['webull'] = True
+                        print("[RELOAD] ✓ Webull credentials updated in memory")
+                    
+                    # Attempt to reconnect Webull broker
+                    if hasattr(bot, 'broker') and bot.broker and hasattr(bot, 'loop'):
+                        try:
+                            # Reset the broker client so it will reconnect
+                            bot.broker._client = None
+                            bot.broker._logged_in = False
+                            
+                            # Schedule login in the bot's event loop
+                            future = asyncio.run_coroutine_threadsafe(bot.broker.login(), bot.loop)
+                            future.result(timeout=30)  # Wait up to 30 seconds for reconnection
+                            
+                            if bot.broker._logged_in:
+                                reload_results['webull_reconnected'] = True
+                                print("[RELOAD] ✓ Webull broker reconnected successfully")
+                            else:
+                                reload_results['errors'].append("Webull: Reconnection failed - check credentials")
+                        except Exception as reconnect_err:
+                            reload_results['errors'].append(f"Webull reconnect: {str(reconnect_err)}")
+                            print(f"[RELOAD] ✗ Webull reconnection error: {reconnect_err}")
+            except Exception as e:
+                reload_results['errors'].append(f"Webull: {str(e)}")
+                print(f"[RELOAD] ✗ Webull reload error: {e}")
+            
+            # Reload Alpaca credentials and reconnect
+            try:
+                # Load from DATABASE (where Settings page saves them)
+                alpaca_creds = db.get_alpaca_settings()
+                api_key = alpaca_creds.get('alpaca_api_key', '')
+                secret_key = alpaca_creds.get('alpaca_secret_key', '')
+                
+                if api_key and secret_key:
+                    import os
+                    os.environ['ALPACA_API_KEY'] = api_key
+                    os.environ['ALPACA_SECRET_KEY'] = secret_key
+                    reload_results['alpaca'] = True
+                    print("[RELOAD] ✓ Alpaca credentials updated in environment")
+                    
+                    # Attempt to reconnect Alpaca broker
+                    if hasattr(bot, 'paper_broker') and hasattr(bot, 'loop'):
+                        try:
+                            # Create new Alpaca broker with updated credentials
+                            from src.brokers.alpaca_broker import AlpacaBroker
+                            alpaca_config = {
+                                'api_key': api_key,
+                                'api_secret': secret_key,
+                                'paper_trade': True
+                            }
+                            new_broker = AlpacaBroker(alpaca_config)
+                            
+                            # Connect the new broker
+                            future = asyncio.run_coroutine_threadsafe(new_broker.connect(), bot.loop)
+                            connected = future.result(timeout=15)
+                            
+                            if connected:
+                                bot.paper_broker = new_broker
+                                reload_results['alpaca_reconnected'] = True
+                                print("[RELOAD] ✓ Alpaca broker reconnected successfully")
+                            else:
+                                reload_results['errors'].append("Alpaca: Reconnection failed - check credentials")
+                        except Exception as reconnect_err:
+                            reload_results['errors'].append(f"Alpaca reconnect: {str(reconnect_err)}")
+                            print(f"[RELOAD] ✗ Alpaca reconnection error: {reconnect_err}")
+            except Exception as e:
+                reload_results['errors'].append(f"Alpaca: {str(e)}")
+                print(f"[RELOAD] ✗ Alpaca reload error: {e}")
+            
+            # Reload Discord credentials (note: Discord requires full restart)
+            try:
+                discord_creds = get_discord_credentials()
+                if discord_creds and discord_creds.get('token'):
+                    if module:
+                        module.USER_TOKEN = discord_creds.get('token', '')
+                        reload_results['discord'] = True
+                        print("[RELOAD] ✓ Discord token updated (requires restart for effect)")
+            except Exception as e:
+                reload_results['errors'].append(f"Discord: {str(e)}")
+                print(f"[RELOAD] ✗ Discord reload error: {e}")
+            
+            # Build result message
+            success = any([reload_results['webull'], reload_results['alpaca'], reload_results['discord']])
+            
+            message_parts = []
+            if reload_results['webull_reconnected']:
+                message_parts.append("Webull (reconnected)")
+            elif reload_results['webull']:
+                message_parts.append("Webull (updated)")
+            if reload_results['alpaca_reconnected']:
+                message_parts.append("Alpaca (reconnected)")
+            elif reload_results['alpaca']:
+                message_parts.append("Alpaca (updated)")
+            if reload_results['discord']:
+                message_parts.append("Discord (restart required)")
+            
+            if message_parts:
+                message = f"Credentials reloaded: {', '.join(message_parts)}"
+                if reload_results['errors']:
+                    message += f". Warnings: {len(reload_results['errors'])}"
+            else:
+                message = "No credentials were reloaded. Please save credentials first."
+            
+            return jsonify({
+                'success': success,
+                'message': message,
+                'details': reload_results
+            })
+            
+        except Exception as e:
+            print(f"[API] Error reloading credentials: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/credentials/api-keys', methods=['GET'])
+    def api_get_api_keys():
+        """Get API keys (masked)"""
+        try:
+            from .broker_credentials_service import get_api_keys_extended
+            
+            keys = get_api_keys_extended()
+            
+            return jsonify({
+                'success': True,
+                'has_openai': bool(keys.get('openai')),
+                'has_alpha_vantage': bool(keys.get('alpha_vantage')),
+                'has_finnhub': bool(keys.get('finnhub')),
+                'has_license': bool(keys.get('license_key'))
+            })
+        except Exception as e:
+            print(f"[API] Error getting API keys: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/credentials/api-keys', methods=['POST'])
+    def api_save_api_keys():
+        """Save API keys"""
+        try:
+            from .broker_credentials_service import save_api_keys_extended, get_api_keys_extended
+            
+            data = request.json
+            existing = get_api_keys_extended()
+            
+            save_api_keys_extended(
+                openai=data.get('openai', existing.get('openai', '')),
+                alpha_vantage=data.get('alpha_vantage', existing.get('alpha_vantage', '')),
+                finnhub=data.get('finnhub', existing.get('finnhub', '')),
+                license_key=data.get('license_key', existing.get('license_key', ''))
+            )
+            
+            return jsonify({
+                'success': True,
+                'message': 'API keys saved successfully'
+            })
+        except Exception as e:
+            print(f"[API] Error saving API keys: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/license')
+    @login_required
+    def license_page():
+        """License management page"""
+        return render_template('license.html')
+    
+    @app.route('/api/license/status', methods=['GET'])
+    @login_required
+    def api_license_status():
+        """Get current license status"""
+        try:
+            import os
+            
+            # ADMIN BYPASS: If running as admin/development server, grant unlimited access
+            # This allows the bot owner to use the system without license restrictions
+            admin_mode = os.getenv('ADMIN_MODE', 'false').lower() == 'true'
+            license_server_mode = os.getenv('LICENSE_SERVER_MODE', 'false').lower() == 'true'
+            admin_password = os.getenv('ADMIN_PASSWORD', '').strip()
+            
+            if admin_mode or license_server_mode or admin_password:
+                # Admin/Owner mode - unlimited access
+                from datetime import datetime, timedelta
+                return jsonify({
+                    'is_valid': True,
+                    'customer_id': 'Admin/Owner',
+                    'expires': (datetime.now() + timedelta(days=36500)).strftime('%Y-%m-%d'),
+                    'days_remaining': 36500,
+                    'license_type': 'admin_unlimited',
+                    'machine_id': 'admin',
+                    'message': 'Admin mode - Unlimited access granted'
+                })
+            
+            # Try multiple license sources in order of priority
+            
+            # Source 1: Check for activated license (activation-based)
+            try:
+                from license.client.manager_activation import validate_activated_license
+                is_valid, data = validate_activated_license()
+                if is_valid:
+                    return jsonify({
+                        'is_valid': True,
+                        'customer_id': data.get('customer_id', 'Unknown'),
+                        'expires': data.get('expires', '--'),
+                        'days_remaining': data.get('days_remaining', 0),
+                        'license_type': data.get('license_type', 'activation'),
+                        'machine_id': data.get('machine_id', ''),
+                        'message': f"License valid - {data.get('days_remaining', 0)} days remaining"
+                    })
+            except ImportError:
+                pass
+            except Exception:
+                pass
+            
+            # Source 2: Check environment variable, wizard credentials, or cache file
+            # Priority: BTF/BT-format licenses first, then legacy format
+            import os
+            from pathlib import Path
+            import json
+            
+            env_license = os.getenv('LICENSE_KEY', '').strip()
+            wizard_license = ''
+            cache_license = ''
+            
+            # Try wizard credentials file - multiple import paths for PyInstaller
+            try:
+                try:
+                    from src.setup_wizard import SetupWizard
+                except ImportError:
+                    try:
+                        from setup_wizard import SetupWizard
+                    except ImportError:
+                        SetupWizard = None
+                
+                if SetupWizard:
+                    wizard = SetupWizard()
+                    if wizard.config_file.exists():
+                        wizard_creds = wizard._load_credentials()
+                        wizard_license = wizard_creds.get('LICENSE_KEY', '').strip()
+            except Exception as e:
+                pass
+            
+            # Also check license cache file for previously saved license key
+            try:
+                cache_file = Path.home() / '.discord_trading_bot' / 'license_cache.json'
+                if cache_file.exists():
+                    with open(cache_file, 'r') as f:
+                        cache_data = json.load(f)
+                        cache_license = cache_data.get('license_key', '').strip()
+                        if cache_license:
+                            print(f"[LICENSE] Found license key in cache file: {cache_license[:8]}...")
+                            # Also get cached validation result for quick display
+                            cached_result = cache_data.get('result', {})
+                            if cached_result.get('is_valid'):
+                                return jsonify({
+                                    'is_valid': True,
+                                    'customer_id': cached_result.get('customer_id', 'Unknown'),
+                                    'expires': cached_result.get('expires', '--'),
+                                    'days_remaining': cached_result.get('days_remaining', 0),
+                                    'license_type': cached_result.get('license_type', 'subscription'),
+                                    'message': f"License valid (cached) - {cached_result.get('days_remaining', 0)} days remaining"
+                                })
+            except Exception as cache_err:
+                print(f"[LICENSE] Could not read cache file: {cache_err}")
+            
+            # Smart priority: Prefer BTF/BT-format licenses over legacy format
+            if env_license.startswith('BTF-') or env_license.startswith('BT-'):
+                license_key = env_license
+            elif wizard_license.startswith('BTF-') or wizard_license.startswith('BT-'):
+                license_key = wizard_license
+            elif cache_license.startswith('BTF-') or cache_license.startswith('BT-'):
+                license_key = cache_license
+            elif env_license:
+                license_key = env_license
+            elif wizard_license:
+                license_key = wizard_license
+            elif cache_license:
+                license_key = cache_license
+            else:
+                license_key = ''
+            
+            if not license_key:
+                # Try database API keys
+                try:
+                    api_keys = get_api_keys_extended()
+                    license_key = api_keys.get('license_key', '').strip()
+                except Exception:
+                    pass
+            
+            if license_key:
+                print(f"[LICENSE] Validating license key (length={len(license_key)})")
+                is_valid = False
+                data = {}
+                license_type = 'unknown'
+                
+                # Try 1: Legacy/Trial format (LicenseManager) - base64 with :: inside
+                try:
+                    try:
+                        from license.client.manager import LicenseManager
+                    except ImportError:
+                        try:
+                            from src.license_manager import LicenseManager
+                        except ImportError:
+                            LicenseManager = None
+                    
+                    if LicenseManager:
+                        valid, msg, lic_data = LicenseManager.validate_license(license_key)
+                        if valid and lic_data:
+                            from datetime import datetime
+                            expires = datetime.fromisoformat(lic_data.get('expires', ''))
+                            days_remaining = max(0, (expires - datetime.now()).days)
+                            is_valid = True
+                            data = {
+                                'customer_id': lic_data.get('customer_id', 'Unknown'),
+                                'expires': expires.strftime('%Y-%m-%d %H:%M'),
+                                'days_remaining': days_remaining,
+                                'license_type': 'trial' if 'trial' in lic_data.get('customer_id', '').lower() else 'legacy'
+                            }
+                            license_type = data['license_type']
+                            print(f"[LICENSE] Validated as {license_type}: {msg}")
+                except Exception as e:
+                    print(f"[LICENSE] Legacy validation failed: {e}")
+                
+                # Try 2: Machine-bound format (manager_secure) - has : separator in key
+                if not is_valid and ':' in license_key:
+                    try:
+                        try:
+                            from license.client.manager_secure import validate_license as validate_secure
+                        except ImportError:
+                            try:
+                                from src.license_manager_secure import validate_license as validate_secure
+                            except ImportError:
+                                validate_secure = None
+                        
+                        if validate_secure:
+                            valid, result = validate_secure(license_key)
+                            if valid:
+                                is_valid = True
+                                data = result
+                                license_type = 'machine-bound'
+                                print(f"[LICENSE] Validated as machine-bound")
+                    except Exception as e:
+                        print(f"[LICENSE] Machine-bound validation failed: {e}")
+                
+                # Try 3: Server-side validation with LicenseClient (BTF-* and BT-* keys)
+                if not is_valid and (license_key.startswith('BTF-') or license_key.startswith('BT-')):
+                    try:
+                        try:
+                            from src.license_client import LicenseClient
+                        except ImportError:
+                            try:
+                                from license_client import LicenseClient
+                            except ImportError:
+                                LicenseClient = None
+                        
+                        if LicenseClient:
+                            client = LicenseClient()
+                            # Try cached first
+                            valid, result = client.validate_cached(license_key)
+                            if not valid:
+                                # Then try server
+                                valid, result = client.validate_license(license_key)
+                            
+                            if valid:
+                                is_valid = True
+                                data = result
+                                license_type = result.get('license_type', 'subscription')
+                                if result.get('cached_mode'):
+                                    license_type += ' (cached)'
+                                elif result.get('offline_mode'):
+                                    license_type += ' (offline)'
+                                print(f"[LICENSE] Validated via server: {license_type}")
+                    except Exception as e:
+                        print(f"[LICENSE] Server validation failed: {e}")
+                
+                if is_valid:
+                    return jsonify({
+                        'is_valid': True,
+                        'customer_id': data.get('customer_id', 'Unknown'),
+                        'expires': data.get('expires', '--'),
+                        'days_remaining': data.get('days_remaining', 0),
+                        'license_type': license_type,
+                        'machine_id': data.get('machine_id', 'Not machine-bound'),
+                        'message': f"License valid - {data.get('days_remaining', 0)} days remaining"
+                    })
+                else:
+                    error_msg = data.get('error', 'License validation failed - check format')
+                    is_expired = 'expired' in error_msg.lower()
+                    print(f"[LICENSE] Validation failed: {error_msg}")
+                    
+                    return jsonify({
+                        'is_valid': False,
+                        'is_expired': is_expired,
+                        'error': error_msg
+                    })
+            
+            # No license found
+            return jsonify({
+                'is_valid': False,
+                'error': 'No license key found'
+            })
+                
+        except Exception as e:
+            print(f"[API] Error getting license status: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                'is_valid': False,
+                'error': str(e)
+            })
+    
+    @app.route('/api/license/machine-info', methods=['GET'])
+    @login_required
+    def api_machine_info():
+        """Get machine fingerprint information"""
+        try:
+            try:
+                from src.machine_fingerprint import get_machine_id, get_machine_info
+            except ImportError:
+                try:
+                    from machine_fingerprint import get_machine_id, get_machine_info
+                except ImportError:
+                    import platform
+                    import hashlib
+                    import uuid
+                    
+                    node = uuid.getnode()
+                    machine_hash = hashlib.sha256(str(node).encode()).hexdigest()[:16]
+                    
+                    return jsonify({
+                        'machine_id': machine_hash,
+                        'platform': platform.system(),
+                        'platform_version': platform.version(),
+                        'machine': platform.machine(),
+                        'processor': platform.processor(),
+                        'node': platform.node()
+                    })
+            
+            info = get_machine_info()
+            return jsonify(info)
+            
+        except Exception as e:
+            print(f"[API] Error getting machine info: {e}")
+            return jsonify({
+                'machine_id': 'Error',
+                'error': str(e)
+            })
+    
+    @app.route('/api/license/activate', methods=['POST'])
+    @login_required
+    def api_activate_license():
+        """Activate a license key - supports all license types"""
+        try:
+            data = request.json
+            license_key = data.get('license_key', '').strip()
+            
+            if not license_key:
+                return jsonify({'success': False, 'error': 'License key is required'})
+            
+            is_valid = False
+            result = {}
+            license_type = 'unknown'
+            
+            # Try 1: Machine-bound license (format: base64:signature)
+            if ':' in license_key and '::' not in license_key:
+                try:
+                    from license.client.manager_secure import validate_license
+                except ImportError:
+                    try:
+                        from src.license_manager_secure import validate_license
+                    except ImportError:
+                        validate_license = None
+                
+                if validate_license:
+                    is_valid, result = validate_license(license_key)
+                    if is_valid:
+                        license_type = 'machine-bound'
+            
+            # Try 2: Legacy/transferable license (format: base64 with ::)
+            if not is_valid and '::' in license_key or (not is_valid and ':' not in license_key):
+                try:
+                    from src.license_manager import LicenseManager
+                    valid, msg, lic_data = LicenseManager.validate_license(license_key)
+                    if valid and lic_data:
+                        from datetime import datetime
+                        expires = datetime.fromisoformat(lic_data.get('expires', ''))
+                        days_remaining = max(0, (expires - datetime.now()).days)
+                        is_valid = True
+                        result = {
+                            'customer_id': lic_data.get('customer_id', 'Unknown'),
+                            'expires': expires.strftime('%Y-%m-%d %H:%M'),
+                            'days_remaining': days_remaining,
+                            'license_type': 'legacy'
+                        }
+                        license_type = 'legacy'
+                    else:
+                        result = {'error': msg}
+                except ImportError:
+                    pass
+                except Exception as e:
+                    result = {'error': str(e)}
+            
+            # Try 3: Activation-based license
+            if not is_valid:
+                try:
+                    from license.client.manager_activation import activate_license
+                except ImportError:
+                    try:
+                        from src.license_manager_activation import activate_license
+                    except ImportError:
+                        activate_license = None
+                
+                if activate_license:
+                    is_valid, result = activate_license(license_key)
+                    if is_valid:
+                        license_type = 'activation'
+            
+            if is_valid:
+                # Save the license key to database
+                from .broker_credentials_service import save_api_keys_extended, get_api_keys_extended
+                existing = get_api_keys_extended()
+                save_api_keys_extended(
+                    openai=existing.get('openai', ''),
+                    alpha_vantage=existing.get('alpha_vantage', ''),
+                    finnhub=existing.get('finnhub', ''),
+                    license_key=license_key
+                )
+                
+                # Also save to wizard credentials if available
+                try:
+                    try:
+                        from src.setup_wizard import SetupWizard
+                    except ImportError:
+                        try:
+                            from setup_wizard import SetupWizard
+                        except ImportError:
+                            SetupWizard = None
+                    
+                    if SetupWizard:
+                        wizard = SetupWizard()
+                        if wizard.config_file.exists():
+                            wizard_creds = wizard._load_credentials()
+                        else:
+                            wizard_creds = {}
+                        wizard_creds['LICENSE_KEY'] = license_key
+                        wizard._save_credentials(wizard_creds)
+                        print(f"[LICENSE] Saved license to wizard credentials")
+                except Exception as e:
+                    print(f"[LICENSE] Could not save to wizard credentials: {e}")
+                
+                return jsonify({
+                    'success': True,
+                    'message': f'License activated successfully ({license_type})',
+                    'customer_id': result.get('customer_id'),
+                    'expires': result.get('expires'),
+                    'days_remaining': result.get('days_remaining'),
+                    'license_type': license_type
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': result.get('error', 'License validation failed - check format and expiry')
+                })
+                
+        except Exception as e:
+            print(f"[API] Error activating license: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)})
+    
+    @app.route('/api/license/validate', methods=['POST'])
+    @login_required
+    def api_validate_license():
+        """Validate a license key without activating"""
+        try:
+            data = request.json
+            license_key = data.get('license_key', '').strip()
+            
+            if not license_key:
+                return jsonify({'is_valid': False, 'error': 'License key is required'})
+            
+            try:
+                from license.client.manager_secure import validate_license
+            except ImportError:
+                try:
+                    from src.license_manager_secure import validate_license
+                except ImportError:
+                    return jsonify({'is_valid': False, 'error': 'License module not available'})
+            
+            is_valid, result = validate_license(license_key)
+            
+            if is_valid:
+                return jsonify({
+                    'is_valid': True,
+                    'customer_id': result.get('customer_id'),
+                    'expires': result.get('expires'),
+                    'days_remaining': result.get('days_remaining'),
+                    'license_type': result.get('license_type', 'unknown')
+                })
+            else:
+                return jsonify({
+                    'is_valid': False,
+                    'error': result.get('error', 'Invalid license')
+                })
+                
+        except Exception as e:
+            print(f"[API] Error validating license: {e}")
+            return jsonify({'is_valid': False, 'error': str(e)})
+    
+    @app.route('/api/license/deactivate', methods=['POST'])
+    @login_required
+    def api_deactivate_license():
+        """Deactivate the current license and clear all cached data"""
+        try:
+            cleared_files = []
+            
+            # 1. Clear the activated license file
+            try:
+                from license.config import ACTIVATED_LICENSE_FILE
+            except ImportError:
+                ACTIVATED_LICENSE_FILE = Path.home() / ".tradingbot_license"
+            
+            if ACTIVATED_LICENSE_FILE.exists():
+                ACTIVATED_LICENSE_FILE.unlink()
+                cleared_files.append(str(ACTIVATED_LICENSE_FILE))
+            
+            # 2. Clear the license cache file (contains offline grace period data)
+            license_cache = Path.home() / '.discord_trading_bot' / 'license_cache.json'
+            if license_cache.exists():
+                license_cache.unlink()
+                cleared_files.append(str(license_cache))
+            
+            # 3. Clear any other license cache locations
+            alt_cache_locations = [
+                Path.home() / '.botifytrades' / 'license_cache.json',
+                Path('.license_cache.json'),
+            ]
+            for cache_path in alt_cache_locations:
+                if cache_path.exists():
+                    cache_path.unlink()
+                    cleared_files.append(str(cache_path))
+            
+            # 4. Clear license key from database
+            from .broker_credentials_service import save_api_keys_extended, get_api_keys_extended
+            existing = get_api_keys_extended()
+            save_api_keys_extended(
+                openai=existing.get('openai', ''),
+                alpha_vantage=existing.get('alpha_vantage', ''),
+                finnhub=existing.get('finnhub', ''),
+                license_key=''
+            )
+            
+            return jsonify({
+                'success': True,
+                'message': 'License deactivated successfully',
+                'cleared_files': cleared_files,
+                'next_steps': 'Restart the application and enter your new license key'
+            })
+            
+        except Exception as e:
+            print(f"[API] Error deactivating license: {e}")
+            return jsonify({'success': False, 'error': str(e)})
+    
+    # ============ SERVER-SIDE LICENSE API (for EXE clients) ============
+    # These endpoints are called by Windows EXE clients to validate licenses
+    # They should NOT require admin login - clients authenticate via license key
+    
+    # Check if running as license server mode
+    LICENSE_SERVER_MODE = os.getenv('LICENSE_SERVER_MODE', 'false').lower() == 'true'
+    LICENSE_SERVER_SECRET = os.getenv('LICENSE_SERVER_SECRET', '')
+    
+    # Rate limiting for license endpoints
+    from collections import defaultdict
+    import time as rate_time
+    
+    LICENSE_RATE_LIMITS = defaultdict(list)  # IP -> [timestamps]
+    RATE_LIMIT_TRIAL = 5  # max 5 trial requests per hour per IP
+    RATE_LIMIT_VALIDATE = 60  # max 60 validations per minute per IP
+    RATE_LIMIT_WINDOW_HOUR = 3600
+    RATE_LIMIT_WINDOW_MINUTE = 60
+    
+    def check_rate_limit(ip: str, limit: int, window: int) -> bool:
+        """Check if IP has exceeded rate limit. Returns True if allowed."""
+        now = rate_time.time()
+        # Clean old entries
+        LICENSE_RATE_LIMITS[ip] = [t for t in LICENSE_RATE_LIMITS[ip] if now - t < window]
+        if len(LICENSE_RATE_LIMITS[ip]) >= limit:
+            return False
+        LICENSE_RATE_LIMITS[ip].append(now)
+        return True
+    
+    @app.route('/api/v1/license/health', methods=['GET'])
+    def api_server_health():
+        """Health check endpoint for license server"""
+        from datetime import datetime
+        return jsonify({
+            'status': 'healthy',
+            'server_mode': LICENSE_SERVER_MODE,
+            'timestamp': datetime.now().isoformat()
+        })
+    
+    @app.route('/api/v1/license/trial', methods=['POST'])
+    def api_server_request_trial():
+        """Request a trial license (one per machine) - called by EXE clients"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        # Rate limit check for trial requests (5 per hour per IP)
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if not check_rate_limit(f"trial_{ip_address}", RATE_LIMIT_TRIAL, RATE_LIMIT_WINDOW_HOUR):
+            return jsonify({'success': False, 'error': 'Too many trial requests. Please try again later.'}), 429
+        
+        try:
+            data = request.json or {}
+            machine_id = data.get('machine_id', '').strip()
+            
+            if not machine_id:
+                return jsonify({'success': False, 'error': 'Machine ID is required'}), 400
+            
+            user_agent = request.headers.get('User-Agent', '')
+            
+            # Request trial from database
+            result = db.request_server_trial(machine_id, ip_address, user_agent)
+            
+            if result.get('success'):
+                trial_result = {
+                    'success': True,
+                    'license_key': result['license_key'],
+                    'expires_at': result['expires_at'],
+                    'days_remaining': result['days_remaining'],
+                    'message': result['message'],
+                    'license_type': 'trial',
+                    'is_valid': True
+                }
+                
+                # Sign trial response for tamper protection
+                try:
+                    signed_token = _sign_license_token(trial_result, machine_id)
+                    if signed_token:
+                        trial_result['signed_token'] = signed_token
+                        print(f"[LICENSE SERVER] Signed trial token for machine {machine_id[:8]}...")
+                except Exception as sign_err:
+                    print(f"[LICENSE SERVER] Warning: Could not sign trial token: {sign_err}")
+                
+                return jsonify(trial_result)
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': result.get('error', 'Trial request failed')
+                }), 400
+                
+        except Exception as e:
+            print(f"[LICENSE SERVER] Error processing trial request: {e}")
+            return jsonify({'success': False, 'error': 'Internal server error'}), 500
+    
+    @app.route('/api/v1/license/activate', methods=['POST'])
+    def api_server_activate_license():
+        """Activate a license on a machine - called by EXE clients"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        try:
+            data = request.json or {}
+            license_key = data.get('license_key', '').strip()
+            machine_id = data.get('machine_id', '').strip()
+            machine_info = data.get('machine_info', '')
+            
+            if not license_key or not machine_id:
+                return jsonify({'success': False, 'error': 'License key and machine ID are required'}), 400
+            
+            # Get client info
+            ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+            
+            # Activate license
+            result = db.activate_server_license(license_key, machine_id, machine_info, ip_address)
+            
+            if result.get('success'):
+                # Calculate days remaining using hours (NOT .days which floors to 0 when <24h)
+                days_remaining = 999
+                hours_remaining = 0
+                if result.get('expires_at'):
+                    from datetime import datetime
+                    try:
+                        expires = datetime.strptime(result['expires_at'], '%Y-%m-%d %H:%M:%S')
+                        time_diff = expires - datetime.now()
+                        hours_remaining = max(0, time_diff.total_seconds() / 3600)
+                        days_remaining = max(0, int(hours_remaining / 24))  # Proper calculation
+                        print(f"[LICENSE SERVER] Activation: expires={result['expires_at']}, hours={hours_remaining:.1f}, days={days_remaining}")
+                    except Exception as calc_err:
+                        print(f"[LICENSE SERVER] Warning: Could not calculate expiry: {calc_err}")
+                
+                # Sign the activation response for tamper protection
+                activation_result = {
+                    'success': True,
+                    'is_valid': True,
+                    'license_type': result.get('license_type', 'subscription'),
+                    'customer_id': result.get('customer_id'),
+                    'expires': result.get('expires_at'),
+                    'days_remaining': days_remaining,
+                    'message': result.get('message', 'License activated')
+                }
+                
+                try:
+                    signed_token = _sign_license_token(activation_result, machine_id)
+                    if signed_token:
+                        activation_result['signed_token'] = signed_token
+                        print(f"[LICENSE SERVER] Signed activation token for machine {machine_id[:8]}...")
+                except Exception as sign_err:
+                    print(f"[LICENSE SERVER] Warning: Could not sign activation token: {sign_err}")
+                
+                return jsonify(activation_result)
+            else:
+                return jsonify({
+                    'success': False,
+                    'is_valid': False,
+                    'error': result.get('error', 'Activation failed')
+                }), 400
+                
+        except Exception as e:
+            print(f"[LICENSE SERVER] Error activating license: {e}")
+            return jsonify({'success': False, 'error': 'Internal server error'}), 500
+    
+    @app.route('/api/v1/license/validate', methods=['POST'])
+    def api_server_validate_license():
+        """Validate a license for a machine - called by EXE clients on startup"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'is_valid': False, 'error': 'License server not enabled'}), 403
+        
+        # Rate limit check for validations (60 per minute per IP)
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if not check_rate_limit(f"validate_{ip_address}", RATE_LIMIT_VALIDATE, RATE_LIMIT_WINDOW_MINUTE):
+            return jsonify({'is_valid': False, 'error': 'Rate limit exceeded'}), 429
+        
+        try:
+            data = request.json or {}
+            license_key = data.get('license_key', '').strip()
+            machine_id = data.get('machine_id', '').strip()
+            
+            if not license_key or not machine_id:
+                return jsonify({'is_valid': False, 'error': 'License key and machine ID are required'}), 400
+            
+            # Validate license
+            result = db.validate_server_license(license_key, machine_id, ip_address)
+            
+            # If valid, sign the response with RSA private key for tamper protection
+            if result.get('is_valid'):
+                try:
+                    signed_token = _sign_license_token(result, machine_id)
+                    if signed_token:
+                        result['signed_token'] = signed_token
+                        print(f"[LICENSE SERVER] Signed token generated for machine {machine_id[:8]}...")
+                except Exception as sign_err:
+                    print(f"[LICENSE SERVER] Warning: Could not sign token: {sign_err}")
+            
+            return jsonify(result)
+                
+        except Exception as e:
+            print(f"[LICENSE SERVER] Error validating license: {e}")
+            return jsonify({'is_valid': False, 'error': 'Internal server error'}), 500
+    
+    @app.route('/api/v1/license/deactivate', methods=['POST'])
+    def api_server_deactivate_machine():
+        """Deactivate a machine from a license - called by EXE clients"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        try:
+            data = request.json or {}
+            license_key = data.get('license_key', '').strip()
+            machine_id = data.get('machine_id', '').strip()
+            
+            if not license_key or not machine_id:
+                return jsonify({'success': False, 'error': 'License key and machine ID are required'}), 400
+            
+            result = db.deactivate_machine(license_key, machine_id)
+            
+            if result:
+                return jsonify({'success': True, 'message': 'Machine deactivated successfully'})
+            else:
+                return jsonify({'success': False, 'error': 'Machine not found or already deactivated'}), 400
+                
+        except Exception as e:
+            print(f"[LICENSE SERVER] Error deactivating machine: {e}")
+            return jsonify({'success': False, 'error': 'Internal server error'}), 500
+    
+    @app.route('/api/v1/license/status', methods=['GET'])
+    def api_server_license_status():
+        """Public endpoint to check if license server is running"""
+        return jsonify({
+            'server_mode': LICENSE_SERVER_MODE,
+            'server_name': 'BotifyTrades License Server',
+            'version': '1.0.0',
+            'status': 'online' if LICENSE_SERVER_MODE else 'disabled'
+        })
+    
+    # ============ ADMIN LICENSE MANAGEMENT (requires admin) ============
+    
+    @app.route('/admin/licenses')
+    @admin_required
+    def admin_licenses_page():
+        """Admin page for managing licenses (LICENSE SERVER ONLY)"""
+        if not LICENSE_SERVER_MODE:
+            flash('License Server management is only available when running as a License Server.', 'error')
+            return redirect(url_for('index'))
+        
+        licenses = db.get_all_server_licenses(include_expired=True)
+        trials = db.get_all_server_trials()
+        stats = db.get_license_stats()
+        
+        return render_template('admin_licenses.html',
+                               server_mode=True,
+                               licenses=licenses,
+                               trials=trials,
+                               stats=stats)
+    
+    @app.route('/api/admin/licenses', methods=['GET'])
+    @admin_required
+    def api_admin_get_licenses():
+        """Get all licenses for admin panel with filtering, sorting, and pagination"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        try:
+            from datetime import datetime, timedelta
+            
+            search = request.args.get('q', '').strip().lower()
+            status_filter = request.args.get('status', '')
+            type_filter = request.args.get('type', '')
+            expiring_days = request.args.get('expiring_within', '')
+            sort_by = request.args.get('sort', 'created_at')
+            sort_order = request.args.get('order', 'desc')
+            page = int(request.args.get('page', 1))
+            page_size = int(request.args.get('page_size', 25))
+            include_expired = request.args.get('include_expired', 'true').lower() == 'true'
+            
+            all_licenses = db.get_all_server_licenses(include_expired=include_expired)
+            
+            if search:
+                all_licenses = [
+                    lic for lic in all_licenses 
+                    if search in (lic.get('license_key', '') or '').lower()
+                    or search in (lic.get('customer_name', '') or '').lower()
+                    or search in (lic.get('customer_email', '') or '').lower()
+                    or search in (lic.get('customer_id', '') or '').lower()
+                    or search in (lic.get('notes', '') or '').lower()
+                ]
+            
+            if status_filter:
+                all_licenses = [lic for lic in all_licenses if lic.get('status') == status_filter]
+            
+            if type_filter:
+                all_licenses = [lic for lic in all_licenses if lic.get('license_type') == type_filter]
+            
+            if expiring_days:
+                try:
+                    days = int(expiring_days)
+                    cutoff = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d')
+                    all_licenses = [
+                        lic for lic in all_licenses 
+                        if lic.get('expires_at') and lic.get('expires_at', '9999') <= cutoff
+                        and lic.get('status') == 'active'
+                    ]
+                except ValueError:
+                    pass
+            
+            sort_key = lambda x: x.get(sort_by, '') or ''
+            reverse = sort_order == 'desc'
+            all_licenses = sorted(all_licenses, key=sort_key, reverse=reverse)
+            
+            total = len(all_licenses)
+            total_pages = (total + page_size - 1) // page_size
+            start = (page - 1) * page_size
+            end = start + page_size
+            licenses = all_licenses[start:end]
+            
+            return jsonify({
+                'success': True, 
+                'licenses': licenses,
+                'pagination': {
+                    'page': page,
+                    'page_size': page_size,
+                    'total': total,
+                    'total_pages': total_pages,
+                    'has_next': page < total_pages,
+                    'has_prev': page > 1
+                }
+            })
+        except Exception as e:
+            print(f"[ADMIN] Error getting licenses: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/licenses/<license_key>/extend', methods=['POST'])
+    @admin_required
+    def api_admin_extend_license(license_key):
+        """Extend a license by specified days"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        try:
+            from datetime import datetime, timedelta
+            data = request.json or {}
+            days = int(data.get('days', 30))
+            
+            license_data = db.get_server_license(license_key)
+            if not license_data:
+                return jsonify({'success': False, 'error': 'License not found'}), 404
+            
+            current_expiry = license_data.get('expires_at')
+            if current_expiry:
+                try:
+                    current_dt = datetime.strptime(current_expiry, '%Y-%m-%d %H:%M:%S')
+                except:
+                    current_dt = datetime.now()
+            else:
+                current_dt = datetime.now()
+            
+            if current_dt < datetime.now():
+                current_dt = datetime.now()
+            
+            new_expiry = (current_dt + timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+            
+            result = db.update_server_license(license_key, expires_at=new_expiry, status='active')
+            
+            if result:
+                return jsonify({
+                    'success': True, 
+                    'message': f'License extended by {days} days',
+                    'new_expiry': new_expiry
+                })
+            else:
+                return jsonify({'success': False, 'error': 'Failed to extend license'}), 500
+                
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/licenses/<license_key>/reactivate', methods=['POST'])
+    @admin_required
+    def api_admin_reactivate_license(license_key):
+        """Reactivate a revoked or expired license"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        try:
+            from datetime import datetime, timedelta
+            data = request.json or {}
+            days = int(data.get('days', 30))
+            
+            new_expiry = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+            result = db.update_server_license(license_key, expires_at=new_expiry, status='active')
+            
+            if result:
+                return jsonify({
+                    'success': True, 
+                    'message': 'License reactivated',
+                    'new_expiry': new_expiry
+                })
+            else:
+                return jsonify({'success': False, 'error': 'License not found'}), 404
+                
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/licenses/<license_key>/reset-devices', methods=['POST'])
+    @admin_required
+    def api_admin_reset_devices(license_key):
+        """Reset device bindings for a license"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        try:
+            result = db.reset_license_devices(license_key)
+            
+            if result:
+                return jsonify({'success': True, 'message': 'Device bindings reset successfully'})
+            else:
+                return jsonify({'success': False, 'error': 'License not found'}), 404
+                
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/licenses/<license_key>/details', methods=['GET'])
+    @admin_required
+    def api_admin_license_details(license_key):
+        """Get detailed license information including machines and activity"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        try:
+            license_data = db.get_server_license(license_key)
+            if not license_data:
+                return jsonify({'success': False, 'error': 'License not found'}), 404
+            
+            machines = db.get_license_machines(license_key)
+            validations = db.get_license_validations(license_key, limit=20)
+            
+            return jsonify({
+                'success': True,
+                'license': license_data,
+                'machines': machines,
+                'validations': validations
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/licenses/<license_key>', methods=['PUT'])
+    @admin_required
+    def api_admin_update_license(license_key):
+        """Update license details"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        try:
+            data = request.json or {}
+            
+            updates = {}
+            if 'customer_name' in data:
+                updates['customer_name'] = data['customer_name']
+            if 'customer_email' in data:
+                updates['customer_email'] = data['customer_email']
+            if 'max_devices' in data:
+                updates['max_devices'] = int(data['max_devices'])
+            if 'notes' in data:
+                updates['notes'] = data['notes']
+            
+            if updates:
+                result = db.update_server_license(license_key, **updates)
+                if result:
+                    return jsonify({'success': True, 'message': 'License updated'})
+            
+            return jsonify({'success': False, 'error': 'No updates provided'}), 400
+                
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/licenses/bulk', methods=['POST'])
+    @admin_required
+    def api_admin_bulk_action():
+        """Perform bulk actions on multiple licenses"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        try:
+            from datetime import datetime, timedelta
+            data = request.json or {}
+            action = data.get('action')
+            license_keys = data.get('license_keys', [])
+            
+            if not license_keys:
+                return jsonify({'success': False, 'error': 'No licenses selected'}), 400
+            
+            results = {'success': 0, 'failed': 0, 'errors': []}
+            
+            for key in license_keys:
+                try:
+                    if action == 'revoke':
+                        if db.revoke_server_license(key, 'Bulk revoke by admin'):
+                            results['success'] += 1
+                        else:
+                            results['failed'] += 1
+                    elif action == 'extend':
+                        days = int(data.get('days', 30))
+                        license_data = db.get_server_license(key)
+                        if license_data:
+                            current_expiry = license_data.get('expires_at')
+                            if current_expiry:
+                                try:
+                                    current_dt = datetime.strptime(current_expiry, '%Y-%m-%d %H:%M:%S')
+                                except:
+                                    current_dt = datetime.now()
+                            else:
+                                current_dt = datetime.now()
+                            if current_dt < datetime.now():
+                                current_dt = datetime.now()
+                            new_expiry = (current_dt + timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+                            if db.update_server_license(key, expires_at=new_expiry, status='active'):
+                                results['success'] += 1
+                            else:
+                                results['failed'] += 1
+                        else:
+                            results['failed'] += 1
+                    elif action == 'reset_devices':
+                        if db.reset_license_devices(key):
+                            results['success'] += 1
+                        else:
+                            results['failed'] += 1
+                    else:
+                        results['errors'].append(f'Unknown action: {action}')
+                        break
+                except Exception as e:
+                    results['failed'] += 1
+                    results['errors'].append(f'{key}: {str(e)}')
+            
+            return jsonify({
+                'success': True,
+                'message': f'{results["success"]} licenses updated, {results["failed"]} failed',
+                'results': results
+            })
+                
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/licenses/export', methods=['GET'])
+    @admin_required
+    def api_admin_export_licenses():
+        """Export licenses as CSV"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        try:
+            import csv
+            from io import StringIO
+            
+            search = request.args.get('q', '').strip().lower()
+            status_filter = request.args.get('status', '')
+            type_filter = request.args.get('type', '')
+            
+            all_licenses = db.get_all_server_licenses(include_expired=True)
+            
+            if search:
+                all_licenses = [
+                    lic for lic in all_licenses 
+                    if search in (lic.get('license_key', '') or '').lower()
+                    or search in (lic.get('customer_name', '') or '').lower()
+                    or search in (lic.get('customer_email', '') or '').lower()
+                ]
+            
+            if status_filter:
+                all_licenses = [lic for lic in all_licenses if lic.get('status') == status_filter]
+            
+            if type_filter:
+                all_licenses = [lic for lic in all_licenses if lic.get('license_type') == type_filter]
+            
+            output = StringIO()
+            writer = csv.writer(output)
+            
+            writer.writerow(['License Key', 'Type', 'Status', 'Customer Name', 'Customer Email', 
+                           'Devices Used', 'Max Devices', 'Created', 'Expires', 'Notes'])
+            
+            for lic in all_licenses:
+                writer.writerow([
+                    lic.get('license_key', ''),
+                    lic.get('license_type', ''),
+                    lic.get('status', ''),
+                    lic.get('customer_name', ''),
+                    lic.get('customer_email', ''),
+                    lic.get('devices_used', 0),
+                    lic.get('max_devices', 1),
+                    lic.get('created_at', ''),
+                    lic.get('expires_at', 'Lifetime'),
+                    lic.get('notes', '')
+                ])
+            
+            from flask import Response
+            output.seek(0)
+            return Response(
+                output.getvalue(),
+                mimetype='text/csv',
+                headers={'Content-Disposition': 'attachment; filename=licenses_export.csv'}
+            )
+                
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/trials', methods=['GET'])
+    @admin_required
+    def api_admin_get_trials():
+        """Get all trials with filtering and pagination"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        try:
+            search = request.args.get('q', '').strip().lower()
+            status_filter = request.args.get('status', '')
+            page = int(request.args.get('page', 1))
+            page_size = int(request.args.get('page_size', 25))
+            
+            all_trials = db.get_all_server_trials()
+            
+            if search:
+                all_trials = [
+                    t for t in all_trials 
+                    if search in (t.get('machine_id', '') or '').lower()
+                    or search in (t.get('license_key', '') or '').lower()
+                    or search in (t.get('first_ip', '') or '').lower()
+                ]
+            
+            if status_filter:
+                all_trials = [t for t in all_trials if t.get('status') == status_filter]
+            
+            total = len(all_trials)
+            total_pages = (total + page_size - 1) // page_size
+            start = (page - 1) * page_size
+            end = start + page_size
+            trials = all_trials[start:end]
+            
+            return jsonify({
+                'success': True, 
+                'trials': trials,
+                'pagination': {
+                    'page': page,
+                    'page_size': page_size,
+                    'total': total,
+                    'total_pages': total_pages
+                }
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/licenses', methods=['POST'])
+    @admin_required
+    def api_admin_create_license():
+        """Create a new license (admin only)"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        try:
+            data = request.json or {}
+            license_type = data.get('license_type', 'subscription')
+            days = int(data.get('days', 30))
+            max_devices = int(data.get('max_devices', 1))
+            customer_email = data.get('customer_email', '')
+            customer_name = data.get('customer_name', '')
+            notes = data.get('notes', '')
+            
+            # Generate license key
+            import secrets
+            prefix = 'BT' if license_type == 'subscription' else 'BETA' if license_type == 'beta' else 'LIFE'
+            license_key = f"{prefix}-{secrets.token_hex(4).upper()}-{secrets.token_hex(4).upper()}"
+            
+            # Calculate expiry
+            from datetime import datetime, timedelta
+            if license_type == 'lifetime':
+                expires_at = None
+            else:
+                expires_at = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Create customer ID from email or generate
+            customer_id = customer_email.split('@')[0] if customer_email else f"customer_{secrets.token_hex(4)}"
+            
+            # Create license
+            license_id = db.create_server_license(
+                license_key=license_key,
+                license_type=license_type,
+                expires_at=expires_at,
+                customer_id=customer_id,
+                customer_email=customer_email,
+                customer_name=customer_name,
+                max_devices=max_devices,
+                notes=notes
+            )
+            
+            if license_id:
+                return jsonify({
+                    'success': True,
+                    'license_key': license_key,
+                    'license_id': license_id,
+                    'expires_at': expires_at,
+                    'message': 'License created successfully'
+                })
+            else:
+                return jsonify({'success': False, 'error': 'Failed to create license'}), 500
+                
+        except Exception as e:
+            print(f"[ADMIN] Error creating license: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/licenses/<license_key>/revoke', methods=['POST'])
+    @admin_required
+    def api_admin_revoke_license(license_key):
+        """Revoke a license (admin only)"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        try:
+            data = request.json or {}
+            reason = data.get('reason', 'Admin revoked')
+            
+            result = db.revoke_server_license(license_key, reason)
+            
+            if result:
+                return jsonify({'success': True, 'message': 'License revoked successfully'})
+            else:
+                return jsonify({'success': False, 'error': 'License not found'}), 404
+                
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/licenses/<license_key>/machines', methods=['GET'])
+    @admin_required
+    def api_admin_get_license_machines(license_key):
+        """Get machines bound to a license"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        try:
+            machines = db.get_license_machines(license_key)
+            return jsonify({'success': True, 'machines': machines})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/licenses/stats', methods=['GET'])
+    @admin_required
+    def api_admin_license_stats():
+        """Get license statistics for dashboard"""
+        if not LICENSE_SERVER_MODE:
+            return jsonify({'success': False, 'error': 'License server not enabled'}), 403
+        
+        try:
+            stats = db.get_license_stats()
+            return jsonify({'success': True, 'stats': stats})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # ============ AI CHAT ASSISTANT ============
+    
+    @app.route('/api/chat', methods=['POST'])
+    def api_chat():
+        """AI Chat Assistant endpoint - handles user questions about the app with error context"""
+        try:
+            from .chat_assistant import get_contextual_response
+            
+            data = request.json
+            query = data.get('message', '').strip()
+            
+            if not query:
+                return jsonify({
+                    'success': True,
+                    'response': "Hi! I'm your BotifyTrades assistant. Ask me anything about the app!",
+                    'topic': None
+                })
+            
+            # Use contextual response that checks for errors
+            result = get_contextual_response(query)
+            return jsonify(result)
+            
+        except Exception as e:
+            print(f"[CHAT] Error: {e}")
+            return jsonify({
+                'success': False,
+                'response': "Sorry, I encountered an error. Please try again.",
+                'error': str(e)
+            })
+    
+    @app.route('/api/chat/suggestions', methods=['GET'])
+    def api_chat_suggestions():
+        """Get topic suggestions for chat assistant"""
+        try:
+            from .chat_assistant import get_suggestions
+            
+            partial = request.args.get('q', '')
+            suggestions = get_suggestions(partial)
+            
+            return jsonify({
+                'success': True,
+                'suggestions': suggestions
+            })
+            
+        except Exception as e:
+            return jsonify({'success': False, 'suggestions': []})
+    
+    @app.route('/api/chat/topics', methods=['GET'])
+    def api_chat_topics():
+        """Get all available chat topics"""
+        try:
+            from .chat_assistant import get_all_topics
+            
+            topics = get_all_topics()
+            return jsonify({
+                'success': True,
+                'topics': topics
+            })
+            
+        except Exception as e:
+            return jsonify({'success': False, 'topics': []})
+    
+    @app.route('/api/chat/status', methods=['GET'])
+    def api_chat_status():
+        """Get chat status including error notifications"""
+        try:
+            from .chat_assistant import get_chat_status
+            
+            status = get_chat_status()
+            return jsonify({
+                'success': True,
+                **status
+            })
+            
+        except Exception as e:
+            return jsonify({'success': False, 'has_unnotified': False, 'unnotified_count': 0})
+    
+    @app.route('/api/chat/errors/seen', methods=['POST'])
+    def api_chat_mark_errors_seen():
+        """Mark errors as seen by the user"""
+        try:
+            from .chat_assistant import mark_errors_seen
+            
+            result = mark_errors_seen()
+            return jsonify({'success': result})
+            
+        except Exception as e:
+            return jsonify({'success': False})
+    
+    # ============ ERROR MONITORING API ============
+    
+    @app.route('/api/errors', methods=['GET'])
+    @login_required
+    def api_get_errors():
+        """Get recent errors for monitoring"""
+        try:
+            hours = request.args.get('hours', 24, type=int)
+            limit = request.args.get('limit', 20, type=int)
+            include_resolved = request.args.get('resolved', 'false').lower() == 'true'
+            
+            errors = db.get_recent_errors(limit=limit, hours=hours, include_resolved=include_resolved)
+            stats = db.get_error_stats(hours=hours)
+            
+            return jsonify({
+                'success': True,
+                'errors': errors,
+                'stats': stats
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting errors: {e}")
+            return jsonify({'success': False, 'errors': [], 'stats': {}})
+    
+    @app.route('/api/errors/frequent', methods=['GET'])
+    @login_required
+    def api_get_frequent_errors():
+        """Get most frequent errors"""
+        try:
+            days = request.args.get('days', 7, type=int)
+            limit = request.args.get('limit', 10, type=int)
+            
+            frequent = db.get_frequent_errors(limit=limit, days=days)
+            
+            return jsonify({
+                'success': True,
+                'errors': frequent
+            })
+            
+        except Exception as e:
+            return jsonify({'success': False, 'errors': []})
+    
+    @app.route('/api/errors/<int:error_id>/resolve', methods=['POST'])
+    @login_required
+    def api_resolve_error(error_id):
+        """Mark an error as resolved"""
+        try:
+            data = request.json or {}
+            notes = data.get('notes', '')
+            
+            result = db.resolve_error(error_id, notes)
+            return jsonify({'success': result})
+            
+        except Exception as e:
+            return jsonify({'success': False})
+    
+    @app.route('/api/errors/known-issues', methods=['GET'])
+    def api_get_known_issues():
+        """Get all known issues and their solutions"""
+        try:
+            issues = db.get_all_known_issues()
+            return jsonify({
+                'success': True,
+                'issues': issues
+            })
+            
+        except Exception as e:
+            return jsonify({'success': False, 'issues': []})
+    
+    @app.route('/api/errors/log', methods=['POST'])
+    def api_log_error():
+        """Log an error from the frontend"""
+        try:
+            data = request.json
+            
+            error_id = db.log_error(
+                error_type=data.get('type', 'frontend'),
+                error_message=data.get('message', 'Unknown error'),
+                component=data.get('component'),
+                context=data.get('context'),
+                severity=data.get('severity', 'error')
+            )
+            
+            return jsonify({'success': True, 'error_id': error_id})
+            
+        except Exception as e:
+            return jsonify({'success': False})
+    
+    # ============ SYSTEM HEALTH / VALIDATION PAGE ============
+    
+    @app.route('/health')
+    @login_required
+    def system_health():
+        """System Health page for users to validate their bot settings"""
+        return render_template('health.html')
+    
+    @app.route('/api/health/full', methods=['GET'])
+    @login_required
+    def api_system_health():
+        """Get comprehensive system health data for user validation"""
+        try:
+            from .broker_credentials_service import get_all_broker_status
+            import configparser
+            
+            health_data = {
+                'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'core_systems': {},
+                'brokers': {},
+                'features': {},
+                'channels': {},
+                'risk_management': {},
+                'positions': {},
+                'recent_activity': {}
+            }
+            
+            # Core Systems
+            bot_connected = bool(_bot_instance and _bot_instance.is_ready())
+            bot_user = str(_bot_instance.user) if _bot_instance and hasattr(_bot_instance, 'user') and _bot_instance.user else 'Not connected'
+            
+            health_data['core_systems'] = {
+                'discord_bot': {
+                    'status': 'connected' if bot_connected else 'disconnected',
+                    'user': bot_user,
+                    'ok': bot_connected
+                },
+                'web_panel': {
+                    'status': 'running',
+                    'port': 5000,
+                    'ok': True
+                },
+                'order_worker': {
+                    'status': 'running' if _bot_instance else 'stopped',
+                    'ok': bool(_bot_instance)
+                },
+                'sync_service': {
+                    'status': 'running' if _bot_instance else 'stopped',
+                    'ok': bool(_bot_instance)
+                }
+            }
+            
+            # Broker Connections - Check actual bot instance for real status
+            broker_status = {}
+            
+            # Check Webull Live
+            webull_connected = False
+            webull_buying_power = 0
+            webull_positions = 0
+            if _bot_instance and hasattr(_bot_instance, 'broker') and _bot_instance.broker:
+                try:
+                    broker = _bot_instance.broker
+                    if hasattr(broker, '_client') and broker._client:
+                        webull_connected = True
+                        try:
+                            account = broker._client.get_account()
+                            if account:
+                                for field in ['settledFunds', 'cashBalance', 'buyingPower', 'dayBuyingPower']:
+                                    if field in account:
+                                        val = account[field]
+                                        if isinstance(val, (int, float)):
+                                            webull_buying_power = float(val)
+                                            break
+                                        elif isinstance(val, str):
+                                            try:
+                                                webull_buying_power = float(val.replace(',', ''))
+                                                break
+                                            except:
+                                                continue
+                            positions = broker._client.get_positions()
+                            webull_positions = len(positions) if positions else 0
+                        except:
+                            pass
+                except:
+                    pass
+            
+            broker_status['webull_live'] = {
+                'connected': webull_connected,
+                'status': 'connected' if webull_connected else 'disconnected',
+                'account_type': 'LIVE',
+                'buying_power': webull_buying_power,
+                'positions': webull_positions
+            }
+            
+            # Check Alpaca Paper
+            alpaca_connected = False
+            alpaca_buying_power = 0
+            alpaca_positions = 0
+            if _bot_instance and hasattr(_bot_instance, 'paper_broker') and _bot_instance.paper_broker:
+                try:
+                    broker = _bot_instance.paper_broker
+                    if hasattr(broker, 'trading_client') and broker.trading_client:
+                        alpaca_connected = True
+                        try:
+                            account = broker.trading_client.get_account()
+                            if account:
+                                alpaca_buying_power = float(account.buying_power)
+                            positions = broker.trading_client.get_all_positions()
+                            alpaca_positions = len(positions) if positions else 0
+                        except:
+                            pass
+                except:
+                    pass
+            
+            broker_status['alpaca_paper'] = {
+                'connected': alpaca_connected,
+                'status': 'connected' if alpaca_connected else 'disconnected',
+                'account_type': 'PAPER',
+                'buying_power': alpaca_buying_power,
+                'positions': alpaca_positions
+            }
+            
+            health_data['brokers'] = broker_status
+            
+            # Feature Settings - Load from config.ini and database
+            config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.ini')
+            config = configparser.ConfigParser()
+            features = {}
+            
+            if os.path.exists(config_path):
+                config.read(config_path)
+                
+                # AI Features
+                features['ai_analysis'] = {
+                    'enabled': config.getboolean('ai_analysis', 'enable_ai_analysis', fallback=False),
+                    'model': config.get('ai_analysis', 'model', fallback='gpt-4o-mini'),
+                    'description': 'Post-trade AI analysis'
+                }
+                features['ai_commands'] = {
+                    'enabled': config.getboolean('ai_analysis', 'enable_ai_commands', fallback=False),
+                    'channel': config.get('ai_analysis', 'ai_commands_channel_id', fallback=''),
+                    'description': 'Interactive AI commands (!analyze, !ask)'
+                }
+                features['signal_conversion'] = {
+                    'enabled': config.getboolean('ai_analysis', 'enable_signal_conversion', fallback=False),
+                    'channel': config.get('ai_analysis', 'signal_conversion_channel_id', fallback=''),
+                    'description': 'Natural language to signal conversion'
+                }
+                features['sentiment_analysis'] = {
+                    'enabled': config.getboolean('ai_analysis', 'enable_sentiment_analysis', fallback=False),
+                    'description': 'Market sentiment analysis'
+                }
+                
+                # Analysis Tools
+                features['alpha_vantage'] = {
+                    'enabled': config.getboolean('alpha_vantage', 'enable_scanner', fallback=False),
+                    'min_premium': config.get('alpha_vantage', 'min_premium', fallback='100000'),
+                    'dte_range': f"{config.get('alpha_vantage', 'dte_min', fallback='7')}-{config.get('alpha_vantage', 'dte_max', fallback='45')} days",
+                    'description': 'Option flow scanner'
+                }
+                features['swing_trading'] = {
+                    'enabled': config.getboolean('swing_analysis', 'enable_swing_analysis', fallback=False),
+                    'min_confidence': config.get('swing_analysis', 'min_confidence_score', fallback='60'),
+                    'auto_reject': config.getboolean('swing_analysis', 'auto_reject_low_confidence', fallback=False),
+                    'description': 'Pre-trade swing analysis'
+                }
+                features['news_service'] = {
+                    'enabled': config.getboolean('news', 'enable_news_service', fallback=False),
+                    'description': 'Market news integration'
+                }
+                
+                # Risk Management
+                risk_enabled = config.getboolean('risk_management', 'enable_risk_management', fallback=False)
+                features['global_risk'] = {
+                    'enabled': risk_enabled,
+                    'profit_target_1': config.get('risk_management', 'profit_target_1_pct', fallback='30') if risk_enabled else 'N/A',
+                    'stop_loss': config.get('risk_management', 'stop_loss_pct', fallback='50') if risk_enabled else 'N/A',
+                    'description': 'Global risk management'
+                }
+                features['slippage_protection'] = {
+                    'enabled': config.getboolean('risk_management', 'enable_slippage_protection', fallback=False),
+                    'max_slippage': config.get('risk_management', 'max_slippage_pct', fallback='5'),
+                    'description': 'Price slippage protection'
+                }
+            
+            health_data['features'] = features
+            
+            # Channel Configuration
+            channels = db.get_channels()
+            channel_summary = {
+                'total': len(channels),
+                'execute_enabled': 0,
+                'track_enabled': 0,
+                'paper_enabled': 0,
+                'with_risk_settings': 0,
+                'with_position_sizing': 0,
+                'channels': []
+            }
+            
+            for ch in channels:
+                if ch.get('execute_enabled'):
+                    channel_summary['execute_enabled'] += 1
+                if ch.get('track_enabled'):
+                    channel_summary['track_enabled'] += 1
+                if ch.get('paper_trade_enabled'):
+                    channel_summary['paper_enabled'] += 1
+                if ch.get('profit_target_1_pct') or ch.get('stop_loss_pct'):
+                    channel_summary['with_risk_settings'] += 1
+                if ch.get('position_size_pct') or ch.get('tracking_position_size_pct'):
+                    channel_summary['with_position_sizing'] += 1
+                
+                if ch.get('execute_enabled') or ch.get('track_enabled') or ch.get('paper_trade_enabled'):
+                    channel_summary['channels'].append({
+                        'name': ch.get('name', 'Unknown'),
+                        'execute': bool(ch.get('execute_enabled')),
+                        'track': bool(ch.get('track_enabled')),
+                        'paper': bool(ch.get('paper_trade_enabled')),
+                        'position_size_pct': ch.get('position_size_pct'),
+                        'paper_position_size_pct': ch.get('tracking_position_size_pct'),
+                        'profit_target_1': ch.get('profit_target_1_pct'),
+                        'stop_loss': ch.get('stop_loss_pct')
+                    })
+            
+            health_data['channels'] = channel_summary
+            
+            # Open Positions
+            open_trades = db.get_trades(status='OPEN')
+            webull_count = sum(1 for t in open_trades if 'Webull' in str(t.get('broker', '')))
+            alpaca_count = sum(1 for t in open_trades if 'Alpaca' in str(t.get('broker', '')) or 'ALPACA' in str(t.get('broker', '')))
+            
+            health_data['positions'] = {
+                'total': len(open_trades),
+                'webull': webull_count,
+                'alpaca': alpaca_count,
+                'symbols': list(set(t.get('symbol', '') for t in open_trades[:20]))
+            }
+            
+            # Recent Activity (last 24h)
+            recent_trades = db.get_recent_trades(hours=24) if hasattr(db, 'get_recent_trades') else []
+            recent_errors = db.get_recent_errors(limit=5, hours=24) if hasattr(db, 'get_recent_errors') else []
+            
+            health_data['recent_activity'] = {
+                'trades_24h': len(recent_trades) if recent_trades else 0,
+                'errors_24h': len(recent_errors) if recent_errors else 0,
+                'last_trade': recent_trades[0] if recent_trades else None,
+                'has_critical_errors': any(e.get('severity') == 'critical' for e in recent_errors) if recent_errors else False
+            }
+            
+            return jsonify({'success': True, 'health': health_data})
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/health/test/<component>', methods=['POST'])
+    @login_required
+    def api_test_component(component):
+        """Test a specific component"""
+        try:
+            result = {'success': False, 'message': 'Unknown component'}
+            
+            if component == 'discord':
+                if _bot_instance and _bot_instance.is_ready():
+                    result = {'success': True, 'message': f'Discord connected as {_bot_instance.user}'}
+                else:
+                    result = {'success': False, 'message': 'Discord not connected'}
+            
+            elif component == 'webull':
+                if _bot_instance and hasattr(_bot_instance, 'broker') and _bot_instance.broker:
+                    try:
+                        broker = _bot_instance.broker
+                        if hasattr(broker, '_client') and broker._client:
+                            account = broker._client.get_account()
+                            if account:
+                                bp = 0.0
+                                for field in ['settledFunds', 'cashBalance', 'buyingPower', 'dayBuyingPower']:
+                                    if field in account:
+                                        val = account[field]
+                                        if isinstance(val, (int, float)):
+                                            bp = float(val)
+                                            break
+                                        elif isinstance(val, str):
+                                            try:
+                                                bp = float(val.replace(',', ''))
+                                                break
+                                            except:
+                                                continue
+                                result = {'success': True, 'message': f'Webull connected - Buying Power: ${bp:,.2f}'}
+                            else:
+                                result = {'success': False, 'message': 'Could not fetch account info'}
+                        else:
+                            result = {'success': False, 'message': 'Webull client not initialized'}
+                    except Exception as e:
+                        result = {'success': False, 'message': f'Webull error: {str(e)}'}
+                else:
+                    result = {'success': False, 'message': 'Webull broker not available'}
+            
+            elif component == 'alpaca':
+                if _bot_instance and hasattr(_bot_instance, 'paper_broker') and _bot_instance.paper_broker:
+                    try:
+                        broker = _bot_instance.paper_broker
+                        if hasattr(broker, 'trading_client') and broker.trading_client:
+                            account = broker.trading_client.get_account()
+                            if account:
+                                bp = float(account.buying_power)
+                                result = {'success': True, 'message': f'Alpaca connected - Buying Power: ${bp:,.2f}'}
+                            else:
+                                result = {'success': False, 'message': 'Could not fetch account info'}
+                        else:
+                            result = {'success': False, 'message': 'Alpaca client not initialized'}
+                    except Exception as e:
+                        result = {'success': False, 'message': f'Alpaca error: {str(e)}'}
+                else:
+                    result = {'success': False, 'message': 'Alpaca broker not available'}
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)})
+    
+    @app.route('/api/health/diagnostics', methods=['GET'])
+    @login_required
+    def api_system_diagnostics():
+        """Run comprehensive system diagnostics"""
+        try:
+            import sys
+            sys.path.insert(0, 'scripts')
+            from system_diagnostics import run_diagnostics
+            
+            results = run_diagnostics()
+            return jsonify({'success': True, **results})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/health/run-tests', methods=['POST'])
+    @login_required  
+    def api_run_tests():
+        """Run the test suite and return results"""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['python', '-m', 'pytest', 'tests/unit/', '-v', '--tb=short', '-q'],
+                capture_output=True, text=True, timeout=120, cwd='/home/runner/workspace'
+            )
+            
+            output = result.stdout + result.stderr
+            passed = 'passed' in output and 'failed' not in output
+            
+            # Extract test count
+            import re
+            match = re.search(r'(\d+) passed', output)
+            test_count = int(match.group(1)) if match else 0
+            
+            return jsonify({
+                'success': passed,
+                'passed': test_count,
+                'output': output[-2000:],  # Last 2000 chars
+                'return_code': result.returncode
+            })
+        except subprocess.TimeoutExpired:
+            return jsonify({'success': False, 'error': 'Tests timed out after 120 seconds'}), 500
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/health/migrations', methods=['GET'])
+    @login_required
+    def api_migration_status():
+        """Get database migration status"""
+        try:
+            import sys
+            sys.path.insert(0, 'scripts')
+            from migrations import MigrationManager
+            
+            manager = MigrationManager()
+            missing = manager.get_missing_tables()
+            validation = manager.validate_schema()
+            version = manager.get_current_version()
+            
+            return jsonify({
+                'success': True,
+                'version': version,
+                'missing_tables': missing,
+                'schema_validation': validation,
+                'needs_upgrade': len(missing) > 0
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/health/migrations/upgrade', methods=['POST'])
+    @login_required
+    def api_run_migration():
+        """Run database migration to create missing tables"""
+        try:
+            import sys
+            sys.path.insert(0, 'scripts')
+            from migrations import MigrationManager
+            
+            manager = MigrationManager()
+            result = manager.upgrade()
+            
+            return jsonify({'success': True, **result})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # ============ AUTO-UPDATE SYSTEM ============
+    
+    @app.route('/api/upgrade/version', methods=['GET'])
+    @login_required
+    def api_get_version():
+        """Get current application version and update status"""
+        try:
+            import sys
+            sys.path.insert(0, str(Path.cwd()))
+            from upgrade import get_version_info, get_version_checker
+            
+            version_info = get_version_info()
+            checker = get_version_checker()
+            status = checker.get_status()
+            
+            return jsonify({
+                'success': True,
+                'version': version_info,
+                'update_status': status
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/upgrade/check', methods=['POST'])
+    @login_required
+    def api_check_updates():
+        """Check for available updates"""
+        try:
+            import sys
+            sys.path.insert(0, str(Path.cwd()))
+            from upgrade import get_version_checker
+            
+            checker = get_version_checker()
+            force = request.json.get('force', False) if request.is_json else False
+            update_info = checker.check_for_updates(force=force)
+            
+            if update_info:
+                return jsonify({
+                    'success': True,
+                    'update_available': True,
+                    'update': update_info.to_dict()
+                })
+            else:
+                return jsonify({
+                    'success': True,
+                    'update_available': False,
+                    'message': 'You are running the latest version'
+                })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/upgrade/readiness', methods=['GET'])
+    @login_required
+    def api_upgrade_readiness():
+        """Check if system is ready for upgrade"""
+        try:
+            import sys
+            sys.path.insert(0, str(Path.cwd()))
+            from upgrade import check_upgrade_readiness
+            
+            ready, checks = check_upgrade_readiness()
+            
+            return jsonify({
+                'success': True,
+                'ready': ready,
+                'checks': checks
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/upgrade/backups', methods=['GET'])
+    @login_required
+    def api_list_backups():
+        """List available database backups"""
+        try:
+            import sys
+            sys.path.insert(0, str(Path.cwd()))
+            from upgrade import list_backups, get_backup_manager
+            
+            backups = list_backups()
+            manager = get_backup_manager()
+            disk_info = manager.get_disk_space()
+            
+            return jsonify({
+                'success': True,
+                'backups': backups,
+                'disk_space': disk_info
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/upgrade/backup', methods=['POST'])
+    @login_required
+    def api_create_backup():
+        """Create a database backup"""
+        try:
+            import sys
+            sys.path.insert(0, str(Path.cwd()))
+            from upgrade import create_backup
+            
+            tag = request.json.get('tag', 'manual') if request.is_json else 'manual'
+            success, backup_path, error = create_backup(tag)
+            
+            if success:
+                return jsonify({
+                    'success': True,
+                    'backup_path': backup_path,
+                    'message': 'Backup created successfully'
+                })
+            else:
+                return jsonify({'success': False, 'error': error}), 500
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/upgrade/backup/restore', methods=['POST'])
+    @login_required
+    def api_restore_backup():
+        """Restore database from backup"""
+        try:
+            import sys
+            sys.path.insert(0, str(Path.cwd()))
+            from upgrade import restore_backup
+            
+            if not request.is_json or 'backup_path' not in request.json:
+                return jsonify({'success': False, 'error': 'backup_path required'}), 400
+            
+            backup_path = request.json['backup_path']
+            success, error = restore_backup(backup_path)
+            
+            if success:
+                return jsonify({
+                    'success': True,
+                    'message': 'Database restored successfully'
+                })
+            else:
+                return jsonify({'success': False, 'error': error}), 500
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/upgrade/run', methods=['POST'])
+    @login_required
+    def api_run_upgrade():
+        """Run the upgrade process"""
+        try:
+            import sys
+            sys.path.insert(0, str(Path.cwd()))
+            from upgrade import get_version_checker, get_upgrade_runner
+            
+            checker = get_version_checker()
+            update_info = checker.check_for_updates(force=True)
+            
+            if not update_info:
+                return jsonify({
+                    'success': False,
+                    'error': 'No update available'
+                }), 400
+            
+            runner = get_upgrade_runner()
+            result = runner.run_upgrade(update_info)
+            
+            return jsonify({
+                'success': result.success,
+                'result': result.to_dict()
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/upgrade/history', methods=['GET'])
+    @login_required
+    def api_upgrade_history():
+        """Get upgrade history"""
+        try:
+            import sys
+            sys.path.insert(0, str(Path.cwd()))
+            from upgrade import get_upgrade_runner
+            
+            runner = get_upgrade_runner()
+            history = runner.get_upgrade_history()
+            
+            return jsonify({
+                'success': True,
+                'history': history
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/upgrade/skip', methods=['POST'])
+    @login_required
+    def api_skip_version():
+        """Skip a specific version"""
+        try:
+            import sys
+            sys.path.insert(0, str(Path.cwd()))
+            from upgrade import get_version_checker
+            
+            if not request.is_json or 'version' not in request.json:
+                return jsonify({'success': False, 'error': 'version required'}), 400
+            
+            version = request.json['version']
+            checker = get_version_checker()
+            checker.skip_version(version)
+            
+            return jsonify({
+                'success': True,
+                'message': f'Version {version} will be skipped'
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/upgrade/remind-later', methods=['POST'])
+    @login_required
+    def api_remind_later():
+        """Postpone update notification"""
+        try:
+            import sys
+            sys.path.insert(0, str(Path.cwd()))
+            from upgrade import get_version_checker
+            
+            hours = request.json.get('hours', 24) if request.is_json else 24
+            checker = get_version_checker()
+            checker.remind_later(hours)
+            
+            return jsonify({
+                'success': True,
+                'message': f'Will remind in {hours} hours'
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # ============ USER PERFORMANCE DASHBOARD ============
+    
+    @app.route('/performance')
+    @login_required
+    def performance_dashboard():
+        """User Performance Dashboard - Webull-style trading analytics"""
+        return render_template('performance.html')
+    
+    @app.route('/api/performance', methods=['GET'])
+    @login_required
+    def api_get_performance():
+        """
+        Get user performance data for the logged-in user.
+        
+        Query params:
+            - period: 'today', '7d', '30d', 'year', 'all' (default: 'all')
+            - broker: Optional broker filter ('Webull', 'ALPACA_PAPER', etc.)
+        """
+        try:
+            user_id = session.get('user_id')
+            if not user_id:
+                return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+            
+            period = request.args.get('period', 'all')
+            broker = request.args.get('broker')
+            
+            # Get main performance metrics
+            performance = db.get_user_performance(user_id, period, broker)
+            
+            # Get daily PNL data for charts
+            days_map = {'today': 1, '7d': 7, '30d': 30, 'year': 365, 'all': 365}
+            days = days_map.get(period, 365)
+            daily_pnl = db.get_user_daily_pnl(user_id, days, broker)
+            
+            # Get top symbols
+            top_symbols = db.get_user_symbol_performance(user_id, period, limit=10)
+            
+            # Get recent trades and enrich with source display
+            recent_trades = db.get_user_recent_trades(user_id, limit=20)
+            for trade in recent_trades:
+                trade['source_display'] = db.get_trade_source_display(trade)
+            
+            return jsonify({
+                'success': True,
+                'performance': performance,
+                'daily_pnl': daily_pnl,
+                'top_symbols': top_symbols,
+                'recent_trades': recent_trades,
+                'period': period,
+                'user_id': user_id,
+                'username': session.get('username')
+            })
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/performance/summary', methods=['GET'])
+    @login_required
+    def api_get_performance_summary():
+        """Get quick performance summary for all time periods"""
+        try:
+            user_id = session.get('user_id')
+            if not user_id:
+                return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+            
+            periods = ['today', '7d', '30d', 'year', 'all']
+            summaries = {}
+            
+            for period in periods:
+                perf = db.get_user_performance(user_id, period)
+                summaries[period] = {
+                    'total_pnl': perf['total_pnl'],
+                    'win_rate': perf['win_rate'],
+                    'total_trades': perf['total_trades']
+                }
+            
+            return jsonify({
+                'success': True,
+                'summaries': summaries
+            })
+            
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    # ============ BROKER LIVE ANALYTICS ============
+    
+    @app.route('/analytics/<broker_id>')
+    @login_required
+    def broker_analytics_page(broker_id):
+        """Broker-specific live analytics page"""
+        from .broker_live_analytics import get_analytics_service
+        
+        service = get_analytics_service()
+        available_brokers = service.get_available_brokers()
+        
+        broker_info = None
+        for b in available_brokers:
+            if b['id'] == broker_id:
+                broker_info = b
+                break
+        
+        if not broker_info:
+            return "Invalid broker", 404
+            
+        return render_template('broker_analytics.html', 
+                             broker_id=broker_id,
+                             broker_name=broker_info['name'],
+                             broker_type=broker_info['type'],
+                             is_paper=broker_info['paper'],
+                             available_brokers=available_brokers)
+    
+    @app.route('/api/broker/analytics/<broker_id>', methods=['GET'])
+    @login_required
+    def api_broker_analytics(broker_id):
+        """Get live analytics from broker account"""
+        import asyncio
+        from .broker_live_analytics import get_analytics_service
+        
+        try:
+            days = int(request.args.get('days', 30))
+            service = get_analytics_service()
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                analytics = loop.run_until_complete(service.get_full_analytics(broker_id, days))
+            finally:
+                loop.close()
+            
+            return jsonify(analytics)
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                'connected': False,
+                'error': str(e),
+                'broker_id': broker_id
+            }), 500
+    
+    @app.route('/api/broker/positions/<broker_id>', methods=['GET'])
+    @login_required
+    def api_broker_positions(broker_id):
+        """Get live positions from broker account"""
+        import asyncio
+        from .broker_live_analytics import get_analytics_service
+        
+        try:
+            service = get_analytics_service()
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                positions = loop.run_until_complete(service.get_open_positions(broker_id))
+                account = loop.run_until_complete(service.get_account_info(broker_id))
+            finally:
+                loop.close()
+            
+            return jsonify({
+                'success': True,
+                'positions': positions,
+                'account': account,
+                'broker_id': broker_id
+            })
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/broker/available', methods=['GET'])
+    @login_required
+    def api_available_brokers():
+        """Get list of available broker accounts"""
+        from .broker_live_analytics import get_analytics_service
+        
+        try:
+            service = get_analytics_service()
+            brokers = service.get_available_brokers()
+            
+            return jsonify({
+                'success': True,
+                'brokers': brokers
+            })
+            
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500

@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}Channel Management - Ψ∿ BotifyTrades{% endblock %}
+
+{% block content %}
+<!-- Multi-Broker Account Overview Section -->
+<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 32px;">
+    <!-- Webull LIVE Account -->
+    <div class="table-container" style="background: linear-gradient(135deg, #1a0a0a 0%, #2a1515 100%); border-radius: 12px; border: 1px solid rgba(255, 100, 100, 0.3);">
+        <div class="table-header" style="border-bottom: 1px solid rgba(255,100,100,0.2); display: flex; justify-content: space-between; align-items: center;">
+            <h3 class="table-title" style="color: #ff6464; margin: 0;">🔥 Webull LIVE</h3>
+            <button onclick="loadAllAccounts()" style="background: none; border: none; color: #ff6464; cursor: pointer; font-size: 16px; padding: 4px 8px;" title="Refresh">🔄</button>
+        </div>
+        <div style="padding: 20px;">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
+                <div style="background: rgba(255,50,50,0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(255, 100, 100, 0.2);">
+                    <div style="color: #999; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Buying Power</div>
+                    <div id="webull-buying-power" style="font-size: 18px; font-weight: bold; color: #ff6464;">$0.00</div>
+                </div>
+                <div style="background: rgba(255,50,50,0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(255, 100, 100, 0.2);">
+                    <div style="color: #999; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Net Liq</div>
+                    <div id="webull-net-liq" style="font-size: 18px; font-weight: bold; color: #ff6464;">$0.00</div>
+                </div>
+            </div>
+            <div style="font-size: 11px; color: #999; border-top: 1px solid rgba(255,100,100,0.1); padding-top: 12px;">
+                <span id="webull-status">⚠️ Checking connection...</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Alpaca PAPER Account -->
+    <div class="table-container" style="background: linear-gradient(135deg, #0d2a3a 0%, #0f3a4f 100%); border-radius: 12px; border: 1px solid rgba(0, 212, 255, 0.3);">
+        <div class="table-header" style="border-bottom: 1px solid rgba(0,212,255,0.2); display: flex; justify-content: space-between; align-items: center;">
+            <h3 class="table-title" style="color: #00d4ff; margin: 0;">📊 Alpaca PAPER</h3>
+            <button onclick="loadAllAccounts()" style="background: none; border: none; color: #00d4ff; cursor: pointer; font-size: 16px; padding: 4px 8px;" title="Refresh">🔄</button>
+        </div>
+        <div style="padding: 20px;">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
+                <div style="background: rgba(0,50,80,0.6); padding: 12px; border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.2);">
+                    <div style="color: #999; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Buying Power</div>
+                    <div id="alpaca-buying-power" style="font-size: 18px; font-weight: bold; color: #15b5d4;">$0.00</div>
+                </div>
+                <div style="background: rgba(0,50,80,0.6); padding: 12px; border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.2);">
+                    <div style="color: #999; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Net Liq</div>
+                    <div id="alpaca-net-liq" style="font-size: 18px; font-weight: bold; color: #00ff88;">$0.00</div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 10px; color: #666; border-top: 1px solid rgba(0,212,255,0.1); padding-top: 12px;">
+                <span>Positions: <span id="alpaca-positions-count" style="color: #00ff88;">0</span></span>
+                <span>Orders: <span id="alpaca-orders-count" style="color: #ffb700;">0</span></span>
+            </div>
+            <div style="font-size: 11px; color: #999; margin-top: 8px;">
+                <span id="alpaca-status">⚠️ Checking connection...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Channel Type Tabs -->
+<div class="table-container" style="margin-bottom: 32px;">
+    <div class="table-header">
+        <div style="display: flex; gap: 16px; align-items: center;">
+            <h3 class="table-title">📡 Channel Management</h3>
+            <div style="display: flex; background: rgba(0, 212, 255, 0.05); border: 1px solid var(--border-color); border-radius: 8px; padding: 4px; gap: 4px;">
+                <button id="channel-type-execute" class="channel-type-tab active" onclick="switchChannelType('EXECUTE')" style="padding: 6px 14px; border: none; border-radius: 6px; background: var(--accent-gradient); color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                    🎯 Execution Channels
+                </button>
+                <button id="channel-type-track" class="channel-type-tab" onclick="switchChannelType('TRACK')" style="padding: 6px 14px; border: none; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                    📊 Tracking Channels
+                </button>
+            </div>
+        </div>
+        <button onclick="document.getElementById('add-channel-form').scrollIntoView({behavior: 'smooth'})" class="btn btn-primary btn-small">
+            ➕ Add Channel
+        </button>
+    </div>
+    
+    <div id="channels-list">
+        <div style="text-align: center; padding: 40px;">
+            <div class="spinner" style="margin: 0 auto 20px;"></div>
+            <div style="color: var(--text-secondary);">Loading channels...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Add New Channel Form -->
+<div class="card" style="margin-top: 32px;">
+    <div class="card-header">➕ Add New Channel</div>
+    <div class="card-body">
+        <form id="add-channel-form" class="form-horizontal" style="max-width: 600px;">
+            <div class="form-group">
+                <label for="channel-type-select" class="form-label">Channel Type</label>
+                <select id="channel-type-select" class="form-control" required>
+                    <option value="EXECUTE">🎯 Execution Channel (Live Trading)</option>
+                    <option value="TRACK">📊 Tracking Channel (Paper Trading / Analysis)</option>
+                </select>
+                <small style="color: var(--text-muted); font-size: 0.8125rem; margin-top: 4px; display: block;">
+                    Execution channels execute trades, Tracking channels simulate/track performance
+                </small>
+            </div>
+            
+            <div class="form-group">
+                <label for="channel-name" class="form-label">Channel Name</label>
+                <input type="text" id="channel-name" class="form-control" placeholder="Premium Signals" required>
+                <small style="color: var(--text-muted); font-size: 0.8125rem; margin-top: 4px; display: block;">
+                    A friendly name to identify this channel
+                </small>
+            </div>
+            
+            <div class="form-group">
+                <label for="channel-id" class="form-label">Discord Channel ID</label>
+                <input type="text" id="channel-id" class="form-control" placeholder="551065756557639680" required>
+                <small style="color: var(--text-muted); font-size: 0.8125rem; margin-top: 4px; display: block;">
+                    Right-click the channel in Discord and select "Copy ID"
+                </small>
+            </div>
+            
+            <div class="form-group" id="broker-select-group">
+                <label class="form-label">Select Brokers for Execution</label>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 8px;">
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(255, 100, 100, 0.1); border: 1px solid rgba(255, 100, 100, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                        <input type="checkbox" id="new-broker-WEBULL" value="WEBULL" style="width: 16px; height: 16px; cursor: pointer;">
+                        <div>
+                            <div style="font-weight: 600; color: #ff6b6b; font-size: 12px;">🔥 Webull LIVE</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">Real money</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                        <input type="checkbox" id="new-broker-WEBULL_PAPER" value="WEBULL_PAPER" style="width: 16px; height: 16px; cursor: pointer;">
+                        <div>
+                            <div style="font-weight: 600; color: #00ff88; font-size: 12px;">📊 Webull PAPER</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">Paper trading</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(255, 100, 100, 0.1); border: 1px solid rgba(255, 100, 100, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                        <input type="checkbox" id="new-broker-ALPACA" value="ALPACA" style="width: 16px; height: 16px; cursor: pointer;">
+                        <div>
+                            <div style="font-weight: 600; color: #ff6b6b; font-size: 12px;">🦙 Alpaca LIVE</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">Real money</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                        <input type="checkbox" id="new-broker-ALPACA_PAPER" value="ALPACA_PAPER" style="width: 16px; height: 16px; cursor: pointer;" checked>
+                        <div>
+                            <div style="font-weight: 600; color: #00ff88; font-size: 12px;">🦙 Alpaca PAPER</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">Paper trading</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(255, 100, 100, 0.1); border: 1px solid rgba(255, 100, 100, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                        <input type="checkbox" id="new-broker-IBKR" value="IBKR" style="width: 16px; height: 16px; cursor: pointer;">
+                        <div>
+                            <div style="font-weight: 600; color: #ff6b6b; font-size: 12px;">🏛️ IBKR LIVE</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">Real money</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                        <input type="checkbox" id="new-broker-IBKR_PAPER" value="IBKR_PAPER" style="width: 16px; height: 16px; cursor: pointer;">
+                        <div>
+                            <div style="font-weight: 600; color: #00ff88; font-size: 12px;">🏛️ IBKR PAPER</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">Paper trading</div>
+                        </div>
+                    </label>
+                </div>
+                <small style="color: var(--text-muted); font-size: 0.8125rem; margin-top: 8px; display: block;">
+                    🔴 LIVE = Real money &nbsp;&nbsp; 🟢 PAPER = Testing. Select multiple to execute on multiple accounts.
+                </small>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" style="margin-top: 16px;">
+                ➕ Add Channel
+            </button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/channels.js') }}"></script>
+<script>
+// Current channel type (EXECUTE or TRACK)
+let currentChannelType = 'EXECUTE';
+
+// Initialize with EXECUTE channels
+initChannelManagement(currentChannelType);
+
+// Switch between Execution and Tracking channels
+function switchChannelType(type) {
+    currentChannelType = type;
+    channelCategory = type; // Update global variable in channels.js
+    
+    // Update tab button styles
+    document.getElementById('channel-type-execute').style.background = type === 'EXECUTE' ? 'var(--accent-gradient)' : 'transparent';
+    document.getElementById('channel-type-execute').style.color = type === 'EXECUTE' ? 'white' : 'var(--text-secondary)';
+    document.getElementById('channel-type-track').style.background = type === 'TRACK' ? 'var(--accent-gradient)' : 'transparent';
+    document.getElementById('channel-type-track').style.color = type === 'TRACK' ? 'white' : 'var(--text-secondary)';
+    
+    // Update channel type dropdown to match
+    document.getElementById('channel-type-select').value = type;
+    
+    // Reload channels
+    loadChannels();
+}
+
+// Update channel type dropdown when changed
+document.getElementById('channel-type-select').addEventListener('change', function() {
+    const selectedType = this.value;
+    switchChannelType(selectedType);
+});
+
+// Load All Broker Accounts (Webull LIVE + Alpaca PAPER)
+async function loadAllAccounts() {
+    try {
+        const response = await fetch('/api/brokers/all_accounts');
+        const data = await response.json();
+        
+        // Update Webull LIVE account
+        if (data.webull_live) {
+            const webull = data.webull_live;
+            document.getElementById('webull-buying-power').textContent = '$' + parseFloat(webull.buying_power || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            document.getElementById('webull-net-liq').textContent = '$' + parseFloat(webull.net_liquidation || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            
+            // Update status
+            if (webull.status === 'ok') {
+                document.getElementById('webull-status').innerHTML = '✅ Connected';
+            } else if (webull.status === 'initializing' || webull.status === 'loading') {
+                document.getElementById('webull-status').innerHTML = '⏳ Initializing...';
+            } else {
+                document.getElementById('webull-status').innerHTML = '❌ Not connected';
+            }
+        }
+        
+        // Update Alpaca PAPER account
+        if (data.alpaca_paper) {
+            const alpaca = data.alpaca_paper;
+            if (alpaca.status === 'ok' && alpaca.balance) {
+                const balance = alpaca.balance;
+                document.getElementById('alpaca-buying-power').textContent = '$' + parseFloat(balance.buying_power || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                document.getElementById('alpaca-net-liq').textContent = '$' + parseFloat(balance.net_liquidation || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                
+                // Update counts
+                document.getElementById('alpaca-positions-count').textContent = (alpaca.positions || []).length;
+                document.getElementById('alpaca-orders-count').textContent = (alpaca.orders || []).length;
+                
+                document.getElementById('alpaca-status').innerHTML = '✅ Connected';
+            } else if (alpaca.status === 'loading' || alpaca.status === 'not_initialized') {
+                document.getElementById('alpaca-status').innerHTML = '⏳ Initializing...';
+            } else {
+                document.getElementById('alpaca-status').innerHTML = '❌ Not connected';
+            }
+        }
+    } catch (error) {
+        console.error('Error loading broker accounts:', error);
+        document.getElementById('webull-status').innerHTML = '❌ Error loading';
+        document.getElementById('alpaca-status').innerHTML = '❌ Error loading';
+    }
+}
+
+// Load all accounts on page load and refresh every 5 seconds
+document.addEventListener('DOMContentLoaded', function() {
+    loadAllAccounts();
+    setInterval(loadAllAccounts, 5000);
+});
+</script>
+{% endblock %}

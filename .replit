@@ -1,0 +1,77 @@
+modules = ["python-3.12", "web", "nodejs-20", "postgresql-16"]
+[agent]
+expertMode = true
+integrations = ["python_openai_ai_integrations:1.0.0", "github:1.0.0", "google-mail:1.0.0"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Admin License Server"
+
+[[workflows.workflow]]
+name = "Admin License Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python admin_server.py"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[nix]
+channel = "stable-25_05"
+packages = ["cargo", "geckodriver", "glibcLocales", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc", "sqlite", "gh"]
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 34117
+externalPort = 5000
+
+[[ports]]
+localPort = 35223
+externalPort = 5173
+
+[[ports]]
+localPort = 42671
+externalPort = 3000
+
+[[ports]]
+localPort = 42903
+externalPort = 3001
+
+[[ports]]
+localPort = 43555
+externalPort = 4200
+
+[[ports]]
+localPort = 43991
+externalPort = 6000
+
+[[ports]]
+localPort = 44245
+externalPort = 3003
+
+[[ports]]
+localPort = 46261
+externalPort = 3002
+
+[userenv]
+
+[userenv.shared]
+
+[deployment]
+deploymentTarget = "vm"
+run = ["python", "src/selfbot_webull.py"]
+build = ["pip", "install", "-r", "requirements.txt"]

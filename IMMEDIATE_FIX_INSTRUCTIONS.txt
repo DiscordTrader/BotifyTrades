@@ -1,0 +1,83 @@
+╔═══════════════════════════════════════════════════════════════════╗
+║        IMMEDIATE FIX - Config.ini Not Found in EXE                ║
+╚═══════════════════════════════════════════════════════════════════╝
+
+THE PROBLEM:
+Your DiscordTradingBot.exe can't find config.ini because it's not in the
+same folder as the .exe file.
+
+QUICK FIX (Do this NOW):
+═══════════════════════════════════════════════════════════════════════
+
+Option 1: Use the Quick Fix Script (EASIEST)
+─────────────────────────────────────────────────────────────────────
+1. Open Command Prompt in your project root folder
+2. Run: QUICK_FIX_CONFIG.bat
+3. Done! Now run: dist\DiscordTradingBot.exe
+
+
+Option 2: Manual Copy (if script doesn't work)
+─────────────────────────────────────────────────────────────────────
+1. Copy config.ini.example to dist folder:
+   copy config.ini.example dist\
+
+2. Rename it to config.ini:
+   copy dist\config.ini.example dist\config.ini
+
+3. Edit dist\config.ini with your credentials:
+   notepad dist\config.ini
+
+4. Run the exe:
+   dist\DiscordTradingBot.exe
+
+   ✅ It should now start successfully!
+
+
+PERMANENT FIX (For future builds):
+═══════════════════════════════════════════════════════════════════════
+
+The build script has been updated. Next time you build:
+
+1. Run: build_exe.bat
+   → This will automatically copy config.ini.example to dist\
+
+2. Run: create_distribution.bat
+   → This creates a complete distribution package
+
+3. Share the TradingBot-Distribution.zip file
+   → Users get everything they need!
+
+
+WHAT WAS WRONG:
+─────────────────────────────────────────────────────────────────────
+PyInstaller's --onefile mode bundles files INSIDE the exe, not next
+to it. The exe looks for config.ini in its own directory, so we need
+to manually place it there.
+
+
+FOLDER STRUCTURE (Correct):
+─────────────────────────────────────────────────────────────────────
+dist/
+├── DiscordTradingBot.exe       ← Your executable
+├── config.ini.example          ← Template (you need this!)
+└── config.ini                  ← Your filled config (you need this!)
+
+The exe checks for config.ini in the same folder as the .exe file.
+
+
+TESTING:
+─────────────────────────────────────────────────────────────────────
+After copying the files, test with:
+
+cd dist
+DiscordTradingBot.exe
+
+You should see:
+[CONFIG] Checking: C:\...\dist\config.ini
+[CONFIG] Loaded from: C:\...\dist\config.ini
+✅ SUCCESS!
+
+
+═══════════════════════════════════════════════════════════════════════
+                    READY TO RUN! 🚀
+═══════════════════════════════════════════════════════════════════════

@@ -1,0 +1,170 @@
+╔════════════════════════════════════════════════════════════════════╗
+║          Discord Trading Bot - Quick Start Guide                  ║
+╚════════════════════════════════════════════════════════════════════╝
+
+📋 OPTION 1: RUN ON YOUR COMPUTER (Python)
+═══════════════════════════════════════════════════════════════════════
+
+STEP 1: Install Python
+   ➜ Download Python 3.11+ from https://www.python.org/downloads/
+   ➜ During install, CHECK "Add Python to PATH"
+
+STEP 2: Download Bot
+   ➜ Download this project as ZIP from Replit
+   ➜ Extract to C:\TradingBot (Windows) or ~/TradingBot (Mac/Linux)
+
+STEP 3: Install Dependencies
+   ➜ Open Command Prompt/Terminal in bot folder
+   ➜ Run: pip install -r requirements.txt
+   ➜ Wait 2-3 minutes for installation
+
+STEP 4: Configure
+   ➜ Copy config.ini.example to config.ini
+   ➜ Edit config.ini with your credentials:
+      - Discord token (use GET_DISCORD_TOKEN.html)
+      - Webull credentials (use GET_WEBULL_TOKENS.html)
+      - API keys (Alpha Vantage, Finnhub, OpenAI)
+      - License key
+
+STEP 5: Run Bot
+   ➜ Run: python src/selfbot_webull.py
+   ➜ Open browser: http://127.0.0.1:5000
+   ➜ Done! ✅
+
+
+📦 OPTION 2: BUILD WINDOWS .EXE (Share with Anyone)
+═══════════════════════════════════════════════════════════════════════
+
+FOR BUILDERS (You):
+   
+   STEP 1: Open Command Prompt in bot folder
+   
+   STEP 2: Run build script
+      ➜ build_exe.bat
+      ➜ Wait 3-5 minutes
+   
+   STEP 3: Create distribution package
+      ➜ create_distribution.bat
+      ➜ Creates: TradingBot-Distribution.zip
+   
+   STEP 4: Share the ZIP file
+      ➜ Upload to Google Drive, Dropbox, etc.
+      ➜ Send download link to customers
+
+
+FOR CUSTOMERS (Them):
+
+   STEP 1: Extract ZIP
+      ➜ Extract TradingBot-Distribution.zip to C:\TradingBot
+   
+   STEP 2: Run the EXE
+      ➜ Double-click DiscordTradingBot.exe
+      ➜ Follow interactive setup wizard
+   
+   STEP 3: Open Web GUI
+      ➜ Browser opens automatically: http://127.0.0.1:5000
+      ➜ Done! ✅
+   
+   📌 NO PYTHON NEEDED! Just extract and run!
+
+
+🖥️ SYSTEM REQUIREMENTS
+═══════════════════════════════════════════════════════════════════════
+
+Minimum:
+   • Windows 10+, macOS 10.15+, or Linux Ubuntu 20.04+
+   • 4 GB RAM (8 GB recommended)
+   • 500 MB free space
+   • Stable internet connection
+   • Python 3.11+ (for Python version)
+   • Modern web browser (Chrome, Firefox, Edge)
+
+Credentials Needed:
+   ✓ Discord account token
+   ✓ Webull account (email, password, tokens)
+   ✓ API keys (optional):
+      - Alpha Vantage (free at alphavantage.co)
+      - Finnhub (free at finnhub.io)
+      - OpenAI (platform.openai.com)
+   ✓ License key (machine-bound)
+
+
+📁 WHAT'S INCLUDED
+═══════════════════════════════════════════════════════════════════════
+
+Main Files:
+   • src/selfbot_webull.py - Main bot script
+   • gui_app/ - Flask web control panel
+   • config.ini - Configuration file
+   • bot_data.db - SQLite database (created on first run)
+
+Helper Tools:
+   • GET_DISCORD_TOKEN.html - Extract Discord token
+   • GET_WEBULL_TOKENS.html - Get Webull credentials
+   • GET_MACHINE_ID.bat - Get machine ID for license
+
+Documentation:
+   • DEPLOYMENT_GUIDE.md - Complete deployment guide
+   • BUILD_EXE_QUICKSTART.md - Build executable guide
+   • EXE_SETUP.md - Customer setup instructions
+   • README.md - Full documentation
+
+
+🚀 DEPLOYMENT OPTIONS
+═══════════════════════════════════════════════════════════════════════
+
+1. LOCAL COMPUTER
+   ➜ Run on your Windows/Mac/Linux machine
+   ➜ Good for: Testing, personal use
+   ➜ Uptime: Only when computer is on
+
+2. REPLIT CLOUD
+   ➜ Already configured here
+   ➜ Good for: Quick testing, development
+   ➜ Uptime: 24/7 with Always On
+
+3. CLOUD VPS (RECOMMENDED FOR PRODUCTION)
+   ➜ Deploy to DigitalOcean, Linode, AWS, etc.
+   ➜ Good for: 24/7 production trading
+   ➜ Cost: $5-10/month
+   ➜ Uptime: 99.9% (24/7)
+
+
+🔧 QUICK TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════════
+
+Bot won't start?
+   ✓ Check Python version: python --version (must be 3.11+)
+   ✓ Reinstall: pip install -r requirements.txt --force-reinstall
+   ✓ Check config.ini for typos
+
+Web GUI not loading?
+   ✓ Check if Flask started (terminal should show "Running on...")
+   ✓ Try http://localhost:5000 instead
+   ✓ Check firewall/antivirus
+
+Build .exe fails?
+   ✓ Use Python 3.11 (not 3.12+)
+   ✓ Run: PYINSTALLER_FIX.bat
+   ✓ Temporarily disable antivirus
+
+License issues?
+   ✓ Get machine ID: GET_MACHINE_ID.bat
+   ✓ Check expiration date
+   ✓ Verify no typos in key
+
+
+📚 MORE HELP
+═══════════════════════════════════════════════════════════════════════
+
+Read these files for detailed guides:
+   • DEPLOYMENT_GUIDE.md ← START HERE
+   • BUILD_EXE_QUICKSTART.md
+   • BUILD_TROUBLESHOOTING.md
+   • LOCAL_SETUP.md
+   • EXE_SETUP.md
+
+
+═══════════════════════════════════════════════════════════════════════
+                    Ready to Trade! 🚀📈
+═══════════════════════════════════════════════════════════════════════

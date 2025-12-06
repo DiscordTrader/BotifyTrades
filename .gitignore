@@ -1,0 +1,75 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Sensitive data - NEVER COMMIT THESE
+config.ini
+config.ini.local
+*.secret
+.env
+.env.local
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Replit
+.upm/
+.pythonlibs/
+.cache/
+
+# Build System - Ignore OUTPUT directories only, keep scripts!
+build/windows/dist_standard/
+build/windows/dist_hardened/
+build/windows/obfuscated/
+build/windows/build_temp_hardened/
+build/linux/dist_standard/
+build/linux/dist_hardened/
+build/linux/obfuscated/
+build/linux/build_temp_hardened/
+
+# Database files
+bot_data.db
+*.db
+
+# Attached assets (may contain sensitive data)
+attached_assets/*.ini
+attached_assets/
+.git_backup/

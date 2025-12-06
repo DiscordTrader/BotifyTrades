@@ -1,0 +1,274 @@
+"""
+Broker Credentials Service
+Handles encrypted storage and retrieval of broker credentials for all supported brokers.
+Allows the application to start without config.ini and manage all credentials through the GUI.
+"""
+import json
+from typing import Optional, Dict, Any
+from .config_service import save_config, load_config, encrypt_value, decrypt_value
+
+
+BROKER_STATUS = {
+    'discord': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'webull_live': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'webull_paper': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'alpaca_live': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'alpaca_paper': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'ibkr_live': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'ibkr_paper': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+}
+
+
+def get_broker_status(broker_id: str) -> Dict[str, Any]:
+    """Get current connection status for a broker"""
+    return BROKER_STATUS.get(broker_id, {'connected': False, 'status': 'unknown', 'error': 'Unknown broker'})
+
+
+def set_broker_status(broker_id: str, connected: bool, status: str, error: str = None, account_info: dict = None):
+    """Update broker connection status"""
+    if broker_id in BROKER_STATUS:
+        BROKER_STATUS[broker_id] = {
+            'connected': connected,
+            'status': status,
+            'error': error,
+            'account_info': account_info
+        }
+
+
+def get_all_broker_status() -> Dict[str, Dict[str, Any]]:
+    """Get status of all brokers"""
+    return BROKER_STATUS.copy()
+
+
+def save_discord_credentials(token: str, allowed_authors: list = None, allowed_guilds: list = None):
+    """Save Discord self-bot credentials"""
+    save_config('discord_credentials', {
+        'token': token,
+        'allowed_authors': allowed_authors or [],
+        'allowed_guilds': allowed_guilds or []
+    })
+
+
+def get_discord_credentials() -> Dict[str, Any]:
+    """Get Discord credentials"""
+    return load_config('discord_credentials') or {
+        'token': '',
+        'allowed_authors': [],
+        'allowed_guilds': []
+    }
+
+
+def save_webull_credentials(
+    email: str = '',
+    password: str = '',
+    trade_pin: str = '',
+    device_id: str = '',
+    access_token: str = '',
+    refresh_token: str = '',
+    token_expire: str = '',
+    uuid: str = '',
+    paper_mode: bool = True
+):
+    """Save Webull broker credentials"""
+    save_config('webull_credentials', {
+        'email': email,
+        'password': password,
+        'trade_pin': trade_pin,
+        'device_id': device_id,
+        'access_token': access_token,
+        'refresh_token': refresh_token,
+        'token_expire': token_expire,
+        'uuid': uuid,
+        'paper_mode': paper_mode
+    })
+
+
+def update_webull_tokens(token_data: Dict[str, Any]):
+    """Update only token fields in Webull credentials (preserves email/password)"""
+    existing = get_webull_credentials()
+    existing['access_token'] = token_data.get('access_token', existing.get('access_token', ''))
+    existing['refresh_token'] = token_data.get('refresh_token', existing.get('refresh_token', ''))
+    existing['token_expire'] = token_data.get('token_expire', existing.get('token_expire', ''))
+    existing['uuid'] = token_data.get('uuid', existing.get('uuid', ''))
+    if token_data.get('device_id'):
+        existing['device_id'] = token_data.get('device_id')
+    save_config('webull_credentials', existing)
+
+
+def get_webull_credentials() -> Dict[str, Any]:
+    """Get Webull credentials"""
+    return load_config('webull_credentials') or {
+        'email': '',
+        'password': '',
+        'trade_pin': '',
+        'device_id': '',
+        'access_token': '',
+        'refresh_token': '',
+        'token_expire': '',
+        'uuid': '',
+        'paper_mode': True
+    }
+
+
+def webull_credentials_adapter(action: str, data: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
+    """
+    Adapter for WebullAuth to access credentials storage.
+    
+    Args:
+        action: 'get' to retrieve, 'save' to update tokens
+        data: Token data when saving
+        
+    Returns:
+        Credentials dict when getting, None when saving
+    """
+    if action == 'get':
+        return get_webull_credentials()
+    elif action == 'save' and data:
+        update_webull_tokens(data)
+        return None
+    return None
+
+
+def save_alpaca_credentials(
+    api_key: str = '',
+    secret_key: str = '',
+    paper_mode: bool = True
+):
+    """Save Alpaca broker credentials"""
+    save_config('alpaca_credentials', {
+        'api_key': api_key,
+        'secret_key': secret_key,
+        'paper_mode': paper_mode
+    })
+
+
+def get_alpaca_credentials() -> Dict[str, Any]:
+    """Get Alpaca credentials"""
+    return load_config('alpaca_credentials') or {
+        'api_key': '',
+        'secret_key': '',
+        'paper_mode': True
+    }
+
+
+def save_ibkr_credentials(
+    host: str = '127.0.0.1',
+    port_live: int = 7496,
+    port_paper: int = 7497,
+    client_id: int = 1,
+    paper_mode: bool = True
+):
+    """Save Interactive Brokers credentials"""
+    save_config('ibkr_credentials', {
+        'host': host,
+        'port_live': port_live,
+        'port_paper': port_paper,
+        'client_id': client_id,
+        'paper_mode': paper_mode
+    })
+
+
+def get_ibkr_credentials() -> Dict[str, Any]:
+    """Get IBKR credentials"""
+    return load_config('ibkr_credentials') or {
+        'host': '127.0.0.1',
+        'port_live': 7496,
+        'port_paper': 7497,
+        'client_id': 1,
+        'paper_mode': True
+    }
+
+
+def save_api_keys_extended(
+    openai: str = '',
+    alpha_vantage: str = '',
+    finnhub: str = '',
+    license_key: str = ''
+):
+    """Save all API keys including license"""
+    save_config('api_keys_extended', {
+        'openai': openai,
+        'alpha_vantage': alpha_vantage,
+        'finnhub': finnhub,
+        'license_key': license_key
+    })
+
+
+def get_api_keys_extended() -> Dict[str, Any]:
+    """Get all API keys"""
+    return load_config('api_keys_extended') or {
+        'openai': '',
+        'alpha_vantage': '',
+        'finnhub': '',
+        'license_key': ''
+    }
+
+
+def get_all_credentials_for_startup() -> Dict[str, Any]:
+    """
+    Get all credentials formatted for bot startup.
+    This replaces the need for config.ini for credentials.
+    """
+    discord = get_discord_credentials()
+    webull = get_webull_credentials()
+    alpaca = get_alpaca_credentials()
+    ibkr = get_ibkr_credentials()
+    api_keys = get_api_keys_extended()
+    
+    return {
+        'DISCORD_USER_TOKEN': discord.get('token', ''),
+        'ALLOWED_AUTHOR_IDS': discord.get('allowed_authors', []),
+        'ALLOWED_GUILD_IDS': discord.get('allowed_guilds', []),
+        
+        'WEBULL_USERNAME': webull.get('email', ''),
+        'WEBULL_PASSWORD': webull.get('password', ''),
+        'WEBULL_TRADE_PIN': webull.get('trade_pin', ''),
+        'WEBULL_DID': webull.get('device_id', ''),
+        'WEBULL_ACCESS_TOKEN': webull.get('access_token', ''),
+        'WEBULL_REFRESH_TOKEN': webull.get('refresh_token', ''),
+        'WEBULL_PAPER_MODE': webull.get('paper_mode', True),
+        
+        'ALPACA_API_KEY': alpaca.get('api_key', ''),
+        'ALPACA_SECRET_KEY': alpaca.get('secret_key', ''),
+        'ALPACA_PAPER_MODE': alpaca.get('paper_mode', True),
+        
+        'IBKR_HOST': ibkr.get('host', '127.0.0.1'),
+        'IBKR_PORT_LIVE': ibkr.get('port_live', 7496),
+        'IBKR_PORT_PAPER': ibkr.get('port_paper', 7497),
+        'IBKR_CLIENT_ID': ibkr.get('client_id', 1),
+        'IBKR_PAPER_MODE': ibkr.get('paper_mode', True),
+        
+        'OPENAI_API_KEY': api_keys.get('openai', ''),
+        'ALPHA_VANTAGE_API_KEY': api_keys.get('alpha_vantage', ''),
+        'FINNHUB_API_KEY': api_keys.get('finnhub', ''),
+        'LICENSE_KEY': api_keys.get('license_key', '')
+    }
+
+
+def has_any_credentials() -> bool:
+    """Check if any credentials have been saved to the database"""
+    discord = get_discord_credentials()
+    webull = get_webull_credentials()
+    alpaca = get_alpaca_credentials()
+    
+    return bool(
+        discord.get('token') or
+        webull.get('email') or
+        webull.get('access_token') or
+        alpaca.get('api_key')
+    )
+
+
+def get_enabled_brokers() -> Dict[str, bool]:
+    """Get which brokers have credentials configured"""
+    discord = get_discord_credentials()
+    webull = get_webull_credentials()
+    alpaca = get_alpaca_credentials()
+    ibkr = get_ibkr_credentials()
+    
+    return {
+        'discord': bool(discord.get('token')),
+        'webull': bool(webull.get('email') or webull.get('access_token')),
+        'alpaca': bool(alpaca.get('api_key')),
+        'ibkr': bool(ibkr.get('host'))
+    }
