@@ -66,85 +66,64 @@
     </div>
 </div>
 
-<div style="display: grid; grid-template-columns: 1fr 280px; gap: 20px;">
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">Recent License Activity</h3>
-            <a href="/licenses" class="btn btn-secondary btn-sm">View All</a>
-        </div>
-        <div class="card-body" style="padding: 0; overflow-x: auto;">
-            <table style="min-width: 100%;">
-                <thead>
-                    <tr>
-                        <th style="min-width: 120px;">Key</th>
-                        <th style="min-width: 70px;">Type</th>
-                        <th style="min-width: 140px;">Customer</th>
-                        <th style="min-width: 70px;">Status</th>
-                        <th style="min-width: 80px;">Expires</th>
-                    </tr>
-                </thead>
-                <tbody id="recent-licenses">
-                    <tr><td colspan="5" class="empty-state">Loading...</td></tr>
-                </tbody>
-            </table>
-        </div>
+<div class="card" style="margin-bottom: 20px;">
+    <div class="card-header">
+        <h3 class="card-title">Recent License Activity</h3>
+        <a href="/licenses" class="btn btn-secondary btn-sm">View All</a>
     </div>
-    
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">Quick Actions</h3>
-        </div>
-        <div class="card-body">
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-                <a href="/licenses" class="btn btn-primary" style="justify-content: flex-start;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    Create New License
-                </a>
-                <a href="/audit" class="btn btn-secondary" style="justify-content: flex-start;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    View Audit Log
-                </a>
-                <a href="/settings" class="btn btn-secondary" style="justify-content: flex-start;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    Server Settings
-                </a>
-            </div>
-            
-            <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-color);">
-                <h4 style="font-size: 14px; color: var(--text-secondary); margin-bottom: 16px;">License Distribution</h4>
-                <div style="display: flex; flex-direction: column; gap: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
-                            <span style="width: 8px; height: 8px; background: var(--success); border-radius: 50%;"></span>
-                            Active
-                        </span>
-                        <span style="font-weight: 600; color: var(--success);" id="dist-active">0%</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
-                            <span style="width: 8px; height: 8px; background: var(--warning); border-radius: 50%;"></span>
-                            Expired
-                        </span>
-                        <span style="font-weight: 600; color: var(--warning);" id="dist-expired">0%</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
-                            <span style="width: 8px; height: 8px; background: var(--error); border-radius: 50%;"></span>
-                            Revoked
-                        </span>
-                        <span style="font-weight: 600; color: var(--error);" id="dist-revoked">0%</span>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="card-body" style="padding: 0;">
+        <table>
+            <thead>
+                <tr>
+                    <th>License Key</th>
+                    <th>Type</th>
+                    <th>Customer</th>
+                    <th>Status</th>
+                    <th>Expires</th>
+                </tr>
+            </thead>
+            <tbody id="recent-licenses">
+                <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+            </tbody>
+        </table>
     </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+    <a href="/licenses" class="action-card">
+        <div class="action-card-icon primary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+        </div>
+        <div class="action-card-content">
+            <div class="action-card-title">Create License</div>
+            <div class="action-card-desc">Issue new license key</div>
+        </div>
+    </a>
+    <a href="/audit" class="action-card">
+        <div class="action-card-icon info">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+        </div>
+        <div class="action-card-content">
+            <div class="action-card-title">Audit Log</div>
+            <div class="action-card-desc">View admin activity</div>
+        </div>
+    </a>
+    <a href="/settings" class="action-card">
+        <div class="action-card-icon warning">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+        </div>
+        <div class="action-card-content">
+            <div class="action-card-title">Settings</div>
+            <div class="action-card-desc">Server configuration</div>
+        </div>
+    </a>
 </div>
 {% endblock %}
 
