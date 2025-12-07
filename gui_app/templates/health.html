@@ -1246,7 +1246,7 @@ async function runDiagnostics() {
     
     btn.disabled = true;
     status.textContent = 'Running diagnostics...';
-    results.innerHTML = '<p class="diag-placeholder">Running 12 diagnostic checks...</p>';
+    results.innerHTML = '<p class="diag-placeholder">Running system checks...</p>';
     
     try {
         const response = await fetch('/api/health/diagnostics');
@@ -1258,13 +1258,13 @@ async function runDiagnostics() {
                 <div class="diag-summary">
                     <span class="diag-stat pass">&#10003; ${summary.passed} Passed</span>
                     <span class="diag-stat warn">&#9888; ${summary.warnings} Warnings</span>
-                    <span class="diag-stat fail">&#10007; ${summary.failures} Failed</span>
+                    <span class="diag-stat fail">&#10007; ${summary.failed} Failed</span>
                 </div>
             `;
             
-            for (const item of data.results) {
-                const iconClass = item.status;
-                const icon = item.status === 'pass' ? '&#10003;' : item.status === 'warn' ? '&#9888;' : '&#10007;';
+            for (const item of data.checks) {
+                const iconClass = item.status === 'pass' ? 'pass' : item.status === 'warning' ? 'warn' : 'fail';
+                const icon = item.status === 'pass' ? '&#10003;' : item.status === 'warning' ? '&#9888;' : '&#10007;';
                 html += `
                     <div class="diag-item">
                         <span class="diag-icon ${iconClass}">${icon}</span>
@@ -1277,7 +1277,8 @@ async function runDiagnostics() {
             }
             
             results.innerHTML = html;
-            status.textContent = `Overall: ${summary.overall_status.toUpperCase()}`;
+            const overallStatus = data.overall ? data.overall.toUpperCase() : (summary.failed > 0 ? 'FAIL' : summary.warnings > 0 ? 'WARNING' : 'PASS');
+            status.textContent = `Overall: ${overallStatus}`;
         } else {
             results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${data.error}</p>`;
             status.textContent = 'Failed';
@@ -1296,29 +1297,67 @@ async function runTests() {
     const results = document.getElementById('testResults');
     
     btn.disabled = true;
-    status.textContent = 'Running tests (this may take a minute)...';
-    results.innerHTML = '<p class="diag-placeholder">Running 185 unit tests...</p>';
+    status.textContent = 'Running validation tests...';
+    results.innerHTML = '<p class="diag-placeholder">Running runtime validation tests...</p>';
     
     try {
         const response = await fetch('/api/health/run-tests', { method: 'POST' });
         const data = await response.json();
         
         if (data.success) {
-            results.innerHTML = `
+            let html = `
                 <div class="diag-summary">
                     <span class="diag-stat pass">&#10003; ${data.passed} Tests Passed</span>
                 </div>
-                <div class="test-output">${data.output}</div>
             `;
+            
+            if (data.tests) {
+                for (const test of data.tests) {
+                    const icon = test.status === 'pass' ? '&#10003;' : '&#10007;';
+                    const iconClass = test.status === 'pass' ? 'pass' : 'fail';
+                    const extra = test.count !== undefined ? ` (${test.count} items)` : '';
+                    html += `
+                        <div class="diag-item">
+                            <span class="diag-icon ${iconClass}">${icon}</span>
+                            <div class="diag-info">
+                                <div class="diag-name">${test.test}</div>
+                                <div class="diag-message">${test.error || 'OK' + extra}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+            
+            results.innerHTML = html;
             status.textContent = `All ${data.passed} tests passed!`;
         } else {
-            results.innerHTML = `
+            let html = `
                 <div class="diag-summary">
-                    <span class="diag-stat fail">&#10007; Tests Failed</span>
+                    <span class="diag-stat pass">&#10003; ${data.passed || 0} Passed</span>
+                    <span class="diag-stat fail">&#10007; ${data.failed || 0} Failed</span>
                 </div>
-                <div class="test-output">${data.output || data.error}</div>
             `;
-            status.textContent = 'Some tests failed';
+            
+            if (data.tests) {
+                for (const test of data.tests) {
+                    const icon = test.status === 'pass' ? '&#10003;' : '&#10007;';
+                    const iconClass = test.status === 'pass' ? 'pass' : 'fail';
+                    html += `
+                        <div class="diag-item">
+                            <span class="diag-icon ${iconClass}">${icon}</span>
+                            <div class="diag-info">
+                                <div class="diag-name">${test.test}</div>
+                                <div class="diag-message">${test.error || 'OK'}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+            } else if (data.error) {
+                html += `<div class="test-output" style="color:#ef4444;">${data.error}</div>`;
+            }
+            
+            results.innerHTML = html;
+            status.textContent = `${data.failed || 0} tests failed`;
         }
     } catch (error) {
         results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${error.message}</p>`;
