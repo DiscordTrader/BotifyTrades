@@ -8,6 +8,8 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 **See `ARCHITECTURE.md` for full details.**
 
 ### Recent Changes (Dec 7, 2025)
+- **v2.1.10**: License validation now contacts server FIRST for fresh expiry data
+- **v2.1.10**: Fixes license extensions not reflecting (was using stale cached data)
 - **v2.1.9**: Fixed upgrade system database path detection (searches exe dir, cwd, env var)
 - **v2.1.9**: Fixes "Database file does not exist" error when upgrading packaged EXE
 - **v2.1.8**: Dashboard positions now show Discord channel name that triggered each trade

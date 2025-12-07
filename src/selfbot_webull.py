@@ -683,12 +683,26 @@ if not LICENSE_VALID:
             
             client = LicenseClient()
             
-            # Step 2a: Check cached validation first (fast, no network)
-            _original_print(f"[LICENSE] Checking cached validation...", flush=True)
+            # Step 2a: Try server validation FIRST for fresh data
+            _original_print(f"[LICENSE] Contacting license server for fresh validation...", flush=True)
             sys.stdout.flush()
-            is_cached_valid, cached_data = client.validate_cached(license_key)
-            _original_print(f"[LICENSE] Cached validation result: valid={is_cached_valid}, data={cached_data}", flush=True)
-            sys.stdout.flush()
+            is_valid, license_data = client.validate_license(license_key)
+            
+            # Check if we got fresh data from server (not cached/offline fallback)
+            is_fresh_from_server = is_valid and not license_data.get('offline_mode') and not license_data.get('cached_mode')
+            
+            if is_fresh_from_server:
+                _original_print(f"[LICENSE] Got fresh data from server", flush=True)
+                # Use fresh server data
+                is_cached_valid = True
+                cached_data = license_data
+            else:
+                # Server unreachable - fall back to cached validation
+                _original_print(f"[LICENSE] Server unreachable, checking cached validation...", flush=True)
+                sys.stdout.flush()
+                is_cached_valid, cached_data = client.validate_cached(license_key)
+                _original_print(f"[LICENSE] Cached validation result: valid={is_cached_valid}, data={cached_data}", flush=True)
+                sys.stdout.flush()
             
             if is_cached_valid:
                 # CRITICAL FIX: Recalculate days_remaining from expires timestamp
