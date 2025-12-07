@@ -1,6 +1,6 @@
 """
 License Client - Server-Side Validation with BotifyTrades License Server
-Validates licenses against license.botifytrades.com
+Validates licenses against api.botifytrades.com with fallback support
 Includes RSA signature verification for tamper-proof cache
 """
 
@@ -13,9 +13,22 @@ import subprocess
 import base64
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, Dict, List
 
-LICENSE_SERVER_URL = "https://92ef2f8a-9447-4d91-8823-2ac83e184d7a-00-384f7fcagd1yw.janeway.replit.dev"
+# Primary license server URL (production domain)
+LICENSE_SERVER_URL_PRIMARY = "https://api.botifytrades.com"
+
+# Fallback URL (Replit - used during migration or if primary is down)
+LICENSE_SERVER_URL_FALLBACK = "https://92ef2f8a-9447-4d91-8823-2ac83e184d7a-00-384f7fcagd1yw.janeway.replit.dev"
+
+# For backwards compatibility - defaults to primary, falls back automatically
+LICENSE_SERVER_URL = LICENSE_SERVER_URL_PRIMARY
+
+# All server URLs to try in order (primary first, then fallbacks)
+LICENSE_SERVER_URLS = [
+    LICENSE_SERVER_URL_PRIMARY,
+    LICENSE_SERVER_URL_FALLBACK,
+]
 
 # RSA Public Key for verifying server-signed tokens
 # This key is embedded in the client - only the server has the private key
@@ -182,17 +195,44 @@ def _verify_signed_token(token_str: str, expected_machine_id: str) -> Tuple[bool
 class LicenseClient:
     """Client for validating licenses against BotifyTrades license server."""
     
-    def __init__(self, license_server_url: str = None):
-        self.server_url = license_server_url or LICENSE_SERVER_URL
+    def __init__(self, license_server_url: str = None, server_urls: List[str] = None):
+        """
+        Initialize license client with fallback URL support.
+        
+        Args:
+            license_server_url: Single URL (legacy compatibility)
+            server_urls: List of URLs to try in order (primary first)
+        """
+        # Support both single URL and list of URLs
+        if server_urls:
+            self.server_urls = server_urls
+        elif license_server_url:
+            self.server_urls = [license_server_url]
+        else:
+            self.server_urls = LICENSE_SERVER_URLS.copy()
+        
+        # Current active server (last successful one)
+        self.active_server_url = self.server_urls[0]
+        self.server_url = self.active_server_url  # Backwards compatibility
+        
         self.machine_id = get_machine_id()
         self.cache_dir = CACHE_DIR
         self.cache_file = CACHE_FILE
         self.cache_dir.mkdir(exist_ok=True)
+        
+        print(f"[LICENSE] Initialized with {len(self.server_urls)} server(s)")
+        print(f"[LICENSE] Primary: {self.server_urls[0]}")
+        if len(self.server_urls) > 1:
+            print(f"[LICENSE] Fallback(s): {', '.join(self.server_urls[1:])}")
     
-    def _make_request(self, endpoint: str, method: str = 'POST', data: dict = None) -> Dict:
-        """Make HTTP request to license server."""
-        url = f"{self.server_url}/api/v1/license/{endpoint}"
-        print(f"[LICENSE] Making request to: {url}")
+    def _make_request_single(self, url: str, method: str = 'POST', data: dict = None) -> Tuple[Dict, bool]:
+        """
+        Make HTTP request to a single server URL.
+        
+        Returns:
+            Tuple of (response_dict, success_bool)
+        """
+        print(f"[LICENSE] Trying server: {url}")
         print(f"[LICENSE] Request data: {data}")
         
         # Get SSL certificate path for PyInstaller bundles
@@ -228,15 +268,21 @@ class LicenseClient:
             print(f"[LICENSE] Response: {response.text[:200]}...")
             
             if response.status_code == 200:
-                return response.json()
+                return response.json(), True
             else:
                 try:
-                    return response.json()
+                    return response.json(), False
                 except:
-                    return {'success': False, 'is_valid': False, 'error': f"HTTP {response.status_code}"}
+                    return {'success': False, 'is_valid': False, 'error': f"HTTP {response.status_code}"}, False
                     
         except ImportError:
             print("[LICENSE] requests library not available, using urllib")
+        except requests.exceptions.ConnectionError as conn_err:
+            print(f"[LICENSE] Connection failed: {conn_err}")
+            return {'success': False, 'is_valid': False, 'error': 'Connection failed', 'offline': True}, False
+        except requests.exceptions.Timeout as timeout_err:
+            print(f"[LICENSE] Request timeout: {timeout_err}")
+            return {'success': False, 'is_valid': False, 'error': 'Request timeout', 'offline': True}, False
         except Exception as req_err:
             print(f"[LICENSE] requests failed: {req_err}, trying urllib...")
         
@@ -264,7 +310,7 @@ class LicenseClient:
                 with urllib.request.urlopen(req, timeout=30, context=context) as response:
                     response_data = response.read().decode('utf-8')
                     print(f"[LICENSE] Response: {response_data[:200]}...")
-                    return json.loads(response_data)
+                    return json.loads(response_data), True
             except ssl.SSLError as ssl_err:
                 print(f"[LICENSE] SSL Error with default context: {ssl_err}")
                 print("[LICENSE] Retrying with unverified SSL...")
@@ -274,23 +320,62 @@ class LicenseClient:
                 with urllib.request.urlopen(req, timeout=30, context=context) as response:
                     response_data = response.read().decode('utf-8')
                     print(f"[LICENSE] Response (unverified SSL): {response_data[:200]}...")
-                    return json.loads(response_data)
+                    return json.loads(response_data), True
                 
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8') if e.fp else ''
             print(f"[LICENSE] HTTP Error {e.code}: {error_body}")
             try:
-                return json.loads(error_body)
+                return json.loads(error_body), False
             except:
-                return {'success': False, 'is_valid': False, 'error': f"HTTP {e.code}: {error_body}"}
+                return {'success': False, 'is_valid': False, 'error': f"HTTP {e.code}: {error_body}"}, False
         except urllib.error.URLError as e:
             print(f"[LICENSE] URL Error: {e.reason}")
-            return {'success': False, 'is_valid': False, 'error': f"Connection failed: {e.reason}", 'offline': True}
+            return {'success': False, 'is_valid': False, 'error': f"Connection failed: {e.reason}", 'offline': True}, False
         except Exception as e:
             print(f"[LICENSE] Unexpected error: {type(e).__name__}: {e}")
             import traceback
             traceback.print_exc()
-            return {'success': False, 'is_valid': False, 'error': str(e), 'offline': True}
+            return {'success': False, 'is_valid': False, 'error': str(e), 'offline': True}, False
+    
+    def _make_request(self, endpoint: str, method: str = 'POST', data: dict = None) -> Dict:
+        """
+        Make HTTP request with automatic fallback to backup servers.
+        
+        Tries each server URL in order until one succeeds.
+        """
+        last_error = None
+        
+        for i, server_url in enumerate(self.server_urls):
+            url = f"{server_url}/api/v1/license/{endpoint}"
+            
+            if i > 0:
+                print(f"[LICENSE] Trying fallback server {i}: {server_url}")
+            
+            result, success = self._make_request_single(url, method, data)
+            
+            # Check if this was a connection/network failure vs a valid API response
+            if success:
+                # Update active server for future requests
+                self.active_server_url = server_url
+                self.server_url = server_url
+                if i > 0:
+                    print(f"[LICENSE] Fallback server succeeded: {server_url}")
+                return result
+            
+            # If we got a valid API response (even an error), don't try fallback
+            # Only fallback on connection failures
+            if not result.get('offline', False):
+                # This is a valid API response (license invalid, etc) - don't fallback
+                return result
+            
+            # Connection failed - save error and try next server
+            last_error = result.get('error', 'Unknown error')
+            print(f"[LICENSE] Server {server_url} unreachable: {last_error}")
+        
+        # All servers failed
+        print(f"[LICENSE] All servers failed. Last error: {last_error}")
+        return {'success': False, 'is_valid': False, 'error': f"All servers unreachable: {last_error}", 'offline': True}
     
     def _save_cache(self, license_key: str, result: Dict):
         """Save validation result with signed token for offline grace period."""

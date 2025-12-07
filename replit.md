@@ -8,6 +8,8 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 **See `ARCHITECTURE.md` for full details.**
 
 ### Recent Changes (Dec 7, 2025)
+- **v2.1.5**: Added fallback URL support to license client (primary: api.botifytrades.com, fallback: Replit)
+- **v2.1.5**: License client now automatically tries backup servers if primary is unreachable
 - **v2.1.4**: User Agreement updated to v2.0 with License Server terms (heartbeat, machine binding, anti-tampering)
 - **v2.1.4**: Professional consent UI with new Section 8 highlighting license validation requirements
 - **v2.1.3**: Admin License Server UI completely redesigned with professional BT branding
