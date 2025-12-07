@@ -20,10 +20,28 @@ class BackupManager:
     """Manages database backups for safe upgrades."""
     
     def __init__(self, db_path: str = None, backup_dir: Path = None, retention_count: int = 5):
-        self.db_path = db_path or os.environ.get('DATABASE_PATH', 'bot_data.db')
+        self.db_path = db_path or os.environ.get('DATABASE_PATH') or self._find_database()
         self.backup_dir = backup_dir or BACKUP_DIR
         self.retention_count = retention_count
         self.backup_dir.mkdir(parents=True, exist_ok=True)
+    
+    def _find_database(self) -> str:
+        """Find the database file in common locations."""
+        import sys
+        
+        possible_paths = [
+            'bot_data.db',
+            Path(sys.executable).parent / 'bot_data.db' if getattr(sys, 'frozen', False) else None,
+            Path.cwd() / 'bot_data.db',
+            Path(__file__).parent.parent / 'bot_data.db',
+        ]
+        
+        for path in possible_paths:
+            if path and Path(path).exists():
+                print(f"[BACKUP] Found database at: {path}")
+                return str(path)
+        
+        return 'bot_data.db'
     
     def create_backup(self, tag: str = None) -> Tuple[bool, str, str]:
         """

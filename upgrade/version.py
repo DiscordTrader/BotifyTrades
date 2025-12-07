@@ -57,8 +57,26 @@ def compare_versions(v1: str, v2: str) -> int:
 
 
 def get_db_path() -> str:
-    """Get the database path."""
-    return os.environ.get('DATABASE_PATH', 'bot_data.db')
+    """Get the database path, searching common locations."""
+    import sys
+    
+    env_path = os.environ.get('DATABASE_PATH')
+    if env_path and Path(env_path).exists():
+        return env_path
+    
+    db_name = 'bot_data.db'
+    possible_paths = [
+        Path(db_name),
+        Path(sys.executable).parent / db_name if getattr(sys, 'frozen', False) else None,
+        Path.cwd() / db_name,
+        Path(__file__).parent.parent / db_name,
+    ]
+    
+    for path in possible_paths:
+        if path and path.exists():
+            return str(path)
+    
+    return db_name
 
 
 def get_current_version() -> str:

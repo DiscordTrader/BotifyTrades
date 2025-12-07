@@ -30,6 +30,28 @@ from .readiness import ReadinessChecker
 from .config import DEFAULT_CONFIG
 
 
+def _find_database_path() -> Path:
+    """Find the database file in common locations."""
+    db_name = 'bot_data.db'
+    
+    env_path = os.environ.get('DATABASE_PATH')
+    if env_path and Path(env_path).exists():
+        return Path(env_path)
+    
+    possible_paths = [
+        Path(db_name),
+        Path(sys.executable).parent / db_name if getattr(sys, 'frozen', False) else None,
+        Path.cwd() / db_name,
+        Path(__file__).parent.parent / db_name,
+    ]
+    
+    for path in possible_paths:
+        if path and path.exists():
+            return path
+    
+    return Path(db_name)
+
+
 class UpgradeStatus(Enum):
     """Status of the upgrade process."""
     PENDING = "pending"
@@ -385,7 +407,7 @@ class UpgradeRunner:
             import sqlite3
             from pathlib import Path
             
-            db_path = Path('bot_data.db')
+            db_path = _find_database_path()
             if not db_path.exists():
                 print(f"[UPGRADE] Database not found for patch history")
                 return
@@ -455,7 +477,7 @@ class UpgradeRunner:
             import sqlite3
             from pathlib import Path
             
-            db_path = Path('bot_data.db')
+            db_path = _find_database_path()
             if not db_path.exists():
                 return []
             
