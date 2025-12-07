@@ -7,7 +7,13 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 
 **See `ARCHITECTURE.md` for full details.**
 
-### Recent Changes (Dec 6, 2025)
+### Recent Changes (Dec 7, 2025)
+- **v2.1.3**: Admin License Server UI completely redesigned with professional BT branding
+- **v2.1.3**: Added executive dashboard with KPIs, recent activity feed, and quick actions
+- **v2.1.3**: Added audit log page for tracking all admin actions
+- **v2.1.3**: Added settings page with server info and password change
+- **v2.1.3**: Improved SSL fallback handling in license client for Windows compatibility
+- **v2.1.2**: Enhanced license extension feature with quick buttons and custom input
 - **v2.1.1**: Fixed upgrade checker GitHub config (was pointing to wrong repo)
 - **v2.1.1**: Added license heartbeat system for runtime re-validation
 - **v2.1.1**: Added detailed upgrade debug logging

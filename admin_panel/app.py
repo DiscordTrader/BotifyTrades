@@ -43,7 +43,7 @@ def create_app():
     @app.route('/')
     def index():
         if 'admin_logged_in' in session:
-            return redirect(url_for('admin_licenses'))
+            return redirect(url_for('admin_dashboard'))
         return redirect(url_for('admin_login'))
     
     @app.route('/login', methods=['GET', 'POST'])
@@ -59,11 +59,11 @@ def create_app():
                 session['admin_username'] = username
                 session.permanent = True
                 db.add_audit_log('login', admin_user=username, ip_address=request.remote_addr)
-                return redirect(url_for('admin_licenses'))
+                return redirect(url_for('admin_dashboard'))
             else:
                 error = 'Invalid username or password'
         
-        return render_template('admin_login.html', error=error)
+        return render_template('login.html', error=error)
     
     @app.route('/logout')
     def admin_logout():
@@ -105,19 +105,45 @@ def create_app():
                     session['admin_logged_in'] = True
                     session['admin_username'] = username
                     session.permanent = True
-                    return redirect(url_for('admin_licenses'))
+                    return redirect(url_for('admin_dashboard'))
                 else:
                     error = 'Failed to create admin account'
         
-        return render_template('admin_setup.html', error=error)
+        return render_template('setup.html', error=error)
+    
+    @app.route('/dashboard')
+    @login_required
+    def admin_dashboard():
+        stats = db.get_license_stats()
+        return render_template('dashboard.html',
+                              admin_username=session.get('admin_username'),
+                              stats=stats,
+                              active_page='dashboard')
     
     @app.route('/licenses')
     @login_required
     def admin_licenses():
         stats = db.get_license_stats()
-        return render_template('admin_licenses.html', 
+        return render_template('licenses.html', 
                               admin_username=session.get('admin_username'),
-                              stats=stats)
+                              stats=stats,
+                              active_page='licenses')
+    
+    @app.route('/audit')
+    @login_required
+    def admin_audit():
+        return render_template('audit.html',
+                              admin_username=session.get('admin_username'),
+                              active_page='audit')
+    
+    @app.route('/settings')
+    @login_required
+    def admin_settings():
+        server_url = os.environ.get('REPLIT_DEV_DOMAIN', 'localhost:5000')
+        return render_template('settings.html',
+                              admin_username=session.get('admin_username'),
+                              server_url=server_url,
+                              active_page='settings')
     
     @app.route('/api/licenses', methods=['GET'])
     @login_required
@@ -239,6 +265,71 @@ def create_app():
     def api_get_stats():
         stats = db.get_license_stats()
         return jsonify(stats)
+    
+    @app.route('/api/licenses/<license_key>/reset', methods=['POST'])
+    @login_required
+    def api_reset_devices_alt(license_key):
+        """Alternative route for resetting devices"""
+        count = db.reset_device_activations(license_key)
+        db.add_audit_log('devices_reset',
+                        license_key=license_key,
+                        admin_user=session.get('admin_username'),
+                        details=f"Reset {count} device(s)",
+                        ip_address=request.remote_addr)
+        return jsonify({'success': True, 'devices_removed': count})
+    
+    @app.route('/api/licenses/<license_key>/revoke', methods=['POST'])
+    @login_required
+    def api_revoke_license_alt(license_key):
+        """Alternative route for revoking licenses"""
+        if db.revoke_license(license_key, 'Revoked by admin'):
+            db.add_audit_log('license_revoked',
+                           license_key=license_key,
+                           admin_user=session.get('admin_username'),
+                           ip_address=request.remote_addr)
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'error': 'License not found'}), 404
+    
+    @app.route('/api/licenses/<license_key>/devices', methods=['GET'])
+    @login_required
+    def api_get_devices(license_key):
+        """Get device activations for a license"""
+        devices = db.get_device_activations(license_key)
+        return jsonify({'devices': devices})
+    
+    @app.route('/api/audit', methods=['GET'])
+    @login_required
+    def api_get_audit_log():
+        """Get paginated audit log"""
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 25, type=int)
+        action = request.args.get('action')
+        search = request.args.get('search')
+        
+        result = db.get_audit_logs(page=page, per_page=per_page, action=action, search=search)
+        return jsonify(result)
+    
+    @app.route('/api/admin/password', methods=['POST'])
+    @login_required
+    def api_change_password():
+        """Change admin password"""
+        data = request.get_json() or {}
+        current_password = data.get('current_password')
+        new_password = data.get('new_password')
+        
+        if not current_password or not new_password:
+            return jsonify({'success': False, 'error': 'Both passwords required'}), 400
+        
+        if len(new_password) < 8:
+            return jsonify({'success': False, 'error': 'Password must be at least 8 characters'}), 400
+        
+        username = session.get('admin_username')
+        if db.verify_admin(username, current_password):
+            if db.update_admin_password(username, new_password):
+                db.add_audit_log('password_changed', admin_user=username, ip_address=request.remote_addr)
+                return jsonify({'success': True})
+            return jsonify({'success': False, 'error': 'Failed to update password'}), 500
+        return jsonify({'success': False, 'error': 'Current password is incorrect'}), 400
     
     @app.route('/api/validate', methods=['POST'])
     def api_validate_license():

@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Log - BotifyTrades Admin{% endblock %}
+{% block page_title %}Audit Log{% endblock %}
+
+{% block content %}
+<div class="table-container">
+    <div class="table-toolbar">
+        <div class="search-box">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input type="text" id="search" placeholder="Search actions, users, or targets...">
+        </div>
+        <div class="filter-group">
+            <button class="filter-btn active" data-action="">All</button>
+            <button class="filter-btn" data-action="create">Created</button>
+            <button class="filter-btn" data-action="extend">Extended</button>
+            <button class="filter-btn" data-action="revoke">Revoked</button>
+            <button class="filter-btn" data-action="reset">Reset</button>
+        </div>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>Action</th>
+                <th>Target</th>
+                <th>Details</th>
+                <th>Admin</th>
+            </tr>
+        </thead>
+        <tbody id="audit-table">
+            <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+        </tbody>
+    </table>
+    
+    <div class="pagination" id="pagination"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentPage = 1;
+    let currentAction = '';
+    let searchTimeout = null;
+    
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentAction = btn.dataset.action;
+            currentPage = 1;
+            loadAuditLog();
+        });
+    });
+    
+    document.getElementById('search').addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            currentPage = 1;
+            loadAuditLog();
+        }, 300);
+    });
+    
+    async function loadAuditLog() {
+        const search = document.getElementById('search').value;
+        const params = new URLSearchParams({
+            page: currentPage,
+            per_page: 25,
+            ...(currentAction && { action: currentAction }),
+            ...(search && { search: search })
+        });
+        
+        try {
+            const res = await fetch(`/api/audit?${params}`);
+            const data = await res.json();
+            renderAuditLog(data.logs || []);
+            renderPagination(data.page || 1, data.total_pages || 1);
+        } catch (e) {
+            document.getElementById('audit-table').innerHTML = '<tr><td colspan="5" class="empty-state">Failed to load audit log</td></tr>';
+        }
+    }
+    
+    function renderAuditLog(logs) {
+        const tbody = document.getElementById('audit-table');
+        if (!logs.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No audit records found</td></tr>';
+            return;
+        }
+        
+        const actionBadges = {
+            'create': 'success',
+            'extend': 'primary',
+            'revoke': 'error',
+            'reactivate': 'success',
+            'reset': 'warning',
+            'validate': 'info',
+            'login': 'info'
+        };
+        
+        tbody.innerHTML = logs.map(log => {
+            const badgeType = actionBadges[log.action] || 'info';
+            return `
+                <tr>
+                    <td style="color: var(--text-muted); font-size: 13px; white-space: nowrap;">
+                        ${new Date(log.timestamp).toLocaleString()}
+                    </td>
+                    <td>
+                        <span class="badge badge-${badgeType}" style="text-transform: capitalize;">
+                            <span class="badge-dot"></span>
+                            ${log.action}
+                        </span>
+                    </td>
+                    <td>
+                        ${log.license_key ? `<span class="license-key">${log.license_key}</span>` : '-'}
+                    </td>
+                    <td style="color: var(--text-secondary); font-size: 13px;">
+                        ${log.details || '-'}
+                    </td>
+                    <td style="font-weight: 500;">${log.admin_user || 'System'}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+    
+    function renderPagination(page, total) {
+        const container = document.getElementById('pagination');
+        if (total <= 1) { container.innerHTML = ''; return; }
+        
+        let html = `<button class="page-btn" onclick="goToPage(${page-1})" ${page === 1 ? 'disabled' : ''}>Prev</button>`;
+        for (let i = 1; i <= Math.min(total, 7); i++) {
+            html += `<button class="page-btn ${i === page ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+        }
+        html += `<button class="page-btn" onclick="goToPage(${page+1})" ${page === total ? 'disabled' : ''}>Next</button>`;
+        container.innerHTML = html;
+    }
+    
+    function goToPage(page) { currentPage = page; loadAuditLog(); }
+    
+    loadAuditLog();
+</script>
+{% endblock %}

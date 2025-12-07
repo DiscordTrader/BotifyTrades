@@ -1,0 +1,433 @@
+{% extends "base.html" %}
+
+{% block title %}License Management - BotifyTrades Admin{% endblock %}
+{% block page_title %}License Management{% endblock %}
+
+{% block content %}
+<div class="stats-grid" style="margin-bottom: 24px;">
+    <div class="stat-card primary">
+        <div class="stat-card-label">Total Licenses</div>
+        <div class="stat-card-value" id="stat-total">{{ stats.total_licenses }}</div>
+    </div>
+    <div class="stat-card success">
+        <div class="stat-card-label">Active</div>
+        <div class="stat-card-value" id="stat-active">{{ stats.active_licenses }}</div>
+    </div>
+    <div class="stat-card warning">
+        <div class="stat-card-label">Expired</div>
+        <div class="stat-card-value" id="stat-expired">{{ stats.expired_licenses }}</div>
+    </div>
+    <div class="stat-card error">
+        <div class="stat-card-label">Revoked</div>
+        <div class="stat-card-value" id="stat-revoked">{{ stats.revoked_licenses }}</div>
+    </div>
+    <div class="stat-card info">
+        <div class="stat-card-label">Devices</div>
+        <div class="stat-card-value" id="stat-devices">{{ stats.total_devices }}</div>
+    </div>
+</div>
+
+<div class="table-container">
+    <div class="table-toolbar">
+        <div class="search-box">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input type="text" id="search" placeholder="Search by key, email, or name...">
+        </div>
+        <div class="filter-group">
+            <button class="filter-btn active" data-status="">All</button>
+            <button class="filter-btn" data-status="active">Active</button>
+            <button class="filter-btn" data-status="expired">Expired</button>
+            <button class="filter-btn" data-status="revoked">Revoked</button>
+        </div>
+        <button class="btn btn-primary" onclick="openCreateModal()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Create License
+        </button>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>License Key</th>
+                <th>Type</th>
+                <th>Customer</th>
+                <th>Devices</th>
+                <th>Expires</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="licenses-table">
+            <tr><td colspan="7" class="empty-state">Loading...</td></tr>
+        </tbody>
+    </table>
+    
+    <div class="pagination" id="pagination"></div>
+</div>
+
+<div class="modal" id="create-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title">Create New License</h2>
+            <button class="modal-close" onclick="closeModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <form id="create-form">
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">License Type</label>
+                        <select name="license_type" class="form-select">
+                            <option value="standard">Standard</option>
+                            <option value="professional">Professional</option>
+                            <option value="enterprise">Enterprise</option>
+                            <option value="lifetime">Lifetime</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Max Devices</label>
+                        <input type="number" name="max_devices" class="form-input" value="1" min="1" max="10">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Customer Email</label>
+                    <input type="email" name="customer_email" class="form-input" placeholder="customer@example.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Customer Name</label>
+                    <input type="text" name="customer_name" class="form-input" placeholder="John Doe">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Duration (days)</label>
+                    <input type="number" name="duration_days" class="form-input" value="365" min="1">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <textarea name="notes" class="form-textarea" rows="2" placeholder="Optional notes..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create License</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal" id="extend-modal">
+    <div class="modal-content" style="max-width: 420px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Extend License</h2>
+            <button class="modal-close" onclick="closeExtendModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <p style="color: var(--text-muted); margin-bottom: 20px;">
+                License: <span id="extend-key" class="license-key" style="margin-left: 8px;"></span>
+            </p>
+            <div class="form-group">
+                <label class="form-label">Quick Extend</label>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button type="button" class="action-btn btn-extend" onclick="extendByDays(7)">+7 Days</button>
+                    <button type="button" class="action-btn btn-extend" onclick="extendByDays(30)">+30 Days</button>
+                    <button type="button" class="action-btn btn-extend" onclick="extendByDays(90)">+90 Days</button>
+                    <button type="button" class="action-btn btn-extend" onclick="extendByDays(365)">+1 Year</button>
+                    <button type="button" class="action-btn" onclick="extendByDays(36500)" style="background: rgba(245, 158, 11, 0.15); color: var(--warning);">Lifetime</button>
+                </div>
+            </div>
+            <div class="form-group" style="margin-top: 20px;">
+                <label class="form-label">Custom Days</label>
+                <div style="display: flex; gap: 12px;">
+                    <input type="number" id="custom-days" class="form-input" min="1" value="30" style="flex: 1;">
+                    <button type="button" class="btn btn-primary" onclick="extendByCustomDays()">Apply</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="devices-modal">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Device Activations</h2>
+            <button class="modal-close" onclick="closeDevicesModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <p style="color: var(--text-muted); margin-bottom: 20px;">
+                License: <span id="devices-key" class="license-key" style="margin-left: 8px;"></span>
+            </p>
+            <div id="devices-list">
+                <div class="empty-state">Loading...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentPage = 1;
+    let currentExtendKey = '';
+    let currentStatus = '';
+    let searchTimeout = null;
+    
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentStatus = btn.dataset.status;
+            currentPage = 1;
+            loadLicenses();
+        });
+    });
+    
+    document.getElementById('search').addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            currentPage = 1;
+            loadLicenses();
+        }, 300);
+    });
+    
+    async function loadLicenses() {
+        const search = document.getElementById('search').value;
+        const params = new URLSearchParams({
+            page: currentPage,
+            per_page: 20,
+            ...(currentStatus && { status: currentStatus }),
+            ...(search && { search: search })
+        });
+        
+        try {
+            const res = await fetch(`/api/licenses?${params}`);
+            const data = await res.json();
+            renderLicenses(data.licenses);
+            renderPagination(data.page, data.total_pages);
+        } catch (e) {
+            showToast('Failed to load licenses', 'error');
+        }
+    }
+    
+    function renderLicenses(licenses) {
+        const tbody = document.getElementById('licenses-table');
+        if (!licenses.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No licenses found</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = licenses.map(lic => {
+            const status = lic.revoked ? 'revoked' : 
+                          (lic.expires_at && new Date(lic.expires_at) < new Date() ? 'expired' : 'active');
+            const expDate = lic.expires_at ? new Date(lic.expires_at).toLocaleDateString() : 'Never';
+            
+            return `
+                <tr>
+                    <td><span class="license-key">${lic.license_key}</span></td>
+                    <td style="text-transform: capitalize;">${lic.license_type}</td>
+                    <td>
+                        ${lic.customer_email || '-'}
+                        ${lic.customer_name ? `<br><small style="color: var(--text-muted);">${lic.customer_name}</small>` : ''}
+                    </td>
+                    <td>${lic.active_devices || 0}/${lic.max_devices}</td>
+                    <td style="color: var(--text-muted);">${expDate}</td>
+                    <td><span class="badge badge-${status}"><span class="badge-dot"></span>${status}</span></td>
+                    <td>
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <button class="action-btn btn-extend" onclick="showExtendModal('${lic.license_key}')">Extend</button>
+                            <button class="action-btn btn-devices" onclick="viewDevices('${lic.license_key}')">Devices</button>
+                            <button class="action-btn btn-reset" onclick="resetDevices('${lic.license_key}')">Reset</button>
+                            ${status === 'revoked' 
+                                ? `<button class="action-btn btn-reactivate" onclick="reactivateLicense('${lic.license_key}')">Restore</button>`
+                                : `<button class="action-btn btn-revoke" onclick="revokeLicense('${lic.license_key}')">Revoke</button>`
+                            }
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+    
+    function renderPagination(page, total) {
+        const container = document.getElementById('pagination');
+        if (total <= 1) { container.innerHTML = ''; return; }
+        
+        let html = `<button class="page-btn" onclick="goToPage(${page-1})" ${page === 1 ? 'disabled' : ''}>Prev</button>`;
+        for (let i = 1; i <= Math.min(total, 7); i++) {
+            html += `<button class="page-btn ${i === page ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+        }
+        if (total > 7) html += `<span style="color: var(--text-muted);">...</span>`;
+        html += `<button class="page-btn" onclick="goToPage(${page+1})" ${page === total ? 'disabled' : ''}>Next</button>`;
+        container.innerHTML = html;
+    }
+    
+    function goToPage(page) { currentPage = page; loadLicenses(); }
+    
+    async function loadStats() {
+        const res = await fetch('/api/stats');
+        const stats = await res.json();
+        document.getElementById('stat-total').textContent = stats.total_licenses;
+        document.getElementById('stat-active').textContent = stats.active_licenses;
+        document.getElementById('stat-expired').textContent = stats.expired_licenses;
+        document.getElementById('stat-revoked').textContent = stats.revoked_licenses;
+        document.getElementById('stat-devices').textContent = stats.total_devices;
+    }
+    
+    function openCreateModal() { document.getElementById('create-modal').classList.add('active'); }
+    function closeModal() { document.getElementById('create-modal').classList.remove('active'); }
+    
+    document.getElementById('create-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData);
+        data.max_devices = parseInt(data.max_devices);
+        data.duration_days = parseInt(data.duration_days);
+        
+        try {
+            const res = await fetch('/api/licenses', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.success) {
+                showToast(`License created: ${result.license.license_key}`, 'success');
+                closeModal();
+                e.target.reset();
+                loadLicenses();
+                loadStats();
+            } else {
+                showToast(result.error || 'Failed to create', 'error');
+            }
+        } catch (err) {
+            showToast('Failed to create license', 'error');
+        }
+    });
+    
+    function showExtendModal(key) {
+        currentExtendKey = key;
+        document.getElementById('extend-key').textContent = key;
+        document.getElementById('extend-modal').classList.add('active');
+    }
+    
+    function closeExtendModal() {
+        document.getElementById('extend-modal').classList.remove('active');
+        currentExtendKey = '';
+    }
+    
+    async function extendByDays(days) {
+        if (!currentExtendKey) return;
+        const res = await fetch(`/api/licenses/${currentExtendKey}/extend`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ days: days })
+        });
+        const result = await res.json();
+        if (result.success) {
+            const label = days >= 36500 ? 'Lifetime' : `${days} days`;
+            showToast(`License extended by ${label}`, 'success');
+            closeExtendModal();
+            loadLicenses();
+            loadStats();
+        } else {
+            showToast(result.error, 'error');
+        }
+    }
+    
+    function extendByCustomDays() {
+        const days = parseInt(document.getElementById('custom-days').value);
+        if (days > 0) extendByDays(days);
+    }
+    
+    async function viewDevices(key) {
+        document.getElementById('devices-key').textContent = key;
+        document.getElementById('devices-modal').classList.add('active');
+        document.getElementById('devices-list').innerHTML = '<div class="empty-state"><div class="loading-spinner"></div></div>';
+        
+        try {
+            const res = await fetch(`/api/licenses/${key}/devices`);
+            const data = await res.json();
+            
+            if (!data.devices || data.devices.length === 0) {
+                document.getElementById('devices-list').innerHTML = '<div class="empty-state">No devices activated</div>';
+                return;
+            }
+            
+            document.getElementById('devices-list').innerHTML = data.devices.map(d => `
+                <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div>
+                            <div style="font-family: var(--font-mono); font-size: 12px; color: var(--accent-mint); margin-bottom: 8px;">${d.machine_id}</div>
+                            <div style="font-size: 12px; color: var(--text-muted);">
+                                Activated: ${new Date(d.activated_at).toLocaleString()}
+                            </div>
+                            ${d.last_seen ? `<div style="font-size: 12px; color: var(--text-muted);">Last seen: ${new Date(d.last_seen).toLocaleString()}</div>` : ''}
+                        </div>
+                        <span class="badge badge-active"><span class="badge-dot"></span>Active</span>
+                    </div>
+                </div>
+            `).join('');
+        } catch (e) {
+            document.getElementById('devices-list').innerHTML = '<div class="empty-state">Failed to load devices</div>';
+        }
+    }
+    
+    function closeDevicesModal() {
+        document.getElementById('devices-modal').classList.remove('active');
+    }
+    
+    async function resetDevices(key) {
+        if (!confirm(`Reset all device activations for license ${key}?`)) return;
+        const res = await fetch(`/api/licenses/${key}/reset`, { method: 'POST' });
+        const result = await res.json();
+        if (result.success) {
+            showToast('Devices reset successfully', 'success');
+            loadLicenses();
+            loadStats();
+        } else {
+            showToast(result.error, 'error');
+        }
+    }
+    
+    async function revokeLicense(key) {
+        if (!confirm(`Revoke license ${key}? This will disable the license.`)) return;
+        const res = await fetch(`/api/licenses/${key}/revoke`, { method: 'POST' });
+        const result = await res.json();
+        if (result.success) {
+            showToast('License revoked', 'success');
+            loadLicenses();
+            loadStats();
+        } else {
+            showToast(result.error, 'error');
+        }
+    }
+    
+    async function reactivateLicense(key) {
+        const res = await fetch(`/api/licenses/${key}/reactivate`, { method: 'POST' });
+        const result = await res.json();
+        if (result.success) {
+            showToast('License reactivated', 'success');
+            loadLicenses();
+            loadStats();
+        } else {
+            showToast(result.error, 'error');
+        }
+    }
+    
+    loadLicenses();
+    loadStats();
+</script>
+{% endblock %}

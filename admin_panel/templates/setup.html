@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup - BotifyTrades License Server</title>
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}" type="image/svg+xml">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0E1117;
+            --bg-secondary: #161B22;
+            --bg-card: #1C2128;
+            --accent-mint: #0FF0B3;
+            --accent-cyan: #00F5FF;
+            --accent-violet: #7C3AED;
+            --accent-gradient: linear-gradient(135deg, #0FF0B3 0%, #7C3AED 50%, #3B82F6 100%);
+            --text-primary: #F0F6FC;
+            --text-secondary: #8B949E;
+            --text-muted: #6E7681;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-accent: rgba(15, 240, 179, 0.3);
+            --success: #10B981;
+            --error: #EF4444;
+            --font-primary: 'Plus Jakarta Sans', sans-serif;
+            --font-brand: 'Space Grotesk', sans-serif;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: var(--font-primary);
+            background: var(--bg-primary);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-primary);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .bg-grid {
+            position: absolute;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(15, 240, 179, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(15, 240, 179, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+        }
+        
+        .bg-glow {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            filter: blur(120px);
+            opacity: 0.15;
+            pointer-events: none;
+        }
+        
+        .bg-glow.mint { background: var(--accent-mint); top: -200px; right: -100px; }
+        .bg-glow.violet { background: var(--accent-violet); bottom: -200px; left: -100px; }
+        
+        .setup-container {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 480px;
+            padding: 20px;
+        }
+        
+        .setup-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 48px 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+        
+        .brand {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        
+        .brand-logo {
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 20px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-violet) 100%);
+            border-radius: 20px;
+            box-shadow: 0 0 60px rgba(0, 245, 255, 0.4);
+        }
+        
+        .brand-logo::before {
+            content: '';
+            position: absolute;
+            inset: 3px;
+            background: var(--bg-primary);
+            border-radius: 17px;
+        }
+        
+        .brand-logo span {
+            position: relative;
+            z-index: 1;
+            font-family: var(--font-brand);
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-mint));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .brand h1 {
+            font-family: var(--font-brand);
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-mint));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+        
+        .brand p {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+        
+        .welcome-box {
+            background: rgba(15, 240, 179, 0.08);
+            border: 1px solid var(--border-accent);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 28px;
+            text-align: center;
+        }
+        
+        .welcome-box h2 {
+            color: var(--accent-mint);
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .welcome-box p {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        .error-message {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--error);
+            padding: 14px 18px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 14px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 15px;
+            font-family: var(--font-primary);
+            transition: all 0.2s ease;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent-mint);
+            box-shadow: 0 0 0 4px rgba(15, 240, 179, 0.1);
+        }
+        
+        .btn-submit {
+            width: 100%;
+            padding: 16px;
+            background: var(--accent-gradient);
+            border: none;
+            border-radius: 12px;
+            color: var(--bg-primary);
+            font-size: 16px;
+            font-weight: 700;
+            font-family: var(--font-primary);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 8px;
+        }
+        
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px rgba(15, 240, 179, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="bg-glow mint"></div>
+    <div class="bg-glow violet"></div>
+    
+    <div class="setup-container">
+        <div class="setup-card">
+            <div class="brand">
+                <div class="brand-logo">
+                    <span>BT</span>
+                </div>
+                <h1>BotifyTrades</h1>
+                <p>License Server Setup</p>
+            </div>
+            
+            <div class="welcome-box">
+                <h2>Welcome!</h2>
+                <p>Create your administrator account to manage licenses.</p>
+            </div>
+            
+            {% if error %}
+            <div class="error-message">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {{ error }}
+            </div>
+            {% endif %}
+            
+            <form method="POST">
+                <div class="form-group">
+                    <label class="form-label" for="username">Admin Username</label>
+                    <input type="text" id="username" name="username" class="form-input" required autofocus placeholder="Choose a username">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="email">Email (for recovery)</label>
+                    <input type="email" id="email" name="email" class="form-input" placeholder="admin@example.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="password">Password (min 8 characters)</label>
+                    <input type="password" id="password" name="password" class="form-input" required minlength="8" placeholder="Create a strong password">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="confirm_password">Confirm Password</label>
+                    <input type="password" id="confirm_password" name="confirm_password" class="form-input" required placeholder="Confirm your password">
+                </div>
+                <button type="submit" class="btn-submit">Create Admin Account</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

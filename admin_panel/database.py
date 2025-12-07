@@ -603,4 +603,60 @@ def deactivate_device(license_key: str, machine_id: str) -> Dict:
         return {'success': False, 'error': 'Device not found'}
 
 
+def get_audit_logs(page: int = 1, per_page: int = 25, action: str = None, search: str = None) -> Dict:
+    """Get paginated audit logs with filtering"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        
+        where_clauses = []
+        params = []
+        
+        if action:
+            where_clauses.append('action LIKE ?')
+            params.append(f'%{action}%')
+        
+        if search:
+            where_clauses.append('(license_key LIKE ? OR admin_user LIKE ? OR details LIKE ?)')
+            params.extend([f'%{search}%', f'%{search}%', f'%{search}%'])
+        
+        where_sql = ' AND '.join(where_clauses) if where_clauses else '1=1'
+        
+        cursor.execute(f'SELECT COUNT(*) FROM audit_log WHERE {where_sql}', params)
+        total = cursor.fetchone()[0]
+        
+        offset = (page - 1) * per_page
+        cursor.execute(f'''
+            SELECT id, action, license_key, admin_user, details, ip_address, created_at as timestamp
+            FROM audit_log 
+            WHERE {where_sql}
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+        ''', params + [per_page, offset])
+        
+        logs = [dict(row) for row in cursor.fetchall()]
+        
+        return {
+            'logs': logs,
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'total_pages': (total + per_page - 1) // per_page if total > 0 else 1
+        }
+
+
+def update_admin_password(username: str, new_password: str) -> bool:
+    """Update admin password"""
+    import bcrypt
+    
+    password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE admin_users SET password_hash = ? WHERE username = ?',
+            (password_hash, username)
+        )
+        return cursor.rowcount > 0
+
+
 init_database()
