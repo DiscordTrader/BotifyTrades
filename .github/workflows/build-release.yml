@@ -70,17 +70,17 @@ jobs:
             Remove-Item -Recurse -Force src/pyarmor_runtime_000000
           }
 
-      - name: Prepare and ZIP distribution
-        shell: bash
+           - name: Prepare and ZIP distribution
+        shell: pwsh
         run: |
-          mkdir -p packaging/windows/dist/BotifyTrades
-          if [ -f "packaging/windows/dist/BotifyTrades.exe" ]; then
-            mv packaging/windows/dist/BotifyTrades.exe packaging/windows/dist/BotifyTrades/
-          fi
-          cp config.ini.example packaging/windows/dist/BotifyTrades/ 2>/dev/null || true
-          cp GET_DISCORD_TOKEN.html packaging/windows/dist/BotifyTrades/ 2>/dev/null || true
-          cp GET_WEBULL_TOKENS.html packaging/windows/dist/BotifyTrades/ 2>/dev/null || true
-          cd packaging/windows/dist && zip -r ../../../BotifyTrades-Windows.zip BotifyTrades/
+          New-Item -ItemType Directory -Force -Path packaging/windows/dist/BotifyTrades
+          if (Test-Path "packaging/windows/dist/BotifyTrades.exe") {
+            Move-Item packaging/windows/dist/BotifyTrades.exe packaging/windows/dist/BotifyTrades/
+          }
+          Copy-Item config.ini.example packaging/windows/dist/BotifyTrades/ -ErrorAction SilentlyContinue
+          Copy-Item GET_DISCORD_TOKEN.html packaging/windows/dist/BotifyTrades/ -ErrorAction SilentlyContinue
+          Copy-Item GET_WEBULL_TOKENS.html packaging/windows/dist/BotifyTrades/ -ErrorAction SilentlyContinue
+          Compress-Archive -Path packaging/windows/dist/BotifyTrades -DestinationPath BotifyTrades-Windows.zip -Force
 
       - name: Upload to Release (skip artifact)
         if: startsWith(github.ref, 'refs/tags/v')
