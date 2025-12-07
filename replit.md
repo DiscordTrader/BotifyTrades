@@ -8,6 +8,8 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 **See `ARCHITECTURE.md` for full details.**
 
 ### Recent Changes (Dec 7, 2025)
+- **v2.1.7**: RSA private key moved to RSA_PRIVATE_KEY environment variable (security fix)
+- **v2.1.7**: Signed tokens now created using env var, server gracefully falls back if not set
 - **v2.1.6**: Refactored license_client.py into src/license/ package (types, crypto, cache, client, heartbeat modules)
 - **v2.1.6**: All modules under 500 lines for Pyarmor trial compatibility
 - **v2.1.6**: Backward-compatible wrapper maintains all existing imports
