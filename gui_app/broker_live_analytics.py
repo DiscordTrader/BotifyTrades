@@ -576,11 +576,22 @@ class BrokerLiveAnalytics:
         monthly_pnl = self.aggregate_period_pnl(daily_pnl, 'monthly')
         
         # Enrich positions and trades with source_display for UI badges
-        from .database import get_trade_source_display
+        from .database import get_trade_source_display, find_open_bto_trade, get_channel_by_id
         broker_config = self.BROKER_CONFIGS.get(broker_id, {})
         broker_name = broker_config.get('name', 'Broker')
         
-        # For broker-fetched data, create a "from broker" source display
+        # Map broker_id to broker name for database lookup
+        broker_name_map = {
+            'webull_live': 'Webull',
+            'webull_paper': 'Webull',
+            'alpaca_live': 'Alpaca',
+            'alpaca_paper': 'Alpaca',
+            'ibkr_live': 'IBKR',
+            'ibkr_paper': 'IBKR'
+        }
+        db_broker_name = broker_name_map.get(broker_id, broker_name)
+        
+        # For broker-fetched data, create a "from broker" source display (fallback)
         broker_source = {
             'name': broker_name,
             'type': 'sync',
@@ -590,8 +601,65 @@ class BrokerLiveAnalytics:
         }
         
         for pos in positions:
-            # Try to find matching trade in database for source info
-            pos['source_display'] = pos.get('source_display') or broker_source
+            # Try to find matching trade in database for source info (channel name)
+            try:
+                symbol = pos.get('symbol', '')
+                asset_type = pos.get('asset_type', 'stock')
+                strike = pos.get('strike')
+                expiry = pos.get('expiry')
+                call_put = pos.get('option_type', '')[0].upper() if pos.get('option_type') else None
+                
+                # Find matching open BTO trade in database
+                matching_trade = find_open_bto_trade(
+                    symbol=symbol,
+                    asset_type=asset_type,
+                    broker=db_broker_name,
+                    strike=strike,
+                    expiry=expiry,
+                    call_put=call_put
+                )
+                
+                if matching_trade:
+                    if matching_trade.get('channel_id'):
+                        # Get channel info for display
+                        channel_info = get_channel_by_id(matching_trade['channel_id'])
+                        if channel_info:
+                            channel_name = channel_info.get('name', 'Unknown')
+                            if channel_info.get('execute_enabled'):
+                                pos['source_display'] = {
+                                    'name': f'#{channel_name}',
+                                    'type': 'execute',
+                                    'color': 'blue',
+                                    'icon': '🎯',
+                                    'full_name': f'Executed from #{channel_name}'
+                                }
+                            elif channel_info.get('track_enabled'):
+                                pos['source_display'] = {
+                                    'name': f'#{channel_name}',
+                                    'type': 'track',
+                                    'color': 'purple',
+                                    'icon': '👁️',
+                                    'full_name': f'Tracked from #{channel_name}'
+                                }
+                            else:
+                                pos['source_display'] = {
+                                    'name': f'#{channel_name}',
+                                    'type': 'channel',
+                                    'color': 'green',
+                                    'icon': '#',
+                                    'full_name': f'From #{channel_name}'
+                                }
+                        else:
+                            # Channel not found, use trade source display
+                            pos['source_display'] = get_trade_source_display(matching_trade)
+                    else:
+                        # Trade exists but no channel - use proper source display (GUI, risk exit, etc.)
+                        pos['source_display'] = get_trade_source_display(matching_trade)
+                else:
+                    pos['source_display'] = broker_source
+            except Exception as e:
+                print(f"[ANALYTICS] Error matching position to channel: {e}")
+                pos['source_display'] = broker_source
             
         for trade in pnl_stats['closed_trades']:
             trade['source_display'] = trade.get('source_display') or broker_source

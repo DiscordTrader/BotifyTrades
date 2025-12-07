@@ -3,6 +3,7 @@
 {% block title %}{{ broker_name }} Analytics - BotifyTrades{% endblock %}
 
 {% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/channel-badge.css') }}">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
     :root {

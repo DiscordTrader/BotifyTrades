@@ -8,6 +8,9 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 **See `ARCHITECTURE.md` for full details.**
 
 ### Recent Changes (Dec 7, 2025)
+- **v2.1.8**: Dashboard positions now show Discord channel name that triggered each trade
+- **v2.1.8**: Channel source badges display in broker analytics (Webull Live, Alpaca Paper/Live, IBKR Live/Paper)
+- **v2.1.8**: Added green color variant to channel badge CSS for better visual distinction
 - **v2.1.7**: RSA private key moved to RSA_PRIVATE_KEY environment variable (security fix)
 - **v2.1.7**: Signed tokens now created using env var, server gracefully falls back if not set
 - **v2.1.6**: Refactored license_client.py into src/license/ package (types, crypto, cache, client, heartbeat modules)
