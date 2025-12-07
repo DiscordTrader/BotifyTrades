@@ -403,12 +403,16 @@ def get_license_stats() -> Dict:
         cursor.execute('SELECT COUNT(DISTINCT device_id) FROM device_activations')
         total_devices = cursor.fetchone()[0]
         
+        cursor.execute("SELECT COUNT(*) FROM licenses WHERE revoked = 0 AND expires_at > datetime('now') AND expires_at <= datetime('now', '+7 days')")
+        expiring_soon = cursor.fetchone()[0]
+        
         return {
             'total_licenses': total,
             'active_licenses': active,
             'expired_licenses': expired,
             'revoked_licenses': revoked,
-            'total_devices': total_devices
+            'total_devices': total_devices,
+            'expiring_soon': expiring_soon
         }
 
 
