@@ -657,6 +657,12 @@
                     <option value="IB">Interactive Brokers</option>
                 </select>
             </div>
+            <div class="broker-selector" style="margin-left: 16px;">
+                <label>Track In:</label>
+                <select class="broker-select" id="trackingChannelSelect">
+                    <option value="">Default (GUI Trades)</option>
+                </select>
+            </div>
         </div>
 
         <div class="options-table">
@@ -718,6 +724,33 @@
                 optionId: ''
             };
         }
+
+        // Load tracking channels on page load
+        async function loadTrackingChannels() {
+            try {
+                const response = await fetch('/api/channels');
+                const data = await response.json();
+                
+                const select = document.getElementById('trackingChannelSelect');
+                select.innerHTML = '<option value="">Default (GUI Trades)</option>';
+                
+                if (data && Array.isArray(data)) {
+                    data.forEach(channel => {
+                        if (channel.track_enabled || channel.execute_enabled) {
+                            const option = document.createElement('option');
+                            option.value = channel.id;
+                            option.textContent = channel.name;
+                            select.appendChild(option);
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading tracking channels:', error);
+            }
+        }
+
+        // Load channels when page loads
+        document.addEventListener('DOMContentLoaded', loadTrackingChannels);
 
         function setType(row, type) {
             rowData[row].type = type;
@@ -921,6 +954,7 @@
             const price = parseFloat(document.getElementById(`limitPrice${row}`).value);
             const qty = parseInt(document.getElementById(`qty${row}`).value);
             const broker = document.getElementById('brokerSelect').value;
+            const trackingChannel = document.getElementById('trackingChannelSelect').value;
 
             try {
                 const response = await fetch('/api/options/order', {
@@ -935,14 +969,16 @@
                         quantity: qty,
                         price: price,
                         option_id: data.optionId,
-                        broker: broker
+                        broker: broker,
+                        tracking_channel_id: trackingChannel || null
                     })
                 });
 
                 const result = await response.json();
 
                 if (result.success) {
-                    showToast(`${side} order placed: ${qty}x ${symbol} $${strike}${data.type[0]} @ $${price}`, 'success');
+                    const trackMsg = result.tracked ? ` (Tracked)` : '';
+                    showToast(`${side} order placed: ${qty}x ${symbol} $${strike}${data.type[0]} @ $${price}${trackMsg}`, 'success');
                 } else {
                     showToast(result.error || 'Order failed', 'error');
                 }

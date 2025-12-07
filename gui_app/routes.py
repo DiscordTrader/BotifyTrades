@@ -4915,7 +4915,8 @@ def register_routes(app):
             side = data.get('side', 'BUY').upper()  # BUY or SELL
             price = float(data.get('price', 0))
             option_id = data.get('option_id', '')  # REQUIRED: Webull option contract ID
-            selected_broker = data.get('broker', 'WEBULL').upper()  # NEW: Broker selection
+            selected_broker = data.get('broker', 'WEBULL').upper()  # Broker selection
+            tracking_channel_id = data.get('tracking_channel_id')  # Optional: Custom channel for tracking
             
             # Validate inputs
             if not all([symbol, strike, expiry, option_type, price, option_id]):
@@ -5046,17 +5047,34 @@ def register_routes(app):
                             from datetime import datetime
                             from gui_app.lot_matcher import get_matcher
                             
-                            # Get the GUI_EXEC channel ID for tracking
-                            gui_channel_id = db.get_gui_exec_channel_id()
-                            if not gui_channel_id:
-                                print("[OPTIONS API] Warning: GUI_EXEC channel not found, trade won't be tracked")
+                            # Use custom tracking channel or fall back to GUI_EXEC
+                            tracking_discord_id = None
+                            tracking_db_channel_id = None
+                            
+                            if tracking_channel_id:
+                                # User specified a custom tracking channel
+                                channel_info = db.get_channel_by_id(int(tracking_channel_id))
+                                if channel_info:
+                                    tracking_discord_id = channel_info.get('discord_channel_id', f'GUI_CHANNEL_{tracking_channel_id}')
+                                    tracking_db_channel_id = int(tracking_channel_id)
+                                    print(f"[OPTIONS API] Using custom tracking channel: {channel_info.get('name', tracking_channel_id)}")
+                                else:
+                                    print(f"[OPTIONS API] Warning: Channel {tracking_channel_id} not found, using GUI_EXEC")
+                            
+                            # Fall back to GUI_EXEC if no custom channel
+                            if not tracking_db_channel_id:
+                                tracking_db_channel_id = db.get_gui_exec_channel_id()
+                                tracking_discord_id = 'GUI_EXEC'
+                            
+                            if not tracking_db_channel_id:
+                                print("[OPTIONS API] Warning: No tracking channel found, trade won't be tracked")
                             else:
                                 # Generate a unique message ID for tracking
                                 msg_id = f"GUI_{datetime.now().strftime('%Y%m%d%H%M%S')}_{order_id}"
                                 
                                 # Save signal to database
                                 db.add_signal(
-                                    discord_channel_id='GUI_EXEC',
+                                    discord_channel_id=tracking_discord_id,
                                     message_id=msg_id,
                                     signal_type=action,
                                     symbol=symbol,
@@ -5071,7 +5089,7 @@ def register_routes(app):
                                 
                                 # Save trade record
                                 trade_data = {
-                                    'channel_id': 'GUI_EXEC',
+                                    'channel_id': tracking_discord_id,
                                     'message_id': msg_id,
                                     'direction': action,
                                     'asset_type': 'option',
@@ -5091,7 +5109,7 @@ def register_routes(app):
                                     'source': 'gui'
                                 }
                                 trade_id = db.add_trade(trade_data)
-                                print(f"[OPTIONS API] ✓ Trade #{trade_id} saved to database for tracking")
+                                print(f"[OPTIONS API] ✓ Trade #{trade_id} saved to database for tracking in channel {tracking_discord_id}")
                                 
                                 # Process through lot_matcher for PNL tracking
                                 matcher = get_matcher()
@@ -5104,8 +5122,8 @@ def register_routes(app):
                                     'strike': strike,
                                     'expiry': expiry,
                                     'opt_type': option_type[0],
-                                    'channel_id': 'GUI_EXEC',
-                                    'db_channel_id': gui_channel_id,
+                                    'channel_id': tracking_discord_id,
+                                    'db_channel_id': tracking_db_channel_id,
                                     'received_at': datetime.now(),
                                     'author_name': session.get('username', 'GUI User'),
                                     'user_id': user_id
@@ -5154,7 +5172,8 @@ def register_routes(app):
                             'trade_id': trade_id if 'trade_id' in dir() else None,
                             'broker': broker_name,
                             'message': f'Order placed on {broker_name}: {side} {quantity} {symbol} ${strike}{option_type[0]}',
-                            'tracked': gui_channel_id is not None if 'gui_channel_id' in dir() else False,
+                            'tracked': tracking_db_channel_id is not None if 'tracking_db_channel_id' in dir() else False,
+                            'tracking_channel': tracking_discord_id if 'tracking_discord_id' in dir() else None,
                             'risk_management': {
                                 'enabled': enable_risk_management,
                                 'stop_loss_price': stop_loss_price,
