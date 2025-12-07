@@ -70,7 +70,7 @@ jobs:
             Remove-Item -Recurse -Force src/pyarmor_runtime_000000
           }
 
-      - name: Prepare distribution
+      - name: Prepare and ZIP distribution
         shell: bash
         run: |
           mkdir -p packaging/windows/dist/BotifyTrades
@@ -80,13 +80,15 @@ jobs:
           cp config.ini.example packaging/windows/dist/BotifyTrades/ 2>/dev/null || true
           cp GET_DISCORD_TOKEN.html packaging/windows/dist/BotifyTrades/ 2>/dev/null || true
           cp GET_WEBULL_TOKENS.html packaging/windows/dist/BotifyTrades/ 2>/dev/null || true
+          cd packaging/windows/dist && zip -r ../../../BotifyTrades-Windows.zip BotifyTrades/
 
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload to Release (skip artifact)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
         with:
-          name: BotifyTrades-Windows
-          path: packaging/windows/dist/BotifyTrades/
-          retention-days: 30
+          files: BotifyTrades-Windows.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos:
     runs-on: macos-latest
@@ -145,7 +147,7 @@ jobs:
           rm -rf src_backup dist_obf
           rm -rf src/pyarmor_runtime_000000 2>/dev/null || true
 
-      - name: Prepare distribution
+      - name: Prepare and ZIP distribution
         run: |
           if [ -f "packaging/macos/dist/BotifyTrades" ]; then
             mkdir -p packaging/macos/dist/BotifyTrades_dist
@@ -162,13 +164,15 @@ jobs:
             rm -rf packaging/macos/dist/BotifyTrades 2>/dev/null || true
             mv packaging/macos/dist/BotifyTrades_dist packaging/macos/dist/BotifyTrades
           fi
+          cd packaging/macos/dist && zip -r ../../../BotifyTrades-macOS.zip BotifyTrades/
 
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload to Release (skip artifact)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
         with:
-          name: BotifyTrades-macOS
-          path: packaging/macos/dist/BotifyTrades/
-          retention-days: 30
+          files: BotifyTrades-macOS.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-linux:
     runs-on: ubuntu-latest
@@ -227,7 +231,7 @@ jobs:
           rm -rf src_backup dist_obf
           rm -rf src/pyarmor_runtime_000000 2>/dev/null || true
 
-      - name: Prepare distribution
+      - name: Prepare and ZIP distribution
         run: |
           if [ -f "packaging/linux/dist/BotifyTrades" ]; then
             mkdir -p packaging/linux/dist/BotifyTrades_dist
@@ -244,41 +248,13 @@ jobs:
             rm -rf packaging/linux/dist/BotifyTrades 2>/dev/null || true
             mv packaging/linux/dist/BotifyTrades_dist packaging/linux/dist/BotifyTrades
           fi
+          cd packaging/linux/dist && zip -r ../../../BotifyTrades-Linux.zip BotifyTrades/
 
-      - name: Upload Linux artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: BotifyTrades-Linux
-          path: packaging/linux/dist/BotifyTrades/
-          retention-days: 30
-
-  create-release:
-    needs: [build-windows, build-macos, build-linux]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Create ZIP archives
-        run: |
-          cd artifacts
-          zip -r BotifyTrades-Windows.zip BotifyTrades-Windows/
-          zip -r BotifyTrades-macOS.zip BotifyTrades-macOS/
-          zip -r BotifyTrades-Linux.zip BotifyTrades-Linux/
-
-      - name: Create Release
+      - name: Upload to Release (skip artifact)
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            artifacts/BotifyTrades-Windows.zip
-            artifacts/BotifyTrades-macOS.zip
-            artifacts/BotifyTrades-Linux.zip
+          files: BotifyTrades-Linux.zip
           generate_release_notes: true
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
