@@ -11,6 +11,8 @@ NO trading functionality - that belongs in the User Bot Build.
 
 import sqlite3
 import os
+import json
+import base64
 import hashlib
 import secrets
 from datetime import datetime, timedelta
@@ -18,6 +20,82 @@ from typing import Optional, Dict, List, Any
 from contextlib import contextmanager
 
 LICENSE_DB_PATH = 'license_server.db'
+
+DEFAULT_OFFLINE_GRACE_HOURS = 48
+
+
+def get_rsa_private_key() -> Optional[str]:
+    """Get RSA private key from environment variable.
+    
+    SECURITY: The private key must be stored in RSA_PRIVATE_KEY environment variable.
+    Never hardcode the private key in source code.
+    """
+    key = os.environ.get('RSA_PRIVATE_KEY')
+    if not key:
+        print("[LICENSE-SERVER] WARNING: RSA_PRIVATE_KEY not set - signed tokens disabled")
+        return None
+    
+    if '\\n' in key:
+        key = key.replace('\\n', '\n')
+    
+    return key
+
+
+def create_signed_token(license_key: str, machine_id: str, expires_at: str, 
+                       license_type: str, grace_hours: int = None) -> Optional[str]:
+    """Create an RSA-signed token for offline validation.
+    
+    Token format: base64(payload).base64(signature)
+    Requires RSA_PRIVATE_KEY environment variable to be set.
+    """
+    try:
+        from cryptography.hazmat.primitives import serialization, hashes
+        from cryptography.hazmat.primitives.asymmetric import padding
+        from cryptography.hazmat.backends import default_backend
+        
+        if grace_hours is None:
+            grace_hours = DEFAULT_OFFLINE_GRACE_HOURS
+        
+        private_key_pem = get_rsa_private_key()
+        if not private_key_pem:
+            return None
+        
+        private_key = serialization.load_pem_private_key(
+            private_key_pem.encode(),
+            password=None,
+            backend=default_backend()
+        )
+        
+        grace_expires = datetime.now() + timedelta(hours=grace_hours)
+        
+        payload = {
+            'license_key': license_key,
+            'machine_id': machine_id,
+            'expires': expires_at,
+            'license_type': license_type,
+            'offline_grace_expires': grace_expires.isoformat(),
+            'issued_at': datetime.now().isoformat()
+        }
+        
+        payload_bytes = json.dumps(payload, sort_keys=True).encode('utf-8')
+        
+        signature = private_key.sign(
+            payload_bytes,
+            padding.PKCS1v15(),
+            hashes.SHA256()
+        )
+        
+        payload_b64 = base64.urlsafe_b64encode(payload_bytes).decode('utf-8').rstrip('=')
+        signature_b64 = base64.urlsafe_b64encode(signature).decode('utf-8').rstrip('=')
+        
+        return f"{payload_b64}.{signature_b64}"
+        
+    except ImportError:
+        print("[LICENSE-SERVER] Warning: cryptography not available - signed tokens disabled")
+        return None
+    except Exception as e:
+        print(f"[LICENSE-SERVER] Error creating signed token: {e}")
+        return None
 
 
 @contextmanager
@@ -517,7 +595,7 @@ def activate_license(license_key: str, machine_id: str, machine_info: Dict = Non
 
 
 def validate_license_for_client(license_key: str, machine_id: str) -> Dict:
-    """Validate a license for client - returns client-compatible response"""
+    """Validate a license for client - returns client-compatible response with signed token"""
     license_data = get_license(license_key)
     
     if not license_data:
@@ -540,16 +618,27 @@ def validate_license_for_client(license_key: str, machine_id: str) -> Dict:
             )
     
     days_remaining = 0
-    if license_data['expires_at']:
-        expires = datetime.fromisoformat(license_data['expires_at'])
+    expires_at = license_data['expires_at']
+    if expires_at:
+        expires = datetime.fromisoformat(expires_at)
         days_remaining = max(0, (expires - datetime.now()).days)
+    
+    signed_token = None
+    if machine_id:
+        signed_token = create_signed_token(
+            license_key=license_key,
+            machine_id=machine_id,
+            expires_at=expires_at,
+            license_type=license_data['license_type']
+        )
     
     return {
         'success': True,
         'is_valid': True,
         'license_type': license_data['license_type'],
         'days_remaining': days_remaining,
-        'expires': license_data['expires_at']
+        'expires': expires_at,
+        'signed_token': signed_token
     }
 
 

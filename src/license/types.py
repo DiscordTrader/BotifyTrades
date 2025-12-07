@@ -25,13 +25,13 @@ LICENSE_SERVER_URLS = [
 # RSA Public Key for verifying server-signed tokens
 # This key is embedded in the client - only the server has the private key
 RSA_PUBLIC_KEY_PEM = """-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAufORe8XZBuHWF3YucVf9
-kKtvvS9qDW781npsrQ2Z5zjgt58Ug1oDhqVVB6e+JmABABjDXiRvw5iavCtmf1UJ
-vJwBoesMKac3mSOATlqPsnkWfWopVYi4sA/lQarJsUTSJYVgajibTmOOvj/2UozX
-Z9pKHD/3bTGA/DNgJjp+KVSTSdohxYORur90taKGnfrpZqHOuOyVRqkdt3TULFmH
-JrUZ0AaSZYimK2NrZqsbx3TnNPCDGW635iB6A0q+bwGYLMv7yavLmjzrvKsY65YX
-MPjAu364HaBXznRaW5RcBsOXaM02OOdP4gH79xrF4GjYrRJzLVsYJu4kEQaSCTwz
-BwIDAQAB
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA9xawPYXSBBAYFbA1FHGa
+yh3w9kdrulymcC8eGayVlLNaObI0yx8TUaftxTpjHi5g+Bg/RLnHw+tNdxiktJv2
+KYdiJO19CNx1B7yw6zGPU67vxEQC6xINVoUjaEmC2T7ePcTpXEwX0ioDYPn6MMOh
+DqZlBzy+sUU/3qr7KBXFMlCMrNsAO5nhj4UIhYavwGx5tlyO4NdtW7UIjZJDweFd
++o6H+/DJo9khP4MyyTJMYEfJBgperSd4LkE4PIOs6vp6EGtT7a38AcYJyLdXVeTF
+PtTq1yAH5XHPKkDBo2xzaGWC1zJdHNd9Fg2FET4wnoDjH0H7E8vSwcaS1yA9W2b3
+nQIDAQAB
 -----END PUBLIC KEY-----"""
 
 # Offline grace period configuration
