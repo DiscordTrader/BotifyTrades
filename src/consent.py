@@ -16,147 +16,206 @@ import os
 import sys
 from datetime import datetime
 
-CONSENT_VERSION = "1.0"
+CONSENT_VERSION = "2.0"
 
 AGREEMENT_TEXT = """
 USER AGREEMENT & LIABILITY WAIVER
-(For Discord Automation Bot, Webull API Integration & Auto-Trading Tool)
+(For Discord Automation Bot, Brokerage API Integration & Auto-Trading Tool)
 
+Version: 2.0 - Strong Legal Edition
 Effective Date: December 2024
 
+================================================================================
 1. ACKNOWLEDGMENT OF RISK
-By installing, accessing, or using this software/application/bot ("Software"), you expressly acknowledge and agree that:
-(a) Trading involves significant financial risk, including the possible loss of your entire investment.
-(b) Automated trading may malfunction, execute trades incorrectly, or fail to execute trades.
-(c) You alone are choosing to use this Software for trading purposes.
-(d) You accept full responsibility for all actions taken by this Software.
-The developer, creator, owner, or distributor ("Developer") assumes NO responsibility for your trading activity.
+================================================================================
+By using this Software, you acknowledge and agree that:
 
-2. NO FINANCIAL ADVICE - NO FIDUCIARY DUTY
-You understand and agree that:
-- The Software is not a financial advisor.
-- The Software does not provide investment recommendations.
-- The Software cannot and does not guarantee any trading results.
-- The Developer is not acting as your broker, advisor, agent, or fiduciary.
-Any trading decision you make is 100% your decision and your responsibility.
+• Trading involves substantial financial risk, including the loss of your entire investment.
+• Automated trading systems may malfunction, misinterpret data, execute incorrect trades, execute duplicate trades, or fail to execute trades.
+• You alone decide whether to use this Software for trading purposes.
+• You assume full responsibility for all actions taken by this Software.
+• The Developer assumes no responsibility for your trading results, losses, or decisions.
 
-3. "AS-IS" AND "AS-AVAILABLE" - NO WARRANTY
-The Software is provided strictly "AS-IS," "AS-AVAILABLE," and WITHOUT ANY WARRANTY OF ANY KIND.
-This includes (but is not limited to):
-- No warranty of performance
-- No warranty of accuracy
-- No warranty of profitability
-- No warranty of uptime
-- No warranty of correct API behavior
-- No guarantee of correct or timely order execution
-- No guarantee of functioning risk management
-You accept the Software with all faults, known and unknown.
+================================================================================
+2. NO FINANCIAL ADVICE — NO FIDUCIARY DUTY
+================================================================================
+You acknowledge and agree that:
 
+• This Software is not a financial advisor.
+• It does not provide investment recommendations, advice, or suitability analysis.
+• The Developer is not your broker, agent, fiduciary, or representative.
+• All trading decisions are entirely your own and at your own risk.
+• No profitability is guaranteed or implied.
+
+================================================================================
+3. "AS-IS" AND "AS-AVAILABLE" — NO WARRANTY
+================================================================================
+The Software is provided strictly on an AS-IS and AS-AVAILABLE basis.
+
+The Developer makes no warranties, express or implied, including but not limited to:
+• Performance or profitability
+• Accuracy or reliability
+• Correct API behavior
+• Timely or correct order execution
+• Functioning of risk management features
+• Uptime, availability, or continued support
+
+You accept the Software with all faults, defects, and errors, known or unknown.
+
+================================================================================
 4. TOTAL WAIVER OF LIABILITY
-To the maximum extent permitted by law, you agree that the Developer:
-- Is NOT liable for any direct damages
-- Is NOT liable for any indirect damages
-- Is NOT liable for incidental or consequential damages
-- Is NOT liable for financial losses of any kind
-- Is NOT liable for lost profits
-- Is NOT liable for missed, late, duplicated, or incorrect trades
-- Is NOT liable for account liquidation or margin calls
-- Is NOT liable for trading losses
-- Is NOT liable for emotional or psychological damages
-- Is NOT liable for any "loss of opportunity"
-- Is NOT liable for technical failures, bugs, or crashes
-- Is NOT liable for incorrect market data or API errors
-You hereby release the Developer from ALL claims, known or unknown, arising from your use of this Software.
+================================================================================
+To the maximum extent permitted by law, the Developer shall NOT be liable for:
 
-5. YOU ASSUME ALL FINANCIAL, PERSONAL & TECHNICAL RISKS
-This includes risks such as:
-- Market volatility
-- Slippage
-- Incorrect parsing of signals
-- Discord message delays
-- Self-bot behavior being blocked
-- API rate limits
-- Broker downtime
-- Webull API changes
-- Loss of API access
-- Loss of funds
-- Loss of entire account
-- Bot misinterpretation of trading signals
-- Execution at unexpected prices
-- Delayed or missing notifications
-You accept ALL risks unconditionally.
+• Direct, indirect, incidental, or consequential damages
+• Financial losses, lost profits, account liquidation, margin calls
+• Missed, incorrect, duplicate, late, or unintended trades
+• Market losses or volatility impacts
+• Emotional, psychological, or stress-related damages
+• Technical failures, bugs, crashes, or software malfunctions
+• Broker/API outages, errors, or data inaccuracies
 
+You expressly waive any legal right to seek damages or compensation.
+
+================================================================================
+5. YOU ASSUME ALL RISKS
+================================================================================
+You assume all risks associated with automated trading, including:
+
+• Market volatility, slippage, spreads
+• Incorrect parsing of Discord messages or signals
+• Message delays, API rate limits, and Discord blocks
+• Broker/API downtime, API changes, revoked access
+• Trading losses, including total loss of account value
+• Bot misinterpretation, failed trades, or unexpected behavior
+
+================================================================================
 6. DISCORD SELF-BOT & POLICY COMPLIANCE
-This Software may use:
-- Automated message reading
-- Self-bot functionality
-- Automated Discord interactions
-You understand:
-- Self-bots may violate Discord Terms of Service.
-- You alone are responsible for compliance with Discord ToS.
-- The Developer is not responsible for:
-  - Discord account bans
-  - Suspensions
-  - Server bans
-  - Enforcement actions
-You use this Software on Discord at your own risk.
+================================================================================
+This Software may operate in a manner considered a self-bot, which may violate Discord's Terms of Service.
 
-7. BROKERAGE & API COMPLIANCE (WEBULL, ALPACA, ETC.)
-The Software may interact with brokerage APIs such as Webull, Alpaca, or others.
-You acknowledge that:
-- The Developer is not affiliated with any broker.
-- The Developer does not guarantee API availability or accuracy.
-- You alone are responsible for compliance with all brokerage rules, regulations, and policies.
-The Developer is not liable for:
-- API outages
-- API errors
-- Order failures
-- Mis-executed trades
-- Brokerage account termination
+• You are 100% responsible for ensuring compliance with Discord policies.
+• The Developer is not responsible for account warnings, suspensions, bans, or loss of access.
 
-8. CREDENTIALS STORED LOCALLY - NOT ACCESSED BY DEVELOPER
-All credentials (e.g., Discord token, API keys, Webull login) are stored locally on your machine.
-The Developer:
-- Does not store any credentials
-- Does not have access to your accounts
-- Does not collect personal data
-- Does not control your trades
-You are fully responsible for securing your system.
+================================================================================
+7. BROKERAGE & API COMPLIANCE
+================================================================================
+• The Developer is not affiliated with any brokerage or financial institution.
+• The Software does not guarantee API availability, accuracy, or performance.
+• You are solely responsible for complying with all brokerage rules, restrictions, and regulations.
+• The Developer is not responsible for loss of API access, rejected orders, or brokerage enforcement actions.
 
-9. INDEMNIFICATION
-You agree to indemnify, defend, and hold harmless the Developer from any claims, losses, damages, liabilities, legal costs, or expenses arising out of:
-- Your use of this Software
-- Your trading activities
-- Your violation of Discord or brokerage policies
-- Your use of self-bot functionalities
-- Any financial losses you incur
-- Any misuse or unauthorized modification of this Software
+================================================================================
+8. LICENSE SERVER, HEARTBEAT VALIDATION, AND MACHINE ID BINDING
+================================================================================
+By using this Software, you acknowledge and agree to the following:
 
-10. NO SUING / NO CLAIMS / NO DISPUTES
-By using this Software, you agree that:
-- You waive your right to sue the Developer for any reason whatsoever.
-- You waive your right to make any financial or legal claims.
-- You waive your right to demand compensation of any kind.
-This agreement is binding and enforceable to the fullest extent permitted by law.
+8.1 License Validation
+----------------------
+This Software requires communication with a remote License Server to:
+• Verify subscription or license status
+• Validate authenticity of your license key
+• Confirm that the license is not shared or misused
+• Enforce usage limits and subscription terms
 
-11. TERMINATION OF ACCESS
-The Developer may modify, suspend, disable, or terminate the Software at any time, without notice, and without liability.
+8.2 Heartbeat Check
+-------------------
+The Software regularly sends a heartbeat request to the License Server to:
+• Validate an active license
+• Confirm subscription status
+• Detect unauthorized use or tampering
+• Prevent use of expired or invalid licenses
 
-12. IF YOU DO NOT AGREE - DO NOT USE THIS SOFTWARE
-If you do not accept all terms above:
-- You must exit the application immediately
-- You must delete all files associated with this Software
-- You must stop using all functionality immediately
-Continuing to use the Software constitutes full legal acceptance.
+If the Software cannot reach the License Server, your license may be:
+• Temporarily suspended
+• Restricted
+• Disabled until revalidation occurs
 
-13. FINAL ACKNOWLEDGMENT
-By installing, running, or using this Software, you affirm that:
-- You read and understood this entire agreement
-- You fully accept all risks associated with automated trading
-- You acknowledge the Developer is not liable for anything
-- You waive all legal rights to sue the Developer
-- You voluntarily choose to proceed at your own risk
-- You are solely responsible for all consequences
+8.3 Machine ID Binding
+----------------------
+To prevent unauthorized license sharing:
+• Your license may be bound to a unique hardware identifier (Machine ID).
+• This Machine ID contains no personal data and is used only for anti-piracy and authentication.
+• Changing hardware or attempting to spoof the Machine ID may invalidate the license.
+
+8.4 Remote Disablement
+----------------------
+The Developer reserves the right to revoke, suspend, disable, block, or terminate any license that is:
+• Expired
+• Refunded or charged back
+• Shared among unauthorized users
+• Used on multiple machines without permission
+• Tampered with or bypassed
+
+8.5 Anti-Tampering
+------------------
+You agree not to:
+• Reverse engineer the Software
+• Modify or patch any executable or script
+• Bypass the heartbeat or license checks
+• Spoof Machine ID
+• Interfere with server communication
+
+Violation results in immediate termination of license and no refund.
+
+================================================================================
+9. CREDENTIALS STORED LOCALLY
+================================================================================
+• All credentials (Discord token, broker keys, passwords) are stored only on the user's machine.
+• The Developer does not store, access, or control any brokerage or Discord accounts.
+• You are fully responsible for securing your system, files, and environment.
+
+================================================================================
+10. INDEMNIFICATION
+================================================================================
+You agree to indemnify, defend, and hold harmless the Developer from any claims, losses, damages, liabilities, or expenses arising from:
+
+• Use or misuse of the Software
+• Trading losses
+• API or brokerage behavior
+• Discord account actions
+• Violation of this Agreement
+
+================================================================================
+11. NO SUING / NO CLAIMS / NO DISPUTES
+================================================================================
+You waive all rights to:
+• Sue the Developer
+• Make financial or legal claims
+• Demand refunds or compensation
+• File disputes or chargebacks for any reason
+
+All sales are final.
+
+================================================================================
+12. TERMINATION OF ACCESS
+================================================================================
+The Developer may, at any time and without notice, modify, suspend, disable, or terminate any part of the Software or licensing system, including:
+
+• Heartbeat servers
+• License validation
+• API integrations
+• Features and functionality
+
+================================================================================
+13. IF YOU DO NOT AGREE — DO NOT USE
+================================================================================
+If you disagree with any part of this Agreement:
+• You must stop using the Software immediately
+• Delete all files and uninstall the application
+
+================================================================================
+14. FINAL ACKNOWLEDGMENT
+================================================================================
+By installing, accessing, or using the Software, you affirm that you:
+
+• Read and fully understand this Agreement
+• Accept all risks of automated trading
+• Acknowledge the Developer is not liable for anything
+• Understand the Software may be disabled at any time
+• Accept license-server, Machine ID, and heartbeat requirements
+• Voluntarily choose to proceed at your own risk
+• Are solely responsible for all consequences
 """
 
 
@@ -175,8 +234,8 @@ def get_consent_status():
         from gui_app import database as db
         
         accepted = db.get_setting('user_consent_accepted', 'false')
-        version = db.get_setting('user_consent_version', None)
-        accepted_at = db.get_setting('user_consent_timestamp', None)
+        version = db.get_setting('user_consent_version', '')
+        accepted_at = db.get_setting('user_consent_timestamp', '')
         
         is_accepted = accepted.lower() == 'true' and version == CONSENT_VERSION
         
@@ -230,8 +289,8 @@ def revoke_consent():
         from gui_app import database as db
         
         db.save_setting('user_consent_accepted', 'false')
-        db.save_setting('user_consent_version', None)
-        db.save_setting('user_consent_timestamp', None)
+        db.save_setting('user_consent_version', '')
+        db.save_setting('user_consent_timestamp', '')
         
         print("[CONSENT] User consent revoked")
         return True

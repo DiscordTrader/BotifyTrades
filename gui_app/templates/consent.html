@@ -25,7 +25,7 @@
         }
         
         .consent-container {
-            max-width: 720px;
+            max-width: 800px;
             width: 100%;
             background: #1e293b;
             border-radius: 16px;
@@ -71,9 +71,19 @@
             margin-top: 4px;
         }
         
+        .version-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            color: #fff;
+            margin-top: 8px;
+        }
+        
         .consent-body {
             padding: 32px;
-            max-height: 400px;
+            max-height: 500px;
             overflow-y: auto;
         }
         
@@ -132,8 +142,8 @@
         }
         
         .section-title .num {
-            width: 24px;
-            height: 24px;
+            width: 28px;
+            height: 28px;
             background: #334155;
             border-radius: 6px;
             display: flex;
@@ -142,6 +152,12 @@
             font-size: 12px;
             font-weight: 600;
             color: #94a3b8;
+            flex-shrink: 0;
+        }
+        
+        .section-title .num.special {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: #fff;
         }
         
         .section-content {
@@ -157,6 +173,11 @@
         
         .section-content.danger {
             border-left-color: #ef4444;
+        }
+        
+        .section-content.special {
+            border-left-color: #8b5cf6;
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(15, 23, 42, 1) 100%);
         }
         
         .section-content p {
@@ -182,6 +203,22 @@
             margin-bottom: 4px;
         }
         
+        .subsection {
+            margin-top: 12px;
+            padding: 12px;
+            background: rgba(51, 65, 85, 0.5);
+            border-radius: 8px;
+        }
+        
+        .subsection-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #a78bfa;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
         .highlight {
             color: #fbbf24;
             font-weight: 600;
@@ -189,6 +226,11 @@
         
         .highlight-red {
             color: #f87171;
+            font-weight: 600;
+        }
+        
+        .highlight-purple {
+            color: #a78bfa;
             font-weight: 600;
         }
         
@@ -399,103 +441,280 @@
             </div>
             <h1>BotifyTrades</h1>
             <p>User Agreement & Risk Disclosure</p>
+            <span class="version-badge">Version 2.0 - Strong Legal Edition</span>
         </div>
         
         <div class="consent-body">
             <div class="alert-banner">
-                <span class="icon">⚠️</span>
+                <span class="icon">&#9888;</span>
                 <span class="text">Please read carefully. Trading involves significant financial risk including total loss of investment.</span>
             </div>
             
             <div class="section">
                 <div class="section-title">
                     <span class="num">1</span>
-                    Risk Acknowledgment
+                    Acknowledgment of Risk
                 </div>
                 <div class="section-content danger">
-                    <p>By using this software, you acknowledge:</p>
+                    <p>By using this Software, you acknowledge and agree:</p>
                     <ul>
-                        <li>Trading involves significant financial risk, including total loss of investment</li>
-                        <li>Automated trading may malfunction or execute trades incorrectly</li>
-                        <li>You accept full responsibility for all actions taken by this software</li>
+                        <li>Trading involves substantial financial risk, including the loss of your entire investment</li>
+                        <li>Automated trading systems may malfunction, misinterpret data, execute incorrect or duplicate trades, or fail to execute</li>
+                        <li>You alone decide whether to use this Software for trading purposes</li>
+                        <li>You assume full responsibility for all actions taken by this Software</li>
                     </ul>
-                    <p class="highlight-red">The developer assumes NO responsibility for your trading activity.</p>
+                    <p class="highlight-red">The Developer assumes NO responsibility for your trading results, losses, or decisions.</p>
                 </div>
             </div>
             
             <div class="section">
                 <div class="section-title">
                     <span class="num">2</span>
-                    No Financial Advice
+                    No Financial Advice - No Fiduciary Duty
                 </div>
                 <div class="section-content">
-                    <p>This software does not provide investment recommendations or guarantee any trading results. The developer is not your broker, advisor, or fiduciary. <strong>All trading decisions are 100% your responsibility.</strong></p>
+                    <p>You acknowledge and agree that:</p>
+                    <ul>
+                        <li>This Software is not a financial advisor</li>
+                        <li>It does not provide investment recommendations, advice, or suitability analysis</li>
+                        <li>The Developer is not your broker, agent, fiduciary, or representative</li>
+                        <li>All trading decisions are entirely your own and at your own risk</li>
+                        <li>No profitability is guaranteed or implied</li>
+                    </ul>
                 </div>
             </div>
             
             <div class="section">
                 <div class="section-title">
                     <span class="num">3</span>
-                    No Warranty
+                    "AS-IS" and "AS-AVAILABLE" - No Warranty
                 </div>
                 <div class="section-content">
-                    <p>The software is provided "AS-IS" without any warranty of performance, accuracy, uptime, or profitability. You accept the software with all faults, known and unknown.</p>
+                    <p>The Software is provided strictly on an <strong>AS-IS</strong> and <strong>AS-AVAILABLE</strong> basis. The Developer makes no warranties, express or implied, including:</p>
+                    <ul>
+                        <li>Performance or profitability</li>
+                        <li>Accuracy or reliability</li>
+                        <li>Correct API behavior or timely order execution</li>
+                        <li>Functioning of risk management features</li>
+                        <li>Uptime, availability, or continued support</li>
+                    </ul>
+                    <p>You accept the Software with all faults, defects, and errors, known or unknown.</p>
                 </div>
             </div>
             
             <div class="section">
                 <div class="section-title">
                     <span class="num">4</span>
-                    Liability Waiver
+                    Total Waiver of Liability
                 </div>
                 <div class="section-content warning">
-                    <p>The developer is NOT liable for:</p>
+                    <p>To the maximum extent permitted by law, the Developer shall NOT be liable for:</p>
                     <ul>
-                        <li>Financial losses, lost profits, or missed trades</li>
-                        <li>Account liquidation, margin calls, or incorrect trades</li>
-                        <li>Technical failures, bugs, crashes, or API errors</li>
-                        <li>Any direct, indirect, or consequential damages</li>
+                        <li>Direct, indirect, incidental, or consequential damages</li>
+                        <li>Financial losses, lost profits, account liquidation, margin calls</li>
+                        <li>Missed, incorrect, duplicate, late, or unintended trades</li>
+                        <li>Market losses or volatility impacts</li>
+                        <li>Emotional, psychological, or stress-related damages</li>
+                        <li>Technical failures, bugs, crashes, or software malfunctions</li>
+                        <li>Broker/API outages, errors, or data inaccuracies</li>
                     </ul>
-                    <p class="highlight">You release the developer from ALL claims arising from your use of this software.</p>
+                    <p class="highlight">You expressly waive any legal right to seek damages or compensation.</p>
                 </div>
             </div>
             
             <div class="section">
                 <div class="section-title">
                     <span class="num">5</span>
-                    Discord & Broker Compliance
+                    You Assume All Risks
                 </div>
                 <div class="section-content">
-                    <p>Self-bots may violate Discord Terms of Service. You are solely responsible for compliance with Discord ToS, brokerage rules, and all applicable regulations. The developer is not affiliated with any broker.</p>
+                    <p>You assume all risks associated with automated trading, including:</p>
+                    <ul>
+                        <li>Market volatility, slippage, spreads</li>
+                        <li>Incorrect parsing of Discord messages or signals</li>
+                        <li>Message delays, API rate limits, and Discord blocks</li>
+                        <li>Broker/API downtime, API changes, revoked access</li>
+                        <li>Trading losses, including total loss of account value</li>
+                        <li>Bot misinterpretation, failed trades, or unexpected behavior</li>
+                    </ul>
                 </div>
             </div>
             
             <div class="section">
                 <div class="section-title">
                     <span class="num">6</span>
-                    Local Data Storage
+                    Discord Self-Bot & Policy Compliance
                 </div>
                 <div class="section-content">
-                    <p>All credentials (Discord token, API keys, login info) are stored locally on your machine. The developer does not store, access, or control your accounts or trades.</p>
+                    <p>This Software may operate in a manner considered a self-bot, which may violate Discord's Terms of Service.</p>
+                    <ul>
+                        <li>You are 100% responsible for ensuring compliance with Discord policies</li>
+                        <li>The Developer is not responsible for account warnings, suspensions, bans, or loss of access</li>
+                    </ul>
                 </div>
             </div>
             
             <div class="section">
                 <div class="section-title">
                     <span class="num">7</span>
-                    No Legal Claims
+                    Brokerage & API Compliance
+                </div>
+                <div class="section-content">
+                    <ul>
+                        <li>The Developer is not affiliated with any brokerage or financial institution</li>
+                        <li>The Software does not guarantee API availability, accuracy, or performance</li>
+                        <li>You are solely responsible for complying with all brokerage rules, restrictions, and regulations</li>
+                        <li>The Developer is not responsible for loss of API access, rejected orders, or brokerage enforcement actions</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num special">8</span>
+                    License Server, Heartbeat Validation & Machine ID Binding
+                </div>
+                <div class="section-content special">
+                    <p class="highlight-purple">By using this Software, you acknowledge and agree to the following licensing requirements:</p>
+                    
+                    <div class="subsection">
+                        <div class="subsection-title">8.1 License Validation</div>
+                        <p>This Software requires communication with a remote License Server to:</p>
+                        <ul>
+                            <li>Verify subscription or license status</li>
+                            <li>Validate authenticity of your license key</li>
+                            <li>Confirm that the license is not shared or misused</li>
+                            <li>Enforce usage limits and subscription terms</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="subsection">
+                        <div class="subsection-title">8.2 Heartbeat Check</div>
+                        <p>The Software regularly sends a heartbeat request to the License Server to validate an active license, confirm subscription status, detect unauthorized use, and prevent use of expired licenses.</p>
+                        <p class="highlight">If the Software cannot reach the License Server, your license may be temporarily suspended, restricted, or disabled until revalidation occurs.</p>
+                    </div>
+                    
+                    <div class="subsection">
+                        <div class="subsection-title">8.3 Machine ID Binding</div>
+                        <p>To prevent unauthorized license sharing:</p>
+                        <ul>
+                            <li>Your license may be bound to a unique hardware identifier (Machine ID)</li>
+                            <li>This Machine ID contains no personal data and is used only for anti-piracy and authentication</li>
+                            <li>Changing hardware or attempting to spoof the Machine ID may invalidate the license</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="subsection">
+                        <div class="subsection-title">8.4 Remote Disablement</div>
+                        <p>The Developer reserves the right to revoke, suspend, disable, block, or terminate any license that is:</p>
+                        <ul>
+                            <li>Expired, refunded, or charged back</li>
+                            <li>Shared among unauthorized users</li>
+                            <li>Used on multiple machines without permission</li>
+                            <li>Tampered with or bypassed</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="subsection">
+                        <div class="subsection-title">8.5 Anti-Tampering</div>
+                        <p>You agree NOT to:</p>
+                        <ul>
+                            <li>Reverse engineer the Software</li>
+                            <li>Modify or patch any executable or script</li>
+                            <li>Bypass the heartbeat or license checks</li>
+                            <li>Spoof Machine ID or interfere with server communication</li>
+                        </ul>
+                        <p class="highlight-red">Violation results in immediate termination of license and no refund.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">9</span>
+                    Credentials Stored Locally
+                </div>
+                <div class="section-content">
+                    <ul>
+                        <li>All credentials (Discord token, broker keys, passwords) are stored only on the user's machine</li>
+                        <li>The Developer does not store, access, or control any brokerage or Discord accounts</li>
+                        <li>You are fully responsible for securing your system, files, and environment</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">10</span>
+                    Indemnification
+                </div>
+                <div class="section-content">
+                    <p>You agree to indemnify, defend, and hold harmless the Developer from any claims, losses, damages, liabilities, or expenses arising from:</p>
+                    <ul>
+                        <li>Use or misuse of the Software</li>
+                        <li>Trading losses</li>
+                        <li>API or brokerage behavior</li>
+                        <li>Discord account actions</li>
+                        <li>Violation of this Agreement</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">11</span>
+                    No Suing / No Claims / No Disputes
                 </div>
                 <div class="section-content danger">
-                    <p>By using this software, you waive your right to sue the developer, make financial claims, or demand compensation of any kind. This agreement is binding to the fullest extent permitted by law.</p>
+                    <p>You waive all rights to:</p>
+                    <ul>
+                        <li>Sue the Developer</li>
+                        <li>Make financial or legal claims</li>
+                        <li>Demand refunds or compensation</li>
+                        <li>File disputes or chargebacks for any reason</li>
+                    </ul>
+                    <p class="highlight-red">All sales are final.</p>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">12</span>
+                    Termination of Access
+                </div>
+                <div class="section-content">
+                    <p>The Developer may, at any time and without notice, modify, suspend, disable, or terminate any part of the Software or licensing system, including:</p>
+                    <ul>
+                        <li>Heartbeat servers and license validation</li>
+                        <li>API integrations</li>
+                        <li>Features and functionality</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <span class="num">13</span>
+                    If You Do Not Agree - Do Not Use
+                </div>
+                <div class="section-content">
+                    <p>If you disagree with any part of this Agreement:</p>
+                    <ul>
+                        <li>You must stop using the Software immediately</li>
+                        <li>Delete all files and uninstall the application</li>
+                    </ul>
                 </div>
             </div>
             
             <div class="final-box">
-                <h3>By Clicking "I Agree" You Confirm:</h3>
+                <h3>By Clicking "I Agree" You Affirm:</h3>
                 <ul>
-                    <li>You have read and understood this entire agreement</li>
+                    <li>You have read and fully understand this Agreement</li>
                     <li>You accept all risks of automated trading</li>
-                    <li>You waive all legal rights to sue the developer</li>
+                    <li>You acknowledge the Developer is not liable for anything</li>
+                    <li>You understand the Software may be disabled at any time</li>
+                    <li>You accept license-server, Machine ID, and heartbeat requirements</li>
+                    <li>You voluntarily choose to proceed at your own risk</li>
                     <li>You are solely responsible for all consequences</li>
                 </ul>
             </div>
@@ -510,7 +729,7 @@
                             <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
                     </div>
-                    <span class="checkbox-label">I have read, understood, and agree to ALL terms in the User Agreement & Liability Waiver</span>
+                    <span class="checkbox-label">I have read, understood, and agree to ALL terms in the User Agreement, License Terms & Liability Waiver</span>
                 </div>
             </label>
         </div>
