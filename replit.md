@@ -8,6 +8,12 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 **See `ARCHITECTURE.md` for full details.**
 
 ### Recent Changes (Dec 7, 2025)
+- **v2.1.12**: Fixed position sizing for options - now executes when buying power can afford 1 contract even if % budget cannot
+- **v2.1.12**: Position size fallback to buying power when percentage budget is too small for minimum order
+- **v2.1.11**: Fix License diagnostic: use validate_license() instead of legacy is_valid
+- **v2.1.11**: Fix Database diagnostic: correct table name users -> app_users
+- **v2.1.11**: Fix Broker pages: early credential check prevents hanging
+- **v2.1.11**: Fix Option chain: load credentials from database, standalone broker/loop
 - **v2.1.10**: License validation now contacts server FIRST for fresh expiry data
 - **v2.1.10**: Fixes license extensions not reflecting (was using stale cached data)
 - **v2.1.9**: Fixed upgrade system database path detection (searches exe dir, cwd, env var)

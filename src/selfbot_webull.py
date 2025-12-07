@@ -5679,10 +5679,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     effective_bp = options_buying_power if options_buying_power else buying_power
                                     affordable_qty = max(0, int(effective_bp / actual_cost))
                                     
-                                    # Take the minimum of: original signal, percentage limit, and affordable
-                                    new_qty = min(original_qty, pct_qty, affordable_qty)
+                                    # FIXED LOGIC: If position size budget can't afford 1 contract but 
+                                    # buying power CAN afford it, execute at least 1 contract
+                                    if pct_qty == 0 and affordable_qty >= 1:
+                                        # Budget too small for even 1 contract, but we CAN afford it
+                                        new_qty = min(original_qty, affordable_qty)
+                                        _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ {position_size_pct}% budget (${position_dollars:.0f}) < 1 contract (${actual_cost:.0f}), using buying power instead")
+                                    else:
+                                        # Take the minimum of: original signal, percentage limit, and affordable
+                                        new_qty = min(original_qty, pct_qty, affordable_qty)
                                     
-                                    # If we can't afford any contracts, skip this trade
+                                    # If we truly can't afford any contracts, skip this trade
                                     if new_qty == 0:
                                         _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 contract (cost: ${actual_cost:.0f}, budget: ${position_dollars:.0f}, buying power: ${effective_bp:.0f})")
                                         return {'success': False, 'error': f'Insufficient funds for 1 contract (need ${actual_cost:.0f}, have ${effective_bp:.0f})'}
@@ -5709,10 +5716,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     # Calculate max affordable qty based on actual buying power
                                     affordable_qty = max(0, int(buying_power / price))
                                     
-                                    # Take the minimum of: original signal, percentage limit, and affordable
-                                    new_qty = min(original_qty, pct_qty, affordable_qty)
+                                    # FIXED LOGIC: If position size budget can't afford 1 share but 
+                                    # buying power CAN afford it, execute at least 1 share
+                                    if pct_qty == 0 and affordable_qty >= 1:
+                                        # Budget too small for even 1 share, but we CAN afford it
+                                        new_qty = min(original_qty, affordable_qty)
+                                        _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ {position_size_pct}% budget (${position_dollars:.0f}) < 1 share (${price:.2f}), using buying power instead")
+                                    else:
+                                        # Take the minimum of: original signal, percentage limit, and affordable
+                                        new_qty = min(original_qty, pct_qty, affordable_qty)
                                     
-                                    # If we can't afford any shares, skip this trade
+                                    # If we truly can't afford any shares, skip this trade
                                     if new_qty == 0:
                                         _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 share (price: ${price:.2f}, budget: ${position_dollars:.0f}, buying power: ${buying_power:.0f})")
                                         return {'success': False, 'error': f'Insufficient funds for 1 share (need ${price:.2f}, have ${buying_power:.0f})'}
@@ -6214,7 +6228,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     if actual_cost > 0:
                                                         pct_qty = max(0, int(position_dollars / actual_cost))
                                                         affordable_qty = max(0, int(options_buying_power / actual_cost))
-                                                        new_qty = min(original_qty, pct_qty, affordable_qty)
+                                                        
+                                                        # FIXED LOGIC: If position size budget can't afford 1 contract but 
+                                                        # buying power CAN afford it, execute at least 1 contract
+                                                        if pct_qty == 0 and affordable_qty >= 1:
+                                                            new_qty = min(original_qty, affordable_qty)
+                                                            _original_print(f"[PAPER TRADE] [POSITION SIZE] ⚠️ {position_size_pct}% budget (${position_dollars:.0f}) < 1 contract (${actual_cost:.0f}), using buying power instead")
+                                                        else:
+                                                            new_qty = min(original_qty, pct_qty, affordable_qty)
                                                         
                                                         if new_qty == 0:
                                                             _original_print(f"[PAPER TRADE] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 contract (cost: ${actual_cost:.0f}, budget: ${position_dollars:.0f}, buying power: ${options_buying_power:.0f})")
@@ -6235,7 +6256,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     if price > 0:
                                                         pct_qty = max(0, int(position_dollars / price))
                                                         affordable_qty = max(0, int(buying_power / price))
-                                                        new_qty = min(original_qty, pct_qty, affordable_qty)
+                                                        
+                                                        # FIXED LOGIC: If position size budget can't afford 1 share but 
+                                                        # buying power CAN afford it, execute at least 1 share
+                                                        if pct_qty == 0 and affordable_qty >= 1:
+                                                            new_qty = min(original_qty, affordable_qty)
+                                                            _original_print(f"[PAPER TRADE] [POSITION SIZE] ⚠️ {position_size_pct}% budget (${position_dollars:.0f}) < 1 share (${price:.2f}), using buying power instead")
+                                                        else:
+                                                            new_qty = min(original_qty, pct_qty, affordable_qty)
                                                         
                                                         if new_qty == 0:
                                                             _original_print(f"[PAPER TRADE] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 share (price: ${price:.2f}, budget: ${position_dollars:.0f})")
