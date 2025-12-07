@@ -9024,7 +9024,7 @@ def register_routes(app):
                 'needs_upgrade': len(missing) > 0
             })
         except ImportError:
-            return jsonify({'success': False, 'error': 'Migrations not available in packaged build', 'packaged': True})
+            return jsonify({'success': True, 'packaged': True, 'message': 'Schema managed automatically in packaged build', 'needs_upgrade': False, 'missing_tables': [], 'version': 'packaged'})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)})
     
@@ -9045,7 +9045,7 @@ def register_routes(app):
             
             return jsonify({'success': True, **result})
         except ImportError:
-            return jsonify({'success': False, 'error': 'Migrations not available in packaged build', 'packaged': True})
+            return jsonify({'success': True, 'packaged': True, 'message': 'Schema managed automatically in packaged build'})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)})
     
