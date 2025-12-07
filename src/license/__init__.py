@@ -1,16 +1,22 @@
 """
-License Client - Backward Compatibility Wrapper
+BotifyTrades License Package - Server-side license validation with offline support
 
-This module re-exports all functionality from the new src/license/ package
-to maintain backward compatibility with existing imports.
+This package provides:
+- License validation against api.botifytrades.com
+- RSA signature verification for tamper-proof caching
+- Offline grace period support
+- Machine ID binding
+- Background heartbeat validation
 
-New code should import from: src.license
-Legacy code can continue using: src.license_client
+Usage (backward compatible with old license_client.py):
+    from src.license import LicenseClient, get_machine_id
+    
+    client = LicenseClient()
+    is_valid, result = client.validate_license("BT-XXXX-XXXX-XXXX-XXXX")
 """
 
-# Re-export everything from the new package structure
-from src.license import (
-    # Types and constants
+# Re-export all public APIs for backward compatibility
+from .types import (
     LICENSE_SERVER_URL,
     LICENSE_SERVER_URL_PRIMARY,
     LICENSE_SERVER_URL_FALLBACK,
@@ -20,31 +26,34 @@ from src.license import (
     CACHE_DIR,
     CACHE_FILE,
     get_ssl_cert_path,
-    
-    # Crypto functions
+)
+
+from .crypto import (
     get_machine_id,
     get_machine_info,
     verify_signed_token,
     compute_integrity_hash,
     verify_integrity,
-    
-    # Cache
-    LicenseCache,
-    
-    # Client
+)
+
+from .cache import LicenseCache
+
+from .client import (
     LicenseClient,
     validate_with_server,
-    
-    # Heartbeat
+)
+
+from .heartbeat import (
     LicenseHeartbeat,
     start_license_heartbeat,
     stop_license_heartbeat,
 )
 
-# Backward compatibility alias
+# For backward compatibility with old imports
 _verify_signed_token = verify_signed_token
 
 __all__ = [
+    # Types and constants
     'LICENSE_SERVER_URL',
     'LICENSE_SERVER_URL_PRIMARY',
     'LICENSE_SERVER_URL_FALLBACK',
@@ -54,15 +63,23 @@ __all__ = [
     'CACHE_DIR',
     'CACHE_FILE',
     'get_ssl_cert_path',
+    
+    # Crypto functions
     'get_machine_id',
     'get_machine_info',
     'verify_signed_token',
     '_verify_signed_token',
     'compute_integrity_hash',
     'verify_integrity',
+    
+    # Cache
     'LicenseCache',
+    
+    # Client
     'LicenseClient',
     'validate_with_server',
+    
+    # Heartbeat
     'LicenseHeartbeat',
     'start_license_heartbeat',
     'stop_license_heartbeat',
