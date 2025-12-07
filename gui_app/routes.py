@@ -107,19 +107,48 @@ _api_cache: Dict[str, tuple] = {}  # {key: (value, timestamp)}
 _option_chain_cache: Dict[str, tuple] = {}  # {symbol_expiry: (chain_data, timestamp)}
 _CHAIN_CACHE_TTL = 30  # Cache for 30 seconds
 
+_standalone_webull_broker = None
+
 def get_webull_broker():
-    """Get the Webull broker instance from the bot for option data"""
-    global _bot_instance
+    """Get the Webull broker instance from the bot for option data.
+    Falls back to creating standalone broker from database credentials.
+    """
+    global _bot_instance, _standalone_webull_broker
+    
     if _bot_instance and hasattr(_bot_instance, 'broker') and _bot_instance.broker:
         return _bot_instance.broker
+    
+    if _standalone_webull_broker is not None:
+        return _standalone_webull_broker
+    
+    try:
+        credentials = db.get_webull_credentials()
+        if credentials and credentials.get('access_token'):
+            from src.brokers.webull_broker import WebullBroker
+            _standalone_webull_broker = WebullBroker(credentials, paper_trade=True)
+            if _standalone_webull_broker.client:
+                print("[OPTIONS] Created standalone Webull broker from database credentials")
+                return _standalone_webull_broker
+    except Exception as e:
+        print(f"[OPTIONS] Could not create standalone Webull broker: {e}")
+    
     return None
 
+_standalone_loop = None
+
 def get_webull_loop():
-    """Get the bot's event loop for async calls"""
-    global _bot_instance
-    if _bot_instance and hasattr(_bot_instance, 'loop'):
+    """Get the bot's event loop for async calls.
+    Falls back to creating a standalone loop when bot isn't running.
+    """
+    global _bot_instance, _standalone_loop
+    
+    if _bot_instance and hasattr(_bot_instance, 'loop') and _bot_instance.loop and not _bot_instance.loop.is_closed():
         return _bot_instance.loop
-    return None
+    
+    if _standalone_loop is None or _standalone_loop.is_closed():
+        _standalone_loop = asyncio.new_event_loop()
+    
+    return _standalone_loop
 
 def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
     """Get option chain from Webull with caching to prevent repeated API calls.

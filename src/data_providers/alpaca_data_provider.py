@@ -278,14 +278,40 @@ _alpaca_provider = None
 
 
 def get_alpaca_provider() -> Optional[AlpacaDataProvider]:
-    """Get or create global Alpaca data provider instance"""
+    """Get or create global Alpaca data provider instance.
+    
+    Tries credentials in order:
+    1. Environment variables (ALPACA_API_KEY, ALPACA_SECRET_KEY)
+    2. Database settings (alpaca_paper_api_key, alpaca_live_api_key)
+    """
     global _alpaca_provider
     
     if _alpaca_provider is None:
+        api_key = os.getenv('ALPACA_API_KEY', '')
+        secret_key = os.getenv('ALPACA_SECRET_KEY', '')
+        
+        if not api_key or not secret_key:
+            try:
+                from gui_app.database import Database
+                db = Database()
+                api_key = db.get_setting('alpaca_paper_api_key', '') or db.get_setting('alpaca_live_api_key', '')
+                secret_key = db.get_setting('alpaca_paper_secret_key', '') or db.get_setting('alpaca_live_secret_key', '')
+                if api_key and secret_key:
+                    print(f"[AlpacaDataProvider] Using credentials from database")
+            except Exception as e:
+                print(f"[AlpacaDataProvider] Could not load credentials from database: {e}")
+        
+        if not api_key or not secret_key:
+            print(f"[AlpacaDataProvider] Cannot initialize: No Alpaca credentials found (env vars or database)")
+            return None
+        
         try:
-            _alpaca_provider = AlpacaDataProvider()
+            _alpaca_provider = AlpacaDataProvider(api_key=api_key, secret_key=secret_key)
         except ValueError as e:
             print(f"[AlpacaDataProvider] Cannot initialize: {e}")
+            return None
+        except Exception as e:
+            print(f"[AlpacaDataProvider] Error initializing: {e}")
             return None
     
     return _alpaca_provider
