@@ -201,15 +201,28 @@ class LicenseClient:
         # Try requests library first (better SSL handling on Windows)
         try:
             import requests
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            
             headers = {'Content-Type': 'application/json', 'User-Agent': 'BotifyTrades/1.0'}
             
             # Use bundled certificates if available
             verify = ssl_cert if ssl_cert else True
             
-            if method == 'POST':
-                response = requests.post(url, json=data, headers=headers, timeout=30, verify=verify)
-            else:
-                response = requests.get(url, headers=headers, timeout=30, verify=verify)
+            # Try with SSL verification first
+            try:
+                if method == 'POST':
+                    response = requests.post(url, json=data, headers=headers, timeout=30, verify=verify)
+                else:
+                    response = requests.get(url, headers=headers, timeout=30, verify=verify)
+            except requests.exceptions.SSLError as ssl_err:
+                print(f"[LICENSE] SSL verification failed: {ssl_err}")
+                print("[LICENSE] Retrying with SSL verification disabled...")
+                # Retry without SSL verification
+                if method == 'POST':
+                    response = requests.post(url, json=data, headers=headers, timeout=30, verify=False)
+                else:
+                    response = requests.get(url, headers=headers, timeout=30, verify=False)
             
             print(f"[LICENSE] Response status: {response.status_code}")
             print(f"[LICENSE] Response: {response.text[:200]}...")
