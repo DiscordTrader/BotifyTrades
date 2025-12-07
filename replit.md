@@ -8,6 +8,9 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 **See `ARCHITECTURE.md` for full details.**
 
 ### Recent Changes (Dec 7, 2025)
+- **v2.1.6**: Refactored license_client.py into src/license/ package (types, crypto, cache, client, heartbeat modules)
+- **v2.1.6**: All modules under 500 lines for Pyarmor trial compatibility
+- **v2.1.6**: Backward-compatible wrapper maintains all existing imports
 - **v2.1.5**: Added fallback URL support to license client (primary: api.botifytrades.com, fallback: Replit)
 - **v2.1.5**: License client now automatically tries backup servers if primary is unreachable
 - **v2.1.4**: User Agreement updated to v2.0 with License Server terms (heartbeat, machine binding, anti-tampering)
