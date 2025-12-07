@@ -57,7 +57,7 @@ jobs:
             --distpath "packaging/windows/dist" `
             --workpath "packaging/windows/build_temp" `
             packaging/windows/specs/botifytrades.spec
-          
+
       - name: Restore original source files
         run: |
           Copy-Item src_backup/license_client.py src/ -Force
@@ -70,7 +70,7 @@ jobs:
             Remove-Item -Recurse -Force src/pyarmor_runtime_000000
           }
 
-           - name: Prepare and ZIP distribution
+      - name: Prepare and ZIP distribution
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path packaging/windows/dist/BotifyTrades
@@ -82,7 +82,7 @@ jobs:
           Copy-Item GET_WEBULL_TOKENS.html packaging/windows/dist/BotifyTrades/ -ErrorAction SilentlyContinue
           Compress-Archive -Path packaging/windows/dist/BotifyTrades -DestinationPath BotifyTrades-Windows.zip -Force
 
-      - name: Upload to Release (skip artifact)
+      - name: Upload to Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v1
         with:
@@ -137,7 +137,7 @@ jobs:
             --distpath "packaging/macos/dist" \
             --workpath "packaging/macos/build_temp" \
             packaging/macos/specs/botifytrades.spec
-          
+
       - name: Restore original source files
         run: |
           cp src_backup/license_client.py src/
@@ -166,7 +166,7 @@ jobs:
           fi
           cd packaging/macos/dist && zip -r ../../../BotifyTrades-macOS.zip BotifyTrades/
 
-      - name: Upload to Release (skip artifact)
+      - name: Upload to Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v1
         with:
@@ -221,7 +221,7 @@ jobs:
             --distpath "packaging/linux/dist" \
             --workpath "packaging/linux/build_temp" \
             packaging/linux/specs/botifytrades.spec
-          
+
       - name: Restore original source files
         run: |
           cp src_backup/license_client.py src/
@@ -250,7 +250,7 @@ jobs:
           fi
           cd packaging/linux/dist && zip -r ../../../BotifyTrades-Linux.zip BotifyTrades/
 
-      - name: Upload to Release (skip artifact)
+      - name: Upload to Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v1
         with:
