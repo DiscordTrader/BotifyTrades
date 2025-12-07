@@ -7,52 +7,62 @@
 <div class="stats-grid">
     <div class="stat-card primary">
         <div class="stat-card-icon primary">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
             </svg>
         </div>
-        <div class="stat-card-label">Total Licenses</div>
-        <div class="stat-card-value" id="stat-total">{{ stats.total_licenses }}</div>
+        <div class="stat-card-content">
+            <div class="stat-card-label">Total</div>
+            <div class="stat-card-value" id="stat-total">{{ stats.total_licenses }}</div>
+        </div>
     </div>
     
     <div class="stat-card success">
         <div class="stat-card-icon success">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
         </div>
-        <div class="stat-card-label">Active Licenses</div>
-        <div class="stat-card-value" id="stat-active">{{ stats.active_licenses }}</div>
+        <div class="stat-card-content">
+            <div class="stat-card-label">Active</div>
+            <div class="stat-card-value" id="stat-active">{{ stats.active_licenses }}</div>
+        </div>
     </div>
     
     <div class="stat-card warning">
         <div class="stat-card-icon warning">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
         </div>
-        <div class="stat-card-label">Expired</div>
-        <div class="stat-card-value" id="stat-expired">{{ stats.expired_licenses }}</div>
+        <div class="stat-card-content">
+            <div class="stat-card-label">Expired</div>
+            <div class="stat-card-value" id="stat-expired">{{ stats.expired_licenses }}</div>
+        </div>
     </div>
     
     <div class="stat-card error">
         <div class="stat-card-icon error">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
             </svg>
         </div>
-        <div class="stat-card-label">Revoked</div>
-        <div class="stat-card-value" id="stat-revoked">{{ stats.revoked_licenses }}</div>
+        <div class="stat-card-content">
+            <div class="stat-card-label">Revoked</div>
+            <div class="stat-card-value" id="stat-revoked">{{ stats.revoked_licenses }}</div>
+        </div>
     </div>
     
     <div class="stat-card info">
         <div class="stat-card-icon info">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
         </div>
-        <div class="stat-card-label">Active Devices</div>
-        <div class="stat-card-value" id="stat-devices">{{ stats.total_devices }}</div>
+        <div class="stat-card-content">
+            <div class="stat-card-label">Devices</div>
+            <div class="stat-card-value" id="stat-devices">{{ stats.total_devices }}</div>
+        </div>
     </div>
 </div>
 
