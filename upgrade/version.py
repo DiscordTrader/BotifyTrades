@@ -58,7 +58,7 @@ def compare_versions(v1: str, v2: str) -> int:
 
 def get_db_path() -> str:
     """Get the database path."""
-    return os.environ.get('DATABASE_PATH', 'gui_app/bot_settings.db')
+    return os.environ.get('DATABASE_PATH', 'bot_data.db')
 
 
 def get_current_version() -> str:

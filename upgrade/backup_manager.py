@@ -20,7 +20,7 @@ class BackupManager:
     """Manages database backups for safe upgrades."""
     
     def __init__(self, db_path: str = None, backup_dir: Path = None, retention_count: int = 5):
-        self.db_path = db_path or os.environ.get('DATABASE_PATH', 'gui_app/bot_settings.db')
+        self.db_path = db_path or os.environ.get('DATABASE_PATH', 'bot_data.db')
         self.backup_dir = backup_dir or BACKUP_DIR
         self.retention_count = retention_count
         self.backup_dir.mkdir(parents=True, exist_ok=True)
