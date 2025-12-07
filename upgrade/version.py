@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional, Tuple, Dict
 
 
-APP_VERSION = "2.1.7"
+APP_VERSION = "2.1.9"
 
 
 def parse_version(version_str: str) -> Tuple[int, int, int]:
