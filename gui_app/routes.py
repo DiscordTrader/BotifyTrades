@@ -8585,7 +8585,7 @@ def register_routes(app):
                 conn = db.get_connection()
                 cursor = conn.cursor()
                 
-                required_tables = ['settings', 'channels', 'signals', 'trades', 'signal_lots', 'lot_closures', 'users']
+                required_tables = ['settings', 'channels', 'signals', 'trades', 'signal_lots', 'lot_closures', 'app_users']
                 missing_tables = []
                 for table in required_tables:
                     cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
@@ -8771,22 +8771,32 @@ def register_routes(app):
             # 6. License Validation
             try:
                 from src.license_client import LicenseClient
-                client = LicenseClient()
-                license_valid = client.is_valid()
-                if license_valid:
+                license_key = db.get_setting('license_key', '')
+                if not license_key:
                     results['checks'].append({
                         'name': 'License',
-                        'status': 'pass',
-                        'message': 'Valid and active'
+                        'status': 'warning',
+                        'message': 'No license key configured'
                     })
-                    results['summary']['passed'] += 1
+                    results['summary']['warnings'] += 1
                 else:
-                    results['checks'].append({
-                        'name': 'License',
-                        'status': 'fail',
-                        'message': 'Invalid or expired'
-                    })
-                    results['summary']['failed'] += 1
+                    client = LicenseClient()
+                    is_valid, result = client.validate_license(license_key)
+                    if is_valid:
+                        results['checks'].append({
+                            'name': 'License',
+                            'status': 'pass',
+                            'message': 'Valid and active'
+                        })
+                        results['summary']['passed'] += 1
+                    else:
+                        error_msg = result.get('error', 'Invalid or expired') if isinstance(result, dict) else 'Invalid or expired'
+                        results['checks'].append({
+                            'name': 'License',
+                            'status': 'fail',
+                            'message': error_msg
+                        })
+                        results['summary']['failed'] += 1
             except Exception as e:
                 results['checks'].append({
                     'name': 'License',
