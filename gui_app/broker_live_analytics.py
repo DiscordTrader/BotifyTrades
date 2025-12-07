@@ -94,6 +94,10 @@ class BrokerLiveAnalytics:
         """Connect to Webull account"""
         if webull is None:
             return None
+        
+        if not credentials:
+            print(f"[ANALYTICS] No credentials for {broker_id}")
+            return None
             
         try:
             config = self.BROKER_CONFIGS.get(broker_id, {})
@@ -107,6 +111,10 @@ class BrokerLiveAnalytics:
             access_token = credentials.get('access_token')
             refresh_token = credentials.get('refresh_token')
             device_id = credentials.get('device_id')
+            
+            if not access_token and not refresh_token and not credentials.get('email'):
+                print(f"[ANALYTICS] Webull credentials not configured for {broker_id}")
+                return None
             
             if access_token and refresh_token:
                 wb.access_token = access_token
