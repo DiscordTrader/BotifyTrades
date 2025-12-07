@@ -845,6 +845,46 @@ class AlpacaBroker(BrokerInterface):
         except Exception as e:
             print(f"[{self.name}] Error getting open orders: {e}")
             return []
+    
+    async def get_options_expiration_dates(self, symbol: str) -> list:
+        """Get all available option expiration dates for a symbol"""
+        try:
+            from src.data_providers.alpaca_data_provider import AlpacaDataProvider
+            
+            api_key = self.config.get('api_key')
+            api_secret = self.config.get('api_secret')
+            
+            if not api_key or not api_secret:
+                print(f"[{self.name}] No credentials for option chain data")
+                return []
+            
+            provider = AlpacaDataProvider(api_key, api_secret)
+            return await provider.get_options_expiration_dates(symbol)
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting expirations for {symbol}: {e}")
+            return []
+    
+    async def get_option_chain(self, symbol: str, expiration_date: str) -> Dict[str, Any]:
+        """Get option chain for a symbol and expiration date"""
+        try:
+            from src.data_providers.alpaca_data_provider import AlpacaDataProvider
+            
+            api_key = self.config.get('api_key')
+            api_secret = self.config.get('api_secret')
+            
+            if not api_key or not api_secret:
+                print(f"[{self.name}] No credentials for option chain data")
+                return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'ALPACA'}
+            
+            provider = AlpacaDataProvider(api_key, api_secret)
+            chain = await provider.get_option_chain(symbol, expiration_date)
+            chain['data_source'] = 'ALPACA'
+            return chain
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting option chain for {symbol}: {e}")
+            return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'ALPACA'}
 
 
 # Register this broker with the factory

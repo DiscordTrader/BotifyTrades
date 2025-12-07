@@ -285,6 +285,139 @@ class IBKRBroker(BrokerInterface):
         except Exception as e:
             print(f"[{self.name}] Error getting quote for {symbol}: {e}")
             return None
+    
+    async def get_options_expiration_dates(self, symbol: str) -> list:
+        """Get all available option expiration dates for a symbol"""
+        try:
+            if not self.ib.isConnected():
+                print(f"[{self.name}] Not connected - cannot get expirations")
+                return []
+            
+            # Create stock contract
+            stock = Stock(symbol, 'SMART', 'USD')
+            self.ib.qualifyContracts(stock)
+            
+            # Get option chain details
+            chains = self.ib.reqSecDefOptParams(
+                stock.symbol, 
+                '', 
+                stock.secType, 
+                stock.conId
+            )
+            
+            if not chains:
+                return []
+            
+            # Extract unique expirations
+            expirations = set()
+            for chain in chains:
+                for exp in chain.expirations:
+                    try:
+                        exp_date = datetime.strptime(exp, '%Y%m%d')
+                        expirations.add(exp_date.strftime('%Y-%m-%d'))
+                    except:
+                        continue
+            
+            sorted_exp = sorted(list(expirations))
+            print(f"[{self.name}] Found {len(sorted_exp)} expirations for {symbol}")
+            return sorted_exp
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting expirations for {symbol}: {e}")
+            return []
+    
+    async def get_option_chain(self, symbol: str, expiration_date: str) -> Dict[str, Any]:
+        """Get option chain for a symbol and expiration date"""
+        try:
+            if not self.ib.isConnected():
+                print(f"[{self.name}] Not connected - cannot get option chain")
+                return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'IBKR'}
+            
+            # Get stock price first
+            stock_price = await self.get_quote(symbol)
+            
+            # Convert expiry format from YYYY-MM-DD to YYYYMMDD
+            exp_ib = expiration_date.replace('-', '')
+            
+            # Create stock contract
+            stock = Stock(symbol, 'SMART', 'USD')
+            self.ib.qualifyContracts(stock)
+            
+            # Get option chain parameters
+            chains = self.ib.reqSecDefOptParams(
+                stock.symbol, 
+                '', 
+                stock.secType, 
+                stock.conId
+            )
+            
+            if not chains:
+                return {'calls': [], 'puts': [], 'stock_price': stock_price, 'data_source': 'IBKR'}
+            
+            # Find strikes for this expiration
+            strikes = set()
+            for chain in chains:
+                if exp_ib in chain.expirations:
+                    strikes.update(chain.strikes)
+            
+            if not strikes:
+                return {'calls': [], 'puts': [], 'stock_price': stock_price, 'data_source': 'IBKR'}
+            
+            calls = []
+            puts = []
+            
+            # Build option contracts for each strike
+            sorted_strikes = sorted(strikes)
+            
+            # Filter to ATM +/- 20 strikes for performance
+            if stock_price:
+                atm_strikes = [s for s in sorted_strikes if abs(s - stock_price) / stock_price < 0.3]
+            else:
+                atm_strikes = sorted_strikes[:40]
+            
+            for strike in atm_strikes:
+                for right in ['C', 'P']:
+                    try:
+                        contract = Option(symbol, exp_ib, strike, right, 'SMART')
+                        qualified = self.ib.qualifyContracts(contract)
+                        
+                        if qualified:
+                            option_data = {
+                                'strike': strike,
+                                'symbol': f"{symbol}{exp_ib}{right}{int(strike*1000):08d}",
+                                'type': 'call' if right == 'C' else 'put',
+                                'expiry': expiration_date,
+                                'bid': 0,
+                                'ask': 0,
+                                'last': 0,
+                                'volume': 0,
+                                'open_interest': 0,
+                                'iv': 0,
+                                'delta': 0,
+                                'gamma': 0,
+                                'theta': 0,
+                                'vega': 0
+                            }
+                            
+                            if right == 'C':
+                                calls.append(option_data)
+                            else:
+                                puts.append(option_data)
+                    except Exception as e:
+                        continue
+            
+            return {
+                'calls': calls,
+                'puts': puts,
+                'stock_price': stock_price,
+                'data_source': 'IBKR',
+                'expiration': expiration_date,
+                'symbol': symbol
+            }
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting option chain for {symbol}: {e}")
+            return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'IBKR'}
 
 
 # Register this broker with the factory
