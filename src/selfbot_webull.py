@@ -9,8 +9,16 @@
 import sys
 import builtins
 _early_print = builtins.print  # Save original print before any override
+
+# Import version dynamically to show actual release version
+try:
+    from upgrade.version import APP_VERSION
+    _build_version = f"v{APP_VERSION}"
+except ImportError:
+    _build_version = "DEV"
+
 _early_print("=" * 60, flush=True)
-_early_print("BUILD VERSION: 2025-12-05-DEBUG-V20", flush=True)
+_early_print(f"BUILD VERSION: {_build_version}", flush=True)
 _early_print("=" * 60, flush=True)
 sys.stdout.flush()
 
