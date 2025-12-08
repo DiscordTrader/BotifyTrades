@@ -262,7 +262,7 @@ jobs:
   # Push releases to public repo for user auto-updates
   publish-to-public:
     needs: [build-windows, build-macos, build-linux]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: always() && startsWith(github.ref, 'refs/tags/v') && (needs.build-windows.result == 'success' || needs.build-linux.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - name: Get release assets from private repo
