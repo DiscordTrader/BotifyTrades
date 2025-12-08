@@ -6556,13 +6556,16 @@ def register_routes(app):
             
             elif broker_id.startswith('webull'):
                 creds = get_webull_credentials()
-                if not creds.get('email') and not creds.get('access_token'):
-                    set_broker_status(broker_id, False, 'error', 'No Webull credentials configured')
-                    return jsonify({'success': False, 'error': 'No Webull credentials configured'}), 400
+                has_tokens = creds.get('access_token') and creds.get('refresh_token')
+                has_login_creds = creds.get('email') and creds.get('password')
                 
-                if not creds.get('password') or not creds.get('trade_pin'):
-                    set_broker_status(broker_id, False, 'error', 'Password and Trade PIN required')
-                    return jsonify({'success': False, 'error': 'Please enter your Webull password and 6-digit Trade PIN'}), 400
+                if not has_tokens and not has_login_creds:
+                    set_broker_status(broker_id, False, 'error', 'No Webull credentials configured')
+                    return jsonify({'success': False, 'error': 'Please enter either email/password OR access/refresh tokens'}), 400
+                
+                if not creds.get('trade_pin'):
+                    set_broker_status(broker_id, False, 'error', 'Trade PIN required')
+                    return jsonify({'success': False, 'error': 'Please enter your 6-digit Trade PIN'}), 400
                 
                 try:
                     from src.webull_auth import WebullAuth
@@ -6571,12 +6574,16 @@ def register_routes(app):
                     is_paper = broker_id == 'webull_paper'
                     auth = WebullAuth(paper_trading=is_paper, credentials_adapter=webull_credentials_adapter)
                     
-                    result = auth.login(
-                        email=creds.get('email'),
-                        password=creds.get('password'),
-                        trading_pin=creds.get('trade_pin'),
-                        device_id=creds.get('device_id')
-                    )
+                    if has_tokens and not has_login_creds:
+                        print(f"[WEBULL] Using token-only authentication (no password)")
+                        result = auth.login_with_saved_session(trading_pin=creds.get('trade_pin'))
+                    else:
+                        result = auth.login(
+                            email=creds.get('email'),
+                            password=creds.get('password'),
+                            trading_pin=creds.get('trade_pin'),
+                            device_id=creds.get('device_id')
+                        )
                     
                     print(f"[WEBULL] Login result: {result}")
                     

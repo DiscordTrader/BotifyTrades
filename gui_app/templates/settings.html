@@ -587,33 +587,73 @@ input:checked + .slider:before {
             <span class="status-dot"></span>
             <span id="webull-status-text">Not connected</span>
         </div>
-        <div class="form-group">
-            <label>Email</label>
-            <input type="email" id="webull-email" placeholder="your@email.com">
+        
+        <!-- Auth Mode Toggle -->
+        <div class="form-group" style="margin-bottom: 20px; padding: 12px; background: rgba(0, 100, 150, 0.2); border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.3);">
+            <label class="toggle-label" style="margin-bottom: 8px;">
+                <span style="font-weight: 600;">Token-Only Mode (Bypass Captcha)</span>
+                <label class="switch">
+                    <input type="checkbox" id="webull-token-mode">
+                    <span class="slider"></span>
+                </label>
+            </label>
+            <p class="help-text" style="margin: 0; font-size: 11px; color: rgba(0, 212, 255, 0.7);">Enable if you have captcha issues. Extract tokens from browser and paste below.</p>
         </div>
-        <div class="form-group">
-            <label>Password</label>
-            <input type="password" id="webull-password" placeholder="Password">
+        
+        <!-- Email/Password Section -->
+        <div id="webull-login-section">
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="webull-email" placeholder="your@email.com">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="webull-password" placeholder="Password">
+            </div>
         </div>
+        
         <div class="form-group">
-            <label>Trade PIN (6 digits)</label>
+            <label>Trade PIN (6 digits) <span style="color: #ff6b6b;">*Required</span></label>
             <input type="password" id="webull-pin" placeholder="123456" maxlength="6">
         </div>
         <div class="form-group">
             <label>Device ID (DID)</label>
             <input type="text" id="webull-did" placeholder="Optional - auto-generated if blank">
-            <p class="help-text">Leave blank for new login, or paste existing DID</p>
+            <p class="help-text">Leave blank for new login, or paste existing DID from browser</p>
         </div>
-        <div class="form-group">
-            <label>Access Token</label>
-            <input type="password" id="webull-access-token" placeholder="Saved after successful login">
-            <p class="help-text">Auto-populated after login</p>
+        
+        <!-- Token Section -->
+        <div id="webull-token-section" style="padding: 12px; background: rgba(0, 50, 80, 0.3); border-radius: 8px; margin-bottom: 16px;">
+            <p style="font-size: 12px; color: #00d4ff; margin-bottom: 12px; font-weight: 600;">Session Tokens (for token-only mode or auto-saved after login)</p>
+            <div class="form-group">
+                <label>Access Token</label>
+                <input type="password" id="webull-access-token" placeholder="Paste from browser or auto-saved after login">
+            </div>
+            <div class="form-group">
+                <label>Refresh Token</label>
+                <input type="password" id="webull-refresh-token" placeholder="Paste from browser or auto-saved after login">
+            </div>
+            <button id="clear-webull-tokens" class="btn" style="background: rgba(255, 100, 100, 0.2); border: 1px solid rgba(255, 100, 100, 0.5); color: #ff6b6b; font-size: 12px; padding: 6px 12px;">
+                🗑️ Clear Tokens
+            </button>
         </div>
-        <div class="form-group">
-            <label>Refresh Token</label>
-            <input type="password" id="webull-refresh-token" placeholder="Saved after successful login">
-            <p class="help-text">Auto-populated after login</p>
-        </div>
+        
+        <!-- Token Extraction Guide (collapsed by default) -->
+        <details id="webull-token-guide" style="margin-bottom: 16px; padding: 12px; background: rgba(255, 170, 0, 0.1); border-radius: 8px; border: 1px solid rgba(255, 170, 0, 0.3);">
+            <summary style="cursor: pointer; color: #ffaa00; font-weight: 600; font-size: 13px;">How to Extract Tokens from Browser</summary>
+            <div style="margin-top: 12px; font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+                <ol style="margin: 0; padding-left: 20px;">
+                    <li>Login to <strong>app.webull.com</strong> in Chrome (complete any captcha manually)</li>
+                    <li>Press <strong>F12</strong> to open DevTools, go to <strong>Network</strong> tab</li>
+                    <li>Refresh the page (Ctrl+R)</li>
+                    <li>Click on any API request, look for <strong>Response</strong> or <strong>Headers</strong></li>
+                    <li>Find and copy: <code>access_token</code>, <code>refresh_token</code>, <code>did</code></li>
+                    <li>Paste them in the fields above</li>
+                </ol>
+                <p style="margin-top: 10px; color: rgba(255, 170, 0, 0.8); font-size: 11px;">Note: Tokens are valid for ~24 hours. Use at your own risk - this uses unofficial API methods.</p>
+            </div>
+        </details>
+        
         <div class="form-group">
             <label class="toggle-label">
                 <span>Paper Trading Mode</span>
@@ -1927,11 +1967,55 @@ async function loadWebullCredentials() {
                 status.connected ? 'connected' : 'disconnected',
                 status.connected ? 'Connected' : 'Not connected',
                 status.account_info);
+            
+            // Auto-enable token mode if tokens exist but no password
+            if (data.has_tokens && !data.has_password) {
+                document.getElementById('webull-token-mode').checked = true;
+                toggleWebullTokenMode(true);
+            }
         }
     } catch (error) {
         console.error('Error loading Webull credentials:', error);
     }
 }
+
+// Toggle token-only mode for Webull
+function toggleWebullTokenMode(enabled) {
+    const loginSection = document.getElementById('webull-login-section');
+    const tokenGuide = document.getElementById('webull-token-guide');
+    
+    if (enabled) {
+        loginSection.style.display = 'none';
+        tokenGuide.setAttribute('open', '');
+    } else {
+        loginSection.style.display = 'block';
+        tokenGuide.removeAttribute('open');
+    }
+}
+
+document.getElementById('webull-token-mode').addEventListener('change', function() {
+    toggleWebullTokenMode(this.checked);
+});
+
+// Clear Webull tokens button
+document.getElementById('clear-webull-tokens').addEventListener('click', async () => {
+    if (!confirm('Clear saved tokens? You will need to re-authenticate.')) return;
+    
+    try {
+        const response = await fetch('/api/brokers/credentials/webull/clear-tokens', { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.success) {
+            document.getElementById('webull-access-token').value = '';
+            document.getElementById('webull-refresh-token').value = '';
+            showMessage('success', result.message);
+        } else {
+            showMessage('error', result.error);
+        }
+    } catch (error) {
+        showMessage('error', error.message);
+    }
+});
 
 document.getElementById('save-webull-creds').addEventListener('click', async () => {
     const data = {
