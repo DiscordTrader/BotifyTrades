@@ -303,6 +303,19 @@ class UpgradeRunner:
                 self._update_progress(100, "Upgrade completed successfully!")
                 message = f"Successfully upgraded from {from_version} to {to_version}"
             
+            # Print prominent upgrade summary to console
+            print("\n" + "="*60)
+            print("  UPGRADE COMPLETE")
+            print("="*60)
+            print(f"  From Version: {from_version}")
+            print(f"  To Version:   {to_version}")
+            print(f"  Backup:       {backup_path}")
+            if requires_restart:
+                print("  Status:       Application will restart automatically")
+            else:
+                print("  Status:       Success - No restart required")
+            print("="*60 + "\n")
+            
             result = UpgradeResult(
                 success=True,
                 status=UpgradeStatus.COMPLETED,
@@ -324,6 +337,18 @@ class UpgradeRunner:
             if backup_path:
                 self._update_progress(0, "Unexpected error, rolling back...")
                 self._rollback(backup_path, from_version)
+            
+            # Print prominent upgrade failure to console
+            print("\n" + "="*60)
+            print("  UPGRADE FAILED")
+            print("="*60)
+            print(f"  From Version: {from_version}")
+            print(f"  To Version:   {to_version}")
+            print(f"  Error:        {error_msg}")
+            if backup_path:
+                print(f"  Backup:       {backup_path}")
+                print("  Status:       Rolled back to previous version")
+            print("="*60 + "\n")
             
             self._record_patch_history(patch_id, to_version, 'upgrade', 'failed', error_msg)
             
