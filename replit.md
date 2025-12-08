@@ -8,10 +8,10 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 **See `ARCHITECTURE.md` for full details.**
 
 ### Recent Changes (Dec 8, 2025)
-- **v2.1.15**: Token-only mode for Webull - bypasses captcha by using browser-extracted tokens
-- **v2.1.15**: Settings UI now shows token extraction guide and clear tokens button
-- **v2.1.15**: Webull credentials update now auto-clears old tokens when email/password changes
-- **v2.1.15**: Added API endpoint to manually clear Webull tokens (/api/brokers/credentials/webull/clear-tokens)
+- **v2.1.16**: Token-only mode for Webull - bypasses captcha by using browser-extracted tokens
+- **v2.1.16**: Settings UI now shows token extraction guide and clear tokens button
+- **v2.1.16**: Webull credentials update now auto-clears old tokens when email/password changes
+- **v2.1.16**: Added API endpoint to manually clear Webull tokens (/api/brokers/credentials/webull/clear-tokens)
 - **v2.1.14**: Fix "Check Schema" error in packaged builds - now shows success message instead of migration error
 - **v2.1.13**: Fixed position sizing for options - now executes when buying power can afford 1 contract even if % budget cannot
 - **v2.1.13**: Position size fallback to buying power when percentage budget is too small for minimum order
