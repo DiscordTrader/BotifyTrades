@@ -8,6 +8,9 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 **See `ARCHITECTURE.md` for full details.**
 
 ### Recent Changes (Dec 8, 2025)
+- **v2.1.19**: Upgrade system now fully implements EXE replacement - extracts ZIP, replaces EXE, auto-restarts
+- **v2.1.19**: Token-only mode now only requires access_token (refresh_token optional/dummy value allowed)
+- **v2.1.19**: Added Windows batch script updater for seamless EXE upgrades
 - **v2.1.18**: Token-only mode for Webull - bypasses captcha by using browser-extracted tokens
 - **v2.1.18**: Settings UI now shows token extraction guide and clear tokens button
 - **v2.1.18**: Webull credentials update now auto-clears old tokens when email/password changes

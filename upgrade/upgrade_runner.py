@@ -227,6 +227,25 @@ class UpgradeRunner:
                     self._record_patch_history(patch_id, to_version, 'upgrade', 'rolled_back', f"Checksum failed: {error}")
                     return result
             
+            self._status = UpgradeStatus.APPLYING
+            self._update_progress(60, "Extracting update package...")
+            
+            new_exe_path, error = self._extract_update(download_path, to_version)
+            if not new_exe_path:
+                self._update_progress(62, "Extraction failed, rolling back...")
+                self._rollback(backup_path, from_version)
+                result = UpgradeResult(
+                    success=False,
+                    status=UpgradeStatus.ROLLED_BACK,
+                    message=f"Extraction failed: {error}",
+                    from_version=from_version,
+                    to_version=to_version,
+                    backup_path=backup_path,
+                    error=error
+                )
+                self._record_patch_history(patch_id, to_version, 'upgrade', 'rolled_back', f"Extraction failed: {error}")
+                return result
+            
             self._status = UpgradeStatus.MIGRATING
             self._update_progress(70, "Running database migrations...")
             
@@ -265,15 +284,29 @@ class UpgradeRunner:
                 self._record_patch_history(patch_id, to_version, 'upgrade', 'rolled_back', f"Validation failed: {error}")
                 return result
             
+            self._update_progress(95, "Applying EXE update...")
+            
+            requires_restart = False
+            if new_exe_path:
+                success, error, requires_restart = self._apply_exe_update(new_exe_path, to_version)
+                if not success:
+                    print(f"[UPGRADE] Warning: EXE update failed: {error}")
+            
             set_current_version(to_version)
             
             self._status = UpgradeStatus.COMPLETED
-            self._update_progress(100, "Upgrade completed successfully!")
+            
+            if requires_restart:
+                self._update_progress(100, "Upgrade ready! Application will restart...")
+                message = f"Successfully upgraded from {from_version} to {to_version}. Application will restart automatically."
+            else:
+                self._update_progress(100, "Upgrade completed successfully!")
+                message = f"Successfully upgraded from {from_version} to {to_version}"
             
             result = UpgradeResult(
                 success=True,
                 status=UpgradeStatus.COMPLETED,
-                message=f"Successfully upgraded from {from_version} to {to_version}",
+                message=message,
                 from_version=from_version,
                 to_version=to_version,
                 backup_path=backup_path
@@ -388,6 +421,202 @@ class UpgradeRunner:
             
         except Exception as e:
             return False, str(e)
+    
+    def _extract_update(self, zip_path: str, target_version: str) -> Tuple[Optional[str], str]:
+        """
+        Extract the update ZIP and find the new EXE.
+        
+        Returns:
+            Tuple of (path to new EXE or None, error message)
+        """
+        try:
+            extract_dir = Path('upgrade/extracted') / target_version
+            extract_dir.mkdir(parents=True, exist_ok=True)
+            
+            print(f"[UPGRADE] Extracting {zip_path} to {extract_dir}")
+            
+            with zipfile.ZipFile(zip_path, 'r') as zf:
+                zf.extractall(extract_dir)
+            
+            exe_files = list(extract_dir.rglob('*.exe'))
+            print(f"[UPGRADE] Found EXE files: {[str(f) for f in exe_files]}")
+            
+            target_exe = None
+            for exe in exe_files:
+                if 'BotifyTrades' in exe.name or 'selfbot' in exe.name.lower():
+                    target_exe = exe
+                    break
+            
+            if not target_exe and exe_files:
+                target_exe = exe_files[0]
+            
+            if target_exe:
+                print(f"[UPGRADE] Selected EXE for update: {target_exe}")
+                return str(target_exe), ""
+            else:
+                return None, "No EXE found in update package"
+                
+        except zipfile.BadZipFile:
+            return None, "Invalid ZIP file"
+        except Exception as e:
+            return None, f"Extraction failed: {str(e)}"
+    
+    def _apply_exe_update(self, new_exe_path: str, target_version: str) -> Tuple[bool, str, bool]:
+        """
+        Apply EXE update using a batch script (Windows) or shell script (Linux).
+        
+        The script will:
+        1. Wait for current process to exit
+        2. Replace old EXE with new EXE
+        3. Start the new EXE
+        4. Clean up
+        
+        Returns:
+            Tuple of (success, error_message, requires_restart)
+        """
+        if not getattr(sys, 'frozen', False):
+            print("[UPGRADE] Not running as frozen EXE, skipping EXE replacement")
+            return True, "", False
+        
+        current_exe = Path(sys.executable)
+        new_exe = Path(new_exe_path)
+        
+        if not new_exe.exists():
+            return False, f"New EXE not found: {new_exe_path}", False
+        
+        print(f"[UPGRADE] Current EXE: {current_exe}")
+        print(f"[UPGRADE] New EXE: {new_exe}")
+        print(f"[UPGRADE] New EXE size: {new_exe.stat().st_size / 1024 / 1024:.2f} MB")
+        
+        try:
+            if sys.platform == 'win32':
+                return self._create_windows_updater(current_exe, new_exe, target_version)
+            else:
+                return self._create_unix_updater(current_exe, new_exe, target_version)
+        except Exception as e:
+            return False, f"Failed to create updater: {str(e)}", False
+    
+    def _create_windows_updater(self, current_exe: Path, new_exe: Path, version: str) -> Tuple[bool, str, bool]:
+        """Create a Windows batch script to replace the EXE after app exits."""
+        batch_path = current_exe.parent / f'_update_{version}.bat'
+        
+        batch_content = f'''@echo off
+echo ============================================
+echo BotifyTrades Updater - Updating to {version}
+echo ============================================
+echo.
+echo Waiting for application to close...
+:waitloop
+tasklist /FI "PID eq %1" 2>NUL | find /I "%1" >NUL
+if not errorlevel 1 (
+    timeout /t 1 /nobreak >NUL
+    goto waitloop
+)
+echo Application closed. Applying update...
+echo.
+
+:: Backup old EXE
+if exist "{current_exe}" (
+    echo Backing up old version...
+    move /Y "{current_exe}" "{current_exe}.old" >NUL 2>&1
+)
+
+:: Copy new EXE
+echo Installing new version...
+copy /Y "{new_exe}" "{current_exe}" >NUL 2>&1
+if errorlevel 1 (
+    echo ERROR: Failed to copy new EXE
+    echo Restoring backup...
+    move /Y "{current_exe}.old" "{current_exe}" >NUL 2>&1
+    pause
+    exit /b 1
+)
+
+:: Start new version
+echo Starting updated application...
+start "" "{current_exe}"
+
+:: Cleanup
+echo Cleaning up...
+del /Q "{current_exe}.old" >NUL 2>&1
+timeout /t 3 /nobreak >NUL
+del /Q "%~f0" >NUL 2>&1
+'''
+        
+        try:
+            with open(batch_path, 'w') as f:
+                f.write(batch_content)
+            
+            print(f"[UPGRADE] Created Windows updater: {batch_path}")
+            
+            import subprocess
+            pid = os.getpid()
+            CREATE_NEW_CONSOLE = 0x00000010
+            DETACHED_PROCESS = 0x00000008
+            subprocess.Popen(
+                ['cmd', '/c', str(batch_path), str(pid)],
+                creationflags=CREATE_NEW_CONSOLE | DETACHED_PROCESS,
+                close_fds=True
+            )
+            
+            print(f"[UPGRADE] Updater launched. Application will restart after exit.")
+            return True, "", True
+            
+        except Exception as e:
+            return False, f"Failed to create updater batch: {str(e)}", False
+    
+    def _create_unix_updater(self, current_exe: Path, new_exe: Path, version: str) -> Tuple[bool, str, bool]:
+        """Create a Unix shell script to replace the executable after app exits."""
+        script_path = current_exe.parent / f'_update_{version}.sh'
+        
+        script_content = f'''#!/bin/bash
+echo "BotifyTrades Updater - Updating to {version}"
+echo "Waiting for application to close..."
+
+while kill -0 $1 2>/dev/null; do
+    sleep 1
+done
+
+echo "Application closed. Applying update..."
+
+# Backup old executable
+if [ -f "{current_exe}" ]; then
+    mv "{current_exe}" "{current_exe}.old"
+fi
+
+# Copy new executable
+cp "{new_exe}" "{current_exe}"
+chmod +x "{current_exe}"
+
+# Start new version
+"{current_exe}" &
+
+# Cleanup
+rm -f "{current_exe}.old"
+sleep 2
+rm -f "$0"
+'''
+        
+        try:
+            with open(script_path, 'w') as f:
+                f.write(script_content)
+            os.chmod(script_path, 0o755)
+            
+            print(f"[UPGRADE] Created Unix updater: {script_path}")
+            
+            import subprocess
+            pid = os.getpid()
+            subprocess.Popen(
+                ['/bin/bash', str(script_path), str(pid)],
+                start_new_session=True,
+                close_fds=True
+            )
+            
+            print(f"[UPGRADE] Updater launched. Application will restart after exit.")
+            return True, "", True
+            
+        except Exception as e:
+            return False, f"Failed to create updater script: {str(e)}", False
     
     def _rollback(self, backup_path: str, original_version: str = "") -> bool:
         """Rollback to the backup and restore version."""
