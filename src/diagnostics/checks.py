@@ -114,6 +114,63 @@ def check_risk_management_sync() -> CheckResult:
             'db_trailing_stop': db_settings['trailing_stop_percent']
         }
         
+        runtime_synced = True
+        mismatches = []
+        
+        try:
+            import sys
+            bot_module = None
+            
+            if '__main__' in sys.modules:
+                main_mod = sys.modules['__main__']
+                if hasattr(main_mod, 'ENABLE_RISK_MGMT'):
+                    bot_module = main_mod
+            
+            if bot_module is None:
+                try:
+                    import src.selfbot_webull as bot_module
+                except ImportError:
+                    pass
+            
+            if bot_module and hasattr(bot_module, 'ENABLE_RISK_MGMT'):
+                runtime_enabled = getattr(bot_module, 'ENABLE_RISK_MGMT', None)
+                runtime_profit = getattr(bot_module, 'PROFIT_TARGET_PCT', None)
+                runtime_stop = getattr(bot_module, 'STOP_LOSS_PCT', None)
+                runtime_trailing = getattr(bot_module, 'TRAILING_STOP_PCT', None)
+                
+                details['runtime_enabled'] = runtime_enabled
+                details['runtime_profit_target'] = runtime_profit
+                details['runtime_stop_loss'] = runtime_stop
+                details['runtime_trailing_stop'] = runtime_trailing
+                details['runtime_loaded'] = True
+                
+                if runtime_enabled != db_settings['enabled']:
+                    mismatches.append(f"enabled: DB={db_settings['enabled']} vs runtime={runtime_enabled}")
+                    runtime_synced = False
+                if runtime_profit != db_settings['profit_target_percent']:
+                    mismatches.append(f"profit_target: DB={db_settings['profit_target_percent']} vs runtime={runtime_profit}")
+                    runtime_synced = False
+                if runtime_stop != db_settings['stop_loss_percent']:
+                    mismatches.append(f"stop_loss: DB={db_settings['stop_loss_percent']} vs runtime={runtime_stop}")
+                    runtime_synced = False
+                if runtime_trailing != db_settings['trailing_stop_percent']:
+                    mismatches.append(f"trailing_stop: DB={db_settings['trailing_stop_percent']} vs runtime={runtime_trailing}")
+                    runtime_synced = False
+            else:
+                details['runtime_loaded'] = False
+        except Exception:
+            details['runtime_loaded'] = False
+        
+        if not runtime_synced:
+            return CheckResult(
+                name="Risk Management Sync",
+                category=DiagnosticCategory.RISK_MANAGEMENT,
+                status=CheckStatus.WARN,
+                message=f"DB/Runtime mismatch: {'; '.join(mismatches)}",
+                details=details,
+                remediation="Restart bot to reload settings from database"
+            )
+        
         if db_settings['enabled']:
             if db_settings['stop_loss_percent'] <= 0 and db_settings['profit_target_percent'] <= 0:
                 return CheckResult(
@@ -129,7 +186,7 @@ def check_risk_management_sync() -> CheckResult:
             name="Risk Management Sync",
             category=DiagnosticCategory.RISK_MANAGEMENT,
             status=CheckStatus.PASS,
-            message=f"Enabled={db_settings['enabled']}, SL={db_settings['stop_loss_percent']}%",
+            message=f"Enabled={db_settings['enabled']}, SL={db_settings['stop_loss_percent']}% (synced)",
             details=details
         )
     except Exception as e:
@@ -463,6 +520,42 @@ def check_options_chain_availability() -> CheckResult:
         )
 
 
+def check_ibkr_broker() -> CheckResult:
+    """Verify Interactive Brokers connectivity."""
+    try:
+        from gui_app import database as db
+        
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT api_key, api_secret FROM broker_credentials WHERE broker_name = 'ibkr'")
+        row = cursor.fetchone()
+        
+        if not row or (not row['api_key'] and not row['api_secret']):
+            return CheckResult(
+                name="IBKR Broker",
+                category=DiagnosticCategory.BROKER_IBKR,
+                status=CheckStatus.SKIP,
+                message="No credentials configured",
+                remediation="Add IBKR credentials in Settings if using Interactive Brokers"
+            )
+        
+        return CheckResult(
+            name="IBKR Broker",
+            category=DiagnosticCategory.BROKER_IBKR,
+            status=CheckStatus.PASS,
+            message="Credentials configured",
+            details={'has_credentials': True}
+        )
+    except Exception as e:
+        return CheckResult(
+            name="IBKR Broker",
+            category=DiagnosticCategory.BROKER_IBKR,
+            status=CheckStatus.WARN,
+            message=f"Could not verify: {str(e)}",
+            details={'error': str(e)}
+        )
+
+
 def get_all_checks() -> List:
     """Return list of all check functions."""
     return [
@@ -473,6 +566,7 @@ def get_all_checks() -> List:
         check_license_status,
         check_webull_broker,
         check_alpaca_broker,
+        check_ibkr_broker,
         check_discord_token,
         check_monitored_channels,
         check_options_chain_availability
