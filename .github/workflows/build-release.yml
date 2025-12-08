@@ -316,14 +316,7 @@ jobs:
           gh release create "$TAG_NAME" \
             --repo "DiscordTrader/BotifyTrades-Releases" \
             --title "BotifyTrades $TAG_NAME" \
-            --notes "Download the ZIP for your platform and extract to use.
-
-## Downloads
-- **Windows**: BotifyTrades-Windows.zip
-- **macOS**: BotifyTrades-macOS.zip  
-- **Linux**: BotifyTrades-Linux.zip
-
-Extract the ZIP and run BotifyTrades to start." \
+            --notes "Download the ZIP for your platform and extract. Windows: BotifyTrades-Windows.zip, macOS: BotifyTrades-macOS.zip, Linux: BotifyTrades-Linux.zip" \
             release_assets/*.zip
           
           echo "Successfully published $TAG_NAME to public repo!"
