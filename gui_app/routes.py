@@ -1522,6 +1522,61 @@ def register_routes(app):
         response.headers['Expires'] = '0'
         return response
     
+    @app.route('/api/diagnostics', methods=['GET'])
+    def api_run_diagnostics():
+        """Run comprehensive system diagnostics and return results."""
+        try:
+            from src.diagnostics import run_all_checks, get_diagnostics_summary
+            
+            summary = run_all_checks(print_summary=False)
+            
+            response = make_response(jsonify({
+                'success': True,
+                'diagnostics': summary.to_dict()
+            }))
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            return response
+        except ImportError as e:
+            return jsonify({
+                'success': False,
+                'error': 'Diagnostics module not available',
+                'details': str(e)
+            }), 500
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
+    @app.route('/api/diagnostics/category/<category>', methods=['GET'])
+    def api_run_diagnostics_category(category):
+        """Run diagnostics for a specific category."""
+        try:
+            from src.diagnostics import DiagnosticsManager, DiagnosticCategory
+            
+            try:
+                cat = DiagnosticCategory(category)
+            except ValueError:
+                return jsonify({
+                    'success': False,
+                    'error': f'Unknown category: {category}',
+                    'valid_categories': [c.value for c in DiagnosticCategory]
+                }), 400
+            
+            manager = DiagnosticsManager()
+            summary = manager.run_category(cat)
+            
+            return jsonify({
+                'success': True,
+                'category': category,
+                'diagnostics': summary.to_dict()
+            })
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
     # Trade monitoring
     @app.route('/api/trades', methods=['GET'])
     def api_get_trades():

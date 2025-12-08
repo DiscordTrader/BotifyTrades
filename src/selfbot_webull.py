@@ -6733,6 +6733,20 @@ if __name__ == '__main__':
     _discord_shutdown_event = threading.Event()
     _discord_error_queue = queue.Queue()
     
+    # Run startup diagnostics
+    try:
+        from src.diagnostics import run_all_checks
+        _original_print("\n[STARTUP] Running system diagnostics...")
+        diag_summary = run_all_checks(print_summary=True)
+        if diag_summary.failed > 0:
+            _original_print(f"[STARTUP] ⚠️  {diag_summary.failed} check(s) failed - review above for details")
+        else:
+            _original_print(f"[STARTUP] ✓ All {diag_summary.passed} checks passed")
+    except ImportError:
+        _original_print("[STARTUP] Diagnostics module not available, skipping health checks")
+    except Exception as e:
+        _original_print(f"[STARTUP] Warning: Could not run diagnostics: {e}")
+    
     # Start Flask GUI server in main thread
     try:
         import sys
