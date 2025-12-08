@@ -14,7 +14,7 @@ class UpdateConfig:
     """Configuration for the auto-update system."""
     
     github_owner: str = "DiscordTrader"
-    github_repo: str = "BotifyTradesv2"
+    github_repo: str = "BotifyTrades-Releases"
     
     update_check_url: Optional[str] = None
     
@@ -41,7 +41,7 @@ class UpdateConfig:
         """Create config from environment variables."""
         return cls(
             github_owner=os.environ.get('UPDATE_GITHUB_OWNER', 'DiscordTrader'),
-            github_repo=os.environ.get('UPDATE_GITHUB_REPO', 'BotifyTradesv2'),
+            github_repo=os.environ.get('UPDATE_GITHUB_REPO', 'BotifyTrades-Releases'),
             update_check_url=os.environ.get('UPDATE_CHECK_URL'),
             check_on_startup=os.environ.get('UPDATE_CHECK_ON_STARTUP', 'true').lower() == 'true',
             check_interval_hours=int(os.environ.get('UPDATE_CHECK_INTERVAL_HOURS', '6')),

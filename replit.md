@@ -8,6 +8,9 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 **See `ARCHITECTURE.md` for full details.**
 
 ### Recent Changes (Dec 8, 2025)
+- **v2.1.20**: Two-repo architecture - public releases repo for auto-updates, private source repo
+- **v2.1.20**: Upgrade checker now points to BotifyTrades-Releases (public) instead of BotifyTradesv2 (private)
+- **v2.1.20**: GitHub Actions automatically mirrors releases to public repo
 - **v2.1.19**: Upgrade system now fully implements EXE replacement - extracts ZIP, replaces EXE, auto-restarts
 - **v2.1.19**: Token-only mode now only requires access_token (refresh_token optional/dummy value allowed)
 - **v2.1.19**: Added Windows batch script updater for seamless EXE upgrades

@@ -250,7 +250,7 @@ jobs:
           fi
           cd packaging/linux/dist && zip -r ../../../BotifyTrades-Linux.zip BotifyTrades/
 
-      - name: Upload to Release
+      - name: Upload to Release (Private Repo)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v1
         with:
@@ -258,3 +258,41 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Push releases to public repo for user auto-updates
+  publish-to-public:
+    needs: [build-windows, build-macos, build-linux]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get release assets from private repo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "Downloading release assets for $TAG_NAME"
+          mkdir -p release_assets
+          
+          # Wait for releases to finish uploading
+          sleep 60
+          
+          # Download release assets using gh CLI
+          gh release download "$TAG_NAME" \
+            --repo "${{ github.repository }}" \
+            --dir release_assets \
+            --pattern "*.zip" || echo "Some assets may not be ready yet"
+          
+          ls -la release_assets/
+
+      - name: Create release in public repo
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          
+          # Create release in public repo
+          gh release create "$TAG_NAME" \
+            --repo "DiscordTrader/BotifyTrades-Releases" \
+            --title "BotifyTrades $TAG_NAME" \
+            --notes "Download the ZIP for your platform and extract to use." \
+            release_assets/*.zip || echo "Release may already exist"
