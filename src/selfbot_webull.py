@@ -3830,6 +3830,7 @@ class WebullBroker:
                                 # This is critical for PNL tracking and leaderboard attribution
                                 if DATABASE_MODULE_AVAILABLE:
                                     try:
+                                        from gui_app import database as db
                                         # Normalize call_put for database lookup
                                         pos_call_put = pos.get('direction', '').upper()
                                         if pos_call_put == 'CALL':
