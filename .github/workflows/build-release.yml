@@ -273,16 +273,29 @@ jobs:
           echo "Downloading release assets for $TAG_NAME"
           mkdir -p release_assets
           
-          # Wait for releases to finish uploading
-          sleep 60
+          # Wait for releases to finish uploading (increased timeout)
+          echo "Waiting for release assets to be ready..."
+          sleep 90
           
-          # Download release assets using gh CLI
-          gh release download "$TAG_NAME" \
-            --repo "${{ github.repository }}" \
-            --dir release_assets \
-            --pattern "*.zip" || echo "Some assets may not be ready yet"
+          # Retry download up to 3 times
+          for i in 1 2 3; do
+            echo "Download attempt $i..."
+            gh release download "$TAG_NAME" \
+              --repo "${{ github.repository }}" \
+              --dir release_assets \
+              --pattern "*.zip" && break
+            echo "Attempt $i failed, waiting 30s..."
+            sleep 30
+          done
           
+          echo "Downloaded assets:"
           ls -la release_assets/
+          
+          # Verify we have at least one ZIP
+          if [ ! "$(ls -A release_assets/*.zip 2>/dev/null)" ]; then
+            echo "ERROR: No ZIP files downloaded!"
+            exit 1
+          fi
 
       - name: Create release in public repo
         env:
@@ -290,9 +303,27 @@ jobs:
         run: |
           TAG_NAME=${GITHUB_REF#refs/tags/}
           
+          echo "Creating release $TAG_NAME in public repo..."
+          
+          # Check if release already exists
+          if gh release view "$TAG_NAME" --repo "DiscordTrader/BotifyTrades-Releases" > /dev/null 2>&1; then
+            echo "Release $TAG_NAME already exists, deleting and recreating..."
+            gh release delete "$TAG_NAME" --repo "DiscordTrader/BotifyTrades-Releases" --yes || true
+            sleep 5
+          fi
+          
           # Create release in public repo
           gh release create "$TAG_NAME" \
             --repo "DiscordTrader/BotifyTrades-Releases" \
             --title "BotifyTrades $TAG_NAME" \
-            --notes "Download the ZIP for your platform and extract to use." \
-            release_assets/*.zip || echo "Release may already exist"
+            --notes "Download the ZIP for your platform and extract to use.
+
+## Downloads
+- **Windows**: BotifyTrades-Windows.zip
+- **macOS**: BotifyTrades-macOS.zip  
+- **Linux**: BotifyTrades-Linux.zip
+
+Extract the ZIP and run BotifyTrades to start." \
+            release_assets/*.zip
+          
+          echo "Successfully published $TAG_NAME to public repo!"
