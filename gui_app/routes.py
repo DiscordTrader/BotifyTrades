@@ -6588,11 +6588,64 @@ def register_routes(app):
                     print(f"[WEBULL] Login result: {result}")
                     
                     if result.get('success'):
+                        # Try to get account details (type, buying power) after successful login
                         account_info = {
                             'account_id': result.get('account_id'),
                             'method': result.get('method', 'direct_login'),
                             'paper_mode': is_paper
                         }
+                        
+                        try:
+                            wb_account = auth.get_account_info()
+                            if wb_account:
+                                # Parse account members if present
+                                account_data = {}
+                                account_members = wb_account.get('accountMembers', [])
+                                if account_members and isinstance(account_members, list):
+                                    for item in account_members:
+                                        if isinstance(item, dict) and 'key' in item and 'value' in item:
+                                            account_data[item['key']] = item['value']
+                                # Merge direct fields
+                                for k, v in wb_account.items():
+                                    if k != 'accountMembers' and k not in account_data:
+                                        account_data[k] = v
+                                
+                                # Extract account type
+                                for field in ['brokerAccountTypeStr', 'accountType', 'brokerAccountType']:
+                                    if field in account_data:
+                                        raw_type = str(account_data[field]).upper()
+                                        if 'MARGIN' in raw_type:
+                                            account_info['account_type'] = 'Margin'
+                                        elif 'CASH' in raw_type:
+                                            account_info['account_type'] = 'Cash'
+                                        elif 'IRA' in raw_type or 'ROTH' in raw_type:
+                                            account_info['account_type'] = 'IRA'
+                                        else:
+                                            account_info['account_type'] = account_data[field]
+                                        break
+                                
+                                # Extract buying power
+                                for field in ['buyingPower', 'dayBuyingPower', 'cashAvailableForTrade']:
+                                    if field in account_data:
+                                        try:
+                                            account_info['buying_power'] = float(account_data[field])
+                                            break
+                                        except (ValueError, TypeError):
+                                            pass
+                                
+                                # Extract portfolio value
+                                for field in ['netLiquidation', 'totalMarketValue', 'accountValue']:
+                                    if field in account_data:
+                                        try:
+                                            account_info['portfolio_value'] = float(account_data[field])
+                                            break
+                                        except (ValueError, TypeError):
+                                            pass
+                                
+                                print(f"[WEBULL] Account details: {account_info}")
+                        except Exception as acc_err:
+                            print(f"[WEBULL] Could not fetch account details: {acc_err}")
+                        
                         set_broker_status(broker_id, True, 'connected', account_info=account_info)
                         print(f"[WEBULL] ✓ Connected successfully: {account_info}")
                         return jsonify({

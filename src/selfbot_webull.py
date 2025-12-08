@@ -1892,13 +1892,34 @@ class WebullBroker:
                         except (ValueError, TypeError):
                             pass
                 
+                # Extract account type (Margin/Cash/IRA)
+                account_type = 'Unknown'
+                for field in ['brokerAccountTypeStr', 'accountType', 'brokerAccountType']:
+                    if field in account_data:
+                        raw_type = str(account_data[field]).upper()
+                        if 'MARGIN' in raw_type:
+                            account_type = 'Margin'
+                        elif 'CASH' in raw_type:
+                            account_type = 'Cash'
+                        elif 'IRA' in raw_type or 'ROTH' in raw_type or 'TRADITIONAL' in raw_type:
+                            account_type = 'IRA'
+                        else:
+                            account_type = account_data[field]
+                        print(f"[Webull] [DEBUG] Account type from '{field}': {account_type}")
+                        break
+                
+                # Get account ID for display
+                account_id = account_data.get('secAccountId', account_data.get('accountId', 'N/A'))
+                
                 result = {
                     'buying_power': buying_power,
                     'options_buying_power': options_bp,
                     'cash': buying_power,
-                    'portfolio_value': portfolio_value
+                    'portfolio_value': portfolio_value,
+                    'account_type': account_type,
+                    'account_id': str(account_id)
                 }
-                print(f"[Webull] [DEBUG] Final: BP=${buying_power:.2f}, OptBP=${options_bp:.2f}, PortValue=${portfolio_value:.2f}")
+                print(f"[Webull] [DEBUG] Final: Type={account_type}, BP=${buying_power:.2f}, OptBP=${options_bp:.2f}, PortValue=${portfolio_value:.2f}")
                 return result
             except Exception as e:
                 print(f"[Webull] [DEBUG] get_account_info error: {e}")

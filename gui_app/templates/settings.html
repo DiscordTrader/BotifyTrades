@@ -1791,7 +1791,18 @@ function updateConnectionStatus(elementId, status, message, accountInfo) {
     if (infoDiv && accountInfo) {
         infoDiv.style.display = 'block';
         if (accountInfo.buying_power !== undefined) {
-            infoDiv.innerHTML = `<strong>Buying Power:</strong> $${accountInfo.buying_power.toLocaleString()} | <strong>Portfolio:</strong> $${accountInfo.portfolio_value.toLocaleString()}`;
+            let infoHtml = '';
+            // Show account type if available (Margin/Cash/IRA)
+            if (accountInfo.account_type && accountInfo.account_type !== 'Unknown') {
+                const typeColor = accountInfo.account_type === 'Margin' ? '#ff9800' : (accountInfo.account_type === 'Cash' ? '#4caf50' : '#9c27b0');
+                infoHtml += `<span style="background: ${typeColor}22; color: ${typeColor}; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-right: 8px;">${accountInfo.account_type.toUpperCase()}</span>`;
+            }
+            // Show account ID if available
+            if (accountInfo.account_id && accountInfo.account_id !== 'N/A') {
+                infoHtml += `<strong>Account:</strong> ...${accountInfo.account_id.slice(-4)} | `;
+            }
+            infoHtml += `<strong>Buying Power:</strong> $${accountInfo.buying_power.toLocaleString()} | <strong>Portfolio:</strong> $${(accountInfo.portfolio_value || 0).toLocaleString()}`;
+            infoDiv.innerHTML = infoHtml;
         } else if (accountInfo.note) {
             infoDiv.innerHTML = `<strong>Note:</strong> ${accountInfo.note}`;
         }
