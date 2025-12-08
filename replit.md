@@ -8,6 +8,7 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 **See `ARCHITECTURE.md` for full details.**
 
 ### Recent Changes (Dec 8, 2025)
+- **v2.1.21**: Fix options chain not loading - Webull API now returns list directly instead of dict
 - **v2.1.20**: Two-repo architecture - public releases repo for auto-updates, private source repo
 - **v2.1.20**: Upgrade checker now points to BotifyTrades-Releases (public) instead of BotifyTradesv2 (private)
 - **v2.1.20**: GitHub Actions automatically mirrors releases to public repo

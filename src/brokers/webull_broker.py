@@ -699,14 +699,22 @@ class WebullBroker(BrokerInterface):
         """Get all available option expiration dates for a symbol"""
         try:
             result = await asyncio.to_thread(self.wb.get_options_expiration_dates, stock=symbol)
-            if result and 'expireDateList' in result:
+            
+            # Handle both list (new API) and dict (old API) formats
+            exp_list = []
+            if isinstance(result, list):
+                exp_list = result
+            elif isinstance(result, dict) and 'expireDateList' in result:
+                exp_list = result['expireDateList']
+            
+            if exp_list:
                 return [
                     {
-                        'date': exp['date'],
+                        'date': exp.get('date', ''),
                         'count': exp.get('count', 0),
-                        'label': exp.get('label', exp['date'])
+                        'label': exp.get('label', exp.get('date', ''))
                     }
-                    for exp in result['expireDateList']
+                    for exp in exp_list if isinstance(exp, dict) and exp.get('date')
                 ]
             return []
         except Exception as e:

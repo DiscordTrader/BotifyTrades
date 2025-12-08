@@ -3018,9 +3018,16 @@ class WebullBroker:
                     else:
                         print(f"[Webull] DEBUG: response is not a dict: {result}")
                 
-                if result and 'expireDateList' in result:
+                # Handle both list (new API) and dict (old API) formats
+                exp_list = []
+                if isinstance(result, list):
+                    exp_list = result
+                elif isinstance(result, dict) and 'expireDateList' in result:
+                    exp_list = result['expireDateList']
+                
+                if exp_list:
                     expirations = []
-                    for exp in result['expireDateList']:
+                    for exp in exp_list:
                         if isinstance(exp, dict):
                             exp_date = exp.get('date', '')
                             exp_label = exp.get('label', exp_date)
