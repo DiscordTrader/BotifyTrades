@@ -6166,22 +6166,74 @@ def register_routes(app):
             
             existing = get_webull_credentials()
             
+            new_email = data.get('email', existing.get('email', ''))
+            new_password = data.get('password', existing.get('password', ''))
+            
+            credentials_changed = (
+                new_email != existing.get('email', '') or
+                (new_password and new_password != existing.get('password', ''))
+            )
+            
+            if credentials_changed:
+                access_token = ''
+                refresh_token = ''
+                print("[Webull] Credentials changed - clearing old tokens for fresh authentication")
+            else:
+                access_token = data.get('access_token', existing.get('access_token', ''))
+                refresh_token = data.get('refresh_token', existing.get('refresh_token', ''))
+            
             save_webull_credentials(
-                email=data.get('email', existing.get('email', '')),
-                password=data.get('password', existing.get('password', '')),
+                email=new_email,
+                password=new_password,
                 trade_pin=data.get('trade_pin', existing.get('trade_pin', '')),
                 device_id=data.get('device_id', existing.get('device_id', '')),
-                access_token=data.get('access_token', existing.get('access_token', '')),
-                refresh_token=data.get('refresh_token', existing.get('refresh_token', '')),
+                access_token=access_token,
+                refresh_token=refresh_token,
                 paper_mode=data.get('paper_mode', existing.get('paper_mode', True))
             )
             
+            message = 'Webull credentials saved.'
+            if credentials_changed:
+                message += ' Old tokens cleared - please use Connect button to authenticate with new credentials.'
+            else:
+                message += ' Use Connect button to connect.'
+            
             return jsonify({
                 'success': True,
-                'message': 'Webull credentials saved. Use Connect button to connect.'
+                'message': message,
+                'tokens_cleared': credentials_changed
             })
         except Exception as e:
             print(f"[API] Error saving Webull credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/credentials/webull/clear-tokens', methods=['POST'])
+    @login_required
+    def api_clear_webull_tokens():
+        """Clear Webull access/refresh tokens to force re-authentication"""
+        try:
+            from .broker_credentials_service import get_webull_credentials, save_webull_credentials
+            
+            existing = get_webull_credentials()
+            
+            save_webull_credentials(
+                email=existing.get('email', ''),
+                password=existing.get('password', ''),
+                trade_pin=existing.get('trade_pin', ''),
+                device_id=existing.get('device_id', ''),
+                access_token='',
+                refresh_token='',
+                paper_mode=existing.get('paper_mode', True)
+            )
+            
+            print("[Webull] Tokens cleared manually - will require fresh authentication")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Webull tokens cleared. Please use Connect button to authenticate.'
+            })
+        except Exception as e:
+            print(f"[API] Error clearing Webull tokens: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/webull/auth/login', methods=['POST'])
