@@ -6556,12 +6556,13 @@ def register_routes(app):
             
             elif broker_id.startswith('webull'):
                 creds = get_webull_credentials()
-                has_tokens = creds.get('access_token') and creds.get('refresh_token')
+                # Token-only mode: access_token required, refresh_token optional (can be dummy)
+                has_tokens = bool(creds.get('access_token'))
                 has_login_creds = creds.get('email') and creds.get('password')
                 
                 if not has_tokens and not has_login_creds:
                     set_broker_status(broker_id, False, 'error', 'No Webull credentials configured')
-                    return jsonify({'success': False, 'error': 'Please enter either email/password OR access/refresh tokens'}), 400
+                    return jsonify({'success': False, 'error': 'Please enter either email/password OR access token'}), 400
                 
                 if not creds.get('trade_pin'):
                     set_broker_status(broker_id, False, 'error', 'Trade PIN required')
