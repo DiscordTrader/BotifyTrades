@@ -575,6 +575,7 @@ del /Q "%~f0" >NUL 2>&1
             print(f"[UPGRADE] Created Windows updater: {batch_path}")
             
             import subprocess
+            import threading
             pid = os.getpid()
             CREATE_NEW_CONSOLE = 0x00000010
             DETACHED_PROCESS = 0x00000008
@@ -584,7 +585,19 @@ del /Q "%~f0" >NUL 2>&1
                 close_fds=True
             )
             
-            print(f"[UPGRADE] Updater launched. Application will restart after exit.")
+            print(f"[UPGRADE] Updater launched. Application will exit in 3 seconds...")
+            print(f"[UPGRADE] The updater will replace the EXE and restart automatically.")
+            
+            # Schedule app exit so the batch script can replace the EXE
+            def delayed_exit():
+                import time
+                time.sleep(3)
+                print("[UPGRADE] Exiting for EXE replacement...")
+                os._exit(0)
+            
+            exit_thread = threading.Thread(target=delayed_exit, daemon=True)
+            exit_thread.start()
+            
             return True, "", True
             
         except Exception as e:
@@ -630,6 +643,7 @@ rm -f "$0"
             print(f"[UPGRADE] Created Unix updater: {script_path}")
             
             import subprocess
+            import threading
             pid = os.getpid()
             subprocess.Popen(
                 ['/bin/bash', str(script_path), str(pid)],
@@ -637,7 +651,19 @@ rm -f "$0"
                 close_fds=True
             )
             
-            print(f"[UPGRADE] Updater launched. Application will restart after exit.")
+            print(f"[UPGRADE] Updater launched. Application will exit in 3 seconds...")
+            print(f"[UPGRADE] The updater will replace the binary and restart automatically.")
+            
+            # Schedule app exit so the script can replace the binary
+            def delayed_exit():
+                import time
+                time.sleep(3)
+                print("[UPGRADE] Exiting for binary replacement...")
+                os._exit(0)
+            
+            exit_thread = threading.Thread(target=delayed_exit, daemon=True)
+            exit_thread.start()
+            
             return True, "", True
             
         except Exception as e:
