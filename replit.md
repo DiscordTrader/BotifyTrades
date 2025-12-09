@@ -8,6 +8,7 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 **See `ARCHITECTURE.md` for full details.**
 
 ### Recent Changes (Dec 8, 2025)
+- **v2.1.24**: Fix upgrade downloading wrong platform ZIP (was grabbing Linux instead of Windows)
 - **v2.1.23**: Upgrade system now auto-exits app after EXE update for seamless replacement
 - **v2.1.23**: Upgrade system now prints prominent status summary to console (UPGRADE COMPLETE/FAILED box)
 - **v2.1.23**: GitHub workflow fix - publish-to-public runs even if one platform build fails

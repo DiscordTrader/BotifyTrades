@@ -233,12 +233,25 @@ class VersionChecker:
             
             download_url = ""
             size_bytes = 0
+            
+            # Determine platform-specific asset name
+            import sys
+            if sys.platform == 'win32':
+                platform_keyword = 'windows'
+            elif sys.platform == 'darwin':
+                platform_keyword = 'macos'
+            else:
+                platform_keyword = 'linux'
+            
+            print(f"[UPDATE] Looking for {platform_keyword} asset...")
+            
             for asset in release.get('assets', []):
                 name = asset.get('name', '').lower()
-                if 'botify' in name or 'trading' in name:
+                if ('botify' in name or 'trading' in name) and platform_keyword in name:
                     if name.endswith('.exe') or name.endswith('.zip') or name.endswith('.tar.gz'):
                         download_url = asset.get('browser_download_url', '')
                         size_bytes = asset.get('size', 0)
+                        print(f"[UPDATE] Found matching asset: {name}")
                         break
             
             if not download_url and release.get('zipball_url'):
