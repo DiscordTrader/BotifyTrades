@@ -29,11 +29,15 @@ outputType = "webview"
 
 [nix]
 channel = "stable-25_05"
-packages = ["cargo", "geckodriver", "glibcLocales", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc", "sqlite", "gh"]
+packages = ["cargo", "geckodriver", "gh", "glibcLocales", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc", "sqlite"]
 
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 34081
+externalPort = 6800
 
 [[ports]]
 localPort = 34117
@@ -103,5 +107,5 @@ DATABASE_PATH = "bot_data.db"
 
 [deployment]
 deploymentTarget = "vm"
-run = ["python", "admin_server.py"]
+run = ["gunicorn", "--bind=0.0.0.0:5000", "--workers=2", "--reuse-port", "admin_server:app"]
 build = ["pip", "install", "-r", "requirements.txt"]

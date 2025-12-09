@@ -83,3 +83,4 @@ websockets
 webull
 Werkzeug
 yfinance
+gunicorn
