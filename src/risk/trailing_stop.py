@@ -82,18 +82,36 @@ def get_effective_trailing_settings(
     """
     Get effective trailing stop settings (channel > global).
     
+    CRITICAL: Only fall back to global settings if global risk is ENABLED.
+    If global is disabled, do not apply global trailing/stop values.
+    
     Returns:
         Tuple of (trailing_stop_pct, trailing_activation_pct, stop_loss_pct)
     """
     if channel_settings:
+        # Channel settings exist - use channel values, 
+        # only fall back to global if global is ENABLED
+        if global_settings.enabled:
+            return (
+                channel_settings.trailing_stop_pct or global_settings.trailing_stop_percent,
+                channel_settings.trailing_activation_pct or default_activation,
+                channel_settings.stop_loss_pct or global_settings.stop_loss_percent
+            )
+        else:
+            # Global is disabled - only use channel's own values, no global fallback
+            return (
+                channel_settings.trailing_stop_pct or 0,
+                channel_settings.trailing_activation_pct or default_activation,
+                channel_settings.stop_loss_pct or 0
+            )
+    
+    # No channel settings - only apply global if enabled
+    if global_settings.enabled:
         return (
-            channel_settings.trailing_stop_pct or global_settings.trailing_stop_percent,
-            channel_settings.trailing_activation_pct or default_activation,
-            channel_settings.stop_loss_pct or global_settings.stop_loss_percent
+            global_settings.trailing_stop_percent,
+            default_activation,
+            global_settings.stop_loss_percent
         )
     
-    return (
-        global_settings.trailing_stop_percent,
-        default_activation,
-        global_settings.stop_loss_percent
-    )
+    # Global disabled and no channel settings - return zeros (no trailing/stop loss)
+    return (0, default_activation, 0)
