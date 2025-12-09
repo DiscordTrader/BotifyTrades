@@ -1305,6 +1305,12 @@ print("[CONFIG] Loading signal patterns...")
 FLEXIBLE_OPT_PATTERN = r'^(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s+\$?([\d.]+)\s*([CPcp])\s*(\d{1,2}/\d{1,2})\s*@?\s*([\d.]+|[mM])'
 DEFAULT_STK_PATTERN = r'^(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s*@?\s*([\d.]+|[mM])'
 
+# Alternate pattern for formats like: 🟢**BTO $RKT | 21.2 C JAN/16 .56**
+# Handles: emoji, markdown **, $SYMBOL, | separator, month names (JAN/FEB/etc)
+MONTH_NAMES = {'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 'JUN': '06',
+               'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'}
+ALT_OPT_PATTERN = r'[🟢🔴]?\*{0,2}(BTO|STC)\s+\$([A-Za-z]+)\s*\|\s*([\d.]+)\s*([CPcp])\s+([A-Za-z]{3}|\d{1,2})/(\d{1,2})\s+\.?([\d.]+)'
+
 # Use database patterns if available, otherwise fallback to config.ini or defaults
 if DB_OPTION_PATTERN:
     OPT_REGEX = re.compile(DB_OPTION_PATTERN, re.IGNORECASE | re.MULTILINE)
@@ -4028,13 +4034,41 @@ class WebullBroker:
                 traceback.print_exc()
 
 # ------------------------------ SIGNAL PARSER -------------------------------------
+# Compile alternate pattern regex
+ALT_OPT_REGEX = re.compile(ALT_OPT_PATTERN, re.IGNORECASE)
+
 def parse_option_signal(text: str) -> Optional[dict]:
     m = OPT_REGEX.search(text.strip())
+    use_alt_format = False
+    
     if not m:
-        print(f"[Discord] ❌ Pattern NOT matched: '{text.strip()[:80]}'")
-        print(f"[Discord]    Expected format: BTO/STC QTY SYMBOL STRIKE C/P MM/DD @ PRICE")
-        return None
-    direction, qty_str, symbol, strike, opt_type, expiry, price_str = m.groups()
+        # Try alternate format: 🟢**BTO $RKT | 21.2 C JAN/16 .56**
+        m = ALT_OPT_REGEX.search(text.strip())
+        if m:
+            use_alt_format = True
+            print(f"[Discord] ✓ Matched alternate format (pipe-separated)")
+        else:
+            print(f"[Discord] ❌ Pattern NOT matched: '{text.strip()[:80]}'")
+            print(f"[Discord]    Expected format: BTO/STC QTY SYMBOL STRIKE C/P MM/DD @ PRICE")
+            print(f"[Discord]    Or alternate: 🟢BTO $SYMBOL | STRIKE C/P MONTH/DAY PRICE")
+            return None
+    
+    if use_alt_format:
+        # Alt format groups: (action, symbol, strike, opt_type, month, day, price)
+        direction, symbol, strike, opt_type, month_str, day, price_str = m.groups()
+        qty_str = None  # Alternate format doesn't include quantity
+        
+        # Convert month name to number if needed
+        month_upper = month_str.upper()
+        if month_upper in MONTH_NAMES:
+            month = MONTH_NAMES[month_upper]
+        else:
+            month = month_str.zfill(2)  # Pad single digit months
+        
+        expiry = f"{month}/{day}"
+        print(f"[Discord] Converted expiry: {month_str}/{day} → {expiry}")
+    else:
+        direction, qty_str, symbol, strike, opt_type, expiry, price_str = m.groups()
     
     # Check for market order: "@ m" or "@m" means execute at market price
     is_market_order = price_str.lower() == 'm'
