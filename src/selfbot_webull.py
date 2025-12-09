@@ -88,7 +88,7 @@ except ImportError:
     RISK_MODULE_AVAILABLE = False
     print("[RISK] Warning: Risk module not available, using legacy monitor_positions")
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Tuple, Dict, Any
 from enum import Enum
 from pathlib import Path
