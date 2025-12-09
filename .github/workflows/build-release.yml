@@ -76,6 +76,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path packaging/windows/dist/BotifyTrades
           if (Test-Path "packaging/windows/dist/BotifyTrades.exe") {
             Move-Item packaging/windows/dist/BotifyTrades.exe packaging/windows/dist/BotifyTrades/
+          } else {
+            Write-Error "ERROR: BotifyTrades.exe was not created! PyInstaller build failed."
+            exit 1
           }
           Copy-Item config.ini.example packaging/windows/dist/BotifyTrades/ -ErrorAction SilentlyContinue
           Copy-Item GET_DISCORD_TOKEN.html packaging/windows/dist/BotifyTrades/ -ErrorAction SilentlyContinue
