@@ -149,8 +149,21 @@ def smart_print(*args, **kwargs):
     - Shows ONLY essential messages in console (errors, key status)
     - Logs ALL messages to rotating files for admin debugging
     - Verbose details ([CONFIG], [LICENSE]) only shown when debug mode ON
+    - Captures to log monitor for AI chat assistant
     """
     message = ' '.join(str(arg) for arg in args)
+    
+    # Capture to log monitor for AI assistant
+    try:
+        from src.log_monitor import capture_log
+        level = "info"
+        if any(tag in message for tag in ['[ERROR]', '[CRITICAL]']):
+            level = "error"
+        elif '[WARNING]' in message or '⚠️' in message:
+            level = "warning"
+        capture_log(message, level)
+    except:
+        pass
     
     # Always log everything to file
     if any(tag in message for tag in ['[ERROR]', '[CRITICAL]']):

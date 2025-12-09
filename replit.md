@@ -8,6 +8,9 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 **See `ARCHITECTURE.md` for full details.**
 
 ### Recent Changes (Dec 8, 2025)
+- **v2.1.26**: AI-powered chat assistant now monitors console logs and answers trade/error questions
+- **v2.1.26**: New log monitor system captures all console output for AI analysis
+- **v2.1.26**: Chat can now analyze trades, positions, errors with OpenAI when API key is set
 - **v2.1.25**: Fix upgrade downloading wrong platform ZIP (was grabbing Linux instead of Windows)
 - **v2.1.23**: Upgrade system now auto-exits app after EXE update for seamless replacement
 - **v2.1.23**: Upgrade system now prints prominent status summary to console (UPGRADE COMPLETE/FAILED box)

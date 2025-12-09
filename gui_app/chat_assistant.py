@@ -957,3 +957,332 @@ def mark_errors_seen() -> bool:
     except Exception as e:
         print(f"[CHAT] Error marking errors seen: {e}")
         return False
+
+
+# ==================== AI-POWERED LOG & TRADE ANALYSIS ====================
+
+def get_ai_response(query: str) -> Dict:
+    """
+    Get an AI-powered response using OpenAI to analyze logs, trades, and issues.
+    This is the main entry point for intelligent chat queries.
+    """
+    query_lower = query.lower().strip()
+    
+    if is_trade_query(query_lower):
+        return analyze_trades(query)
+    elif is_log_query(query_lower):
+        return analyze_logs(query)
+    elif is_error_query(query_lower):
+        return analyze_errors(query)
+    else:
+        return get_contextual_response(query)
+
+
+def is_trade_query(query: str) -> bool:
+    """Check if query is about trades."""
+    trade_keywords = ["trade", "position", "order", "buy", "sell", "bto", "stc", 
+                      "filled", "executed", "profit", "loss", "p&l", "pnl"]
+    return any(kw in query for kw in trade_keywords)
+
+
+def is_log_query(query: str) -> bool:
+    """Check if query is about logs or console."""
+    log_keywords = ["log", "console", "output", "message", "what happened", 
+                    "show me", "recent activity", "status"]
+    return any(kw in query for kw in log_keywords)
+
+
+def is_error_query(query: str) -> bool:
+    """Check if query is about errors or issues."""
+    error_keywords = ["error", "issue", "problem", "fail", "wrong", "not working",
+                      "crash", "bug", "why did", "why didn't"]
+    return any(kw in query for kw in error_keywords)
+
+
+def analyze_trades(query: str) -> Dict:
+    """Analyze trades and provide AI-powered insights."""
+    try:
+        from . import database as db
+        
+        recent_trades = []
+        try:
+            recent_trades = db.get_recent_filled_orders(limit=20) or []
+        except:
+            pass
+        
+        open_positions = []
+        try:
+            open_positions = db.get_open_positions() or []
+        except:
+            pass
+        
+        log_context = _get_log_context()
+        
+        context = f"""Recent Trades (last 20):
+{_format_trades(recent_trades)}
+
+Open Positions:
+{_format_positions(open_positions)}
+
+Recent Console Activity:
+{log_context}
+"""
+        
+        ai_response = _call_openai(query, context, "trade_analysis")
+        
+        if ai_response:
+            return {
+                "success": True,
+                "response": ai_response,
+                "topic": "trade_analysis",
+                "ai_powered": True
+            }
+        else:
+            summary = _generate_trade_summary(recent_trades, open_positions)
+            return {
+                "success": True,
+                "response": summary,
+                "topic": "trade_summary"
+            }
+            
+    except Exception as e:
+        print(f"[CHAT] Trade analysis error: {e}")
+        return {
+            "success": True,
+            "response": "I couldn't retrieve trade data. Please check that your broker is connected in Settings.",
+            "topic": "error"
+        }
+
+
+def analyze_logs(query: str) -> Dict:
+    """Analyze console logs and provide insights."""
+    try:
+        log_context = _get_log_context(count=100)
+        summary = _get_log_summary()
+        
+        ai_response = _call_openai(query, f"Log Summary:\n{summary}\n\nRecent Logs:\n{log_context}", "log_analysis")
+        
+        if ai_response:
+            return {
+                "success": True,
+                "response": ai_response,
+                "topic": "log_analysis",
+                "ai_powered": True
+            }
+        else:
+            return {
+                "success": True,
+                "response": f"**Recent Activity Summary**\n\n{summary}\n\n**Recent Logs:**\n```\n{log_context[:1500]}...\n```",
+                "topic": "log_summary"
+            }
+            
+    except Exception as e:
+        print(f"[CHAT] Log analysis error: {e}")
+        return {
+            "success": True,
+            "response": "I couldn't access the log monitor. Logs are being captured in the background.",
+            "topic": "error"
+        }
+
+
+def analyze_errors(query: str) -> Dict:
+    """Analyze errors and provide troubleshooting help."""
+    try:
+        error_context = get_error_context()
+        log_context = _get_log_context(category="error", count=30)
+        
+        context = f"""Error Summary:
+- Total errors (24h): {error_context.get('error_count', 0)}
+- Critical errors: {error_context.get('critical_count', 0)}
+
+Recent Error Logs:
+{log_context}
+
+Recent Errors from Database:
+{_format_errors(error_context.get('recent_errors', []))}
+"""
+        
+        ai_response = _call_openai(query, context, "error_analysis")
+        
+        if ai_response:
+            return {
+                "success": True,
+                "response": ai_response,
+                "topic": "error_analysis",
+                "ai_powered": True,
+                "has_errors": error_context.get('has_errors', False)
+            }
+        else:
+            if error_context.get('has_errors'):
+                return {
+                    "success": True,
+                    "response": f"**{error_context['error_count']} errors detected in the last 24 hours.**\n\nMost common issues:\n{_format_errors(error_context.get('recent_errors', [])[:5])}",
+                    "topic": "error_summary",
+                    "has_errors": True
+                }
+            else:
+                return {
+                    "success": True,
+                    "response": "No errors detected in the last 24 hours. Your bot is running smoothly!",
+                    "topic": "no_errors"
+                }
+                
+    except Exception as e:
+        print(f"[CHAT] Error analysis error: {e}")
+        return get_contextual_response(query)
+
+
+def _get_log_context(count: int = 50, category: Optional[str] = None) -> str:
+    """Get recent logs formatted for AI context."""
+    try:
+        from src.log_monitor import get_log_monitor
+        monitor = get_log_monitor()
+        
+        if category:
+            logs = monitor.get_recent_logs(count=count, category=category)
+        else:
+            logs = monitor.get_recent_logs(count=count)
+        
+        return monitor.format_for_ai(logs)
+    except Exception as e:
+        return f"Log monitor not available: {e}"
+
+
+def _get_log_summary() -> str:
+    """Get a summary of log activity."""
+    try:
+        from src.log_monitor import get_log_monitor
+        monitor = get_log_monitor()
+        summary = monitor.get_summary()
+        
+        lines = [
+            f"Total logs captured: {summary['total_logs']}",
+            f"Errors: {summary['error_count']}",
+            f"Warnings: {summary['warning_count']}",
+            f"Trade-related: {summary['trade_count']}",
+        ]
+        
+        if summary.get('categories'):
+            lines.append("\nBy category:")
+            for cat, count in sorted(summary['categories'].items(), key=lambda x: -x[1])[:5]:
+                lines.append(f"  - {cat}: {count}")
+        
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Summary not available: {e}"
+
+
+def _format_trades(trades: List[Dict]) -> str:
+    """Format trades for display."""
+    if not trades:
+        return "No recent trades found."
+    
+    lines = []
+    for t in trades[:10]:
+        symbol = t.get('symbol', 'Unknown')
+        action = t.get('action', t.get('side', 'Unknown'))
+        qty = t.get('quantity', t.get('qty', 0))
+        price = t.get('price', t.get('fill_price', 0))
+        time = t.get('filled_at', t.get('created_at', ''))[:19] if t.get('filled_at') or t.get('created_at') else ''
+        lines.append(f"  {time} | {action} {qty} {symbol} @ ${price}")
+    
+    return "\n".join(lines) if lines else "No trades to display."
+
+
+def _format_positions(positions: List[Dict]) -> str:
+    """Format positions for display."""
+    if not positions:
+        return "No open positions."
+    
+    lines = []
+    for p in positions:
+        symbol = p.get('symbol', 'Unknown')
+        qty = p.get('quantity', p.get('qty', 0))
+        pnl = p.get('unrealized_pnl', p.get('pnl', 0))
+        lines.append(f"  {symbol}: {qty} shares (P&L: ${pnl:.2f})")
+    
+    return "\n".join(lines) if lines else "No positions."
+
+
+def _format_errors(errors: List[Dict]) -> str:
+    """Format errors for display."""
+    if not errors:
+        return "No errors found."
+    
+    lines = []
+    for e in errors:
+        error_type = e.get('error_type', 'Unknown')
+        message = e.get('error_message', '')[:100]
+        count = e.get('occurrence_count', 1)
+        lines.append(f"  - [{error_type}] {message} (x{count})")
+    
+    return "\n".join(lines) if lines else "No errors."
+
+
+def _generate_trade_summary(trades: List[Dict], positions: List[Dict]) -> str:
+    """Generate a text summary of trading activity."""
+    parts = ["**Trading Summary**\n"]
+    
+    if trades:
+        parts.append(f"**Recent Trades ({len(trades)} total):**")
+        parts.append(_format_trades(trades[:5]))
+    else:
+        parts.append("No recent trades found.")
+    
+    parts.append("")
+    
+    if positions:
+        parts.append(f"**Open Positions ({len(positions)} total):**")
+        parts.append(_format_positions(positions))
+    else:
+        parts.append("No open positions.")
+    
+    return "\n".join(parts)
+
+
+def _call_openai(query: str, context: str, analysis_type: str) -> Optional[str]:
+    """Call OpenAI to analyze context and answer query."""
+    try:
+        import os
+        
+        api_key = os.environ.get('OPENAI_API_KEY') or os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY')
+        if not api_key:
+            return None
+        
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        
+        system_prompts = {
+            "trade_analysis": """You are a trading assistant for BotifyTrades, a Discord trading bot.
+Analyze the provided trade data and console logs to answer the user's question.
+Be concise but helpful. If you see errors, explain what they mean.
+Format your response with markdown for readability.""",
+            
+            "log_analysis": """You are a technical assistant for BotifyTrades, a Discord trading bot.
+Analyze the console logs and activity to answer the user's question.
+Identify any issues, patterns, or important events.
+Be concise and highlight the most relevant information.""",
+            
+            "error_analysis": """You are a troubleshooting assistant for BotifyTrades, a Discord trading bot.
+Analyze the errors and issues to help the user understand what went wrong.
+Provide clear explanations and suggest solutions when possible.
+Be empathetic - users are often frustrated when things don't work."""
+        }
+        
+        system_prompt = system_prompts.get(analysis_type, system_prompts["log_analysis"])
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Context:\n{context}\n\nUser Question: {query}"}
+            ],
+            max_tokens=500,
+            temperature=0.7
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        print(f"[CHAT] OpenAI call failed: {e}")
+        return None

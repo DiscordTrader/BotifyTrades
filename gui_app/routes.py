@@ -8275,7 +8275,7 @@ def register_routes(app):
     def api_chat():
         """AI Chat Assistant endpoint - handles user questions about the app with error context"""
         try:
-            from .chat_assistant import get_contextual_response
+            from .chat_assistant import get_ai_response
             
             data = request.json
             query = data.get('message', '').strip()
@@ -8283,12 +8283,12 @@ def register_routes(app):
             if not query:
                 return jsonify({
                     'success': True,
-                    'response': "Hi! I'm your BotifyTrades assistant. Ask me anything about the app!",
+                    'response': "Hi! I'm your BotifyTrades assistant. Ask me about trades, errors, logs, or anything about the app!",
                     'topic': None
                 })
             
-            # Use contextual response that checks for errors
-            result = get_contextual_response(query)
+            # Use AI-powered response that analyzes logs, trades, and errors
+            result = get_ai_response(query)
             return jsonify(result)
             
         except Exception as e:
@@ -8357,6 +8357,46 @@ def register_routes(app):
             
         except Exception as e:
             return jsonify({'success': False})
+    
+    @app.route('/api/chat/logs', methods=['GET'])
+    def api_chat_logs():
+        """Get recent console logs for display"""
+        try:
+            try:
+                from src.log_monitor import get_log_monitor
+            except ImportError:
+                try:
+                    import sys
+                    sys.path.insert(0, str(Path(__file__).parent.parent))
+                    from src.log_monitor import get_log_monitor
+                except ImportError:
+                    return jsonify({
+                        'success': True,
+                        'logs': [],
+                        'summary': {'total_logs': 0, 'error_count': 0, 'warning_count': 0, 'trade_count': 0},
+                        'message': 'Log monitor not available'
+                    })
+            
+            count = request.args.get('count', 50, type=int)
+            category = request.args.get('category', None)
+            
+            monitor = get_log_monitor()
+            
+            if category:
+                logs = monitor.get_recent_logs(count=count, category=category)
+            else:
+                logs = monitor.get_recent_logs(count=count)
+            
+            summary = monitor.get_summary()
+            
+            return jsonify({
+                'success': True,
+                'logs': logs,
+                'summary': summary
+            })
+            
+        except Exception as e:
+            return jsonify({'success': True, 'logs': [], 'summary': {}, 'error': str(e)})
     
     # ============ ERROR MONITORING API ============
     
