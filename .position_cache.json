@@ -526,7 +526,7 @@
   },
   "ALPACA_PAPER_BEAT_stock": {
     "entry_price": 1.27,
-    "highest_price": 1.3599,
+    "highest_price": 1.36,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -601,7 +601,7 @@
   },
   "ALPACA_PAPER_ORCL_185.0_2025-12-12_P": {
     "entry_price": 0.79,
-    "highest_price": 0.77,
+    "highest_price": 0.79,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
