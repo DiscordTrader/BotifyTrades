@@ -2814,6 +2814,7 @@ class WebullBroker:
 
             print(f"[DEBUG] place_stock payload: {payload}")
             resp = func(**payload)
+            print(f"[DEBUG] Webull place_stock response: {resp}")
             return resp
 
         return await self.loop.run_in_executor(None, _blocking_place)
