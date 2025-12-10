@@ -4715,13 +4715,16 @@ def register_routes(app):
             if not symbol:
                 return jsonify({'error': 'Symbol is required'}), 400
             
-            print(f"[OPTIONS API] Fetching expirations for {symbol} from broker: {selected_broker}")
+            print(f"[OPTIONS API] Fetching expirations for {symbol} from broker: {selected_broker}", flush=True)
             
             # Route to Alpaca if selected
             if 'ALPACA' in selected_broker:
+                print(f"[OPTIONS API] Loading Alpaca provider for {selected_broker}...", flush=True)
                 alpaca = get_alpaca_provider()
                 if not alpaca:
+                    print(f"[OPTIONS API] ERROR: Alpaca provider not initialized!", flush=True)
                     return jsonify({'error': 'Alpaca data provider not configured.'}), 503
+                print(f"[OPTIONS API] Alpaca provider ready, fetching expirations...", flush=True)
                 
                 new_loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(new_loop)
