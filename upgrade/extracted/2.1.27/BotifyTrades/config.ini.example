@@ -1,0 +1,59 @@
+[discord]
+# Your Discord USER token (not bot token)
+# SECURITY: Set via environment variable DISCORD_USER_TOKEN instead of hardcoding here
+discord_user_token = 
+
+# Discovery mode - log all messages to help find channel IDs
+discovery_mode = false
+
+# Testing mode - allow bot to process its own messages (for testing only)
+# Set to true if you want to test by posting signals from the bot's own account
+# Set to false for production to avoid processing your own test messages
+allow_self_messages = false
+
+# Comma-separated list of allowed author IDs (leave empty to allow all)
+# Example: allowed_author_ids = 123456789,987654321
+allowed_author_ids = 
+
+# Comma-separated list of allowed guild/server IDs (leave empty to allow all)
+# Example: allowed_guild_ids = 111111111
+allowed_guild_ids = 
+
+# Comma-separated list of channel IDs to monitor for signals
+# REQUIRED: You must set at least one channel ID
+# Example: channel_ids = 551065756557639680,1386424654209618050
+channel_ids = 
+
+[signals]
+# Pattern for options: BTO/STC QTY SYMBOL STRIKE[C/P] MM/DD @PRICE
+# Supports both uppercase and lowercase C/P
+pattern = ^(BTO|STC)\s+(\d+)\s+([A-Za-z]+)\s+([\d.]+)\s*([CPcp])\s+(\d{2}/\d{2})\s*@\s*([\d.]+)
+
+# Pattern for stocks: BTO/STC QTY SYMBOL @PRICE
+stock_pattern = ^(BTO|STC)\s+(\d+)\s+([A-Za-z]+)\s*@\s*([\d.]+)
+
+[webull]
+# SECURITY: Set credentials via environment variables instead of hardcoding:
+# - WEBULL_USERNAME
+# - WEBULL_PASSWORD  
+# - WEBULL_TRADE_PIN (your 6-digit trading PIN)
+username = 
+password = 
+trade_pin = 
+
+# OPTIONAL: Use saved tokens to skip login (get from browser console)
+# If both access_token and refresh_token are provided, username/password are optional
+# SECURITY: Store these in Replit Secrets (WEBULL_ACCESS_TOKEN, WEBULL_REFRESH_TOKEN, WEBULL_DID)
+access_token = 
+refresh_token = 
+did = 
+
+# Device configuration
+device_name = MyTradingBot
+
+# Order defaults (GTC = Good Till Cancelled, DAY = Day order)
+enforce = GTC
+
+# SAFETY: Set to true for paper trading (no real trades)
+# Set to false for LIVE trading (real money!)
+paper_trade = true
