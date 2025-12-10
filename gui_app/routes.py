@@ -3633,12 +3633,12 @@ def register_routes(app):
                                    for t in trades if t['status'] == 'OPEN')
                     avg_entry = (total_cost / total_qty) if total_qty > 0 else 0
                     
-                    # Get channel info for risk settings
+                    # Get channel info for risk settings (use Discord channel ID lookup)
                     channel_id = first_trade.get('channel_id')
                     channel_info = None
                     if channel_id:
                         try:
-                            channel_info = db.get_channel_by_id(channel_id)
+                            channel_info = db.get_channel_by_discord_id(channel_id)
                         except:
                             pass
                     
@@ -3669,12 +3669,12 @@ def register_routes(app):
                         elif trade['status'] == 'OPEN':
                             fill_status = 'Filled'
                         
-                        # Get channel info for risk settings
+                        # Get channel info for risk settings (use Discord channel ID lookup)
                         channel_id = trade.get('channel_id')
                         channel_info = None
                         if channel_id:
                             try:
-                                channel_info = db.get_channel_by_id(channel_id)
+                                channel_info = db.get_channel_by_discord_id(channel_id)
                             except:
                                 pass
                         

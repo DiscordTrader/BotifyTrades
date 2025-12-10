@@ -584,7 +584,7 @@ class BrokerLiveAnalytics:
         monthly_pnl = self.aggregate_period_pnl(daily_pnl, 'monthly')
         
         # Enrich positions and trades with source_display for UI badges
-        from .database import get_trade_source_display, find_open_bto_trade, get_channel_by_id
+        from .database import get_trade_source_display, find_open_bto_trade, get_channel_by_discord_id
         broker_config = self.BROKER_CONFIGS.get(broker_id, {})
         broker_name = broker_config.get('name', 'Broker')
         
@@ -629,8 +629,8 @@ class BrokerLiveAnalytics:
                 
                 if matching_trade:
                     if matching_trade.get('channel_id'):
-                        # Get channel info for display
-                        channel_info = get_channel_by_id(matching_trade['channel_id'])
+                        # Get channel info for display (use Discord channel ID lookup)
+                        channel_info = get_channel_by_discord_id(matching_trade['channel_id'])
                         if channel_info:
                             channel_name = channel_info.get('name', 'Unknown')
                             if channel_info.get('execute_enabled'):

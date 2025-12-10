@@ -1216,6 +1216,48 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
     }
 
 
+def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
+    """Get a single channel by its Discord channel ID with risk settings"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT id, discord_channel_id, name, category, execute_enabled, track_enabled,
+               broker_override, is_active, paper_trade_enabled, enabled_brokers,
+               profit_target_pct, profit_target_1_pct, profit_target_2_pct, profit_target_3_pct,
+               stop_loss_pct, trailing_stop_pct, trailing_activation_pct, position_size_pct,
+               created_at, updated_at
+        FROM channels WHERE discord_channel_id = ?
+    ''', (str(discord_channel_id),))
+    
+    row = cursor.fetchone()
+    if not row:
+        return None
+    
+    return {
+        'id': row[0],
+        'discord_channel_id': row[1],
+        'name': row[2],
+        'category': row[3],
+        'execute_enabled': row[4],
+        'track_enabled': row[5],
+        'broker_override': row[6],
+        'is_active': row[7],
+        'paper_trade_enabled': row[8],
+        'enabled_brokers': json.loads(row[9]) if row[9] else [],
+        'profit_target_pct': row[10],
+        'profit_target_1_pct': row[11] if row[11] is not None else 20,
+        'profit_target_2_pct': row[12] if row[12] is not None else 50,
+        'profit_target_3_pct': row[13] if row[13] is not None else 100,
+        'stop_loss_pct': row[14] if row[14] is not None else 10,
+        'trailing_stop_pct': row[15],
+        'trailing_activation_pct': row[16],
+        'position_size_pct': row[17],
+        'created_at': row[18],
+        'updated_at': row[19]
+    }
+
+
 def update_channel(channel_id: int, **kwargs):
     """Update channel fields (supports dual-mode flags)"""
     conn = get_connection()
