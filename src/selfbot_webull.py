@@ -5715,6 +5715,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 print(f"[QUEUE] ✓ Signal queued (legacy mode)")
             
             return
+        
+        # FALLBACK: Try TRADE IDEA format for execute/track channels when BTO/STC and stock patterns fail
+        if execute_enabled or track_enabled:
+            structured = self.parse_structured_alert(message.content)
+            if structured:
+                print(f"[TRADE IDEA FALLBACK] ✅ Parsed: {structured['symbol']} Entry=${structured['entry_price']}, SL=${structured['stop_loss']}, Target=${structured['target_price']}")
+                await self.handle_auto_signal_conversion(message, message.content.strip())
+                return
     
     async def execute_on_single_broker(self, signal: dict, broker_name: str, broker_instance) -> dict:
         """Execute order on a single broker instance"""
