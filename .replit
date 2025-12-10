@@ -105,6 +105,11 @@ Y9gni8Qrg3UdNjwzTFUkmtA=
 -----END PRIVATE KEY-----"""
 DATABASE_PATH = "bot_data.db"
 
+[userenv.production]
+BUILD_TARGET = "admin"
+LICENSE_SERVER_MODE = "true"
+ADMIN_MODE = "true"
+
 [deployment]
 deploymentTarget = "vm"
 run = ["gunicorn", "--bind=0.0.0.0:5000", "--workers=2", "--reuse-port", "admin_server:app"]
