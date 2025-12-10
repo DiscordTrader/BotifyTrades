@@ -4423,6 +4423,12 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                                 'profit_target_price': structured.get('target_price')
                             }
                             
+                            # Add position sizing from channel settings
+                            position_size_pct = target_channel_info.get('position_size_pct')
+                            if position_size_pct:
+                                signal['_position_size_pct'] = float(position_size_pct)
+                                print(f"[ALERT PARSER] ✓ Position sizing: {position_size_pct}% of portfolio")
+                            
                             # Add multi-broker configuration from channel settings
                             enabled_brokers_json = target_channel_info.get('enabled_brokers')
                             if enabled_brokers_json:
