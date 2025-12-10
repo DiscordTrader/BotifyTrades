@@ -5020,8 +5020,8 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                 except:
                     pass
             
-            # Extract stop loss - handles "⛔\nSL: 0.435" or "SL: 0.435"
-            sl_match = re.search(r'SL:\s*\$?([\d.]+)', text, re.IGNORECASE)
+            # Extract stop loss - handles "⛔\nSL: 0.435" or "SL: 0.435" or "SL 0.435" (colon optional)
+            sl_match = re.search(r'SL[:\s]+\$?([\d.]+)', text, re.IGNORECASE)
             if sl_match:
                 try:
                     alert_data['stop_loss'] = float(sl_match.group(1))
@@ -5060,8 +5060,8 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                 except:
                     pass
             
-            # Extract stop loss - look for "S.L:" or "SL" or "STOP"
-            sl_match = re.search(r'(?:S\.L|SL|stop\s+loss):\s*\$?([\d.]+)', text, re.IGNORECASE)
+            # Extract stop loss - look for "S.L:" or "SL" or "STOP" (colon optional)
+            sl_match = re.search(r'(?:S\.L|SL|stop\s*loss)[:\s]+\$?([\d.]+)', text, re.IGNORECASE)
             if sl_match:
                 try:
                     alert_data['stop_loss'] = float(sl_match.group(1))
