@@ -76,5 +76,5 @@ ADMIN_MODE = "true"
 
 [deployment]
 deploymentTarget = "vm"
-run = ["gunicorn", "--bind=0.0.0.0:80", "--workers=2", "--timeout=120", "wsgi:app"]
+run = ["gunicorn", "--bind=0.0.0.0:5000", "--workers=2", "--timeout=120", "wsgi:app"]
 build = ["pip", "install", "-r", "requirements.txt"]
