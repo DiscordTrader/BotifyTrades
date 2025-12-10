@@ -1625,6 +1625,7 @@ def register_routes(app):
                 'expiry': trade.get('expiry'),
                 'call_put': trade.get('call_put'),
                 'option_id': trade.get('option_id'),
+                'source_display': db.get_trade_source_display(trade),
             })
         
         response = make_response(jsonify(formatted_trades))
