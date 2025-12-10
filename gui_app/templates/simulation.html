@@ -556,11 +556,12 @@ async function loadEntityStats() {
             <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
                 <div><span style="color: var(--text-muted);">Trades:</span> ${stats.total_trades}</div>
                 <div><span style="color: var(--text-muted);">Win Rate:</span> ${stats.win_rate}%</div>
+                <div><span style="color: var(--text-muted);">Wins:</span> <span class="success">${stats.wins}</span></div>
+                <div><span style="color: var(--text-muted);">Losses:</span> <span class="danger">${stats.losses}</span></div>
                 <div><span style="color: var(--text-muted);">Avg Win:</span> ${stats.avg_win_pct > 0 ? '+' : ''}${stats.avg_win_pct}%</div>
                 <div><span style="color: var(--text-muted);">Avg Loss:</span> ${stats.avg_loss_pct}%</div>
                 <div><span style="color: var(--text-muted);">Total P/L:</span> <span class="${stats.total_pnl >= 0 ? 'success' : 'danger'}">$${stats.total_pnl.toLocaleString()}</span></div>
                 <div><span style="color: var(--text-muted);">Avg ROI:</span> <span class="${stats.avg_pnl_percent >= 0 ? 'success' : 'danger'}">${stats.avg_pnl_percent > 0 ? '+' : ''}${stats.avg_pnl_percent}%</span></div>
-                <div><span style="color: var(--text-muted);">Trades/Day:</span> ${stats.trades_per_day}</div>
             </div>
         `;
         preview.style.display = 'block';
