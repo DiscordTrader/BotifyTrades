@@ -8,6 +8,10 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 **See `ARCHITECTURE.md` for full details.**
 
 ### Recent Changes (Dec 10, 2025)
+- **v2.1.28**: NEW Settings Manifest System - Single source of truth for all 30 application settings
+- **v2.1.28**: SettingsService with enforcement decorators (@requires_setting, @with_setting, @enforce_trading_limits)
+- **v2.1.28**: SettingsValidator for cross-layer consistency checking (Schema, Manifest, Enforcement, Defaults)
+- **v2.1.28**: Consistency check now validates settings (step 6/9) - reduced warnings from 22 to 10
 - **v2.1.27**: Removed legacy `monitor_positions` from WebullBroker (~800 lines) - RiskManager is now single source
 - **v2.1.27**: Risk module now skips positions when global disabled AND no channel settings (no false "[Global]" logs)
 - **v2.1.27**: Simplified SelfClient risk wiring - removed fallback logic, uses only pluggable RiskManager

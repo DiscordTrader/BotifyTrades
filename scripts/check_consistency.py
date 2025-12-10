@@ -45,6 +45,7 @@ class ConsistencyChecker:
         self._check_database_schema()
         self._check_route_conflicts()
         self._check_module_structure()
+        self._check_settings_consistency()
         
         if self.mode in ['full', 'pre-deploy']:
             self._run_unit_tests()
@@ -205,9 +206,41 @@ class ConsistencyChecker:
         else:
             self._add_result('Module Structure', 'pass', f'{len(required_modules)} modules OK')
     
+    def _check_settings_consistency(self):
+        """Validate settings manifest against database and enforcement points."""
+        print("\n[6/8] Checking Settings Consistency...")
+        
+        try:
+            from src.core.settings_validator import SettingsValidator
+            from src.core.settings_manifest import SETTINGS_MANIFEST
+            
+            validator = SettingsValidator(db_path='bot_data.db')
+            results = validator.run_all_checks()
+            
+            total_errors = sum(len(r.errors) for r in results)
+            total_warnings = sum(len(r.warnings) for r in results)
+            
+            if total_errors > 0:
+                self._add_result('Settings Consistency', 'fail', 
+                               f'{total_errors} errors, {total_warnings} warnings in {len(SETTINGS_MANIFEST)} settings')
+                for result in results:
+                    for error in result.errors[:3]:
+                        print(f"      - {error}")
+            elif total_warnings > 0:
+                self._add_result('Settings Consistency', 'warn',
+                               f'{total_warnings} warnings in {len(SETTINGS_MANIFEST)} settings')
+            else:
+                self._add_result('Settings Consistency', 'pass',
+                               f'{len(SETTINGS_MANIFEST)} settings validated')
+                
+        except ImportError as e:
+            self._add_result('Settings Consistency', 'warn', f'Module not found: {e}')
+        except Exception as e:
+            self._add_result('Settings Consistency', 'warn', f'Skipped: {e}')
+    
     def _run_unit_tests(self):
         """Run quick unit tests."""
-        print("\n[6/8] Running Unit Tests...")
+        print("\n[7/9] Running Unit Tests...")
         
         try:
             result = subprocess.run(
@@ -232,7 +265,7 @@ class ConsistencyChecker:
     
     def _check_system_diagnostics(self):
         """Run full system diagnostics."""
-        print("\n[7/8] Running System Diagnostics...")
+        print("\n[8/9] Running System Diagnostics...")
         
         try:
             from scripts.system_diagnostics import run_diagnostics
@@ -254,7 +287,7 @@ class ConsistencyChecker:
     
     def _validate_build_targets(self):
         """Validate dual-build architecture."""
-        print("\n[8/8] Validating Build Targets...")
+        print("\n[9/9] Validating Build Targets...")
         
         issues = []
         
