@@ -7029,15 +7029,20 @@ def register_routes(app):
         """Get current license status"""
         try:
             import os
+            import sys
             
-            # ADMIN BYPASS: If running as admin/development server, grant unlimited access
-            # This allows the bot owner to use the system without license restrictions
+            # Check if actually running from admin_server.py entry point
+            # This prevents admin bypass when secrets leak into User Build
+            entry_point = os.path.basename(sys.argv[0]) if sys.argv else ''
+            is_admin_entry = entry_point in ('admin_server.py', 'wsgi.py')
+            
+            # ADMIN BYPASS: Only grant admin access when running via admin entry point
             admin_mode = os.getenv('ADMIN_MODE', 'false').lower() == 'true'
             license_server_mode = os.getenv('LICENSE_SERVER_MODE', 'false').lower() == 'true'
             admin_password = os.getenv('ADMIN_PASSWORD', '').strip()
             
-            if admin_mode or license_server_mode or admin_password:
-                # Admin/Owner mode - unlimited access
+            if is_admin_entry and (admin_mode or license_server_mode or admin_password):
+                # Admin/Owner mode - unlimited access (only when running as admin server)
                 from datetime import datetime, timedelta
                 return jsonify({
                     'is_valid': True,
