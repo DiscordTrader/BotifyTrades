@@ -1334,13 +1334,25 @@ MONTH_NAMES = {'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 
                'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'}
 ALT_OPT_PATTERN = r'[🟢🔴]?\*{0,2}(BTO|STC)\s+\$([A-Za-z]+)\s*\|\s*([\d.]+)\s*([CPcp])\s+([A-Za-z]{3}|\d{1,2})/(\d{1,2})\s+\.?([\d.]+)'
 
-# Steel-style pattern for formats like: :green_alert: AAPL | $282.5 C 1.72 NEXT WEEK
-# Also handles: :SirenRed: AAPL | 1.82 OUT HALF
+# Steel-style patterns for formats like:
+# BTO: :green_alert: COIN | $290 C 5.14
+#      TSLA | 470 C 5.15 next week (no prefix)
+# STC: :SirenRed: AAPL | 1.82 OUT HALF SL ENTRY ✅
+#      :SirenRed: PLTR | 1.33 OUT 1/3 ✅
+#      TSLA 5.03 OUT (simple format)
+
+# BTO pattern - with or without :green_alert: prefix
 # Groups: (symbol, strike, opt_type, price, expiry_text)
-STEEL_BTO_PATTERN = r':?(?:green_alert|greencheckmark):?\s*\$?([A-Za-z]+)\s*\|\s*\$?([\d.]+)\s*([CPcp])\s+([\d.]+)\s*(NEXT\s*WEEK|THIS\s*WEEK|TOMORROW|\d{1,2}/\d{1,2})?'
-# STC pattern for steel format: :SirenRed: AAPL | 1.82 OUT HALF
-# Groups: (symbol, price, exit_type) - exit_type: HALF, ALL, "ALL BUT 1", etc
-STEEL_STC_PATTERN = r':?(?:SirenRed|redx|stopsign):?\s*\$?([A-Za-z]+)\s*\|\s*([\d.]+)\s*(OUT\s*(?:HALF|ALL(?:\s*BUT\s*\d+)?)|SL\s*ENTRY)?'
+# Note: [$] is used instead of \$ because $ is a regex metacharacter
+STEEL_BTO_PATTERN = r'(?::green_alert:|:greencheckmark:)?\s*([A-Za-z]+)\s*[|]\s*[$]?([0-9.]+)\s*([CPcp])\s+([0-9.]+)\s*(NEXT\s*WEEK|THIS\s*WEEK|TOMORROW|[0-9]{1,2}/[0-9]{1,2})?'
+
+# STC pattern with :SirenRed: prefix - handles OUT HALF, OUT 1/3, OUT ALL
+# Groups: (symbol, price, exit_type)
+STEEL_STC_PATTERN = r':SirenRed:\s*([A-Za-z]+)\s*[|]\s*([0-9.]+)\s*(OUT\s*HALF|OUT\s*ALL|OUT\s*ALL\s*BUT\s*[0-9]+|OUT\s*[0-9]+/[0-9]+|SL\s*ENTRY)?'
+
+# Simple STC pattern: SYMBOL PRICE OUT (no prefix)
+# Groups: (symbol, price)
+SIMPLE_STC_PATTERN = r'^([A-Za-z]+)\s+([0-9.]+)\s+OUT'
 
 def calculate_next_week_expiry():
     """Calculate next Friday's date for 'NEXT WEEK' expiry"""
@@ -3327,6 +3339,7 @@ class WebullBroker:
 ALT_OPT_REGEX = re.compile(ALT_OPT_PATTERN, re.IGNORECASE)
 STEEL_BTO_REGEX = re.compile(STEEL_BTO_PATTERN, re.IGNORECASE)
 STEEL_STC_REGEX = re.compile(STEEL_STC_PATTERN, re.IGNORECASE)
+SIMPLE_STC_REGEX = re.compile(SIMPLE_STC_PATTERN, re.IGNORECASE)
 
 def parse_option_signal(text: str) -> Optional[dict]:
     m = OPT_REGEX.search(text.strip())
@@ -3353,15 +3366,30 @@ def parse_option_signal(text: str) -> Optional[dict]:
                     use_steel_stc = True
                     print(f"[Discord] ✓ Matched steel STC format")
                 else:
-                    print(f"[Discord] ❌ Pattern NOT matched: '{text.strip()[:80]}'")
-                    print(f"[Discord]    Expected format: BTO/STC QTY SYMBOL STRIKE C/P MM/DD @ PRICE")
-                    print(f"[Discord]    Or alternate: 🟢BTO $SYMBOL | STRIKE C/P MONTH/DAY PRICE")
-                    print(f"[Discord]    Or steel: :green_alert: SYMBOL | $STRIKE C/P PRICE NEXT WEEK")
-                    return None
+                    # Try simple STC format: TSLA 5.03 OUT
+                    m = SIMPLE_STC_REGEX.search(text.strip())
+                    if m:
+                        use_steel_stc = True  # Reuse the same handling
+                        print(f"[Discord] ✓ Matched simple STC format (SYMBOL PRICE OUT)")
+                    else:
+                        print(f"[Discord] ❌ Pattern NOT matched: '{text.strip()[:80]}'")
+                        print(f"[Discord]    Expected format: BTO/STC QTY SYMBOL STRIKE C/P MM/DD @ PRICE")
+                        print(f"[Discord]    Or alternate: 🟢BTO $SYMBOL | STRIKE C/P MONTH/DAY PRICE")
+                        print(f"[Discord]    Or steel: :green_alert: SYMBOL | $STRIKE C/P PRICE NEXT WEEK")
+                        print(f"[Discord]    Or STC: :SirenRed: SYMBOL | PRICE OUT HALF")
+                        return None
     
     if use_steel_stc:
-        # Steel STC format groups: (symbol, price, exit_type)
-        symbol, price_str, exit_type = m.groups()
+        # Handle both steel STC (3 groups) and simple STC (2 groups)
+        groups = m.groups()
+        if len(groups) == 3:
+            # Steel STC format groups: (symbol, price, exit_type)
+            symbol, price_str, exit_type = groups
+        else:
+            # Simple STC format groups: (symbol, price)
+            symbol, price_str = groups
+            exit_type = "ALL"  # Default to exit all
+        
         direction = 'STC'
         qty_str = None  # Will need to look up position or default to 1
         
