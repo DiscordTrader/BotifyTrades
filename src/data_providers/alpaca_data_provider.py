@@ -59,8 +59,8 @@ class AlpacaDataProvider:
     
     async def get_options_expiration_dates(self, symbol: str) -> List[str]:
         """
-        Get all available expiration dates for a symbol using TradingClient.get_option_contracts()
-        This is more reliable than parsing OCC symbols from option chain.
+        Get all available expiration dates for a symbol using OptionChainRequest (market data API).
+        This uses the full market data feed rather than the limited paper trading contracts.
         
         Args:
             symbol: Stock symbol (e.g., 'AAPL', 'SPY', 'SPX')
@@ -72,52 +72,43 @@ class AlpacaDataProvider:
         from datetime import date, timedelta
         
         try:
-            print(f"[AlpacaDataProvider] Fetching expirations for {symbol} using get_option_contracts()", flush=True)
+            print(f"[AlpacaDataProvider] Fetching expirations for {symbol} using OptionChainRequest (market data)", flush=True)
             
-            # Fetch contracts with pagination to get all expiration dates
-            # Request a large limit to get more expiration dates in fewer calls
+            # Use market data API's OptionChainRequest - this has complete options data
+            # Unlike TradingClient with paper=True, this accesses full market data
+            request = OptionChainRequest(
+                underlying_symbol=symbol.upper()
+            )
+            
+            # Execute blocking SDK call in background thread (non-blocking)
+            chain_response = await asyncio.to_thread(
+                self.client.get_option_chain, request
+            )
+            
+            # Extract unique expiration dates from option chain
             all_expirations = set()
-            page_token = None
-            max_pages = 10  # Safety limit
-            pages_fetched = 0
             
-            while pages_fetched < max_pages:
-                # Build request - only include page_token if we have one
-                request_params = {
-                    'underlying_symbols': [symbol.upper()],
-                    'status': AssetStatus.ACTIVE,
-                    'limit': 10000  # Maximum allowed by Alpaca API
-                }
-                if page_token:
-                    request_params['page_token'] = page_token
-                    
-                request = GetOptionContractsRequest(**request_params)
+            # chain_response is a dict keyed by option symbol
+            # Each option symbol contains expiration in the data
+            if chain_response:
+                print(f"[AlpacaDataProvider] Received {len(chain_response)} option contracts from market data", flush=True)
                 
-                # Execute blocking SDK call in background thread (non-blocking)
-                contracts_response = await asyncio.to_thread(
-                    self.trading_client.get_option_contracts, request
-                )
-                
-                # Extract contracts from response
-                contracts = contracts_response.option_contracts if hasattr(contracts_response, 'option_contracts') else []
-                
-                print(f"[AlpacaDataProvider] Page {pages_fetched + 1}: Received {len(contracts)} contracts", flush=True)
-                
-                for contract in contracts:
+                for option_symbol, option_data in chain_response.items():
                     try:
-                        exp_date = contract.expiration_date
-                        if exp_date:
-                            all_expirations.add(str(exp_date))
+                        # Parse expiration from OCC symbol format: SPY241220C00600000
+                        # Format: SYMBOL + YYMMDD + C/P + strike
+                        # Find where the date starts (after the underlying symbol)
+                        symbol_upper = symbol.upper()
+                        if option_symbol.startswith(symbol_upper):
+                            date_part = option_symbol[len(symbol_upper):len(symbol_upper)+6]
+                            if len(date_part) == 6 and date_part.isdigit():
+                                year = 2000 + int(date_part[0:2])
+                                month = int(date_part[2:4])
+                                day = int(date_part[4:6])
+                                exp_date = f"{year}-{month:02d}-{day:02d}"
+                                all_expirations.add(exp_date)
                     except Exception as e:
                         continue
-                
-                # Check for next page (try both attribute names)
-                next_token = getattr(contracts_response, 'next_page_token', None) or getattr(contracts_response, 'page_token', None)
-                if next_token and next_token != page_token:  # Ensure we're not stuck in a loop
-                    page_token = next_token
-                    pages_fetched += 1
-                else:
-                    break
             
             # Sort chronologically
             sorted_expirations = sorted(list(all_expirations))
