@@ -826,6 +826,16 @@
             });
         }
 
+        document.getElementById('brokerSelect').addEventListener('change', () => {
+            expiryCache = {};
+            for (let i = 1; i <= 4; i++) {
+                const symbol = document.getElementById(`symbol${i}`).value.trim();
+                if (symbol) {
+                    loadExpirations(i);
+                }
+            }
+        });
+
         async function loadQuote(row) {
             const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
             const strike = document.getElementById(`strike${row}`).value.trim();
