@@ -1354,6 +1354,11 @@ STEEL_STC_PATTERN = r':SirenRed:\s*([A-Za-z]+)\s*[|]\s*([0-9.]+)\s*(OUT\s*HALF|O
 # Groups: (symbol, price)
 SIMPLE_STC_PATTERN = r'^([A-Za-z]+)\s+([0-9.]+)\s+OUT'
 
+# JC-style pattern: BTO $QQQ $627c 12/10 .77
+# Supports strike+optType combined: $627c, $619p
+# Groups: (direction, symbol, strike, opt_type, month, day, price)
+JC_OPT_PATTERN = r'(BTO|STC)\s+[$]?([A-Za-z]+)\s+[$]?([0-9.]+)([CPcp])\s+([0-9]{1,2})/([0-9]{1,2})\s+[.]?([0-9.]+)'
+
 def calculate_next_week_expiry():
     """Calculate next Friday's date for 'NEXT WEEK' expiry"""
     from datetime import datetime, timedelta
@@ -3340,44 +3345,53 @@ ALT_OPT_REGEX = re.compile(ALT_OPT_PATTERN, re.IGNORECASE)
 STEEL_BTO_REGEX = re.compile(STEEL_BTO_PATTERN, re.IGNORECASE)
 STEEL_STC_REGEX = re.compile(STEEL_STC_PATTERN, re.IGNORECASE)
 SIMPLE_STC_REGEX = re.compile(SIMPLE_STC_PATTERN, re.IGNORECASE)
+JC_OPT_REGEX = re.compile(JC_OPT_PATTERN, re.IGNORECASE)
 
 def parse_option_signal(text: str) -> Optional[dict]:
     m = OPT_REGEX.search(text.strip())
     use_alt_format = False
     use_steel_format = False
     use_steel_stc = False
+    use_jc_format = False
     
     if not m:
-        # Try alternate format: 🟢**BTO $RKT | 21.2 C JAN/16 .56**
-        m = ALT_OPT_REGEX.search(text.strip())
+        # Try JC format first: BTO $QQQ $627c 12/10 .77
+        m = JC_OPT_REGEX.search(text.strip())
         if m:
-            use_alt_format = True
-            print(f"[Discord] ✓ Matched alternate format (pipe-separated)")
+            use_jc_format = True
+            print(f"[Discord] ✓ Matched JC format (strike+type combined)")
         else:
-            # Try steel BTO format: :green_alert: AAPL | $282.5 C 1.72 NEXT WEEK
-            m = STEEL_BTO_REGEX.search(text.strip())
+            # Try alternate format: 🟢**BTO $RKT | 21.2 C JAN/16 .56**
+            m = ALT_OPT_REGEX.search(text.strip())
             if m:
-                use_steel_format = True
-                print(f"[Discord] ✓ Matched steel BTO format")
+                use_alt_format = True
+                print(f"[Discord] ✓ Matched alternate format (pipe-separated)")
             else:
-                # Try steel STC format: :SirenRed: AAPL | 1.82 OUT HALF
-                m = STEEL_STC_REGEX.search(text.strip())
+                # Try steel BTO format: :green_alert: AAPL | $282.5 C 1.72 NEXT WEEK
+                m = STEEL_BTO_REGEX.search(text.strip())
                 if m:
-                    use_steel_stc = True
-                    print(f"[Discord] ✓ Matched steel STC format")
+                    use_steel_format = True
+                    print(f"[Discord] ✓ Matched steel BTO format")
                 else:
-                    # Try simple STC format: TSLA 5.03 OUT
-                    m = SIMPLE_STC_REGEX.search(text.strip())
+                    # Try steel STC format: :SirenRed: AAPL | 1.82 OUT HALF
+                    m = STEEL_STC_REGEX.search(text.strip())
                     if m:
-                        use_steel_stc = True  # Reuse the same handling
-                        print(f"[Discord] ✓ Matched simple STC format (SYMBOL PRICE OUT)")
+                        use_steel_stc = True
+                        print(f"[Discord] ✓ Matched steel STC format")
                     else:
-                        print(f"[Discord] ❌ Pattern NOT matched: '{text.strip()[:80]}'")
-                        print(f"[Discord]    Expected format: BTO/STC QTY SYMBOL STRIKE C/P MM/DD @ PRICE")
-                        print(f"[Discord]    Or alternate: 🟢BTO $SYMBOL | STRIKE C/P MONTH/DAY PRICE")
-                        print(f"[Discord]    Or steel: :green_alert: SYMBOL | $STRIKE C/P PRICE NEXT WEEK")
-                        print(f"[Discord]    Or STC: :SirenRed: SYMBOL | PRICE OUT HALF")
-                        return None
+                        # Try simple STC format: TSLA 5.03 OUT
+                        m = SIMPLE_STC_REGEX.search(text.strip())
+                        if m:
+                            use_steel_stc = True  # Reuse the same handling
+                            print(f"[Discord] ✓ Matched simple STC format (SYMBOL PRICE OUT)")
+                        else:
+                            print(f"[Discord] ❌ Pattern NOT matched: '{text.strip()[:80]}'")
+                            print(f"[Discord]    Expected format: BTO/STC QTY SYMBOL STRIKE C/P MM/DD @ PRICE")
+                            print(f"[Discord]    Or JC: BTO $SYMBOL $STRIKEc/p MM/DD PRICE")
+                            print(f"[Discord]    Or alternate: 🟢BTO $SYMBOL | STRIKE C/P MONTH/DAY PRICE")
+                            print(f"[Discord]    Or steel: :green_alert: SYMBOL | $STRIKE C/P PRICE NEXT WEEK")
+                            print(f"[Discord]    Or STC: :SirenRed: SYMBOL | PRICE OUT HALF")
+                            return None
     
     if use_steel_stc:
         # Handle both steel STC (3 groups) and simple STC (2 groups)
@@ -3413,7 +3427,13 @@ def parse_option_signal(text: str) -> Optional[dict]:
             "_exit_type": exit_type.strip().upper() if exit_type else "ALL"
         }
     
-    if use_steel_format:
+    if use_jc_format:
+        # JC format groups: (direction, symbol, strike, opt_type, month, day, price)
+        direction, symbol, strike, opt_type, month, day, price_str = m.groups()
+        qty_str = None  # JC format doesn't include quantity
+        expiry = f"{month}/{day}"
+        print(f"[Discord] JC format parsed: {direction} {symbol} {strike}{opt_type} {expiry} @ {price_str}")
+    elif use_steel_format:
         # Steel BTO format groups: (symbol, strike, opt_type, price, expiry_text)
         symbol, strike, opt_type, price_str, expiry_text = m.groups()
         direction = 'BTO'
