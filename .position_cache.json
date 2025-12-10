@@ -241,7 +241,7 @@
   },
   "ALPACA_PAPER_ORCL_220.0_2025-12-12_C": {
     "entry_price": 11.7,
-    "highest_price": 13.95,
+    "highest_price": 14.05,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -346,7 +346,7 @@
   },
   "ALPACA_PAPER_NFLX_93.0_2025-12-12_P": {
     "entry_price": 0.5,
-    "highest_price": 1.17,
+    "highest_price": 1.2,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -511,7 +511,7 @@
   },
   "ALPACA_PAPER_ORCL_280.0_2025-12-12_C": {
     "entry_price": 0.79,
-    "highest_price": 0.95,
+    "highest_price": 0.96,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
