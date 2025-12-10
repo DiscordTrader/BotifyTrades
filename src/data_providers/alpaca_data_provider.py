@@ -82,13 +82,16 @@ class AlpacaDataProvider:
             pages_fetched = 0
             
             while pages_fetched < max_pages:
-                # Build request with high limit and pagination
-                request = GetOptionContractsRequest(
-                    underlying_symbols=[symbol.upper()],
-                    status=AssetStatus.ACTIVE,
-                    limit=10000,  # Maximum allowed by Alpaca API
-                    page_token=page_token if page_token else None
-                )
+                # Build request - only include page_token if we have one
+                request_params = {
+                    'underlying_symbols': [symbol.upper()],
+                    'status': AssetStatus.ACTIVE,
+                    'limit': 10000  # Maximum allowed by Alpaca API
+                }
+                if page_token:
+                    request_params['page_token'] = page_token
+                    
+                request = GetOptionContractsRequest(**request_params)
                 
                 # Execute blocking SDK call in background thread (non-blocking)
                 contracts_response = await asyncio.to_thread(
@@ -108,9 +111,10 @@ class AlpacaDataProvider:
                     except Exception as e:
                         continue
                 
-                # Check for next page
-                if hasattr(contracts_response, 'next_page_token') and contracts_response.next_page_token:
-                    page_token = contracts_response.next_page_token
+                # Check for next page (try both attribute names)
+                next_token = getattr(contracts_response, 'next_page_token', None) or getattr(contracts_response, 'page_token', None)
+                if next_token and next_token != page_token:  # Ensure we're not stuck in a loop
+                    page_token = next_token
                     pages_fetched += 1
                 else:
                     break
