@@ -4719,12 +4719,18 @@ def register_routes(app):
             
             # Route to Alpaca if selected
             if 'ALPACA' in selected_broker:
-                print(f"[OPTIONS API] Loading Alpaca provider for {selected_broker}...", flush=True)
-                alpaca = get_alpaca_provider()
+                import sys
+                print(f"[OPTIONS API] Loading Alpaca provider for {selected_broker}...", file=sys.stderr, flush=True)
+                try:
+                    alpaca = get_alpaca_provider()
+                except Exception as init_err:
+                    print(f"[OPTIONS API] ERROR initializing Alpaca: {init_err}", file=sys.stderr, flush=True)
+                    return jsonify({'error': f'Alpaca initialization failed: {str(init_err)}', 'expirations': []}), 503
+                    
                 if not alpaca:
-                    print(f"[OPTIONS API] ERROR: Alpaca provider not initialized!", flush=True)
-                    return jsonify({'error': 'Alpaca data provider not configured.'}), 503
-                print(f"[OPTIONS API] Alpaca provider ready, fetching expirations...", flush=True)
+                    print(f"[OPTIONS API] ERROR: Alpaca provider not initialized!", file=sys.stderr, flush=True)
+                    return jsonify({'error': 'Alpaca data provider not configured. Check API credentials.', 'expirations': []}), 503
+                print(f"[OPTIONS API] Alpaca provider ready, fetching expirations for {symbol}...", file=sys.stderr, flush=True)
                 
                 new_loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(new_loop)
@@ -4732,6 +4738,7 @@ def register_routes(app):
                     expirations_list = new_loop.run_until_complete(
                         alpaca.get_options_expiration_dates(symbol)
                     )
+                    print(f"[OPTIONS API] Got {len(expirations_list)} expirations from Alpaca for {symbol}", file=sys.stderr, flush=True)
                     
                     from datetime import datetime
                     expirations = []
@@ -4743,7 +4750,7 @@ def register_routes(app):
                                 'label': exp_date.strftime('%b %d, %Y')
                             })
                         except Exception as e:
-                            print(f"[API] Warning: Could not format expiration {exp_str}: {e}")
+                            print(f"[API] Warning: Could not format expiration {exp_str}: {e}", file=sys.stderr, flush=True)
                             continue
                     
                     return jsonify({
@@ -4751,6 +4758,11 @@ def register_routes(app):
                         'expirations': expirations,
                         'data_source': 'Alpaca'
                     })
+                except Exception as fetch_err:
+                    print(f"[OPTIONS API] ERROR fetching Alpaca expirations: {fetch_err}", file=sys.stderr, flush=True)
+                    import traceback
+                    traceback.print_exc()
+                    return jsonify({'error': f'Failed to fetch expirations: {str(fetch_err)}', 'expirations': []}), 500
                 finally:
                     new_loop.close()
             
