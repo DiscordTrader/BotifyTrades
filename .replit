@@ -13,15 +13,15 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Admin License Server"
+args = "User Trading Bot"
 
 [[workflows.workflow]]
-name = "Admin License Server"
+name = "User Trading Bot"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python admin_server.py"
+args = "python src/selfbot_webull.py"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
@@ -34,6 +34,10 @@ packages = ["cargo", "geckodriver", "gh", "glibcLocales", "libiconv", "libxcrypt
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 44937
+externalPort = 3000
 
 [userenv]
 
@@ -73,6 +77,10 @@ DATABASE_PATH = "bot_data.db"
 BUILD_TARGET = "admin"
 LICENSE_SERVER_MODE = "true"
 ADMIN_MODE = "true"
+
+[userenv.development]
+LICENSE_VALID = "true"
+LICENSE_KEY = "BT-8A09-B036-926E-421E"
 
 [deployment]
 deploymentTarget = "vm"
