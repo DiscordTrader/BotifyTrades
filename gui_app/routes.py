@@ -4715,12 +4715,15 @@ def register_routes(app):
             if not symbol:
                 return jsonify({'error': 'Symbol is required'}), 400
             
+            import logging
+            logging.warning(f"[OPTIONS API] Fetching expirations for {symbol} from broker: {selected_broker}")
             print(f"[OPTIONS API] Fetching expirations for {symbol} from broker: {selected_broker}", flush=True)
             
             # Route to Alpaca if selected
             if 'ALPACA' in selected_broker:
                 import sys
-                print(f"[OPTIONS API] Loading Alpaca provider for {selected_broker}...", file=sys.stderr, flush=True)
+                logging.warning(f"[OPTIONS API] Loading Alpaca provider for {selected_broker}...")
+                print(f"[OPTIONS API] Loading Alpaca provider for {selected_broker}...", flush=True)
                 try:
                     alpaca = get_alpaca_provider()
                 except Exception as init_err:
