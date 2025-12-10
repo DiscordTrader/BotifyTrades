@@ -7,7 +7,10 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 
 **See `ARCHITECTURE.md` for full details.**
 
-### Recent Changes (Dec 8, 2025)
+### Recent Changes (Dec 10, 2025)
+- **v2.1.27**: Removed legacy `monitor_positions` from WebullBroker (~800 lines) - RiskManager is now single source
+- **v2.1.27**: Risk module now skips positions when global disabled AND no channel settings (no false "[Global]" logs)
+- **v2.1.27**: Simplified SelfClient risk wiring - removed fallback logic, uses only pluggable RiskManager
 - **v2.1.26**: AI-powered chat assistant now monitors console logs and answers trade/error questions
 - **v2.1.26**: New log monitor system captures all console output for AI analysis
 - **v2.1.26**: Chat can now analyze trades, positions, errors with OpenAI when API key is set

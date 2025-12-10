@@ -1,7 +1,7 @@
 # BotifyTrades - Pluggable Architecture Guide
 
-**Version:** 1.1  
-**Last Updated:** December 6, 2025  
+**Version:** 1.2  
+**Last Updated:** December 10, 2025  
 **Purpose:** Define architecture principles for scalable, pluggable features
 
 ---
@@ -149,7 +149,7 @@ python scripts/check_consistency.py --full    # Deep analysis
 | `core` | `src/core/bootstrap.py` | N/A | N/A |
 | `discord_client` | `src/discord_client/client.py` | DiscordDBAdapter | bot_data.db |
 | `signals` | `src/signals/parser.py` | N/A (pure) | N/A |
-| `risk` | `src/risk/position_monitor.py` | RiskDBAdapter | bot_data.db |
+| `risk` | `src/risk/position_monitor.py` | RiskDBAdapter | bot_data.db | **Single source** - no legacy fallbacks |
 | `brokers` | `src/brokers/__init__.py` | N/A | N/A |
 | `execution` | `src/execution/` | TBD | bot_data.db |
 
