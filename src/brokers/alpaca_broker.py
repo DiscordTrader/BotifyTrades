@@ -308,29 +308,55 @@ class AlpacaBroker(BrokerInterface):
         try:
             side = OrderSide.BUY if action == 'BTO' else OrderSide.SELL
             
-            # Build bracket order with stop loss and/or profit target
+            # Alpaca BRACKET orders require BOTH stop_loss AND take_profit
+            # If only one is provided, fall back to simple order
+            has_both_legs = stop_loss_price is not None and profit_target_price is not None
+            has_any_leg = stop_loss_price is not None or profit_target_price is not None
+            
+            if has_both_legs:
+                # Full bracket order with both legs
+                order_class = OrderClass.BRACKET
+                stop_loss = StopLossRequest(stop_price=stop_loss_price)
+                take_profit = TakeProfitRequest(limit_price=profit_target_price)
+                print(f"[{self.name}] Using full BRACKET order (stop + target)")
+            elif has_any_leg:
+                # Alpaca doesn't support partial bracket - fall back to simple order
+                # We'll place entry order and let risk management handle stops
+                order_class = OrderClass.SIMPLE
+                stop_loss = None
+                take_profit = None
+                if stop_loss_price:
+                    print(f"[{self.name}] ⚠️  BRACKET requires both SL+Target - placing SIMPLE order (SL will be managed separately)")
+                else:
+                    print(f"[{self.name}] ⚠️  BRACKET requires both SL+Target - placing SIMPLE order (Target will be managed separately)")
+            else:
+                # No legs - simple order
+                order_class = OrderClass.SIMPLE
+                stop_loss = None
+                take_profit = None
+            
             if entry_price is None:
-                # Market order with bracket
+                # Market order
                 order_data = MarketOrderRequest(
                     symbol=symbol,
                     qty=quantity,
                     side=side,
                     time_in_force=TimeInForce.DAY,
-                    order_class=OrderClass.BRACKET,
-                    stop_loss=StopLossRequest(stop_price=stop_loss_price) if stop_loss_price else None,
-                    take_profit=TakeProfitRequest(limit_price=profit_target_price) if profit_target_price else None
+                    order_class=order_class,
+                    stop_loss=stop_loss,
+                    take_profit=take_profit
                 )
             else:
-                # Limit order with bracket
+                # Limit order
                 order_data = LimitOrderRequest(
                     symbol=symbol,
                     qty=quantity,
                     side=side,
                     time_in_force=TimeInForce.DAY,
                     limit_price=entry_price,
-                    order_class=OrderClass.BRACKET,
-                    stop_loss=StopLossRequest(stop_price=stop_loss_price) if stop_loss_price else None,
-                    take_profit=TakeProfitRequest(limit_price=profit_target_price) if profit_target_price else None
+                    order_class=order_class,
+                    stop_loss=stop_loss,
+                    take_profit=take_profit
                 )
             
             # Submit order
