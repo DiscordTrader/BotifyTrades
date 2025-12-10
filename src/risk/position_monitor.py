@@ -459,6 +459,10 @@ class RiskManager:
                       f"{channel_settings.profit_target_2_pct}%/{channel_settings.profit_target_3_pct}%, "
                       f"StopLoss={channel_settings.stop_loss_pct}%")
         
+        # Skip position if global is disabled AND no channel settings - no risk management applies
+        if not channel_settings and not risk_settings.enabled:
+            return  # Skip this position entirely
+        
         self._log_position_status(position, cache, channel_settings, pct_change)
         
         decision = self._evaluate_exit_conditions(
