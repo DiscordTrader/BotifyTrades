@@ -5174,15 +5174,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'success': result.success,
                         'msg': result.message,
                         'broker': broker_name,
-                        'orderId': result.order_id if result.success else None
+                        'orderId': result.order_id if result.success else None,
+                        'executed_qty': signal['qty']
                     }
                 else:
                     # Result is a dict, create a new dict with broker name
                     resp = dict(result) if isinstance(result, dict) else result
                     if isinstance(resp, dict):
                         resp['broker'] = broker_name
+                        resp['executed_qty'] = signal['qty']
                     else:
-                        resp = {'broker': broker_name, 'result': resp}
+                        resp = {'broker': broker_name, 'result': resp, 'executed_qty': signal['qty']}
             elif signal['asset'] == 'option':
                 # Handle different broker parameter names
                 # AlpacaBroker uses: symbol, strike, expiry, option_type, action, quantity, price
@@ -5214,13 +5216,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'success': result.success,
                         'msg': result.message,
                         'broker': broker_name,
-                        'orderId': result.order_id if result.success else None
+                        'orderId': result.order_id if result.success else None,
+                        'executed_qty': signal['qty']
                     }
                 elif isinstance(result, dict):
                     resp = dict(result)
                     resp['broker'] = broker_name
+                    resp['executed_qty'] = signal['qty']
                 else:
-                    resp = {'broker': broker_name, 'result': result}
+                    resp = {'broker': broker_name, 'result': result, 'executed_qty': signal['qty']}
             else:
                 # Handle legacy WebullBroker (uses qty, not quantity)
                 result = await broker_instance.place_stock_order(
@@ -5235,13 +5239,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'success': result.success,
                         'msg': result.message,
                         'broker': broker_name,
-                        'orderId': result.order_id if result.success else None
+                        'orderId': result.order_id if result.success else None,
+                        'executed_qty': signal['qty']
                     }
                 elif isinstance(result, dict):
                     resp = dict(result)
                     resp['broker'] = broker_name
+                    resp['executed_qty'] = signal['qty']
                 else:
-                    resp = {'broker': broker_name, 'result': result}
+                    resp = {'broker': broker_name, 'result': result, 'executed_qty': signal['qty']}
             
             return resp
         
@@ -5918,6 +5924,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     _original_print(f"[DATABASE] Multi-broker execution - saving {len([r for r in multi_broker_results if r.get('success') or 'orderId' in r])} trade entries")
                                     for broker_resp in multi_broker_results:
                                         if broker_resp.get('success') or 'orderId' in broker_resp:
+                                            # Use executed_qty from broker response (position-sized), fallback to signal qty
+                                            executed_qty = broker_resp.get('executed_qty', signal['qty'])
                                             trade_data = {
                                                 'channel_id': str(signal['channel_id']),
                                                 'message_id': str(signal.get('message_id', '')),
@@ -5927,7 +5935,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 'strike': signal.get('strike'),
                                                 'expiry': signal.get('expiry'),
                                                 'call_put': signal.get('opt_type'),
-                                                'quantity': signal['qty'],
+                                                'quantity': executed_qty,
                                                 'intended_price': signal.get('price'),
                                                 'executed_price': signal.get('price'),
                                                 'executed': True,
@@ -5937,9 +5945,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 'profit_target_price': signal.get('profit_target_price')
                                             }
                                             db.add_trade(trade_data)
-                                            _original_print(f"[DATABASE] ✓ Trade saved for {broker_resp.get('broker')} with SL=${trade_data.get('stop_loss_price')} Target=${trade_data.get('profit_target_price')}")
+                                            _original_print(f"[DATABASE] ✓ Trade saved for {broker_resp.get('broker')} qty={executed_qty} with SL=${trade_data.get('stop_loss_price')} Target=${trade_data.get('profit_target_price')}")
                                 else:
-                                    # Single broker execution
+                                    # Single broker execution - use executed_qty from response
+                                    executed_qty = resp.get('executed_qty', signal['qty'])
                                     trade_data = {
                                         'channel_id': str(signal['channel_id']),
                                         'message_id': str(signal.get('message_id', '')),
@@ -5949,7 +5958,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         'strike': signal.get('strike'),
                                         'expiry': signal.get('expiry'),
                                         'call_put': signal.get('opt_type'),
-                                        'quantity': signal['qty'],
+                                        'quantity': executed_qty,
                                         'intended_price': signal.get('price'),
                                         'executed_price': signal.get('price'),
                                         'executed': True,
@@ -5959,7 +5968,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         'profit_target_price': signal.get('profit_target_price')
                                     }
                                     db.add_trade(trade_data)
-                                    _original_print(f"[DATABASE] ✓ Trade saved with SL=${trade_data.get('stop_loss_price')} Target=${trade_data.get('profit_target_price')}")
+                                    _original_print(f"[DATABASE] ✓ Trade saved qty={executed_qty} with SL=${trade_data.get('stop_loss_price')} Target=${trade_data.get('profit_target_price')}")
                             
                             elif signal['action'] == 'STC':
                                 # Handle STC trades - especially for risk management exits
