@@ -294,8 +294,13 @@ def get_alpaca_provider() -> Optional[AlpacaDataProvider]:
             try:
                 from gui_app.database import Database
                 db = Database()
-                api_key = db.get_setting('alpaca_paper_api_key', '') or db.get_setting('alpaca_live_api_key', '')
-                secret_key = db.get_setting('alpaca_paper_secret_key', '') or db.get_setting('alpaca_live_secret_key', '')
+                # Try various key naming conventions used in the database
+                api_key = (db.get_setting('alpaca_api_key', '') or 
+                          db.get_setting('alpaca_paper_api_key', '') or 
+                          db.get_setting('alpaca_live_api_key', ''))
+                secret_key = (db.get_setting('alpaca_secret_key', '') or 
+                             db.get_setting('alpaca_paper_secret_key', '') or 
+                             db.get_setting('alpaca_live_secret_key', ''))
                 if api_key and secret_key:
                     print(f"[AlpacaDataProvider] Using credentials from database")
             except Exception as e:
