@@ -765,10 +765,10 @@ def update_admin_password(username: str, new_password: str) -> bool:
 
 
 def get_admin_by_email(email: str) -> Optional[Dict]:
-    """Get admin user by email"""
+    """Get admin user by email (case-insensitive)"""
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('SELECT id, username, email FROM admin_users WHERE email = ?', (email,))
+        cursor.execute('SELECT id, username, email FROM admin_users WHERE LOWER(email) = LOWER(?)', (email,))
         row = cursor.fetchone()
         return dict(row) if row else None
 
