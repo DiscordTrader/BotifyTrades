@@ -84,3 +84,4 @@ webull
 Werkzeug
 yfinance
 gunicorn
+bcrypt
