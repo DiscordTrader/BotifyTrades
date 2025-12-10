@@ -1231,7 +1231,15 @@ try:
         try:
             channels = db.get_channels()
             if channels:
-                CHANNEL_IDS = [int(ch['discord_channel_id']) for ch in channels if ch.get('discord_channel_id')]
+                for ch in channels:
+                    ch_id = ch.get('discord_channel_id')
+                    if ch_id:
+                        try:
+                            # Only add numeric Discord channel IDs (skip GUI_EXEC, etc.)
+                            CHANNEL_IDS.append(int(ch_id))
+                        except (ValueError, TypeError):
+                            # Skip non-numeric channel IDs like 'GUI_EXEC'
+                            pass
                 print(f"[CONFIG] ✓ Loaded {len(CHANNEL_IDS)} channels from database")
         except Exception as e:
             print(f"[CONFIG] Warning: Could not load channels from database: {e}")
