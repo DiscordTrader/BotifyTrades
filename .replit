@@ -35,10 +35,6 @@ packages = ["cargo", "geckodriver", "gh", "glibcLocales", "libiconv", "libxcrypt
 localPort = 5000
 externalPort = 80
 
-[[ports]]
-localPort = 36813
-externalPort = 3000
-
 [userenv]
 
 [userenv.shared]

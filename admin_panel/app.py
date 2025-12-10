@@ -31,8 +31,20 @@ def create_app():
                 template_folder='templates',
                 static_folder='static')
     
-    app.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(32).hex())
-    app.config['SESSION_COOKIE_SECURE'] = False
+    # Use stable secret key - FLASK_SECRET_KEY env var or generate stable fallback
+    # IMPORTANT: In production, always set FLASK_SECRET_KEY to a random 32+ char string
+    secret_key = os.environ.get('FLASK_SECRET_KEY')
+    if not secret_key:
+        # Generate stable fallback from machine-specific data (not random each restart)
+        import hashlib
+        stable_seed = f"botifytrades-admin-{os.environ.get('REPL_ID', 'local')}"
+        secret_key = hashlib.sha256(stable_seed.encode()).hexdigest()
+        print("[ADMIN] Warning: Using generated secret key. Set FLASK_SECRET_KEY for production.")
+    app.secret_key = secret_key
+    
+    # Session cookie settings - detect production (HTTPS) environment
+    is_production = os.environ.get('REPL_SLUG') is not None or os.environ.get('REPLIT_DEPLOYMENT') == '1'
+    app.config['SESSION_COOKIE_SECURE'] = is_production  # True for HTTPS in production
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
