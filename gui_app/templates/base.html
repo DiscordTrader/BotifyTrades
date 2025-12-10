@@ -120,7 +120,7 @@
             </div>
 
             <div class="nav-dropdown">
-                <button class="nav-dropdown-btn {% if request.path in ['/waitlist', '/settings', '/architecture', '/license', '/health', '/admin/licenses'] %}active{% endif %}">
+                <button class="nav-dropdown-btn {% if request.path in ['/settings', '/architecture', '/license', '/health'] %}active{% endif %}">
                     Admin
                     <span class="dropdown-arrow">▼</span>
                 </button>
@@ -138,20 +138,8 @@
                     <a href="/license" class="dropdown-item {% if request.path == '/license' %}active{% endif %}">
                         <span class="dropdown-icon">🔐</span>
                         <span class="dropdown-text">License</span>
-                        <span class="dropdown-desc">License management</span>
+                        <span class="dropdown-desc">View license status</span>
                     </a>
-                    {% if session.get('is_admin') and config.get('LICENSE_SERVER_MODE') %}
-                    <a href="/waitlist" class="dropdown-item {% if request.path == '/waitlist' %}active{% endif %}">
-                        <span class="dropdown-icon">📋</span>
-                        <span class="dropdown-text">Waitlist</span>
-                        <span class="dropdown-desc">Manage signups</span>
-                    </a>
-                    <a href="/admin/licenses" class="dropdown-item {% if request.path == '/admin/licenses' %}active{% endif %}">
-                        <span class="dropdown-icon">🎫</span>
-                        <span class="dropdown-text">License Server</span>
-                        <span class="dropdown-desc">Manage licenses</span>
-                    </a>
-                    {% endif %}
                     <a href="/architecture" class="dropdown-item {% if request.path == '/architecture' %}active{% endif %}">
                         <span class="dropdown-icon">📐</span>
                         <span class="dropdown-text">Docs</span>
