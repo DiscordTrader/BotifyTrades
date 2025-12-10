@@ -4191,6 +4191,75 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
             print(f"[AI CMD] Error formatting market data: {e}")
             return "Error formatting market data"
     
+    def clean_signal_text(self, text: str) -> str:
+        """
+        Normalize signal text by removing invisible unicode characters
+        and standardizing punctuation for reliable regex parsing.
+        
+        Handles: zero-width joiners, RTL/LTR marks, unicode dashes/colons,
+        fullwidth characters, and other problematic invisible formatting.
+        """
+        import unicodedata
+        
+        if not text:
+            return text
+        
+        # First, normalize using NFKC to fold compatibility characters
+        # This handles fullwidth chars, some special forms, etc.
+        text = unicodedata.normalize('NFKC', text)
+        
+        # Remove invisible formatting characters (Unicode category Cf)
+        # This includes: zero-width joiners, RTL/LTR marks, soft hyphens, etc.
+        cleaned_chars = []
+        for char in text:
+            category = unicodedata.category(char)
+            # Keep normal characters, but remove format characters (Cf)
+            # Preserve emojis which are in category So (Symbol, other)
+            if category != 'Cf':
+                cleaned_chars.append(char)
+        text = ''.join(cleaned_chars)
+        
+        # Standardize common unicode punctuation variants to ASCII
+        punctuation_map = {
+            '\u2010': '-',  # Hyphen
+            '\u2011': '-',  # Non-breaking hyphen
+            '\u2012': '-',  # Figure dash
+            '\u2013': '-',  # En dash
+            '\u2014': '-',  # Em dash
+            '\u2015': '-',  # Horizontal bar
+            '\uFE58': '-',  # Small em dash
+            '\uFE63': '-',  # Small hyphen-minus
+            '\uFF0D': '-',  # Fullwidth hyphen-minus
+            '\uFF1A': ':',  # Fullwidth colon
+            '\uFE55': ':',  # Small colon
+            '\uFF04': '$',  # Fullwidth dollar sign
+            '\uFE69': '$',  # Small dollar sign
+            '\u00A0': ' ',  # Non-breaking space
+            '\u2000': ' ',  # En quad
+            '\u2001': ' ',  # Em quad
+            '\u2002': ' ',  # En space
+            '\u2003': ' ',  # Em space
+            '\u2004': ' ',  # Three-per-em space
+            '\u2005': ' ',  # Four-per-em space
+            '\u2006': ' ',  # Six-per-em space
+            '\u2007': ' ',  # Figure space
+            '\u2008': ' ',  # Punctuation space
+            '\u2009': ' ',  # Thin space
+            '\u200A': ' ',  # Hair space
+            '\u202F': ' ',  # Narrow no-break space
+            '\u205F': ' ',  # Medium mathematical space
+            '\u3000': ' ',  # Ideographic space
+        }
+        
+        for unicode_char, ascii_char in punctuation_map.items():
+            text = text.replace(unicode_char, ascii_char)
+        
+        # Collapse multiple spaces into single space
+        import re as re_local
+        text = re_local.sub(r' +', ' ', text)
+        
+        return text
+
     def parse_structured_alert(self, text: str) -> dict:
         """Parse structured stock trading alerts like:
         ENTERED LONG: $CGTL, ENTRY: $1.15, S.L: $1.06, 1st Target: $1.25-1.28
@@ -4204,6 +4273,9 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
         ⛔ SL: 0.435
         """
         import re
+        
+        # Clean text of invisible unicode characters before parsing
+        text = self.clean_signal_text(text)
         
         alert_data = {
             'symbol': None,
