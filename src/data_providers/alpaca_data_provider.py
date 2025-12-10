@@ -69,49 +69,64 @@ class AlpacaDataProvider:
             List of expiration dates in YYYY-MM-DD format
         """
         import asyncio
+        from datetime import date, timedelta
         
         try:
-            print(f"[AlpacaDataProvider] Fetching expirations for {symbol} using get_option_contracts()")
+            print(f"[AlpacaDataProvider] Fetching expirations for {symbol} using get_option_contracts()", flush=True)
             
-            # Use TradingClient.get_option_contracts() - more reliable than parsing OCC symbols
-            request = GetOptionContractsRequest(
-                underlying_symbols=[symbol.upper()],
-                status=AssetStatus.ACTIVE
-            )
+            # Fetch contracts with pagination to get all expiration dates
+            # Request a large limit to get more expiration dates in fewer calls
+            all_expirations = set()
+            page_token = None
+            max_pages = 10  # Safety limit
+            pages_fetched = 0
             
-            # Execute blocking SDK call in background thread (non-blocking)
-            contracts_response = await asyncio.to_thread(
-                self.trading_client.get_option_contracts, request
-            )
-            
-            # Extract unique expiration dates from contract objects
-            expirations = set()
-            contracts = contracts_response.option_contracts if hasattr(contracts_response, 'option_contracts') else []
-            
-            print(f"[AlpacaDataProvider] Received {len(contracts)} contracts for {symbol}")
-            
-            for contract in contracts:
-                try:
-                    # Contract has expiration_date attribute (datetime.date)
-                    exp_date = contract.expiration_date
-                    if exp_date:
-                        expirations.add(str(exp_date))  # Format: YYYY-MM-DD
-                except Exception as e:
-                    print(f"[AlpacaDataProvider] Warning: Could not parse expiration from contract: {e}")
-                    continue
+            while pages_fetched < max_pages:
+                # Build request with high limit and pagination
+                request = GetOptionContractsRequest(
+                    underlying_symbols=[symbol.upper()],
+                    status=AssetStatus.ACTIVE,
+                    limit=10000,  # Maximum allowed by Alpaca API
+                    page_token=page_token if page_token else None
+                )
+                
+                # Execute blocking SDK call in background thread (non-blocking)
+                contracts_response = await asyncio.to_thread(
+                    self.trading_client.get_option_contracts, request
+                )
+                
+                # Extract contracts from response
+                contracts = contracts_response.option_contracts if hasattr(contracts_response, 'option_contracts') else []
+                
+                print(f"[AlpacaDataProvider] Page {pages_fetched + 1}: Received {len(contracts)} contracts", flush=True)
+                
+                for contract in contracts:
+                    try:
+                        exp_date = contract.expiration_date
+                        if exp_date:
+                            all_expirations.add(str(exp_date))
+                    except Exception as e:
+                        continue
+                
+                # Check for next page
+                if hasattr(contracts_response, 'next_page_token') and contracts_response.next_page_token:
+                    page_token = contracts_response.next_page_token
+                    pages_fetched += 1
+                else:
+                    break
             
             # Sort chronologically
-            sorted_expirations = sorted(list(expirations))
-            print(f"[AlpacaDataProvider] Found {len(sorted_expirations)} expirations for {symbol}")
+            sorted_expirations = sorted(list(all_expirations))
+            print(f"[AlpacaDataProvider] Found {len(sorted_expirations)} unique expirations for {symbol}", flush=True)
             
             # Log first few expirations
             if sorted_expirations:
-                print(f"[AlpacaDataProvider] First 5 expirations: {sorted_expirations[:5]}")
+                print(f"[AlpacaDataProvider] First 5: {sorted_expirations[:5]}", flush=True)
             
             return sorted_expirations
             
         except Exception as e:
-            print(f"[AlpacaDataProvider] Error fetching expirations for {symbol}: {e}")
+            print(f"[AlpacaDataProvider] Error fetching expirations for {symbol}: {e}", flush=True)
             import traceback
             traceback.print_exc()
             raise
