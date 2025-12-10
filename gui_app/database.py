@@ -1500,7 +1500,7 @@ def get_trades(status: Optional[str] = None, broker: Optional[str] = None, limit
                r.trailing_stop_enabled as trailing_stop_enabled,
                r.trailing_stop_percent as trailing_stop_percent
         FROM trades t 
-        LEFT JOIN channels c ON t.channel_id = c.id
+        LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
         LEFT JOIN position_risk_settings r ON t.id = r.trade_id
         WHERE 1=1
     '''
