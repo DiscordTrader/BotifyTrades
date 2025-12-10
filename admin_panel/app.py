@@ -73,6 +73,75 @@ def create_app():
         session.clear()
         return redirect(url_for('admin_login'))
     
+    @app.route('/forgot-password', methods=['GET', 'POST'])
+    def forgot_password():
+        from . import email_service
+        
+        message = None
+        error = None
+        
+        if request.method == 'POST':
+            email = request.form.get('email', '').strip().lower()
+            
+            if not email:
+                error = 'Please enter your email address'
+            else:
+                admin = db.get_admin_by_email(email)
+                if admin:
+                    token = db.create_password_reset_token(admin['id'])
+                    
+                    base_url = request.host_url.rstrip('/')
+                    reset_link = f"{base_url}/reset-password/{token}"
+                    
+                    if email_service.send_password_reset_email(admin['email'], admin['username'], reset_link):
+                        db.add_audit_log('password_reset_requested', 
+                                        admin_user=admin['username'],
+                                        details=f'Reset email sent to {email}',
+                                        ip_address=request.remote_addr)
+                        message = 'If an account exists with that email, a reset link has been sent.'
+                    else:
+                        error = 'Failed to send reset email. Please contact support.'
+                else:
+                    message = 'If an account exists with that email, a reset link has been sent.'
+        
+        return render_template('forgot_password.html', message=message, error=error)
+    
+    @app.route('/reset-password/<token>', methods=['GET', 'POST'])
+    def reset_password(token):
+        token_data = db.verify_reset_token(token)
+        
+        if not token_data:
+            return render_template('reset_password.html', 
+                                 error='Invalid or expired reset link. Please request a new one.',
+                                 token_valid=False)
+        
+        error = None
+        if request.method == 'POST':
+            password = request.form.get('password', '')
+            confirm = request.form.get('confirm_password', '')
+            
+            if not password:
+                error = 'Password is required'
+            elif len(password) < 8:
+                error = 'Password must be at least 8 characters'
+            elif password != confirm:
+                error = 'Passwords do not match'
+            else:
+                if db.use_reset_token(token, password):
+                    db.add_audit_log('password_reset_completed',
+                                    admin_user=token_data['username'],
+                                    ip_address=request.remote_addr)
+                    return render_template('reset_password.html',
+                                         success=True,
+                                         token_valid=False)
+                else:
+                    error = 'Failed to reset password. Please try again.'
+        
+        return render_template('reset_password.html',
+                             token_valid=True,
+                             username=token_data['username'],
+                             error=error)
+    
     @app.route('/setup', methods=['GET', 'POST'])
     def admin_setup():
         """First-time admin setup"""
