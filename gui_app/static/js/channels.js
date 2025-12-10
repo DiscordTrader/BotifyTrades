@@ -85,8 +85,8 @@ async function loadChannels() {
                                 </div>
                             </td>
                             <td style="padding: 16px; text-align: center;">
-                                <span style="padding: 4px 10px; background: ${channel.is_active ? 'rgba(0, 255, 136, 0.15)' : 'rgba(255, 107, 107, 0.15)'}; border: 1px solid ${channel.is_active ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 107, 107, 0.3)'}; border-radius: 6px; font-size: 10px; color: ${channel.is_active ? '#00ff88' : '#ff6b6b'}; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;">
-                                    ${channel.is_active ? '✓ ACTIVE' : '✗ INACTIVE'}
+                                <span style="display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; background: ${channel.is_active ? 'rgba(0, 255, 136, 0.15)' : 'rgba(255, 107, 107, 0.15)'}; border: 1px solid ${channel.is_active ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 107, 107, 0.3)'}; border-radius: 6px; font-size: 11px; color: ${channel.is_active ? '#00ff88' : '#ff6b6b'}; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap;">
+                                    ${channel.is_active ? 'ACTIVE' : 'INACTIVE'}
                                 </span>
                             </td>
                             <td style="padding: 16px; text-align: center;">
