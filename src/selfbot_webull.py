@@ -88,6 +88,21 @@ except ImportError:
     RISK_MODULE_AVAILABLE = False
     print("[RISK] Warning: Risk module not available - risk monitoring will be disabled")
 
+# Import Settings Integration (unified settings via SettingsService)
+try:
+    from core.settings_integration import (
+        get_trading_settings_via_service,
+        get_slippage_settings_via_service,
+        get_risk_settings_via_service,
+        get_ai_settings_via_service,
+        check_trading_limits,
+        log_settings_at_startup
+    )
+    SETTINGS_SERVICE_AVAILABLE = True
+except ImportError:
+    SETTINGS_SERVICE_AVAILABLE = False
+    print("[SETTINGS] Warning: Settings service not available - using direct DB access")
+
 from datetime import datetime, timedelta
 from typing import Optional, Tuple, Dict, Any
 from enum import Enum
@@ -1339,7 +1354,15 @@ print(f"[CONFIG] ✓ Market order support: @ m or @m")
 
 # Auto-quantity calculation when quantity not specified
 def get_trading_settings():
-    """Get trading settings from database (if available), fallback to config.ini"""
+    """Get trading settings via SettingsService (falls back to database/config.ini)"""
+    if SETTINGS_SERVICE_AVAILABLE:
+        try:
+            settings = get_trading_settings_via_service()
+            print(f"[CONFIG] ✓ Trading settings loaded via SettingsService")
+            return settings
+        except Exception as e:
+            print(f"[CONFIG] Warning: SettingsService failed, falling back: {e}")
+    
     if DATABASE_MODULE_AVAILABLE:
         try:
             settings = db.get_trading_settings()
@@ -1364,9 +1387,16 @@ print(f"[CONFIG]   - Source: {'DATABASE' if DATABASE_MODULE_AVAILABLE else 'conf
 # Price Slippage Protection - Intelligent order management
 print("[CONFIG] Loading price slippage protection settings...")
 
-# Helper function to get slippage settings (database takes precedence over config.ini)
+# Helper function to get slippage settings (SettingsService > database > config.ini)
 def get_slippage_settings():
-    """Get slippage settings from database (if available), fallback to config.ini"""
+    """Get slippage settings via SettingsService (falls back to database/config.ini)"""
+    if SETTINGS_SERVICE_AVAILABLE:
+        try:
+            settings = get_slippage_settings_via_service()
+            return settings
+        except Exception as e:
+            print(f"[CONFIG] Warning: SettingsService slippage failed: {e}")
+    
     if DATABASE_MODULE_AVAILABLE:
         try:
             settings = db.get_slippage_settings()
@@ -1407,7 +1437,14 @@ else:
 print("[CONFIG] Loading risk management settings...")
 
 def get_risk_management_settings():
-    """Get risk management settings from database (if available), fallback to config.ini"""
+    """Get risk settings via SettingsService (falls back to database/config.ini)"""
+    if SETTINGS_SERVICE_AVAILABLE:
+        try:
+            settings = get_risk_settings_via_service()
+            return settings
+        except Exception as e:
+            print(f"[CONFIG] Warning: SettingsService risk failed: {e}")
+    
     if DATABASE_MODULE_AVAILABLE:
         try:
             settings = db.get_risk_management_settings()
@@ -1450,7 +1487,14 @@ else:
 print("[CONFIG] Loading AI analysis settings...")
 
 def get_ai_analysis_settings():
-    """Get AI analysis settings from database (if available), fallback to config.ini"""
+    """Get AI settings via SettingsService (falls back to database/config.ini)"""
+    if SETTINGS_SERVICE_AVAILABLE:
+        try:
+            settings = get_ai_settings_via_service()
+            return settings
+        except Exception as e:
+            print(f"[CONFIG] Warning: SettingsService AI failed: {e}")
+    
     if DATABASE_MODULE_AVAILABLE:
         try:
             settings = db.get_ai_settings()
@@ -5978,6 +6022,14 @@ if __name__ == '__main__':
             _original_print(f"[STARTUP] ⚠️  {diag_summary.failed} check(s) failed - review above for details")
         else:
             _original_print(f"[STARTUP] ✓ All {diag_summary.passed} checks passed")
+    except Exception as e:
+        _original_print(f"[STARTUP] ⚠️  Diagnostics skipped: {e}")
+    
+    # Run settings audit via SettingsService
+    try:
+        if SETTINGS_SERVICE_AVAILABLE:
+            log_settings_at_startup()
+            _original_print("[STARTUP] ✓ Settings audit complete")
     except ImportError:
         _original_print("[STARTUP] Diagnostics module not available, skipping health checks")
     except Exception as e:
