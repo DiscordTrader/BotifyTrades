@@ -9,6 +9,9 @@ from typing import List, Dict, Optional
 from alpaca.data.historical.option import OptionHistoricalDataClient
 from alpaca.data.historical.stock import StockHistoricalDataClient
 from alpaca.data.requests import OptionChainRequest, OptionSnapshotRequest
+from alpaca.trading.client import TradingClient
+from alpaca.trading.requests import GetOptionContractsRequest
+from alpaca.trading.enums import AssetStatus
 
 
 class AlpacaDataProvider:
@@ -33,7 +36,7 @@ class AlpacaDataProvider:
         if not self.api_key or not self.secret_key:
             raise ValueError("Alpaca API credentials not found. Set ALPACA_API_KEY and ALPACA_SECRET_KEY")
             
-        # Option data client for option chains
+        # Option data client for option chains (market data)
         self.client = OptionHistoricalDataClient(
             api_key=self.api_key,
             secret_key=self.secret_key
@@ -45,11 +48,19 @@ class AlpacaDataProvider:
             secret_key=self.secret_key
         )
         
+        # Trading client for option contracts (more reliable for expirations)
+        self.trading_client = TradingClient(
+            api_key=self.api_key,
+            secret_key=self.secret_key,
+            paper=True
+        )
+        
         print(f"[AlpacaDataProvider] ✓ Initialized successfully")
     
     async def get_options_expiration_dates(self, symbol: str) -> List[str]:
         """
-        Get all available expiration dates for a symbol
+        Get all available expiration dates for a symbol using TradingClient.get_option_contracts()
+        This is more reliable than parsing OCC symbols from option chain.
         
         Args:
             symbol: Stock symbol (e.g., 'AAPL', 'SPY', 'SPX')
@@ -57,50 +68,37 @@ class AlpacaDataProvider:
         Returns:
             List of expiration dates in YYYY-MM-DD format
         """
-        import re
+        import asyncio
         
         try:
-            print(f"[AlpacaDataProvider] Fetching expirations for {symbol}")
+            print(f"[AlpacaDataProvider] Fetching expirations for {symbol} using get_option_contracts()")
             
-            # Get option chain (contains all expirations)
-            request = OptionChainRequest(underlying_symbol=symbol.upper())
+            # Use TradingClient.get_option_contracts() - more reliable than parsing OCC symbols
+            request = GetOptionContractsRequest(
+                underlying_symbols=[symbol.upper()],
+                status=AssetStatus.ACTIVE
+            )
             
             # Execute blocking SDK call in background thread (non-blocking)
-            import asyncio
-            chain_data = await asyncio.to_thread(self.client.get_option_chain, request)
+            contracts_response = await asyncio.to_thread(
+                self.trading_client.get_option_contracts, request
+            )
             
-            print(f"[AlpacaDataProvider] Received {len(chain_data)} contracts for {symbol}")
-            
-            # Extract unique expiration dates from contract symbols using regex
-            # OCC format: ROOT + YYMMDD + C/P + STRIKE
-            # Examples: SPY250117C00600000, SPXW241202C06000000, AAPL250117P00200000
-            # Regex finds 6 digits followed by C or P
-            exp_pattern = re.compile(r'(\d{6})[CP]')
-            
+            # Extract unique expiration dates from contract objects
             expirations = set()
-            sample_contracts = []
+            contracts = contracts_response.option_contracts if hasattr(contracts_response, 'option_contracts') else []
             
-            for contract_symbol in chain_data.keys():
+            print(f"[AlpacaDataProvider] Received {len(contracts)} contracts for {symbol}")
+            
+            for contract in contracts:
                 try:
-                    # Use regex to find the 6-digit date before C/P
-                    match = exp_pattern.search(contract_symbol)
-                    if match:
-                        exp_str = match.group(1)  # YYMMDD
-                        exp_date = datetime.strptime(exp_str, '%y%m%d')
-                        expirations.add(exp_date.strftime('%Y-%m-%d'))
-                        
-                        # Collect sample contracts for debugging
-                        if len(sample_contracts) < 5:
-                            sample_contracts.append(contract_symbol)
-                    else:
-                        print(f"[AlpacaDataProvider] No date match in: {contract_symbol}")
+                    # Contract has expiration_date attribute (datetime.date)
+                    exp_date = contract.expiration_date
+                    if exp_date:
+                        expirations.add(str(exp_date))  # Format: YYYY-MM-DD
                 except Exception as e:
-                    print(f"[AlpacaDataProvider] Warning: Could not parse expiration from {contract_symbol}: {e}")
+                    print(f"[AlpacaDataProvider] Warning: Could not parse expiration from contract: {e}")
                     continue
-            
-            # Log sample contracts for debugging
-            if sample_contracts:
-                print(f"[AlpacaDataProvider] Sample contracts: {sample_contracts}")
             
             # Sort chronologically
             sorted_expirations = sorted(list(expirations))
