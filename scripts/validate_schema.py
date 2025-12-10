@@ -10,8 +10,8 @@ from pathlib import Path
 
 REQUIRED_TABLES = {
     'settings': ['key', 'value'],
-    'channels': ['channel_id', 'channel_name', 'execute_trades', 'track_only', 'broker'],
-    'trades': ['symbol', 'action', 'quantity', 'price', 'broker', 'status', 'source_channel_id'],
+    'channels': ['discord_channel_id', 'name', 'category', 'execute_enabled', 'track_enabled', 'broker_override'],
+    'trades': ['symbol', 'direction', 'quantity', 'intended_price', 'broker', 'status', 'channel_id'],
     'server_licenses': ['license_key', 'customer_name', 'license_type', 'status', 'expires_at'],
 }
 
@@ -54,9 +54,8 @@ def main():
     print("-" * 40)
     
     db_paths = [
-        'gui_app/bot_settings.db',
-        'trading_bot.db',
-        'botify_trades.db',
+        'bot_data.db',
+        'license_server.db',
     ]
     
     found_db = False
