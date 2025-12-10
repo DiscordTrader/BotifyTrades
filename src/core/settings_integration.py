@@ -99,9 +99,9 @@ def get_notification_settings_via_service() -> Dict[str, Any]:
         service = get_settings_service()
         
         return {
-            'enabled': service.get('notifications.enabled', module='selfbot_webull'),
-            'on_entry': service.get('notifications.on_entry', module='selfbot_webull'),
-            'on_exit': service.get('notifications.on_exit', module='selfbot_webull'),
+            'enabled': service.get('notifications.notifications_enabled', module='selfbot_webull'),
+            'on_entry': service.get('notifications.notification_on_entry', module='selfbot_webull'),
+            'on_exit': service.get('notifications.notification_on_exit', module='selfbot_webull'),
         }
     except Exception as e:
         logger.warning(f"[SETTINGS] Could not load notifications via service: {e}")
