@@ -771,12 +771,14 @@
         async function loadExpirations(row) {
             const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
             const broker = document.getElementById('brokerSelect').value;
+            console.log(`[OPTIONS] loadExpirations called - row=${row}, symbol=${symbol}, broker=${broker}`);
             if (!symbol) return;
 
             const expirySelect = document.getElementById(`expiry${row}`);
             const cacheKey = `${broker}_${symbol}`;
             
             if (expiryCache[cacheKey]) {
+                console.log(`[OPTIONS] Using cached expirations for ${cacheKey}`);
                 populateExpiries(row, expiryCache[cacheKey]);
                 return;
             }
@@ -784,8 +786,10 @@
             expirySelect.innerHTML = `<option value="">Loading from ${broker}...</option>`;
             
             try {
+                console.log(`[OPTIONS] Fetching expirations from /api/options/expirations?symbol=${symbol}&broker=${broker}`);
                 const response = await fetch(`/api/options/expirations?symbol=${symbol}&broker=${broker}`);
                 const data = await response.json();
+                console.log(`[OPTIONS] Response:`, data);
                 
                 if (data.expirations && data.expirations.length > 0) {
                     expiryCache[cacheKey] = data.expirations;
