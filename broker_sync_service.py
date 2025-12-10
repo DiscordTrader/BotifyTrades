@@ -618,6 +618,15 @@ class BrokerSyncService:
                     pnl_percent = 0
                 
                 # Create synthetic trade entry - inherit channel_id if found from Discord origin
+                # Normalize broker name to consistent format (e.g., 'Webull' not 'WEBULL')
+                normalized_broker = broker_name
+                if broker_name.upper() == 'WEBULL':
+                    normalized_broker = 'Webull'
+                elif broker_name.upper() == 'ALPACA_PAPER':
+                    normalized_broker = 'ALPACA_PAPER'
+                elif broker_name.upper() == 'ALPACA_LIVE':
+                    normalized_broker = 'ALPACA_LIVE'
+                
                 trade_data = {
                     'symbol': symbol,
                     'direction': 'BTO',
@@ -627,7 +636,7 @@ class BrokerSyncService:
                     'current_price': current_price,
                     'pnl': pnl,
                     'pnl_percent': pnl_percent,
-                    'broker': broker_name,
+                    'broker': normalized_broker,
                     'status': 'OPEN',
                     'asset_type': asset_type,
                     'executed_at': datetime.now().isoformat(),

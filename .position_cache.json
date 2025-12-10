@@ -241,7 +241,7 @@
   },
   "ALPACA_PAPER_ORCL_220.0_2025-12-12_C": {
     "entry_price": 11.7,
-    "highest_price": 13.55,
+    "highest_price": 13.95,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -406,7 +406,7 @@
   },
   "ALPACA_PAPER_SPY_683.0_2025-12-10_C": {
     "entry_price": 1.6,
-    "highest_price": 5.82,
+    "highest_price": 5.88,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -481,7 +481,7 @@
   },
   "Webull_ORCL_280.0_12/12_C": {
     "entry_price": 0.79,
-    "highest_price": 0.92,
+    "highest_price": 0.97,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -511,7 +511,7 @@
   },
   "ALPACA_PAPER_ORCL_280.0_2025-12-12_C": {
     "entry_price": 0.79,
-    "highest_price": 0.91,
+    "highest_price": 0.95,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -556,7 +556,7 @@
   },
   "ALPACA_PAPER_SPY_687.0_2025-12-12_C": {
     "entry_price": 2.13,
-    "highest_price": 4.15,
+    "highest_price": 4.2,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -661,7 +661,7 @@
   },
   "ALPACA_PAPER_ORCL_265.0_2025-12-12_C": {
     "entry_price": 1.53,
-    "highest_price": 1.81,
+    "highest_price": 1.92,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -721,7 +721,7 @@
   },
   "Webull_QQQ_630.0_12/11_C": {
     "entry_price": 2.12,
-    "highest_price": 2.15,
+    "highest_price": 2.18,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -736,7 +736,7 @@
   },
   "ALPACA_PAPER_QQQ_630.0_2025-12-11_C": {
     "entry_price": 2.12,
-    "highest_price": 2.15,
+    "highest_price": 2.18,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -751,7 +751,7 @@
   },
   "Webull_QQQ_631.0_12/11_C": {
     "entry_price": 1.53,
-    "highest_price": 1.69,
+    "highest_price": 1.72,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -766,7 +766,7 @@
   },
   "ALPACA_PAPER_QQQ_631.0_2025-12-11_C": {
     "entry_price": 1.53,
-    "highest_price": 1.68,
+    "highest_price": 1.72,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
