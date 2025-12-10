@@ -1346,9 +1346,10 @@ ALT_OPT_PATTERN = r'[🟢🔴]?\*{0,2}(BTO|STC)\s+\$([A-Za-z]+)\s*\|\s*([\d.]+)\
 # Note: [$] is used instead of \$ because $ is a regex metacharacter
 STEEL_BTO_PATTERN = r'(?::green_alert:|:greencheckmark:)?\s*([A-Za-z]+)\s*[|]\s*[$]?([0-9.]+)\s*([CPcp])\s+([0-9.]+)\s*(NEXT\s*WEEK|THIS\s*WEEK|TOMORROW|[0-9]{1,2}/[0-9]{1,2})?'
 
-# STC pattern with :SirenRed: prefix - handles OUT HALF, OUT 1/3, OUT ALL
+# STC pattern with :SirenRed: prefix - handles OUT HALF, OUT 1/3, OUT ALL, or just OUT
 # Groups: (symbol, price, exit_type)
-STEEL_STC_PATTERN = r':SirenRed:\s*([A-Za-z]+)\s*[|]\s*([0-9.]+)\s*(OUT\s*HALF|OUT\s*ALL|OUT\s*ALL\s*BUT\s*[0-9]+|OUT\s*[0-9]+/[0-9]+|SL\s*ENTRY)?'
+# Note: OUT alone (with any trailing text) means exit all
+STEEL_STC_PATTERN = r':SirenRed:\s*([A-Za-z]+)\s*[|]\s*([0-9.]+)\s*(OUT\s*HALF|OUT\s*ALL\s*BUT\s*[0-9]+|OUT\s*ALL|OUT\s*[0-9]+/[0-9]+|SL\s*ENTRY|OUT(?=\s|$))?'
 
 # Simple STC pattern: SYMBOL PRICE OUT (no prefix)
 # Groups: (symbol, price)
