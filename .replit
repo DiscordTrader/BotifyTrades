@@ -112,5 +112,5 @@ ADMIN_MODE = "true"
 
 [deployment]
 deploymentTarget = "vm"
-run = ["gunicorn", "--bind=0.0.0.0:5000", "--workers=2", "--reuse-port", "admin_server:app"]
+run = ["gunicorn", "--bind=0.0.0.0:5000", "--workers=2", "--reuse-port", "wsgi:app"]
 build = ["pip", "install", "-r", "requirements.txt"]
