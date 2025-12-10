@@ -559,6 +559,7 @@ async function loadEntityStats() {
                 <div><span style="color: var(--text-muted);">Avg Win:</span> ${stats.avg_win_pct > 0 ? '+' : ''}${stats.avg_win_pct}%</div>
                 <div><span style="color: var(--text-muted);">Avg Loss:</span> ${stats.avg_loss_pct}%</div>
                 <div><span style="color: var(--text-muted);">Total P/L:</span> <span class="${stats.total_pnl >= 0 ? 'success' : 'danger'}">$${stats.total_pnl.toLocaleString()}</span></div>
+                <div><span style="color: var(--text-muted);">Avg ROI:</span> <span class="${stats.avg_pnl_percent >= 0 ? 'success' : 'danger'}">${stats.avg_pnl_percent > 0 ? '+' : ''}${stats.avg_pnl_percent}%</span></div>
                 <div><span style="color: var(--text-muted);">Trades/Day:</span> ${stats.trades_per_day}</div>
             </div>
         `;
