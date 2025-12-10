@@ -114,8 +114,8 @@ class DashboardAudit:
         cursor.execute('''
             SELECT t.id, t.symbol, t.channel_id, t.status, c.name
             FROM trades t
-            LEFT JOIN channels c ON t.channel_id = c.id
-            WHERE t.channel_id IS NOT NULL AND c.id IS NULL
+            LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
+            WHERE t.channel_id IS NOT NULL AND t.channel_id != '' AND c.id IS NULL
         ''')
         orphan_trades = cursor.fetchall()
         
@@ -147,7 +147,7 @@ class DashboardAudit:
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, symbol, quantity, executed_price, current_price, pnl, pnl_percent, status
+            SELECT id, symbol, quantity, executed_price, current_price, pnl, pnl_percent, status, asset_type
             FROM trades
             WHERE status = 'CLOSED' AND executed_price > 0 AND quantity > 0
             LIMIT 100
@@ -156,11 +156,11 @@ class DashboardAudit:
         
         issues = []
         for trade in closed_trades:
-            t_id, symbol, qty, exec_price, current_price, pnl, pnl_pct, status = trade
+            t_id, symbol, qty, exec_price, current_price, pnl, pnl_pct, status, asset_type = trade
             
             if current_price and current_price > 0 and exec_price and exec_price > 0:
-                expected_pnl = (current_price - exec_price) * qty
-                expected_pct = ((current_price - exec_price) / exec_price) * 100
+                multiplier = 100 if asset_type == 'option' else 1
+                expected_pnl = (current_price - exec_price) * qty * multiplier
                 
                 if pnl and abs(pnl - expected_pnl) > 1.0:
                     issues.append(f"Trade #{t_id} ({symbol}): PNL ${pnl:.2f} != expected ${expected_pnl:.2f}")
