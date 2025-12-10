@@ -787,7 +787,9 @@
             
             try {
                 console.log(`[OPTIONS] Fetching expirations from /api/options/expirations?symbol=${symbol}&broker=${broker}`);
-                const response = await fetch(`/api/options/expirations?symbol=${symbol}&broker=${broker}`);
+                const response = await fetch(`/api/options/expirations?symbol=${symbol}&broker=${broker}`, {
+                    credentials: 'include'
+                });
                 const data = await response.json();
                 console.log(`[OPTIONS] Response:`, data);
                 
