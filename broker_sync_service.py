@@ -439,10 +439,56 @@ class BrokerSyncService:
                         close_reason='BROKER_CLOSED'
                     )
     
+    def _normalize_expiry(self, expiry: str) -> str:
+        """Normalize expiry date to YYYY-MM-DD format for consistent matching"""
+        if not expiry:
+            return ''
+        
+        expiry = str(expiry).strip()
+        
+        # Already in YYYY-MM-DD format
+        if len(expiry) == 10 and expiry[4] == '-' and expiry[7] == '-':
+            return expiry
+        
+        # Handle MM/DD format (assumes current year or next year)
+        if '/' in expiry and len(expiry) <= 5:
+            parts = expiry.split('/')
+            if len(parts) == 2:
+                try:
+                    month = int(parts[0])
+                    day = int(parts[1])
+                    from datetime import datetime
+                    current_year = datetime.now().year
+                    current_month = datetime.now().month
+                    # If expiry month is less than current month, assume next year
+                    year = current_year if month >= current_month else current_year + 1
+                    return f"{year}-{month:02d}-{day:02d}"
+                except (ValueError, IndexError):
+                    pass
+        
+        # Handle MM/DD/YY or MM/DD/YYYY format
+        if '/' in expiry:
+            parts = expiry.split('/')
+            if len(parts) == 3:
+                try:
+                    month = int(parts[0])
+                    day = int(parts[1])
+                    year = int(parts[2])
+                    if year < 100:
+                        year += 2000
+                    return f"{year}-{month:02d}-{day:02d}"
+                except (ValueError, IndexError):
+                    pass
+        
+        return expiry
+
     def _build_position_key(self, symbol: str, asset_type: str, strike=None, expiry=None, call_put=None) -> str:
         """Build a normalized position key for matching between broker and database"""
         if asset_type == 'option' and strike and expiry and call_put:
-            return f"{symbol}_{strike}_{expiry}_{call_put}"
+            normalized_expiry = self._normalize_expiry(expiry)
+            # Round strike to avoid float precision issues (0.5 increments for most options)
+            normalized_strike = round(float(strike) * 2) / 2 if strike else 0
+            return f"{symbol}_{normalized_strike}_{normalized_expiry}_{call_put}"
         else:
             return f"{symbol}_stock"
     
