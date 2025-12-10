@@ -280,7 +280,7 @@ def get_alpaca_provider() -> Optional[AlpacaDataProvider]:
     
     Tries credentials in order:
     1. Environment variables (ALPACA_API_KEY, ALPACA_SECRET_KEY)
-    2. Database settings (alpaca_paper_api_key, alpaca_live_api_key)
+    2. Database settings via get_alpaca_settings() (same as main bot uses)
     """
     global _alpaca_provider
     
@@ -290,19 +290,18 @@ def get_alpaca_provider() -> Optional[AlpacaDataProvider]:
         
         if not api_key or not secret_key:
             try:
-                from gui_app.database import Database
-                db = Database()
-                # Try various key naming conventions used in the database
-                api_key = (db.get_setting('alpaca_api_key', '') or 
-                          db.get_setting('alpaca_paper_api_key', '') or 
-                          db.get_setting('alpaca_live_api_key', ''))
-                secret_key = (db.get_setting('alpaca_secret_key', '') or 
-                             db.get_setting('alpaca_paper_secret_key', '') or 
-                             db.get_setting('alpaca_live_secret_key', ''))
+                from gui_app import database as db
+                alpaca_settings = db.get_alpaca_settings()
+                api_key = alpaca_settings.get('alpaca_api_key', '')
+                secret_key = alpaca_settings.get('alpaca_secret_key', '')
                 if api_key and secret_key:
-                    print(f"[AlpacaDataProvider] Using credentials from database")
+                    print(f"[AlpacaDataProvider] ✓ Using credentials from database (same as main bot)")
+                else:
+                    print(f"[AlpacaDataProvider] Database returned empty credentials - api_key: {bool(api_key)}, secret: {bool(secret_key)}")
             except Exception as e:
                 print(f"[AlpacaDataProvider] Could not load credentials from database: {e}")
+                import traceback
+                traceback.print_exc()
         
         if not api_key or not secret_key:
             print(f"[AlpacaDataProvider] Cannot initialize: No Alpaca credentials found (env vars or database)")
@@ -310,11 +309,14 @@ def get_alpaca_provider() -> Optional[AlpacaDataProvider]:
         
         try:
             _alpaca_provider = AlpacaDataProvider(api_key=api_key, secret_key=secret_key)
+            print(f"[AlpacaDataProvider] ✓ Initialized successfully")
         except ValueError as e:
             print(f"[AlpacaDataProvider] Cannot initialize: {e}")
             return None
         except Exception as e:
             print(f"[AlpacaDataProvider] Error initializing: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     return _alpaca_provider
