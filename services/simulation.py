@@ -233,9 +233,9 @@ def get_user_stats(author_name: str, period_days: int = 30) -> Optional[EntitySt
                     (lc.pnl / (sl.open_price * lc.closed_qty * CASE WHEN sl.asset_type = 'option' THEN 100 ELSE 1 END)) * 100
                 ELSE NULL END) as avg_win_pct,
                 
-                -- Average loss percentage (only losing trades)
-                AVG(CASE WHEN lc.pnl < 0 THEN 
-                    (lc.pnl / (sl.open_price * lc.closed_qty * CASE WHEN sl.asset_type = 'option' THEN 100 ELSE 1 END)) * 100
+                -- Average loss percentage (losing and breakeven trades)
+                AVG(CASE WHEN lc.pnl <= 0 THEN 
+                    (lc.pnl / NULLIF(sl.open_price * lc.closed_qty * CASE WHEN sl.asset_type = 'option' THEN 100 ELSE 1 END, 0)) * 100
                 ELSE NULL END) as avg_loss_pct,
                 
                 -- Overall average percentage
@@ -317,9 +317,9 @@ def get_channel_stats(channel_name: str, period_days: int = 30) -> Optional[Enti
                     (lc.pnl / (sl.open_price * lc.closed_qty * CASE WHEN sl.asset_type = 'option' THEN 100 ELSE 1 END)) * 100
                 ELSE NULL END) as avg_win_pct,
                 
-                -- Average loss percentage (only losing trades)
-                AVG(CASE WHEN lc.pnl < 0 THEN 
-                    (lc.pnl / (sl.open_price * lc.closed_qty * CASE WHEN sl.asset_type = 'option' THEN 100 ELSE 1 END)) * 100
+                -- Average loss percentage (losing and breakeven trades)
+                AVG(CASE WHEN lc.pnl <= 0 THEN 
+                    (lc.pnl / NULLIF(sl.open_price * lc.closed_qty * CASE WHEN sl.asset_type = 'option' THEN 100 ELSE 1 END, 0)) * 100
                 ELSE NULL END) as avg_loss_pct,
                 
                 -- Overall average percentage
