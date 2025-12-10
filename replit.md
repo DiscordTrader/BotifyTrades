@@ -26,6 +26,27 @@ The system supports a dual-mode channel system for simultaneous execution and tr
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, and Interactive Brokers. The system emphasizes user experience through an interactive setup wizard, GUI-based credential management, automatic license renewal, and extensive documentation. Deployment options include Windows, Linux (with systemd), and AWS EC2. The Discord bot runs in a dedicated thread with an isolated asyncio event loop. Broker credentials are loaded hierarchically. Discord channel IDs and all bot settings, including signal regex patterns and allowed author/guild IDs, are GUI-manageable and stored in SQLite. Per-channel risk management can override global defaults. The `/packaging/` directory consolidates platform-specific build scripts. The `/license/` module handles licensing, supporting legacy, machine-bound, and activation-based licenses with a dedicated GUI. The BrokerSyncService handles case-insensitive broker name matching. Options data retrieval prioritizes Webull for live prices. A unified position key format (`{BROKER}_{SYMBOL}_{STRIKE}_{EXPIRY}_{C/P}`) is used across the system. The system employs a dual-build license architecture separating Admin and User deployments for license management and bot operation.
 
+## Critical Implementation Patterns (DO NOT BREAK)
+
+### Options Page (gui_app/templates/options.html)
+- **Expiration Data**: Uses Alpaca's `OptionChainRequest` (market data API) - NOT the TradingClient paper API which has limited data
+- **Cache Variable**: `expiryCache` must be declared as `let` (not `const`) because it's reassigned when broker changes
+- **Credential Loading**: AlpacaDataProvider loads credentials from database via `get_alpaca_settings()` function, matching the main bot pattern
+- **Async Threading**: Flask routes use `asyncio.run()` to execute async provider methods in the synchronous Flask context
+
+### AlpacaDataProvider (src/data_providers/alpaca_data_provider.py)
+- **Market Data Client**: Uses `OptionHistoricalDataClient` for complete options data (not paper-limited)
+- **Expiration Parsing**: Extracts dates from OCC symbol format (e.g., SPY241220C00600000 → 2024-12-20)
+- **Database Credentials**: Must use `get_alpaca_settings()` from gui_app.database for credential loading
+
+### Position Key Format
+- Unified format: `{BROKER}_{SYMBOL}_{STRIKE}_{EXPIRY}_{C/P}`
+- Expiry dates normalized to YYYY-MM-DD to prevent duplicate trades
+
+### BrokerSyncService
+- Inherits `channel_id` from signal for both Webull and Alpaca live trading
+- Uses case-insensitive broker name matching
+
 ## External Dependencies
 
 - **Python**: 3.8+
