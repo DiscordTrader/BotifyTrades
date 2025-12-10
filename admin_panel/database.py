@@ -178,6 +178,18 @@ def init_database():
             )
         ''')
         
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                admin_user_id INTEGER NOT NULL,
+                token TEXT UNIQUE NOT NULL,
+                expires_at TEXT NOT NULL,
+                used INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (admin_user_id) REFERENCES admin_users(id)
+            )
+        ''')
+        
         conn.commit()
         print("[LICENSE_DB] ✓ License database initialized")
 
@@ -750,6 +762,80 @@ def update_admin_password(username: str, new_password: str) -> bool:
             (password_hash, username)
         )
         return cursor.rowcount > 0
+
+
+def get_admin_by_email(email: str) -> Optional[Dict]:
+    """Get admin user by email"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, username, email FROM admin_users WHERE email = ?', (email,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def create_password_reset_token(admin_user_id: int) -> str:
+    """Create a password reset token for an admin user"""
+    token = secrets.token_urlsafe(32)
+    expires_at = (datetime.now() + timedelta(hours=1)).isoformat()
+    
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM password_reset_tokens WHERE admin_user_id = ?', (admin_user_id,))
+        cursor.execute('''
+            INSERT INTO password_reset_tokens (admin_user_id, token, expires_at)
+            VALUES (?, ?, ?)
+        ''', (admin_user_id, token, expires_at))
+    
+    return token
+
+
+def verify_reset_token(token: str) -> Optional[Dict]:
+    """Verify a password reset token and return admin info if valid"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT prt.id, prt.admin_user_id, prt.expires_at, prt.used,
+                   au.username, au.email
+            FROM password_reset_tokens prt
+            JOIN admin_users au ON au.id = prt.admin_user_id
+            WHERE prt.token = ?
+        ''', (token,))
+        row = cursor.fetchone()
+        
+        if not row:
+            return None
+        
+        data = dict(row)
+        
+        if data['used']:
+            return None
+        
+        if datetime.fromisoformat(data['expires_at']) < datetime.now():
+            return None
+        
+        return data
+
+
+def use_reset_token(token: str, new_password: str) -> bool:
+    """Use a reset token to change password"""
+    token_data = verify_reset_token(token)
+    if not token_data:
+        return False
+    
+    new_hash = hash_password(new_password)
+    
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE admin_users SET password_hash = ? WHERE id = ?',
+            (new_hash, token_data['admin_user_id'])
+        )
+        cursor.execute(
+            'UPDATE password_reset_tokens SET used = 1 WHERE token = ?',
+            (token,)
+        )
+    
+    return True
 
 
 init_database()
