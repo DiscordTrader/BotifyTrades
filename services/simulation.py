@@ -909,7 +909,7 @@ def run_exact_historical_simulation(
         
         # Use actual P&L percent from the trade
         pnl_pct = trade.pnl_percent / 100  # Convert to decimal
-        is_win = pnl_pct >= 0
+        is_win = pnl_pct > 0  # Only positive P&L counts as win (breakeven = loss)
         
         trade_pnl = sim_position_size * pnl_pct
         balance += trade_pnl
