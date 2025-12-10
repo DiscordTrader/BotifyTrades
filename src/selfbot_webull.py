@@ -1334,6 +1334,44 @@ MONTH_NAMES = {'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 
                'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'}
 ALT_OPT_PATTERN = r'[🟢🔴]?\*{0,2}(BTO|STC)\s+\$([A-Za-z]+)\s*\|\s*([\d.]+)\s*([CPcp])\s+([A-Za-z]{3}|\d{1,2})/(\d{1,2})\s+\.?([\d.]+)'
 
+# Steel-style pattern for formats like: :green_alert: AAPL | $282.5 C 1.72 NEXT WEEK
+# Also handles: :SirenRed: AAPL | 1.82 OUT HALF
+# Groups: (symbol, strike, opt_type, price, expiry_text)
+STEEL_BTO_PATTERN = r':?(?:green_alert|greencheckmark):?\s*\$?([A-Za-z]+)\s*\|\s*\$?([\d.]+)\s*([CPcp])\s+([\d.]+)\s*(NEXT\s*WEEK|THIS\s*WEEK|TOMORROW|\d{1,2}/\d{1,2})?'
+# STC pattern for steel format: :SirenRed: AAPL | 1.82 OUT HALF
+# Groups: (symbol, price, exit_type) - exit_type: HALF, ALL, "ALL BUT 1", etc
+STEEL_STC_PATTERN = r':?(?:SirenRed|redx|stopsign):?\s*\$?([A-Za-z]+)\s*\|\s*([\d.]+)\s*(OUT\s*(?:HALF|ALL(?:\s*BUT\s*\d+)?)|SL\s*ENTRY)?'
+
+def calculate_next_week_expiry():
+    """Calculate next Friday's date for 'NEXT WEEK' expiry"""
+    from datetime import datetime, timedelta
+    today = datetime.now()
+    # Find days until next Friday (weekday 4)
+    days_until_friday = (4 - today.weekday()) % 7
+    if days_until_friday == 0:
+        days_until_friday = 7  # If today is Friday, get NEXT Friday
+    # For "NEXT WEEK", add 7 more days to get the Friday after this one
+    next_friday = today + timedelta(days=days_until_friday + 7)
+    return next_friday.strftime("%m/%d")
+
+def calculate_this_week_expiry():
+    """Calculate this Friday's date for 'THIS WEEK' expiry"""
+    from datetime import datetime, timedelta
+    today = datetime.now()
+    days_until_friday = (4 - today.weekday()) % 7
+    if days_until_friday == 0:
+        # Today is Friday, use today
+        this_friday = today
+    else:
+        this_friday = today + timedelta(days=days_until_friday)
+    return this_friday.strftime("%m/%d")
+
+def calculate_tomorrow_expiry():
+    """Calculate tomorrow's date for 'TOMORROW' expiry"""
+    from datetime import datetime, timedelta
+    tomorrow = datetime.now() + timedelta(days=1)
+    return tomorrow.strftime("%m/%d")
+
 # Use database patterns if available, otherwise fallback to config.ini or defaults
 if DB_OPTION_PATTERN:
     OPT_REGEX = re.compile(DB_OPTION_PATTERN, re.IGNORECASE | re.MULTILINE)
@@ -3287,10 +3325,14 @@ class WebullBroker:
 # ------------------------------ SIGNAL PARSER -------------------------------------
 # Compile alternate pattern regex
 ALT_OPT_REGEX = re.compile(ALT_OPT_PATTERN, re.IGNORECASE)
+STEEL_BTO_REGEX = re.compile(STEEL_BTO_PATTERN, re.IGNORECASE)
+STEEL_STC_REGEX = re.compile(STEEL_STC_PATTERN, re.IGNORECASE)
 
 def parse_option_signal(text: str) -> Optional[dict]:
     m = OPT_REGEX.search(text.strip())
     use_alt_format = False
+    use_steel_format = False
+    use_steel_stc = False
     
     if not m:
         # Try alternate format: 🟢**BTO $RKT | 21.2 C JAN/16 .56**
@@ -3299,12 +3341,79 @@ def parse_option_signal(text: str) -> Optional[dict]:
             use_alt_format = True
             print(f"[Discord] ✓ Matched alternate format (pipe-separated)")
         else:
-            print(f"[Discord] ❌ Pattern NOT matched: '{text.strip()[:80]}'")
-            print(f"[Discord]    Expected format: BTO/STC QTY SYMBOL STRIKE C/P MM/DD @ PRICE")
-            print(f"[Discord]    Or alternate: 🟢BTO $SYMBOL | STRIKE C/P MONTH/DAY PRICE")
-            return None
+            # Try steel BTO format: :green_alert: AAPL | $282.5 C 1.72 NEXT WEEK
+            m = STEEL_BTO_REGEX.search(text.strip())
+            if m:
+                use_steel_format = True
+                print(f"[Discord] ✓ Matched steel BTO format")
+            else:
+                # Try steel STC format: :SirenRed: AAPL | 1.82 OUT HALF
+                m = STEEL_STC_REGEX.search(text.strip())
+                if m:
+                    use_steel_stc = True
+                    print(f"[Discord] ✓ Matched steel STC format")
+                else:
+                    print(f"[Discord] ❌ Pattern NOT matched: '{text.strip()[:80]}'")
+                    print(f"[Discord]    Expected format: BTO/STC QTY SYMBOL STRIKE C/P MM/DD @ PRICE")
+                    print(f"[Discord]    Or alternate: 🟢BTO $SYMBOL | STRIKE C/P MONTH/DAY PRICE")
+                    print(f"[Discord]    Or steel: :green_alert: SYMBOL | $STRIKE C/P PRICE NEXT WEEK")
+                    return None
     
-    if use_alt_format:
+    if use_steel_stc:
+        # Steel STC format groups: (symbol, price, exit_type)
+        symbol, price_str, exit_type = m.groups()
+        direction = 'STC'
+        qty_str = None  # Will need to look up position or default to 1
+        
+        # For STC, we need to find the matching open position
+        # For now, default to 1 contract - will be overridden by position lookup
+        print(f"[Discord] Steel STC: {symbol} @ ${price_str}, exit type: {exit_type}")
+        
+        # We don't have strike/expiry from STC signal - need to match to open position
+        # Return a special signal that will trigger position lookup
+        return {
+            "asset": "option",
+            "action": "STC",
+            "qty": 1,  # Will be overridden by position lookup
+            "symbol": symbol.upper(),
+            "strike": None,  # Will need position lookup
+            "opt_type": None,  # Will need position lookup
+            "expiry": None,  # Will need position lookup
+            "price": float(price_str),
+            "is_market_order": False,
+            "_steel_stc": True,  # Flag for position lookup
+            "_exit_type": exit_type.strip().upper() if exit_type else "ALL"
+        }
+    
+    if use_steel_format:
+        # Steel BTO format groups: (symbol, strike, opt_type, price, expiry_text)
+        symbol, strike, opt_type, price_str, expiry_text = m.groups()
+        direction = 'BTO'
+        qty_str = None  # Steel format doesn't include quantity
+        
+        # Calculate expiry from text
+        if expiry_text:
+            expiry_upper = expiry_text.strip().upper()
+            if 'NEXT' in expiry_upper and 'WEEK' in expiry_upper:
+                expiry = calculate_next_week_expiry()
+                print(f"[Discord] Calculated NEXT WEEK expiry: {expiry}")
+            elif 'THIS' in expiry_upper and 'WEEK' in expiry_upper:
+                expiry = calculate_this_week_expiry()
+                print(f"[Discord] Calculated THIS WEEK expiry: {expiry}")
+            elif 'TOMORROW' in expiry_upper:
+                expiry = calculate_tomorrow_expiry()
+                print(f"[Discord] Calculated TOMORROW expiry: {expiry}")
+            elif '/' in expiry_text:
+                expiry = expiry_text.strip()
+            else:
+                # Default to this Friday
+                expiry = calculate_this_week_expiry()
+                print(f"[Discord] No expiry specified, defaulting to this Friday: {expiry}")
+        else:
+            # Default to this Friday if no expiry text
+            expiry = calculate_this_week_expiry()
+            print(f"[Discord] No expiry specified, defaulting to this Friday: {expiry}")
+    elif use_alt_format:
         # Alt format groups: (action, symbol, strike, opt_type, month, day, price)
         direction, symbol, strike, opt_type, month_str, day, price_str = m.groups()
         qty_str = None  # Alternate format doesn't include quantity
