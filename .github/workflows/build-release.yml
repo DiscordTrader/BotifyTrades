@@ -33,17 +33,13 @@ jobs:
           mkdir -p dist_obf/src
           pyarmor gen --output dist_obf/src src/license_client.py
           pyarmor gen --output dist_obf/src src/license_manager.py
-                    
+          
           mkdir -p src_backup
           Copy-Item src/license_client.py src_backup/
           Copy-Item src/license_manager.py src_backup/
-          Copy-Item src/license_manager_secure.py src_backup/
-          Copy-Item src/license_manager_activation.py src_backup/
           
           Copy-Item dist_obf/src/license_client.py src/ -Force
           Copy-Item dist_obf/src/license_manager.py src/ -Force
-          Copy-Item dist_obf/src/license_manager_secure.py src/ -Force
-          Copy-Item dist_obf/src/license_manager_activation.py src/ -Force
           
           if (Test-Path "dist_obf/src/pyarmor_runtime_000000") {
             Copy-Item -Recurse dist_obf/src/pyarmor_runtime_000000 src/
@@ -60,8 +56,6 @@ jobs:
         run: |
           Copy-Item src_backup/license_client.py src/ -Force
           Copy-Item src_backup/license_manager.py src/ -Force
-          Copy-Item src_backup/license_manager_secure.py src/ -Force
-          Copy-Item src_backup/license_manager_activation.py src/ -Force
           Remove-Item -Recurse -Force src_backup
           Remove-Item -Recurse -Force dist_obf
           if (Test-Path "src/pyarmor_runtime_000000") {
@@ -114,19 +108,13 @@ jobs:
           mkdir -p dist_obf/src
           pyarmor gen --output dist_obf/src src/license_client.py
           pyarmor gen --output dist_obf/src src/license_manager.py
-          pyarmor gen --output dist_obf/src src/license_manager_secure.py
-          pyarmor gen --output dist_obf/src src/license_manager_activation.py
           
           mkdir -p src_backup
           cp src/license_client.py src_backup/
           cp src/license_manager.py src_backup/
-          cp src/license_manager_secure.py src_backup/
-          cp src/license_manager_activation.py src_backup/
           
           cp dist_obf/src/license_client.py src/
           cp dist_obf/src/license_manager.py src/
-          cp dist_obf/src/license_manager_secure.py src/
-          cp dist_obf/src/license_manager_activation.py src/
           
           if [ -d "dist_obf/src/pyarmor_runtime_000000" ]; then
             cp -r dist_obf/src/pyarmor_runtime_000000 src/
@@ -143,8 +131,6 @@ jobs:
         run: |
           cp src_backup/license_client.py src/
           cp src_backup/license_manager.py src/
-          cp src_backup/license_manager_secure.py src/
-          cp src_backup/license_manager_activation.py src/
           rm -rf src_backup dist_obf
           rm -rf src/pyarmor_runtime_000000 2>/dev/null || true
 
@@ -198,19 +184,13 @@ jobs:
           mkdir -p dist_obf/src
           pyarmor gen --output dist_obf/src src/license_client.py
           pyarmor gen --output dist_obf/src src/license_manager.py
-          pyarmor gen --output dist_obf/src src/license_manager_secure.py
-          pyarmor gen --output dist_obf/src src/license_manager_activation.py
           
           mkdir -p src_backup
           cp src/license_client.py src_backup/
           cp src/license_manager.py src_backup/
-          cp src/license_manager_secure.py src_backup/
-          cp src/license_manager_activation.py src_backup/
           
           cp dist_obf/src/license_client.py src/
           cp dist_obf/src/license_manager.py src/
-          cp dist_obf/src/license_manager_secure.py src/
-          cp dist_obf/src/license_manager_activation.py src/
           
           if [ -d "dist_obf/src/pyarmor_runtime_000000" ]; then
             cp -r dist_obf/src/pyarmor_runtime_000000 src/
@@ -227,8 +207,6 @@ jobs:
         run: |
           cp src_backup/license_client.py src/
           cp src_backup/license_manager.py src/
-          cp src_backup/license_manager_secure.py src/
-          cp src_backup/license_manager_activation.py src/
           rm -rf src_backup dist_obf
           rm -rf src/pyarmor_runtime_000000 2>/dev/null || true
 
@@ -260,7 +238,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Push releases to public repo for user auto-updates
   publish-to-public:
     needs: [build-windows, build-macos, build-linux]
     if: always() && startsWith(github.ref, 'refs/tags/v') && (needs.build-windows.result == 'success' || needs.build-linux.result == 'success')
@@ -274,11 +251,9 @@ jobs:
           echo "Downloading release assets for $TAG_NAME"
           mkdir -p release_assets
           
-          # Wait for releases to finish uploading (increased timeout)
           echo "Waiting for release assets to be ready..."
           sleep 90
           
-          # Retry download up to 3 times
           for i in 1 2 3; do
             echo "Download attempt $i..."
             gh release download "$TAG_NAME" \
@@ -292,7 +267,6 @@ jobs:
           echo "Downloaded assets:"
           ls -la release_assets/
           
-          # Verify we have at least one ZIP
           if [ ! "$(ls -A release_assets/*.zip 2>/dev/null)" ]; then
             echo "ERROR: No ZIP files downloaded!"
             exit 1
@@ -306,14 +280,12 @@ jobs:
           
           echo "Creating release $TAG_NAME in public repo..."
           
-          # Check if release already exists
           if gh release view "$TAG_NAME" --repo "DiscordTrader/BotifyTrades-Releases" > /dev/null 2>&1; then
             echo "Release $TAG_NAME already exists, deleting and recreating..."
             gh release delete "$TAG_NAME" --repo "DiscordTrader/BotifyTrades-Releases" --yes || true
             sleep 5
           fi
           
-          # Create release in public repo
           gh release create "$TAG_NAME" \
             --repo "DiscordTrader/BotifyTrades-Releases" \
             --title "BotifyTrades $TAG_NAME" \
