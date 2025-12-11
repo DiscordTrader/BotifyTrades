@@ -121,24 +121,42 @@ class WebullAuth:
             access_token = creds.get('access_token')
             refresh_token = creds.get('refresh_token')
             
-            if access_token and refresh_token:
+            if access_token:
                 self.wb._access_token = access_token
-                self.wb._refresh_token = refresh_token
+                if refresh_token:
+                    self.wb._refresh_token = refresh_token
                 self.wb._token_expire = creds.get('token_expire')
                 self.wb._uuid = creds.get('uuid')
                 if creds.get('device_id'):
                     self.wb._set_did(creds.get('device_id'))
                 
+                # Verify tokens by calling get_account (same as main bot)
                 try:
-                    self.wb.refresh_login()
-                    if self.wb.is_logged_in():
-                        self.wb.get_trade_token(trading_pin)
+                    account = self.wb.get_account()
+                    if account:
+                        # Tokens work! Get trade token
+                        if trading_pin:
+                            try:
+                                self.wb.get_trade_token(trading_pin)
+                            except Exception as e:
+                                print(f"[WEBULL AUTH] Trade token warning: {e}")
                         self.logged_in = True
                         self.account_id = self.wb.get_account_id()
-                        self._save_session()
                         return True
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[WEBULL AUTH] Token verification via get_account failed: {e}")
+                    # Fallback to refresh_login
+                    try:
+                        self.wb.refresh_login()
+                        if self.wb.is_logged_in():
+                            if trading_pin:
+                                self.wb.get_trade_token(trading_pin)
+                            self.logged_in = True
+                            self.account_id = self.wb.get_account_id()
+                            self._save_session()
+                            return True
+                    except Exception:
+                        pass
             return False
         except Exception:
             return False
