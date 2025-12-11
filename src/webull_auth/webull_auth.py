@@ -103,6 +103,12 @@ class WebullAuth:
             error_msg = str(e)
             if 'mfa' in error_msg.lower() or 'verification' in error_msg.lower():
                 return {"success": False, "error": "MFA required", "needs_mfa": True}
+            if 'Expecting value' in error_msg or 'JSONDecodeError' in error_msg or 'line 1 column 1' in error_msg:
+                return {
+                    "success": False, 
+                    "error": "Webull CAPTCHA/anti-bot protection detected. Email login is blocked. Please use Token-Only Mode instead.",
+                    "captcha_blocked": True
+                }
             return {"success": False, "error": error_msg}
     
     def _try_saved_session(self, trading_pin: str) -> bool:
