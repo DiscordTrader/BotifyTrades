@@ -26,6 +26,16 @@ The system supports a dual-mode channel system for simultaneous execution and tr
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, and Interactive Brokers. The system emphasizes user experience through an interactive setup wizard, GUI-based credential management, automatic license renewal, and extensive documentation. Deployment options include Windows, Linux (with systemd), and AWS EC2. The Discord bot runs in a dedicated thread with an isolated asyncio event loop. Broker credentials are loaded hierarchically. Discord channel IDs and all bot settings, including signal regex patterns and allowed author/guild IDs, are GUI-manageable and stored in SQLite. Per-channel risk management can override global defaults. The `/packaging/` directory consolidates platform-specific build scripts. The `/license/` module handles licensing, supporting legacy, machine-bound, and activation-based licenses with a dedicated GUI. The BrokerSyncService handles case-insensitive broker name matching. Options data retrieval prioritizes Webull for live prices. A unified position key format (`{BROKER}_{SYMBOL}_{STRIKE}_{EXPIRY}_{C/P}`) is used across the system. The system employs a dual-build license architecture separating Admin and User deployments for license management and bot operation.
 
+## Recent Changes
+
+### v2.1.31 - Bot Trades Tab (2025-12-11)
+- **NEW: Isolated Bot Trades Tab** - Shows ONLY Discord signal-executed trades with channel attribution
+- Filters: Channel Name, Symbol, Status, Broker dropdowns
+- Professional dark theme UI matching dashboard styling
+- API: `/api/bot-trades` endpoint returns trades with channel_id + filter metadata
+- Database: `get_bot_trades()` function joins trades with discord_channels table
+- Completely isolated from broker sync - no "Pre-tracking" noise
+
 ## Critical Implementation Patterns (DO NOT BREAK)
 
 ### Options Page (gui_app/templates/options.html)

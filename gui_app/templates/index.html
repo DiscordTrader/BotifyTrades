@@ -93,12 +93,60 @@
         <button id="tab-filled" class="tab" onclick="switchTab('filled')">
             ✅ Filled Orders
         </button>
+        <button id="tab-bot-trades" class="tab" onclick="switchTab('bot-trades')">
+            🤖 Bot Trades
+        </button>
     </div>
     
     <div id="trades-table-container">
         <div style="text-align: center; padding: 60px 20px;">
             <div class="spinner" style="margin: 0 auto 20px;"></div>
             <div style="color: var(--text-secondary); font-size: 0.9375rem;">Loading trades...</div>
+        </div>
+    </div>
+    
+    <!-- Bot Trades Container (hidden by default) -->
+    <div id="bot-trades-container" style="display: none;">
+        <!-- Filter Bar -->
+        <div class="bot-trades-filters" style="display: flex; gap: 12px; padding: 16px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="font-size: 0.875rem; color: var(--text-secondary); white-space: nowrap;">Channel:</label>
+                <select id="bot-filter-channel" onchange="loadBotTrades()" class="form-select" style="min-width: 180px;">
+                    <option value="">All Channels</option>
+                </select>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="font-size: 0.875rem; color: var(--text-secondary); white-space: nowrap;">Symbol:</label>
+                <input type="text" id="bot-filter-symbol" placeholder="Search symbol..." 
+                       class="form-control" style="min-width: 120px; max-width: 150px;"
+                       oninput="debounceBotSearch()">
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="font-size: 0.875rem; color: var(--text-secondary); white-space: nowrap;">Status:</label>
+                <select id="bot-filter-status" onchange="loadBotTrades()" class="form-select" style="min-width: 120px;">
+                    <option value="">All Status</option>
+                    <option value="OPEN">Open</option>
+                    <option value="CLOSED">Closed</option>
+                    <option value="PENDING">Pending</option>
+                </select>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="font-size: 0.875rem; color: var(--text-secondary); white-space: nowrap;">Broker:</label>
+                <select id="bot-filter-broker" onchange="loadBotTrades()" class="form-select" style="min-width: 140px;">
+                    <option value="">All Brokers</option>
+                </select>
+            </div>
+            <button onclick="resetBotFilters()" class="btn btn-secondary btn-small" style="margin-left: auto;">
+                Reset Filters
+            </button>
+        </div>
+        
+        <!-- Bot Trades Table -->
+        <div id="bot-trades-table">
+            <div style="text-align: center; padding: 60px 20px;">
+                <div class="spinner" style="margin: 0 auto 20px;"></div>
+                <div style="color: var(--text-secondary); font-size: 0.9375rem;">Loading bot trades...</div>
+            </div>
         </div>
     </div>
 </div>
@@ -688,11 +736,24 @@ async function switchTab(tab) {
     });
     document.getElementById(`tab-${tab}`).classList.add('active');
     
-    // Load trades - use order history API for filled orders
-    if (tab === 'filled') {
-        await loadFilledOrderHistory();
+    // Show/hide appropriate containers
+    const tradesContainer = document.getElementById('trades-table-container');
+    const botTradesContainer = document.getElementById('bot-trades-container');
+    
+    if (tab === 'bot-trades') {
+        tradesContainer.style.display = 'none';
+        botTradesContainer.style.display = 'block';
+        await loadBotTrades();
     } else {
-        loadTrades();
+        tradesContainer.style.display = 'block';
+        botTradesContainer.style.display = 'none';
+        
+        // Load trades - use order history API for filled orders
+        if (tab === 'filled') {
+            await loadFilledOrderHistory();
+        } else {
+            loadTrades();
+        }
     }
 }
 
@@ -1330,6 +1391,211 @@ async function loadStats() {
     } catch (err) {
         console.error('Error loading stats:', err);
     }
+}
+
+// ============ BOT TRADES TAB FUNCTIONS ============
+let botTradesDebounceTimer = null;
+let botFiltersInitialized = false;
+
+async function loadBotTrades() {
+    console.log('[loadBotTrades] Starting...');
+    const container = document.getElementById('bot-trades-table');
+    if (!container) return;
+    
+    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading bot trades...</div></div>';
+    
+    try {
+        // Get filter values
+        const channelId = document.getElementById('bot-filter-channel')?.value || '';
+        const symbol = document.getElementById('bot-filter-symbol')?.value || '';
+        const status = document.getElementById('bot-filter-status')?.value || '';
+        const broker = document.getElementById('bot-filter-broker')?.value || '';
+        
+        let url = '/api/bot-trades?';
+        if (channelId) url += `channel_id=${channelId}&`;
+        if (symbol) url += `symbol=${encodeURIComponent(symbol)}&`;
+        if (status) url += `status=${status}&`;
+        if (broker) url += `broker=${broker}&`;
+        url = url.replace(/[&?]$/, '');
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (!data.success) {
+            container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">Error: ${data.error}</div>`;
+            return;
+        }
+        
+        // Initialize filter dropdowns (only once)
+        if (!botFiltersInitialized && data.filters) {
+            initBotFilters(data.filters);
+            botFiltersInitialized = true;
+        }
+        
+        const trades = data.trades || [];
+        
+        // Update summary
+        const summaryEl = document.getElementById('summary-text');
+        if (summaryEl) {
+            summaryEl.textContent = `${trades.length} bot trade${trades.length !== 1 ? 's' : ''} with channel attribution`;
+        }
+        
+        if (trades.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 60px 20px;">
+                    <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">🤖</div>
+                    <div style="color: var(--text-secondary); font-size: 1rem;">No bot trades found</div>
+                    <div style="color: var(--text-muted); font-size: 0.875rem; margin-top: 8px;">Trades executed from Discord signals will appear here</div>
+                </div>
+            `;
+            return;
+        }
+        
+        // Render bot trades table
+        container.innerHTML = renderBotTradesTable(trades);
+        
+    } catch (err) {
+        console.error('[loadBotTrades] Error:', err);
+        container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load bot trades: ${err.message}</div>`;
+    }
+}
+
+function initBotFilters(filters) {
+    // Populate channel dropdown
+    const channelSelect = document.getElementById('bot-filter-channel');
+    if (channelSelect && filters.channels) {
+        channelSelect.innerHTML = '<option value="">All Channels</option>';
+        filters.channels.forEach(ch => {
+            const option = document.createElement('option');
+            option.value = ch.discord_channel_id;
+            option.textContent = `#${ch.name} (${ch.trade_count})`;
+            channelSelect.appendChild(option);
+        });
+    }
+    
+    // Populate broker dropdown
+    const brokerSelect = document.getElementById('bot-filter-broker');
+    if (brokerSelect && filters.brokers) {
+        brokerSelect.innerHTML = '<option value="">All Brokers</option>';
+        filters.brokers.forEach(b => {
+            const option = document.createElement('option');
+            option.value = b;
+            option.textContent = b;
+            brokerSelect.appendChild(option);
+        });
+    }
+}
+
+function renderBotTradesTable(trades) {
+    let html = `
+        <table class="data-table" style="width: 100%;">
+            <thead>
+                <tr>
+                    <th style="min-width: 140px;">Channel</th>
+                    <th>Symbol</th>
+                    <th>Strike</th>
+                    <th>Expiry</th>
+                    <th>Direction</th>
+                    <th>Qty</th>
+                    <th>Entry</th>
+                    <th>Current</th>
+                    <th>P&L</th>
+                    <th>Broker</th>
+                    <th>Status</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    trades.forEach(trade => {
+        const pnl = parseFloat(trade.pnl) || 0;
+        const pnlPercent = parseFloat(trade.pnl_percent) || 0;
+        const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+        const pnlSign = pnl >= 0 ? '+' : '';
+        
+        const directionBadge = (trade.direction === 'BTO' || trade.action === 'BUY') 
+            ? '<span class="badge badge-success">BTO</span>'
+            : '<span class="badge badge-error">STC</span>';
+        
+        const statusBadge = getStatusBadge(trade.status);
+        const brokerBadge = getBrokerBadge(trade.broker);
+        
+        const strikeDisplay = trade.strike ? `$${trade.strike}${trade.call_put || ''}` : '-';
+        const expiryDisplay = trade.expiry || '-';
+        const entryPrice = parseFloat(trade.price) || 0;
+        const currentPrice = parseFloat(trade.current_price) || entryPrice;
+        
+        // Format time
+        let timeDisplay = '-';
+        if (trade.executed_at) {
+            const d = new Date(trade.executed_at);
+            timeDisplay = d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+        
+        html += `
+            <tr>
+                <td>
+                    <span class="channel-badge" style="background: rgba(99, 102, 241, 0.2); color: #818cf8; padding: 4px 10px; border-radius: 6px; font-weight: 500; display: inline-block;">
+                        #${trade.channel_name}
+                    </span>
+                </td>
+                <td><strong style="color: var(--text-primary);">${trade.symbol}</strong></td>
+                <td>${strikeDisplay}</td>
+                <td style="color: var(--text-secondary);">${expiryDisplay}</td>
+                <td>${directionBadge}</td>
+                <td>${trade.qty}</td>
+                <td>$${entryPrice.toFixed(2)}</td>
+                <td>$${currentPrice.toFixed(2)}</td>
+                <td class="${pnlClass}" style="font-weight: 600;">${pnlSign}$${pnl.toFixed(2)} (${pnlSign}${pnlPercent.toFixed(1)}%)</td>
+                <td>${brokerBadge}</td>
+                <td>${statusBadge}</td>
+                <td style="color: var(--text-muted); font-size: 0.85rem;">${timeDisplay}</td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table>';
+    return html;
+}
+
+function getStatusBadge(status) {
+    const statusColors = {
+        'OPEN': 'background: rgba(34, 197, 94, 0.2); color: #22c55e;',
+        'CLOSED': 'background: rgba(156, 163, 175, 0.2); color: #9ca3af;',
+        'PENDING': 'background: rgba(251, 191, 36, 0.2); color: #fbbf24;',
+        'CANCELLED': 'background: rgba(239, 68, 68, 0.2); color: #ef4444;'
+    };
+    const style = statusColors[status] || statusColors['PENDING'];
+    return `<span class="badge" style="${style} padding: 3px 8px; border-radius: 4px; font-size: 0.75rem;">${status}</span>`;
+}
+
+function getBrokerBadge(broker) {
+    const brokerColors = {
+        'WEBULL': 'background: rgba(59, 130, 246, 0.2); color: #3b82f6;',
+        'WEBULL_PAPER': 'background: rgba(59, 130, 246, 0.15); color: #93c5fd;',
+        'ALPACA': 'background: rgba(245, 158, 11, 0.2); color: #f59e0b;',
+        'ALPACA_PAPER': 'background: rgba(245, 158, 11, 0.15); color: #fcd34d;',
+        'IBKR': 'background: rgba(168, 85, 247, 0.2); color: #a855f7;',
+        'IBKR_PAPER': 'background: rgba(168, 85, 247, 0.15); color: #c4b5fd;'
+    };
+    const style = brokerColors[broker] || 'background: rgba(156, 163, 175, 0.2); color: #9ca3af;';
+    return `<span class="badge" style="${style} padding: 3px 8px; border-radius: 4px; font-size: 0.75rem;">${broker}</span>`;
+}
+
+function debounceBotSearch() {
+    if (botTradesDebounceTimer) clearTimeout(botTradesDebounceTimer);
+    botTradesDebounceTimer = setTimeout(() => {
+        loadBotTrades();
+    }, 400);
+}
+
+function resetBotFilters() {
+    document.getElementById('bot-filter-channel').value = '';
+    document.getElementById('bot-filter-symbol').value = '';
+    document.getElementById('bot-filter-status').value = '';
+    document.getElementById('bot-filter-broker').value = '';
+    loadBotTrades();
 }
 
 // Load initial data with startup delay

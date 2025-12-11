@@ -1640,6 +1640,70 @@ def register_routes(app):
         response.headers['Expires'] = '0'
         return response
     
+    @app.route('/api/bot-trades', methods=['GET'])
+    def api_get_bot_trades():
+        """Get ONLY bot-executed trades with channel attribution - isolated from broker sync"""
+        try:
+            channel_id = request.args.get('channel_id')
+            symbol = request.args.get('symbol')
+            status = request.args.get('status')
+            broker = request.args.get('broker')
+            limit = int(request.args.get('limit', 200))
+            
+            result = db.get_bot_trades(
+                channel_id=channel_id,
+                symbol=symbol,
+                status=status,
+                broker=broker,
+                limit=limit
+            )
+            
+            formatted_trades = []
+            for trade in result['trades']:
+                entry_price = float(trade.get('price', 0) or 0)
+                current_price = float(trade.get('current_price', 0) or 0) or entry_price
+                pnl = float(trade.get('pnl', 0) or 0)
+                pnl_percent = float(trade.get('pnl_percent', 0) or 0)
+                
+                formatted_trades.append({
+                    'id': trade.get('id'),
+                    'symbol': trade.get('symbol'),
+                    'strike': trade.get('strike'),
+                    'expiry': trade.get('expiry'),
+                    'call_put': trade.get('call_put'),
+                    'action': trade.get('action'),
+                    'direction': trade.get('direction'),
+                    'qty': trade.get('quantity', 0),
+                    'price': entry_price,
+                    'current_price': current_price,
+                    'pnl': pnl,
+                    'pnl_percent': pnl_percent,
+                    'status': trade.get('status'),
+                    'broker': trade.get('broker', 'Unknown'),
+                    'asset_type': trade.get('asset_type', 'option'),
+                    'option_id': trade.get('option_id'),
+                    'executed_at': trade.get('executed_at', ''),
+                    'closed_at': trade.get('closed_at'),
+                    'channel_id': trade.get('channel_id'),
+                    'channel_name': trade.get('channel_name', 'Unknown'),
+                    'channel_category': trade.get('channel_category', ''),
+                })
+            
+            response = make_response(jsonify({
+                'success': True,
+                'trades': formatted_trades,
+                'filters': result['filters'],
+                'total': len(formatted_trades)
+            }))
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            return response
+            
+        except Exception as e:
+            print(f"[API] Error in bot-trades: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @app.route('/api/trades/summary', methods=['GET'])
     def api_trades_summary():
         """Get today's trade summary including bot-tracked and live positions"""

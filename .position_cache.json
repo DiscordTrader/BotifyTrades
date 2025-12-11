@@ -196,7 +196,7 @@
   },
   "ALPACA_PAPER_OKTA_90.0_2025-12-12_C": {
     "entry_price": 0.44,
-    "highest_price": 1.17,
+    "highest_price": 1.58,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -826,7 +826,7 @@
   },
   "ALPACA_PAPER_AAPL_280.0_2025-12-19_C": {
     "entry_price": 1.52,
-    "highest_price": 1.92,
+    "highest_price": 2.31,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -916,7 +916,7 @@
   },
   "ALPACA_PAPER_SPY_684.0_2025-12-11_C": {
     "entry_price": 1.56,
-    "highest_price": 2.59,
+    "highest_price": 3.53,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -931,7 +931,7 @@
   },
   "ALPACA_PAPER_SPY_685.0_2025-12-11_P": {
     "entry_price": 1.21,
-    "highest_price": 1.35,
+    "highest_price": 1.58,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -946,7 +946,7 @@
   },
   "ALPACA_PAPER_IWM_256.0_2025-12-11_C": {
     "entry_price": 0.6,
-    "highest_price": 0.72,
+    "highest_price": 1.61,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -973,5 +973,20 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-11T16:10:06.467384"
+  },
+  "ALPACA_PAPER_QQQ_614.0_2025-12-11_P": {
+    "entry_price": 0.25,
+    "highest_price": 0.31,
+    "trailing_activated": true,
+    "closing": true,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "QQQ251211P00614000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-11T16:35:23.835984"
   }
 }

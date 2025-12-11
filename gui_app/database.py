@@ -1563,6 +1563,86 @@ def get_trades(status: Optional[str] = None, broker: Optional[str] = None, limit
     return [dict(row) for row in cursor.fetchall()]
 
 
+def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = None, 
+                   status: Optional[str] = None, broker: Optional[str] = None, 
+                   limit: int = 200) -> Dict[str, Any]:
+    """
+    Get ONLY bot-executed trades (trades with channel_id) - isolated from broker sync.
+    Returns trades and filter metadata for UI dropdowns.
+    Uses LEFT JOIN to include trades even if channel was deleted (shows as 'Unknown').
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT t.id, t.symbol, t.strike, t.expiry, t.call_put, t.action, t.quantity,
+               t.price, t.current_price, t.pnl, t.pnl_percent, t.status, t.broker,
+               t.asset_type, t.option_id, t.executed_at, t.closed_at, t.channel_id,
+               t.message_id, t.direction, t.source,
+               COALESCE(c.name, 'Unknown') as channel_name, 
+               COALESCE(c.category, '') as channel_category
+        FROM trades t 
+        LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
+        WHERE t.channel_id IS NOT NULL AND t.channel_id != ''
+    '''
+    params = []
+    
+    if channel_id:
+        query += ' AND t.channel_id = ?'
+        params.append(channel_id)
+    
+    if symbol:
+        query += ' AND UPPER(t.symbol) LIKE ?'
+        params.append(f'%{symbol.upper()}%')
+    
+    if status:
+        query += ' AND t.status = ?'
+        params.append(status)
+    
+    if broker:
+        query += ' AND t.broker = ?'
+        params.append(broker)
+    
+    query += ' ORDER BY t.executed_at DESC LIMIT ?'
+    params.append(limit)
+    
+    cursor.execute(query, params)
+    trades = [dict(row) for row in cursor.fetchall()]
+    
+    channel_query = '''
+        SELECT DISTINCT c.discord_channel_id, c.name, c.category, 
+               COUNT(t.id) as trade_count
+        FROM channels c
+        INNER JOIN trades t ON c.discord_channel_id = t.channel_id
+        WHERE t.channel_id IS NOT NULL AND t.channel_id != ''
+        GROUP BY c.discord_channel_id, c.name, c.category
+        ORDER BY trade_count DESC
+    '''
+    cursor.execute(channel_query)
+    channels = [dict(row) for row in cursor.fetchall()]
+    
+    symbol_query = '''
+        SELECT DISTINCT UPPER(symbol) as symbol, COUNT(*) as count
+        FROM trades 
+        WHERE channel_id IS NOT NULL AND channel_id != ''
+        GROUP BY UPPER(symbol)
+        ORDER BY count DESC
+        LIMIT 50
+    '''
+    cursor.execute(symbol_query)
+    symbols = [row['symbol'] for row in cursor.fetchall()]
+    
+    return {
+        'trades': trades,
+        'filters': {
+            'channels': channels,
+            'symbols': symbols,
+            'statuses': ['OPEN', 'CLOSED', 'PENDING', 'CANCELLED'],
+            'brokers': ['WEBULL', 'WEBULL_PAPER', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'IBKR_PAPER']
+        }
+    }
+
+
 def update_trade_price(trade_id: int, current_price: float, pnl: float, pnl_percent: float):
     """Update trade's current price and P&L"""
     conn = get_connection()
