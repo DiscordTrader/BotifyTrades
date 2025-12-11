@@ -2,6 +2,7 @@
 # ========================================================================
 #   BotifyTrades - Linux Build with PyArmor Obfuscation
 #   Protection: PyArmor + PyInstaller + UPX Compression
+#   Note: NO GIT REQUIRED - version is read from upgrade/version.py
 # ========================================================================
 
 echo ""

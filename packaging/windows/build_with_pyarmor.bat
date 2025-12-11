@@ -1,6 +1,7 @@
 @echo off
 REM ============================================================
 REM BotifyTrades - Windows Build Script with PyArmor Obfuscation
+REM Note: NO GIT REQUIRED - version is read from upgrade/version.py
 REM ============================================================
 
 echo ============================================================
