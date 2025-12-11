@@ -1355,6 +1355,15 @@ STEEL_STC_PATTERN = r':SirenRed:\s*([A-Za-z]+)\s*[|]\s*([0-9.]+)\s*(OUT\s*HALF|O
 # Groups: (symbol, price)
 SIMPLE_STC_PATTERN = r'^([A-Za-z]+)\s+([0-9.]+)\s+OUT'
 
+# SirenRed with PRICE only (no symbol) - for closing most recent position
+# :SirenRed: 4.67 OUT ✅ or :SirenRed: $4.20 OUT 3/4 ✅
+# Groups: (price, exit_type)
+SIRENRED_PRICE_STC_PATTERN = r':SirenRed:\s*[$]?([0-9.]+)\s+(OUT\s*HALF|OUT\s*ALL\s*BUT\s*[0-9]+|OUT\s*ALL|OUT\s*[0-9]+/[0-9]+|OUT(?=\s|$))'
+
+# Price-only STC pattern: 5.38 out all but 1, 4.20 out all, etc (no prefix, no symbol)
+# Groups: (price, exit_type)
+PRICE_ONLY_STC_PATTERN = r'^[$]?([0-9.]+)\s+(out\s*half|out\s*all\s*but\s*[0-9]+|out\s*all|out\s*[0-9]+/[0-9]+|out(?=\s|$))'
+
 # JC-style pattern: BTO $QQQ $627c 12/10 .77
 # Supports strike+optType combined: $627c, $619p
 # Groups: (direction, symbol, strike, opt_type, month, day, price)
@@ -3346,6 +3355,8 @@ ALT_OPT_REGEX = re.compile(ALT_OPT_PATTERN, re.IGNORECASE)
 STEEL_BTO_REGEX = re.compile(STEEL_BTO_PATTERN, re.IGNORECASE)
 STEEL_STC_REGEX = re.compile(STEEL_STC_PATTERN, re.IGNORECASE)
 SIMPLE_STC_REGEX = re.compile(SIMPLE_STC_PATTERN, re.IGNORECASE)
+SIRENRED_PRICE_STC_REGEX = re.compile(SIRENRED_PRICE_STC_PATTERN, re.IGNORECASE)
+PRICE_ONLY_STC_REGEX = re.compile(PRICE_ONLY_STC_PATTERN, re.IGNORECASE)
 JC_OPT_REGEX = re.compile(JC_OPT_PATTERN, re.IGNORECASE)
 
 def parse_option_signal(text: str) -> Optional[dict]:
@@ -3386,31 +3397,58 @@ def parse_option_signal(text: str) -> Optional[dict]:
                             use_steel_stc = True  # Reuse the same handling
                             print(f"[Discord] ✓ Matched simple STC format (SYMBOL PRICE OUT)")
                         else:
-                            print(f"[Discord] ❌ Pattern NOT matched: '{text.strip()[:80]}'")
-                            print(f"[Discord]    Expected format: BTO/STC QTY SYMBOL STRIKE C/P MM/DD @ PRICE")
-                            print(f"[Discord]    Or JC: BTO $SYMBOL $STRIKEc/p MM/DD PRICE")
-                            print(f"[Discord]    Or alternate: 🟢BTO $SYMBOL | STRIKE C/P MONTH/DAY PRICE")
-                            print(f"[Discord]    Or steel: :green_alert: SYMBOL | $STRIKE C/P PRICE NEXT WEEK")
-                            print(f"[Discord]    Or STC: :SirenRed: SYMBOL | PRICE OUT HALF")
-                            return None
+                            # Try :SirenRed: with price only (no symbol): :SirenRed: 4.67 OUT
+                            m = SIRENRED_PRICE_STC_REGEX.search(text.strip())
+                            if m:
+                                use_steel_stc = True
+                                print(f"[Discord] ✓ Matched SirenRed price-only STC format")
+                            else:
+                                # Try price-only STC: 5.38 out all but 1
+                                m = PRICE_ONLY_STC_REGEX.search(text.strip())
+                                if m:
+                                    use_steel_stc = True
+                                    print(f"[Discord] ✓ Matched price-only STC format")
+                                else:
+                                    print(f"[Discord] ❌ Pattern NOT matched: '{text.strip()[:80]}'")
+                                    print(f"[Discord]    Expected format: BTO/STC QTY SYMBOL STRIKE C/P MM/DD @ PRICE")
+                                    print(f"[Discord]    Or JC: BTO $SYMBOL $STRIKEc/p MM/DD PRICE")
+                                    print(f"[Discord]    Or alternate: 🟢BTO $SYMBOL | STRIKE C/P MONTH/DAY PRICE")
+                                    print(f"[Discord]    Or steel: :green_alert: SYMBOL | $STRIKE C/P PRICE NEXT WEEK")
+                                    print(f"[Discord]    Or STC: :SirenRed: SYMBOL | PRICE OUT HALF")
+                                    return None
     
     if use_steel_stc:
-        # Handle both steel STC (3 groups) and simple STC (2 groups)
+        # Handle various STC formats with different group structures
         groups = m.groups()
-        if len(groups) == 3:
+        symbol = None
+        price_str = None
+        exit_type = "ALL"
+        
+        # Determine format based on matched regex and groups
+        text_stripped = text.strip()
+        
+        # Check if it's a price-only format (no symbol)
+        if SIRENRED_PRICE_STC_REGEX.search(text_stripped) or PRICE_ONLY_STC_REGEX.search(text_stripped):
+            if len(groups) == 2:
+                # Price-only formats: (price, exit_type)
+                price_str, exit_type = groups
+                symbol = None  # Will need to find from most recent open position
+                print(f"[Discord] Price-only STC: @ ${price_str}, exit type: {exit_type}")
+        elif len(groups) == 3:
             # Steel STC format groups: (symbol, price, exit_type)
             symbol, price_str, exit_type = groups
-        else:
+        elif len(groups) == 2:
             # Simple STC format groups: (symbol, price)
             symbol, price_str = groups
-            exit_type = "ALL"  # Default to exit all
+            exit_type = "ALL"
         
         direction = 'STC'
-        qty_str = None  # Will need to look up position or default to 1
         
         # For STC, we need to find the matching open position
-        # For now, default to 1 contract - will be overridden by position lookup
-        print(f"[Discord] Steel STC: {symbol} @ ${price_str}, exit type: {exit_type}")
+        if symbol:
+            print(f"[Discord] Steel STC: {symbol} @ ${price_str}, exit type: {exit_type}")
+        else:
+            print(f"[Discord] Price-only STC: @ ${price_str}, exit type: {exit_type} (will match to recent position)")
         
         # We don't have strike/expiry from STC signal - need to match to open position
         # Return a special signal that will trigger position lookup
@@ -3418,13 +3456,14 @@ def parse_option_signal(text: str) -> Optional[dict]:
             "asset": "option",
             "action": "STC",
             "qty": 1,  # Will be overridden by position lookup
-            "symbol": symbol.upper(),
+            "symbol": symbol.upper() if symbol else None,  # None means find most recent position
             "strike": None,  # Will need position lookup
             "opt_type": None,  # Will need position lookup
             "expiry": None,  # Will need position lookup
             "price": float(price_str),
             "is_market_order": False,
             "_steel_stc": True,  # Flag for position lookup
+            "_price_only": symbol is None,  # Flag for price-only format
             "_exit_type": exit_type.strip().upper() if exit_type else "ALL"
         }
     
@@ -4994,6 +5033,37 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # Parse trading signals
         opt = parse_option_signal(message.content)
         if opt:
+            # Handle price-only STC signals - find most recent open position from this channel
+            if opt.get('_price_only') and opt.get('symbol') is None:
+                print(f"[STC] Price-only signal detected - looking up most recent open position for channel {message.channel.id}")
+                try:
+                    from gui_app.database import get_connection
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    # Find most recent open BTO trade from this channel
+                    cursor.execute('''
+                        SELECT symbol, strike, call_put, expiry 
+                        FROM trades 
+                        WHERE channel_id = ? 
+                        AND direction = 'BTO' 
+                        AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                        ORDER BY created_at DESC 
+                        LIMIT 1
+                    ''', (str(message.channel.id),))
+                    open_position = cursor.fetchone()
+                    if open_position:
+                        opt['symbol'] = open_position['symbol']
+                        opt['strike'] = open_position['strike']
+                        opt['opt_type'] = open_position['call_put']
+                        opt['expiry'] = open_position['expiry']
+                        print(f"[STC] ✓ Found open position: {opt['symbol']} ${opt['strike']}{opt['opt_type']} {opt['expiry']}")
+                    else:
+                        print(f"[STC] ❌ No open positions found for channel {message.channel.id} - cannot process price-only STC")
+                        return
+                except Exception as e:
+                    print(f"[STC] ❌ Error looking up position: {e}")
+                    return
+            
             print(f"[SIGNAL PARSED] ✓ Option Signal: {opt['action']} {opt['qty']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ ${opt['price']}")
             print(f"[CHANNEL CONFIG] execute_enabled={execute_enabled}, track_enabled={track_enabled}, paper_trade_enabled={channel_info.get('paper_trade_enabled', 0) if channel_info else 0}")
             
