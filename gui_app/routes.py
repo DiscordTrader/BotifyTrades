@@ -9368,8 +9368,11 @@ def register_routes(app):
             user_id = session.get('user_id')
             broker_id = request.json.get('broker_id') if request.json else None
             
+            print(f"[SYNC-API] Starting sync for user {user_id}, broker filter: {broker_id}")
+            
             service = get_analytics_service()
             available_brokers = service.get_available_brokers()
+            print(f"[SYNC-API] Available brokers: {[b['id'] for b in available_brokers]}")
             
             sync_results = []
             
@@ -9382,7 +9385,9 @@ def register_routes(app):
                         continue
                     
                     try:
+                        print(f"[SYNC-API] Getting positions for {broker['id']}...")
                         positions = loop.run_until_complete(service.get_open_positions(broker['id']))
+                        print(f"[SYNC-API] {broker['id']}: Got {len(positions)} positions from broker")
                         
                         active_keys = set()
                         for pos in positions:
@@ -9400,11 +9405,14 @@ def register_routes(app):
                                 key = symbol
                             active_keys.add(key)
                         
+                        print(f"[SYNC-API] {broker['id']}: Active keys = {sorted(active_keys)[:10]}...")
+                        
                         result = db.sync_positions_with_broker(
                             broker_name=broker['id'],
                             active_position_keys=active_keys,
                             user_id=user_id
                         )
+                        print(f"[SYNC-API] {broker['id']}: Closed {result.get('closed', 0)} trades")
                         sync_results.append(result)
                         
                     except Exception as broker_err:
