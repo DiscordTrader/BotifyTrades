@@ -946,7 +946,7 @@
   },
   "ALPACA_PAPER_IWM_256.0_2025-12-11_C": {
     "entry_price": 0.6,
-    "highest_price": 1.75,
+    "highest_price": 1.81,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -1033,5 +1033,35 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-11T18:26:26.110297"
+  },
+  "ALPACA_PAPER_SPY_700.0_2025-12-19_C": {
+    "entry_price": 0.65,
+    "highest_price": 0.68,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "SPY251219C00700000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-11T19:08:43.321253"
+  },
+  "ALPACA_PAPER_UROY_5.0_2025-12-19_C": {
+    "entry_price": 0.05,
+    "highest_price": 0.0,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "UROY251219C00005000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-11T19:10:15.438185"
   }
 }
