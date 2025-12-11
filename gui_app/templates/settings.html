@@ -2056,11 +2056,16 @@ document.getElementById('save-webull-creds').addEventListener('click', async () 
 document.getElementById('connect-webull').addEventListener('click', async () => {
     const isPaper = document.getElementById('webull-paper').checked;
     const brokerId = isPaper ? 'webull_paper' : 'webull_live';
+    const tokenOnlyMode = document.getElementById('webull-token-mode').checked;
     
     updateConnectionStatus('webull-connection-status', 'connecting', 'Connecting...');
     
     try {
-        const response = await fetch(`/api/brokers/connect/${brokerId}`, { method: 'POST' });
+        const response = await fetch(`/api/brokers/connect/${brokerId}`, { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token_only_mode: tokenOnlyMode })
+        });
         const result = await response.json();
         
         if (result.success) {

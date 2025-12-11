@@ -6634,9 +6634,16 @@ def register_routes(app):
             
             elif broker_id.startswith('webull'):
                 creds = get_webull_credentials()
+                data = request.json or {}
+                token_only_mode = data.get('token_only_mode', False)
+                
                 # Token-only mode: access_token required, refresh_token optional (can be dummy)
                 has_tokens = bool(creds.get('access_token'))
                 has_login_creds = creds.get('email') and creds.get('password')
+                
+                if token_only_mode and not has_tokens:
+                    set_broker_status(broker_id, False, 'error', 'No access token configured')
+                    return jsonify({'success': False, 'error': 'Token-Only Mode requires an access token. Please enter your access token.'}), 400
                 
                 if not has_tokens and not has_login_creds:
                     set_broker_status(broker_id, False, 'error', 'No Webull credentials configured')
@@ -6653,8 +6660,9 @@ def register_routes(app):
                     is_paper = broker_id == 'webull_paper'
                     auth = WebullAuth(paper_trading=is_paper, credentials_adapter=webull_credentials_adapter)
                     
-                    if has_tokens and not has_login_creds:
-                        print(f"[WEBULL] Using token-only authentication (no password)")
+                    # Use token-only mode if explicitly enabled OR if tokens exist without login creds
+                    if token_only_mode or (has_tokens and not has_login_creds):
+                        print(f"[WEBULL] Using token-only authentication (token_only_mode={token_only_mode})")
                         result = auth.login_with_saved_session(trading_pin=creds.get('trade_pin'))
                     else:
                         result = auth.login(
