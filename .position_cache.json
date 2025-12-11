@@ -946,7 +946,7 @@
   },
   "ALPACA_PAPER_IWM_256.0_2025-12-11_C": {
     "entry_price": 0.6,
-    "highest_price": 1.81,
+    "highest_price": 1.92,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -1036,7 +1036,7 @@
   },
   "ALPACA_PAPER_SPY_700.0_2025-12-19_C": {
     "entry_price": 0.65,
-    "highest_price": 0.68,
+    "highest_price": 0.72,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -1063,5 +1063,20 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-11T19:10:15.438185"
+  },
+  "Webull_UROY_7.5_12/19_C": {
+    "entry_price": 0.03,
+    "highest_price": 0.01,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "Webull",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-11T19:16:55.598194"
   }
 }
