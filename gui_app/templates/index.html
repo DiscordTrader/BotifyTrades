@@ -76,6 +76,9 @@
         <h3 class="table-title">📈 Live Trading Monitor</h3>
         <div style="display: flex; gap: 12px; align-items: center;">
             <span id="summary-text" style="color: var(--text-secondary); font-size: 0.875rem;">Loading...</span>
+            <button id="syncPositionsBtn" onclick="syncPositions()" class="btn btn-small" style="background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; color: white;" title="Sync with broker - closes stale positions">
+                🔄 Sync Positions
+            </button>
             <button onclick="refreshPrices()" class="btn btn-primary btn-small">
                 🔄 Refresh Prices
             </button>
@@ -1325,6 +1328,46 @@ function refreshPrices() {
             loadTrades();
             loadStats();
         });
+}
+
+async function syncPositions() {
+    const btn = document.getElementById('syncPositionsBtn');
+    const originalText = btn.innerHTML;
+    
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Syncing...';
+    btn.style.opacity = '0.6';
+    
+    try {
+        const broker = document.getElementById('broker-filter').value;
+        const response = await fetch('/api/sync-positions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(broker ? { broker_id: broker } : {})
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const closedCount = data.results.reduce((sum, r) => sum + (r.closed || 0), 0);
+            if (closedCount > 0) {
+                alert(`✅ Sync complete! Closed ${closedCount} stale position(s).`);
+            } else {
+                alert('✅ Sync complete! All positions are up to date.');
+            }
+            loadTrades();
+            loadStats();
+        } else {
+            alert('❌ Sync failed: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Sync error:', error);
+        alert('❌ Sync failed: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        btn.style.opacity = '1';
+    }
 }
 
 async function loadStats() {
