@@ -80,6 +80,8 @@ a = Analysis(
         'src.license_manager_secure',
         'src.license_manager_activation',
         'src.license_client',
+        'src.setup_wizard',
+        'setup_wizard',
         'certifi',
     ],
     hookspath=[],

@@ -1036,7 +1036,7 @@
   },
   "ALPACA_PAPER_SPY_700.0_2025-12-19_C": {
     "entry_price": 0.65,
-    "highest_price": 0.72,
+    "highest_price": 0.74,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
