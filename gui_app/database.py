@@ -1853,6 +1853,105 @@ def close_trade(trade_id: int, close_price: float, pnl: float, pnl_percent: floa
     conn.commit()
 
 
+def sync_positions_with_broker(broker_name: str, active_position_keys: set, user_id: int = None):
+    """
+    Sync database trades with broker positions.
+    Marks trades as CLOSED if they're no longer open at the broker.
+    
+    Args:
+        broker_name: The broker name (e.g., 'Webull', 'ALPACA_PAPER', 'ALPACA_LIVE')
+        active_position_keys: Set of position keys currently open at broker
+                             Format: {SYMBOL} for stocks, {SYMBOL}_{STRIKE}_{EXPIRY}_{C/P} for options
+        user_id: Optional user ID filter
+    
+    Returns:
+        Dict with sync results
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    user_clause = ""
+    params = [broker_name]
+    if user_id:
+        user_clause = "AND (user_id IS NULL OR user_id = ?)"
+        params.append(user_id)
+    
+    cursor.execute(f'''
+        SELECT id, symbol, strike, expiry, call_put, asset_type, executed_price, quantity
+        FROM trades
+        WHERE status = 'OPEN' AND LOWER(broker) = LOWER(?) {user_clause}
+    ''', params)
+    
+    open_trades = cursor.fetchall()
+    closed_count = 0
+    closed_trades = []
+    
+    for trade in open_trades:
+        trade_id = trade['id']
+        symbol = trade['symbol']
+        strike = trade['strike']
+        expiry = trade['expiry']
+        call_put = trade['call_put']
+        asset_type = trade['asset_type']
+        entry_price = trade['executed_price'] or 0
+        
+        if asset_type == 'option' and strike and expiry and call_put:
+            exp_normalized = expiry.replace('-', '') if expiry else ''
+            if len(exp_normalized) == 8:
+                exp_normalized = exp_normalized[4:8]
+            position_key = f"{symbol}_{strike}_{exp_normalized}_{call_put}"
+        else:
+            position_key = symbol
+        
+        if position_key not in active_position_keys:
+            pnl = 0.0
+            pnl_percent = 0.0
+            
+            cursor.execute('''
+                UPDATE trades
+                SET status = 'CLOSED', closed_at = ?, pnl = ?, pnl_percent = ?
+                WHERE id = ?
+            ''', (datetime.now(), pnl, pnl_percent, trade_id))
+            closed_count += 1
+            closed_trades.append({
+                'id': trade_id,
+                'symbol': symbol,
+                'position_key': position_key
+            })
+            print(f"[SYNC] Marked trade {trade_id} ({position_key}) as CLOSED - no longer at broker")
+    
+    if closed_count > 0:
+        conn.commit()
+    
+    return {
+        'broker': broker_name,
+        'open_in_db': len(open_trades),
+        'active_at_broker': len(active_position_keys),
+        'closed': closed_count,
+        'closed_trades': closed_trades
+    }
+
+
+def get_open_trades_for_broker(broker_name: str, user_id: int = None) -> list:
+    """Get all OPEN trades for a specific broker"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    user_clause = ""
+    params = [broker_name]
+    if user_id:
+        user_clause = "AND (user_id IS NULL OR user_id = ?)"
+        params.append(user_id)
+    
+    cursor.execute(f'''
+        SELECT id, symbol, strike, expiry, call_put, asset_type, executed_price, quantity, direction
+        FROM trades
+        WHERE status = 'OPEN' AND LOWER(broker) = LOWER(?) {user_clause}
+    ''', params)
+    
+    return [dict(row) for row in cursor.fetchall()]
+
+
 def update_trade(trade_id: int, **kwargs):
     """Generic function to update any trade fields"""
     if not kwargs:

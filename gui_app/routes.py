@@ -9353,3 +9353,77 @@ def register_routes(app):
             
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/sync-positions', methods=['POST'])
+    @login_required
+    def api_sync_positions():
+        """
+        Sync database trades with broker positions.
+        Marks trades as CLOSED if they're no longer open at the broker.
+        """
+        import asyncio
+        from .broker_live_analytics import get_analytics_service
+        
+        try:
+            user_id = session.get('user_id')
+            broker_id = request.json.get('broker_id') if request.json else None
+            
+            service = get_analytics_service()
+            available_brokers = service.get_available_brokers()
+            
+            sync_results = []
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                for broker in available_brokers:
+                    if broker_id and broker['id'] != broker_id:
+                        continue
+                    
+                    try:
+                        positions = loop.run_until_complete(service.get_open_positions(broker['id']))
+                        
+                        active_keys = set()
+                        for pos in positions:
+                            symbol = pos.get('symbol', '')
+                            strike = pos.get('strike')
+                            expiry = pos.get('expiry', '')
+                            call_put = pos.get('call_put', pos.get('option_type', ''))
+                            
+                            if strike and expiry:
+                                exp_normalized = expiry.replace('-', '') if expiry else ''
+                                if len(exp_normalized) == 8:
+                                    exp_normalized = exp_normalized[4:8]
+                                key = f"{symbol}_{strike}_{exp_normalized}_{call_put}"
+                            else:
+                                key = symbol
+                            active_keys.add(key)
+                        
+                        result = db.sync_positions_with_broker(
+                            broker_name=broker['id'],
+                            active_position_keys=active_keys,
+                            user_id=user_id
+                        )
+                        sync_results.append(result)
+                        
+                    except Exception as broker_err:
+                        sync_results.append({
+                            'broker': broker['id'],
+                            'error': str(broker_err)
+                        })
+            finally:
+                loop.close()
+            
+            total_closed = sum(r.get('closed', 0) for r in sync_results)
+            
+            return jsonify({
+                'success': True,
+                'message': f'Synced {len(sync_results)} broker(s), closed {total_closed} stale position(s)',
+                'results': sync_results
+            })
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500

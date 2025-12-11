@@ -83,6 +83,40 @@
     border-color: var(--accent-blue);
 }
 
+.sync-btn {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    border: none;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sync-btn:hover {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    transform: translateY(-1px);
+}
+
+.sync-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.sync-btn.syncing {
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
 .period-tabs {
     display: flex;
     background: var(--bg-card);
@@ -381,6 +415,9 @@
                     <option value="Webull">Webull Live</option>
                     <option value="ALPACA_PAPER">Alpaca Paper</option>
                 </select>
+                <button id="syncPositionsBtn" class="sync-btn" title="Sync positions with broker - closes stale positions">
+                    🔄 Sync
+                </button>
                 <div class="period-tabs">
                     <button class="period-tab" data-period="today">1D</button>
                     <button class="period-tab" data-period="7d">1W</button>
@@ -539,7 +576,48 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('brokerFilter').addEventListener('change', function() {
         loadPerformance(currentPeriod);
     });
+    
+    document.getElementById('syncPositionsBtn').addEventListener('click', syncPositions);
 });
+
+async function syncPositions() {
+    const btn = document.getElementById('syncPositionsBtn');
+    const originalText = btn.innerHTML;
+    
+    btn.disabled = true;
+    btn.classList.add('syncing');
+    btn.innerHTML = '🔄 Syncing...';
+    
+    try {
+        const broker = document.getElementById('brokerFilter').value;
+        const response = await fetch('/api/sync-positions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(broker ? { broker_id: broker } : {})
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const closedCount = data.results.reduce((sum, r) => sum + (r.closed || 0), 0);
+            if (closedCount > 0) {
+                alert(`Sync complete! Closed ${closedCount} stale position(s).`);
+                loadPerformance(currentPeriod);
+            } else {
+                alert('Sync complete! All positions are up to date.');
+            }
+        } else {
+            alert('Sync failed: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Sync error:', error);
+        alert('Sync failed: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.classList.remove('syncing');
+        btn.innerHTML = originalText;
+    }
+}
 
 function initCharts() {
     Chart.defaults.color = chartColors.text;
