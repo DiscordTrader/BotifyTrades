@@ -3586,6 +3586,41 @@ def register_routes(app):
             # Create order_id -> status mapping for quick lookup
             order_status_map = {order['order_id']: order['status'] for order in webull_orders}
             
+            # Helper to normalize call_put to single character
+            def normalize_call_put(val):
+                val = (val or '').upper().strip()
+                if val in ['CALL', 'C', 'BTO']:
+                    return 'C'
+                elif val in ['PUT', 'P', 'STO']:
+                    return 'P'
+                return val[:1] if val else ''
+            
+            # Helper to normalize expiry to MMDD format for matching
+            def normalize_expiry(val):
+                if not val:
+                    return ''
+                val = str(val).strip()
+                # Handle various formats: 12/12, 2024-12-12, 12-12-24, etc.
+                import re
+                # Try to extract month and day
+                # Format: MM/DD or M/D
+                match = re.match(r'^(\d{1,2})/(\d{1,2})$', val)
+                if match:
+                    return f"{int(match.group(1)):02d}{int(match.group(2)):02d}"
+                # Format: YYYY-MM-DD
+                match = re.match(r'^(\d{4})-(\d{1,2})-(\d{1,2})$', val)
+                if match:
+                    return f"{int(match.group(2)):02d}{int(match.group(3)):02d}"
+                # Format: MM-DD-YY or MM-DD-YYYY
+                match = re.match(r'^(\d{1,2})-(\d{1,2})-(\d{2,4})$', val)
+                if match:
+                    return f"{int(match.group(1)):02d}{int(match.group(2)):02d}"
+                # Format: MM/DD/YY or MM/DD/YYYY
+                match = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{2,4})$', val)
+                if match:
+                    return f"{int(match.group(1)):02d}{int(match.group(2)):02d}"
+                return val  # Return as-is if can't parse
+            
             # Create a merged list
             merged = []
             tracked_positions = set()
@@ -3593,20 +3628,13 @@ def register_routes(app):
             # Create position key -> live position mapping for merging prices
             live_position_map = {}
             for pos in live_positions:
-                # Normalize direction to CALL/PUT for matching with DB trades
-                direction = (pos.get('direction') or '').upper()
-                # Map BTO/STO to CALL/PUT, or use call_put if available
-                if pos.get('call_put'):
-                    call_put_normalized = pos.get('call_put', '').upper()
-                elif direction in ['BTO', 'CALL', 'C']:
-                    call_put_normalized = 'CALL'
-                elif direction in ['STO', 'PUT', 'P']:
-                    call_put_normalized = 'PUT'
-                else:
-                    call_put_normalized = direction  # Fallback
+                # Normalize call_put using direction or call_put field
+                direction = pos.get('direction') or pos.get('call_put') or ''
+                call_put_norm = normalize_call_put(direction)
+                expiry_norm = normalize_expiry(pos.get('expiry', ''))
                 
                 if pos['asset'] == 'option':
-                    pos_key = f"{pos['symbol']}_{pos.get('strike', '')}_{pos.get('expiry', '')}_{call_put_normalized}"
+                    pos_key = f"{pos['symbol']}_{pos.get('strike', '')}_{expiry_norm}_{call_put_norm}"
                 else:
                     pos_key = f"{pos['symbol']}_stock"
                 live_position_map[pos_key] = pos
@@ -3614,12 +3642,13 @@ def register_routes(app):
             # Group database trades by position key for consolidation
             position_groups = {}
             for trade in db_trades:
-                # Normalize call_put to uppercase for consistent matching
-                call_put_normalized = (trade.get('call_put') or '').upper()
+                # Normalize call_put and expiry for consistent matching
+                call_put_norm = normalize_call_put(trade.get('call_put', ''))
+                expiry_norm = normalize_expiry(trade.get('expiry', ''))
                 
                 # Create position key for matching
                 if trade['asset_type'] == 'option':
-                    pos_key = f"{trade['symbol']}_{trade.get('strike', '')}_{trade.get('expiry', '')}_{call_put_normalized}"
+                    pos_key = f"{trade['symbol']}_{trade.get('strike', '')}_{expiry_norm}_{call_put_norm}"
                 else:
                     pos_key = f"{trade['symbol']}_stock"
                 
@@ -3710,19 +3739,13 @@ def register_routes(app):
             # Add live positions not tracked by bot (only if broker filter matches or is empty)
             if not broker_filter_upper or broker_filter_upper == 'WEBULL':
                 for pos in live_positions:
-                    # Normalize direction to CALL/PUT to match tracked_positions keys
-                    direction = (pos.get('direction') or '').upper()
-                    if pos.get('call_put'):
-                        call_put_normalized = pos.get('call_put', '').upper()
-                    elif direction in ['BTO', 'CALL', 'C']:
-                        call_put_normalized = 'CALL'
-                    elif direction in ['STO', 'PUT', 'P']:
-                        call_put_normalized = 'PUT'
-                    else:
-                        call_put_normalized = direction  # Fallback
+                    # Use same normalization as above for consistent matching
+                    direction = pos.get('direction') or pos.get('call_put') or ''
+                    call_put_norm = normalize_call_put(direction)
+                    expiry_norm = normalize_expiry(pos.get('expiry', ''))
                     
                     if pos['asset'] == 'option':
-                        pos_key = f"{pos['symbol']}_{pos.get('strike', '')}_{pos.get('expiry', '')}_{call_put_normalized}"
+                        pos_key = f"{pos['symbol']}_{pos.get('strike', '')}_{expiry_norm}_{call_put_norm}"
                     else:
                         pos_key = f"{pos['symbol']}_stock"
                     
@@ -3748,7 +3771,7 @@ def register_routes(app):
                             'executed_at': None,
                             'strike': pos.get('strike'),
                             'expiry': pos.get('expiry'),
-                            'call_put': call_put_normalized,
+                            'call_put': call_put_norm,
                             'option_id': pos.get('option_id'),
                             'source': 'sync',  # Broker-synced position
                             'fill_status': 'Filled',  # Live positions are already filled
