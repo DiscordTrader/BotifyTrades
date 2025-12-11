@@ -28,6 +28,13 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 
 ## Recent Changes
 
+### v2.1.35 - Webull Auth Error Handling Fix (2025-12-11)
+- **CRITICAL FIX: `_try_saved_session` return type bug** - Fixed boolean check on dict return (always truthy)
+- **FIX: Specific error messages** - Token verification now returns actual error reason, not generic message
+- **FIX: JSON/CAPTCHA error handling** - Routes.py now catches CAPTCHA-blocked errors with friendly message
+- **IMPROVED: Error messages include actionable guidance** - Users see exactly what to do to fix issues
+- Error scenarios: No credentials, no token, verification failed, API blocked, session restore error
+
 ### v2.1.34 - Position Sync & Stale Trade Cleanup (2025-12-11)
 - **NEW: Sync Positions Button** - Dashboard and Performance pages now have a "Sync Positions" button
 - **NEW: `/api/sync-positions` endpoint** - Compares database trades with actual broker positions
