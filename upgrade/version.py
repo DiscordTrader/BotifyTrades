@@ -2,6 +2,9 @@
 Version Management
 ==================
 Handles semantic versioning for the application.
+
+NOTE: This module does NOT require git. Version is hardcoded below.
+Build scripts read APP_VERSION directly - no git tags or commands needed.
 """
 
 import os
@@ -13,6 +16,7 @@ from typing import Optional, Tuple, Dict
 
 
 APP_VERSION = "2.1.35"
+BUILD_DATE = "2025-12-11"
 
 
 def parse_version(version_str: str) -> Tuple[int, int, int]:
@@ -146,6 +150,7 @@ def get_version_info() -> Dict:
         'minor': minor,
         'patch': patch,
         'display': f"v{current}",
-        'app_version': APP_VERSION
+        'app_version': APP_VERSION,
+        'build_date': BUILD_DATE
     }
 

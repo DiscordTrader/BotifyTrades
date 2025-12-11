@@ -4,6 +4,7 @@
 #   Protection Level: Standard (PyInstaller packaging)
 #   Uses consolidated license/ module
 #   Produces: BotifyTrades.app (macOS Application Bundle)
+#   Note: NO GIT REQUIRED - version is read from upgrade/version.py
 # ========================================================================
 
 set -e

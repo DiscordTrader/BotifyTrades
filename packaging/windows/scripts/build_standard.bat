@@ -4,6 +4,7 @@ REM   BotifyTrades - Windows Standard Build
 REM   Protection Level: Standard (UPX compression + PyInstaller packaging)
 REM   Uses consolidated license/ module
 REM   Note: --key encryption was removed in PyInstaller v6.0
+REM   Note: NO GIT REQUIRED - version is read from upgrade/version.py
 REM ========================================================================
 
 echo.

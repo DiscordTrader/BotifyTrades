@@ -4,6 +4,7 @@
 #   Protection Level: Standard (PyInstaller packaging + UPX compression)
 #   Uses consolidated license/ module
 #   Note: --key encryption was removed in PyInstaller v6.0 (2023)
+#   Note: NO GIT REQUIRED - version is read from upgrade/version.py
 # ========================================================================
 
 echo ""
