@@ -56,7 +56,9 @@ class WebullAuth:
             if device_id:
                 self.wb._set_did(device_id)
             
-            if self._try_saved_session(trading_pin):
+            # Try saved session first
+            session_result = self._try_saved_session(trading_pin)
+            if session_result.get("success"):
                 return {"success": True, "account_id": self.account_id, "method": "saved_session"}
             
             if mfa_code and security_qid and security_answer:
