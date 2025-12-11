@@ -918,22 +918,35 @@ if not LICENSE_VALID:
 
 # Step 3: If no valid license, try setup wizard (for EXE) or block startup (for Replit)
 if not LICENSE_VALID:
-    print("[LICENSE] ❌ No valid license found after checking cache and server")
-    print("[LICENSE] Entering license prompt mode...")
+    import sys
+    print("[LICENSE] ❌ No valid license found after checking cache and server", flush=True)
+    print("[LICENSE] Entering license prompt mode...", flush=True)
+    sys.stdout.flush()
     
     # Check if setup wizard is available (EXE mode)
     SETUP_WIZARD_AVAILABLE = False
+    print("[LICENSE] Checking for setup wizard availability...")
     if SetupWizard is None:
         try:
             try:
                 from src.setup_wizard import SetupWizard
-            except ImportError:
-                from setup_wizard import SetupWizard
+                print("[LICENSE] ✓ Imported SetupWizard from src.setup_wizard")
+            except ImportError as e1:
+                print(f"[LICENSE] src.setup_wizard failed: {e1}")
+                try:
+                    from setup_wizard import SetupWizard
+                    print("[LICENSE] ✓ Imported SetupWizard from setup_wizard")
+                except ImportError as e2:
+                    print(f"[LICENSE] setup_wizard failed: {e2}")
+                    raise ImportError(f"Both import paths failed")
             SETUP_WIZARD_AVAILABLE = True
-        except ImportError:
-            pass
+        except ImportError as final_err:
+            print(f"[LICENSE] ⚠️  SetupWizard not available: {final_err}")
     else:
+        print("[LICENSE] ✓ SetupWizard already loaded")
         SETUP_WIZARD_AVAILABLE = True
+    
+    print(f"[LICENSE] SETUP_WIZARD_AVAILABLE = {SETUP_WIZARD_AVAILABLE}")
     
     if SETUP_WIZARD_AVAILABLE:
         # EXE mode - prompt user for license via setup wizard
