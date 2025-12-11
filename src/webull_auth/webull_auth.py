@@ -157,7 +157,7 @@ class WebullAuth:
         """Login using saved session tokens from database"""
         if self._try_saved_session(trading_pin):
             return {"success": True, "account_id": self.account_id}
-        return {"success": False, "error": "No saved session or session expired"}
+        return {"success": False, "error": "Webull tokens expired or not configured. Please enter fresh access token from Webull app.", "token_expired": True}
     
     def _load_credentials(self) -> Optional[Dict[str, Any]]:
         """Load credentials from database via adapter"""
