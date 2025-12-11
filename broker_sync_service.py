@@ -426,8 +426,7 @@ class BrokerSyncService:
                     self.db.update_trade(
                         trade_id,
                         status='CLOSED',
-                        closed_at=datetime.now().isoformat(),
-                        close_reason='ORDER_CANCELLED'
+                        closed_at=datetime.now().isoformat()
                     )
                 elif current_status == 'OPEN':
                     # Open position no longer exists = broker closed it (manual close, stop/target hit, or liquidation)
@@ -435,8 +434,7 @@ class BrokerSyncService:
                     self.db.update_trade(
                         trade_id,
                         status='CLOSED',
-                        closed_at=datetime.now().isoformat(),
-                        close_reason='BROKER_CLOSED'
+                        closed_at=datetime.now().isoformat()
                     )
     
     def _normalize_expiry(self, expiry: str) -> str:
