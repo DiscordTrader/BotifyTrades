@@ -3593,9 +3593,20 @@ def register_routes(app):
             # Create position key -> live position mapping for merging prices
             live_position_map = {}
             for pos in live_positions:
-                direction_normalized = (pos.get('direction') or '').upper()
+                # Normalize direction to CALL/PUT for matching with DB trades
+                direction = (pos.get('direction') or '').upper()
+                # Map BTO/STO to CALL/PUT, or use call_put if available
+                if pos.get('call_put'):
+                    call_put_normalized = pos.get('call_put', '').upper()
+                elif direction in ['BTO', 'CALL', 'C']:
+                    call_put_normalized = 'CALL'
+                elif direction in ['STO', 'PUT', 'P']:
+                    call_put_normalized = 'PUT'
+                else:
+                    call_put_normalized = direction  # Fallback
+                
                 if pos['asset'] == 'option':
-                    pos_key = f"{pos['symbol']}_{pos.get('strike', '')}_{pos.get('expiry', '')}_{direction_normalized}"
+                    pos_key = f"{pos['symbol']}_{pos.get('strike', '')}_{pos.get('expiry', '')}_{call_put_normalized}"
                 else:
                     pos_key = f"{pos['symbol']}_stock"
                 live_position_map[pos_key] = pos
@@ -3699,11 +3710,19 @@ def register_routes(app):
             # Add live positions not tracked by bot (only if broker filter matches or is empty)
             if not broker_filter_upper or broker_filter_upper == 'WEBULL':
                 for pos in live_positions:
-                    # Normalize direction to uppercase
-                    direction_normalized = (pos.get('direction') or '').upper()
+                    # Normalize direction to CALL/PUT to match tracked_positions keys
+                    direction = (pos.get('direction') or '').upper()
+                    if pos.get('call_put'):
+                        call_put_normalized = pos.get('call_put', '').upper()
+                    elif direction in ['BTO', 'CALL', 'C']:
+                        call_put_normalized = 'CALL'
+                    elif direction in ['STO', 'PUT', 'P']:
+                        call_put_normalized = 'PUT'
+                    else:
+                        call_put_normalized = direction  # Fallback
                     
                     if pos['asset'] == 'option':
-                        pos_key = f"{pos['symbol']}_{pos.get('strike', '')}_{pos.get('expiry', '')}_{direction_normalized}"
+                        pos_key = f"{pos['symbol']}_{pos.get('strike', '')}_{pos.get('expiry', '')}_{call_put_normalized}"
                     else:
                         pos_key = f"{pos['symbol']}_stock"
                     
@@ -3729,7 +3748,7 @@ def register_routes(app):
                             'executed_at': None,
                             'strike': pos.get('strike'),
                             'expiry': pos.get('expiry'),
-                            'call_put': direction_normalized,
+                            'call_put': call_put_normalized,
                             'option_id': pos.get('option_id'),
                             'source': 'sync',  # Broker-synced position
                             'fill_status': 'Filled',  # Live positions are already filled
