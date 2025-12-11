@@ -1381,26 +1381,36 @@ async function checkMigrations() {
         const data = await response.json();
         
         if (data.success) {
-            let html = '<table class="schema-table"><thead><tr><th>Table</th><th>Status</th></tr></thead><tbody>';
-            
-            for (const [table, exists] of Object.entries(data.schema_validation)) {
-                const icon = exists ? '&#10003;' : '&#10007;';
-                const color = exists ? '#10b981' : '#ef4444';
-                html += `<tr><td>${table}</td><td style="color:${color}">${icon} ${exists ? 'Exists' : 'Missing'}</td></tr>`;
-            }
-            
-            html += '</tbody></table>';
-            results.innerHTML = html;
-            
-            if (data.needs_upgrade) {
-                runBtn.style.display = 'flex';
-                status.textContent = `${data.missing_tables.length} table(s) need to be created`;
-            } else {
+            if (data.packaged) {
+                results.innerHTML = `<p class="diag-placeholder" style="color:#10b981;">&#10003; ${data.message || 'Schema managed automatically in packaged build'}</p>`;
+                status.textContent = 'OK (Packaged)';
                 runBtn.style.display = 'none';
-                status.textContent = 'All tables present';
+            } else if (data.schema_validation) {
+                let html = '<table class="schema-table"><thead><tr><th>Table</th><th>Status</th></tr></thead><tbody>';
+                
+                for (const [table, exists] of Object.entries(data.schema_validation)) {
+                    const icon = exists ? '&#10003;' : '&#10007;';
+                    const color = exists ? '#10b981' : '#ef4444';
+                    html += `<tr><td>${table}</td><td style="color:${color}">${icon} ${exists ? 'Exists' : 'Missing'}</td></tr>`;
+                }
+                
+                html += '</tbody></table>';
+                results.innerHTML = html;
+                
+                if (data.needs_upgrade) {
+                    runBtn.style.display = 'flex';
+                    status.textContent = `${data.missing_tables.length} table(s) need to be created`;
+                } else {
+                    runBtn.style.display = 'none';
+                    status.textContent = 'All tables present';
+                }
+            } else {
+                results.innerHTML = `<p class="diag-placeholder" style="color:#10b981;">&#10003; Schema check complete</p>`;
+                status.textContent = 'OK';
+                runBtn.style.display = 'none';
             }
         } else {
-            results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${data.error}</p>`;
+            results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${data.error || 'Unknown error'}</p>`;
             status.textContent = 'Error';
         }
     } catch (error) {
