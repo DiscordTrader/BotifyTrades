@@ -826,7 +826,7 @@
   },
   "ALPACA_PAPER_AAPL_280.0_2025-12-19_C": {
     "entry_price": 1.52,
-    "highest_price": 2.46,
+    "highest_price": 2.53,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -871,7 +871,7 @@
   },
   "Webull_ORCL_200.0_12/12_C": {
     "entry_price": 1.36,
-    "highest_price": 1.68,
+    "highest_price": 2.0,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -886,7 +886,7 @@
   },
   "ALPACA_PAPER_ORCL_200.0_2025-12-12_C": {
     "entry_price": 1.35,
-    "highest_price": 1.68,
+    "highest_price": 1.96,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -901,7 +901,7 @@
   },
   "ALPACA_PAPER_META_662.5_2025-12-12_C": {
     "entry_price": 0.92,
-    "highest_price": 0.92,
+    "highest_price": 1.25,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -916,7 +916,7 @@
   },
   "ALPACA_PAPER_SPY_684.0_2025-12-11_C": {
     "entry_price": 1.56,
-    "highest_price": 4.03,
+    "highest_price": 4.15,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -961,7 +961,7 @@
   },
   "ALPACA_PAPER_HOOD_130.0_2025-12-12_C": {
     "entry_price": 0.5,
-    "highest_price": 0.56,
+    "highest_price": 0.69,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -988,5 +988,50 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-11T16:35:23.835984"
+  },
+  "ALPACA_PAPER_RIVN_17.0_2025-12-12_C": {
+    "entry_price": 0.43,
+    "highest_price": 0.29,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "RIVN251212C00017000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-11T18:07:01.541117"
+  },
+  "Webull_QQQ_0.0__": {
+    "entry_price": 1.53,
+    "highest_price": 0.025,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "Webull",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-11T18:16:10.874506"
+  },
+  "ALPACA_PAPER_GOOGL_317.5_2025-12-12_C": {
+    "entry_price": 0.8,
+    "highest_price": 1.13,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "GOOGL251212C00317500",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-11T18:26:26.110297"
   }
 }
