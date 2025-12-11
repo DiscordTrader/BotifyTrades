@@ -1563,6 +1563,188 @@ def get_trades(status: Optional[str] = None, broker: Optional[str] = None, limit
     return [dict(row) for row in cursor.fetchall()]
 
 
+def get_all_broker_performance(period: str = 'all', broker_filter: str = None, user_id: int = None) -> Dict[str, Any]:
+    """
+    Get trading performance from ALL broker positions (trades table).
+    NOT filtered by channel - shows all open/closed trades across all brokers.
+    
+    Args:
+        period: 'today', '7d', '30d', 'year', 'all'
+        broker_filter: Optional broker filter ('Webull', 'ALPACA_PAPER', etc.)
+        user_id: Optional user ID filter (shows all if NULL due to historical trades)
+    
+    Returns:
+        Dict with performance metrics from trades table directly
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Build date filter
+    start_date, end_date = get_date_filter_bounds(period)
+    
+    params = []
+    date_filter = ""
+    if start_date and end_date:
+        date_filter = "AND (t.executed_at BETWEEN ? AND ? OR t.closed_at BETWEEN ? AND ?)"
+        params.extend([start_date, end_date, start_date, end_date])
+    
+    broker_clause = ""
+    if broker_filter:
+        broker_clause = "AND LOWER(t.broker) = LOWER(?)"
+        params.append(broker_filter)
+    
+    # User filter - show all trades where user_id is NULL (historical) or matches current user
+    user_clause = ""
+    if user_id:
+        user_clause = "AND (t.user_id IS NULL OR t.user_id = ?)"
+        params.append(user_id)
+    
+    # Get CLOSED trades performance (realized P&L)
+    closed_query = f'''
+        SELECT 
+            COUNT(*) as total_closed,
+            SUM(CASE WHEN t.pnl > 0 THEN 1 ELSE 0 END) as wins,
+            SUM(CASE WHEN t.pnl <= 0 THEN 1 ELSE 0 END) as losses,
+            COALESCE(SUM(t.pnl), 0) as realized_pnl,
+            COALESCE(SUM(CASE WHEN t.pnl > 0 THEN t.pnl ELSE 0 END), 0) as gross_profit,
+            COALESCE(SUM(CASE WHEN t.pnl < 0 THEN t.pnl ELSE 0 END), 0) as gross_loss,
+            COALESCE(AVG(t.pnl), 0) as avg_pnl,
+            COALESCE(AVG(t.pnl_percent), 0) as avg_pnl_percent,
+            COALESCE(MAX(t.pnl), 0) as best_trade,
+            COALESCE(MIN(t.pnl), 0) as worst_trade
+        FROM trades t
+        WHERE t.status = 'CLOSED' {date_filter} {broker_clause} {user_clause}
+    '''
+    
+    cursor.execute(closed_query, tuple(params))
+    closed_row = cursor.fetchone()
+    
+    # Get OPEN trades (unrealized P&L)
+    open_params = []
+    open_broker_clause = ""
+    if broker_filter:
+        open_broker_clause = "AND LOWER(t.broker) = LOWER(?)"
+        open_params.append(broker_filter)
+    
+    open_user_clause = ""
+    if user_id:
+        open_user_clause = "AND (t.user_id IS NULL OR t.user_id = ?)"
+        open_params.append(user_id)
+    
+    open_query = f'''
+        SELECT 
+            COUNT(*) as total_open,
+            COALESCE(SUM(t.pnl), 0) as unrealized_pnl,
+            COALESCE(SUM(t.quantity * t.executed_price * 100), 0) as total_invested
+        FROM trades t
+        WHERE t.status = 'OPEN' {open_broker_clause} {open_user_clause}
+    '''
+    
+    cursor.execute(open_query, tuple(open_params))
+    open_row = cursor.fetchone()
+    
+    total_closed = closed_row['total_closed'] or 0
+    wins = closed_row['wins'] or 0
+    losses = closed_row['losses'] or 0
+    
+    result = {
+        'total_closed': total_closed,
+        'total_open': open_row['total_open'] or 0,
+        'total_trades': total_closed + (open_row['total_open'] or 0),
+        'wins': wins,
+        'losses': losses,
+        'win_rate': round((wins / total_closed * 100) if total_closed > 0 else 0, 1),
+        'realized_pnl': round(float(closed_row['realized_pnl'] or 0), 2),
+        'unrealized_pnl': round(float(open_row['unrealized_pnl'] or 0), 2),
+        'total_pnl': round(float(closed_row['realized_pnl'] or 0) + float(open_row['unrealized_pnl'] or 0), 2),
+        'gross_profit': round(float(closed_row['gross_profit'] or 0), 2),
+        'gross_loss': round(float(closed_row['gross_loss'] or 0), 2),
+        'avg_pnl': round(float(closed_row['avg_pnl'] or 0), 2),
+        'avg_pnl_percent': round(float(closed_row['avg_pnl_percent'] or 0), 1),
+        'best_trade': round(float(closed_row['best_trade'] or 0), 2),
+        'worst_trade': round(float(closed_row['worst_trade'] or 0), 2),
+        'total_invested': round(float(open_row['total_invested'] or 0), 2),
+        'profit_factor': 0.0
+    }
+    
+    # Calculate profit factor
+    if result['gross_loss'] != 0:
+        result['profit_factor'] = round(abs(result['gross_profit'] / result['gross_loss']), 2)
+    elif result['gross_profit'] > 0:
+        result['profit_factor'] = 10.0
+    
+    return result
+
+
+def get_all_broker_trades(status: Optional[str] = None, broker: Optional[str] = None, 
+                          symbol: Optional[str] = None, limit: int = 200, user_id: int = None) -> Dict[str, Any]:
+    """
+    Get ALL trades from ALL brokers - not filtered by channel.
+    Returns trades and filter metadata for UI dropdowns.
+    
+    Args:
+        user_id: Optional user ID filter (shows all if NULL due to historical trades)
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT t.id, t.symbol, t.strike, t.expiry, t.call_put, t.direction, t.quantity,
+               t.executed_price as price, t.current_price, t.pnl, t.pnl_percent, t.status, t.broker,
+               t.asset_type, t.option_id, t.executed_at, t.closed_at, t.channel_id,
+               t.message_id, t.source,
+               COALESCE(c.name, '') as channel_name, 
+               COALESCE(c.category, '') as channel_category
+        FROM trades t 
+        LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
+        WHERE 1=1
+    '''
+    params = []
+    
+    # User filter - show all trades where user_id is NULL (historical) or matches current user
+    if user_id:
+        query += ' AND (t.user_id IS NULL OR t.user_id = ?)'
+        params.append(user_id)
+    
+    if status:
+        query += ' AND t.status = ?'
+        params.append(status)
+    
+    if broker:
+        query += ' AND LOWER(t.broker) = LOWER(?)'
+        params.append(broker)
+    
+    if symbol:
+        query += ' AND UPPER(t.symbol) LIKE ?'
+        params.append(f'%{symbol.upper()}%')
+    
+    query += ' ORDER BY t.executed_at DESC LIMIT ?'
+    params.append(limit)
+    
+    cursor.execute(query, params)
+    trades = [dict(row) for row in cursor.fetchall()]
+    
+    # Get filter metadata
+    cursor.execute('SELECT DISTINCT broker FROM trades WHERE broker IS NOT NULL ORDER BY broker')
+    brokers = [row['broker'] for row in cursor.fetchall()]
+    
+    cursor.execute('SELECT DISTINCT status FROM trades WHERE status IS NOT NULL ORDER BY status')
+    statuses = [row['status'] for row in cursor.fetchall()]
+    
+    cursor.execute('SELECT DISTINCT symbol FROM trades WHERE symbol IS NOT NULL ORDER BY symbol')
+    symbols = [row['symbol'] for row in cursor.fetchall()]
+    
+    return {
+        'trades': trades,
+        'filters': {
+            'brokers': brokers,
+            'statuses': statuses,
+            'symbols': symbols
+        },
+        'total': len(trades)
+    }
+
+
 def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = None, 
                    status: Optional[str] = None, broker: Optional[str] = None, 
                    limit: int = 200) -> Dict[str, Any]:

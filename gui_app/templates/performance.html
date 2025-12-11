@@ -667,8 +667,9 @@ async function loadPerformance(period) {
     const broker = document.getElementById('brokerFilter').value;
     
     try {
-        const url = `/api/performance?period=${period}${broker ? '&broker=' + broker : ''}`;
-        console.log('Fetching performance from:', url);
+        // Use broker-performance endpoint - gets ALL broker trades, not channel-filtered
+        const url = `/api/broker-performance?period=${period}${broker ? '&broker=' + broker : ''}`;
+        console.log('Fetching broker performance from:', url);
         const response = await fetch(url, {
             method: 'GET',
             credentials: 'same-origin',
@@ -688,11 +689,11 @@ async function loadPerformance(period) {
         console.log('API Response:', JSON.stringify(data).substring(0, 500));
         
         if (data.success) {
-            console.log('Updating stats with performance data:', data.performance);
+            console.log('Updating stats with broker performance data:', data.performance);
             updateStats(data.performance);
-            updateCharts(data.daily_pnl, data.performance);
-            updateTopSymbols(data.top_symbols);
-            updateRecentTrades(data.recent_trades);
+            updateChartsFromTrades(data.trades, data.performance);
+            updateTopSymbolsFromTrades(data.trades);
+            updateRecentTrades(data.trades);
         } else {
             console.error('API returned error:', data.error || 'Unknown error');
         }
@@ -763,6 +764,84 @@ function updateCharts(dailyPnl, perf) {
     
     winLossChart.data.datasets[0].data = [perf.wins || 0, perf.losses || 0];
     winLossChart.update();
+}
+
+function updateChartsFromTrades(trades, perf) {
+    // Build daily PNL from closed trades
+    const closedTrades = trades.filter(t => t.status === 'CLOSED' && t.closed_at);
+    const dailyPnlMap = {};
+    
+    closedTrades.forEach(t => {
+        const date = t.closed_at.split('T')[0];
+        if (!dailyPnlMap[date]) {
+            dailyPnlMap[date] = { date, pnl: 0, trades: 0 };
+        }
+        dailyPnlMap[date].pnl += (t.pnl || 0);
+        dailyPnlMap[date].trades++;
+    });
+    
+    const dailyPnl = Object.values(dailyPnlMap).sort((a, b) => a.date.localeCompare(b.date));
+    
+    // Calculate cumulative PNL
+    let cumulative = 0;
+    dailyPnl.forEach(d => {
+        cumulative += d.pnl;
+        d.cumulative_pnl = cumulative;
+    });
+    
+    if (dailyPnl.length > 0) {
+        equityChart.data.labels = dailyPnl.map(d => {
+            const date = new Date(d.date);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        });
+        equityChart.data.datasets[0].data = dailyPnl.map(d => d.cumulative_pnl);
+        
+        const lastPnl = dailyPnl[dailyPnl.length - 1]?.cumulative_pnl || 0;
+        equityChart.data.datasets[0].borderColor = lastPnl >= 0 ? chartColors.green : chartColors.red;
+        equityChart.data.datasets[0].backgroundColor = lastPnl >= 0 ? 'rgba(0, 200, 83, 0.1)' : 'rgba(255, 82, 82, 0.1)';
+        equityChart.update();
+        
+        dailyPnlChart.data.labels = dailyPnl.map(d => {
+            const date = new Date(d.date);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        });
+        dailyPnlChart.data.datasets[0].data = dailyPnl.map(d => d.pnl);
+        dailyPnlChart.data.datasets[0].backgroundColor = dailyPnl.map(d => d.pnl >= 0 ? chartColors.green : chartColors.red);
+        dailyPnlChart.update();
+    } else {
+        equityChart.data.labels = [];
+        equityChart.data.datasets[0].data = [];
+        equityChart.update();
+        dailyPnlChart.data.labels = [];
+        dailyPnlChart.data.datasets[0].data = [];
+        dailyPnlChart.update();
+    }
+    
+    winLossChart.data.datasets[0].data = [perf.wins || 0, perf.losses || 0];
+    winLossChart.update();
+}
+
+function updateTopSymbolsFromTrades(trades) {
+    // Build symbol performance from trades
+    const symbolMap = {};
+    
+    trades.filter(t => t.status === 'CLOSED').forEach(t => {
+        const sym = t.symbol;
+        if (!symbolMap[sym]) {
+            symbolMap[sym] = { symbol: sym, trades: 0, wins: 0, total_pnl: 0, asset_type: t.asset_type };
+        }
+        symbolMap[sym].trades++;
+        symbolMap[sym].total_pnl += (t.pnl || 0);
+        if ((t.pnl || 0) > 0) symbolMap[sym].wins++;
+    });
+    
+    // Calculate win rate and sort by total trades
+    const symbols = Object.values(symbolMap).map(s => ({
+        ...s,
+        win_rate: s.trades > 0 ? (s.wins / s.trades) * 100 : 0
+    })).sort((a, b) => b.trades - a.trades);
+    
+    updateTopSymbols(symbols);
 }
 
 function updateTopSymbols(symbols) {

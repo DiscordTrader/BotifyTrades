@@ -9200,6 +9200,56 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
 
+    # ============ ALL BROKER PERFORMANCE (Not channel-filtered) ============
+    
+    @app.route('/api/broker-performance', methods=['GET'])
+    @login_required
+    def api_get_broker_performance():
+        """
+        Get performance data from ALL broker positions (trades table).
+        NOT filtered by channel - shows all open/closed trades across all brokers.
+        
+        Query params:
+            - period: 'today', '7d', '30d', 'year', 'all' (default: 'all')
+            - broker: Optional broker filter ('Webull', 'ALPACA_PAPER', etc.)
+        """
+        try:
+            user_id = session.get('user_id')
+            period = request.args.get('period', 'all')
+            broker = request.args.get('broker')
+            
+            # Get performance from trades table (all brokers, scoped to user)
+            performance = db.get_all_broker_performance(period, broker, user_id)
+            
+            # Get all broker trades for the table (scoped to user)
+            status_filter = request.args.get('status')
+            symbol_filter = request.args.get('symbol')
+            trades_data = db.get_all_broker_trades(
+                status=status_filter,
+                broker=broker,
+                symbol=symbol_filter,
+                limit=200,
+                user_id=user_id
+            )
+            
+            # Enrich trades with source display
+            for trade in trades_data['trades']:
+                trade['source_display'] = db.get_trade_source_display(trade)
+            
+            return jsonify({
+                'success': True,
+                'performance': performance,
+                'trades': trades_data['trades'],
+                'filters': trades_data['filters'],
+                'total': trades_data['total'],
+                'period': period
+            })
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     # ============ BROKER LIVE ANALYTICS ============
     
     @app.route('/analytics/<broker_id>')
