@@ -116,6 +116,9 @@ class WebullAuth:
             refresh_token = creds.get('refresh_token')
             
             if access_token and refresh_token:
+                # Apply tokens directly (same approach as main bot WebullBroker)
+                self.wb.access_token = access_token
+                self.wb.refresh_token = refresh_token
                 self.wb._access_token = access_token
                 self.wb._refresh_token = refresh_token
                 self.wb._token_expire = creds.get('token_expire')
@@ -123,16 +126,33 @@ class WebullAuth:
                 if creds.get('device_id'):
                     self.wb._set_did(creds.get('device_id'))
                 
+                # Verify connection by getting account (same as main bot)
                 try:
-                    self.wb.refresh_login()
-                    if self.wb.is_logged_in():
-                        self.wb.get_trade_token(trading_pin)
+                    account = self.wb.get_account()
+                    if account:
+                        # Tokens work! Get trade token if trading_pin provided
+                        if trading_pin:
+                            try:
+                                self.wb.get_trade_token(trading_pin)
+                            except Exception as e:
+                                print(f"[WEBULL AUTH] Trade token warning: {e}")
                         self.logged_in = True
                         self.account_id = self.wb.get_account_id()
-                        self._save_session()
                         return True
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[WEBULL AUTH] Token verification failed: {e}")
+                    # Tokens didn't work, try refresh as fallback
+                    try:
+                        self.wb.refresh_login()
+                        if self.wb.is_logged_in():
+                            if trading_pin:
+                                self.wb.get_trade_token(trading_pin)
+                            self.logged_in = True
+                            self.account_id = self.wb.get_account_id()
+                            self._save_session()
+                            return True
+                    except Exception:
+                        pass
             return False
         except Exception:
             return False
