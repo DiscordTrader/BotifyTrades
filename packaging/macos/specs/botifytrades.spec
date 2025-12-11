@@ -3,13 +3,22 @@
 # BotifyTrades - macOS Build Specification
 # Uses consolidated license/ module for clean architecture
 # Produces standalone macOS executable
+# Note: NO GIT REQUIRED - version is read from upgrade/version.py
 # ============================================================
 
 import os
 import sys
 from datetime import datetime
 
-build_date = datetime.now().strftime('%Y-%m-%d')
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(SPEC), '..', '..', '..')))
+try:
+    from upgrade.version import APP_VERSION, BUILD_DATE
+except ImportError:
+    APP_VERSION = "2.1.35"
+    BUILD_DATE = datetime.now().strftime('%Y-%m-%d')
+
+print(f"[BUILD] Version: {APP_VERSION} | Build Date: {BUILD_DATE}")
+build_date = BUILD_DATE
 
 SPEC_DIR = os.path.dirname(os.path.abspath(SPEC))
 PROJECT_ROOT = os.path.abspath(os.path.join(SPEC_DIR, '..', '..', '..'))
