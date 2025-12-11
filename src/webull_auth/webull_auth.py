@@ -111,53 +111,62 @@ class WebullAuth:
                 }
             return {"success": False, "error": error_msg}
     
-    def _try_saved_session(self, trading_pin: str) -> bool:
-        """Try to restore session from database-stored tokens"""
+    def _try_saved_session(self, trading_pin: str) -> Dict[str, Any]:
+        """Try to restore session from database-stored tokens. Returns dict with success/error."""
         try:
             creds = self._load_credentials()
             if not creds:
-                return False
+                return {"success": False, "error": "No Webull credentials found in database"}
                 
             access_token = creds.get('access_token')
             refresh_token = creds.get('refresh_token')
             
-            if access_token:
-                # Use PUBLIC attributes (same as main bot WebullBroker.connect)
-                self.wb.access_token = access_token
-                if refresh_token:
-                    self.wb.refresh_token = refresh_token
-                if creds.get('device_id'):
-                    self.wb.did = creds.get('device_id')
-                
-                # Verify tokens by calling get_account (same as main bot)
-                try:
-                    print(f"[WEBULL AUTH] Verifying tokens via get_account...")
-                    account = self.wb.get_account()
-                    if account:
-                        print(f"[WEBULL AUTH] ✓ Token verification successful")
-                        # Tokens work! Get trade token
-                        if trading_pin:
-                            try:
-                                self.wb.get_trade_token(trading_pin)
-                                print(f"[WEBULL AUTH] ✓ Trade token acquired")
-                            except Exception as e:
-                                print(f"[WEBULL AUTH] ⚠ Trade token warning: {e}")
-                        self.logged_in = True
-                        self.account_id = self.wb.get_account_id()
-                        return True
-                    else:
-                        print(f"[WEBULL AUTH] ✗ get_account returned empty")
-                except Exception as e:
-                    print(f"[WEBULL AUTH] ✗ Token verification failed: {e}")
-            return False
-        except Exception:
-            return False
+            if not access_token:
+                return {"success": False, "error": "No access token configured. Please enter your Webull access token."}
+            
+            # Use PUBLIC attributes (same as main bot WebullBroker.connect)
+            self.wb.access_token = access_token
+            if refresh_token:
+                self.wb.refresh_token = refresh_token
+            if creds.get('device_id'):
+                self.wb.did = creds.get('device_id')
+            
+            # Verify tokens by calling get_account (same as main bot)
+            try:
+                print(f"[WEBULL AUTH] Verifying tokens via get_account...")
+                account = self.wb.get_account()
+                if account:
+                    print(f"[WEBULL AUTH] ✓ Token verification successful")
+                    # Tokens work! Get trade token
+                    if trading_pin:
+                        try:
+                            self.wb.get_trade_token(trading_pin)
+                            print(f"[WEBULL AUTH] ✓ Trade token acquired")
+                        except Exception as e:
+                            print(f"[WEBULL AUTH] ⚠ Trade token warning: {e}")
+                    self.logged_in = True
+                    self.account_id = self.wb.get_account_id()
+                    return {"success": True, "account_id": self.account_id}
+                else:
+                    print(f"[WEBULL AUTH] ✗ get_account returned empty")
+                    return {"success": False, "error": "Token verification failed - get_account returned empty. Token may be expired."}
+            except Exception as e:
+                error_msg = str(e)
+                print(f"[WEBULL AUTH] ✗ Token verification failed: {error_msg}")
+                # Check for specific error types
+                if 'Expecting value' in error_msg or 'JSONDecodeError' in error_msg:
+                    return {"success": False, "error": "Webull API returned invalid response. Token may be expired or blocked."}
+                return {"success": False, "error": f"Token verification failed: {error_msg}"}
+        except Exception as e:
+            return {"success": False, "error": f"Session restore error: {str(e)}"}
     
     def login_with_saved_session(self, trading_pin: str) -> Dict[str, Any]:
         """Login using saved session tokens from database"""
-        if self._try_saved_session(trading_pin):
-            return {"success": True, "account_id": self.account_id}
-        return {"success": False, "error": "Webull tokens expired or not configured. Please enter fresh access token from Webull app.", "token_expired": True}
+        result = self._try_saved_session(trading_pin)
+        if result.get("success"):
+            return result
+        # Return the specific error from _try_saved_session
+        return {"success": False, "error": result.get("error", "Unknown error"), "token_expired": True}
     
     def _load_credentials(self) -> Optional[Dict[str, Any]]:
         """Load credentials from database via adapter"""
