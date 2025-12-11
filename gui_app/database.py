@@ -1575,10 +1575,10 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
     cursor = conn.cursor()
     
     query = '''
-        SELECT t.id, t.symbol, t.strike, t.expiry, t.call_put, t.action, t.quantity,
-               t.price, t.current_price, t.pnl, t.pnl_percent, t.status, t.broker,
+        SELECT t.id, t.symbol, t.strike, t.expiry, t.call_put, t.direction, t.quantity,
+               t.executed_price as price, t.current_price, t.pnl, t.pnl_percent, t.status, t.broker,
                t.asset_type, t.option_id, t.executed_at, t.closed_at, t.channel_id,
-               t.message_id, t.direction, t.source,
+               t.message_id, t.source,
                COALESCE(c.name, 'Unknown') as channel_name, 
                COALESCE(c.category, '') as channel_category
         FROM trades t 
