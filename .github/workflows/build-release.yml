@@ -33,9 +33,7 @@ jobs:
           mkdir -p dist_obf/src
           pyarmor gen --output dist_obf/src src/license_client.py
           pyarmor gen --output dist_obf/src src/license_manager.py
-          pyarmor gen --output dist_obf/src src/license_manager_secure.py
-          pyarmor gen --output dist_obf/src src/license_manager_activation.py
-          
+                    
           mkdir -p src_backup
           Copy-Item src/license_client.py src_backup/
           Copy-Item src/license_manager.py src_backup/
