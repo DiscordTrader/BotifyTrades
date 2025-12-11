@@ -116,9 +116,7 @@ class WebullAuth:
             refresh_token = creds.get('refresh_token')
             
             if access_token and refresh_token:
-                # Apply tokens directly (same approach as main bot WebullBroker)
-                self.wb.access_token = access_token
-                self.wb.refresh_token = refresh_token
+                # Apply tokens using internal attributes only
                 self.wb._access_token = access_token
                 self.wb._refresh_token = refresh_token
                 self.wb._token_expire = creds.get('token_expire')
