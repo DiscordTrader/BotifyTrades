@@ -122,41 +122,33 @@ class WebullAuth:
             refresh_token = creds.get('refresh_token')
             
             if access_token:
-                self.wb._access_token = access_token
+                # Use PUBLIC attributes (same as main bot WebullBroker.connect)
+                self.wb.access_token = access_token
                 if refresh_token:
-                    self.wb._refresh_token = refresh_token
-                self.wb._token_expire = creds.get('token_expire')
-                self.wb._uuid = creds.get('uuid')
+                    self.wb.refresh_token = refresh_token
                 if creds.get('device_id'):
-                    self.wb._set_did(creds.get('device_id'))
+                    self.wb.did = creds.get('device_id')
                 
                 # Verify tokens by calling get_account (same as main bot)
                 try:
+                    print(f"[WEBULL AUTH] Verifying tokens via get_account...")
                     account = self.wb.get_account()
                     if account:
+                        print(f"[WEBULL AUTH] ✓ Token verification successful")
                         # Tokens work! Get trade token
                         if trading_pin:
                             try:
                                 self.wb.get_trade_token(trading_pin)
+                                print(f"[WEBULL AUTH] ✓ Trade token acquired")
                             except Exception as e:
-                                print(f"[WEBULL AUTH] Trade token warning: {e}")
+                                print(f"[WEBULL AUTH] ⚠ Trade token warning: {e}")
                         self.logged_in = True
                         self.account_id = self.wb.get_account_id()
                         return True
+                    else:
+                        print(f"[WEBULL AUTH] ✗ get_account returned empty")
                 except Exception as e:
-                    print(f"[WEBULL AUTH] Token verification via get_account failed: {e}")
-                    # Fallback to refresh_login
-                    try:
-                        self.wb.refresh_login()
-                        if self.wb.is_logged_in():
-                            if trading_pin:
-                                self.wb.get_trade_token(trading_pin)
-                            self.logged_in = True
-                            self.account_id = self.wb.get_account_id()
-                            self._save_session()
-                            return True
-                    except Exception:
-                        pass
+                    print(f"[WEBULL AUTH] ✗ Token verification failed: {e}")
             return False
         except Exception:
             return False
