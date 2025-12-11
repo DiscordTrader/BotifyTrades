@@ -28,13 +28,14 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 
 ## Recent Changes
 
-### v2.1.31 - Bot Trades Tab (2025-12-11)
+### v2.1.31 - Bot Trades Tab & All-Broker Performance (2025-12-11)
 - **NEW: Isolated Bot Trades Tab** - Shows ONLY Discord signal-executed trades with channel attribution
-- Filters: Channel Name, Symbol, Status, Broker dropdowns
-- Professional dark theme UI matching dashboard styling
-- API: `/api/bot-trades` endpoint returns trades with channel_id + filter metadata
-- Database: `get_bot_trades()` function joins trades with discord_channels table
-- Completely isolated from broker sync - no "Pre-tracking" noise
+- **NEW: All-Broker Performance Page** - Shows ALL positions from ALL configured brokers (not channel-filtered)
+- Bot Trades: LEFT JOIN fix for deleted channels, corrected column names (direction, executed_price)
+- Performance: New `/api/broker-performance` endpoint returns metrics from trades table directly
+- Database: `get_all_broker_performance()` and `get_all_broker_trades()` functions with user_id filtering
+- Multi-tenant safety: Backwards compatible user_id filtering (shows historical trades + current user's trades)
+- Filters: Channel Name, Symbol, Status, Broker dropdowns on both pages
 
 ## Critical Implementation Patterns (DO NOT BREAK)
 
