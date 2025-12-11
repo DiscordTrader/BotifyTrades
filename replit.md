@@ -28,6 +28,15 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 
 ## Recent Changes
 
+### v2.1.34 - Position Sync & Stale Trade Cleanup (2025-12-11)
+- **NEW: Sync Positions Button** - Dashboard and Performance pages now have a "Sync Positions" button
+- **NEW: `/api/sync-positions` endpoint** - Compares database trades with actual broker positions
+- **NEW: `sync_positions_with_broker()` function** - Marks expired/closed positions as CLOSED in database
+- **FIX: Stale positions detection** - Expired options (like ONDS 12/05) now properly detected and closeable
+- **DEBUG: Enhanced sync logging** - `[SYNC-API]` logs show exactly what positions are being synced
+- Sync works for Webull, ALPACA_PAPER, and ALPACA_LIVE brokers
+- Position key matching: Symbol-only for stocks, SYMBOL_STRIKE_EXPIRY_C/P for options
+
 ### v2.1.31 - Bot Trades Tab & All-Broker Performance (2025-12-11)
 - **NEW: Isolated Bot Trades Tab** - Shows ONLY Discord signal-executed trades with channel attribution
 - **NEW: All-Broker Performance Page** - Shows ALL positions from ALL configured brokers (not channel-filtered)
