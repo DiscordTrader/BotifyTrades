@@ -6866,6 +6866,11 @@ def register_routes(app):
                         
                 except Exception as webull_err:
                     error_msg = str(webull_err)
+                    # Check for CAPTCHA/anti-bot JSON parsing errors
+                    if 'Expecting value' in error_msg or 'JSONDecodeError' in error_msg or 'line 1 column 1' in error_msg:
+                        friendly_msg = "Webull CAPTCHA/anti-bot protection detected. Email login is blocked. Please use Token-Only Mode with access token instead."
+                        set_broker_status(broker_id, False, 'error', friendly_msg)
+                        return jsonify({'success': False, 'error': friendly_msg, 'captcha_blocked': True}), 400
                     set_broker_status(broker_id, False, 'error', error_msg)
                     return jsonify({'success': False, 'error': f'Webull connection failed: {error_msg}'}), 400
             
