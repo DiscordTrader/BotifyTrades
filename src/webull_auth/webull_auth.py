@@ -134,36 +134,42 @@ class WebullAuth:
                 self.wb.did = creds.get('device_id')
             
             # Apply region metadata if available (required by Webull API v2 - Nov 2025+)
-            region_id = creds.get('region_id', '')
-            zone_id = creds.get('zone_id', '')
-            rzone = creds.get('rzone', '')
+            # CRITICAL: zone_var is where webull library stores 'rzone' value!
+            zone_var = creds.get('zone_var', '') or creds.get('rzone', '')
+            saved_account_id = creds.get('account_id', '')
+            region_code = creds.get('region_id', '')
             
-            if region_id:
+            # Set zone_var BEFORE any API calls - this is the critical field!
+            if zone_var:
+                self.wb.zone_var = zone_var
+                print(f"[WEBULL AUTH] ✓ Restored zone_var: {zone_var}")
+            
+            # Set account_id if we have it saved (avoids needing get_account_id first)
+            if saved_account_id:
+                self.wb._account_id = saved_account_id
+                print(f"[WEBULL AUTH] ✓ Restored account_id: {saved_account_id}")
+            
+            # Set region code if available
+            if region_code:
                 try:
-                    self.wb._region_id = region_id
-                except Exception:
-                    pass
-            if zone_id:
-                try:
-                    self.wb._zone_id = zone_id
-                except Exception:
-                    pass
-            if rzone:
-                try:
-                    # The webull library accesses session['rzone'] - we need to set it properly
-                    if hasattr(self.wb, '_session') and isinstance(self.wb._session, dict):
-                        self.wb._session['rzone'] = rzone
-                    elif hasattr(self.wb, 'session') and isinstance(self.wb.session, dict):
-                        self.wb.session['rzone'] = rzone
+                    self.wb._region_code = int(region_code) if region_code.isdigit() else region_code
                 except Exception:
                     pass
             
-            # Check if region metadata is missing (tokens from before Nov 2025 API change)
-            if not rzone and not region_id:
-                print(f"[WEBULL AUTH] ⚠ Region metadata missing - tokens may be from old API version")
+            # Check if zone_var is missing (tokens from before Nov 2025 API change)
+            if not zone_var:
+                print(f"[WEBULL AUTH] ⚠ zone_var missing - will try get_account_id() first to obtain it")
             
-            # Verify tokens by calling get_account (same as main bot)
+            # Verify tokens - if no account_id, get it first (which also sets zone_var)
             try:
+                if not saved_account_id:
+                    print(f"[WEBULL AUTH] Getting account_id (will also set zone_var)...")
+                    account_id = self.wb.get_account_id()
+                    if account_id:
+                        print(f"[WEBULL AUTH] ✓ Got account_id: {account_id}, zone_var: {self.wb.zone_var}")
+                    else:
+                        return {"success": False, "error": "Failed to get account ID. Token may be expired."}
+                
                 print(f"[WEBULL AUTH] Verifying tokens via get_account...")
                 account = self.wb.get_account()
                 if account:
@@ -176,7 +182,9 @@ class WebullAuth:
                         except Exception as e:
                             print(f"[WEBULL AUTH] ⚠ Trade token warning: {e}")
                     self.logged_in = True
-                    self.account_id = self.wb.get_account_id()
+                    # Re-save session to persist zone_var if it was obtained fresh
+                    self._save_session()
+                    self.account_id = self.wb._account_id or self.wb.get_account_id()
                     return {"success": True, "account_id": self.account_id}
                 else:
                     print(f"[WEBULL AUTH] ✗ get_account returned empty")
@@ -232,12 +240,11 @@ class WebullAuth:
             return
             
         try:
-            # Extract region metadata from webull client (required for API v2)
-            rzone = ''
-            if hasattr(self.wb, '_session') and isinstance(self.wb._session, dict):
-                rzone = self.wb._session.get('rzone', '')
-            elif hasattr(self.wb, 'session') and isinstance(self.wb.session, dict):
-                rzone = self.wb.session.get('rzone', '')
+            # Extract zone_var from webull client (THIS is where rzone value is stored!)
+            # The webull library sets zone_var in get_account_id() from result['data'][id]['rzone']
+            zone_var = getattr(self.wb, 'zone_var', '')
+            region_code = getattr(self.wb, '_region_code', '')
+            account_id = getattr(self.wb, '_account_id', '')
             
             token_data = {
                 'access_token': getattr(self.wb, '_access_token', None) or getattr(self.wb, 'access_token', None),
@@ -245,12 +252,14 @@ class WebullAuth:
                 'token_expire': getattr(self.wb, '_token_expire', None),
                 'uuid': getattr(self.wb, '_uuid', None),
                 'device_id': getattr(self.wb, '_did', None) or getattr(self.wb, 'did', None),
-                'region_id': getattr(self.wb, '_region_id', '') or getattr(self.wb, 'region_id', ''),
-                'zone_id': getattr(self.wb, '_zone_id', '') or getattr(self.wb, 'zone_id', ''),
-                'rzone': rzone
+                'region_id': str(region_code) if region_code else '',
+                'zone_id': '',
+                'rzone': zone_var,
+                'zone_var': zone_var,
+                'account_id': account_id
             }
             self._credentials_adapter('save', token_data)
-            print(f"[WEBULL AUTH] ✓ Session saved (rzone: {'yes' if rzone else 'no'})")
+            print(f"[WEBULL AUTH] ✓ Session saved (zone_var: {zone_var or 'none'}, region_code: {region_code or 'none'})")
         except Exception as e:
             print(f"[WEBULL AUTH] Warning: Could not save session: {e}")
     
