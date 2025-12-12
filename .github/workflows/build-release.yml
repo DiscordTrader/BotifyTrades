@@ -33,20 +33,20 @@ jobs:
 
       - name: Backup license files
         run: |
-          mkdir -p backup
-          copy license\config\constants.py backup\constants.py.bak
-          copy license\client\manager_secure.py backup\manager_secure.py.bak
-          copy license\client\manager_activation.py backup\manager_activation.py.bak
+          New-Item -ItemType Directory -Force -Path backup
+          Copy-Item license\config\constants.py backup\constants.py.bak
+          Copy-Item license\client\manager_secure.py backup\manager_secure.py.bak
+          Copy-Item license\client\manager_activation.py backup\manager_activation.py.bak
 
       - name: Obfuscate with PyArmor
         run: |
           pyarmor gen -O dist_obf license\config\constants.py
           pyarmor gen -O dist_obf license\client\manager_secure.py
           pyarmor gen -O dist_obf license\client\manager_activation.py
-          copy /Y dist_obf\constants.py license\config\constants.py
-          copy /Y dist_obf\manager_secure.py license\client\manager_secure.py
-          copy /Y dist_obf\manager_activation.py license\client\manager_activation.py
-          if exist dist_obf\pyarmor_runtime_000000 xcopy /s /y /q dist_obf\pyarmor_runtime_000000 license\pyarmor_runtime_000000\
+          Copy-Item -Force dist_obf\constants.py license\config\constants.py
+          Copy-Item -Force dist_obf\manager_secure.py license\client\manager_secure.py
+          Copy-Item -Force dist_obf\manager_activation.py license\client\manager_activation.py
+          if (Test-Path dist_obf\pyarmor_runtime_000000) { Copy-Item -Recurse -Force dist_obf\pyarmor_runtime_000000 license\ }
 
       - name: Build EXE with PyInstaller
         run: |
@@ -54,14 +54,27 @@ jobs:
 
       - name: Create distribution package
         run: |
-          mkdir packaging\windows\dist\config
-          if exist config.ini.example copy config.ini.example packaging\windows\dist\
-          if exist GET_DISCORD_TOKEN.html copy GET_DISCORD_TOKEN.html packaging\windows\dist\
-          if exist GET_WEBULL_TOKENS.html copy GET_WEBULL_TOKENS.html packaging\windows\dist\
+          New-Item -ItemType Directory -Force -Path packaging\windows\dist\config
+          if (Test-Path config.ini.example) { Copy-Item config.ini.example packaging\windows\dist\ }
+          if (Test-Path GET_DISCORD_TOKEN.html) { Copy-Item GET_DISCORD_TOKEN.html packaging\windows\dist\ }
+          if (Test-Path GET_WEBULL_TOKENS.html) { Copy-Item GET_WEBULL_TOKENS.html packaging\windows\dist\ }
+          Set-Content -Path packaging\windows\dist\RUN.bat -Value "@echo off`r`necho Starting BotifyTrades...`r`nBotifyTrades.exe"
+
+      - name: Create README
+        run: |
+          $readme = @"
+          BotifyTrades ${{ steps.version.outputs.VERSION }}
+          =================================
+          
+          1. Run RUN.bat or BotifyTrades.exe
+          2. Open http://localhost:5000
+          3. Complete the setup wizard
+          "@
+          Set-Content -Path packaging\windows\dist\README.txt -Value $readme
 
       - name: Zip distribution
         run: |
-          cd packaging\windows\dist
+          Set-Location packaging\windows\dist
           Compress-Archive -Path * -DestinationPath ..\BotifyTrades-${{ steps.version.outputs.VERSION }}-Windows.zip
 
       - name: Upload Windows artifact
@@ -91,6 +104,13 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
+      - name: Backup license files
+        run: |
+          mkdir -p backup
+          cp license/config/constants.py backup/constants.py.bak
+          cp license/client/manager_secure.py backup/manager_secure.py.bak
+          cp license/client/manager_activation.py backup/manager_activation.py.bak
+
       - name: Obfuscate with PyArmor
         run: |
           pyarmor gen -O dist_obf license/config/constants.py
@@ -99,14 +119,30 @@ jobs:
           cp -f dist_obf/constants.py license/config/constants.py
           cp -f dist_obf/manager_secure.py license/client/manager_secure.py
           cp -f dist_obf/manager_activation.py license/client/manager_activation.py
+          mkdir -p license/pyarmor_runtime_000000
+          cp -r dist_obf/pyarmor_runtime_000000/* license/pyarmor_runtime_000000/ 2>/dev/null || true
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller --clean --noconfirm --distpath packaging/linux/dist --workpath packaging/linux/build_temp packaging/linux/specs/botifytrades.spec
+          pyinstaller --clean --noconfirm \
+            --distpath packaging/linux/dist \
+            --workpath packaging/linux/build_temp \
+            packaging/linux/specs/botifytrades.spec
+
+      - name: Create distribution package
+        run: |
+          chmod +x packaging/linux/dist/BotifyTrades
+          mkdir -p packaging/linux/dist/config
+          cp config.ini.example packaging/linux/dist/ 2>/dev/null || true
+          cp GET_DISCORD_TOKEN.html packaging/linux/dist/ 2>/dev/null || true
+          cp GET_WEBULL_TOKENS.html packaging/linux/dist/ 2>/dev/null || true
+          echo '#!/bin/bash' > packaging/linux/dist/run.sh
+          echo 'echo "Starting BotifyTrades..."' >> packaging/linux/dist/run.sh
+          echo './BotifyTrades' >> packaging/linux/dist/run.sh
+          chmod +x packaging/linux/dist/run.sh
 
       - name: Create tarball
         run: |
-          chmod +x packaging/linux/dist/BotifyTrades
           cd packaging/linux/dist
           tar -czvf ../BotifyTrades-${{ steps.version.outputs.VERSION }}-Linux.tar.gz *
 
@@ -124,10 +160,20 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      - name: Download artifacts
+      - name: Download Windows build
         uses: actions/download-artifact@v4
         with:
+          name: windows-build
           path: ./artifacts
+
+      - name: Download Linux build
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-build
+          path: ./artifacts
+
+      - name: List artifacts
+        run: ls -la ./artifacts
 
       - name: Create Release on Public Repo
         uses: softprops/action-gh-release@v1
@@ -139,10 +185,23 @@ jobs:
             ## BotifyTrades ${{ steps.version.outputs.VERSION }}
             
             ### Downloads
-            - **Windows**: BotifyTrades-${{ steps.version.outputs.VERSION }}-Windows.zip
-            - **Linux**: BotifyTrades-${{ steps.version.outputs.VERSION }}-Linux.tar.gz
+            - **Windows**: `BotifyTrades-${{ steps.version.outputs.VERSION }}-Windows.zip`
+            - **Linux**: `BotifyTrades-${{ steps.version.outputs.VERSION }}-Linux.tar.gz`
+            
+            ### Quick Start
+            1. Download and extract for your platform
+            2. Run `BotifyTrades.exe` (Windows) or `./BotifyTrades` (Linux)
+            3. Open http://localhost:5000 in your browser
+            4. Complete the setup wizard
+            
+            ### Requirements
+            - Valid license key
+            - Discord account
+            - Broker account (Webull, Alpaca, or IBKR)
           files: |
-            ./artifacts/windows-build/*.zip
-            ./artifacts/linux-build/*.tar.gz
+            ./artifacts/BotifyTrades-${{ steps.version.outputs.VERSION }}-Windows.zip
+            ./artifacts/BotifyTrades-${{ steps.version.outputs.VERSION }}-Linux.tar.gz
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
