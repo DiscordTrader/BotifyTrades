@@ -5,6 +5,29 @@ Uses adapter pattern for database access - credentials stored encrypted in SQLit
 """
 from typing import Optional, Dict, Any, Callable
 from webull import webull, paper_webull
+import requests
+
+
+def _patched_get_account_id(self, id=0):
+    """
+    Patched version of webull.get_account_id() that handles missing 'rzone' field.
+    Webull API changed in late 2025 to sometimes omit 'rzone' from responses.
+    """
+    headers = self.build_req_headers()
+    response = requests.get(self._urls.account_id(), headers=headers, timeout=self.timeout)
+    result = response.json()
+    
+    if result.get('success') and len(result.get('data', [])) > 0:
+        account_data = result['data'][int(id)]
+        self.zone_var = str(account_data.get('rzone', getattr(self, 'zone_var', 'dc_core_r001')))
+        self._account_id = str(account_data.get('secAccountId', ''))
+        self._region_code = account_data.get('regionId', account_data.get('region_id', ''))
+        return self._account_id
+    else:
+        return None
+
+webull.get_account_id = _patched_get_account_id
+paper_webull.get_account_id = _patched_get_account_id
 
 
 class WebullAuth:
@@ -190,7 +213,7 @@ class WebullAuth:
                 if account_id:
                     print(f"[WEBULL AUTH] ✓ Got account_id: {account_id}, zone_var: {self.wb.zone_var}", flush=True)
                 else:
-                    return {"success": False, "error": "Failed to get account ID. Token may be expired."}
+                    return {"success": False, "error": "Access token expired. Please get a new access token from Webull (open https://app.webull.com, login, F12 → Console, copy new token).", "token_expired": True}
                 
                 print(f"[WEBULL AUTH DEBUG] Calling get_account()...", flush=True)
                 account = self.wb.get_account()

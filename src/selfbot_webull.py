@@ -80,6 +80,12 @@ except ImportError as e:
 # Import BrokerSyncService for real-time trade synchronization
 from broker_sync_service import BrokerSyncService
 
+# Import webull_auth early to apply monkey-patch for Webull API v2 (rzone fix)
+try:
+    from webull_auth import webull_auth as _webull_auth_patch
+except ImportError:
+    pass
+
 # Import Risk Management module (single source of truth - no legacy fallback)
 try:
     from risk import RiskManager, RiskDBAdapter

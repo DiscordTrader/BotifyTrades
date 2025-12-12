@@ -28,6 +28,13 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 
 ## Recent Changes
 
+### v3.1.5 - Webull Library Monkey-Patch for Missing rzone (2025-12-12)
+- **ROOT CAUSE FIX: Webull library get_account_id() crash** - Library expects 'rzone' in API response but Webull removed it
+- **FIX: Monkey-patch webull.get_account_id()** - Uses .get() with fallback instead of direct key access
+- **FIX: Applied to both webull and paper_webull classes** - Patch runs at module load time
+- **FIX: Main bot imports webull_auth early** - Ensures patch is applied before any webull usage
+- **IMPROVED: Token expiration messages** - Now clearly tells users to get fresh tokens with instructions
+
 ### v3.1.4 - Webull API v2 Region Metadata Fix (2025-12-12)
 - **ROOT CAUSE FIX: KeyError 'rzone'** - Webull API changed in Nov 2025 to require region metadata (rzone, region_id, zone_id)
 - **FIX: Credential storage extended** - Now persists and restores region metadata alongside tokens
