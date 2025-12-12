@@ -31,6 +31,19 @@ jobs:
         shell: bash
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
+      - name: Update version.py with tag version
+        shell: python
+        run: |
+          import re
+          version = "${{ steps.version.outputs.VERSION }}".lstrip('v')
+          with open('upgrade/version.py', 'r') as f:
+              content = f.read()
+          content = re.sub(r'APP_VERSION = "[^"]*"', f'APP_VERSION = "{version}"', content)
+          content = re.sub(r'BUILD_DATE = "[^"]*"', f'BUILD_DATE = "${{ github.event.head_commit.timestamp[:10] }}"', content)
+          with open('upgrade/version.py', 'w') as f:
+              f.write(content)
+          print(f"Updated version.py to {version}")
+
       - name: Backup license files
         run: |
           New-Item -ItemType Directory -Force -Path backup
@@ -103,6 +116,21 @@ jobs:
       - name: Get version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Update version.py with tag version
+        run: |
+          python3 << 'EOF'
+          import re
+          version = "${{ steps.version.outputs.VERSION }}".lstrip('v')
+          with open('upgrade/version.py', 'r') as f:
+              content = f.read()
+          content = re.sub(r'APP_VERSION = "[^"]*"', f'APP_VERSION = "{version}"', content)
+          import datetime
+          content = re.sub(r'BUILD_DATE = "[^"]*"', f'BUILD_DATE = "{datetime.date.today()}"', content)
+          with open('upgrade/version.py', 'w') as f:
+              f.write(content)
+          print(f"Updated version.py to {version}")
+          EOF
 
       - name: Backup license files
         run: |
