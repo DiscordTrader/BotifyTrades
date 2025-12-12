@@ -5464,6 +5464,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     )
                 else:
                     # Webull and other brokers
+                    _original_print(f"[{broker_name}] Placing option order: {signal['action']} {signal['qty']} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @ ${signal.get('price')}")
                     result = await broker_instance.place_option_order(
                         action=signal['action'],
                         qty=signal['qty'],
@@ -5473,6 +5474,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         expiry_mmdd=signal['expiry'],
                         limit_price=signal.get('price')  # None for market orders
                     )
+                    # Log the result for debugging
+                    if hasattr(result, 'success'):
+                        if result.success:
+                            _original_print(f"[{broker_name}] ✅ Option order SUCCESS: {result.message}, Order ID: {result.order_id}")
+                        else:
+                            _original_print(f"[{broker_name}] ❌ Option order FAILED: {result.message}")
+                    elif isinstance(result, dict):
+                        if result.get('success') or result.get('orderId'):
+                            _original_print(f"[{broker_name}] ✅ Option order SUCCESS: {result.get('msg', result.get('orderId'))}")
+                        else:
+                            _original_print(f"[{broker_name}] ❌ Option order FAILED: {result.get('msg', result.get('error', 'Unknown error'))}")
+                    else:
+                        _original_print(f"[{broker_name}] Option order result: {result}")
                 # Convert OrderResult to dict format for consistency
                 if hasattr(result, 'success'):
                     resp = {
