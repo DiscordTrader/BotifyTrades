@@ -552,6 +552,54 @@ input:checked + .slider:before {
         <div id="alpaca-live-account-info" class="account-info" style="display: none;"></div>
     </div>
     
+    <!-- Tastytrade Paper Trading with Connect -->
+    <div class="settings-card">
+        <h3>🍒 Tastytrade Paper Trading</h3>
+        <p class="description">Options-focused trading platform sandbox for testing</p>
+        <div id="tastytrade-paper-connection-status" class="connection-status disconnected">
+            <span class="status-dot"></span>
+            <span id="tastytrade-paper-status-text">Not connected</span>
+        </div>
+        <div class="form-group">
+            <label>Tastytrade Username</label>
+            <input type="text" id="tastytrade-paper-username" placeholder="Username or email">
+            <p class="help-text">Get from <a href="https://developer.tastytrade.com/" target="_blank">Tastytrade Developer Portal</a></p>
+        </div>
+        <div class="form-group">
+            <label>Tastytrade Password</label>
+            <input type="password" id="tastytrade-paper-password" placeholder="Password">
+        </div>
+        <div class="btn-group">
+            <button id="save-tastytrade-paper" class="btn btn-success">💾 Save</button>
+            <button id="connect-tastytrade-paper" class="btn btn-connect">🔌 Connect</button>
+        </div>
+        <div id="tastytrade-paper-account-info" class="account-info" style="display: none;"></div>
+    </div>
+    
+    <!-- Tastytrade Live Trading with Connect -->
+    <div class="settings-card">
+        <h3>🍒 Tastytrade Live Trading</h3>
+        <p class="description">Real money trading with Tastytrade (use with caution)</p>
+        <div id="tastytrade-live-connection-status" class="connection-status disconnected">
+            <span class="status-dot"></span>
+            <span id="tastytrade-live-status-text">Not connected</span>
+        </div>
+        <div class="form-group">
+            <label>Tastytrade Username</label>
+            <input type="text" id="tastytrade-live-username" placeholder="Username or email">
+            <p class="help-text">Use your Tastytrade production account credentials</p>
+        </div>
+        <div class="form-group">
+            <label>Tastytrade Password</label>
+            <input type="password" id="tastytrade-live-password" placeholder="Password">
+        </div>
+        <div class="btn-group">
+            <button id="save-tastytrade-live" class="btn btn-success">💾 Save</button>
+            <button id="connect-tastytrade-live" class="btn btn-connect">🔌 Connect</button>
+        </div>
+        <div id="tastytrade-live-account-info" class="account-info" style="display: none;"></div>
+    </div>
+    
     <!-- Clear Stale Trades - Data Management -->
     <div class="settings-card" style="background: linear-gradient(135deg, #2a1f0d 0%, #3d2a0f 100%); border-color: rgba(255, 170, 0, 0.3);">
         <h3 style="color: #ffaa00;">🧹 Clear Stale Trades</h3>
@@ -1765,9 +1813,12 @@ function updateStatusBadge(brokerId, status) {
     const badgeMap = {
         'discord': 'discord-status-badge',
         'alpaca_paper': 'alpaca-paper-status-badge',
+        'alpaca_live': 'alpaca-live-status-badge',
         'webull_live': 'webull-live-status-badge',
         'webull_paper': 'webull-paper-status-badge',
-        'ibkr_paper': 'ibkr-status-badge'
+        'ibkr_paper': 'ibkr-status-badge',
+        'tastytrade_paper': 'tastytrade-paper-status-badge',
+        'tastytrade_live': 'tastytrade-live-status-badge'
     };
     
     const badge = document.getElementById(badgeMap[brokerId]);
@@ -1956,6 +2007,128 @@ document.getElementById('connect-alpaca-live').addEventListener('click', async (
         }
     } catch (error) {
         updateConnectionStatus('alpaca-live-connection-status', 'error', error.message);
+        showMessage('error', error.message);
+    }
+});
+
+// ========== TASTYTRADE SETTINGS ==========
+
+// Tastytrade Paper save
+document.getElementById('save-tastytrade-paper').addEventListener('click', async () => {
+    const username = document.getElementById('tastytrade-paper-username').value.trim();
+    const password = document.getElementById('tastytrade-paper-password').value.trim();
+    
+    if (!username || !password) {
+        showMessage('error', 'Both Username and Password are required');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/brokers/credentials/tastytrade', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: username,
+                password: password,
+                paper_mode: true
+            })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            showMessage('success', 'Tastytrade Paper credentials saved! Use Connect button to test.');
+        } else {
+            showMessage('error', result.error || 'Failed to save');
+        }
+    } catch (error) {
+        showMessage('error', error.message);
+    }
+});
+
+// Tastytrade Paper connect
+document.getElementById('connect-tastytrade-paper').addEventListener('click', async () => {
+    updateConnectionStatus('tastytrade-paper-connection-status', 'connecting', 'Connecting...');
+    
+    try {
+        const response = await fetch('/api/brokers/connect/tastytrade_paper', { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.success) {
+            updateConnectionStatus('tastytrade-paper-connection-status', 'connected', 'Connected', result.account);
+            updateStatusBadge('tastytrade_paper', { status: 'connected' });
+            showMessage('success', result.message);
+            
+            if (result.account) {
+                const infoDiv = document.getElementById('tastytrade-paper-account-info');
+                infoDiv.style.display = 'block';
+                infoDiv.innerHTML = `<strong>Account:</strong> ${result.account.account_number} | <strong>Portfolio:</strong> $${result.account.portfolio_value.toLocaleString(undefined, {minimumFractionDigits: 2})} | <strong>Cash:</strong> $${result.account.cash.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            }
+        } else {
+            updateConnectionStatus('tastytrade-paper-connection-status', 'error', result.error);
+            showMessage('error', result.error);
+        }
+    } catch (error) {
+        updateConnectionStatus('tastytrade-paper-connection-status', 'error', error.message);
+        showMessage('error', error.message);
+    }
+});
+
+// Tastytrade Live save
+document.getElementById('save-tastytrade-live').addEventListener('click', async () => {
+    const username = document.getElementById('tastytrade-live-username').value.trim();
+    const password = document.getElementById('tastytrade-live-password').value.trim();
+    
+    if (!username || !password) {
+        showMessage('error', 'Both Username and Password are required');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/brokers/credentials/tastytrade', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: username,
+                password: password,
+                paper_mode: false
+            })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            showMessage('success', 'Tastytrade Live credentials saved! Use Connect button to test.');
+        } else {
+            showMessage('error', result.error || 'Failed to save');
+        }
+    } catch (error) {
+        showMessage('error', error.message);
+    }
+});
+
+// Tastytrade Live connect
+document.getElementById('connect-tastytrade-live').addEventListener('click', async () => {
+    updateConnectionStatus('tastytrade-live-connection-status', 'connecting', 'Connecting...');
+    
+    try {
+        const response = await fetch('/api/brokers/connect/tastytrade_live', { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.success) {
+            updateConnectionStatus('tastytrade-live-connection-status', 'connected', 'Connected', result.account);
+            updateStatusBadge('tastytrade_live', { status: 'connected' });
+            showMessage('success', result.message);
+            
+            if (result.account) {
+                const infoDiv = document.getElementById('tastytrade-live-account-info');
+                infoDiv.style.display = 'block';
+                infoDiv.innerHTML = `<strong>Account:</strong> ${result.account.account_number} | <strong>Portfolio:</strong> $${result.account.portfolio_value.toLocaleString(undefined, {minimumFractionDigits: 2})} | <strong>Cash:</strong> $${result.account.cash.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            }
+        } else {
+            updateConnectionStatus('tastytrade-live-connection-status', 'error', result.error);
+            showMessage('error', result.error);
+        }
+    } catch (error) {
+        updateConnectionStatus('tastytrade-live-connection-status', 'error', error.message);
         showMessage('error', error.message);
     }
 });

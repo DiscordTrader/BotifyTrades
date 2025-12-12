@@ -16,6 +16,8 @@ BROKER_STATUS = {
     'alpaca_paper': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
     'ibkr_live': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
     'ibkr_paper': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'tastytrade_live': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'tastytrade_paper': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
 }
 
 
@@ -199,6 +201,28 @@ def get_ibkr_credentials() -> Dict[str, Any]:
     }
 
 
+def save_tastytrade_credentials(
+    username: str = '',
+    password: str = '',
+    paper_mode: bool = True
+):
+    """Save Tastytrade broker credentials"""
+    save_config('tastytrade_credentials', {
+        'username': username,
+        'password': password,
+        'paper_mode': paper_mode
+    })
+
+
+def get_tastytrade_credentials() -> Dict[str, Any]:
+    """Get Tastytrade credentials"""
+    return load_config('tastytrade_credentials') or {
+        'username': '',
+        'password': '',
+        'paper_mode': True
+    }
+
+
 def save_api_keys_extended(
     openai: str = '',
     alpha_vantage: str = '',
@@ -233,6 +257,7 @@ def get_all_credentials_for_startup() -> Dict[str, Any]:
     webull = get_webull_credentials()
     alpaca = get_alpaca_credentials()
     ibkr = get_ibkr_credentials()
+    tastytrade = get_tastytrade_credentials()
     api_keys = get_api_keys_extended()
     
     return {
@@ -257,6 +282,10 @@ def get_all_credentials_for_startup() -> Dict[str, Any]:
         'IBKR_PORT_PAPER': ibkr.get('port_paper', 7497),
         'IBKR_CLIENT_ID': ibkr.get('client_id', 1),
         'IBKR_PAPER_MODE': ibkr.get('paper_mode', True),
+        
+        'TASTYTRADE_USERNAME': tastytrade.get('username', ''),
+        'TASTYTRADE_PASSWORD': tastytrade.get('password', ''),
+        'TASTYTRADE_PAPER_MODE': tastytrade.get('paper_mode', True),
         
         'OPENAI_API_KEY': api_keys.get('openai', ''),
         'ALPHA_VANTAGE_API_KEY': api_keys.get('alpha_vantage', ''),
@@ -285,10 +314,12 @@ def get_enabled_brokers() -> Dict[str, bool]:
     webull = get_webull_credentials()
     alpaca = get_alpaca_credentials()
     ibkr = get_ibkr_credentials()
+    tastytrade = get_tastytrade_credentials()
     
     return {
         'discord': bool(discord.get('token')),
         'webull': bool(webull.get('email') or webull.get('access_token')),
         'alpaca': bool(alpaca.get('api_key')),
-        'ibkr': bool(ibkr.get('host'))
+        'ibkr': bool(ibkr.get('host')),
+        'tastytrade': bool(tastytrade.get('username'))
     }

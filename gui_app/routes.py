@@ -6697,6 +6697,60 @@ def register_routes(app):
         except Exception as e:
             print(f"[API] Error saving Alpaca Live credentials: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/credentials/tastytrade', methods=['GET'])
+    def api_get_tastytrade_credentials():
+        """Get Tastytrade credentials (password masked)"""
+        try:
+            from .broker_credentials_service import get_tastytrade_credentials, get_broker_status
+            
+            creds = get_tastytrade_credentials()
+            live_status = get_broker_status('tastytrade_live')
+            paper_status = get_broker_status('tastytrade_paper')
+            
+            username = creds.get('username', '')
+            
+            return jsonify({
+                'success': True,
+                'has_username': bool(username),
+                'username_preview': f"{username[:10]}..." if len(username) > 10 else username or '(not set)',
+                'has_password': bool(creds.get('password')),
+                'paper_mode': creds.get('paper_mode', True),
+                'live_status': live_status,
+                'paper_status': paper_status
+            })
+        except Exception as e:
+            print(f"[API] Error getting Tastytrade credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/credentials/tastytrade', methods=['POST'])
+    def api_save_tastytrade_credentials():
+        """Save Tastytrade credentials"""
+        try:
+            from .broker_credentials_service import save_tastytrade_credentials
+            
+            data = request.json
+            username = data.get('username', '').strip()
+            password = data.get('password', '').strip()
+            
+            if not username or not password:
+                return jsonify({'success': False, 'error': 'Both username and password are required'}), 400
+            
+            save_tastytrade_credentials(
+                username=username,
+                password=password,
+                paper_mode=data.get('paper_mode', True)
+            )
+            
+            print(f"[API] ✓ Tastytrade credentials saved")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Tastytrade credentials saved. Use Connect button to connect.'
+            })
+        except Exception as e:
+            print(f"[API] Error saving Tastytrade credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/brokers/credentials/ibkr', methods=['GET'])
     def api_get_ibkr_credentials():
@@ -6964,6 +7018,56 @@ def register_routes(app):
                     'message': 'IBKR credentials saved. Ensure TWS/Gateway is running on your local machine.',
                     'status': 'pending'
                 })
+            
+            elif broker_id.startswith('tastytrade'):
+                from .broker_credentials_service import get_tastytrade_credentials
+                is_paper = broker_id == 'tastytrade_paper'
+                
+                creds = get_tastytrade_credentials()
+                username = creds.get('username', '')
+                password = creds.get('password', '')
+                
+                if not username or not password:
+                    set_broker_status(broker_id, False, 'error', 'No Tastytrade credentials configured')
+                    mode_name = "Paper" if is_paper else "Live"
+                    return jsonify({'success': False, 'error': f'No Tastytrade {mode_name} credentials configured. Please save username and password first.'}), 400
+                
+                try:
+                    from tastytrade import Session, Account
+                    
+                    session = Session(username, password, is_test=is_paper)
+                    accounts = Account.get(session)
+                    
+                    if not accounts:
+                        set_broker_status(broker_id, False, 'error', 'No accounts found')
+                        return jsonify({'success': False, 'error': 'No Tastytrade accounts found'}), 400
+                    
+                    account = accounts[0]
+                    balances = account.get_balances(session)
+                    
+                    nlv = float(getattr(balances, 'net_liquidating_value', 0) or 0)
+                    cash = float(getattr(balances, 'cash_balance', 0) or 0)
+                    
+                    account_info = {
+                        'account_number': account.account_number,
+                        'portfolio_value': nlv,
+                        'cash': cash,
+                        'status': 'active'
+                    }
+                    
+                    set_broker_status(broker_id, True, 'connected', account_info=account_info)
+                    
+                    return jsonify({
+                        'success': True,
+                        'message': f'Tastytrade {"Sandbox" if is_paper else "Live"} connected successfully!',
+                        'status': 'connected',
+                        'account': account_info
+                    })
+                    
+                except Exception as tt_err:
+                    error_msg = str(tt_err)
+                    set_broker_status(broker_id, False, 'error', error_msg)
+                    return jsonify({'success': False, 'error': f'Tastytrade connection failed: {error_msg}'}), 400
             
             return jsonify({'success': False, 'error': 'Broker connection not implemented'}), 501
             
