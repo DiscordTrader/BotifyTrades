@@ -77,6 +77,14 @@ except ImportError as e:
     print(f"[WARNING] Could not import AlpacaBroker: {e}")
     ALPACA_AVAILABLE = False
 
+# Import Tastytrade broker
+try:
+    from brokers.tastytrade_broker import TastytradeBroker
+    TASTYTRADE_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARNING] Could not import TastytradeBroker: {e}")
+    TASTYTRADE_AVAILABLE = False
+
 # Import BrokerSyncService for real-time trade synchronization
 from broker_sync_service import BrokerSyncService
 
@@ -3965,6 +3973,38 @@ class SelfClient(discord.Client):
             traceback.print_exc()
             self.paper_broker = None
 
+        # Initialize Tastytrade broker
+        self.tastytrade_broker = None
+        try:
+            if TASTYTRADE_AVAILABLE:
+                _original_print("[TASTYTRADE] Starting broker initialization...", flush=True)
+                from gui_app.broker_credentials_service import get_tastytrade_credentials
+                tt_creds = get_tastytrade_credentials()
+                
+                if tt_creds.get('username') and tt_creds.get('password'):
+                    _original_print("[TASTYTRADE] Creating TastytradeBroker instance...", flush=True)
+                    self.tastytrade_broker = TastytradeBroker({
+                        'username': tt_creds.get('username'),
+                        'password': tt_creds.get('password'),
+                        'paper_trade': tt_creds.get('paper_mode', True)
+                    })
+                    
+                    connected = await self.tastytrade_broker.connect()
+                    if connected:
+                        _original_print("[TASTYTRADE] ✓ Connected successfully", flush=True)
+                    else:
+                        _original_print("[TASTYTRADE] ⚠️ Connection failed", flush=True)
+                        self.tastytrade_broker = None
+                else:
+                    _original_print("[TASTYTRADE] No credentials configured - broker disabled", flush=True)
+            else:
+                _original_print("[TASTYTRADE] TastytradeBroker not available", flush=True)
+        except Exception as e:
+            _original_print(f"[TASTYTRADE] ⚠️ Initialization failed: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            self.tastytrade_broker = None
+
         # Initialize and start BrokerSyncService for real-time trade synchronization
         try:
             _original_print("[SYNC] Initializing trade synchronization service...", flush=True)
@@ -3972,11 +4012,12 @@ class SelfClient(discord.Client):
             
             # Create simple broker manager for sync service
             class BrokerManager:
-                def __init__(self, webull_broker, alpaca_paper_broker):
+                def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None):
                     self.webull_broker = webull_broker
                     self.alpaca_paper_broker = alpaca_paper_broker
+                    self.tastytrade_broker = tastytrade_broker
             
-            broker_manager = BrokerManager(self.broker, self.paper_broker)
+            broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker)
             db_instance = Database()
             
             self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=30)
@@ -5666,6 +5707,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elif broker_name_lower == 'ibkr_live' and self.broker and hasattr(self.broker, 'name') and self.broker.name == 'IBKR':
                             broker_instance = self.broker
                             _original_print(f"[MULTI-BROKER] Using IBKR LIVE broker")
+                        # Tastytrade Paper: 'tastytrade_paper', 'TASTYTRADE_PAPER'
+                        elif broker_name_lower == 'tastytrade_paper' and self.tastytrade_broker and self.tastytrade_broker.connected and not self.tastytrade_broker.is_live:
+                            broker_instance = self.tastytrade_broker
+                            _original_print(f"[MULTI-BROKER] Using Tastytrade PAPER broker")
+                        # Tastytrade Live: 'tastytrade_live', 'TASTYTRADE_LIVE', 'tastytrade', 'TASTYTRADE'
+                        elif broker_name_lower in ('tastytrade_live', 'tastytrade') and self.tastytrade_broker and self.tastytrade_broker.connected and self.tastytrade_broker.is_live:
+                            broker_instance = self.tastytrade_broker
+                            _original_print(f"[MULTI-BROKER] Using Tastytrade LIVE broker")
                         else:
                             _original_print(f"[MULTI-BROKER] ⚠️  Broker '{broker_name}' not available or not connected")
                             _original_print(f"[DEBUG] Requested: '{broker_name_lower}', paper_broker: {getattr(self.paper_broker, 'name', None) if self.paper_broker else None}, broker: {getattr(self.broker, 'name', None) if self.broker else None}")
@@ -5847,6 +5896,52 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             # Use Webull broker - fall through to normal execution
                             _original_print(f"[RISK] Routing to Webull broker")
                             # Continue with normal Webull execution below
+                        
+                        elif 'tastytrade' in risk_broker.lower():
+                            # Use Tastytrade broker for risk exit
+                            if self.tastytrade_broker and self.tastytrade_broker.connected:
+                                try:
+                                    if signal['asset'] == 'option':
+                                        _original_print(f"[RISK] Closing Tastytrade option position: {signal['symbol']}")
+                                        result = await self.tastytrade_broker.place_option_order(
+                                            symbol=signal['symbol'],
+                                            strike=signal.get('strike'),
+                                            expiry=signal.get('expiry'),
+                                            option_type=signal.get('opt_type', 'C'),
+                                            action='STC',
+                                            quantity=signal['qty'],
+                                            price=signal.get('price')
+                                        )
+                                    else:
+                                        _original_print(f"[RISK] Closing Tastytrade stock position: {signal['symbol']}")
+                                        result = await self.tastytrade_broker.place_stock_order(
+                                            symbol=signal['symbol'],
+                                            action='STC',
+                                            quantity=signal['qty'],
+                                            price=signal.get('price')
+                                        )
+                                    
+                                    broker_label = 'TASTYTRADE_LIVE' if self.tastytrade_broker.is_live else 'TASTYTRADE_PAPER'
+                                    if result and (result.success or result.order_id):
+                                        _original_print(f"[RISK] ✅ Tastytrade exit order placed: {result}")
+                                        resp = {'success': True, 'orderId': result.order_id, 'broker': broker_label}
+                                        order_success = True
+                                    else:
+                                        _original_print(f"[RISK] ❌ Tastytrade exit order failed: {result}")
+                                        resp = {'success': False, 'msg': str(result.message if result else 'Unknown error')}
+                                        order_success = False
+                                except Exception as e:
+                                    _original_print(f"[RISK] ❌ Tastytrade exit order error: {e}")
+                                    import traceback
+                                    traceback.print_exc()
+                                    resp = {'success': False, 'msg': str(e)}
+                                    order_success = False
+                            else:
+                                _original_print(f"[RISK] ❌ Tastytrade broker not available")
+                                resp = {'success': False, 'msg': 'Tastytrade broker not connected'}
+                                order_success = False
+                            
+                            continue  # Skip the rest of the single broker execution
                     
                     # Check if this is a paper trading signal from tracking channel
                     is_paper_trade = signal.get('_paper_trade_mode', False)
@@ -5870,9 +5965,33 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         if profit_target or stop_loss or trailing_stop:
                             _original_print(f"[PAPER TRADE] Risk settings - Profit Target: {profit_target}%, Stop Loss: {stop_loss}%, Trailing Stop: {trailing_stop}%")
                         
-                        # Execute paper trade using Webull paper account
+                        # Determine which paper broker to use based on channel settings
+                        # Check if Tastytrade paper is configured for this channel
+                        enabled_brokers = signal.get('_enabled_brokers', [])
+                        use_tastytrade_paper = (
+                            any(b.lower() == 'tastytrade_paper' for b in enabled_brokers) and
+                            self.tastytrade_broker and 
+                            self.tastytrade_broker.connected and 
+                            not self.tastytrade_broker.is_live
+                        )
+                        
+                        # Execute paper trade
                         try:
-                            if not self.paper_broker:
+                            if use_tastytrade_paper:
+                                # Use Tastytrade paper broker
+                                _original_print(f"[PAPER TRADE] ✓ Using Tastytrade paper broker")
+                                active_paper_broker = self.tastytrade_broker
+                                paper_broker_label = 'TASTYTRADE_PAPER'
+                            elif self.paper_broker:
+                                # Use Alpaca paper broker (default)
+                                _original_print(f"[PAPER TRADE] ✓ Using Alpaca paper broker")
+                                active_paper_broker = self.paper_broker
+                                paper_broker_label = 'ALPACA_PAPER'
+                            else:
+                                active_paper_broker = None
+                                paper_broker_label = 'SIMULATION'
+                            
+                            if not active_paper_broker:
                                 _original_print("[PAPER TRADE] ❌ Paper trading broker not available - falling back to simulation")
                                 # Fallback to simulation only
                                 resp = {
@@ -5883,15 +6002,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     'signal': signal
                                 }
                             else:
-                                _original_print(f"[PAPER TRADE] ✓ Paper broker instance available - Using: {self.paper_broker.__class__.__name__}")
-                                _original_print(f"[PAPER TRADE] Paper broker connected: {self.paper_broker.connected}")
+                                _original_print(f"[PAPER TRADE] ✓ Paper broker instance available - Using: {active_paper_broker.__class__.__name__}")
+                                _original_print(f"[PAPER TRADE] Paper broker connected: {active_paper_broker.connected}")
                                 
                                 # ======== POSITION SIZE CALCULATION FOR PAPER TRADES ========
                                 position_size_pct = signal.get('_position_size_pct')
                                 if position_size_pct and signal['action'] == 'BTO':
                                     try:
                                         _original_print(f"[PAPER TRADE] Calculating position size ({position_size_pct}% of portfolio)...")
-                                        account_info = await self.paper_broker.get_account_info()
+                                        account_info = await active_paper_broker.get_account_info()
                                         if account_info:
                                             buying_power = account_info.get('buying_power') or 0
                                             options_buying_power = account_info.get('options_buying_power') or buying_power
@@ -5963,7 +6082,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     signal['asset'] == 'stock' and 
                                     signal['action'] == 'BTO' and
                                     (signal.get('stop_loss_price') or signal.get('profit_target_price')) and
-                                    hasattr(self.paper_broker, 'place_bracket_order')
+                                    hasattr(active_paper_broker, 'place_bracket_order')
                                 )
                                 
                                 if use_bracket:
@@ -5974,7 +6093,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     if signal.get('profit_target_price'):
                                         _original_print(f"[PAPER TRADE]   Profit Target: ${signal['profit_target_price']}")
                                     
-                                    result = await self.paper_broker.place_bracket_order(
+                                    result = await active_paper_broker.place_bracket_order(
                                         symbol=signal['symbol'],
                                         action=signal['action'],
                                         quantity=signal['qty'],
@@ -5984,9 +6103,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     )
                                 else:
                                     # Regular order execution
-                                    _original_print(f"[PAPER TRADE] Calling paper_broker.place_{signal['asset']}_order()...")
+                                    _original_print(f"[PAPER TRADE] Calling {paper_broker_label}.place_{signal['asset']}_order()...")
                                     if signal['asset'] == 'option':
-                                        result = await self.paper_broker.place_option_order(
+                                        result = await active_paper_broker.place_option_order(
                                             symbol=signal['symbol'],
                                             strike=signal['strike'],
                                             expiry=signal['expiry'],
@@ -5996,31 +6115,31 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             price=signal['price']
                                         )
                                     else:
-                                        result = await self.paper_broker.place_stock_order(
+                                        result = await active_paper_broker.place_stock_order(
                                             symbol=signal['symbol'],
                                             action=signal['action'],
                                             quantity=signal['qty'],
                                             price=signal['price']
                                         )
                                 
-                                # Convert Alpaca OrderResult to dict format
+                                # Convert OrderResult to dict format
                                 if hasattr(result, 'success'):
-                                    # AlpacaBroker returns OrderResult object
+                                    # AlpacaBroker/TastytradeBroker returns OrderResult object
                                     resp = {
                                         'success': result.success,
                                         'msg': result.message,
                                         'paper_trade': True,
-                                        'broker': 'ALPACA_PAPER',
+                                        'broker': paper_broker_label,
                                         'orderId': result.order_id if result.success else None
                                     }
                                     if result.success:
-                                        _original_print(f"[PAPER TRADE] ✅ Order executed in Alpaca paper account")
+                                        _original_print(f"[PAPER TRADE] ✅ Order executed in {paper_broker_label} account")
                                         _original_print(f"[PAPER TRADE] Order ID: {result.order_id}")
                                 else:
                                     # Fallback for dict response
                                     resp = result
                                     resp['paper_trade'] = True
-                                    resp['broker'] = 'ALPACA_PAPER'
+                                    resp['broker'] = paper_broker_label
                         except Exception as e:
                             _original_print(f"[PAPER TRADE] ❌ Error executing paper trade: {e}")
                             import traceback

@@ -37,6 +37,11 @@ class TastytradeBroker(BrokerInterface):
         self.account = None
         self.paper_trade = config.get('paper_trade', True)
     
+    @property
+    def is_live(self) -> bool:
+        """Returns True if broker is in live trading mode (not paper/sandbox)"""
+        return not self.paper_trade
+    
     async def connect(self) -> bool:
         """Connect to Tastytrade using username/password or OAuth"""
         try:

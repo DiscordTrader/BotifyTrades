@@ -143,6 +143,13 @@ class BrokerSyncService:
         if hasattr(self.broker_manager, 'alpaca_paper_broker') and self.broker_manager.alpaca_paper_broker:
             brokers_to_sync.append(('ALPACA_PAPER', self.broker_manager.alpaca_paper_broker))
         
+        # Add Tastytrade if available
+        if hasattr(self.broker_manager, 'tastytrade_broker') and self.broker_manager.tastytrade_broker:
+            tt_broker = self.broker_manager.tastytrade_broker
+            # Determine if live or paper based on broker settings
+            broker_label = 'TASTYTRADE_LIVE' if getattr(tt_broker, 'is_live', False) else 'TASTYTRADE_PAPER'
+            brokers_to_sync.append((broker_label, tt_broker))
+        
         if not brokers_to_sync:
             print("[SYNC] No brokers available for sync", flush=True)
             return

@@ -1,7 +1,7 @@
 # BotifyTrades - Discord Trading Bot
 
 ## Overview
-BotifyTrades is a cross-platform Discord self-bot designed for automated stock and options trading. It offers automated trading across Webull, Alpaca, and Interactive Brokers, featuring advanced analytics, a dual-broker architecture for paper and live trading, and comprehensive risk management. The bot monitors Discord for trading signals, executes trades with pre-trade swing analysis, AI-powered post-trade analysis, and interactive commands, all managed via a Flask web control panel. The project aims to provide a robust, automated trading solution, enhancing user control and analytical capabilities in the Discord environment, with a focus on comprehensive automation and analytical tools within a Discord-centric workflow.
+BotifyTrades is a cross-platform Discord self-bot designed for automated stock and options trading. It offers automated trading across Webull, Alpaca, Interactive Brokers, and Tastytrade, featuring advanced analytics, a dual-broker architecture for paper and live trading, and comprehensive risk management. The bot monitors Discord for trading signals, executes trades with pre-trade swing analysis, AI-powered post-trade analysis, and interactive commands, all managed via a Flask web control panel. The project aims to provide a robust, automated trading solution, enhancing user control and analytical capabilities in the Discord environment, with a focus on comprehensive automation and analytical tools within a Discord-centric workflow.
 
 ## User Preferences
 - **Security**: Always use environment variables (Replit Secrets) for credentials and license keys
@@ -27,6 +27,14 @@ The system supports a dual-mode channel system for simultaneous execution and tr
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, and Interactive Brokers. The system emphasizes user experience through an interactive setup wizard, GUI-based credential management, automatic license renewal, and extensive documentation. Deployment options include Windows, Linux (with systemd), and AWS EC2. The Discord bot runs in a dedicated thread with an isolated asyncio event loop. Broker credentials are loaded hierarchically. Discord channel IDs and all bot settings, including signal regex patterns and allowed author/guild IDs, are GUI-manageable and stored in SQLite. Per-channel risk management can override global defaults. The `/packaging/` directory consolidates platform-specific build scripts. The `/license/` module handles licensing, supporting legacy, machine-bound, and activation-based licenses with a dedicated GUI. The BrokerSyncService handles case-insensitive broker name matching. Options data retrieval prioritizes Webull for live prices. A unified position key format (`{BROKER}_{SYMBOL}_{STRIKE}_{EXPIRY}_{C/P}`) is used across the system. The system employs a dual-build license architecture separating Admin and User deployments for license management and bot operation.
 
 ## Recent Changes
+
+### v3.2.0 - Tastytrade Broker Integration (2025-12-12)
+- **NEW: Tastytrade broker support** - Full integration with Tastytrade API for stocks and options trading
+- **NEW: TastytradeBroker class** - Implements BrokerInterface at `src/brokers/tastytrade_broker.py`
+- **NEW: Tastytrade credentials UI** - Settings page has paper and live credential sections
+- **NEW: Multi-broker execution** - Tastytrade available in per-channel broker selection
+- **NEW: BrokerSyncService integration** - Tastytrade positions sync to database
+- **NEW: Risk management routing** - Exit orders route correctly to Tastytrade
 
 ### v3.1.7 - GUI Region Metadata Preservation Fix (2025-12-12)
 - **ROOT CAUSE FIX: GUI "rzone" error** - GUI save credentials now preserves zone_var, rzone, region_id metadata
