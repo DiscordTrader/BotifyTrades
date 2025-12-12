@@ -116,9 +116,21 @@ class WebullAuth:
     def _try_saved_session(self, trading_pin: str) -> Dict[str, Any]:
         """Try to restore session from database-stored tokens. Returns dict with success/error."""
         try:
+            print(f"[WEBULL AUTH DEBUG] === _try_saved_session START ===")
             creds = self._load_credentials()
             if not creds:
+                print(f"[WEBULL AUTH DEBUG] No credentials found in database")
                 return {"success": False, "error": "No Webull credentials found in database"}
+            
+            # Debug: show all credential keys
+            print(f"[WEBULL AUTH DEBUG] Credential keys: {list(creds.keys())}")
+            print(f"[WEBULL AUTH DEBUG] access_token: {'yes' if creds.get('access_token') else 'no'} (len={len(creds.get('access_token', ''))})")
+            print(f"[WEBULL AUTH DEBUG] refresh_token: {'yes' if creds.get('refresh_token') else 'no'}")
+            print(f"[WEBULL AUTH DEBUG] zone_var: {creds.get('zone_var', 'NOT SET')}")
+            print(f"[WEBULL AUTH DEBUG] rzone: {creds.get('rzone', 'NOT SET')}")
+            print(f"[WEBULL AUTH DEBUG] account_id: {creds.get('account_id', 'NOT SET')}")
+            print(f"[WEBULL AUTH DEBUG] region_id: {creds.get('region_id', 'NOT SET')}")
+            print(f"[WEBULL AUTH DEBUG] device_id: {'yes' if creds.get('device_id') else 'no'}")
                 
             access_token = creds.get('access_token')
             refresh_token = creds.get('refresh_token')
@@ -127,6 +139,7 @@ class WebullAuth:
                 return {"success": False, "error": "No access token configured. Please enter your Webull access token."}
             
             # Use PUBLIC attributes (same as main bot WebullBroker.connect)
+            print(f"[WEBULL AUTH DEBUG] Applying tokens to webull client...")
             self.wb.access_token = access_token
             if refresh_token:
                 self.wb.refresh_token = refresh_token
@@ -158,20 +171,28 @@ class WebullAuth:
             
             # Check if zone_var is missing (tokens from before Nov 2025 API change)
             if not zone_var:
-                print(f"[WEBULL AUTH] ⚠ zone_var missing - will try get_account_id() first to obtain it")
+                print(f"[WEBULL AUTH DEBUG] ⚠ zone_var missing - will try get_account_id() first to obtain it")
+            
+            print(f"[WEBULL AUTH DEBUG] Current wb state before API calls:")
+            print(f"[WEBULL AUTH DEBUG]   wb.zone_var = {getattr(self.wb, 'zone_var', 'NOT SET')}")
+            print(f"[WEBULL AUTH DEBUG]   wb._account_id = {getattr(self.wb, '_account_id', 'NOT SET')}")
+            print(f"[WEBULL AUTH DEBUG]   wb._region_code = {getattr(self.wb, '_region_code', 'NOT SET')}")
             
             # Verify tokens - if no account_id, get it first (which also sets zone_var)
             try:
                 if not saved_account_id:
-                    print(f"[WEBULL AUTH] Getting account_id (will also set zone_var)...")
+                    print(f"[WEBULL AUTH DEBUG] Calling get_account_id()...")
                     account_id = self.wb.get_account_id()
+                    print(f"[WEBULL AUTH DEBUG] get_account_id() returned: {account_id}")
+                    print(f"[WEBULL AUTH DEBUG] After get_account_id, wb.zone_var = {getattr(self.wb, 'zone_var', 'NOT SET')}")
                     if account_id:
                         print(f"[WEBULL AUTH] ✓ Got account_id: {account_id}, zone_var: {self.wb.zone_var}")
                     else:
                         return {"success": False, "error": "Failed to get account ID. Token may be expired."}
                 
-                print(f"[WEBULL AUTH] Verifying tokens via get_account...")
+                print(f"[WEBULL AUTH DEBUG] Calling get_account()...")
                 account = self.wb.get_account()
+                print(f"[WEBULL AUTH DEBUG] get_account() returned: {'data' if account else 'empty'}")
                 if account:
                     print(f"[WEBULL AUTH] ✓ Token verification successful")
                     # Tokens work! Get trade token
