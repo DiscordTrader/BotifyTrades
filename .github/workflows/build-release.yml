@@ -1,13 +1,12 @@
-name: Build BotifyTrades
+name: Build and Release to Public Repo
 
 on:
   push:
-    branches: [main, master]
     tags:
       - 'v*'
-  pull_request:
-    branches: [main, master]
-  workflow_dispatch:
+
+env:
+  PUBLIC_REPO: DiscordTrader/BotifyTrades
 
 jobs:
   build-windows:
@@ -24,142 +23,52 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller pyarmor certifi
-          pip install discord.py-self webull flask cryptography requests openai aiohttp yfinance pandas numpy ta alpaca-py
-          pip install oauthlib requests-oauthlib python-dotenv ib_insync
+          pip install pyarmor pyinstaller certifi
+          pip install -r requirements.txt
 
-      - name: Obfuscate license code with PyArmor
+      - name: Get version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Backup license files
         run: |
-          mkdir -p dist_obf/src
-          pyarmor gen --output dist_obf/src src/license_client.py
-          pyarmor gen --output dist_obf/src src/license_manager.py
-          
-          mkdir -p src_backup
-          Copy-Item src/license_client.py src_backup/
-          Copy-Item src/license_manager.py src_backup/
-          
-          Copy-Item dist_obf/src/license_client.py src/ -Force
-          Copy-Item dist_obf/src/license_manager.py src/ -Force
-          
-          if (Test-Path "dist_obf/src/pyarmor_runtime_000000") {
-            Copy-Item -Recurse dist_obf/src/pyarmor_runtime_000000 src/
-          }
+          mkdir -p backup
+          copy license\config\constants.py backup\constants.py.bak
+          copy license\client\manager_secure.py backup\manager_secure.py.bak
+          copy license\client\manager_activation.py backup\manager_activation.py.bak
 
-      - name: Build Windows EXE
+      - name: Obfuscate with PyArmor
         run: |
-          python -m PyInstaller --clean --noconfirm `
-            --distpath "packaging/windows/dist" `
-            --workpath "packaging/windows/build_temp" `
-            packaging/windows/specs/botifytrades.spec
+          pyarmor gen -O dist_obf license\config\constants.py
+          pyarmor gen -O dist_obf license\client\manager_secure.py
+          pyarmor gen -O dist_obf license\client\manager_activation.py
+          copy /Y dist_obf\constants.py license\config\constants.py
+          copy /Y dist_obf\manager_secure.py license\client\manager_secure.py
+          copy /Y dist_obf\manager_activation.py license\client\manager_activation.py
+          if exist dist_obf\pyarmor_runtime_000000 xcopy /s /y /q dist_obf\pyarmor_runtime_000000 license\pyarmor_runtime_000000\
 
-      - name: Restore original source files
+      - name: Build EXE with PyInstaller
         run: |
-          Copy-Item src_backup/license_client.py src/ -Force
-          Copy-Item src_backup/license_manager.py src/ -Force
-          Remove-Item -Recurse -Force src_backup
-          Remove-Item -Recurse -Force dist_obf
-          if (Test-Path "src/pyarmor_runtime_000000") {
-            Remove-Item -Recurse -Force src/pyarmor_runtime_000000
-          }
+          pyinstaller --clean --noconfirm --distpath packaging\windows\dist --workpath packaging\windows\build_temp packaging\windows\specs\botifytrades.spec
 
-      - name: Prepare and ZIP distribution
-        shell: pwsh
+      - name: Create distribution package
         run: |
-          New-Item -ItemType Directory -Force -Path packaging/windows/dist/BotifyTrades
-          if (Test-Path "packaging/windows/dist/BotifyTrades.exe") {
-            Move-Item packaging/windows/dist/BotifyTrades.exe packaging/windows/dist/BotifyTrades/
-          } else {
-            Write-Error "ERROR: BotifyTrades.exe was not created! PyInstaller build failed."
-            exit 1
-          }
-          Copy-Item config.ini.example packaging/windows/dist/BotifyTrades/ -ErrorAction SilentlyContinue
-          Copy-Item GET_DISCORD_TOKEN.html packaging/windows/dist/BotifyTrades/ -ErrorAction SilentlyContinue
-          Copy-Item GET_WEBULL_TOKENS.html packaging/windows/dist/BotifyTrades/ -ErrorAction SilentlyContinue
-          Compress-Archive -Path packaging/windows/dist/BotifyTrades -DestinationPath BotifyTrades-Windows.zip -Force
+          mkdir packaging\windows\dist\config
+          if exist config.ini.example copy config.ini.example packaging\windows\dist\
+          if exist GET_DISCORD_TOKEN.html copy GET_DISCORD_TOKEN.html packaging\windows\dist\
+          if exist GET_WEBULL_TOKENS.html copy GET_WEBULL_TOKENS.html packaging\windows\dist\
 
-      - name: Upload to Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
+      - name: Zip distribution
+        run: |
+          cd packaging\windows\dist
+          Compress-Archive -Path * -DestinationPath ..\BotifyTrades-${{ steps.version.outputs.VERSION }}-Windows.zip
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: BotifyTrades-Windows.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller pyarmor certifi
-          pip install discord.py-self webull flask cryptography requests openai aiohttp yfinance pandas numpy ta alpaca-py
-          pip install oauthlib requests-oauthlib python-dotenv ib_insync
-
-      - name: Obfuscate license code with PyArmor
-        run: |
-          mkdir -p dist_obf/src
-          pyarmor gen --output dist_obf/src src/license_client.py
-          pyarmor gen --output dist_obf/src src/license_manager.py
-          
-          mkdir -p src_backup
-          cp src/license_client.py src_backup/
-          cp src/license_manager.py src_backup/
-          
-          cp dist_obf/src/license_client.py src/
-          cp dist_obf/src/license_manager.py src/
-          
-          if [ -d "dist_obf/src/pyarmor_runtime_000000" ]; then
-            cp -r dist_obf/src/pyarmor_runtime_000000 src/
-          fi
-
-      - name: Build macOS app
-        run: |
-          python -m PyInstaller --clean --noconfirm \
-            --distpath "packaging/macos/dist" \
-            --workpath "packaging/macos/build_temp" \
-            packaging/macos/specs/botifytrades.spec
-
-      - name: Restore original source files
-        run: |
-          cp src_backup/license_client.py src/
-          cp src_backup/license_manager.py src/
-          rm -rf src_backup dist_obf
-          rm -rf src/pyarmor_runtime_000000 2>/dev/null || true
-
-      - name: Prepare and ZIP distribution
-        run: |
-          if [ -f "packaging/macos/dist/BotifyTrades" ]; then
-            mkdir -p packaging/macos/dist/BotifyTrades_dist
-            mv packaging/macos/dist/BotifyTrades packaging/macos/dist/BotifyTrades_dist/
-          elif [ ! -d "packaging/macos/dist/BotifyTrades" ]; then
-            mkdir -p packaging/macos/dist/BotifyTrades
-          fi
-          DIST_DIR="packaging/macos/dist/BotifyTrades"
-          if [ -d "packaging/macos/dist/BotifyTrades_dist" ]; then
-            DIST_DIR="packaging/macos/dist/BotifyTrades_dist"
-          fi
-          cp config.ini.example "$DIST_DIR/" 2>/dev/null || true
-          if [ -d "packaging/macos/dist/BotifyTrades_dist" ]; then
-            rm -rf packaging/macos/dist/BotifyTrades 2>/dev/null || true
-            mv packaging/macos/dist/BotifyTrades_dist packaging/macos/dist/BotifyTrades
-          fi
-          cd packaging/macos/dist && zip -r ../../../BotifyTrades-macOS.zip BotifyTrades/
-
-      - name: Upload to Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: BotifyTrades-macOS.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: windows-build
+          path: packaging/windows/BotifyTrades-${{ steps.version.outputs.VERSION }}-Windows.zip
 
   build-linux:
     runs-on: ubuntu-latest
@@ -175,121 +84,65 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller pyarmor certifi
-          pip install discord.py-self webull flask cryptography requests openai aiohttp yfinance pandas numpy ta alpaca-py
-          pip install oauthlib requests-oauthlib python-dotenv ib_insync
+          pip install pyarmor pyinstaller certifi
+          pip install -r requirements.txt
 
-      - name: Obfuscate license code with PyArmor
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Obfuscate with PyArmor
         run: |
-          mkdir -p dist_obf/src
-          pyarmor gen --output dist_obf/src src/license_client.py
-          pyarmor gen --output dist_obf/src src/license_manager.py
-          
-          mkdir -p src_backup
-          cp src/license_client.py src_backup/
-          cp src/license_manager.py src_backup/
-          
-          cp dist_obf/src/license_client.py src/
-          cp dist_obf/src/license_manager.py src/
-          
-          if [ -d "dist_obf/src/pyarmor_runtime_000000" ]; then
-            cp -r dist_obf/src/pyarmor_runtime_000000 src/
-          fi
+          pyarmor gen -O dist_obf license/config/constants.py
+          pyarmor gen -O dist_obf license/client/manager_secure.py
+          pyarmor gen -O dist_obf license/client/manager_activation.py
+          cp -f dist_obf/constants.py license/config/constants.py
+          cp -f dist_obf/manager_secure.py license/client/manager_secure.py
+          cp -f dist_obf/manager_activation.py license/client/manager_activation.py
 
-      - name: Build Linux binary
+      - name: Build with PyInstaller
         run: |
-          python -m PyInstaller --clean --noconfirm \
-            --distpath "packaging/linux/dist" \
-            --workpath "packaging/linux/build_temp" \
-            packaging/linux/specs/botifytrades.spec
+          pyinstaller --clean --noconfirm --distpath packaging/linux/dist --workpath packaging/linux/build_temp packaging/linux/specs/botifytrades.spec
 
-      - name: Restore original source files
+      - name: Create tarball
         run: |
-          cp src_backup/license_client.py src/
-          cp src_backup/license_manager.py src/
-          rm -rf src_backup dist_obf
-          rm -rf src/pyarmor_runtime_000000 2>/dev/null || true
+          chmod +x packaging/linux/dist/BotifyTrades
+          cd packaging/linux/dist
+          tar -czvf ../BotifyTrades-${{ steps.version.outputs.VERSION }}-Linux.tar.gz *
 
-      - name: Prepare and ZIP distribution
-        run: |
-          if [ -f "packaging/linux/dist/BotifyTrades" ]; then
-            mkdir -p packaging/linux/dist/BotifyTrades_dist
-            mv packaging/linux/dist/BotifyTrades packaging/linux/dist/BotifyTrades_dist/
-          elif [ ! -d "packaging/linux/dist/BotifyTrades" ]; then
-            mkdir -p packaging/linux/dist/BotifyTrades
-          fi
-          DIST_DIR="packaging/linux/dist/BotifyTrades"
-          if [ -d "packaging/linux/dist/BotifyTrades_dist" ]; then
-            DIST_DIR="packaging/linux/dist/BotifyTrades_dist"
-          fi
-          cp config.ini.example "$DIST_DIR/" 2>/dev/null || true
-          if [ -d "packaging/linux/dist/BotifyTrades_dist" ]; then
-            rm -rf packaging/linux/dist/BotifyTrades 2>/dev/null || true
-            mv packaging/linux/dist/BotifyTrades_dist packaging/linux/dist/BotifyTrades
-          fi
-          cd packaging/linux/dist && zip -r ../../../BotifyTrades-Linux.zip BotifyTrades/
-
-      - name: Upload to Release (Private Repo)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: BotifyTrades-Linux.zip
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: linux-build
+          path: packaging/linux/BotifyTrades-${{ steps.version.outputs.VERSION }}-Linux.tar.gz
 
-  publish-to-public:
-    needs: [build-windows, build-macos, build-linux]
-    if: always() && startsWith(github.ref, 'refs/tags/v') && (needs.build-windows.result == 'success' || needs.build-linux.result == 'success')
+  release-to-public:
+    needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
     steps:
-      - name: Get release assets from private repo
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG_NAME=${GITHUB_REF#refs/tags/}
-          echo "Downloading release assets for $TAG_NAME"
-          mkdir -p release_assets
-          
-          echo "Waiting for release assets to be ready..."
-          sleep 90
-          
-          for i in 1 2 3; do
-            echo "Download attempt $i..."
-            gh release download "$TAG_NAME" \
-              --repo "${{ github.repository }}" \
-              --dir release_assets \
-              --pattern "*.zip" && break
-            echo "Attempt $i failed, waiting 30s..."
-            sleep 30
-          done
-          
-          echo "Downloaded assets:"
-          ls -la release_assets/
-          
-          if [ ! "$(ls -A release_assets/*.zip 2>/dev/null)" ]; then
-            echo "ERROR: No ZIP files downloaded!"
-            exit 1
-          fi
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      - name: Create release in public repo
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Create Release on Public Repo
+        uses: softprops/action-gh-release@v1
+        with:
+          repository: ${{ env.PUBLIC_REPO }}
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: BotifyTrades ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## BotifyTrades ${{ steps.version.outputs.VERSION }}
+            
+            ### Downloads
+            - **Windows**: BotifyTrades-${{ steps.version.outputs.VERSION }}-Windows.zip
+            - **Linux**: BotifyTrades-${{ steps.version.outputs.VERSION }}-Linux.tar.gz
+          files: |
+            ./artifacts/windows-build/*.zip
+            ./artifacts/linux-build/*.tar.gz
         env:
-          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
-        run: |
-          TAG_NAME=${GITHUB_REF#refs/tags/}
-          
-          echo "Creating release $TAG_NAME in public repo..."
-          
-          if gh release view "$TAG_NAME" --repo "DiscordTrader/BotifyTrades-Releases" > /dev/null 2>&1; then
-            echo "Release $TAG_NAME already exists, deleting and recreating..."
-            gh release delete "$TAG_NAME" --repo "DiscordTrader/BotifyTrades-Releases" --yes || true
-            sleep 5
-          fi
-          
-          gh release create "$TAG_NAME" \
-            --repo "DiscordTrader/BotifyTrades-Releases" \
-            --title "BotifyTrades $TAG_NAME" \
-            --notes "Download the ZIP for your platform and extract. Windows: BotifyTrades-Windows.zip, macOS: BotifyTrades-macOS.zip, Linux: BotifyTrades-Linux.zip" \
-            release_assets/*.zip
-          
-          echo "Successfully published $TAG_NAME to public repo!"
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
