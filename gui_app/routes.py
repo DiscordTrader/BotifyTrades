@@ -6368,14 +6368,10 @@ def register_routes(app):
                 access_token = data.get('access_token', existing.get('access_token', ''))
                 refresh_token = data.get('refresh_token', existing.get('refresh_token', ''))
             
-            # VALIDATION: Detect and reject web tokens (dc_us_tech, dc_*)
-            # These tokens from app.webull.com cannot access trading API
-            if access_token and (access_token.startswith('dc_us_tech') or access_token.startswith('dc_')):
-                return jsonify({
-                    'success': False,
-                    'error': 'Web token detected! Tokens starting with "dc_" are from the Webull website and cannot access the trading API. Please use Email/Password login instead, or get a mobile token from the Webull mobile app.',
-                    'token_type_error': True
-                }), 400
+            # NOTE: Web tokens (dc_us_tech) from app.webull.com may not work for trading
+            # We warn but don't block - let user try and get proper error from API
+            if access_token and access_token.startswith('dc_'):
+                print("[Webull] Warning: Token starts with 'dc_' - this may be a web token that won't work for trading API")
             
             save_webull_credentials(
                 email=new_email,

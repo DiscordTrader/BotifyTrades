@@ -163,14 +163,6 @@ class WebullAuth:
             if not access_token:
                 return {"success": False, "error": "No access token configured. Please enter your Webull access token."}
             
-            # Check for web tokens (dc_us_tech) - these don't work for trading API
-            if access_token.startswith('dc_us_tech') or access_token.startswith('dc_'):
-                return {
-                    "success": False, 
-                    "error": "Web token detected (starts with 'dc_'). This token is from the Webull website and cannot access the trading API. Please use Email/Password login instead, or get a mobile token from the Webull mobile app.",
-                    "token_type_error": True
-                }
-            
             # Use PUBLIC attributes (same as main bot WebullBroker.connect)
             print(f"[WEBULL AUTH DEBUG] Applying tokens to webull client...", flush=True)
             self.wb.access_token = access_token
