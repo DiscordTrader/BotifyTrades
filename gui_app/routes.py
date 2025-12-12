@@ -6363,10 +6363,18 @@ def register_routes(app):
             if credentials_changed:
                 access_token = ''
                 refresh_token = ''
-                print("[Webull] Credentials changed - clearing old tokens for fresh authentication")
+                # Clear region data too when credentials change
+                zone_var = ''
+                rzone = ''
+                region_id = ''
+                print("[Webull] Credentials changed - clearing old tokens and region data for fresh authentication")
             else:
                 access_token = data.get('access_token', existing.get('access_token', ''))
                 refresh_token = data.get('refresh_token', existing.get('refresh_token', ''))
+                # PRESERVE region metadata from existing credentials (fixes rzone error)
+                zone_var = data.get('zone_var', existing.get('zone_var', ''))
+                rzone = data.get('rzone', existing.get('rzone', ''))
+                region_id = data.get('region_id', existing.get('region_id', ''))
             
             # NOTE: Web tokens (dc_us_tech) from app.webull.com may not work for trading
             # We warn but don't block - let user try and get proper error from API
@@ -6380,7 +6388,10 @@ def register_routes(app):
                 device_id=data.get('device_id', existing.get('device_id', '')),
                 access_token=access_token,
                 refresh_token=refresh_token,
-                paper_mode=data.get('paper_mode', existing.get('paper_mode', True))
+                paper_mode=data.get('paper_mode', existing.get('paper_mode', True)),
+                zone_var=zone_var,
+                rzone=rzone,
+                region_id=region_id
             )
             
             message = 'Webull credentials saved.'
@@ -6407,6 +6418,7 @@ def register_routes(app):
             
             existing = get_webull_credentials()
             
+            # Preserve region data - it doesn't change when just clearing tokens
             save_webull_credentials(
                 email=existing.get('email', ''),
                 password=existing.get('password', ''),
@@ -6414,10 +6426,13 @@ def register_routes(app):
                 device_id=existing.get('device_id', ''),
                 access_token='',
                 refresh_token='',
-                paper_mode=existing.get('paper_mode', True)
+                paper_mode=existing.get('paper_mode', True),
+                zone_var=existing.get('zone_var', ''),
+                rzone=existing.get('rzone', ''),
+                region_id=existing.get('region_id', '')
             )
             
-            print("[Webull] Tokens cleared manually - will require fresh authentication")
+            print("[Webull] Tokens cleared manually - region data preserved, will require fresh authentication")
             
             return jsonify({
                 'success': True,

@@ -28,6 +28,12 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 
 ## Recent Changes
 
+### v3.1.7 - GUI Region Metadata Preservation Fix (2025-12-12)
+- **ROOT CAUSE FIX: GUI "rzone" error** - GUI save credentials now preserves zone_var, rzone, region_id metadata
+- **FIX: Consistency between bot and GUI** - Main bot worked because it had monkey-patch, GUI was losing region data
+- **FIX: Clear-tokens preserves region** - Clearing tokens no longer loses region metadata
+- **CLARIFIED: Replit vs Local difference** - Both now use same region handling pattern
+
 ### v3.1.6 - Web Token Detection & GUI-Bot Token Consistency (2025-12-12)
 - **FIX: Web token detection** - GUI now rejects `dc_us_tech` web tokens that can't access trading API
 - **FIX: Token validation in save** - GUI Settings validates tokens before saving to database
