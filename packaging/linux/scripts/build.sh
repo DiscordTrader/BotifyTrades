@@ -1,6 +1,6 @@
 #!/bin/bash
 # ========================================================================
-#   BotifyTrades - Linux Build with PyArmor Obfuscation
+#   BotifyTrades - Linux Build (PyArmor Protected)
 #   Protection: PyArmor + PyInstaller + UPX Compression
 #   Note: NO GIT REQUIRED - version is read from upgrade/version.py
 # ========================================================================

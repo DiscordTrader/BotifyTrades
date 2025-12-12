@@ -1,103 +1,120 @@
-# Windows EXE - Quick Start Guide
+# BotifyTrades - EXE Quick Start Guide
 
-## ✅ What's Ready
+## What's Ready
 
-Your Discord Trading Bot can now be packaged as a **standalone Windows executable** with an **interactive setup wizard** that securely stores credentials.
+Your Discord Trading Bot can be packaged as a **standalone executable** with:
+- **PyArmor obfuscation** - License code protection
+- **Interactive setup wizard** - Secure credential storage
+- **Cross-platform support** - Windows, Linux, macOS
 
 ---
 
-## 🚀 How to Build the EXE
+## How to Build
 
-### Step 1: Prepare Your Environment
+**NO GIT REQUIRED** - Version is read from `upgrade/version.py`
 
-On your **Windows machine** (not Replit):
+### Windows
 
-1. Install Python 3.11+ from [python.org](https://www.python.org/downloads/)
-2. Download your project files from Replit
-
-### Step 2: Install Dependencies
-
-Open Command Prompt in your project folder:
-
-```bash
-pip install -r requirements.txt
+```batch
+cd packaging\windows\scripts
+build.bat
 ```
 
-This installs:
-- All trading bot dependencies
+Output: `packaging\windows\dist\BotifyTrades.exe`
+
+### Linux
+
+```bash
+cd packaging/linux/scripts
+chmod +x build.sh
+./build.sh
+```
+
+Output: `packaging/linux/dist/BotifyTrades`
+
+### macOS
+
+```bash
+cd packaging/macos/scripts
+chmod +x build.sh
+./build.sh
+```
+
+Output: `packaging/macos/dist/BotifyTrades`
+
+---
+
+## Prerequisites
+
+### All Platforms
+
+1. Python 3.8+ installed
+2. Project dependencies installed: `pip install -r requirements.txt`
+
+### Windows Specific
+
 - `pywin32` (for Windows DPAPI encryption)
 
-### Step 3: Build the EXE
+### Build Dependencies (auto-installed)
 
-Simply run:
-
-```bash
-build_exe.bat
-```
-
-This automated script will:
-- Check for PyInstaller (installs if needed)
-- Check for pywin32 (installs if needed)
-- Build a standalone EXE (takes 2-3 minutes)
-- Output to `dist\DiscordTradingBot.exe`
-
-### Step 4: Create Distribution Package
-
-```bash
-create_distribution.bat
-```
-
-This creates a `TradingBot-Distribution\` folder with:
-- `DiscordTradingBot.exe` (the standalone executable)
-- `config.ini.example` (configuration template)
-- `EXE_SETUP.md` (user setup instructions)
-- `README.md` (documentation)
-
-###Step 5: Test Before Distributing
-
-1. Copy the `TradingBot-Distribution\` folder to a test location
-2. Run `DiscordTradingBot.exe`
-3. Complete the interactive setup wizard
-4. Verify the bot connects and monitors positions
+- `pyarmor` - Code obfuscation
+- `pyinstaller` - Executable packaging
+- `upx` (optional) - Compression
 
 ---
 
-## 🔒 Security Features
+## Build Process
+
+The build script automatically:
+
+1. Checks for Python, PyArmor, PyInstaller
+2. Backs up original license files
+3. Obfuscates license code with PyArmor
+4. Builds standalone executable
+5. Compresses with UPX (if available)
+6. Creates distribution package
+7. Restores original files (cleanup)
+
+---
+
+## Security Features
+
+### PyArmor Obfuscation
+- License validation code is obfuscated
+- Makes reverse engineering difficult
+- Runtime protection for sensitive code
 
 ### Windows DPAPI Encryption
-- Credentials are encrypted using **Windows Data Protection API**
-- Only your Windows user account can decrypt them
+- Credentials encrypted with Windows Data Protection API
+- Only the user's Windows account can decrypt
 - Credentials cannot be decrypted on another computer
-- Provides true security (not just obfuscation)
 
-### How It Works
+### How Credentials Work
 1. User runs EXE for the first time
 2. Interactive wizard prompts for credentials
-3. Credentials encrypted with Windows DPAPI
-4. Stored at: `C:\Users\YourName\.discord_trading_bot\credentials.dat`
-5. On subsequent runs, credentials auto-load
+3. Credentials encrypted and stored securely
+4. On subsequent runs, credentials auto-load
 
 ---
 
-## 📦 Distribution Checklist
+## Distribution Checklist
 
-Before sharing the EXE with others:
+Before sharing the executable:
 
-- [ ] Test on a clean Windows machine (no Python installed)
+- [ ] Test on a clean machine (no Python installed)
 - [ ] Verify setup wizard launches on first run
 - [ ] Confirm credentials persist across restarts
 - [ ] Test signal detection and position monitoring
-- [ ] **Add strong legal disclaimers** (see EXE_SETUP.md)
-- [ ] **Never include your personal credentials** in the distribution
-- [ ] **Never include your personal config.ini** (use config.ini.example)
+- [ ] **Never include your personal credentials**
+- [ ] **Never include your personal config.ini**
 
 ---
 
-## ⚠️ Important Warnings
+## Important Warnings
 
 ### Legal & Terms of Service
 - **Discord Self-Bots VIOLATE Discord's ToS** - accounts may be terminated
-- Distribute for **personal use only** to avoid legal liability
+- Distribute for **personal use only**
 - **No warranty** - users accept all risks
 
 ### Trading Risks
@@ -107,67 +124,48 @@ Before sharing the EXE with others:
 
 ### Security
 - Never distribute your personal credentials
-- Users must obtain their own Discord/Webull tokens
-- Each user runs the wizard to set up their own credentials
+- Users must obtain their own tokens
+- Each user runs the wizard for their own credentials
 
 ---
 
-## 🎯 Next Steps (Phase 2)
+## Troubleshooting
 
-The current implementation is **Phase 1: Simple EXE**. For Phase 2, you can add:
-
-### Licensing System Features
-1. **License Key Validation**
-   - Time-based expiration (7 days, 365 days, etc.)
-   - Machine-specific activation
-   - Online or offline validation
-
-2. **Obfuscation** (makes decompilation harder)
-   - PyArmor or similar tools
-   - Code obfuscation
-
-3. **Usage Tracking**
-   - License server (requires hosting)
-   - Activation/deactivation system
-
-**Current Setup is Ready:** The credential storage and setup wizard are designed to integrate with licensing in Phase 2.
-
----
-
-## 📝 Files You Created
-
-| File | Purpose |
-|------|---------|
-| `src/setup_wizard.py` | Interactive credential collection and DPAPI encryption |
-| `build_exe.bat` | Automated PyInstaller build script |
-| `create_distribution.bat` | Package EXE for distribution |
-| `build_instructions.md` | Developer build guide |
-| `EXE_SETUP.md` | End-user setup instructions with warnings |
-| `BUILD_EXE_QUICKSTART.md` | This file - quick reference |
-
----
-
-## 🆘 Troubleshooting
-
-### "pywin32 not found" during build
+### Build fails with "PyArmor not found"
 ```bash
-pip install pywin32
+pip install pyarmor
 ```
 
 ### EXE crashes immediately
 - Check console output for errors
-- Ensure `config.ini.example` is in the same folder as the EXE
-- Try running from Command Prompt to see error messages
+- Ensure config files are in the same folder
+- Run from Command Prompt/Terminal to see errors
 
 ### Credentials don't persist
-- Check folder permissions for `C:\Users\YourName\.discord_trading_bot\`
-- Verify pywin32 is installed
-- Try deleting the folder and re-running setup wizard
+- Check folder permissions
+- Verify pywin32 is installed (Windows)
+- Try deleting credentials folder and re-run wizard
 
-### Build takes too long
-- Normal build time: 2-3 minutes
-- First build is slower (downloads dependencies)
+### macOS Security Block
+If blocked by Gatekeeper:
+```bash
+xattr -cr ./BotifyTrades
+```
+Or right-click and select "Open"
 
 ---
 
-**You're Ready to Build!** Run `build_exe.bat` on your Windows machine to create the standalone executable.
+## Version Information
+
+Version is displayed at startup:
+```
+============================================================
+BUILD VERSION: v2.1.35
+============================================================
+```
+
+To update version, edit `upgrade/version.py`:
+```python
+APP_VERSION = "2.1.35"
+BUILD_DATE = "2025-12-11"
+```
