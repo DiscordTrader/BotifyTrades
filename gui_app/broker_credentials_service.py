@@ -67,9 +67,12 @@ def save_webull_credentials(
     refresh_token: str = '',
     token_expire: str = '',
     uuid: str = '',
-    paper_mode: bool = True
+    paper_mode: bool = True,
+    region_id: str = '',
+    zone_id: str = '',
+    rzone: str = ''
 ):
-    """Save Webull broker credentials"""
+    """Save Webull broker credentials (including region metadata for API v2)"""
     save_config('webull_credentials', {
         'email': email,
         'password': password,
@@ -79,7 +82,10 @@ def save_webull_credentials(
         'refresh_token': refresh_token,
         'token_expire': token_expire,
         'uuid': uuid,
-        'paper_mode': paper_mode
+        'paper_mode': paper_mode,
+        'region_id': region_id,
+        'zone_id': zone_id,
+        'rzone': rzone
     })
 
 
@@ -92,12 +98,18 @@ def update_webull_tokens(token_data: Dict[str, Any]):
     existing['uuid'] = token_data.get('uuid', existing.get('uuid', ''))
     if token_data.get('device_id'):
         existing['device_id'] = token_data.get('device_id')
+    if token_data.get('region_id'):
+        existing['region_id'] = token_data.get('region_id')
+    if token_data.get('zone_id'):
+        existing['zone_id'] = token_data.get('zone_id')
+    if token_data.get('rzone'):
+        existing['rzone'] = token_data.get('rzone')
     save_config('webull_credentials', existing)
 
 
 def get_webull_credentials() -> Dict[str, Any]:
-    """Get Webull credentials"""
-    return load_config('webull_credentials') or {
+    """Get Webull credentials (including region metadata for API v2)"""
+    defaults = {
         'email': '',
         'password': '',
         'trade_pin': '',
@@ -106,8 +118,16 @@ def get_webull_credentials() -> Dict[str, Any]:
         'refresh_token': '',
         'token_expire': '',
         'uuid': '',
-        'paper_mode': True
+        'paper_mode': True,
+        'region_id': '',
+        'zone_id': '',
+        'rzone': ''
     }
+    creds = load_config('webull_credentials') or {}
+    for key, default_val in defaults.items():
+        if key not in creds:
+            creds[key] = default_val
+    return creds
 
 
 def webull_credentials_adapter(action: str, data: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:

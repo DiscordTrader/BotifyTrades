@@ -28,6 +28,14 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 
 ## Recent Changes
 
+### v3.1.4 - Webull API v2 Region Metadata Fix (2025-12-12)
+- **ROOT CAUSE FIX: KeyError 'rzone'** - Webull API changed in Nov 2025 to require region metadata (rzone, region_id, zone_id)
+- **FIX: Credential storage extended** - Now persists and restores region metadata alongside tokens
+- **FIX: Both GUI and bot auth paths** - Applied consistent region handling to webull_auth.py AND selfbot_webull.py
+- **FIX: _apply_tokens updated** - Main bot now supports region_data parameter for session restoration
+- **FIX: Session save includes region** - _save_session extracts and persists rzone from webull client session
+- **IMPROVED: Defensive restoration** - Warns when region metadata is missing instead of crashing
+
 ### v3.1.3 - Webull Auth Schema Drift Fix & CI/CD Pipeline (2025-12-12)
 - **FIX: KeyError 'rzone' handling** - Added specific KeyError catch for Webull API schema changes
 - **FIX: Stale token detection** - Tokens now marked stale with friendly message when API schema drifts

@@ -133,6 +133,35 @@ class WebullAuth:
             if creds.get('device_id'):
                 self.wb.did = creds.get('device_id')
             
+            # Apply region metadata if available (required by Webull API v2 - Nov 2025+)
+            region_id = creds.get('region_id', '')
+            zone_id = creds.get('zone_id', '')
+            rzone = creds.get('rzone', '')
+            
+            if region_id:
+                try:
+                    self.wb._region_id = region_id
+                except Exception:
+                    pass
+            if zone_id:
+                try:
+                    self.wb._zone_id = zone_id
+                except Exception:
+                    pass
+            if rzone:
+                try:
+                    # The webull library accesses session['rzone'] - we need to set it properly
+                    if hasattr(self.wb, '_session') and isinstance(self.wb._session, dict):
+                        self.wb._session['rzone'] = rzone
+                    elif hasattr(self.wb, 'session') and isinstance(self.wb.session, dict):
+                        self.wb.session['rzone'] = rzone
+                except Exception:
+                    pass
+            
+            # Check if region metadata is missing (tokens from before Nov 2025 API change)
+            if not rzone and not region_id:
+                print(f"[WEBULL AUTH] ⚠ Region metadata missing - tokens may be from old API version")
+            
             # Verify tokens by calling get_account (same as main bot)
             try:
                 print(f"[WEBULL AUTH] Verifying tokens via get_account...")
@@ -198,19 +227,30 @@ class WebullAuth:
         return None
     
     def _save_session(self):
-        """Save session tokens to database via adapter"""
+        """Save session tokens to database via adapter (including region metadata for API v2)"""
         if not self._credentials_adapter:
             return
             
         try:
+            # Extract region metadata from webull client (required for API v2)
+            rzone = ''
+            if hasattr(self.wb, '_session') and isinstance(self.wb._session, dict):
+                rzone = self.wb._session.get('rzone', '')
+            elif hasattr(self.wb, 'session') and isinstance(self.wb.session, dict):
+                rzone = self.wb.session.get('rzone', '')
+            
             token_data = {
-                'access_token': getattr(self.wb, '_access_token', None),
-                'refresh_token': getattr(self.wb, '_refresh_token', None),
+                'access_token': getattr(self.wb, '_access_token', None) or getattr(self.wb, 'access_token', None),
+                'refresh_token': getattr(self.wb, '_refresh_token', None) or getattr(self.wb, 'refresh_token', None),
                 'token_expire': getattr(self.wb, '_token_expire', None),
                 'uuid': getattr(self.wb, '_uuid', None),
-                'device_id': getattr(self.wb, '_did', None)
+                'device_id': getattr(self.wb, '_did', None) or getattr(self.wb, 'did', None),
+                'region_id': getattr(self.wb, '_region_id', '') or getattr(self.wb, 'region_id', ''),
+                'zone_id': getattr(self.wb, '_zone_id', '') or getattr(self.wb, 'zone_id', ''),
+                'rzone': rzone
             }
             self._credentials_adapter('save', token_data)
+            print(f"[WEBULL AUTH] ✓ Session saved (rzone: {'yes' if rzone else 'no'})")
         except Exception as e:
             print(f"[WEBULL AUTH] Warning: Could not save session: {e}")
     

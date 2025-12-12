@@ -1821,7 +1821,7 @@ class WebullBroker:
             else:
                 wb._did = WB_DID
 
-    def _apply_tokens(self, wb, access_token, refresh_token, did_from_web=None):
+    def _apply_tokens(self, wb, access_token, refresh_token, did_from_web=None, region_data=None):
         for attr, val in (("_access_token", access_token),
                           ("access_token", access_token),
                           ("_refresh_token", refresh_token),
@@ -1843,6 +1843,22 @@ class WebullBroker:
                     wb._did = did_from_web
             except Exception:
                 pass
+        if region_data:
+            rzone = region_data.get('rzone', '')
+            region_id = region_data.get('region_id', '')
+            zone_id = region_data.get('zone_id', '')
+            if rzone and hasattr(wb, '_session') and isinstance(wb._session, dict):
+                wb._session['rzone'] = rzone
+            if region_id:
+                try:
+                    wb._region_id = region_id
+                except Exception:
+                    pass
+            if zone_id:
+                try:
+                    wb._zone_id = zone_id
+                except Exception:
+                    pass
 
     async def login(self):
         def _blocking_login():
