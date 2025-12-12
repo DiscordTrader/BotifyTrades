@@ -115,22 +115,24 @@ class WebullAuth:
     
     def _try_saved_session(self, trading_pin: str) -> Dict[str, Any]:
         """Try to restore session from database-stored tokens. Returns dict with success/error."""
+        import sys
+        import traceback
         try:
-            print(f"[WEBULL AUTH DEBUG] === _try_saved_session START ===")
+            print(f"[WEBULL AUTH DEBUG] === _try_saved_session START ===", flush=True)
             creds = self._load_credentials()
             if not creds:
-                print(f"[WEBULL AUTH DEBUG] No credentials found in database")
+                print(f"[WEBULL AUTH DEBUG] No credentials found in database", flush=True)
                 return {"success": False, "error": "No Webull credentials found in database"}
             
             # Debug: show all credential keys
-            print(f"[WEBULL AUTH DEBUG] Credential keys: {list(creds.keys())}")
-            print(f"[WEBULL AUTH DEBUG] access_token: {'yes' if creds.get('access_token') else 'no'} (len={len(creds.get('access_token', ''))})")
-            print(f"[WEBULL AUTH DEBUG] refresh_token: {'yes' if creds.get('refresh_token') else 'no'}")
-            print(f"[WEBULL AUTH DEBUG] zone_var: {creds.get('zone_var', 'NOT SET')}")
-            print(f"[WEBULL AUTH DEBUG] rzone: {creds.get('rzone', 'NOT SET')}")
-            print(f"[WEBULL AUTH DEBUG] account_id: {creds.get('account_id', 'NOT SET')}")
-            print(f"[WEBULL AUTH DEBUG] region_id: {creds.get('region_id', 'NOT SET')}")
-            print(f"[WEBULL AUTH DEBUG] device_id: {'yes' if creds.get('device_id') else 'no'}")
+            print(f"[WEBULL AUTH DEBUG] Credential keys: {list(creds.keys())}", flush=True)
+            print(f"[WEBULL AUTH DEBUG] access_token: {'yes' if creds.get('access_token') else 'no'} (len={len(creds.get('access_token', ''))})", flush=True)
+            print(f"[WEBULL AUTH DEBUG] refresh_token: {'yes' if creds.get('refresh_token') else 'no'}", flush=True)
+            print(f"[WEBULL AUTH DEBUG] zone_var: {creds.get('zone_var', 'NOT SET')}", flush=True)
+            print(f"[WEBULL AUTH DEBUG] rzone: {creds.get('rzone', 'NOT SET')}", flush=True)
+            print(f"[WEBULL AUTH DEBUG] account_id: {creds.get('account_id', 'NOT SET')}", flush=True)
+            print(f"[WEBULL AUTH DEBUG] region_id: {creds.get('region_id', 'NOT SET')}", flush=True)
+            print(f"[WEBULL AUTH DEBUG] device_id: {'yes' if creds.get('device_id') else 'no'}", flush=True)
                 
             access_token = creds.get('access_token')
             refresh_token = creds.get('refresh_token')
@@ -139,7 +141,7 @@ class WebullAuth:
                 return {"success": False, "error": "No access token configured. Please enter your Webull access token."}
             
             # Use PUBLIC attributes (same as main bot WebullBroker.connect)
-            print(f"[WEBULL AUTH DEBUG] Applying tokens to webull client...")
+            print(f"[WEBULL AUTH DEBUG] Applying tokens to webull client...", flush=True)
             self.wb.access_token = access_token
             if refresh_token:
                 self.wb.refresh_token = refresh_token
@@ -171,20 +173,20 @@ class WebullAuth:
             
             # Check if zone_var is missing (tokens from before Nov 2025 API change)
             if not zone_var:
-                print(f"[WEBULL AUTH DEBUG] ⚠ zone_var missing - will try get_account_id() first to obtain it")
+                print(f"[WEBULL AUTH DEBUG] ⚠ zone_var missing - will try get_account_id() first to obtain it", flush=True)
             
-            print(f"[WEBULL AUTH DEBUG] Current wb state before API calls:")
-            print(f"[WEBULL AUTH DEBUG]   wb.zone_var = {getattr(self.wb, 'zone_var', 'NOT SET')}")
-            print(f"[WEBULL AUTH DEBUG]   wb._account_id = {getattr(self.wb, '_account_id', 'NOT SET')}")
-            print(f"[WEBULL AUTH DEBUG]   wb._region_code = {getattr(self.wb, '_region_code', 'NOT SET')}")
+            print(f"[WEBULL AUTH DEBUG] Current wb state before API calls:", flush=True)
+            print(f"[WEBULL AUTH DEBUG]   wb.zone_var = {getattr(self.wb, 'zone_var', 'NOT SET')}", flush=True)
+            print(f"[WEBULL AUTH DEBUG]   wb._account_id = {getattr(self.wb, '_account_id', 'NOT SET')}", flush=True)
+            print(f"[WEBULL AUTH DEBUG]   wb._region_code = {getattr(self.wb, '_region_code', 'NOT SET')}", flush=True)
             
             # Verify tokens - if no account_id, get it first (which also sets zone_var)
             try:
                 if not saved_account_id:
-                    print(f"[WEBULL AUTH DEBUG] Calling get_account_id()...")
+                    print(f"[WEBULL AUTH DEBUG] Calling get_account_id()...", flush=True)
                     account_id = self.wb.get_account_id()
-                    print(f"[WEBULL AUTH DEBUG] get_account_id() returned: {account_id}")
-                    print(f"[WEBULL AUTH DEBUG] After get_account_id, wb.zone_var = {getattr(self.wb, 'zone_var', 'NOT SET')}")
+                    print(f"[WEBULL AUTH DEBUG] get_account_id() returned: {account_id}", flush=True)
+                    print(f"[WEBULL AUTH DEBUG] After get_account_id, wb.zone_var = {getattr(self.wb, 'zone_var', 'NOT SET')}", flush=True)
                     if account_id:
                         print(f"[WEBULL AUTH] ✓ Got account_id: {account_id}, zone_var: {self.wb.zone_var}")
                     else:
@@ -213,7 +215,11 @@ class WebullAuth:
             except KeyError as e:
                 # Handle missing keys in Webull API response (schema drift like 'rzone')
                 key_name = str(e).strip("'\"")
-                print(f"[WEBULL AUTH] ✗ API schema error - missing key: {key_name}")
+                print(f"[WEBULL AUTH DEBUG] ✗ KEYERROR EXCEPTION: {key_name}", flush=True)
+                print(f"[WEBULL AUTH DEBUG] Full traceback:", flush=True)
+                traceback.print_exc()
+                sys.stdout.flush()
+                sys.stderr.flush()
                 # Mark tokens as stale and prompt for re-authentication
                 return {
                     "success": False, 
