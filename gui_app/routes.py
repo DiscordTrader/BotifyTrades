@@ -6751,6 +6751,23 @@ def register_routes(app):
         except Exception as e:
             print(f"[API] Error saving Tastytrade credentials: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/credentials/tastytrade/clear', methods=['POST'])
+    def api_clear_tastytrade_credentials():
+        """Clear Tastytrade credentials"""
+        try:
+            from .broker_credentials_service import clear_tastytrade_credentials
+            
+            clear_tastytrade_credentials()
+            print("[API] Tastytrade credentials cleared")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Tastytrade credentials cleared'
+            })
+        except Exception as e:
+            print(f"[API] Error clearing Tastytrade credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/brokers/credentials/ibkr', methods=['GET'])
     def api_get_ibkr_credentials():
@@ -6806,7 +6823,7 @@ def register_routes(app):
         try:
             from .broker_credentials_service import set_broker_status, get_discord_credentials, get_webull_credentials, get_alpaca_credentials, get_ibkr_credentials
             
-            valid_brokers = ['discord', 'webull_live', 'webull_paper', 'alpaca_live', 'alpaca_paper', 'ibkr_live', 'ibkr_paper']
+            valid_brokers = ['discord', 'webull_live', 'webull_paper', 'alpaca_live', 'alpaca_paper', 'ibkr_live', 'ibkr_paper', 'tastytrade_live', 'tastytrade_paper']
             
             if broker_id not in valid_brokers:
                 return jsonify({'success': False, 'error': f'Invalid broker ID: {broker_id}'}), 400

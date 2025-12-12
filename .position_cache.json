@@ -1246,7 +1246,7 @@
   },
   "ALPACA_PAPER_TSLA_stock": {
     "entry_price": 455.936,
-    "highest_price": 456.33,
+    "highest_price": 459.2,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -1408,5 +1408,20 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-12T19:45:00.177615"
+  },
+  "ALPACA_PAPER_AMZN_227.5_2025-12-19_C": {
+    "entry_price": 2.97,
+    "highest_price": 3.0,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "AMZN251219C00227500",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-12T20:32:09.731915"
   }
 }

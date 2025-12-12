@@ -223,6 +223,18 @@ def get_tastytrade_credentials() -> Dict[str, Any]:
     }
 
 
+def clear_tastytrade_credentials():
+    """Clear Tastytrade credentials"""
+    save_config('tastytrade_credentials', {
+        'username': '',
+        'password': '',
+        'paper_mode': True
+    })
+    # Reset broker status
+    set_broker_status('tastytrade_live', False, 'disconnected')
+    set_broker_status('tastytrade_paper', False, 'disconnected')
+
+
 def save_api_keys_extended(
     openai: str = '',
     alpha_vantage: str = '',
