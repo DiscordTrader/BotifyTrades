@@ -22,17 +22,21 @@ project_root/
 │
 ├── packaging/                  # Build system
 │   ├── windows/
-│   │   ├── scripts/            # Build scripts (.bat)
-│   │   │   ├── build_standard.bat
-│   │   │   └── build_with_pyarmor.bat
-│   │   ├── specs/              # PyInstaller specifications
+│   │   ├── scripts/
+│   │   │   └── build.bat       # PyArmor protected build
+│   │   ├── specs/
 │   │   │   └── botifytrades.spec
 │   │   └── dist/               # Build output (gitignored)
 │   ├── linux/
-│   │   ├── scripts/            # Build scripts (.sh)
-│   │   │   ├── build_standard.sh
-│   │   │   └── build_with_pyarmor.sh
-│   │   ├── specs/              # PyInstaller specifications
+│   │   ├── scripts/
+│   │   │   └── build.sh        # PyArmor protected build
+│   │   ├── specs/
+│   │   │   └── botifytrades.spec
+│   │   └── dist/               # Build output (gitignored)
+│   ├── macos/
+│   │   ├── scripts/
+│   │   │   └── build.sh        # PyArmor protected build
+│   │   ├── specs/
 │   │   │   └── botifytrades.spec
 │   │   └── dist/               # Build output (gitignored)
 │   └── docs/                   # Build documentation
@@ -41,6 +45,60 @@ project_root/
 ├── src/                        # Application source code
 └── gui_app/                    # Web GUI application
 ```
+
+## Build System
+
+**IMPORTANT**: All builds use PyArmor obfuscation for license protection. No standard builds available.
+
+**NO GIT REQUIRED** - Version is read from `upgrade/version.py`
+
+### Windows Build
+
+```batch
+cd packaging\windows\scripts
+build.bat
+
+# Output: packaging\windows\dist\BotifyTrades.exe
+```
+
+### Linux Build
+
+```bash
+cd packaging/linux/scripts
+chmod +x build.sh
+./build.sh
+
+# Output: packaging/linux/dist/BotifyTrades
+```
+
+### macOS Build
+
+```bash
+cd packaging/macos/scripts
+chmod +x build.sh
+./build.sh
+
+# Output: packaging/macos/dist/BotifyTrades
+```
+
+### Build Process
+
+1. Check Python, PyArmor, and PyInstaller installation
+2. Backup original license files
+3. Obfuscate license code with PyArmor
+4. Replace originals with obfuscated versions
+5. Build with PyInstaller using spec file
+6. Compress with UPX (optional, where available)
+7. Create distribution package
+8. Restore original files (automatic on exit)
+9. Clean up temporary files
+
+### Protection Levels
+
+All builds include:
+- **PyArmor** - Runtime obfuscation of license validation code
+- **PyInstaller** - Single executable packaging
+- **UPX** - Compression (where available)
 
 ## License System
 
@@ -100,64 +158,6 @@ is_valid, data = validate_license(license_key)
 is_valid, data = check_or_activate_license(license_key)
 ```
 
-## Build System
-
-### Windows Build
-
-```batch
-# Standard build (UPX compression)
-packaging\windows\scripts\build_standard.bat
-
-# Protected build (PyArmor + UPX)
-packaging\windows\scripts\build_with_pyarmor.bat
-
-# Output: packaging\windows\dist\BotifyTrades.exe
-```
-
-### Linux Build
-
-```bash
-# Standard build
-chmod +x packaging/linux/scripts/build_standard.sh
-./packaging/linux/scripts/build_standard.sh
-
-# Protected build (PyArmor + UPX)
-chmod +x packaging/linux/scripts/build_with_pyarmor.sh
-./packaging/linux/scripts/build_with_pyarmor.sh
-
-# Output: packaging/linux/dist/BotifyTrades
-```
-
-### PyInstaller Specification
-
-The `.spec` files in `packaging/*/specs/` include:
-
-- All application data (gui_app, src, services)
-- Consolidated license module
-- Hidden imports for all dependencies
-- Proper path references for isolated builds
-
-**Note**: PyInstaller v6.0 (2023) removed the `--key` bytecode encryption feature.
-The encryption key had to be embedded in the executable, making it trivially
-extractable. Use PyArmor, Cython, or Nuitka for additional code protection.
-
-### Build Process
-
-1. Check Python and PyInstaller installation
-2. Clean previous builds
-3. Build with PyInstaller using spec file
-4. Compress with UPX (Windows, optional)
-5. Create distribution package
-6. Clean up temporary files
-
-### Alternative Protection Methods
-
-Since PyInstaller bytecode encryption was removed, consider:
-
-1. **PyArmor** - Runtime obfuscation (recommended for license validation)
-2. **Cython** - Compile Python to C extensions
-3. **Nuitka** - Compile to native binaries (strongest protection)
-
 ## GUI License Management
 
 The application includes a web-based License Management page at `/license`:
@@ -174,85 +174,20 @@ The application includes a web-based License Management page at `/license`:
 - `GET /api/license/machine-info` - Get machine fingerprint  
 - `POST /api/license/activate` - Activate a license key
 - `POST /api/license/validate` - Validate without activating
-- `POST /api/license/deactivate` - Remove license
+- `POST /api/license/deactivate` - Remove license binding
 
-### Header Badge
-A license status indicator appears in the navigation bar showing:
-- Days remaining (green if valid)
-- Warning color if expiring within 30 days
-- Red if expired or no license
+## Security Best Practices
 
-## Security Notes
+### For Production Builds
 
-### Important Files to Protect
+1. Always use PyArmor builds (the only option now)
+2. Generate unique SECRET_KEY in `license/config/constants.py`
+3. Never commit production keys to git
+4. Test license validation before distribution
 
-1. `license/config/constants.py` - Contains SECRET_KEY
-   - **MUST be obfuscated with PyArmor before distribution**
-   - Never commit production keys to git
+### For License Keys
 
-2. `license/client/manager_*.py` - License validation logic
-   - Should be obfuscated to prevent bypass
-
-### Obfuscation (Production)
-
-Before production builds:
-
-```bash
-# Obfuscate license module
-pyarmor obfuscate license/config/constants.py
-pyarmor obfuscate license/client/manager_secure.py
-pyarmor obfuscate license/client/manager_activation.py
-```
-
-### Key Rotation
-
-To rotate the SECRET_KEY:
-
-1. Update `license/config/constants.py`
-2. Regenerate all customer licenses
-3. Rebuild the application
-4. Distribute new EXE and licenses
-
-## Troubleshooting
-
-### Common Build Issues
-
-1. **Missing module imports**
-   - Add to `hiddenimports` in spec file
-   - Run: `pip install <missing_module>`
-
-2. **Data files not included**
-   - Add to `datas` list in spec file
-   - Use correct path format for OS
-
-3. **License validation fails after build**
-   - Check that `license/` folder is in `datas`
-   - Verify `hiddenimports` includes license modules
-
-### License Issues
-
-1. **Machine ID mismatch**
-   - Customer changed hardware
-   - Generate new license with new Machine ID
-
-2. **Expired license**
-   - Generate new license with extended duration
-
-3. **Signature verification failed**
-   - License was tampered or corrupted
-   - Generate new license
-
-## Migration from Old Structure
-
-If migrating from the old scattered files:
-
-1. Old files still work (imports fall back to old paths)
-2. Update imports in main app to use `license.client`
-3. Remove old files after confirming new structure works:
-   - `src/license_manager.py`
-   - `src/license_manager_activation.py`
-   - `src/license_manager_secure.py`
-   - `src/license_client.py`
-   - `generate_license.py`
-   - `generate_license_activation.py`
-   - `generate_license_secure.py`
+1. Use activation-based licenses for best UX
+2. Set reasonable expiration periods
+3. Track machine bindings for support
+4. Implement offline grace period for reliability

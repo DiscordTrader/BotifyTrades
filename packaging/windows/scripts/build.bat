@@ -1,28 +1,32 @@
 @echo off
 REM ========================================================================
-REM   BotifyTrades - Windows Standard Build
-REM   Protection Level: Standard (UPX compression + PyInstaller packaging)
-REM   Uses consolidated license/ module
-REM   Note: --key encryption was removed in PyInstaller v6.0
+REM   BotifyTrades - Windows Build (PyArmor Protected)
+REM   Protection: PyArmor + PyInstaller + UPX Compression
 REM   Note: NO GIT REQUIRED - version is read from upgrade/version.py
 REM ========================================================================
 
 echo.
 echo ========================================================================
-echo   BotifyTrades Trading Bot - Windows Standard Build
-echo   Protection: PyInstaller + UPX Compression
+echo   BotifyTrades Trading Bot - Protected Build
+echo   Protection: PyArmor Obfuscation + PyInstaller + UPX
 echo ========================================================================
 echo.
 
 cd /d "%~dp0..\..\..\"
 
 REM Check dependencies
-echo [1/5] Checking dependencies...
+echo [1/7] Checking dependencies...
 python --version >nul 2>&1
 if errorlevel 1 (
     echo ERROR: Python not found. Please install Python 3.8+
     pause
     exit /b 1
+)
+
+pip show pyarmor >nul 2>&1
+if errorlevel 1 (
+    echo Installing PyArmor...
+    pip install pyarmor
 )
 
 pip show pyinstaller >nul 2>&1
@@ -31,16 +35,58 @@ if errorlevel 1 (
     pip install pyinstaller
 )
 
+REM Backup original files
+echo.
+echo [2/7] Backing up original license files...
+if not exist "packaging\windows\backup" mkdir "packaging\windows\backup"
+copy "license\config\constants.py" "packaging\windows\backup\constants.py.bak" >nul
+copy "license\client\manager_secure.py" "packaging\windows\backup\manager_secure.py.bak" >nul
+copy "license\client\manager_activation.py" "packaging\windows\backup\manager_activation.py.bak" >nul
+
+REM Obfuscate license files with PyArmor
+echo.
+echo [3/7] Obfuscating license files with PyArmor...
+if exist "dist" rmdir /s /q "dist"
+
+pyarmor gen -O dist_obf license\config\constants.py
+if errorlevel 1 (
+    echo ERROR: PyArmor obfuscation failed for constants.py
+    goto :restore
+)
+
+pyarmor gen -O dist_obf license\client\manager_secure.py
+if errorlevel 1 (
+    echo ERROR: PyArmor obfuscation failed for manager_secure.py
+    goto :restore
+)
+
+pyarmor gen -O dist_obf license\client\manager_activation.py
+if errorlevel 1 (
+    echo ERROR: PyArmor obfuscation failed for manager_activation.py
+    goto :restore
+)
+
+REM Replace originals with obfuscated versions
+echo.
+echo [4/7] Replacing with obfuscated files...
+copy /Y "dist_obf\constants.py" "license\config\constants.py" >nul
+copy /Y "dist_obf\manager_secure.py" "license\client\manager_secure.py" >nul
+copy /Y "dist_obf\manager_activation.py" "license\client\manager_activation.py" >nul
+
+REM Copy PyArmor runtime
+if not exist "license\pyarmor_runtime_000000" mkdir "license\pyarmor_runtime_000000"
+xcopy /Y /E "dist_obf\pyarmor_runtime_000000\*" "license\pyarmor_runtime_000000\" >nul
+
 REM Clean previous builds
 echo.
-echo [2/5] Cleaning previous builds...
+echo [5/7] Cleaning previous builds...
 if exist "packaging\windows\dist" rmdir /s /q "packaging\windows\dist"
 if exist "packaging\windows\build_temp" rmdir /s /q "packaging\windows\build_temp"
 mkdir "packaging\windows\dist"
 
 REM Build with PyInstaller using the pre-configured spec file
 echo.
-echo [3/5] Building executable with PyInstaller...
+echo [6/7] Building executable with PyInstaller...
 
 pyinstaller --clean --noconfirm ^
     --distpath "packaging\windows\dist" ^
@@ -49,24 +95,21 @@ pyinstaller --clean --noconfirm ^
 
 if errorlevel 1 (
     echo.
-    echo ERROR: Build failed!
-    pause
-    exit /b 1
+    echo ERROR: PyInstaller build failed!
+    goto :restore
 )
 
 REM Compress with UPX (optional)
 echo.
-echo [4/5] Compressing executable with UPX...
+echo [7/7] Compressing executable with UPX...
 where upx >nul 2>&1
 if not errorlevel 1 (
     upx --best "packaging\windows\dist\BotifyTrades.exe"
 ) else (
-    echo UPX not found - skipping compression (optional)
+    echo UPX not found - skipping compression
 )
 
 REM Create distribution package
-echo.
-echo [5/5] Creating distribution package...
 if not exist "packaging\windows\dist\config" mkdir "packaging\windows\dist\config"
 copy "config.ini.example" "packaging\windows\dist\config.ini.example" >nul 2>&1
 copy "GET_DISCORD_TOKEN.html" "packaging\windows\dist\" >nul 2>&1
@@ -99,12 +142,24 @@ echo.
 echo SUPPORT:
 echo - For issues, contact support with your Machine ID
 echo - Machine ID can be found in the License Management page
+echo.
+echo BUILD INFO:
+echo - This build is protected with PyArmor obfuscation
 ) > "packaging\windows\dist\README.txt"
 
-REM Clean up temp files
+:restore
+REM Restore original files
 echo.
+echo Restoring original license files...
+copy /Y "packaging\windows\backup\constants.py.bak" "license\config\constants.py" >nul
+copy /Y "packaging\windows\backup\manager_secure.py.bak" "license\client\manager_secure.py" >nul
+copy /Y "packaging\windows\backup\manager_activation.py.bak" "license\client\manager_activation.py" >nul
+
+REM Clean up
 echo Cleaning up temporary files...
+if exist "dist_obf" rmdir /s /q "dist_obf"
 if exist "packaging\windows\build_temp" rmdir /s /q "packaging\windows\build_temp"
+if exist "license\pyarmor_runtime_000000" rmdir /s /q "license\pyarmor_runtime_000000"
 
 echo.
 echo ========================================================================
@@ -112,7 +167,7 @@ echo   BUILD COMPLETE!
 echo ========================================================================
 echo   Location: packaging\windows\dist\
 echo   Executable: BotifyTrades.exe
-echo   Protection: Standard PyInstaller + UPX compression
+echo   Protection: PyArmor + PyInstaller + UPX
 echo ========================================================================
 echo.
 
