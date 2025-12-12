@@ -28,6 +28,13 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 
 ## Recent Changes
 
+### v3.1.3 - Webull Auth Schema Drift Fix & CI/CD Pipeline (2025-12-12)
+- **FIX: KeyError 'rzone' handling** - Added specific KeyError catch for Webull API schema changes
+- **FIX: Stale token detection** - Tokens now marked stale with friendly message when API schema drifts
+- **NEW: GitHub Actions CI/CD** - Automated PyArmor-protected builds for Windows/Linux
+- **NEW: PowerShell build syntax** - Windows builds now use native PowerShell instead of CMD
+- **IMPROVED: Error messages** - Stale tokens prompt user to re-enter instead of cryptic KeyError
+
 ### v2.1.35 - Webull Auth Error Handling Fix (2025-12-11)
 - **CRITICAL FIX: `_try_saved_session` return type bug** - Fixed boolean check on dict return (always truthy)
 - **FIX: Specific error messages** - Token verification now returns actual error reason, not generic message

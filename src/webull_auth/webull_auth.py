@@ -152,12 +152,30 @@ class WebullAuth:
                 else:
                     print(f"[WEBULL AUTH] ✗ get_account returned empty")
                     return {"success": False, "error": "Token verification failed - get_account returned empty. Token may be expired."}
+            except KeyError as e:
+                # Handle missing keys in Webull API response (schema drift like 'rzone')
+                key_name = str(e).strip("'\"")
+                print(f"[WEBULL AUTH] ✗ API schema error - missing key: {key_name}")
+                # Mark tokens as stale and prompt for re-authentication
+                return {
+                    "success": False, 
+                    "error": f"Saved tokens are stale (API schema changed). Please re-enter your Webull tokens to refresh.",
+                    "token_stale": True,
+                    "missing_key": key_name
+                }
             except Exception as e:
                 error_msg = str(e)
                 print(f"[WEBULL AUTH] ✗ Token verification failed: {error_msg}")
                 # Check for specific error types
                 if 'Expecting value' in error_msg or 'JSONDecodeError' in error_msg:
                     return {"success": False, "error": "Webull API returned invalid response. Token may be expired or blocked."}
+                # Handle KeyError-like messages in exception text
+                if "KeyError" in error_msg or "'rzone'" in error_msg or "'regionId'" in error_msg:
+                    return {
+                        "success": False, 
+                        "error": "Saved tokens are stale. Please re-enter your Webull tokens to refresh.",
+                        "token_stale": True
+                    }
                 return {"success": False, "error": f"Token verification failed: {error_msg}"}
         except Exception as e:
             return {"success": False, "error": f"Session restore error: {str(e)}"}
