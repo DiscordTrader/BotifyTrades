@@ -6555,12 +6555,22 @@ def register_routes(app):
     @app.route('/api/webull/auth/session-login', methods=['POST'])
     def api_webull_session_login():
         """Login using saved session tokens"""
+        import sys
+        import traceback
         try:
             from src.webull_auth import WebullAuth
             from .broker_credentials_service import webull_credentials_adapter, get_webull_credentials
             
             data = request.json
             creds = get_webull_credentials()
+            
+            # DEBUG: Log what credentials we have
+            print(f"[ROUTES DEBUG] === session-login START ===", flush=True)
+            print(f"[ROUTES DEBUG] Creds keys: {list(creds.keys())}", flush=True)
+            print(f"[ROUTES DEBUG] access_token: {'yes' if creds.get('access_token') else 'no'}", flush=True)
+            print(f"[ROUTES DEBUG] rzone: {creds.get('rzone', 'NOT SET')}", flush=True)
+            print(f"[ROUTES DEBUG] zone_var: {creds.get('zone_var', 'NOT SET')}", flush=True)
+            
             trade_pin = data.get('trade_pin', creds.get('trade_pin', ''))
             paper_mode = data.get('paper_mode', creds.get('paper_mode', True))
             
@@ -6568,7 +6578,9 @@ def register_routes(app):
                 return jsonify({'success': False, 'error': 'Trading PIN is required'}), 400
             
             auth = WebullAuth(paper_trading=paper_mode, credentials_adapter=webull_credentials_adapter)
+            print(f"[ROUTES DEBUG] Calling login_with_saved_session...", flush=True)
             result = auth.login_with_saved_session(trade_pin)
+            print(f"[ROUTES DEBUG] Result: {result}", flush=True)
             
             if result.get('success'):
                 return jsonify({
