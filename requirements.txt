@@ -85,3 +85,4 @@ Werkzeug
 yfinance
 gunicorn
 bcrypt
+tastytrade
