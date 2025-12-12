@@ -180,19 +180,19 @@ class WebullAuth:
             print(f"[WEBULL AUTH DEBUG]   wb._account_id = {getattr(self.wb, '_account_id', 'NOT SET')}", flush=True)
             print(f"[WEBULL AUTH DEBUG]   wb._region_code = {getattr(self.wb, '_region_code', 'NOT SET')}", flush=True)
             
-            # Verify tokens - if no account_id, get it first (which also sets zone_var)
+            # ALWAYS call get_account_id() first - this sets zone_var from API response
+            # This matches how the main bot works (selfbot_webull.py line 1930)
             try:
-                if not saved_account_id:
-                    print(f"[WEBULL AUTH DEBUG] Calling get_account_id()...", flush=True)
-                    account_id = self.wb.get_account_id()
-                    print(f"[WEBULL AUTH DEBUG] get_account_id() returned: {account_id}", flush=True)
-                    print(f"[WEBULL AUTH DEBUG] After get_account_id, wb.zone_var = {getattr(self.wb, 'zone_var', 'NOT SET')}", flush=True)
-                    if account_id:
-                        print(f"[WEBULL AUTH] ✓ Got account_id: {account_id}, zone_var: {self.wb.zone_var}")
-                    else:
-                        return {"success": False, "error": "Failed to get account ID. Token may be expired."}
+                print(f"[WEBULL AUTH DEBUG] Calling get_account_id() (ALWAYS required to set zone_var)...", flush=True)
+                account_id = self.wb.get_account_id()
+                print(f"[WEBULL AUTH DEBUG] get_account_id() returned: {account_id}", flush=True)
+                print(f"[WEBULL AUTH DEBUG] After get_account_id, wb.zone_var = {getattr(self.wb, 'zone_var', 'NOT SET')}", flush=True)
+                if account_id:
+                    print(f"[WEBULL AUTH] ✓ Got account_id: {account_id}, zone_var: {self.wb.zone_var}", flush=True)
+                else:
+                    return {"success": False, "error": "Failed to get account ID. Token may be expired."}
                 
-                print(f"[WEBULL AUTH DEBUG] Calling get_account()...")
+                print(f"[WEBULL AUTH DEBUG] Calling get_account()...", flush=True)
                 account = self.wb.get_account()
                 print(f"[WEBULL AUTH DEBUG] get_account() returned: {'data' if account else 'empty'}")
                 if account:
