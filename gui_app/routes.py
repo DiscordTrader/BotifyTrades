@@ -6344,7 +6344,7 @@ def register_routes(app):
     
     @app.route('/api/brokers/credentials/webull', methods=['POST'])
     def api_save_webull_credentials():
-        """Save Webull credentials"""
+        """Save Webull credentials with token validation"""
         try:
             from .broker_credentials_service import save_webull_credentials, get_webull_credentials
             
@@ -6367,6 +6367,15 @@ def register_routes(app):
             else:
                 access_token = data.get('access_token', existing.get('access_token', ''))
                 refresh_token = data.get('refresh_token', existing.get('refresh_token', ''))
+            
+            # VALIDATION: Detect and reject web tokens (dc_us_tech, dc_*)
+            # These tokens from app.webull.com cannot access trading API
+            if access_token and (access_token.startswith('dc_us_tech') or access_token.startswith('dc_')):
+                return jsonify({
+                    'success': False,
+                    'error': 'Web token detected! Tokens starting with "dc_" are from the Webull website and cannot access the trading API. Please use Email/Password login instead, or get a mobile token from the Webull mobile app.',
+                    'token_type_error': True
+                }), 400
             
             save_webull_credentials(
                 email=new_email,

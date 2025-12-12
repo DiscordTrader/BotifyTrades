@@ -28,6 +28,13 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 
 ## Recent Changes
 
+### v3.1.6 - Web Token Detection & GUI-Bot Token Consistency (2025-12-12)
+- **FIX: Web token detection** - GUI now rejects `dc_us_tech` web tokens that can't access trading API
+- **FIX: Token validation in save** - GUI Settings validates tokens before saving to database
+- **FIX: webull_auth.py** - Detects web tokens early and gives clear guidance to use email/password login
+- **IMPROVED: Error messages** - Explains difference between web tokens (browser) and mobile tokens (trading API)
+- **CLARIFIED: Token types** - Web tokens from app.webull.com cannot trade, only mobile tokens work
+
 ### v3.1.5 - Webull Library Monkey-Patch for Missing rzone (2025-12-12)
 - **ROOT CAUSE FIX: Webull library get_account_id() crash** - Library expects 'rzone' in API response but Webull removed it
 - **FIX: Monkey-patch webull.get_account_id()** - Uses .get() with fallback instead of direct key access
