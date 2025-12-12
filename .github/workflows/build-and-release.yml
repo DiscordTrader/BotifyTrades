@@ -32,13 +32,15 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Backup license files
+        shell: cmd
         run: |
-          mkdir -p backup
+          mkdir backup
           copy license\config\constants.py backup\constants.py.bak
           copy license\client\manager_secure.py backup\manager_secure.py.bak
           copy license\client\manager_activation.py backup\manager_activation.py.bak
 
       - name: Obfuscate with PyArmor
+        shell: cmd
         run: |
           pyarmor gen -O dist_obf license\config\constants.py
           pyarmor gen -O dist_obf license\client\manager_secure.py
@@ -49,13 +51,12 @@ jobs:
           if exist dist_obf\pyarmor_runtime_000000 xcopy /s /y /q dist_obf\pyarmor_runtime_000000 license\pyarmor_runtime_000000\
 
       - name: Build EXE with PyInstaller
+        shell: cmd
         run: |
-          pyinstaller --clean --noconfirm ^
-            --distpath packaging\windows\dist ^
-            --workpath packaging\windows\build_temp ^
-            packaging\windows\specs\botifytrades.spec
+          pyinstaller --clean --noconfirm --distpath packaging\windows\dist --workpath packaging\windows\build_temp packaging\windows\specs\botifytrades.spec
 
       - name: Create distribution package
+        shell: cmd
         run: |
           mkdir packaging\windows\dist\config
           if exist config.ini.example copy config.ini.example packaging\windows\dist\
@@ -66,6 +67,7 @@ jobs:
           echo BotifyTrades.exe >> packaging\windows\dist\RUN.bat
 
       - name: Create README
+        shell: cmd
         run: |
           echo BotifyTrades ${{ steps.version.outputs.VERSION }} > packaging\windows\dist\README.txt
           echo ================================= >> packaging\windows\dist\README.txt
