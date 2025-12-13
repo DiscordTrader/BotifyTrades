@@ -1396,6 +1396,19 @@ PRICE_ONLY_STC_PATTERN = r'^[$]?([0-9.]+)\s+(out\s*half|out\s*all\s*but\s*[0-9]+
 # Groups: (direction, symbol, strike, opt_type, month, day, price)
 JC_OPT_PATTERN = r'(BTO|STC)\s+[$]?([A-Za-z]+)\s+[$]?([0-9.]+)([CPcp])\s+([0-9]{1,2})/([0-9]{1,2})\s+[.]?([0-9.]+)'
 
+# Waxui-style patterns (LOTTO alerts)
+# Entry format: SPX here 12/05 6880C Avg. 4.00 or "SPX here 12/13 6100C Avg .35"
+# Groups: (symbol, month, day, strike, opt_type, price)
+WAXUI_ENTRY_PATTERN = r'([A-Za-z]+)\s+here\s+(\d{1,2})/(\d{1,2})\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+[Aa]vg\.?\s*(\d+\.?\d*)'
+
+# Trim format: "Trim SPX here" or "Trim SPX here at $5.50" - partial exit
+# Groups: (symbol)
+WAXUI_TRIM_PATTERN = r'[Tt]rim\s+([A-Za-z]+)\s+here'
+
+# Close format: "Closed SPX here" or "Close SPX here" - full exit
+# Groups: (symbol)
+WAXUI_CLOSE_PATTERN = r'[Cc]lose[d]?\s+([A-Za-z]+)\s+here'
+
 def calculate_next_week_expiry():
     """Calculate next Friday's date for 'NEXT WEEK' expiry"""
     from datetime import datetime, timedelta
@@ -3401,6 +3414,9 @@ SIMPLE_STC_REGEX = re.compile(SIMPLE_STC_PATTERN, re.IGNORECASE)
 SIRENRED_PRICE_STC_REGEX = re.compile(SIRENRED_PRICE_STC_PATTERN, re.IGNORECASE)
 PRICE_ONLY_STC_REGEX = re.compile(PRICE_ONLY_STC_PATTERN, re.IGNORECASE)
 JC_OPT_REGEX = re.compile(JC_OPT_PATTERN, re.IGNORECASE)
+WAXUI_ENTRY_REGEX = re.compile(WAXUI_ENTRY_PATTERN, re.IGNORECASE)
+WAXUI_TRIM_REGEX = re.compile(WAXUI_TRIM_PATTERN, re.IGNORECASE)
+WAXUI_CLOSE_REGEX = re.compile(WAXUI_CLOSE_PATTERN, re.IGNORECASE)
 
 def parse_option_signal(text: str) -> Optional[dict]:
     m = OPT_REGEX.search(text.strip())
