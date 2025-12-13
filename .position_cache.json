@@ -1423,5 +1423,20 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-12T20:32:09.731915"
+  },
+  "Webull_UROY_0.0__": {
+    "entry_price": 0.03,
+    "highest_price": 0.01,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "Webull",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-12T22:11:14.143933"
   }
 }
