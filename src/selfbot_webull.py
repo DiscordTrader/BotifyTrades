@@ -1399,7 +1399,8 @@ JC_OPT_PATTERN = r'(BTO|STC)\s+[$]?([A-Za-z]+)\s+[$]?([0-9.]+)([CPcp])\s+([0-9]{
 # Waxui-style patterns (LOTTO alerts)
 # Entry format: SPX here 12/05 6880C Avg. 4.00 or "SPX here 12/13 6100C Avg .35"
 # Groups: (symbol, month, day, strike, opt_type, price)
-WAXUI_ENTRY_PATTERN = r'([A-Za-z]+)\s+here\s+(\d{1,2})/(\d{1,2})\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+[Aa]vg\.?\s*(\d+\.?\d*)'
+# Price pattern: supports "4.00", ".35", "0.35" formats
+WAXUI_ENTRY_PATTERN = r'([A-Za-z]+)\s+here\s+(\d{1,2})/(\d{1,2})\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+[Aa]vg\.?\s*(\.?\d+\.?\d*)'
 
 # Trim format: "Trim SPX here" or "Trim SPX here at $5.50" - partial exit
 # Groups: (symbol)
@@ -3468,13 +3469,80 @@ def parse_option_signal(text: str) -> Optional[dict]:
                                     use_steel_stc = True
                                     print(f"[Discord] ✓ Matched price-only STC format")
                                 else:
-                                    print(f"[Discord] ❌ Pattern NOT matched: '{text.strip()[:80]}'")
-                                    print(f"[Discord]    Expected format: BTO/STC QTY SYMBOL STRIKE C/P MM/DD @ PRICE")
-                                    print(f"[Discord]    Or JC: BTO $SYMBOL $STRIKEc/p MM/DD PRICE")
-                                    print(f"[Discord]    Or alternate: 🟢BTO $SYMBOL | STRIKE C/P MONTH/DAY PRICE")
-                                    print(f"[Discord]    Or steel: :green_alert: SYMBOL | $STRIKE C/P PRICE NEXT WEEK")
-                                    print(f"[Discord]    Or STC: :SirenRed: SYMBOL | PRICE OUT HALF")
-                                    return None
+                                    # Try Waxui entry: SPX here 12/05 6880C Avg. 4.00
+                                    m = WAXUI_ENTRY_REGEX.search(text.strip())
+                                    if m:
+                                        symbol, month, day, strike, opt_type, price_str = m.groups()
+                                        expiry = f"{month}/{day}"
+                                        price = float(price_str)
+                                        print(f"[Discord] ✓ Matched Waxui entry format: {symbol} {expiry} {strike}{opt_type} Avg ${price_str}")
+                                        _current_trading_settings = get_trading_settings()
+                                        max_position_size = _current_trading_settings['max_position_size']
+                                        actual_cost_per_contract = price * 100
+                                        if actual_cost_per_contract <= 0:
+                                            qty = 1
+                                        else:
+                                            qty = max(1, int(max_position_size / actual_cost_per_contract))
+                                        print(f"[AUTO-QTY] Waxui: ${price} premium x 100 = ${actual_cost_per_contract}/contract, buying {qty} contracts (max ${max_position_size})")
+                                        return {
+                                            "asset": "option",
+                                            "action": "BTO",
+                                            "qty": qty,
+                                            "symbol": symbol.upper(),
+                                            "strike": float(strike),
+                                            "opt_type": opt_type.upper(),
+                                            "expiry": expiry,
+                                            "price": price,
+                                            "is_market_order": False,
+                                            "_waxui_format": True
+                                        }
+                                    else:
+                                        # Try Waxui close: Closed SPX here
+                                        m = WAXUI_CLOSE_REGEX.search(text.strip())
+                                        if m:
+                                            symbol = m.group(1)
+                                            print(f"[Discord] ✓ Matched Waxui CLOSE format: {symbol}")
+                                            return {
+                                                "asset": "option",
+                                                "action": "STC",
+                                                "qty": 1,
+                                                "symbol": symbol.upper(),
+                                                "strike": None,
+                                                "opt_type": None,
+                                                "expiry": None,
+                                                "price": None,
+                                                "is_market_order": True,
+                                                "_waxui_close": True,
+                                                "_exit_type": "ALL"
+                                            }
+                                        else:
+                                            # Try Waxui trim: Trim SPX here
+                                            m = WAXUI_TRIM_REGEX.search(text.strip())
+                                            if m:
+                                                symbol = m.group(1)
+                                                print(f"[Discord] ✓ Matched Waxui TRIM format: {symbol}")
+                                                return {
+                                                    "asset": "option",
+                                                    "action": "STC",
+                                                    "qty": 1,
+                                                    "symbol": symbol.upper(),
+                                                    "strike": None,
+                                                    "opt_type": None,
+                                                    "expiry": None,
+                                                    "price": None,
+                                                    "is_market_order": True,
+                                                    "_waxui_trim": True,
+                                                    "_exit_type": "HALF"
+                                                }
+                                            else:
+                                                print(f"[Discord] ❌ Pattern NOT matched: '{text.strip()[:80]}'")
+                                                print(f"[Discord]    Expected format: BTO/STC QTY SYMBOL STRIKE C/P MM/DD @ PRICE")
+                                                print(f"[Discord]    Or JC: BTO $SYMBOL $STRIKEc/p MM/DD PRICE")
+                                                print(f"[Discord]    Or alternate: 🟢BTO $SYMBOL | STRIKE C/P MONTH/DAY PRICE")
+                                                print(f"[Discord]    Or steel: :green_alert: SYMBOL | $STRIKE C/P PRICE NEXT WEEK")
+                                                print(f"[Discord]    Or STC: :SirenRed: SYMBOL | PRICE OUT HALF")
+                                                print(f"[Discord]    Or Waxui: SYMBOL here MM/DD STRIKEc Avg. PRICE")
+                                                return None
     
     if use_steel_stc:
         # Handle various STC formats with different group structures
