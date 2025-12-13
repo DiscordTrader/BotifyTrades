@@ -28,6 +28,14 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 
 ## Recent Changes
 
+### v3.2.1 - Waxui Alert Format Support (2025-12-13)
+- **NEW: Waxui LOTTO entry format** - Parses "SPX here 12/05 6880C Avg. 4.00" and ".35" price formats
+- **NEW: Waxui trim signals** - "Trim SPX here" triggers partial exit (HALF)
+- **NEW: Waxui close signals** - "Closed SPX here" or "Close SPX here" triggers full exit (ALL)
+- **AUTO-QTY: Waxui entries** - Auto-calculates quantity based on max_position_size settings
+- **PATTERNS: src/selfbot_webull.py** - Added WAXUI_ENTRY_REGEX, WAXUI_TRIM_REGEX, WAXUI_CLOSE_REGEX
+- **EXIT TYPES** - Trim sets _exit_type="HALF", Close sets _exit_type="ALL" for position lookup
+
 ### v3.2.0 - Tastytrade Broker Integration (2025-12-12)
 - **NEW: Tastytrade broker support** - Full integration with Tastytrade API for stocks and options trading
 - **NEW: TastytradeBroker class** - Implements BrokerInterface at `src/brokers/tastytrade_broker.py`
