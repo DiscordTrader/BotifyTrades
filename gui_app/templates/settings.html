@@ -560,15 +560,33 @@ input:checked + .slider:before {
             <span class="status-dot"></span>
             <span id="tastytrade-paper-status-text">Not connected</span>
         </div>
-        <div class="form-group">
-            <label>Tastytrade Username</label>
-            <input type="text" id="tastytrade-paper-username" placeholder="Username or email">
-            <p class="help-text">Get from <a href="https://developer.tastytrade.com/" target="_blank">Tastytrade Developer Portal</a></p>
+        <div style="background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+            <div style="font-size: 12px; font-weight: 600; color: #a78bfa; margin-bottom: 8px;">🔐 OAuth2 Authentication (Recommended)</div>
+            <p style="font-size: 11px; color: var(--text-secondary); margin: 0;">Get these from <a href="https://my.tastytrade.com" target="_blank" style="color: #a78bfa;">my.tastytrade.com</a> → OAuth Applications</p>
         </div>
         <div class="form-group">
-            <label>Tastytrade Password</label>
-            <input type="password" id="tastytrade-paper-password" placeholder="Password">
+            <label>Client Secret</label>
+            <input type="password" id="tastytrade-paper-client-secret" placeholder="OAuth2 Client Secret">
+            <p class="help-text">Create OAuth app → Save the Client Secret</p>
         </div>
+        <div class="form-group">
+            <label>Refresh Token</label>
+            <input type="password" id="tastytrade-paper-refresh-token" placeholder="OAuth2 Refresh Token">
+            <p class="help-text">Manage app → Create Grant → Save Refresh Token</p>
+        </div>
+        <details style="margin-bottom: 16px;">
+            <summary style="cursor: pointer; font-size: 12px; color: var(--text-secondary);">Legacy Login (Username/Password) - Deprecated Dec 2025</summary>
+            <div style="padding-top: 12px;">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="tastytrade-paper-username" placeholder="Username or email">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="tastytrade-paper-password" placeholder="Password">
+                </div>
+            </div>
+        </details>
         <div class="btn-group">
             <button id="save-tastytrade-paper" class="btn btn-success">💾 Save</button>
             <button id="connect-tastytrade-paper" class="btn btn-connect">🔌 Connect</button>
@@ -584,15 +602,33 @@ input:checked + .slider:before {
             <span class="status-dot"></span>
             <span id="tastytrade-live-status-text">Not connected</span>
         </div>
-        <div class="form-group">
-            <label>Tastytrade Username</label>
-            <input type="text" id="tastytrade-live-username" placeholder="Username or email">
-            <p class="help-text">Use your Tastytrade production account credentials</p>
+        <div style="background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+            <div style="font-size: 12px; font-weight: 600; color: #a78bfa; margin-bottom: 8px;">🔐 OAuth2 Authentication (Recommended)</div>
+            <p style="font-size: 11px; color: var(--text-secondary); margin: 0;">Get these from <a href="https://my.tastytrade.com" target="_blank" style="color: #a78bfa;">my.tastytrade.com</a> → OAuth Applications</p>
         </div>
         <div class="form-group">
-            <label>Tastytrade Password</label>
-            <input type="password" id="tastytrade-live-password" placeholder="Password">
+            <label>Client Secret</label>
+            <input type="password" id="tastytrade-live-client-secret" placeholder="OAuth2 Client Secret">
+            <p class="help-text">Create OAuth app → Save the Client Secret</p>
         </div>
+        <div class="form-group">
+            <label>Refresh Token</label>
+            <input type="password" id="tastytrade-live-refresh-token" placeholder="OAuth2 Refresh Token">
+            <p class="help-text">Manage app → Create Grant → Save Refresh Token</p>
+        </div>
+        <details style="margin-bottom: 16px;">
+            <summary style="cursor: pointer; font-size: 12px; color: var(--text-secondary);">Legacy Login (Username/Password) - Deprecated Dec 2025</summary>
+            <div style="padding-top: 12px;">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="tastytrade-live-username" placeholder="Username or email">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="tastytrade-live-password" placeholder="Password">
+                </div>
+            </div>
+        </details>
         <div class="btn-group">
             <button id="save-tastytrade-live" class="btn btn-success">💾 Save</button>
             <button id="connect-tastytrade-live" class="btn btn-connect">🔌 Connect</button>
@@ -2017,9 +2053,14 @@ document.getElementById('connect-alpaca-live').addEventListener('click', async (
 document.getElementById('save-tastytrade-paper').addEventListener('click', async () => {
     const username = document.getElementById('tastytrade-paper-username').value.trim();
     const password = document.getElementById('tastytrade-paper-password').value.trim();
+    const clientSecret = document.getElementById('tastytrade-paper-client-secret').value.trim();
+    const refreshToken = document.getElementById('tastytrade-paper-refresh-token').value.trim();
     
-    if (!username || !password) {
-        showMessage('error', 'Both Username and Password are required');
+    const hasOAuth = clientSecret && refreshToken;
+    const hasLegacy = username && password;
+    
+    if (!hasOAuth && !hasLegacy) {
+        showMessage('error', 'Either OAuth2 (Client Secret + Refresh Token) OR Legacy (Username + Password) required');
         return;
     }
     
@@ -2030,6 +2071,8 @@ document.getElementById('save-tastytrade-paper').addEventListener('click', async
             body: JSON.stringify({
                 username: username,
                 password: password,
+                client_secret: clientSecret,
+                refresh_token: refreshToken,
                 paper_mode: true
             })
         });
@@ -2077,9 +2120,14 @@ document.getElementById('connect-tastytrade-paper').addEventListener('click', as
 document.getElementById('save-tastytrade-live').addEventListener('click', async () => {
     const username = document.getElementById('tastytrade-live-username').value.trim();
     const password = document.getElementById('tastytrade-live-password').value.trim();
+    const clientSecret = document.getElementById('tastytrade-live-client-secret').value.trim();
+    const refreshToken = document.getElementById('tastytrade-live-refresh-token').value.trim();
     
-    if (!username || !password) {
-        showMessage('error', 'Both Username and Password are required');
+    const hasOAuth = clientSecret && refreshToken;
+    const hasLegacy = username && password;
+    
+    if (!hasOAuth && !hasLegacy) {
+        showMessage('error', 'Either OAuth2 (Client Secret + Refresh Token) OR Legacy (Username + Password) required');
         return;
     }
     
@@ -2090,6 +2138,8 @@ document.getElementById('save-tastytrade-live').addEventListener('click', async 
             body: JSON.stringify({
                 username: username,
                 password: password,
+                client_secret: clientSecret,
+                refresh_token: refreshToken,
                 paper_mode: false
             })
         });

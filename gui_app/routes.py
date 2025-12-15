@@ -6759,7 +6759,7 @@ def register_routes(app):
     
     @app.route('/api/brokers/credentials/tastytrade', methods=['GET'])
     def api_get_tastytrade_credentials():
-        """Get Tastytrade credentials (password masked)"""
+        """Get Tastytrade credentials (secrets masked)"""
         try:
             from .broker_credentials_service import get_tastytrade_credentials, get_broker_status
             
@@ -6768,12 +6768,19 @@ def register_routes(app):
             paper_status = get_broker_status('tastytrade_paper')
             
             username = creds.get('username', '')
+            client_secret = creds.get('client_secret', '')
+            refresh_token = creds.get('refresh_token', '')
             
             return jsonify({
                 'success': True,
                 'has_username': bool(username),
                 'username_preview': f"{username[:10]}..." if len(username) > 10 else username or '(not set)',
                 'has_password': bool(creds.get('password')),
+                'has_client_secret': bool(client_secret),
+                'client_secret_preview': f"{client_secret[:8]}..." if len(client_secret) > 8 else '(not set)' if not client_secret else client_secret,
+                'has_refresh_token': bool(refresh_token),
+                'refresh_token_preview': f"{refresh_token[:8]}..." if len(refresh_token) > 8 else '(not set)' if not refresh_token else refresh_token,
+                'auth_method': 'oauth2' if (client_secret and refresh_token) else 'legacy' if (username and creds.get('password')) else 'none',
                 'paper_mode': creds.get('paper_mode', True),
                 'live_status': live_status,
                 'paper_status': paper_status
@@ -6784,28 +6791,39 @@ def register_routes(app):
     
     @app.route('/api/brokers/credentials/tastytrade', methods=['POST'])
     def api_save_tastytrade_credentials():
-        """Save Tastytrade credentials"""
+        """Save Tastytrade credentials (OAuth2 or legacy)"""
         try:
             from .broker_credentials_service import save_tastytrade_credentials
             
             data = request.json
             username = data.get('username', '').strip()
             password = data.get('password', '').strip()
+            client_secret = data.get('client_secret', '').strip()
+            refresh_token = data.get('refresh_token', '').strip()
             
-            if not username or not password:
-                return jsonify({'success': False, 'error': 'Both username and password are required'}), 400
+            has_oauth = client_secret and refresh_token
+            has_legacy = username and password
+            
+            if not has_oauth and not has_legacy:
+                return jsonify({
+                    'success': False, 
+                    'error': 'OAuth2 (client_secret + refresh_token) OR legacy (username + password) credentials required'
+                }), 400
             
             save_tastytrade_credentials(
                 username=username,
                 password=password,
+                client_secret=client_secret,
+                refresh_token=refresh_token,
                 paper_mode=data.get('paper_mode', True)
             )
             
-            print(f"[API] ✓ Tastytrade credentials saved")
+            auth_method = "OAuth2" if has_oauth else "legacy username/password"
+            print(f"[API] ✓ Tastytrade credentials saved ({auth_method})")
             
             return jsonify({
                 'success': True,
-                'message': 'Tastytrade credentials saved. Use Connect button to connect.'
+                'message': f'Tastytrade credentials saved ({auth_method}). Use Connect button to connect.'
             })
         except Exception as e:
             print(f"[API] Error saving Tastytrade credentials: {e}")
