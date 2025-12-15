@@ -4065,22 +4065,32 @@ class SelfClient(discord.Client):
                 from gui_app.broker_credentials_service import get_tastytrade_credentials
                 tt_creds = get_tastytrade_credentials()
                 
-                if tt_creds.get('username') and tt_creds.get('password'):
-                    _original_print("[TASTYTRADE] Creating TastytradeBroker instance...", flush=True)
+                has_oauth = tt_creds.get('client_secret') and tt_creds.get('refresh_token')
+                has_legacy = tt_creds.get('username') and tt_creds.get('password')
+                
+                if has_oauth or has_legacy:
+                    auth_type = "OAuth2" if has_oauth else "username/password"
+                    paper_mode = tt_creds.get('paper_mode', True)
+                    mode_str = "PAPER" if paper_mode else "LIVE"
+                    _original_print(f"[TASTYTRADE] Creating TastytradeBroker instance ({auth_type}, {mode_str})...", flush=True)
+                    
                     self.tastytrade_broker = TastytradeBroker({
                         'username': tt_creds.get('username'),
                         'password': tt_creds.get('password'),
-                        'paper_trade': tt_creds.get('paper_mode', True)
+                        'client_secret': tt_creds.get('client_secret'),
+                        'refresh_token': tt_creds.get('refresh_token'),
+                        'paper_trade': paper_mode
                     })
                     
                     connected = await self.tastytrade_broker.connect()
                     if connected:
-                        _original_print("[TASTYTRADE] ✓ Connected successfully", flush=True)
+                        _original_print(f"[TASTYTRADE] ✓ Connected successfully ({mode_str})", flush=True)
                     else:
                         _original_print("[TASTYTRADE] ⚠️ Connection failed", flush=True)
                         self.tastytrade_broker = None
                 else:
                     _original_print("[TASTYTRADE] No credentials configured - broker disabled", flush=True)
+                    _original_print("[TASTYTRADE]   Need OAuth2 (client_secret + refresh_token) or legacy (username + password)", flush=True)
             else:
                 _original_print("[TASTYTRADE] TastytradeBroker not available", flush=True)
         except Exception as e:
