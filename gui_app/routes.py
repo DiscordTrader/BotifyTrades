@@ -7120,16 +7120,28 @@ def register_routes(app):
                 creds = get_tastytrade_credentials()
                 username = creds.get('username', '')
                 password = creds.get('password', '')
+                client_secret = creds.get('client_secret', '')
+                refresh_token = creds.get('refresh_token', '')
                 
-                if not username or not password:
+                has_oauth = client_secret and refresh_token
+                has_legacy = username and password
+                
+                if not has_oauth and not has_legacy:
                     set_broker_status(broker_id, False, 'error', 'No Tastytrade credentials configured')
                     mode_name = "Paper" if is_paper else "Live"
-                    return jsonify({'success': False, 'error': f'No Tastytrade {mode_name} credentials configured. Please save username and password first.'}), 400
+                    return jsonify({'success': False, 'error': f'No Tastytrade {mode_name} credentials configured. Please save OAuth2 or legacy credentials first.'}), 400
                 
                 try:
                     from tastytrade import Session, Account
                     
-                    session = Session(username, password, is_test=is_paper)
+                    if has_oauth:
+                        print(f"[API] Tastytrade: Using OAuth2 authentication (is_test={is_paper})")
+                        print(f"[API] Tastytrade: client_secret length={len(client_secret)}, refresh_token length={len(refresh_token)}")
+                        session = Session(client_secret, refresh_token, is_test=is_paper)
+                    else:
+                        print(f"[API] Tastytrade: Using legacy username/password (is_test={is_paper})")
+                        session = Session(username, password, is_test=is_paper)
+                    
                     accounts = Account.get(session)
                     
                     if not accounts:
@@ -7150,16 +7162,20 @@ def register_routes(app):
                     }
                     
                     set_broker_status(broker_id, True, 'connected', account_info=account_info)
+                    auth_method = 'OAuth2' if has_oauth else 'legacy'
                     
                     return jsonify({
                         'success': True,
-                        'message': f'Tastytrade {"Sandbox" if is_paper else "Live"} connected successfully!',
+                        'message': f'Tastytrade {"Sandbox" if is_paper else "Live"} connected successfully via {auth_method}!',
                         'status': 'connected',
                         'account': account_info
                     })
                     
                 except Exception as tt_err:
                     error_msg = str(tt_err)
+                    print(f"[API] Tastytrade connection error: {error_msg}")
+                    import traceback
+                    traceback.print_exc()
                     set_broker_status(broker_id, False, 'error', error_msg)
                     return jsonify({'success': False, 'error': f'Tastytrade connection failed: {error_msg}'}), 400
             
