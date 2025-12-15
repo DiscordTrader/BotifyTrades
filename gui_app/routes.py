@@ -6251,12 +6251,71 @@ def register_routes(app):
     
     @app.route('/api/brokers/status', methods=['GET'])
     def api_get_broker_status():
-        """Get connection status of all brokers"""
+        """Get connection status of all brokers - checks actual bot connections"""
         try:
-            from .broker_credentials_service import get_all_broker_status, get_enabled_brokers
+            from .broker_credentials_service import get_all_broker_status, get_enabled_brokers, set_broker_status
             
+            # Get stored status as baseline
             status = get_all_broker_status()
             enabled = get_enabled_brokers()
+            
+            # Check actual connections from bot instance and update status accordingly
+            if _bot_instance:
+                # Discord connection
+                discord_connected = _bot_instance.is_ready() if hasattr(_bot_instance, 'is_ready') else False
+                if discord_connected:
+                    user_info = str(_bot_instance.user) if hasattr(_bot_instance, 'user') and _bot_instance.user else None
+                    set_broker_status('discord', True, 'connected', account_info={'user': user_info})
+                    status['discord'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': {'user': user_info}}
+                else:
+                    set_broker_status('discord', False, 'disconnected')
+                    status['discord'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+                
+                # Webull Live broker
+                if hasattr(_bot_instance, 'broker') and _bot_instance.broker:
+                    set_broker_status('webull_live', True, 'connected')
+                    status['webull_live'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': None}
+                else:
+                    set_broker_status('webull_live', False, 'disconnected')
+                    status['webull_live'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+                
+                # Paper broker - detect type
+                paper_broker = getattr(_bot_instance, 'paper_broker', None)
+                paper_broker_type = type(paper_broker).__name__ if paper_broker else ''
+                
+                # Webull Paper
+                if paper_broker and 'Webull' in paper_broker_type:
+                    set_broker_status('webull_paper', True, 'connected')
+                    status['webull_paper'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': None}
+                else:
+                    set_broker_status('webull_paper', False, 'disconnected')
+                    status['webull_paper'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+                
+                # Alpaca Paper
+                if paper_broker and ('Alpaca' in paper_broker_type or 'TradingClient' in paper_broker_type):
+                    set_broker_status('alpaca_paper', True, 'connected')
+                    status['alpaca_paper'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': None}
+                else:
+                    set_broker_status('alpaca_paper', False, 'disconnected')
+                    status['alpaca_paper'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+                
+                # Alpaca Live broker
+                live_broker = getattr(_bot_instance, 'live_broker', None)
+                live_broker_type = type(live_broker).__name__ if live_broker else ''
+                if live_broker and ('Alpaca' in live_broker_type or 'TradingClient' in live_broker_type):
+                    set_broker_status('alpaca_live', True, 'connected')
+                    status['alpaca_live'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': None}
+                else:
+                    set_broker_status('alpaca_live', False, 'disconnected')
+                    status['alpaca_live'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+                
+                # IBKR broker
+                if hasattr(_bot_instance, 'ibkr_broker') and _bot_instance.ibkr_broker:
+                    set_broker_status('ibkr_live', True, 'connected')
+                    status['ibkr_live'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': None}
+                else:
+                    set_broker_status('ibkr_live', False, 'disconnected')
+                    status['ibkr_live'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
             
             return jsonify({
                 'success': True,
