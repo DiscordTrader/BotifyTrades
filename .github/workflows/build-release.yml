@@ -25,6 +25,8 @@ on:
 
 env:
   PRIVATE_REPO: DiscordTrader/BotifyTradesv2
+  permissions:
+  contents: write  # Required for creating releases and uploading assets
 
 jobs:
   build-windows:
