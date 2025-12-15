@@ -5002,6 +5002,28 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         except Exception as e:
             print(f"[Discord] Warning: Could not register bot instance: {e}")
         
+        # Run startup validation for critical settings consistency
+        try:
+            from gui_app.settings_validator import run_system_validation
+            from gui_app import database as db
+            
+            print("\n[STARTUP] Running settings consistency validation...")
+            report = run_system_validation(db)
+            
+            if report.is_valid:
+                print(f"[STARTUP] ✓ Settings validation PASSED ({report.channels_checked} channels, {report.brokers_checked} brokers)")
+                if report.warning_count > 0:
+                    print(f"[STARTUP] ⚠️  {report.warning_count} warnings found - review /api/system/consistency-check")
+            else:
+                print(f"[STARTUP] ❌ Settings validation FAILED - {report.critical_count} critical issues:")
+                for issue in report.issues:
+                    if issue.severity == 'critical':
+                        channel_info = f" [Channel: {issue.channel_name}]" if issue.channel_name else ""
+                        print(f"[STARTUP]   - {issue.field}: {issue.message}{channel_info}")
+                print("[STARTUP] ⚠️  TRADING MAY BE AFFECTED - Fix issues via GUI or /api/system/consistency-check")
+        except Exception as e:
+            print(f"[STARTUP] Warning: Could not run settings validation: {e}")
+        
         # Signal ready event for thread synchronization (if available)
         try:
             global _discord_ready_event

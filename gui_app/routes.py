@@ -1349,10 +1349,48 @@ def register_routes(app):
     
     @app.route('/api/channels/<int:channel_id>', methods=['PUT'])
     def api_update_channel(channel_id):
-        """Update a channel"""
+        """Update a channel with save-and-verify for critical settings"""
         data = request.json
+        
+        # Perform the update
         db.update_channel(channel_id, **data)
-        return jsonify({'success': True})
+        
+        # Save-and-verify: Re-read and confirm critical settings were persisted
+        verification_errors = []
+        try:
+            from .settings_validator import get_validator, CRITICAL_CHANNEL_FIELDS
+            
+            saved_channel = db.get_channel_by_id(channel_id)
+            if saved_channel:
+                for field_name in CRITICAL_CHANNEL_FIELDS.keys():
+                    if field_name in data:
+                        submitted = data[field_name]
+                        saved = saved_channel.get(field_name)
+                        
+                        # Normalize for comparison
+                        if submitted is not None and saved is not None:
+                            try:
+                                if isinstance(submitted, (int, float)):
+                                    submitted = float(submitted)
+                                    saved = float(saved) if saved else None
+                            except (ValueError, TypeError):
+                                pass
+                        
+                        if submitted != saved:
+                            verification_errors.append(f"{field_name}: expected {submitted}, got {saved}")
+        except Exception as e:
+            print(f"[SAVE-VERIFY] Verification error: {e}")
+        
+        if verification_errors:
+            print(f"[SAVE-VERIFY] Channel {channel_id} verification failed: {verification_errors}")
+            return jsonify({
+                'success': True, 
+                'verified': False,
+                'verification_errors': verification_errors,
+                'message': 'Settings saved but verification found mismatches'
+            })
+        
+        return jsonify({'success': True, 'verified': True})
     
     @app.route('/api/channels/<int:channel_id>', methods=['DELETE'])
     def api_delete_channel(channel_id):
@@ -9072,6 +9110,59 @@ def register_routes(app):
             import traceback
             traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)})
+    
+    @app.route('/api/system/consistency-check', methods=['GET'])
+    @login_required
+    def api_system_consistency_check():
+        """
+        Run comprehensive system-wide consistency check.
+        Validates alignment between GUI, Database, and Bot execution pipeline
+        for critical settings: position sizing, risk management, slippage, broker credentials.
+        """
+        try:
+            from .settings_validator import run_system_validation
+            
+            report = run_system_validation(db)
+            return jsonify({
+                'success': True,
+                **report.to_dict()
+            })
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                'success': False, 
+                'error': str(e),
+                'is_valid': False,
+                'issues': []
+            })
+    
+    @app.route('/api/system/validate-channel/<int:channel_id>', methods=['GET'])
+    @login_required
+    def api_validate_channel_settings(channel_id):
+        """
+        Validate a specific channel's settings configuration status.
+        Returns detailed info about which settings are configured vs using defaults.
+        """
+        try:
+            from .settings_validator import get_validator
+            
+            validator = get_validator()
+            validator.set_database(db)
+            status = validator.get_channel_settings_status(channel_id)
+            
+            return jsonify({
+                'success': True,
+                **status
+            })
+            
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': str(e),
+                'configured': False
+            })
     
     @app.route('/api/health/run-tests', methods=['POST'])
     @login_required  
