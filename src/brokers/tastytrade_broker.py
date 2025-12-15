@@ -115,12 +115,12 @@ class TastytradeBroker(BrokerInterface):
             
             balances = await asyncio.to_thread(self.account.get_balances, self.session)
             
+            nlv = float(getattr(balances, 'net_liquidating_value', 0) or 0)
+            cash = float(getattr(balances, 'cash_balance', 0) or 0)
+            
             print(f"[{self.name}] ✓ Connected successfully ({mode} trading)")
             print(f"[{self.name}]   Account #: {self.account.account_number}")
-            if hasattr(balances, 'net_liquidating_value'):
-                print(f"[{self.name}]   Net Liquidating Value: ${float(balances.net_liquidating_value):,.2f}")
-            if hasattr(balances, 'cash_balance'):
-                print(f"[{self.name}]   Cash Balance: ${float(balances.cash_balance):,.2f}")
+            print(f"[{self.name}]   Net Liq: ${nlv:,.2f}, Cash: ${cash:,.2f}")
             
             return True
             
@@ -159,7 +159,7 @@ class TastytradeBroker(BrokerInterface):
         print(f"[{self.name}] Disconnected")
     
     async def get_account_info(self) -> Dict[str, Any]:
-        """Get account information"""
+        """Get account information from Tastytrade"""
         try:
             if not self.account or not self.session:
                 return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
@@ -175,10 +175,13 @@ class TastytradeBroker(BrokerInterface):
                 'buying_power': equity_bp,
                 'options_buying_power': derivative_bp,
                 'cash': cash,
-                'portfolio_value': nlv
+                'portfolio_value': nlv,
+                'account_number': self.account.account_number
             }
         except Exception as e:
             print(f"[{self.name}] Error getting account info: {e}")
+            import traceback
+            traceback.print_exc()
             return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
     
     async def get_positions(self) -> Dict[str, Any]:

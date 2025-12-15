@@ -4085,6 +4085,32 @@ class SelfClient(discord.Client):
                     connected = await self.tastytrade_broker.connect()
                     if connected:
                         _original_print(f"[TASTYTRADE] ✓ Connected successfully ({mode_str})", flush=True)
+                        _original_print(f"[TASTYTRADE]   Account #: {self.tastytrade_broker.account.account_number}", flush=True)
+                        # Update GUI broker status with account info
+                        try:
+                            from gui_app.broker_credentials_service import set_broker_status
+                            
+                            account_info = await self.tastytrade_broker.get_account_info()
+                            nlv = account_info.get('portfolio_value', 0)
+                            
+                            # Warn if balance is zero (common OAuth scope issue)
+                            if nlv == 0:
+                                _original_print(f"[TASTYTRADE] ⚠️  Balance shows $0 - API returned zero values", flush=True)
+                                _original_print(f"[TASTYTRADE]     This may indicate:", flush=True)
+                                _original_print(f"[TASTYTRADE]     1. Account has no funds", flush=True)
+                                _original_print(f"[TASTYTRADE]     2. OAuth scope may need 'Account Balance' permission", flush=True)
+                                _original_print(f"[TASTYTRADE]     3. Check account balance at my.tastytrade.com", flush=True)
+                            else:
+                                _original_print(f"[TASTYTRADE]   Net Liq: ${nlv:,.2f}", flush=True)
+                                _original_print(f"[TASTYTRADE]   Buying Power: ${account_info.get('equity_buying_power', 0):,.2f}", flush=True)
+                            
+                            broker_id = 'tastytrade_paper' if paper_mode else 'tastytrade_live'
+                            set_broker_status(broker_id, True, 'connected', account_info=account_info)
+                            _original_print(f"[TASTYTRADE] ✓ Broker status updated in GUI", flush=True)
+                        except Exception as status_err:
+                            _original_print(f"[TASTYTRADE] ⚠️ Failed to update broker status: {status_err}", flush=True)
+                            import traceback
+                            traceback.print_exc()
                     else:
                         _original_print("[TASTYTRADE] ⚠️ Connection failed", flush=True)
                         self.tastytrade_broker = None
