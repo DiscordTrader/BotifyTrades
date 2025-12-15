@@ -48,13 +48,24 @@ class SettingsDBAdapter:
                         'position_sizing_enabled': trading.get('position_sizing_enabled', True),
                         'max_position_size': trading.get('max_position_size', 1000.0),
                         'position_size_percent': trading.get('position_size_percent', 5.0),
-                        'slippage_protection_enabled': trading.get('slippage_protection_enabled', True),
-                        'slippage_percent': trading.get('slippage_percent', 2.0),
                         'auto_clear_stale_trades': trading.get('auto_clear_stale_trades', False),
                         'stale_trade_hours': trading.get('stale_trade_hours', 24),
                         'max_daily_trades': trading.get('max_daily_trades', 50),
                         'max_daily_loss': trading.get('max_daily_loss', 500.0),
                         'paper_trade': trading.get('paper_trade', True),
+                    })
+            
+            if hasattr(self._db, 'get_slippage_settings'):
+                slippage = self._db.get_slippage_settings()
+                if slippage:
+                    settings.update({
+                        'slippage_protection_enabled': slippage.get('enabled', False),
+                        'slippage_percent': slippage.get('threshold_percent', 10.0),
+                    })
+                else:
+                    settings.update({
+                        'slippage_protection_enabled': False,
+                        'slippage_percent': 10.0,
                     })
             
             if hasattr(self._db, 'get_risk_management_settings'):
