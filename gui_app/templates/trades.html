@@ -29,16 +29,16 @@
         <h3 class="table-title">📈 Trade Monitor</h3>
         <div style="display: flex; gap: 12px; align-items: center;">
             <label style="font-size: 0.875rem; color: var(--text-secondary);">Broker:</label>
-            <select id="broker-filter" onchange="onBrokerChange(this.value)" class="form-select" style="min-width: 140px;">
-                <option value="">All Brokers</option>
-                <option value="WEBULL">Webull LIVE</option>
-                <option value="WEBULL_PAPER">Webull PAPER</option>
-                <option value="ALPACA">Alpaca LIVE</option>
-                <option value="ALPACA_PAPER">Alpaca PAPER</option>
-                <option value="IBKR">IBKR LIVE</option>
-                <option value="IBKR_PAPER">IBKR PAPER</option>
-                <option value="TASTYTRADE_LIVE">Tastytrade LIVE</option>
-                <option value="TASTYTRADE_PAPER">Tastytrade PAPER</option>
+            <select id="broker-filter" onchange="onBrokerChange(this.value)" class="form-select" style="min-width: 140px; background-color: #2C2C2E; color: #FFFFFF;">
+                <option value="" style="background-color: #2C2C2E; color: #FFFFFF;">All Brokers</option>
+                <option value="WEBULL" style="background-color: #2C2C2E; color: #FFFFFF;">Webull LIVE</option>
+                <option value="WEBULL_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">Webull PAPER</option>
+                <option value="ALPACA" style="background-color: #2C2C2E; color: #FFFFFF;">Alpaca LIVE</option>
+                <option value="ALPACA_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">Alpaca PAPER</option>
+                <option value="IBKR" style="background-color: #2C2C2E; color: #FFFFFF;">IBKR LIVE</option>
+                <option value="IBKR_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">IBKR PAPER</option>
+                <option value="TASTYTRADE_LIVE" style="background-color: #2C2C2E; color: #FFFFFF;">Tastytrade LIVE</option>
+                <option value="TASTYTRADE_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">Tastytrade PAPER</option>
             </select>
             <button onclick="refreshPrices()" class="btn btn-primary btn-small">
                 🔄 Refresh Prices

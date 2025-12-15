@@ -102,9 +102,9 @@
                 <label class="form-label">Risk Per Trade</label>
                 <div style="display: grid; grid-template-columns: 1fr 120px; gap: 8px;">
                     <input type="number" id="risk-value" class="form-input" value="300" min="1" step="10">
-                    <select id="risk-mode" class="form-select" onchange="updateRiskPlaceholder()">
-                        <option value="fixed">$ Fixed</option>
-                        <option value="percent">% of Balance</option>
+                    <select id="risk-mode" class="form-select" onchange="updateRiskPlaceholder()" style="background-color: #2C2C2E; color: #FFFFFF;">
+                        <option value="fixed" style="background-color: #2C2C2E; color: #FFFFFF;">$ Fixed</option>
+                        <option value="percent" style="background-color: #2C2C2E; color: #FFFFFF;">% of Balance</option>
                     </select>
                 </div>
             </div>
