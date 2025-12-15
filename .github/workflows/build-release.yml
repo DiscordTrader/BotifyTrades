@@ -26,8 +26,8 @@ on:
 env:
   PRIVATE_REPO: DiscordTrader/BotifyTradesv2
 
-permissions:             # ✅ CORRECT - at root level (no indent)
-  contents: write
+permissions:
+  contents: write  # Required for creating releases and uploading assets
 
 jobs:
   build-windows:
