@@ -43,28 +43,65 @@ class TastytradeBroker(BrokerInterface):
         return not self.paper_trade
     
     async def connect(self) -> bool:
-        """Connect to Tastytrade using username/password or OAuth"""
+        """Connect to Tastytrade using OAuth2 (preferred) or legacy username/password"""
         try:
             if not TASTYTRADE_AVAILABLE:
                 print(f"[{self.name}] ❌ tastytrade package not installed")
                 return False
             
+            client_secret = self.config.get('client_secret')
+            refresh_token = self.config.get('refresh_token')
             username = self.config.get('username')
             password = self.config.get('password')
-            
-            if not username or not password:
-                print(f"[{self.name}] ❌ Missing credentials (username/password)")
-                return False
             
             mode = "SANDBOX" if self.paper_trade else "LIVE"
             print(f"[{self.name}] Connecting to {mode} account...")
             
-            self.session = await asyncio.to_thread(
-                Session,
-                username,
-                password,
-                is_test=self.paper_trade
-            )
+            if client_secret and refresh_token:
+                print(f"[{self.name}] Using OAuth2 authentication...")
+                try:
+                    self.session = await asyncio.to_thread(
+                        Session,
+                        client_secret=client_secret,
+                        refresh_token=refresh_token,
+                        is_test=self.paper_trade
+                    )
+                except TypeError:
+                    self.session = Session(
+                        client_secret=client_secret,
+                        refresh_token=refresh_token,
+                        is_test=self.paper_trade
+                    )
+            elif username and password:
+                print(f"[{self.name}] Using legacy username/password authentication...")
+                print(f"[{self.name}] ⚠️  NOTE: Session-token login is being deprecated Dec 2025")
+                print(f"[{self.name}]    Consider switching to OAuth2 for better reliability")
+                try:
+                    self.session = await asyncio.to_thread(
+                        Session,
+                        username,
+                        password,
+                        is_test=self.paper_trade
+                    )
+                except Exception as legacy_err:
+                    error_str = str(legacy_err).lower()
+                    if 'invalid_grant' in error_str or 'jwt' in error_str:
+                        print(f"[{self.name}] ❌ Legacy login failed - OAuth2 required!")
+                        print(f"[{self.name}] ")
+                        print(f"[{self.name}] 📋 TO FIX THIS:")
+                        print(f"[{self.name}]    1. Go to my.tastytrade.com")
+                        print(f"[{self.name}]    2. Navigate to OAuth Applications")
+                        print(f"[{self.name}]    3. Create new app → Save Client Secret")
+                        print(f"[{self.name}]    4. Manage → Create Grant → Save Refresh Token")
+                        print(f"[{self.name}]    5. Enter Client Secret + Refresh Token in bot settings")
+                        print(f"[{self.name}] ")
+                        return False
+                    raise
+            else:
+                print(f"[{self.name}] ❌ Missing credentials")
+                print(f"[{self.name}]    Option 1 (Recommended): client_secret + refresh_token")
+                print(f"[{self.name}]    Option 2 (Deprecated): username + password")
+                return False
             
             accounts = await asyncio.to_thread(Account.get, self.session)
             
@@ -91,9 +128,22 @@ class TastytradeBroker(BrokerInterface):
             error_msg = str(e)
             print(f"[{self.name}] ❌ Connection error: {error_msg}")
             
-            if 'invalid' in error_msg.lower() or '401' in error_msg or 'unauthorized' in error_msg.lower():
+            if 'invalid_grant' in error_msg.lower() or 'jwt' in error_msg.lower():
+                print(f"[{self.name}] ")
+                print(f"[{self.name}] ⚠️  TASTYTRADE NOW REQUIRES OAUTH2 AUTHENTICATION")
+                print(f"[{self.name}] ")
+                print(f"[{self.name}] 📋 How to set up OAuth2:")
+                print(f"[{self.name}]    1. Go to my.tastytrade.com")
+                print(f"[{self.name}]    2. Navigate to OAuth Applications")
+                print(f"[{self.name}]    3. Create new application")
+                print(f"[{self.name}]    4. Save your Client Secret")
+                print(f"[{self.name}]    5. Go to Manage → Create Grant")
+                print(f"[{self.name}]    6. Save your Refresh Token")
+                print(f"[{self.name}]    7. Enter both in the Tastytrade broker settings")
+                print(f"[{self.name}] ")
+            elif 'invalid' in error_msg.lower() or '401' in error_msg or 'unauthorized' in error_msg.lower():
                 print(f"[{self.name}] ⚠️  AUTHENTICATION FAILED - Check that:")
-                print(f"[{self.name}]    1. Username and password are correct")
+                print(f"[{self.name}]    1. Credentials are correct")
                 print(f"[{self.name}]    2. Account has API access enabled")
                 print(f"[{self.name}]    3. For sandbox, use sandbox credentials")
             
