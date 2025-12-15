@@ -119,6 +119,12 @@ jobs:
           Set-Location packaging\windows\dist
           Compress-Archive -Path * -DestinationPath ..\BotifyTrades-v${{ steps.version.outputs.VERSION }}-Windows.zip
 
+      - name: Restore original license files
+        run: |
+          Copy-Item -Force backup\constants.py.bak license\config\constants.py
+          Copy-Item -Force backup\manager_secure.py.bak license\client\manager_secure.py
+          Copy-Item -Force backup\manager_activation.py.bak license\client\manager_activation.py
+
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
@@ -196,6 +202,12 @@ jobs:
         run: |
           cd packaging/linux/dist
           tar -czvf ../BotifyTrades-v${{ steps.version.outputs.VERSION }}-Linux.tar.gz *
+
+      - name: Restore original license files
+        run: |
+          cp -f backup/constants.py.bak license/config/constants.py
+          cp -f backup/manager_secure.py.bak license/client/manager_secure.py
+          cp -f backup/manager_activation.py.bak license/client/manager_activation.py
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4

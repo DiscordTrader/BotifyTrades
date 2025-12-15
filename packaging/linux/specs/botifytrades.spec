@@ -92,6 +92,7 @@ a = Analysis(
         'src.setup_wizard',
         'setup_wizard',
         'certifi',
+        'pyarmor_runtime_000000',  # PyArmor runtime for obfuscated license
     ],
     hookspath=[],
     hooksconfig={},
