@@ -1,0 +1,274 @@
+# =============================================================================
+# BotifyTrades Build Workflow - FOR PUBLIC REPO (DiscordTrader/BotifyTrades)
+# =============================================================================
+# 
+# INSTALLATION:
+# 1. Copy this file to: DiscordTrader/BotifyTrades/.github/workflows/build-release.yml
+# 2. Add secret PRIVATE_REPO_TOKEN (PAT with 'repo' scope for private repo access)
+#
+# TRIGGERING:
+# - Automatically via repository_dispatch from release.sh
+# - Manually via GitHub Actions "Run workflow" button
+# =============================================================================
+
+name: Build and Release
+
+on:
+  repository_dispatch:
+    types: [release_ready]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., 3.2.1)'
+        required: true
+        type: string
+
+env:
+  PRIVATE_REPO: DiscordTrader/BotifyTradesv2
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            echo "VERSION=${{ github.event.client_payload.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout private repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PRIVATE_REPO }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          ref: main
+
+      - name: Verify version matches
+        shell: python
+        run: |
+          import re
+          with open('upgrade/version.py', 'r') as f:
+              content = f.read()
+          match = re.search(r'APP_VERSION = "([^"]*)"', content)
+          if match:
+              file_version = match.group(1)
+              expected = "${{ steps.version.outputs.VERSION }}"
+              if file_version != expected:
+                  print(f"WARNING: version.py has {file_version}, expected {expected}")
+              else:
+                  print(f"Version verified: {file_version}")
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarmor pyinstaller certifi
+          pip install -r requirements.txt
+
+      - name: Backup license files
+        run: |
+          New-Item -ItemType Directory -Force -Path backup
+          Copy-Item license\config\constants.py backup\constants.py.bak
+          Copy-Item license\client\manager_secure.py backup\manager_secure.py.bak
+          Copy-Item license\client\manager_activation.py backup\manager_activation.py.bak
+
+      - name: Obfuscate with PyArmor
+        run: |
+          pyarmor gen -O dist_obf license\config\constants.py
+          pyarmor gen -O dist_obf license\client\manager_secure.py
+          pyarmor gen -O dist_obf license\client\manager_activation.py
+          Copy-Item -Force dist_obf\constants.py license\config\constants.py
+          Copy-Item -Force dist_obf\manager_secure.py license\client\manager_secure.py
+          Copy-Item -Force dist_obf\manager_activation.py license\client\manager_activation.py
+          if (Test-Path dist_obf\pyarmor_runtime_000000) { Copy-Item -Recurse -Force dist_obf\pyarmor_runtime_000000 license\ }
+
+      - name: Build EXE with PyInstaller
+        run: |
+          pyinstaller --clean --noconfirm --distpath packaging\windows\dist --workpath packaging\windows\build_temp packaging\windows\specs\botifytrades.spec
+
+      - name: Create distribution package
+        run: |
+          New-Item -ItemType Directory -Force -Path packaging\windows\dist\config
+          if (Test-Path config.ini.example) { Copy-Item config.ini.example packaging\windows\dist\ }
+          if (Test-Path GET_DISCORD_TOKEN.html) { Copy-Item GET_DISCORD_TOKEN.html packaging\windows\dist\ }
+          if (Test-Path GET_WEBULL_TOKENS.html) { Copy-Item GET_WEBULL_TOKENS.html packaging\windows\dist\ }
+          Set-Content -Path packaging\windows\dist\RUN.bat -Value "@echo off`r`necho Starting BotifyTrades...`r`nBotifyTrades.exe"
+
+      - name: Create README
+        run: |
+          $readme = @"
+          BotifyTrades v${{ steps.version.outputs.VERSION }}
+          =================================
+          
+          1. Run RUN.bat or BotifyTrades.exe
+          2. Open http://localhost:5000
+          3. Complete the setup wizard
+          "@
+          Set-Content -Path packaging\windows\dist\README.txt -Value $readme
+
+      - name: Zip distribution
+        run: |
+          Set-Location packaging\windows\dist
+          Compress-Archive -Path * -DestinationPath ..\BotifyTrades-v${{ steps.version.outputs.VERSION }}-Windows.zip
+
+      - name: Restore original license files
+        run: |
+          Copy-Item -Force backup\constants.py.bak license\config\constants.py
+          Copy-Item -Force backup\manager_secure.py.bak license\client\manager_secure.py
+          Copy-Item -Force backup\manager_activation.py.bak license\client\manager_activation.py
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: packaging/windows/BotifyTrades-v${{ steps.version.outputs.VERSION }}-Windows.zip
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            echo "VERSION=${{ github.event.client_payload.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout private repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PRIVATE_REPO }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarmor pyinstaller certifi
+          pip install -r requirements.txt
+
+      - name: Backup license files
+        run: |
+          mkdir -p backup
+          cp license/config/constants.py backup/constants.py.bak
+          cp license/client/manager_secure.py backup/manager_secure.py.bak
+          cp license/client/manager_activation.py backup/manager_activation.py.bak
+
+      - name: Obfuscate with PyArmor
+        run: |
+          pyarmor gen -O dist_obf license/config/constants.py
+          pyarmor gen -O dist_obf license/client/manager_secure.py
+          pyarmor gen -O dist_obf license/client/manager_activation.py
+          cp -f dist_obf/constants.py license/config/constants.py
+          cp -f dist_obf/manager_secure.py license/client/manager_secure.py
+          cp -f dist_obf/manager_activation.py license/client/manager_activation.py
+          mkdir -p license/pyarmor_runtime_000000
+          cp -r dist_obf/pyarmor_runtime_000000/* license/pyarmor_runtime_000000/ 2>/dev/null || true
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --clean --noconfirm \
+            --distpath packaging/linux/dist \
+            --workpath packaging/linux/build_temp \
+            packaging/linux/specs/botifytrades.spec
+
+      - name: Create distribution package
+        run: |
+          chmod +x packaging/linux/dist/BotifyTrades
+          mkdir -p packaging/linux/dist/config
+          cp config.ini.example packaging/linux/dist/ 2>/dev/null || true
+          cp GET_DISCORD_TOKEN.html packaging/linux/dist/ 2>/dev/null || true
+          cp GET_WEBULL_TOKENS.html packaging/linux/dist/ 2>/dev/null || true
+          echo '#!/bin/bash' > packaging/linux/dist/run.sh
+          echo 'echo "Starting BotifyTrades..."' >> packaging/linux/dist/run.sh
+          echo './BotifyTrades' >> packaging/linux/dist/run.sh
+          chmod +x packaging/linux/dist/run.sh
+
+      - name: Create tarball
+        run: |
+          cd packaging/linux/dist
+          tar -czvf ../BotifyTrades-v${{ steps.version.outputs.VERSION }}-Linux.tar.gz *
+
+      - name: Restore original license files
+        run: |
+          cp -f backup/constants.py.bak license/config/constants.py
+          cp -f backup/manager_secure.py.bak license/client/manager_secure.py
+          cp -f backup/manager_activation.py.bak license/client/manager_activation.py
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: packaging/linux/BotifyTrades-v${{ steps.version.outputs.VERSION }}-Linux.tar.gz
+
+  create-release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            echo "VERSION=${{ github.event.client_payload.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build
+          path: ./artifacts
+
+      - name: Download Linux build
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-build
+          path: ./artifacts
+
+      - name: List artifacts
+        run: ls -la ./artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: BotifyTrades v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## BotifyTrades v${{ steps.version.outputs.VERSION }}
+            
+            ### Downloads
+            - **Windows**: `BotifyTrades-v${{ steps.version.outputs.VERSION }}-Windows.zip`
+            - **Linux**: `BotifyTrades-v${{ steps.version.outputs.VERSION }}-Linux.tar.gz`
+            
+            ### Quick Start
+            1. Download and extract for your platform
+            2. Run `BotifyTrades.exe` (Windows) or `./BotifyTrades` (Linux)
+            3. Open http://localhost:5000 in your browser
+            4. Complete the setup wizard
+            
+            ### Requirements
+            - Valid license key
+            - Discord account
+            - Broker account (Webull, Alpaca, Interactive Brokers, or Tastytrade)
+          files: |
+            ./artifacts/BotifyTrades-v${{ steps.version.outputs.VERSION }}-Windows.zip
+            ./artifacts/BotifyTrades-v${{ steps.version.outputs.VERSION }}-Linux.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
