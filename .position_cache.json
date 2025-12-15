@@ -391,7 +391,7 @@
   },
   "ALPACA_PAPER_TSLA_460.0_2025-12-19_C": {
     "entry_price": 7.0,
-    "highest_price": 21.1,
+    "highest_price": 25.25,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -706,7 +706,7 @@
   },
   "ALPACA_PAPER_TSLA_470.0_2025-12-19_C": {
     "entry_price": 7.0,
-    "highest_price": 14.85,
+    "highest_price": 18.35,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -1246,7 +1246,7 @@
   },
   "ALPACA_PAPER_TSLA_stock": {
     "entry_price": 455.936,
-    "highest_price": 475.36,
+    "highest_price": 480.3472,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -1453,5 +1453,20 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-15T14:31:22.286416"
+  },
+  "ALPACA_PAPER_COIN_270.0_2025-12-19_C": {
+    "entry_price": 5.85,
+    "highest_price": 5.45,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "COIN251219C00270000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-15T14:34:03.707625"
   }
 }

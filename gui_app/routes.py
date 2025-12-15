@@ -2042,6 +2042,96 @@ def register_routes(app):
             _api_cache[cache_key] = (result, time.time())
             return result
     
+    @app.route('/api/tastytrade/balance', methods=['GET'])
+    def api_tastytrade_balance() -> Any:
+        """Get Tastytrade account balance for Dashboard"""
+        import asyncio
+        
+        # Determine paper/live mode from request or default to live
+        paper_mode = request.args.get('paper', 'false').lower() == 'true'
+        
+        # Check cache first (5 second TTL) - separate cache for paper vs live
+        cache_key = f'tastytrade_balance_{"paper" if paper_mode else "live"}'
+        if cache_key in _api_cache:
+            cached_value, timestamp = _api_cache[cache_key]
+            if time.time() - timestamp < 5:
+                return cached_value
+        
+        try:
+            from .broker_credentials_service import get_tastytrade_credentials
+            from src.brokers.tastytrade_broker import TastytradeBroker
+            
+            creds = get_tastytrade_credentials()
+            
+            # Check if we have OAuth2 credentials
+            if not creds.get('client_secret') or not creds.get('refresh_token'):
+                result = jsonify({
+                    'buying_power': 0,
+                    'cash_balance': 0,
+                    'net_liquidation': 0,
+                    'equity': 0,
+                    'unrealized_pnl': 0,
+                    'status': 'not_configured',
+                    'error': 'Tastytrade credentials not configured'
+                })
+                return result
+            
+            config = {
+                'client_secret': creds.get('client_secret'),
+                'refresh_token': creds.get('refresh_token'),
+                'paper_trade': paper_mode
+            }
+            
+            broker = TastytradeBroker(config)
+            
+            # Connect and get account info
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                connected = loop.run_until_complete(broker.connect())
+                if not connected:
+                    result = jsonify({
+                        'buying_power': 0,
+                        'cash_balance': 0,
+                        'net_liquidation': 0,
+                        'equity': 0,
+                        'unrealized_pnl': 0,
+                        'status': 'connection_failed',
+                        'error': 'Failed to connect to Tastytrade'
+                    })
+                    return result
+                
+                account_info = loop.run_until_complete(broker.get_account_info())
+                
+                result = jsonify({
+                    'buying_power': account_info.get('buying_power', 0),
+                    'cash_balance': account_info.get('cash', 0),
+                    'net_liquidation': account_info.get('portfolio_value', 0),
+                    'equity': account_info.get('portfolio_value', 0),
+                    'unrealized_pnl': 0,
+                    'options_buying_power': account_info.get('options_buying_power', 0),
+                    'status': 'ok'
+                })
+                _api_cache[cache_key] = (result, time.time())
+                return result
+            finally:
+                loop.close()
+                
+        except Exception as e:
+            print(f"[API] Exception in Tastytrade balance endpoint: {e}")
+            import traceback
+            traceback.print_exc()
+            result = jsonify({
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'equity': 0,
+                'unrealized_pnl': 0,
+                'status': 'error',
+                'error': str(e)
+            })
+            return result
+    
     @app.route('/api/alpaca/positions/<symbol>/close', methods=['POST'])
     def api_alpaca_close_position(symbol: str) -> Any:
         """Close an Alpaca position by symbol with optional limit price and partial quantity"""
