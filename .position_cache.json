@@ -1501,7 +1501,7 @@
   },
   "ALPACA_PAPER_AAPL_282.5_2025-12-26_C": {
     "entry_price": 1.08,
-    "highest_price": 1.06,
+    "highest_price": 1.15,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -1531,7 +1531,7 @@
   },
   "ALPACA_PAPER_TSLA_470.0_2025-12-19_P": {
     "entry_price": 8.0,
-    "highest_price": 8.2,
+    "highest_price": 9.25,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -1543,5 +1543,20 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-15T14:48:41.712869"
+  },
+  "ALPACA_PAPER_NVDA_180.0_2025-12-19_C": {
+    "entry_price": 2.3,
+    "highest_price": 2.3,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "NVDA251219C00180000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-15T15:09:35.782589"
   }
 }
