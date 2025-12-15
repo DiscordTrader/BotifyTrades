@@ -204,12 +204,16 @@ def get_ibkr_credentials() -> Dict[str, Any]:
 def save_tastytrade_credentials(
     username: str = '',
     password: str = '',
+    client_secret: str = '',
+    refresh_token: str = '',
     paper_mode: bool = True
 ):
-    """Save Tastytrade broker credentials"""
+    """Save Tastytrade broker credentials (OAuth2 or legacy)"""
     save_config('tastytrade_credentials', {
         'username': username,
         'password': password,
+        'client_secret': client_secret,
+        'refresh_token': refresh_token,
         'paper_mode': paper_mode
     })
 
@@ -219,6 +223,8 @@ def get_tastytrade_credentials() -> Dict[str, Any]:
     return load_config('tastytrade_credentials') or {
         'username': '',
         'password': '',
+        'client_secret': '',
+        'refresh_token': '',
         'paper_mode': True
     }
 
@@ -228,6 +234,8 @@ def clear_tastytrade_credentials():
     save_config('tastytrade_credentials', {
         'username': '',
         'password': '',
+        'client_secret': '',
+        'refresh_token': '',
         'paper_mode': True
     })
     # Reset broker status
