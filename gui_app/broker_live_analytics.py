@@ -37,6 +37,8 @@ class BrokerLiveAnalytics:
         'webull_paper': {'name': 'Webull Paper', 'type': 'webull', 'paper': True},
         'alpaca_live': {'name': 'Alpaca Live', 'type': 'alpaca', 'paper': False},
         'alpaca_paper': {'name': 'Alpaca Paper', 'type': 'alpaca', 'paper': True},
+        'tastytrade_live': {'name': 'Tastytrade Live', 'type': 'tastytrade', 'paper': False},
+        'tastytrade_paper': {'name': 'Tastytrade Paper', 'type': 'tastytrade', 'paper': True},
     }
     
     def __init__(self):
@@ -81,6 +83,11 @@ class BrokerLiveAnalytics:
                     'secret_key': live_secret or base_creds.get('secret_key', ''),
                     'paper_mode': False
                 }
+        elif broker_type == 'tastytrade':
+            from .broker_credentials_service import get_tastytrade_credentials
+            creds = get_tastytrade_credentials()
+            creds['paper_mode'] = is_paper
+            return creds
         return {}
     
     def _is_cache_valid(self, broker_id: str) -> bool:
