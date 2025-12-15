@@ -5286,7 +5286,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # Add paper trading flag and channel config to signal
                     opt['_paper_trade_mode'] = True
                     opt['_channel_paper_config'] = {
-                        'profit_target_pct': channel_info.get('profit_target_pct'),
+                        'profit_target_1_pct': channel_info.get('profit_target_1_pct'),
+                        'profit_target_2_pct': channel_info.get('profit_target_2_pct'),
+                        'profit_target_3_pct': channel_info.get('profit_target_3_pct'),
                         'stop_loss_pct': channel_info.get('stop_loss_pct'),
                         'trailing_stop_pct': channel_info.get('trailing_stop_pct'),
                         'trailing_activation_pct': channel_info.get('trailing_activation_pct')
@@ -5370,7 +5372,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # Add paper trading flag and channel config to signal
                     stk['_paper_trade_mode'] = True
                     stk['_channel_paper_config'] = {
-                        'profit_target_pct': channel_info.get('profit_target_pct'),
+                        'profit_target_1_pct': channel_info.get('profit_target_1_pct'),
+                        'profit_target_2_pct': channel_info.get('profit_target_2_pct'),
+                        'profit_target_3_pct': channel_info.get('profit_target_3_pct'),
                         'stop_loss_pct': channel_info.get('stop_loss_pct'),
                         'trailing_stop_pct': channel_info.get('trailing_stop_pct'),
                         'trailing_activation_pct': channel_info.get('trailing_activation_pct')
