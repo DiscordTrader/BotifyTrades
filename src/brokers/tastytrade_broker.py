@@ -59,17 +59,18 @@ class TastytradeBroker(BrokerInterface):
             
             if client_secret and refresh_token:
                 print(f"[{self.name}] Using OAuth2 authentication...")
+                print(f"[{self.name}]    Environment: {'Sandbox' if self.paper_trade else 'Production'}")
                 try:
                     self.session = await asyncio.to_thread(
                         Session,
-                        client_secret=client_secret,
-                        refresh_token=refresh_token,
+                        client_secret,
+                        refresh_token,
                         is_test=self.paper_trade
                     )
                 except TypeError:
                     self.session = Session(
-                        client_secret=client_secret,
-                        refresh_token=refresh_token,
+                        client_secret,
+                        refresh_token,
                         is_test=self.paper_trade
                     )
             elif username and password:
