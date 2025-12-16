@@ -827,8 +827,19 @@ def handle_format_commands(query: str) -> Optional[Dict]:
     - "show formats" / "list formats" - Show all learned formats
     - "delete format <name>" - Delete a learned format
     - "enable format <name>" / "disable format <name>" - Toggle format
+    - "scan channel <channel_id>" - Scan messages and auto-learn formats
+    - "scan channels" - List channels available for scanning
     """
     query_lower = query.lower().strip()
+    
+    # Scan channel command - auto-discover formats
+    if query_lower.startswith('scan channel '):
+        channel_id = query[13:].strip()
+        return scan_channel_for_formats(channel_id)
+    
+    # List scannable channels
+    if query_lower in ['scan channels', 'list channels', 'show channels for scanning', 'which channels can i scan']:
+        return list_scannable_channels()
     
     # Teach format command
     if query_lower.startswith('teach this format:') or query_lower.startswith('teach format:'):
@@ -1027,6 +1038,125 @@ def delete_learned_format(format_name: str) -> Dict:
             "success": True,
             "response": f"**Error**\n\nCouldn't delete format: {str(e)}",
             "topic": "format_management"
+        }
+
+
+def list_scannable_channels() -> Dict:
+    """List channels that have stored messages for format discovery."""
+    try:
+        from . import database as db
+        channels = db.get_all_channels_with_messages()
+        
+        if not channels:
+            return {
+                "success": True,
+                "response": "**No Channels Available for Scanning**\n\nI haven't collected any messages from monitored channels yet.\n\nTo enable format discovery:\n1. Add channels in the Channels page\n2. Wait for some messages to come through\n3. Then use `scan channel <channel_id>` to learn formats\n\nAlternatively, use `teach this format: <signal>` to teach formats manually.",
+                "topic": "format_discovery"
+            }
+        
+        response = "**Channels Available for Format Discovery**\n\n"
+        for ch in channels:
+            response += f"**{ch.get('channel_name', 'Unknown')}**\n"
+            response += f"  ID: `{ch['channel_id']}`\n"
+            response += f"  Messages: {ch['message_count']}\n"
+            response += f"  Last activity: {ch.get('last_message', 'Unknown')}\n\n"
+        
+        response += "To scan a channel and auto-learn formats:\n`scan channel <channel_id>`"
+        
+        return {
+            "success": True,
+            "response": response,
+            "topic": "format_discovery"
+        }
+        
+    except Exception as e:
+        print(f"[CHAT] Error listing scannable channels: {e}")
+        return {
+            "success": True,
+            "response": f"**Error**\n\nCouldn't list channels: {str(e)}",
+            "topic": "format_discovery"
+        }
+
+
+def scan_channel_for_formats(channel_id: str) -> Dict:
+    """Scan a channel's messages and auto-learn signal formats using AI."""
+    try:
+        from . import database as db
+        from .format_trainer import get_format_trainer
+        
+        trainer = get_format_trainer()
+        
+        if not trainer.is_ai_available():
+            return {
+                "success": True,
+                "response": "**AI Not Available**\n\nTo scan channels and auto-learn formats, I need AI access.\n\nConfigure your AI provider in **Settings > AI & Market Data APIs**:\n- **Auto/Replit AI** - Uses Replit AI Integration\n- **OpenAI** - Uses your own OpenAI API key\n\nOr use `teach this format: <signal>` to teach formats one at a time.",
+                "topic": "format_discovery"
+            }
+        
+        messages = db.get_recent_channel_messages(channel_id, limit=50)
+        
+        if not messages:
+            return {
+                "success": True,
+                "response": f"**No Messages Found**\n\nNo messages found for channel ID `{channel_id}`.\n\nMake sure:\n1. The channel is configured in the Channels page\n2. Some messages have been received\n3. The channel ID is correct\n\nUse `scan channels` to see available channels.",
+                "topic": "format_discovery"
+            }
+        
+        channels = db.get_all_channels_with_messages()
+        channel_name = next((ch['channel_name'] for ch in channels if ch['channel_id'] == channel_id), 'Unknown Channel')
+        
+        result = trainer.discover_formats_from_messages(messages, channel_name)
+        
+        if not result.get('success'):
+            return {
+                "success": True,
+                "response": f"**Discovery Failed**\n\n{result.get('error', 'Unknown error')}\n\nTry again later or teach formats manually.",
+                "topic": "format_discovery"
+            }
+        
+        formats_saved = result.get('formats_saved', [])
+        formats_skipped = result.get('formats_skipped', [])
+        
+        if not formats_saved and not formats_skipped:
+            return {
+                "success": True,
+                "response": f"**No New Formats Found**\n\nAnalyzed {len(messages)} messages from **{channel_name}** but didn't find any recognizable signal formats.\n\nThis could mean:\n- The channel doesn't contain trading signals\n- Signals use a format already known\n- Messages need more variety for pattern detection",
+                "topic": "format_discovery"
+            }
+        
+        response = f"**Format Discovery Complete!**\n\n"
+        response += f"Scanned: {len(messages)} messages from **{channel_name}**\n"
+        response += f"Summary: {result.get('summary', '')}\n\n"
+        
+        if formats_saved:
+            response += f"**Formats Learned ({len(formats_saved)}):**\n"
+            for fmt in formats_saved:
+                response += f"- {fmt['name']} ({fmt['confidence']*100:.0f}% confidence)\n"
+            response += "\n"
+        
+        if formats_skipped:
+            response += f"**Skipped ({len(formats_skipped)}):**\n"
+            for fmt in formats_skipped:
+                response += f"- {fmt['name']}: {fmt['reason']}\n"
+        
+        response += "\nUse `show formats` to see all learned formats."
+        
+        return {
+            "success": True,
+            "response": response,
+            "topic": "format_discovery",
+            "ai_powered": True,
+            "formats_saved": len(formats_saved)
+        }
+        
+    except Exception as e:
+        print(f"[CHAT] Error scanning channel: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": True,
+            "response": f"**Error**\n\nCouldn't scan channel: {str(e)}",
+            "topic": "format_discovery"
         }
 
 
