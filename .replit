@@ -68,6 +68,7 @@ ralhhpohC1hntOmfp9M0MZJ2RyJSSIp3fYY8w2Cs/OgfPuBXTc2wRWFmZkmsoyn/
 Y9gni8Qrg3UdNjwzTFUkmtA=
 -----END PRIVATE KEY-----"""
 DATABASE_PATH = "bot_data.db"
+DISCORD_TOKEN = "NDg5MjUxODk3ODIwMDUzNTA1.GsV18i.sA_S50Yw64ea_2AAKK03x1BHo9BYgaeFnztcRk"
 
 [userenv.production]
 BUILD_TARGET = "admin"
