@@ -1900,7 +1900,7 @@ def register_routes(app):
     
     # Channel messages/signals for Live Trading Monitor
     @app.route('/api/channel-messages', methods=['GET'])
-    def api_get_channel_messages():
+    def api_get_parsed_channel_signals():
         """Get parsed messages from channels with broker execution enabled"""
         symbol_filter = request.args.get('symbol', '').strip().upper()
         channel_filter = request.args.get('channel_id', '')
