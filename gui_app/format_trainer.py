@@ -141,7 +141,7 @@ Only include fields that are actually present in the signal. Be precise with the
                 response_format={"type": "json_object"}
             )
             
-            result_text = response.choices[0].message.content
+            result_text = response.choices[0].message.content or "{}"
             result = json.loads(result_text)
             
             return {
@@ -216,7 +216,7 @@ If it's not a trading signal, set is_trading_signal to false and action to null.
                 response_format={"type": "json_object"}
             )
             
-            result = json.loads(response.choices[0].message.content)
+            result = json.loads(response.choices[0].message.content or "{}")
             
             return {
                 'success': True,
