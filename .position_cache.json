@@ -1693,5 +1693,20 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-15T16:40:01.310596"
+  },
+  "Webull_RH_0.0__": {
+    "entry_price": 7.5,
+    "highest_price": 8.7,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "Webull",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-16T01:11:06.542116"
   }
 }
