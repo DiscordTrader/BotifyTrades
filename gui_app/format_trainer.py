@@ -112,9 +112,17 @@ class FormatTrainer:
         client = self._get_openai_client()
         
         if not client:
+            from .config_service import get_ai_provider
+            provider = get_ai_provider()
+            if provider == 'disabled':
+                error_msg = 'AI is disabled. Enable it in Settings > AI & Market Data APIs.'
+            elif provider == 'replit_ai':
+                error_msg = 'Replit AI is not available. Try selecting OpenAI in Settings.'
+            else:
+                error_msg = 'OpenAI API key not configured. Add it in Settings > AI & Market Data APIs.'
             return {
                 'success': False,
-                'error': 'OpenAI not available. Please configure your API key in Settings.',
+                'error': error_msg,
                 'ai_powered': False
             }
         

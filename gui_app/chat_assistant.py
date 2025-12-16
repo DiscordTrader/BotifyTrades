@@ -1280,22 +1280,41 @@ def handle_format_teaching(query: str) -> Dict:
         trainer = get_format_trainer()
         
         if not trainer.is_ai_available():
-            return {
-                "success": True,
-                "response": """**Teaching New Formats Requires OpenAI**
+            from .config_service import get_ai_provider
+            provider = get_ai_provider()
+            
+            if provider == 'disabled':
+                msg = """**AI Features Disabled**
 
-To teach me new signal formats, you'll need to configure your OpenAI API key:
+AI is currently disabled in your settings. To teach new signal formats:
+
+1. Go to **Settings** > **AI & Market Data APIs**
+2. Select **Auto (Replit AI)** or **OpenAI** from the dropdown
+3. Click **Save API Keys**
+
+Then try again!"""
+            elif provider == 'replit_ai':
+                msg = """**Replit AI Not Available**
+
+Replit AI Integration is selected but not available. You can:
+
+1. Go to **Settings** > **AI & Market Data APIs**
+2. Select **OpenAI** and enter your API key
+3. Click **Save API Keys**
+
+Or wait and try again later."""
+            else:
+                msg = """**OpenAI API Key Required**
+
+To teach new signal formats, configure your OpenAI API key:
 
 1. Go to **Settings** > **AI & Market Data APIs**
 2. Enter your OpenAI API key
-3. Click Save
-
-Once configured, you can teach me new formats by pasting an example signal and I'll learn to recognize similar ones automatically!
-
-**Example:**
-"Teach this format: BTO AAPL 150C 12/20 @ 2.50"
-
-I'll analyze it once with AI and then parse similar signals instantly without AI costs.""",
+3. Click **Save API Keys**"""
+            
+            return {
+                "success": True,
+                "response": msg,
                 "topic": "format_teaching",
                 "ai_powered": False
             }
