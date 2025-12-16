@@ -19,24 +19,37 @@ class FormatTrainer:
         self._openai_available = None
     
     def _get_openai_client(self):
-        """Get OpenAI client, lazy initialization.
+        """Get OpenAI client, checking for best available option each time.
         
-        Supports both Replit AI Integrations (no API key needed, billed to credits)
-        and user-provided OpenAI API key (from environment or database).
+        Priority:
+        1. Replit AI Integrations (no API key needed, billed to credits)
+        2. User-provided OpenAI API key (from environment or database)
         """
-        if self._openai_client is not None:
-            return self._openai_client
-        
-        if self._openai_available is False:
-            return None
-        
         try:
-            # Check for Replit AI Integrations first (preferred - no API key needed)
+            # Always check for Replit AI Integrations first (preferred)
             ai_integrations_key = os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY')
             ai_integrations_base = os.environ.get('AI_INTEGRATIONS_OPENAI_BASE_URL')
+            
+            from openai import OpenAI
+            
+            # Use Replit AI Integrations if available (highest priority)
+            if ai_integrations_key and ai_integrations_base:
+                # Check if we already have the Replit client cached
+                if self._openai_client is not None and getattr(self, '_using_ai_integrations', False):
+                    return self._openai_client
+                    
+                self._openai_client = OpenAI(
+                    api_key=ai_integrations_key,
+                    base_url=ai_integrations_base
+                )
+                self._openai_available = True
+                self._using_ai_integrations = True
+                print("[FORMAT_TRAINER] Using Replit AI Integrations for OpenAI")
+                return self._openai_client
+            
+            # Fallback to user's API key (env var or database)
             user_api_key = os.environ.get('OPENAI_API_KEY')
             
-            # Also check database for user's OpenAI key (saved via GUI Settings)
             if not user_api_key:
                 try:
                     from .config_service import load_config
@@ -46,28 +59,19 @@ class FormatTrainer:
                 except Exception as e:
                     print(f"[FORMAT_TRAINER] Could not load API key from database: {e}")
             
-            from openai import OpenAI
-            
-            if ai_integrations_key and ai_integrations_base:
-                # Use Replit AI Integrations (billed to Replit credits)
-                self._openai_client = OpenAI(
-                    api_key=ai_integrations_key,
-                    base_url=ai_integrations_base
-                )
-                self._openai_available = True
-                self._using_ai_integrations = True
-                print("[FORMAT_TRAINER] Using Replit AI Integrations for OpenAI")
-                return self._openai_client
-            elif user_api_key:
-                # Use user's own OpenAI API key
+            if user_api_key:
+                # Check if we already have user's client cached
+                if self._openai_client is not None and not getattr(self, '_using_ai_integrations', True):
+                    return self._openai_client
+                    
                 self._openai_client = OpenAI(api_key=user_api_key)
                 self._openai_available = True
                 self._using_ai_integrations = False
                 print("[FORMAT_TRAINER] Using user-provided OpenAI API key")
                 return self._openai_client
-            else:
-                self._openai_available = False
-                return None
+            
+            self._openai_available = False
+            return None
                 
         except Exception as e:
             print(f"[FORMAT_TRAINER] OpenAI initialization failed: {e}")
