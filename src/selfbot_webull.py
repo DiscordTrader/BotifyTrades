@@ -5204,21 +5204,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         self._processed_messages.add(message.id)
         print(f"[Discord] Processing message ID: {message.id}")
         
-        # Store message for format discovery (if from monitored channel)
-        if channel_info and DATABASE_MODULE_AVAILABLE:
-            try:
-                from gui_app import database as db
-                db.save_channel_message(
-                    channel_id=str(message.channel.id),
-                    message_content=message.content,
-                    channel_name=channel_name,
-                    author_id=str(message.author.id),
-                    author_name=message.author.name,
-                    message_id=str(message.id)
-                )
-            except Exception as e:
-                pass  # Don't fail message processing if storage fails
-        
         # Limit cache size to prevent memory growth
         if len(self._processed_messages) > self._max_processed_cache:
             # Remove oldest half of cached message IDs
@@ -5274,6 +5259,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             except Exception as e:
                 print(f"[WARN] Failed to check allowed users: {e}")
                 # Continue processing if check fails (fail-open for safety)
+
+        # Store message for format discovery (after all eligibility checks pass)
+        if channel_info and DATABASE_MODULE_AVAILABLE:
+            try:
+                from gui_app import database as db
+                db.save_channel_message(
+                    channel_id=str(message.channel.id),
+                    message_content=message.content,
+                    channel_name=channel_name,
+                    author_id=str(message.author.id),
+                    author_name=message.author.name,
+                    message_id=str(message.id)
+                )
+            except Exception as e:
+                pass  # Don't fail message processing if storage fails
 
         if message.content.strip().lower() == "ping":
             try:
