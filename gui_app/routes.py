@@ -1297,6 +1297,11 @@ def register_routes(app):
         """System architecture presentation page (PUBLIC - no auth required)"""
         return render_template('architecture.html')
     
+    @app.route('/chat/popout')
+    def chat_popout():
+        """Pop-out chat assistant window"""
+        return render_template('chat_popout.html')
+    
     @app.route('/waitlist')
     @admin_required
     def waitlist_admin():

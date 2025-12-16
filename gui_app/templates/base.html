@@ -180,7 +180,28 @@
                         <span class="chat-status" id="chat-status-text">Ask me anything!</span>
                     </div>
                 </div>
-                <button class="chat-minimize" onclick="toggleChat()">−</button>
+                <div class="chat-header-controls">
+                    <button class="chat-control-btn" onclick="openChatPopout()" title="Open in new window">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                        </svg>
+                    </button>
+                    <button class="chat-control-btn" onclick="toggleMaximize()" title="Maximize">
+                        <svg id="maximize-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>
+                        </svg>
+                        <svg id="restore-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+                            <path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/>
+                        </svg>
+                    </button>
+                    <button class="chat-control-btn chat-minimize-btn" onclick="toggleChat()" title="Minimize">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
             <div id="error-alert" class="error-alert" style="display: none;">
                 <div class="error-alert-content">
@@ -200,6 +221,7 @@
                             <li>Options trading</li>
                             <li>P&L tracking</li>
                             <li>Risk management</li>
+                            <li>Signal format learning</li>
                         </ul>
                         <em style="color: #00F5FF; font-size: 11px; display: block; margin-top: 8px;">I'll also alert you if I detect any issues!</em>
                     </div>
@@ -208,6 +230,7 @@
             <div class="chat-suggestions" id="chat-suggestions">
                 <button onclick="askQuestion('How do I get started?')">Getting Started</button>
                 <button onclick="askQuestion('How do I add a channel?')">Add Channel</button>
+                <button onclick="askQuestion('Show formats')">Formats</button>
                 <button onclick="askQuestion('Any issues?')">Check Issues</button>
             </div>
             <div class="chat-input-container">
@@ -230,8 +253,8 @@
         font-family: 'Plus Jakarta Sans', sans-serif;
     }
     .chat-toggle {
-        width: 56px;
-        height: 56px;
+        width: 60px;
+        height: 60px;
         border-radius: 50%;
         background: linear-gradient(135deg, #00F5FF 0%, #8B5CF6 100%);
         border: none;
@@ -239,19 +262,19 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 4px 20px rgba(0, 245, 255, 0.4);
+        box-shadow: 0 4px 24px rgba(0, 245, 255, 0.4);
         transition: all 0.3s ease;
     }
     .chat-toggle:hover {
         transform: scale(1.1);
-        box-shadow: 0 6px 30px rgba(0, 245, 255, 0.5);
+        box-shadow: 0 6px 32px rgba(0, 245, 255, 0.5);
     }
     .chat-toggle .chat-icon {
-        font-size: 24px;
+        font-size: 26px;
     }
     .chat-toggle .chat-close {
         display: none;
-        font-size: 24px;
+        font-size: 26px;
         color: white;
     }
     .chat-widget.open .chat-toggle .chat-icon {
@@ -262,30 +285,53 @@
     }
     .chat-panel {
         position: absolute;
-        bottom: 70px;
+        bottom: 76px;
         right: 0;
-        width: 380px;
-        max-height: 520px;
+        width: 420px;
+        height: 580px;
+        max-height: calc(100vh - 120px);
         background: #0D1117;
         border: 1px solid rgba(0, 245, 255, 0.2);
-        border-radius: 16px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        border-radius: 20px;
+        box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
         display: none;
         flex-direction: column;
         overflow: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .chat-widget.open .chat-panel {
         display: flex;
         animation: slideUp 0.3s ease;
     }
+    .chat-widget.maximized .chat-panel {
+        position: fixed;
+        top: 80px;
+        left: 50%;
+        right: auto;
+        bottom: 24px;
+        transform: translateX(-50%);
+        width: 90%;
+        max-width: 800px;
+        height: auto;
+        max-height: calc(100vh - 104px);
+        border-radius: 24px;
+        animation: scaleIn 0.3s ease;
+    }
+    .chat-widget.maximized .chat-toggle {
+        display: none;
+    }
     @keyframes slideUp {
         from { opacity: 0; transform: translateY(20px); }
         to { opacity: 1; transform: translateY(0); }
     }
+    @keyframes scaleIn {
+        from { opacity: 0; transform: translateX(-50%) scale(0.95); }
+        to { opacity: 1; transform: translateX(-50%) scale(1); }
+    }
     .chat-header {
-        padding: 16px;
+        padding: 16px 20px;
         background: linear-gradient(135deg, rgba(0, 245, 255, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
-        border-bottom: 1px solid rgba(0, 245, 255, 0.1);
+        border-bottom: 1px solid rgba(0, 245, 255, 0.15);
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -293,43 +339,80 @@
     .chat-header-title {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 14px;
     }
     .chat-avatar {
-        font-size: 28px;
+        font-size: 32px;
+        width: 44px;
+        height: 44px;
+        background: linear-gradient(135deg, rgba(0, 245, 255, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     .chat-header strong {
         color: #fff;
-        font-size: 14px;
+        font-size: 15px;
         display: block;
     }
     .chat-status {
         color: #00F5FF;
-        font-size: 11px;
+        font-size: 12px;
     }
-    .chat-minimize {
-        background: none;
-        border: none;
+    .chat-header-controls {
+        display: flex;
+        gap: 6px;
+    }
+    .chat-control-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         color: #888;
-        font-size: 24px;
         cursor: pointer;
-        padding: 0 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
     }
-    .chat-minimize:hover {
-        color: #fff;
+    .chat-control-btn:hover {
+        background: rgba(0, 245, 255, 0.1);
+        border-color: rgba(0, 245, 255, 0.3);
+        color: #00F5FF;
+    }
+    .chat-control-btn.chat-minimize-btn:hover {
+        background: rgba(239, 68, 68, 0.1);
+        border-color: rgba(239, 68, 68, 0.3);
+        color: #ef4444;
     }
     .chat-messages {
         flex: 1;
         overflow-y: auto;
-        padding: 16px;
-        max-height: 300px;
+        padding: 20px;
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 14px;
+    }
+    .chat-messages::-webkit-scrollbar {
+        width: 6px;
+    }
+    .chat-messages::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.2);
+    }
+    .chat-messages::-webkit-scrollbar-thumb {
+        background: rgba(0, 245, 255, 0.3);
+        border-radius: 3px;
     }
     .chat-message {
         display: flex;
         flex-direction: column;
+        animation: messageIn 0.25s ease;
+    }
+    @keyframes messageIn {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
     }
     .chat-message.user {
         align-items: flex-end;
@@ -339,76 +422,88 @@
     }
     .message-content {
         max-width: 85%;
-        padding: 12px 16px;
-        border-radius: 16px;
-        font-size: 13px;
-        line-height: 1.5;
+        padding: 14px 18px;
+        border-radius: 18px;
+        font-size: 14px;
+        line-height: 1.6;
     }
     .chat-message.user .message-content {
         background: linear-gradient(135deg, #00F5FF 0%, #8B5CF6 100%);
         color: #000;
-        border-bottom-right-radius: 4px;
+        border-bottom-right-radius: 6px;
+        font-weight: 500;
     }
     .chat-message.assistant .message-content {
         background: #1C2128;
         color: #E6EDF3;
-        border-bottom-left-radius: 4px;
+        border-bottom-left-radius: 6px;
         border: 1px solid rgba(0, 245, 255, 0.1);
     }
     .message-content strong {
         color: #00F5FF;
     }
+    .message-content code {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: 'SF Mono', 'Consolas', monospace;
+        font-size: 13px;
+    }
     .message-content ul, .message-content li {
         color: #E6EDF3;
     }
     .chat-suggestions {
-        padding: 8px 16px;
+        padding: 12px 20px;
         display: flex;
-        gap: 8px;
+        gap: 10px;
         flex-wrap: wrap;
         border-top: 1px solid rgba(255, 255, 255, 0.05);
+        background: rgba(0, 0, 0, 0.2);
     }
     .chat-suggestions button {
-        background: rgba(0, 245, 255, 0.1);
+        background: rgba(0, 245, 255, 0.08);
         border: 1px solid rgba(0, 245, 255, 0.2);
         color: #00F5FF;
-        padding: 6px 12px;
-        border-radius: 16px;
-        font-size: 11px;
+        padding: 8px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
         cursor: pointer;
         transition: all 0.2s ease;
     }
     .chat-suggestions button:hover {
-        background: rgba(0, 245, 255, 0.2);
+        background: rgba(0, 245, 255, 0.15);
         border-color: #00F5FF;
+        transform: translateY(-1px);
     }
     .chat-input-container {
-        padding: 12px 16px;
+        padding: 16px 20px;
         border-top: 1px solid rgba(0, 245, 255, 0.1);
         display: flex;
-        gap: 8px;
-        background: #161B22;
+        gap: 10px;
+        background: linear-gradient(180deg, rgba(22, 27, 34, 0.95) 0%, rgba(13, 17, 23, 1) 100%);
     }
     .chat-input {
         flex: 1;
         background: #0D1117;
         border: 1px solid rgba(0, 245, 255, 0.2);
-        border-radius: 24px;
-        padding: 10px 16px;
+        border-radius: 26px;
+        padding: 12px 20px;
         color: #fff;
-        font-size: 13px;
+        font-size: 14px;
         outline: none;
-        transition: border-color 0.2s ease;
+        transition: all 0.2s ease;
     }
     .chat-input:focus {
         border-color: #00F5FF;
+        box-shadow: 0 0 0 3px rgba(0, 245, 255, 0.1);
     }
     .chat-input::placeholder {
         color: #666;
     }
     .chat-send {
-        width: 40px;
-        height: 40px;
+        width: 46px;
+        height: 46px;
         border-radius: 50%;
         background: linear-gradient(135deg, #00F5FF 0%, #8B5CF6 100%);
         border: none;
@@ -417,23 +512,27 @@
         align-items: center;
         justify-content: center;
         color: #000;
-        transition: transform 0.2s ease;
+        transition: all 0.2s ease;
+        box-shadow: 0 4px 16px rgba(0, 245, 255, 0.3);
     }
     .chat-send:hover {
         transform: scale(1.05);
+        box-shadow: 0 6px 20px rgba(0, 245, 255, 0.4);
     }
     .chat-send:disabled {
         opacity: 0.5;
         cursor: not-allowed;
+        transform: none;
     }
     .typing-indicator {
         display: flex;
-        gap: 4px;
-        padding: 12px 16px;
+        gap: 5px;
+        padding: 14px 18px;
+        align-items: center;
     }
     .typing-indicator span {
-        width: 8px;
-        height: 8px;
+        width: 9px;
+        height: 9px;
         background: #00F5FF;
         border-radius: 50%;
         animation: typing 1.4s infinite;
@@ -441,13 +540,20 @@
     .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
     .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
     @keyframes typing {
-        0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-        30% { transform: translateY(-4px); opacity: 1; }
+        0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+        30% { transform: translateY(-5px); opacity: 1; }
     }
     @media (max-width: 480px) {
         .chat-panel {
             width: calc(100vw - 48px);
             right: -12px;
+        }
+        .chat-widget.maximized .chat-panel {
+            width: calc(100vw - 24px);
+            top: 70px;
+            left: 12px;
+            right: 12px;
+            transform: none;
         }
     }
     .error-badge {
@@ -474,28 +580,28 @@
     .error-alert {
         background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05));
         border-bottom: 1px solid rgba(239, 68, 68, 0.3);
-        padding: 10px 16px;
+        padding: 12px 20px;
     }
     .error-alert-content {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
     }
     .error-alert-icon {
-        font-size: 16px;
+        font-size: 18px;
     }
     .error-alert-text {
         flex: 1;
-        font-size: 12px;
+        font-size: 13px;
         color: #fca5a5;
     }
     .error-alert-btn {
         background: rgba(239, 68, 68, 0.2);
         border: 1px solid rgba(239, 68, 68, 0.4);
         color: #fca5a5;
-        padding: 4px 10px;
-        border-radius: 6px;
-        font-size: 11px;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 12px;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.2s ease;
@@ -504,13 +610,50 @@
         background: rgba(239, 68, 68, 0.3);
         border-color: #ef4444;
     }
+    .chat-maximize-backdrop {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        z-index: 9998;
+    }
+    .chat-widget.maximized .chat-maximize-backdrop {
+        display: block;
+    }
     </style>
 
     <script>
     let lastErrorCount = 0;
+    let chatPopoutWindow = null;
+    const chatChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('botify-chat') : null;
+    
+    if (chatChannel) {
+        chatChannel.onmessage = (event) => {
+            if (event.data.type === 'popout-opened') {
+                document.getElementById('chat-input').disabled = true;
+                document.getElementById('chat-status-text').textContent = 'Using pop-out window';
+            } else if (event.data.type === 'popout-closed') {
+                document.getElementById('chat-input').disabled = false;
+                document.getElementById('chat-status-text').textContent = 'Ask me anything!';
+                chatPopoutWindow = null;
+            } else if (event.data.type === 'new-message') {
+                addMessageHTML(event.data.content, event.data.isUser);
+            }
+        };
+    }
     
     function toggleChat() {
         const widget = document.getElementById('chat-widget');
+        
+        if (widget.classList.contains('maximized')) {
+            widget.classList.remove('maximized');
+            updateMaximizeIcon(false);
+        }
+        
         widget.classList.toggle('open');
         
         if (widget.classList.contains('open')) {
@@ -518,6 +661,51 @@
                 document.getElementById('chat-input').focus();
             }, 100);
             markErrorsSeen();
+        }
+    }
+    
+    function toggleMaximize() {
+        const widget = document.getElementById('chat-widget');
+        const isMaximized = widget.classList.toggle('maximized');
+        updateMaximizeIcon(isMaximized);
+        
+        if (!widget.classList.contains('open')) {
+            widget.classList.add('open');
+        }
+        
+        setTimeout(() => {
+            document.getElementById('chat-input').focus();
+        }, 100);
+        
+        localStorage.setItem('chat-maximized', isMaximized ? 'true' : 'false');
+    }
+    
+    function updateMaximizeIcon(isMaximized) {
+        document.getElementById('maximize-icon').style.display = isMaximized ? 'none' : 'block';
+        document.getElementById('restore-icon').style.display = isMaximized ? 'block' : 'none';
+    }
+    
+    function openChatPopout() {
+        if (chatPopoutWindow && !chatPopoutWindow.closed) {
+            chatPopoutWindow.focus();
+            return;
+        }
+        
+        const width = 500;
+        const height = 700;
+        const left = (screen.width - width) / 2;
+        const top = (screen.height - height) / 2;
+        
+        chatPopoutWindow = window.open(
+            '/chat/popout',
+            'BotifyTradesAssistant',
+            `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no`
+        );
+        
+        if (chatPopoutWindow) {
+            const widget = document.getElementById('chat-widget');
+            widget.classList.remove('open', 'maximized');
+            updateMaximizeIcon(false);
         }
     }
     
@@ -536,23 +724,29 @@
         sendChatMessage();
     }
     
-    function addMessage(content, isUser = false) {
+    function addMessageHTML(content, isUser = false) {
         const messagesDiv = document.getElementById('chat-messages');
         const messageDiv = document.createElement('div');
         messageDiv.className = `chat-message ${isUser ? 'user' : 'assistant'}`;
-        
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
         contentDiv.innerHTML = formatMessage(content);
-        
         messageDiv.appendChild(contentDiv);
         messagesDiv.appendChild(messageDiv);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
     
+    function addMessage(content, isUser = false) {
+        addMessageHTML(content, isUser);
+        if (chatChannel) {
+            chatChannel.postMessage({ type: 'new-message', content, isUser });
+        }
+    }
+    
     function formatMessage(text) {
         return text
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
             .replace(/\n/g, '<br>')
             .replace(/• /g, '&bull; ');
     }
