@@ -22,7 +22,7 @@ class FormatTrainer:
         """Get OpenAI client, lazy initialization.
         
         Supports both Replit AI Integrations (no API key needed, billed to credits)
-        and user-provided OpenAI API key.
+        and user-provided OpenAI API key (from environment or database).
         """
         if self._openai_client is not None:
             return self._openai_client
@@ -35,6 +35,16 @@ class FormatTrainer:
             ai_integrations_key = os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY')
             ai_integrations_base = os.environ.get('AI_INTEGRATIONS_OPENAI_BASE_URL')
             user_api_key = os.environ.get('OPENAI_API_KEY')
+            
+            # Also check database for user's OpenAI key (saved via GUI Settings)
+            if not user_api_key:
+                try:
+                    from .config_service import load_config
+                    api_keys = load_config('api_keys')
+                    if api_keys and api_keys.get('openai'):
+                        user_api_key = api_keys['openai']
+                except Exception as e:
+                    print(f"[FORMAT_TRAINER] Could not load API key from database: {e}")
             
             from openai import OpenAI
             

@@ -1788,6 +1788,7 @@ def _get_openai_client():
     
     Replit AI Integrations provides OpenAI-compatible API access without requiring 
     your own API key - charges are billed to your Replit credits.
+    Also checks database for user's OpenAI key saved via GUI Settings.
     """
     import os
     
@@ -1796,6 +1797,16 @@ def _get_openai_client():
         ai_integrations_key = os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY')
         ai_integrations_base = os.environ.get('AI_INTEGRATIONS_OPENAI_BASE_URL')
         user_api_key = os.environ.get('OPENAI_API_KEY')
+        
+        # Also check database for user's OpenAI key (saved via GUI Settings)
+        if not user_api_key:
+            try:
+                from .config_service import load_config
+                api_keys = load_config('api_keys')
+                if api_keys and api_keys.get('openai'):
+                    user_api_key = api_keys['openai']
+            except Exception as e:
+                print(f"[CHAT] Could not load API key from database: {e}")
         
         from openai import OpenAI
         
