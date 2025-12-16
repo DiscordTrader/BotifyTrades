@@ -1353,7 +1353,7 @@ print("[CONFIG] Loading signal patterns...")
 # Group 7 captures either a price (e.g., "0.28") or "m"/"M" for market
 # Pattern now supports both "3 c" and "3c" formats (optional space between strike and option type)
 FLEXIBLE_OPT_PATTERN = r'^(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s+\$?([\d.]+)\s*([CPcp])\s*(\d{1,2}/\d{1,2})\s*@?\s*([\d.]+|[mM])'
-DEFAULT_STK_PATTERN = r'(?:[\U0001F300-\U0001F9FF✅🟢🔴⚠️❌]+)?\s*\*{0,2}(BTO|STC)\*{0,2}\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s*@?\s*\$?([\d.]+|[mM])'
+DEFAULT_STK_PATTERN = r'(?:[\U0001F300-\U0001F9FF✅🟢🔴⚠️❌]+)?\s*\*{0,2}(BTO|STC)\*{0,2}\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s*@?\s*\$?([\d.]+|[mM])\*{0,2}'
 
 # Alternate pattern for formats like: 🟢**BTO $RKT | 21.2 C JAN/16 .56**
 # Handles: emoji, markdown **, $SYMBOL, | separator, month names (JAN/FEB/etc)
