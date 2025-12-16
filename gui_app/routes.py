@@ -8550,6 +8550,81 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': True, 'ai_available': False})
     
+    @app.route('/api/signal-formats/discover', methods=['POST'])
+    @login_required
+    def api_discover_formats():
+        """Discover signal formats from channel messages using AI"""
+        try:
+            from .format_trainer import get_format_trainer
+            trainer = get_format_trainer()
+            
+            data = request.json or {}
+            messages = data.get('messages', [])
+            channel_name = data.get('channel_name', 'Unknown Channel')
+            channel_id = data.get('channel_id')
+            
+            if not messages:
+                return jsonify({
+                    'success': False,
+                    'error': 'No messages provided. Please fetch messages from the channel first.'
+                })
+            
+            if not trainer.is_ai_available():
+                return jsonify({
+                    'success': False,
+                    'error': 'AI is not available. Configure AI provider in Settings > AI & Market Data APIs.'
+                })
+            
+            print(f"[API] Discovering formats from {len(messages)} messages in '{channel_name}'")
+            
+            result = trainer.discover_formats_from_messages(messages, channel_name)
+            
+            if result.get('success'):
+                print(f"[API] Format discovery: {len(result.get('formats_saved', []))} formats saved")
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            print(f"[API] Error in format discovery: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                'success': False,
+                'error': str(e),
+                'formats_discovered': 0
+            })
+    
+    @app.route('/api/channels/<channel_id>/recent-messages', methods=['GET'])
+    @login_required
+    def api_get_channel_messages(channel_id):
+        """Get recent messages from a monitored channel for format discovery"""
+        try:
+            limit = request.args.get('limit', 50, type=int)
+            limit = min(limit, 100)
+            
+            messages = db.get_recent_channel_messages(channel_id, limit=limit)
+            
+            if not messages:
+                return jsonify({
+                    'success': True,
+                    'messages': [],
+                    'message': 'No messages found for this channel. The bot needs to receive some messages first.'
+                })
+            
+            return jsonify({
+                'success': True,
+                'messages': messages,
+                'count': len(messages)
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting channel messages: {e}")
+            return jsonify({
+                'success': False,
+                'messages': [],
+                'error': str(e)
+            })
+    
     # ============ ERROR MONITORING API ============
     
     @app.route('/api/errors', methods=['GET'])

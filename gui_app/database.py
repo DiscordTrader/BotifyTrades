@@ -4885,7 +4885,116 @@ def delete_signal_format_by_name(format_name: str) -> bool:
         return False
 
 
-# Initialize signal formats table
+# ============ CHANNEL MESSAGES TABLE (for format discovery) ============
+
+def init_channel_messages_table():
+    """Initialize channel messages table for format discovery."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS channel_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id TEXT NOT NULL,
+                channel_name TEXT,
+                message_content TEXT NOT NULL,
+                author_id TEXT,
+                author_name TEXT,
+                message_id TEXT UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_channel_messages_channel ON channel_messages(channel_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_channel_messages_created ON channel_messages(created_at)')
+        
+        conn.commit()
+    except Exception as e:
+        print(f"[DATABASE] Error creating channel_messages table: {e}")
+
+
+def save_channel_message(channel_id: str, message_content: str, 
+                         channel_name: str = None, author_id: str = None,
+                         author_name: str = None, message_id: str = None) -> bool:
+    """Save a message from a Discord channel for format discovery."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT OR REPLACE INTO channel_messages 
+            (channel_id, channel_name, message_content, author_id, author_name, message_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (str(channel_id), channel_name, message_content, 
+              str(author_id) if author_id else None, 
+              author_name, str(message_id) if message_id else None,
+              datetime.now().isoformat()))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error saving channel message: {e}")
+        return False
+
+
+def get_recent_channel_messages(channel_id: str, limit: int = 50) -> List[str]:
+    """Get recent messages from a channel for format discovery."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT message_content FROM channel_messages 
+            WHERE channel_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        ''', (str(channel_id), limit))
+        
+        return [row['message_content'] for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"[DATABASE] Error getting channel messages: {e}")
+        return []
+
+
+def get_all_channels_with_messages() -> List[Dict]:
+    """Get list of channels that have stored messages."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT channel_id, channel_name, COUNT(*) as message_count,
+                   MAX(created_at) as last_message
+            FROM channel_messages
+            GROUP BY channel_id
+            ORDER BY last_message DESC
+        ''')
+        
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"[DATABASE] Error getting channels: {e}")
+        return []
+
+
+def cleanup_old_channel_messages(days: int = 30) -> int:
+    """Clean up channel messages older than specified days."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            DELETE FROM channel_messages 
+            WHERE created_at < datetime('now', ?)
+        ''', (f'-{days} days',))
+        conn.commit()
+        return cursor.rowcount
+    except Exception as e:
+        print(f"[DATABASE] Error cleaning channel messages: {e}")
+        return 0
+
+
+# Initialize tables
+init_channel_messages_table()
 init_signal_formats_table()
 
 init_db()

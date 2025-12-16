@@ -418,6 +418,181 @@ If it's not a trading signal, set is_trading_signal to false and action to null.
             return False
 
 
+    def discover_formats_from_messages(self, messages: List[str], 
+                                         channel_name: str = "Unknown Channel") -> Dict:
+        """
+        Analyze multiple messages to discover and learn signal formats automatically.
+        Uses AI to identify trading signals and group them by format type.
+        
+        Args:
+            messages: List of message texts from a channel
+            channel_name: Name of the channel for labeling
+            
+        Returns:
+            Dictionary with discovered formats and statistics
+        """
+        client = self._get_openai_client()
+        
+        if not client:
+            from .config_service import get_ai_provider
+            provider = get_ai_provider()
+            if provider == 'disabled':
+                error_msg = 'AI is disabled. Enable it in Settings > AI & Market Data APIs.'
+            elif provider == 'replit_ai':
+                error_msg = 'Replit AI is not available. Try selecting OpenAI in Settings.'
+            else:
+                error_msg = 'OpenAI API key not configured. Add it in Settings > AI & Market Data APIs.'
+            return {
+                'success': False,
+                'error': error_msg,
+                'formats_discovered': 0
+            }
+        
+        if not messages:
+            return {
+                'success': False,
+                'error': 'No messages provided to analyze',
+                'formats_discovered': 0
+            }
+        
+        messages = [m.strip() for m in messages if m.strip()]
+        messages = messages[:50]
+        
+        try:
+            system_prompt = """You are a trading signal format analyzer. Analyze these messages from a Discord trading channel and identify UNIQUE signal formats.
+
+For each distinct format pattern you find:
+1. Identify if it's a trading signal (BTO/STC for options, BUY/SELL for stocks)
+2. Extract the format structure (what fields are present and in what order)
+3. Group similar messages that use the same format
+
+Return a JSON object:
+{
+    "formats": [
+        {
+            "format_name": "Short descriptive name",
+            "format_type": "option" or "stock",
+            "description": "Brief description of this format pattern",
+            "example_message": "One representative example from the messages",
+            "pattern_structure": "Description like: ACTION QTY SYMBOL STRIKE TYPE EXPIRY @ PRICE",
+            "parsed_example": {
+                "action": "BTO/STC/BUY/SELL",
+                "symbol": "TICKER",
+                "entry_price": 0.00,
+                "quantity": null or number,
+                "is_option": true/false,
+                "strike": number or null,
+                "expiration": "MM/DD" or null,
+                "option_type": "C" or "P" or null
+            },
+            "suggested_regex": "Regex pattern or null if too complex",
+            "message_count": "How many of the provided messages match this format",
+            "confidence": 0.0-1.0
+        }
+    ],
+    "non_signals": ["List of messages that are NOT trading signals"],
+    "total_signals_found": number,
+    "summary": "Brief summary of what was found"
+}
+
+Only include UNIQUE formats - do not duplicate similar patterns. Focus on formats that appear multiple times."""
+
+            messages_text = "\n---\n".join(messages)
+            user_content = f"Analyze these {len(messages)} messages from '{channel_name}' channel:\n\n{messages_text}"
+            
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                max_tokens=2000,
+                temperature=0.3,
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content or "{}")
+            
+            formats_discovered = result.get('formats', [])
+            formats_saved = []
+            formats_skipped = []
+            
+            from . import database as db
+            existing_formats = db.get_learned_signal_formats(enabled_only=False)
+            existing_names = {f.get('name', '').lower() for f in existing_formats}
+            
+            for fmt in formats_discovered:
+                format_name = fmt.get('format_name', 'Unknown Format')
+                
+                if format_name.lower() in existing_names:
+                    formats_skipped.append({
+                        'name': format_name,
+                        'reason': 'Format with similar name already exists'
+                    })
+                    continue
+                
+                if fmt.get('confidence', 0) < 0.6:
+                    formats_skipped.append({
+                        'name': format_name,
+                        'reason': f"Low confidence ({fmt.get('confidence', 0)*100:.0f}%)"
+                    })
+                    continue
+                
+                try:
+                    format_id = db.save_signal_format(
+                        name=f"{format_name} ({channel_name})",
+                        description=fmt.get('description', ''),
+                        example_signal=fmt.get('example_message', ''),
+                        parsed_fields=fmt.get('parsed_example', {}),
+                        field_mappings={
+                            'pattern_structure': fmt.get('pattern_structure', ''),
+                            'format_type': fmt.get('format_type', 'option')
+                        },
+                        regex_pattern=fmt.get('suggested_regex')
+                    )
+                    
+                    if format_id:
+                        formats_saved.append({
+                            'id': format_id,
+                            'name': f"{format_name} ({channel_name})",
+                            'example': fmt.get('example_message', '')[:50] + '...',
+                            'confidence': fmt.get('confidence', 0.8)
+                        })
+                        existing_names.add(format_name.lower())
+                except Exception as e:
+                    print(f"[FORMAT_TRAINER] Error saving discovered format: {e}")
+                    formats_skipped.append({
+                        'name': format_name,
+                        'reason': str(e)
+                    })
+            
+            return {
+                'success': True,
+                'formats_discovered': len(formats_discovered),
+                'formats_saved': formats_saved,
+                'formats_skipped': formats_skipped,
+                'total_signals_found': result.get('total_signals_found', 0),
+                'non_signals_count': len(result.get('non_signals', [])),
+                'summary': result.get('summary', ''),
+                'ai_powered': True
+            }
+            
+        except json.JSONDecodeError as e:
+            print(f"[FORMAT_TRAINER] JSON parse error in discovery: {e}")
+            return {
+                'success': False,
+                'error': 'Failed to parse AI response',
+                'formats_discovered': 0
+            }
+        except Exception as e:
+            print(f"[FORMAT_TRAINER] Error in format discovery: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'formats_discovered': 0
+            }
+
+
 _format_trainer_instance = None
 
 def get_format_trainer() -> FormatTrainer:
