@@ -3535,13 +3535,8 @@ def parse_option_signal(text: str) -> Optional[dict]:
                                                     "_exit_type": "HALF"
                                                 }
                                             else:
-                                                print(f"[Discord] ❌ Pattern NOT matched: '{text.strip()[:80]}'")
-                                                print(f"[Discord]    Expected format: BTO/STC QTY SYMBOL STRIKE C/P MM/DD @ PRICE")
-                                                print(f"[Discord]    Or JC: BTO $SYMBOL $STRIKEc/p MM/DD PRICE")
-                                                print(f"[Discord]    Or alternate: 🟢BTO $SYMBOL | STRIKE C/P MONTH/DAY PRICE")
-                                                print(f"[Discord]    Or steel: :green_alert: SYMBOL | $STRIKE C/P PRICE NEXT WEEK")
-                                                print(f"[Discord]    Or STC: :SirenRed: SYMBOL | PRICE OUT HALF")
-                                                print(f"[Discord]    Or Waxui: SYMBOL here MM/DD STRIKEc Avg. PRICE")
+                                                # Silently return None - let the caller try other formats (stock, TRADE IDEA)
+                                                # before printing "NOT matched"
                                                 return None
     
     if use_steel_stc:
@@ -5465,9 +5460,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if execute_enabled or track_enabled:
             structured = self.parse_structured_alert(message.content)
             if structured:
-                print(f"[TRADE IDEA FALLBACK] ✅ Parsed: {structured['symbol']} Entry=${structured['entry_price']}, SL=${structured['stop_loss']}, Target=${structured['target_price']}")
+                print(f"[TRADE IDEA] ✅ Parsed: {structured['symbol']} Entry=${structured['entry_price']}, SL=${structured['stop_loss']}, Target=${structured['target_price']}")
                 await self.handle_auto_signal_conversion(message, message.content.strip())
                 return
+            else:
+                # ALL pattern matching failed - print debug info
+                text_preview = message.content.strip()[:80]
+                print(f"[Discord] ❌ No pattern matched: '{text_preview}'")
+                print(f"[Discord]    Supported: BTO/STC options, BTO/STC stock, TRADE IDEA (Ticker/Entry/SL/Levels)")
     
     async def execute_on_single_broker(self, signal: dict, broker_name: str, broker_instance) -> dict:
         """Execute order on a single broker instance"""
