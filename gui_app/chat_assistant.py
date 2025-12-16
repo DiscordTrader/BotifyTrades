@@ -653,6 +653,38 @@ The database tracks each lot with:
 • Associated channel/signal
 
 This ensures accurate P&L regardless of multiple entries."""
+    },
+    
+    "signal_formats": {
+        "keywords": ["signal format", "format learning", "teach format", "custom signal", "learn signal", "ai format", "parse signal"],
+        "title": "AI-Powered Signal Format Learning",
+        "content": """BotifyTrades can learn new signal formats using AI - pay once to teach, use forever!
+
+**How It Works:**
+1. You show me an example signal via the chatbot
+2. AI analyzes it ONCE to understand the structure
+3. I save the pattern for instant future parsing (no more AI costs!)
+
+**Teaching a New Format:**
+Say something like:
+- "Teach this format: BTO AAPL 150C 12/20 @ 2.50"
+- "Learn this signal: TRADE IDEA - SPY Entry: 450"
+- "Recognize: BUY $TSLA at $250, TP: $260, SL: $240"
+
+**Managing Formats:**
+- "Show my formats" - List all learned formats
+- "Delete format #X" - Remove a format
+- "Disable format #X" - Temporarily turn off
+- "Enable format #X" - Re-enable a format
+
+**Benefits:**
+- One-time AI cost per format (not per message)
+- Instant parsing using stored templates
+- Add formats without code changes
+- AI fallback for edge cases
+
+**Requirements:**
+OpenAI API key configured in Settings > AI & Market Data APIs"""
     }
 }
 
@@ -965,10 +997,15 @@ def get_ai_response(query: str) -> Dict:
     """
     Get an AI-powered response using OpenAI to analyze logs, trades, and issues.
     This is the main entry point for intelligent chat queries.
+    Falls back to knowledge base if OpenAI is not available.
     """
     query_lower = query.lower().strip()
     
-    if is_trade_query(query_lower):
+    if is_format_teaching_query(query_lower):
+        return handle_format_teaching(query)
+    elif is_format_management_query(query_lower):
+        return handle_format_management(query)
+    elif is_trade_query(query_lower):
         return analyze_trades(query)
     elif is_log_query(query_lower):
         return analyze_logs(query)
@@ -976,6 +1013,273 @@ def get_ai_response(query: str) -> Dict:
         return analyze_errors(query)
     else:
         return get_contextual_response(query)
+
+
+def is_format_teaching_query(query: str) -> bool:
+    """Check if query is about teaching/learning new signal formats."""
+    teaching_keywords = ["teach", "learn", "new format", "add format", "train", 
+                         "recognize", "parse this", "understand this signal",
+                         "new signal type", "custom format"]
+    return any(kw in query for kw in teaching_keywords)
+
+
+def is_format_management_query(query: str) -> bool:
+    """Check if query is about managing learned formats."""
+    management_keywords = ["list format", "show format", "my format", "learned format",
+                           "delete format", "disable format", "enable format",
+                           "signal formats", "custom formats"]
+    return any(kw in query for kw in management_keywords)
+
+
+def handle_format_teaching(query: str) -> Dict:
+    """
+    Handle requests to teach new signal formats.
+    Uses AI to analyze the signal and create a parsing template.
+    """
+    try:
+        from .format_trainer import get_format_trainer
+        trainer = get_format_trainer()
+        
+        if not trainer.is_ai_available():
+            return {
+                "success": True,
+                "response": """**Teaching New Formats Requires OpenAI**
+
+To teach me new signal formats, you'll need to configure your OpenAI API key:
+
+1. Go to **Settings** > **AI & Market Data APIs**
+2. Enter your OpenAI API key
+3. Click Save
+
+Once configured, you can teach me new formats by pasting an example signal and I'll learn to recognize similar ones automatically!
+
+**Example:**
+"Teach this format: BTO AAPL 150C 12/20 @ 2.50"
+
+I'll analyze it once with AI and then parse similar signals instantly without AI costs.""",
+                "topic": "format_teaching",
+                "ai_powered": False
+            }
+        
+        signal_match = re.search(r'(?:teach|learn|train|parse|recognize)[:\s]+(.+)', query, re.IGNORECASE | re.DOTALL)
+        
+        if not signal_match:
+            example_signal = extract_signal_from_query(query)
+            if not example_signal:
+                return {
+                    "success": True,
+                    "response": """**Ready to Learn a New Signal Format!**
+
+To teach me a new signal format, paste an example signal after your request:
+
+**Examples:**
+- "Teach this format: BTO AAPL 150C 12/20 @ 2.50"
+- "Learn this signal: TRADE IDEA - SPY Entry: 450 Target: 455"
+- "Recognize this: BUY $TSLA at $250, TP1: $260, SL: $240"
+
+I'll analyze it with AI once and save the format for future use!""",
+                    "topic": "format_teaching",
+                    "ai_powered": True
+                }
+        else:
+            example_signal = signal_match.group(1).strip()
+        
+        result = trainer.learn_format_from_example(example_signal)
+        
+        if not result.get('success'):
+            return {
+                "success": True,
+                "response": f"**Couldn't Analyze Signal**\n\n{result.get('error', 'Unknown error occurred.')}",
+                "topic": "format_teaching",
+                "ai_powered": result.get('ai_powered', False)
+            }
+        
+        parsed = result.get('parsed_fields', {})
+        format_name = result.get('format_name', 'Custom Format')
+        description = result.get('description', '')
+        
+        save_result = trainer.validate_and_save_format(
+            name=format_name,
+            description=description,
+            example_signal=example_signal,
+            parsed_fields=parsed,
+            regex_pattern=result.get('suggested_regex'),
+            field_mappings=result.get('field_mappings', {})
+        )
+        
+        if save_result.get('success'):
+            parsed_display = format_parsed_fields(parsed)
+            return {
+                "success": True,
+                "response": f"""**Format Learned Successfully!**
+
+**Format Name:** {format_name}
+{f'**Description:** {description}' if description else ''}
+
+**Parsed Information:**
+{parsed_display}
+
+**Confidence:** {int(result.get('confidence', 0.8) * 100)}%
+
+This format is now saved and will be used to parse similar signals instantly without AI costs!
+
+**Tip:** You can view and manage all learned formats by asking "Show my formats" """,
+                "topic": "format_learned",
+                "ai_powered": True,
+                "format_id": save_result.get('format_id')
+            }
+        else:
+            return {
+                "success": True,
+                "response": f"**Analyzed but couldn't save:**\n\n{save_result.get('error', 'Database error')}\n\nPlease try again.",
+                "topic": "format_teaching",
+                "ai_powered": True
+            }
+            
+    except Exception as e:
+        print(f"[CHAT] Format teaching error: {e}")
+        return {
+            "success": True,
+            "response": f"An error occurred while learning the format. Please try again.",
+            "topic": "error"
+        }
+
+
+def handle_format_management(query: str) -> Dict:
+    """Handle requests to manage learned signal formats."""
+    try:
+        from .format_trainer import get_format_trainer
+        trainer = get_format_trainer()
+        
+        query_lower = query.lower()
+        
+        if "delete" in query_lower:
+            id_match = re.search(r'(?:format|id)\s*#?(\d+)', query_lower)
+            if id_match:
+                format_id = int(id_match.group(1))
+                if trainer.delete_format(format_id):
+                    return {
+                        "success": True,
+                        "response": f"**Format #{format_id} deleted successfully!**",
+                        "topic": "format_deleted"
+                    }
+                else:
+                    return {
+                        "success": True,
+                        "response": f"Couldn't delete format #{format_id}. It may not exist.",
+                        "topic": "format_error"
+                    }
+        
+        elif "disable" in query_lower or "enable" in query_lower:
+            enable = "enable" in query_lower
+            id_match = re.search(r'(?:format|id)\s*#?(\d+)', query_lower)
+            if id_match:
+                format_id = int(id_match.group(1))
+                if trainer.toggle_format(format_id, enable):
+                    status = "enabled" if enable else "disabled"
+                    return {
+                        "success": True,
+                        "response": f"**Format #{format_id} {status}!**",
+                        "topic": "format_toggled"
+                    }
+        
+        formats = trainer.get_all_formats(include_disabled=True)
+        
+        if not formats:
+            return {
+                "success": True,
+                "response": """**No Custom Formats Yet**
+
+You haven't taught me any custom signal formats yet!
+
+To add a new format, just say:
+"Teach this format: [paste your signal here]"
+
+I'll learn to recognize similar signals automatically.""",
+                "topic": "format_list"
+            }
+        
+        format_list = []
+        for fmt in formats:
+            status = "Active" if fmt.get('is_enabled') else "Disabled"
+            usage = fmt.get('usage_count', 0)
+            success_rate = fmt.get('success_rate', 100)
+            format_list.append(
+                f"**#{fmt['id']} - {fmt['name']}** ({status})\n"
+                f"   Uses: {usage} | Success: {success_rate:.0f}%\n"
+                f"   Example: `{fmt['example_signal'][:50]}...`" if len(fmt.get('example_signal', '')) > 50 
+                else f"**#{fmt['id']} - {fmt['name']}** ({status})\n"
+                     f"   Uses: {usage} | Success: {success_rate:.0f}%\n"
+                     f"   Example: `{fmt.get('example_signal', 'N/A')}`"
+            )
+        
+        return {
+            "success": True,
+            "response": f"""**Your Learned Signal Formats**
+
+{chr(10).join(format_list)}
+
+**Commands:**
+- "Delete format #X" - Remove a format
+- "Disable format #X" - Temporarily disable
+- "Enable format #X" - Re-enable a format
+- "Teach format: [signal]" - Add new format""",
+            "topic": "format_list"
+        }
+        
+    except Exception as e:
+        print(f"[CHAT] Format management error: {e}")
+        return {
+            "success": True,
+            "response": "An error occurred while managing formats.",
+            "topic": "error"
+        }
+
+
+def extract_signal_from_query(query: str) -> Optional[str]:
+    """Try to extract a signal from a query that might contain one."""
+    lines = query.split('\n')
+    for line in lines:
+        line = line.strip()
+        if len(line) > 10:
+            signal_indicators = ['bto', 'stc', 'buy', 'sell', 'trade', 
+                                 'entry', 'target', '@', '$']
+            if any(ind in line.lower() for ind in signal_indicators):
+                return line
+    return None
+
+
+def format_parsed_fields(parsed: Dict) -> str:
+    """Format parsed fields for display."""
+    lines = []
+    field_labels = {
+        'action': 'Action',
+        'symbol': 'Symbol',
+        'entry_price': 'Entry Price',
+        'quantity': 'Quantity',
+        'profit_targets': 'Profit Targets',
+        'stop_loss': 'Stop Loss',
+        'is_option': 'Option Trade',
+        'strike': 'Strike',
+        'expiration': 'Expiration',
+        'option_type': 'Type'
+    }
+    
+    for key, label in field_labels.items():
+        value = parsed.get(key)
+        if value is not None:
+            if key == 'is_option':
+                value = 'Yes' if value else 'No'
+            elif key == 'option_type':
+                value = 'Call' if value == 'C' else 'Put' if value == 'P' else value
+            elif key == 'profit_targets' and isinstance(value, list):
+                value = ', '.join([f'${v}' if isinstance(v, (int, float)) else str(v) for v in value])
+            elif key == 'entry_price' or key == 'stop_loss' or key == 'strike':
+                if isinstance(value, (int, float)):
+                    value = f'${value}'
+            lines.append(f"- **{label}:** {value}")
+    
+    return '\n'.join(lines) if lines else "No fields extracted"
 
 
 def is_trade_query(query: str) -> bool:

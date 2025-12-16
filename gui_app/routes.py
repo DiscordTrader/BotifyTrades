@@ -8403,6 +8403,145 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': True, 'logs': [], 'summary': {}, 'error': str(e)})
     
+    # ============ SIGNAL FORMAT LEARNING API ============
+    
+    @app.route('/api/signal-formats', methods=['GET'])
+    @login_required
+    def api_get_signal_formats():
+        """Get all learned signal formats"""
+        try:
+            include_disabled = request.args.get('include_disabled', 'true').lower() == 'true'
+            formats = db.get_learned_signal_formats(enabled_only=not include_disabled)
+            
+            for fmt in formats:
+                if fmt.get('parsed_fields'):
+                    try:
+                        fmt['parsed_fields'] = json.loads(fmt['parsed_fields'])
+                    except:
+                        pass
+                if fmt.get('field_mappings'):
+                    try:
+                        fmt['field_mappings'] = json.loads(fmt['field_mappings'])
+                    except:
+                        pass
+            
+            return jsonify({
+                'success': True,
+                'formats': formats,
+                'count': len(formats)
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting signal formats: {e}")
+            return jsonify({'success': False, 'formats': [], 'error': str(e)})
+    
+    @app.route('/api/signal-formats/<int:format_id>', methods=['PUT'])
+    @login_required
+    def api_update_signal_format(format_id):
+        """Update a signal format"""
+        try:
+            data = request.json or {}
+            
+            result = db.update_signal_format(
+                format_id,
+                name=data.get('name'),
+                description=data.get('description'),
+                is_enabled=1 if data.get('is_enabled', True) else 0
+            )
+            
+            return jsonify({'success': result})
+            
+        except Exception as e:
+            print(f"[API] Error updating signal format: {e}")
+            return jsonify({'success': False, 'error': str(e)})
+    
+    @app.route('/api/signal-formats/<int:format_id>', methods=['DELETE'])
+    @login_required
+    def api_delete_signal_format(format_id):
+        """Delete a signal format"""
+        try:
+            result = db.delete_signal_format(format_id)
+            return jsonify({'success': result})
+            
+        except Exception as e:
+            print(f"[API] Error deleting signal format: {e}")
+            return jsonify({'success': False, 'error': str(e)})
+    
+    @app.route('/api/signal-formats/<int:format_id>/toggle', methods=['POST'])
+    @login_required
+    def api_toggle_signal_format(format_id):
+        """Toggle a signal format's enabled status"""
+        try:
+            data = request.json or {}
+            enabled = data.get('enabled', True)
+            
+            result = db.update_signal_format(format_id, is_enabled=1 if enabled else 0)
+            return jsonify({'success': result})
+            
+        except Exception as e:
+            print(f"[API] Error toggling signal format: {e}")
+            return jsonify({'success': False, 'error': str(e)})
+    
+    @app.route('/api/signal-formats/test-parse', methods=['POST'])
+    @login_required
+    def api_test_parse_signal():
+        """Test parsing a signal with learned formats"""
+        try:
+            from .format_trainer import get_format_trainer
+            
+            data = request.json or {}
+            signal_text = data.get('signal', '')
+            
+            if not signal_text:
+                return jsonify({'success': False, 'error': 'No signal provided'})
+            
+            trainer = get_format_trainer()
+            
+            result = trainer.try_parse_with_learned_formats(signal_text)
+            
+            if result:
+                return jsonify({
+                    'success': True,
+                    'parsed': True,
+                    'result': result,
+                    'method': 'learned_format'
+                })
+            
+            if trainer.is_ai_available():
+                ai_result = trainer.parse_signal_with_ai(signal_text)
+                if ai_result.get('success') and ai_result.get('is_trading_signal'):
+                    return jsonify({
+                        'success': True,
+                        'parsed': True,
+                        'result': ai_result.get('parsed'),
+                        'method': 'ai_fallback'
+                    })
+            
+            return jsonify({
+                'success': True,
+                'parsed': False,
+                'message': 'Could not parse this signal with any known format'
+            })
+            
+        except Exception as e:
+            print(f"[API] Error testing signal parse: {e}")
+            return jsonify({'success': False, 'error': str(e)})
+    
+    @app.route('/api/signal-formats/ai-status', methods=['GET'])
+    def api_ai_status():
+        """Check if AI is available for format learning"""
+        try:
+            from .format_trainer import get_format_trainer
+            trainer = get_format_trainer()
+            
+            return jsonify({
+                'success': True,
+                'ai_available': trainer.is_ai_available()
+            })
+            
+        except Exception as e:
+            return jsonify({'success': True, 'ai_available': False})
+    
     # ============ ERROR MONITORING API ============
     
     @app.route('/api/errors', methods=['GET'])
