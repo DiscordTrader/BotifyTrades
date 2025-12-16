@@ -4609,4 +4609,229 @@ def get_license_stats() -> Dict:
         return {}
 
 
+# ==================== SIGNAL FORMAT LEARNING (AI-POWERED) ====================
+
+def init_signal_formats_table():
+    """Initialize the signal_formats table for learned parsing patterns."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS signal_formats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            example_signal TEXT NOT NULL,
+            parsed_fields TEXT NOT NULL,
+            regex_pattern TEXT,
+            field_mappings TEXT NOT NULL,
+            is_enabled INTEGER DEFAULT 1,
+            usage_count INTEGER DEFAULT 0,
+            success_rate REAL DEFAULT 100.0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by TEXT DEFAULT 'chatbot'
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS signal_format_cache (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_hash TEXT UNIQUE NOT NULL,
+            format_id INTEGER,
+            parsed_result TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (format_id) REFERENCES signal_formats(id)
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_signal_formats_enabled ON signal_formats(is_enabled)
+    ''')
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_signal_format_cache_hash ON signal_format_cache(message_hash)
+    ''')
+    
+    conn.commit()
+
+
+def get_learned_signal_formats(enabled_only: bool = True) -> List[Dict]:
+    """Get all learned signal formats from database."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        if enabled_only:
+            cursor.execute('''
+                SELECT * FROM signal_formats 
+                WHERE is_enabled = 1 
+                ORDER BY usage_count DESC, created_at DESC
+            ''')
+        else:
+            cursor.execute('''
+                SELECT * FROM signal_formats 
+                ORDER BY is_enabled DESC, usage_count DESC, created_at DESC
+            ''')
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"[DATABASE] Error getting signal formats: {e}")
+        return []
+
+
+def save_learned_signal_format(name: str, description: str, example_signal: str,
+                                parsed_fields: Dict, regex_pattern: str,
+                                field_mappings: Dict, created_by: str = 'chatbot') -> Optional[int]:
+    """Save a new learned signal format to database."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO signal_formats 
+            (name, description, example_signal, parsed_fields, regex_pattern, field_mappings, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            name, description, example_signal,
+            json.dumps(parsed_fields), regex_pattern, json.dumps(field_mappings), created_by
+        ))
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"[DATABASE] Error saving signal format: {e}")
+        return None
+
+
+def update_signal_format(format_id: int, **kwargs) -> bool:
+    """Update a signal format's fields."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        allowed_fields = ['name', 'description', 'regex_pattern', 'field_mappings', 
+                          'is_enabled', 'usage_count', 'success_rate']
+        updates = {}
+        for k, v in kwargs.items():
+            if k in allowed_fields:
+                if k == 'field_mappings' and isinstance(v, dict):
+                    v = json.dumps(v)
+                updates[k] = v
+        
+        if not updates:
+            return False
+        
+        updates['updated_at'] = datetime.now().isoformat()
+        set_clause = ', '.join([f"{k} = ?" for k in updates.keys()])
+        values = list(updates.values()) + [format_id]
+        
+        cursor.execute(f'''
+            UPDATE signal_formats SET {set_clause} WHERE id = ?
+        ''', values)
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error updating signal format: {e}")
+        return False
+
+
+def delete_signal_format(format_id: int) -> bool:
+    """Delete a signal format."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('DELETE FROM signal_format_cache WHERE format_id = ?', (format_id,))
+        cursor.execute('DELETE FROM signal_formats WHERE id = ?', (format_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error deleting signal format: {e}")
+        return False
+
+
+def increment_format_usage(format_id: int, success: bool = True) -> bool:
+    """Increment usage count and update success rate for a format."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT usage_count, success_rate FROM signal_formats WHERE id = ?', (format_id,))
+        row = cursor.fetchone()
+        if not row:
+            return False
+        
+        usage_count = row['usage_count'] + 1
+        old_rate = row['success_rate']
+        new_rate = ((old_rate * (usage_count - 1)) + (100.0 if success else 0.0)) / usage_count
+        
+        cursor.execute('''
+            UPDATE signal_formats 
+            SET usage_count = ?, success_rate = ?, updated_at = ?
+            WHERE id = ?
+        ''', (usage_count, new_rate, datetime.now().isoformat(), format_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error incrementing format usage: {e}")
+        return False
+
+
+def get_cached_signal_parse(message_hash: str) -> Optional[Dict]:
+    """Get cached parse result for a message hash."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT parsed_result, format_id FROM signal_format_cache 
+            WHERE message_hash = ?
+        ''', (message_hash,))
+        row = cursor.fetchone()
+        if row and row['parsed_result']:
+            return {
+                'parsed_result': json.loads(row['parsed_result']),
+                'format_id': row['format_id']
+            }
+        return None
+    except Exception as e:
+        print(f"[DATABASE] Error getting cached parse: {e}")
+        return None
+
+
+def cache_signal_parse(message_hash: str, format_id: Optional[int], parsed_result: Dict) -> bool:
+    """Cache a parse result for future use."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT OR REPLACE INTO signal_format_cache (message_hash, format_id, parsed_result)
+            VALUES (?, ?, ?)
+        ''', (message_hash, format_id, json.dumps(parsed_result)))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error caching parse: {e}")
+        return False
+
+
+def cleanup_old_cache(days: int = 7) -> int:
+    """Clean up cache entries older than specified days."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            DELETE FROM signal_format_cache 
+            WHERE created_at < datetime('now', ?)
+        ''', (f'-{days} days',))
+        conn.commit()
+        return cursor.rowcount
+    except Exception as e:
+        print(f"[DATABASE] Error cleaning cache: {e}")
+        return 0
+
+
+# Initialize signal formats table
+init_signal_formats_table()
+
 init_db()
