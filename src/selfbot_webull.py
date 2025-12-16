@@ -3420,6 +3420,11 @@ WAXUI_TRIM_REGEX = re.compile(WAXUI_TRIM_PATTERN, re.IGNORECASE)
 WAXUI_CLOSE_REGEX = re.compile(WAXUI_CLOSE_PATTERN, re.IGNORECASE)
 
 def parse_option_signal(text: str) -> Optional[dict]:
+    learned_result = try_parse_with_learned_formats(text)
+    if learned_result and learned_result.get('asset') == 'option':
+        print(f"[SIGNAL] Parsed using learned format: {learned_result.get('action')} {learned_result.get('symbol')} {learned_result.get('strike')}{learned_result.get('opt_type')}")
+        return learned_result
+    
     m = OPT_REGEX.search(text.strip())
     use_alt_format = False
     use_steel_format = False
@@ -3681,7 +3686,96 @@ def parse_option_signal(text: str) -> Optional[dict]:
         "is_market_order": is_market_order
     }
 
+def try_parse_with_learned_formats(text: str) -> Optional[dict]:
+    """
+    Try to parse signal using learned formats from database.
+    Returns parsed signal dict if successful, None otherwise.
+    Uses "teach once, use forever" approach - no AI cost per message.
+    """
+    try:
+        import sys
+        from pathlib import Path
+        gui_app_path = str(Path(__file__).parent.parent / 'gui_app')
+        if gui_app_path not in sys.path:
+            sys.path.insert(0, gui_app_path)
+        
+        from gui_app.format_trainer import get_format_trainer
+        trainer = get_format_trainer()
+        
+        result = trainer.try_parse_with_learned_formats(text)
+        
+        if result and result.get('action'):
+            action = result.get('action', '').upper()
+            symbol = result.get('symbol', '').upper()
+            
+            if not symbol:
+                return None
+            
+            is_option = result.get('is_option', False)
+            entry_price = result.get('entry_price')
+            quantity = result.get('quantity')
+            
+            if is_option:
+                strike = result.get('strike')
+                expiry = result.get('expiration', '')
+                opt_type = result.get('option_type', 'C').upper()
+                
+                if expiry:
+                    if '/' in expiry:
+                        parts = expiry.split('/')
+                        if len(parts) == 2:
+                            expiry = f"{parts[0].zfill(2)}/{parts[1].zfill(2)}"
+                        elif len(parts) == 3:
+                            expiry = f"{parts[0].zfill(2)}/{parts[1].zfill(2)}"
+                
+                if quantity is None:
+                    quantity = 1
+                
+                return {
+                    "asset": "option",
+                    "action": action,
+                    "qty": int(quantity) if quantity else 1,
+                    "symbol": symbol,
+                    "strike": float(strike) if strike else 0,
+                    "opt_type": opt_type,
+                    "expiry": expiry or '',
+                    "price": float(entry_price) if entry_price else None,
+                    "is_market_order": entry_price is None,
+                    "parsed_by": "learned_format",
+                    "profit_targets": result.get('profit_targets'),
+                    "stop_loss": result.get('stop_loss')
+                }
+            else:
+                if quantity is None:
+                    quantity = 1
+                
+                return {
+                    "asset": "stock",
+                    "action": action,
+                    "qty": int(quantity) if quantity else 1,
+                    "symbol": symbol,
+                    "price": float(entry_price) if entry_price else None,
+                    "is_market_order": entry_price is None,
+                    "parsed_by": "learned_format",
+                    "profit_targets": result.get('profit_targets'),
+                    "stop_loss": result.get('stop_loss')
+                }
+        
+        return None
+        
+    except ImportError:
+        return None
+    except Exception as e:
+        print(f"[LEARNED_FORMAT] Error parsing with learned formats: {e}")
+        return None
+
+
 def parse_stock_signal(text: str) -> Optional[dict]:
+    learned_result = try_parse_with_learned_formats(text)
+    if learned_result and learned_result.get('asset') == 'stock':
+        print(f"[SIGNAL] Parsed using learned format: {learned_result.get('action')} {learned_result.get('symbol')}")
+        return learned_result
+    
     m = STK_REGEX.search(text.strip())
     if not m:
         return None
