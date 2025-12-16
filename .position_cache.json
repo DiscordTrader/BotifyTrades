@@ -1726,7 +1726,7 @@
   },
   "ALPACA_PAPER_GOOGL_295.0_2025-12-26_P": {
     "entry_price": 1.2,
-    "highest_price": 1.22,
+    "highest_price": 1.27,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -1741,7 +1741,7 @@
   },
   "ALPACA_PAPER_NOW_750.0_2025-12-19_P": {
     "entry_price": 3.1,
-    "highest_price": 3.1,
+    "highest_price": 3.2,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
