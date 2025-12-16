@@ -77,6 +77,17 @@
                 <option value="">All Channels</option>
             </select>
         </div>
+        <div style="display: flex; gap: 12px; align-items: center; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 16px;">
+            <label style="font-size: 0.875rem; color: var(--text-secondary);">Keep messages:</label>
+            <select id="signal-retention-days" onchange="updateRetentionDays()" 
+                    style="padding: 8px 12px; background: #2C2C2E; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; min-width: 100px;">
+                <option value="1">1 day</option>
+                <option value="3" selected>3 days</option>
+                <option value="7">7 days</option>
+                <option value="14">14 days</option>
+                <option value="30">30 days</option>
+            </select>
+        </div>
         <button onclick="loadSignalMessages()" class="btn btn-primary btn-small" style="margin-left: auto;">
             🔄 Refresh
         </button>
@@ -117,6 +128,7 @@ async function switchTab(tab) {
     const signalsFilterBar = document.getElementById('signals-filter-bar');
     if (tab === 'signals') {
         signalsFilterBar.style.display = 'flex';
+        await loadRetentionSettings();
         await loadSignalMessages();
     } else {
         signalsFilterBar.style.display = 'none';
@@ -698,10 +710,54 @@ document.addEventListener('change', (e) => {
 // Signal Messages Functions
 let signalFilterTimeout = null;
 let signalChannelsLoaded = false;
+let retentionSettingsLoaded = false;
 
 function debounceSignalFilter() {
     if (signalFilterTimeout) clearTimeout(signalFilterTimeout);
     signalFilterTimeout = setTimeout(() => loadSignalMessages(), 400);
+}
+
+async function loadRetentionSettings() {
+    if (retentionSettingsLoaded) return;
+    
+    try {
+        const response = await fetch('/api/channel-messages/settings');
+        const data = await response.json();
+        
+        if (data.retention_days) {
+            const select = document.getElementById('signal-retention-days');
+            select.value = data.retention_days.toString();
+        }
+        retentionSettingsLoaded = true;
+    } catch (error) {
+        console.error('Failed to load retention settings:', error);
+    }
+}
+
+async function updateRetentionDays() {
+    const retentionDays = document.getElementById('signal-retention-days').value;
+    
+    try {
+        const response = await fetch('/api/channel-messages/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ retention_days: parseInt(retentionDays) })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            if (data.messages_purged > 0) {
+                alert(`Retention updated to ${retentionDays} days.\n${data.messages_purged} old message(s) purged.`);
+                loadSignalMessages();
+            }
+        } else {
+            alert('Failed to update retention settings');
+        }
+    } catch (error) {
+        console.error('Failed to update retention:', error);
+        alert('Failed to update retention settings');
+    }
 }
 
 async function loadSignalMessages() {

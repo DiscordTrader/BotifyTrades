@@ -1898,6 +1898,44 @@ def register_routes(app):
         
         return jsonify(formatted_signals)
     
+    # Channel messages retention settings
+    @app.route('/api/channel-messages/settings', methods=['GET'])
+    def api_get_message_settings():
+        """Get message retention settings"""
+        retention_days = db.get_setting('message_retention_days', '3')
+        return jsonify({'retention_days': int(retention_days)})
+    
+    @app.route('/api/channel-messages/settings', methods=['POST'])
+    def api_update_message_settings():
+        """Update message retention settings and purge old messages"""
+        data = request.get_json() or {}
+        retention_days = data.get('retention_days', 3)
+        
+        try:
+            retention_days = max(1, min(30, int(retention_days)))  # Clamp between 1-30 days
+            db.save_setting('message_retention_days', str(retention_days))
+            
+            # Purge old messages
+            deleted = db.cleanup_old_channel_messages(retention_days)
+            
+            return jsonify({
+                'success': True,
+                'retention_days': retention_days,
+                'messages_purged': deleted
+            })
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/channel-messages/purge', methods=['POST'])
+    def api_purge_messages():
+        """Manually purge old messages based on retention setting"""
+        try:
+            retention_days = int(db.get_setting('message_retention_days', '3'))
+            deleted = db.cleanup_old_channel_messages(retention_days)
+            return jsonify({'success': True, 'messages_purged': deleted})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
     # Channel messages/signals for Live Trading Monitor
     @app.route('/api/channel-messages', methods=['GET'])
     def api_get_parsed_channel_signals():
@@ -1905,6 +1943,13 @@ def register_routes(app):
         symbol_filter = request.args.get('symbol', '').strip().upper()
         channel_filter = request.args.get('channel_id', '')
         limit = request.args.get('limit', 100, type=int)
+        
+        # Auto-purge old messages on load
+        try:
+            retention_days = int(db.get_setting('message_retention_days', '3'))
+            db.cleanup_old_channel_messages(retention_days)
+        except:
+            pass
         
         try:
             conn = db.get_connection()
