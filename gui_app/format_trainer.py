@@ -19,7 +19,11 @@ class FormatTrainer:
         self._openai_available = None
     
     def _get_openai_client(self):
-        """Get OpenAI client, lazy initialization."""
+        """Get OpenAI client, lazy initialization.
+        
+        Supports both Replit AI Integrations (no API key needed, billed to credits)
+        and user-provided OpenAI API key.
+        """
         if self._openai_client is not None:
             return self._openai_client
         
@@ -27,15 +31,34 @@ class FormatTrainer:
             return None
         
         try:
-            api_key = os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY') or os.environ.get('OPENAI_API_KEY')
-            if not api_key:
-                self._openai_available = False
-                return None
+            # Check for Replit AI Integrations first (preferred - no API key needed)
+            ai_integrations_key = os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY')
+            ai_integrations_base = os.environ.get('AI_INTEGRATIONS_OPENAI_BASE_URL')
+            user_api_key = os.environ.get('OPENAI_API_KEY')
             
             from openai import OpenAI
-            self._openai_client = OpenAI(api_key=api_key)
-            self._openai_available = True
-            return self._openai_client
+            
+            if ai_integrations_key and ai_integrations_base:
+                # Use Replit AI Integrations (billed to Replit credits)
+                self._openai_client = OpenAI(
+                    api_key=ai_integrations_key,
+                    base_url=ai_integrations_base
+                )
+                self._openai_available = True
+                self._using_ai_integrations = True
+                print("[FORMAT_TRAINER] Using Replit AI Integrations for OpenAI")
+                return self._openai_client
+            elif user_api_key:
+                # Use user's own OpenAI API key
+                self._openai_client = OpenAI(api_key=user_api_key)
+                self._openai_available = True
+                self._using_ai_integrations = False
+                print("[FORMAT_TRAINER] Using user-provided OpenAI API key")
+                return self._openai_client
+            else:
+                self._openai_available = False
+                return None
+                
         except Exception as e:
             print(f"[FORMAT_TRAINER] OpenAI initialization failed: {e}")
             self._openai_available = False

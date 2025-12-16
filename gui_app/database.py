@@ -4831,6 +4831,60 @@ def cleanup_old_cache(days: int = 7) -> int:
         return 0
 
 
+# Aliases for chat_assistant compatibility
+def save_signal_format(name: str, description: str, example_signal: str,
+                       parsed_fields: Dict, field_mappings: Dict, 
+                       regex_pattern: Optional[str] = None) -> Optional[int]:
+    """Alias for save_learned_signal_format."""
+    return save_learned_signal_format(name, description, example_signal, 
+                                       parsed_fields, field_mappings, regex_pattern)
+
+
+def get_signal_formats(enabled_only: bool = False) -> List[Dict]:
+    """Alias for get_learned_signal_formats."""
+    return get_learned_signal_formats(enabled_only)
+
+
+def toggle_signal_format(format_name: str, enabled: bool) -> bool:
+    """Toggle a signal format's enabled state by name."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            UPDATE signal_formats 
+            SET is_enabled = ?, updated_at = ?
+            WHERE name = ?
+        ''', (1 if enabled else 0, datetime.now().isoformat(), format_name))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error toggling signal format: {e}")
+        return False
+
+
+def delete_signal_format_by_name(format_name: str) -> bool:
+    """Delete a signal format by name."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Get the format_id first
+        cursor.execute('SELECT id FROM signal_formats WHERE name = ?', (format_name,))
+        row = cursor.fetchone()
+        if not row:
+            return False
+        
+        format_id = row['id']
+        cursor.execute('DELETE FROM signal_format_cache WHERE format_id = ?', (format_id,))
+        cursor.execute('DELETE FROM signal_formats WHERE id = ?', (format_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error deleting signal format by name: {e}")
+        return False
+
+
 # Initialize signal formats table
 init_signal_formats_table()
 

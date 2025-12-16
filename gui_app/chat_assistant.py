@@ -755,12 +755,24 @@ def check_greeting(query: str) -> Optional[str]:
 
 
 def get_response(query: str) -> Dict:
-    """Get AI assistant response for a query"""
+    """Get AI assistant response for a query.
+    
+    Priority order:
+    1. Empty query - welcome message
+    2. Greetings
+    3. Format teaching commands (e.g., "teach this format: ...")
+    4. Format management commands (e.g., "show formats", "delete format X")
+    5. Knowledge base matches
+    6. AI-powered response (if OpenAI available)
+    7. Fallback responses
+    """
     if not query or not query.strip():
+        ai_status = " I can use AI to answer questions beyond my knowledge base." if is_ai_available() else ""
         return {
             "success": True,
-            "response": "Hi! I'm your BotifyTrades assistant. Ask me anything about the app - channels, brokers, trading, settings, and more!",
-            "topic": None
+            "response": f"Hi! I'm your BotifyTrades assistant. Ask me anything about the app - channels, brokers, trading, settings, and more!{ai_status}",
+            "topic": None,
+            "ai_available": is_ai_available()
         }
     
     greeting_response = check_greeting(query)
@@ -770,6 +782,11 @@ def get_response(query: str) -> Dict:
             "response": greeting_response,
             "topic": "greeting"
         }
+    
+    # Check for format teaching/management commands
+    format_response = handle_format_commands(query)
+    if format_response:
+        return format_response
     
     topic_id, score = find_best_match(query)
     
@@ -782,6 +799,17 @@ def get_response(query: str) -> Dict:
             "confidence": round(score, 2)
         }
     
+    # Try AI-powered response if available
+    ai_response = get_general_ai_response(query)
+    if ai_response:
+        return {
+            "success": True,
+            "response": ai_response,
+            "topic": None,
+            "confidence": 0.7,
+            "ai_powered": True
+        }
+    
     import random
     return {
         "success": True,
@@ -789,6 +817,217 @@ def get_response(query: str) -> Dict:
         "topic": None,
         "confidence": 0
     }
+
+
+def handle_format_commands(query: str) -> Optional[Dict]:
+    """Handle format teaching and management commands.
+    
+    Commands:
+    - "teach this format: <signal>" - Learn a new signal format
+    - "show formats" / "list formats" - Show all learned formats
+    - "delete format <name>" - Delete a learned format
+    - "enable format <name>" / "disable format <name>" - Toggle format
+    """
+    query_lower = query.lower().strip()
+    
+    # Teach format command
+    if query_lower.startswith('teach this format:') or query_lower.startswith('teach format:'):
+        signal_part = query.split(':', 1)[1].strip() if ':' in query else ''
+        if not signal_part:
+            return {
+                "success": True,
+                "response": "**Teaching a New Format**\n\nTo teach me a new signal format, use:\n\n`Teach this format: <paste your signal here>`\n\nFor example:\n`Teach this format: BTO SPY 600C 12/20 @ 1.50`\n\nI'll analyze the format once and remember it for future signals!",
+                "topic": "format_teaching"
+            }
+        
+        return teach_new_format(signal_part)
+    
+    # Show formats command
+    if query_lower in ['show formats', 'list formats', 'show learned formats', 'list learned formats', 'what formats do you know']:
+        return list_learned_formats()
+    
+    # Delete format command
+    if query_lower.startswith('delete format '):
+        format_name = query[14:].strip()
+        return delete_learned_format(format_name)
+    
+    # Enable/disable format command
+    if query_lower.startswith('enable format '):
+        format_name = query[14:].strip()
+        return toggle_format(format_name, enabled=True)
+    
+    if query_lower.startswith('disable format '):
+        format_name = query[15:].strip()
+        return toggle_format(format_name, enabled=False)
+    
+    return None
+
+
+def teach_new_format(signal_example: str) -> Dict:
+    """Teach the bot a new signal format using AI."""
+    try:
+        from .format_trainer import FormatTrainer
+        trainer = FormatTrainer()
+        
+        if not trainer.is_ai_available():
+            return {
+                "success": True,
+                "response": "**AI Not Available**\n\nTo teach new signal formats, I need access to AI. This feature uses Replit AI Integrations (billed to your Replit credits) or you can configure your own OpenAI API key in Settings.\n\nWithout AI, I can still parse signals using built-in patterns.",
+                "topic": "format_teaching"
+            }
+        
+        # Learn the format
+        result = trainer.learn_format_from_example(signal_example)
+        
+        if not result.get('success'):
+            return {
+                "success": True,
+                "response": f"**Learning Failed**\n\nI couldn't learn that format: {result.get('error', 'Unknown error')}\n\nPlease try again with a different example.",
+                "topic": "format_teaching"
+            }
+        
+        # Save to database
+        from . import database as db
+        format_id = db.save_signal_format(
+            name=result.get('format_name', 'Custom Format'),
+            description=result.get('description', ''),
+            example_signal=signal_example,
+            parsed_fields=result.get('parsed_fields', {}),
+            field_mappings=result.get('field_mappings', {}),
+            regex_pattern=result.get('suggested_regex')
+        )
+        
+        parsed = result.get('parsed_fields', {})
+        action = parsed.get('action', 'Unknown')
+        symbol = parsed.get('symbol', 'Unknown')
+        
+        response_text = f"""**Format Learned Successfully!** 
+
+**Name:** {result.get('format_name', 'Custom Format')}
+**Confidence:** {result.get('confidence', 0.8)*100:.0f}%
+
+**Parsed from your example:**
+- Action: {action}
+- Symbol: {symbol}"""
+        
+        if parsed.get('entry_price'):
+            response_text += f"\n- Entry: ${parsed.get('entry_price')}"
+        if parsed.get('is_option'):
+            response_text += f"\n- Strike: ${parsed.get('strike')}"
+            response_text += f"\n- Type: {'Call' if parsed.get('option_type') == 'C' else 'Put'}"
+        
+        response_text += "\n\nThis format will now be automatically recognized for future signals!"
+        
+        return {
+            "success": True,
+            "response": response_text,
+            "topic": "format_teaching",
+            "format_id": format_id,
+            "ai_powered": True
+        }
+        
+    except Exception as e:
+        print(f"[CHAT] Error teaching format: {e}")
+        return {
+            "success": True,
+            "response": f"**Error**\n\nSomething went wrong while learning the format: {str(e)}",
+            "topic": "format_teaching"
+        }
+
+
+def list_learned_formats() -> Dict:
+    """List all learned signal formats."""
+    try:
+        from . import database as db
+        formats = db.get_signal_formats()
+        
+        if not formats:
+            return {
+                "success": True,
+                "response": "**No Learned Formats**\n\nYou haven't taught me any custom signal formats yet.\n\nTo teach a new format, use:\n`Teach this format: <paste your signal here>`",
+                "topic": "format_management"
+            }
+        
+        response = "**Learned Signal Formats**\n\n"
+        for f in formats:
+            status = "Enabled" if f.get('is_enabled') else "Disabled"
+            usage = f.get('usage_count', 0)
+            response += f"**{f.get('name')}** ({status})\n"
+            response += f"  Example: `{f.get('example_signal', '')[:50]}...`\n"
+            response += f"  Used: {usage} times\n\n"
+        
+        response += "Commands:\n- `enable format <name>` - Enable a format\n- `disable format <name>` - Disable a format\n- `delete format <name>` - Delete a format"
+        
+        return {
+            "success": True,
+            "response": response,
+            "topic": "format_management"
+        }
+        
+    except Exception as e:
+        print(f"[CHAT] Error listing formats: {e}")
+        return {
+            "success": True,
+            "response": f"**Error**\n\nCouldn't retrieve formats: {str(e)}",
+            "topic": "format_management"
+        }
+
+
+def toggle_format(format_name: str, enabled: bool) -> Dict:
+    """Enable or disable a learned format."""
+    try:
+        from . import database as db
+        success = db.toggle_signal_format(format_name, enabled)
+        
+        if success:
+            action = "enabled" if enabled else "disabled"
+            return {
+                "success": True,
+                "response": f"Format **{format_name}** has been {action}.",
+                "topic": "format_management"
+            }
+        else:
+            return {
+                "success": True,
+                "response": f"Format **{format_name}** not found. Use `show formats` to see available formats.",
+                "topic": "format_management"
+            }
+            
+    except Exception as e:
+        print(f"[CHAT] Error toggling format: {e}")
+        return {
+            "success": True,
+            "response": f"**Error**\n\nCouldn't update format: {str(e)}",
+            "topic": "format_management"
+        }
+
+
+def delete_learned_format(format_name: str) -> Dict:
+    """Delete a learned format."""
+    try:
+        from . import database as db
+        success = db.delete_signal_format_by_name(format_name)
+        
+        if success:
+            return {
+                "success": True,
+                "response": f"Format **{format_name}** has been deleted.",
+                "topic": "format_management"
+            }
+        else:
+            return {
+                "success": True,
+                "response": f"Format **{format_name}** not found. Use `show formats` to see available formats.",
+                "topic": "format_management"
+            }
+            
+    except Exception as e:
+        print(f"[CHAT] Error deleting format: {e}")
+        return {
+            "success": True,
+            "response": f"**Error**\n\nCouldn't delete format: {str(e)}",
+            "topic": "format_management"
+        }
 
 
 def get_suggestions(partial_query: str) -> List[str]:
@@ -1544,17 +1783,46 @@ def _generate_trade_summary(trades: List[Dict], positions: List[Dict]) -> str:
     return "\n".join(parts)
 
 
+def _get_openai_client():
+    """Get OpenAI client using Replit AI Integrations or user API key.
+    
+    Replit AI Integrations provides OpenAI-compatible API access without requiring 
+    your own API key - charges are billed to your Replit credits.
+    """
+    import os
+    
+    try:
+        # Check for Replit AI Integrations first (preferred)
+        ai_integrations_key = os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY')
+        ai_integrations_base = os.environ.get('AI_INTEGRATIONS_OPENAI_BASE_URL')
+        user_api_key = os.environ.get('OPENAI_API_KEY')
+        
+        from openai import OpenAI
+        
+        if ai_integrations_key and ai_integrations_base:
+            # Use Replit AI Integrations
+            return OpenAI(api_key=ai_integrations_key, base_url=ai_integrations_base)
+        elif user_api_key:
+            # Use user's own OpenAI API key
+            return OpenAI(api_key=user_api_key)
+        else:
+            return None
+    except Exception as e:
+        print(f"[CHAT] OpenAI client initialization failed: {e}")
+        return None
+
+
+def is_ai_available() -> bool:
+    """Check if OpenAI is available (via AI Integrations or user API key)."""
+    return _get_openai_client() is not None
+
+
 def _call_openai(query: str, context: str, analysis_type: str) -> Optional[str]:
     """Call OpenAI to analyze context and answer query."""
     try:
-        import os
-        
-        api_key = os.environ.get('OPENAI_API_KEY') or os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY')
-        if not api_key:
+        client = _get_openai_client()
+        if not client:
             return None
-        
-        from openai import OpenAI
-        client = OpenAI(api_key=api_key)
         
         system_prompts = {
             "trade_analysis": """You are a trading assistant for BotifyTrades, a Discord trading bot.
@@ -1570,23 +1838,67 @@ Be concise and highlight the most relevant information.""",
             "error_analysis": """You are a troubleshooting assistant for BotifyTrades, a Discord trading bot.
 Analyze the errors and issues to help the user understand what went wrong.
 Provide clear explanations and suggest solutions when possible.
-Be empathetic - users are often frustrated when things don't work."""
+Be empathetic - users are often frustrated when things don't work.""",
+            
+            "general": """You are a helpful assistant for BotifyTrades, a Discord trading bot that automates stock and options trading.
+Answer the user's question helpfully. Be concise but informative.
+If asked about features, explain what BotifyTrades can do.
+Format your response with markdown for readability."""
         }
         
-        system_prompt = system_prompts.get(analysis_type, system_prompts["log_analysis"])
+        system_prompt = system_prompts.get(analysis_type, system_prompts["general"])
         
+        # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
+        # do not change this unless explicitly requested by the user
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Context:\n{context}\n\nUser Question: {query}"}
             ],
-            max_tokens=500,
-            temperature=0.7
+            max_completion_tokens=500
         )
         
         return response.choices[0].message.content
         
     except Exception as e:
         print(f"[CHAT] OpenAI call failed: {e}")
+        return None
+
+
+def get_general_ai_response(query: str) -> Optional[str]:
+    """Get a general AI response for questions not in knowledge base."""
+    try:
+        client = _get_openai_client()
+        if not client:
+            return None
+        
+        system_prompt = """You are a helpful assistant for BotifyTrades, a Discord trading bot.
+BotifyTrades monitors Discord channels for trading signals and automatically executes trades on brokers like Webull, Alpaca, Interactive Brokers, and Tastytrade.
+
+Key features:
+- Automated trade execution from Discord signals
+- Risk management with profit targets and stop losses
+- Paper and live trading modes
+- Per-channel configuration
+- Web-based control panel
+
+Answer the user's question helpfully and concisely. Use markdown formatting.
+If you don't know something specific about BotifyTrades, suggest they check the Settings or Channels page in the GUI."""
+        
+        # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
+        # do not change this unless explicitly requested by the user
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": query}
+            ],
+            max_completion_tokens=500
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        print(f"[CHAT] AI response failed: {e}")
         return None
