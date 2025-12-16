@@ -4522,9 +4522,10 @@ def register_routes(app):
     # API Keys Settings (OpenAI, Alpha Vantage, Finnhub)
     @app.route('/api/settings/api_keys', methods=['GET'])
     def api_get_api_keys_settings():
-        """Get API keys (masked for display)"""
+        """Get API keys (masked for display) and AI provider"""
         try:
             from .broker_credentials_service import get_api_keys_extended
+            from .config_service import get_ai_provider
             
             keys = get_api_keys_extended()
             
@@ -4536,6 +4537,7 @@ def register_routes(app):
             
             return jsonify({
                 'success': True,
+                'ai_provider': get_ai_provider(),
                 'openai_key': mask_key(keys.get('openai', '')),
                 'alphavantage_key': mask_key(keys.get('alpha_vantage', '')),
                 'finnhub_key': mask_key(keys.get('finnhub', ''))
@@ -4546,12 +4548,18 @@ def register_routes(app):
     
     @app.route('/api/settings/api_keys', methods=['POST'])
     def api_save_api_keys_settings():
-        """Save API keys"""
+        """Save API keys and AI provider"""
         try:
             from .broker_credentials_service import save_api_keys_extended, get_api_keys_extended
+            from .config_service import save_ai_provider
             
             data = request.json
             existing = get_api_keys_extended()
+            
+            # Save AI provider preference
+            ai_provider = data.get('ai_provider', 'replit_ai')
+            save_ai_provider(ai_provider)
+            print(f"[API] AI provider set to: {ai_provider}")
             
             # Only update if new value provided (not masked value)
             openai = data.get('openai_key', '')
@@ -4575,7 +4583,7 @@ def register_routes(app):
             
             return jsonify({
                 'success': True,
-                'message': 'API keys saved successfully'
+                'message': 'API keys and AI provider saved successfully'
             })
         except Exception as e:
             print(f"[API] Error saving API keys: {e}")

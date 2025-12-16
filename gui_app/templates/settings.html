@@ -835,10 +835,23 @@ input:checked + .slider:before {
     <div class="settings-card">
         <h3>🤖 AI & Market Data APIs</h3>
         <p class="description">External API credentials for analysis & data</p>
+        
+        <!-- AI Provider Selection -->
         <div class="form-group">
+            <label>AI Provider</label>
+            <select id="ai-provider" class="form-control" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #fff;">
+                <option value="replit_ai">Replit AI (Uses Replit Credits - Recommended)</option>
+                <option value="openai">OpenAI (Your Own API Key)</option>
+                <option value="disabled">Disabled (No AI Features)</option>
+            </select>
+            <p class="help-text">Choose which AI service to use for chatbot and signal format learning</p>
+        </div>
+        
+        <!-- OpenAI Key (only shown when OpenAI is selected) -->
+        <div class="form-group" id="openai-key-group">
             <label>OpenAI API Key</label>
             <input type="password" id="openai-key" placeholder="sk-...">
-            <p class="help-text">For AI trade analysis</p>
+            <p class="help-text">Required when using "OpenAI" provider above</p>
         </div>
         <div class="form-group">
             <label>Alpha Vantage Key</label>
@@ -1414,14 +1427,30 @@ document.getElementById('save-alpaca').addEventListener('click', async () => {
 
 // ========== AI & MARKET DATA API KEYS ==========
 
+function updateAiProviderUI() {
+    const provider = document.getElementById('ai-provider').value;
+    const openaiGroup = document.getElementById('openai-key-group');
+    if (provider === 'openai') {
+        openaiGroup.style.display = 'block';
+    } else {
+        openaiGroup.style.display = 'none';
+    }
+}
+
+document.getElementById('ai-provider').addEventListener('change', updateAiProviderUI);
+
 async function loadApiKeys() {
     try {
         const response = await fetch('/api/settings/api_keys');
         if (response.ok) {
             const data = await response.json();
+            if (data.ai_provider) {
+                document.getElementById('ai-provider').value = data.ai_provider;
+            }
             if (data.openai_key) document.getElementById('openai-key').value = data.openai_key;
             if (data.alphavantage_key) document.getElementById('alphavantage-key').value = data.alphavantage_key;
             if (data.finnhub_key) document.getElementById('finnhub-key').value = data.finnhub_key;
+            updateAiProviderUI();
         }
     } catch (error) {
         console.error('Error loading API keys:', error);
@@ -1430,6 +1459,7 @@ async function loadApiKeys() {
 
 document.getElementById('save-api-keys').addEventListener('click', async () => {
     const data = {
+        ai_provider: document.getElementById('ai-provider').value,
         openai_key: document.getElementById('openai-key').value.trim(),
         alphavantage_key: document.getElementById('alphavantage-key').value.trim(),
         finnhub_key: document.getElementById('finnhub-key').value.trim()
@@ -1445,7 +1475,7 @@ document.getElementById('save-api-keys').addEventListener('click', async () => {
         const result = await response.json();
         const msg = document.getElementById('save-message');
         if (result.success) {
-            msg.textContent = '✅ API keys saved!';
+            msg.textContent = '✅ API keys and AI provider saved!';
             msg.className = 'message success';
         } else {
             msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');

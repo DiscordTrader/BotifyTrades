@@ -1784,41 +1784,53 @@ def _generate_trade_summary(trades: List[Dict], positions: List[Dict]) -> str:
 
 
 def _get_openai_client():
-    """Get OpenAI client using Replit AI Integrations or user API key.
+    """Get OpenAI client based on user's provider preference from GUI.
     
-    Priority:
-    1. Replit AI Integrations (no API key needed, billed to credits) - ALWAYS checked first
-    2. User's OPENAI_API_KEY environment variable
-    3. User's OpenAI key from database (GUI Settings)
+    Provider options (set in Settings > AI & Market Data APIs):
+    - 'replit_ai': Use Replit AI Integrations (billed to Replit credits)
+    - 'openai': Use user's own OpenAI API key
+    - 'disabled': No AI features
     """
     import os
     
     try:
+        from .config_service import get_ai_provider, load_config
         from openai import OpenAI
         
-        # ALWAYS check for Replit AI Integrations first (highest priority)
-        ai_integrations_key = os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY')
-        ai_integrations_base = os.environ.get('AI_INTEGRATIONS_OPENAI_BASE_URL')
+        provider = get_ai_provider()
         
-        if ai_integrations_key and ai_integrations_base:
-            print("[CHAT] Using Replit AI Integrations for OpenAI")
-            return OpenAI(api_key=ai_integrations_key, base_url=ai_integrations_base)
+        # Check if AI is disabled
+        if provider == 'disabled':
+            print("[CHAT] AI is disabled in settings")
+            return None
         
-        # Fallback to user's API key
-        user_api_key = os.environ.get('OPENAI_API_KEY')
+        # Use Replit AI Integrations
+        if provider == 'replit_ai':
+            ai_integrations_key = os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY')
+            ai_integrations_base = os.environ.get('AI_INTEGRATIONS_OPENAI_BASE_URL')
+            
+            if ai_integrations_key and ai_integrations_base:
+                print("[CHAT] Using Replit AI Integrations")
+                return OpenAI(api_key=ai_integrations_key, base_url=ai_integrations_base)
+            else:
+                print("[CHAT] Replit AI Integrations not available")
+                return None
         
-        if not user_api_key:
-            try:
-                from .config_service import load_config
+        # Use user's OpenAI API key
+        if provider == 'openai':
+            user_api_key = os.environ.get('OPENAI_API_KEY')
+            
+            if not user_api_key:
                 api_keys = load_config('api_keys')
                 if api_keys and api_keys.get('openai'):
                     user_api_key = api_keys['openai']
-            except Exception as e:
-                print(f"[CHAT] Could not load API key from database: {e}")
-        
-        if user_api_key:
-            print("[CHAT] Using user-provided OpenAI API key")
-            return OpenAI(api_key=user_api_key)
+            
+            if user_api_key:
+                print("[CHAT] Using user's OpenAI API key")
+                return OpenAI(api_key=user_api_key)
+            else:
+                print("[CHAT] OpenAI API key not configured")
+                return None
         
         return None
     except Exception as e:

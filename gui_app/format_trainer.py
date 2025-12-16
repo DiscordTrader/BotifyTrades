@@ -19,56 +19,72 @@ class FormatTrainer:
         self._openai_available = None
     
     def _get_openai_client(self):
-        """Get OpenAI client, checking for best available option each time.
+        """Get OpenAI client based on user's provider preference from GUI.
         
-        Priority:
-        1. Replit AI Integrations (no API key needed, billed to credits)
-        2. User-provided OpenAI API key (from environment or database)
+        Provider options (set in Settings > AI & Market Data APIs):
+        - 'replit_ai': Use Replit AI Integrations (billed to Replit credits)
+        - 'openai': Use user's own OpenAI API key
+        - 'disabled': No AI features
         """
         try:
-            # Always check for Replit AI Integrations first (preferred)
-            ai_integrations_key = os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY')
-            ai_integrations_base = os.environ.get('AI_INTEGRATIONS_OPENAI_BASE_URL')
+            from .config_service import get_ai_provider, load_config
+            
+            provider = get_ai_provider()
+            
+            # Check if provider changed - reset cache
+            cached_provider = getattr(self, '_cached_provider', None)
+            if cached_provider != provider:
+                self._openai_client = None
+                self._cached_provider = provider
+            
+            # Return cached client if available
+            if self._openai_client is not None:
+                return self._openai_client
+            
+            # Check if AI is disabled
+            if provider == 'disabled':
+                self._openai_available = False
+                print("[FORMAT_TRAINER] AI is disabled in settings")
+                return None
             
             from openai import OpenAI
             
-            # Use Replit AI Integrations if available (highest priority)
-            if ai_integrations_key and ai_integrations_base:
-                # Check if we already have the Replit client cached
-                if self._openai_client is not None and getattr(self, '_using_ai_integrations', False):
+            # Use Replit AI Integrations
+            if provider == 'replit_ai':
+                ai_integrations_key = os.environ.get('AI_INTEGRATIONS_OPENAI_API_KEY')
+                ai_integrations_base = os.environ.get('AI_INTEGRATIONS_OPENAI_BASE_URL')
+                
+                if ai_integrations_key and ai_integrations_base:
+                    self._openai_client = OpenAI(
+                        api_key=ai_integrations_key,
+                        base_url=ai_integrations_base
+                    )
+                    self._openai_available = True
+                    print("[FORMAT_TRAINER] Using Replit AI Integrations")
                     return self._openai_client
-                    
-                self._openai_client = OpenAI(
-                    api_key=ai_integrations_key,
-                    base_url=ai_integrations_base
-                )
-                self._openai_available = True
-                self._using_ai_integrations = True
-                print("[FORMAT_TRAINER] Using Replit AI Integrations for OpenAI")
-                return self._openai_client
+                else:
+                    print("[FORMAT_TRAINER] Replit AI Integrations not available")
+                    self._openai_available = False
+                    return None
             
-            # Fallback to user's API key (env var or database)
-            user_api_key = os.environ.get('OPENAI_API_KEY')
-            
-            if not user_api_key:
-                try:
-                    from .config_service import load_config
+            # Use user's OpenAI API key
+            if provider == 'openai':
+                user_api_key = os.environ.get('OPENAI_API_KEY')
+                
+                if not user_api_key:
                     api_keys = load_config('api_keys')
                     if api_keys and api_keys.get('openai'):
                         user_api_key = api_keys['openai']
-                except Exception as e:
-                    print(f"[FORMAT_TRAINER] Could not load API key from database: {e}")
-            
-            if user_api_key:
-                # Check if we already have user's client cached
-                if self._openai_client is not None and not getattr(self, '_using_ai_integrations', True):
+                
+                if user_api_key:
+                    self._openai_client = OpenAI(api_key=user_api_key)
+                    self._openai_available = True
+                    print("[FORMAT_TRAINER] Using user's OpenAI API key")
                     return self._openai_client
-                    
-                self._openai_client = OpenAI(api_key=user_api_key)
-                self._openai_available = True
-                self._using_ai_integrations = False
-                print("[FORMAT_TRAINER] Using user-provided OpenAI API key")
-                return self._openai_client
+                else:
+                    print("[FORMAT_TRAINER] OpenAI API key not configured")
+                    self._openai_available = False
+                    return None
             
             self._openai_available = False
             return None
