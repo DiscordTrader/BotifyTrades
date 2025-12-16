@@ -57,6 +57,29 @@
         <button id="tab-filled" class="tab" onclick="switchTab('filled')">
             ✅ Filled Orders
         </button>
+        <button id="tab-signals" class="tab" onclick="switchTab('signals')">
+            📡 Signals
+        </button>
+    </div>
+    
+    <!-- Signals Filter Bar (hidden by default) -->
+    <div id="signals-filter-bar" style="display: none; padding: 16px; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.05); gap: 16px; align-items: center; flex-wrap: wrap;">
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <label style="font-size: 0.875rem; color: var(--text-secondary);">Symbol:</label>
+            <input type="text" id="signal-symbol-filter" placeholder="e.g. AAPL, SPY" 
+                   style="padding: 8px 12px; background: #2C2C2E; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; min-width: 140px;"
+                   onkeyup="debounceSignalFilter()">
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <label style="font-size: 0.875rem; color: var(--text-secondary);">Channel:</label>
+            <select id="signal-channel-filter" onchange="loadSignalMessages()" 
+                    style="padding: 8px 12px; background: #2C2C2E; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; min-width: 180px;">
+                <option value="">All Channels</option>
+            </select>
+        </div>
+        <button onclick="loadSignalMessages()" class="btn btn-primary btn-small" style="margin-left: auto;">
+            🔄 Refresh
+        </button>
     </div>
     
     <div id="trades-table-container">
@@ -90,11 +113,19 @@ async function switchTab(tab) {
     document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
     document.getElementById(`tab-${tab}`).classList.add('active');
     
-    if (tab === 'filled') {
-        console.log('[DEBUG] Loading filled orders from API...');
-        await loadFilledOrders();
+    // Show/hide signals filter bar
+    const signalsFilterBar = document.getElementById('signals-filter-bar');
+    if (tab === 'signals') {
+        signalsFilterBar.style.display = 'flex';
+        await loadSignalMessages();
     } else {
-        filterAndDisplayTrades();
+        signalsFilterBar.style.display = 'none';
+        if (tab === 'filled') {
+            console.log('[DEBUG] Loading filled orders from API...');
+            await loadFilledOrders();
+        } else {
+            filterAndDisplayTrades();
+        }
     }
 }
 
@@ -663,6 +694,141 @@ document.addEventListener('change', (e) => {
         }
     }
 });
+
+// Signal Messages Functions
+let signalFilterTimeout = null;
+let signalChannelsLoaded = false;
+
+function debounceSignalFilter() {
+    if (signalFilterTimeout) clearTimeout(signalFilterTimeout);
+    signalFilterTimeout = setTimeout(() => loadSignalMessages(), 400);
+}
+
+async function loadSignalMessages() {
+    const container = document.getElementById('trades-table-container');
+    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading signals...</div></div>';
+    
+    try {
+        const symbolFilter = document.getElementById('signal-symbol-filter').value.trim();
+        const channelFilter = document.getElementById('signal-channel-filter').value;
+        
+        let url = '/api/channel-messages?limit=200';
+        if (symbolFilter) url += `&symbol=${encodeURIComponent(symbolFilter)}`;
+        if (channelFilter) url += `&channel_id=${encodeURIComponent(channelFilter)}`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.error) {
+            container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">${data.error}</div>`;
+            return;
+        }
+        
+        // Populate channel dropdown if not done
+        if (!signalChannelsLoaded && data.channels && data.channels.length > 0) {
+            const channelSelect = document.getElementById('signal-channel-filter');
+            data.channels.forEach(ch => {
+                const option = document.createElement('option');
+                option.value = ch.id;
+                option.textContent = ch.name;
+                channelSelect.appendChild(option);
+            });
+            signalChannelsLoaded = true;
+        }
+        
+        displaySignalMessagesTable(data.messages || []);
+        
+    } catch (error) {
+        console.error('Failed to load signal messages:', error);
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load signals</div>';
+    }
+}
+
+function displaySignalMessagesTable(messages) {
+    const container = document.getElementById('trades-table-container');
+    
+    if (messages.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px;">
+                <div style="font-size: 48px; margin-bottom: 16px;">📡</div>
+                <div style="font-size: 1.125rem; color: var(--text-primary); margin-bottom: 8px;">No Signals Found</div>
+                <div style="color: var(--text-secondary); font-size: 0.875rem;">
+                    Signals from configured channels will appear here.<br>
+                    Make sure you have channels with execution enabled.
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Channel</th>
+                    <th>Symbol</th>
+                    <th>Direction</th>
+                    <th>Details</th>
+                    <th>Message</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    for (const msg of messages) {
+        const parsed = msg.parsed_signal;
+        const time = msg.created_at ? new Date(msg.created_at).toLocaleString() : 'Unknown';
+        const symbol = msg.symbol || (parsed ? parsed.symbol : '-');
+        const direction = parsed ? (parsed.direction || parsed.action || '-') : '-';
+        const dirClass = direction.toUpperCase().includes('BUY') || direction.toUpperCase().includes('LONG') ? 'success' : 
+                        (direction.toUpperCase().includes('SELL') || direction.toUpperCase().includes('SHORT') ? 'danger' : '');
+        
+        // Format details from parsed signal
+        let details = '-';
+        if (parsed) {
+            const parts = [];
+            if (parsed.strike) parts.push(`Strike: $${parsed.strike}`);
+            if (parsed.expiry) parts.push(`Exp: ${parsed.expiry}`);
+            if (parsed.option_type) parts.push(parsed.option_type.toUpperCase());
+            if (parsed.entry_price) parts.push(`Entry: $${parsed.entry_price}`);
+            if (parsed.target || parsed.targets) parts.push(`TP: ${parsed.target || (parsed.targets ? parsed.targets[0] : '')}`);
+            if (parsed.stop_loss) parts.push(`SL: $${parsed.stop_loss}`);
+            details = parts.length > 0 ? parts.join(' | ') : '-';
+        }
+        
+        // Truncate message
+        const maxLen = 120;
+        let messagePreview = msg.message_content || '';
+        if (messagePreview.length > maxLen) {
+            messagePreview = messagePreview.substring(0, maxLen) + '...';
+        }
+        
+        html += `
+            <tr>
+                <td style="white-space: nowrap; font-size: 0.8rem;">${time}</td>
+                <td>
+                    <span style="background: rgba(0,245,255,0.1); padding: 4px 8px; border-radius: 6px; font-size: 0.8rem;">
+                        ${msg.channel_name || 'Unknown'}
+                    </span>
+                    ${msg.broker_override ? `<span style="font-size: 0.7rem; color: #888; margin-left: 6px;">${msg.broker_override}</span>` : ''}
+                </td>
+                <td style="font-weight: 600; color: #00F5FF;">${symbol || '-'}</td>
+                <td class="${dirClass}" style="font-weight: 600;">${direction.toUpperCase()}</td>
+                <td style="font-size: 0.8rem; color: var(--text-secondary);">${details}</td>
+                <td style="font-size: 0.8rem; color: #aaa; max-width: 300px; overflow: hidden; text-overflow: ellipsis;" title="${msg.message_content || ''}">${messagePreview}</td>
+            </tr>
+        `;
+    }
+    
+    html += '</tbody></table>';
+    
+    html += `<div style="padding: 12px 16px; text-align: right; color: var(--text-secondary); font-size: 0.8rem;">
+        Showing ${messages.length} signal${messages.length !== 1 ? 's' : ''}
+    </div>`;
+    
+    container.innerHTML = html;
+}
 
 // Load trades initially
 loadTrades();

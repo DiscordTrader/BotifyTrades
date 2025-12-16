@@ -1898,6 +1898,93 @@ def register_routes(app):
         
         return jsonify(formatted_signals)
     
+    # Channel messages/signals for Live Trading Monitor
+    @app.route('/api/channel-messages', methods=['GET'])
+    def api_get_channel_messages():
+        """Get parsed messages from channels with broker execution enabled"""
+        symbol_filter = request.args.get('symbol', '').strip().upper()
+        channel_filter = request.args.get('channel_id', '')
+        limit = request.args.get('limit', 100, type=int)
+        
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            # Get messages from channel_messages table for execute-enabled channels
+            query = '''
+                SELECT cm.id, cm.channel_id, cm.channel_name, cm.message_content, 
+                       cm.author_id, cm.author_name, cm.message_id, cm.created_at,
+                       c.name as configured_channel_name, c.broker_override
+                FROM channel_messages cm
+                LEFT JOIN channels c ON cm.channel_id = c.discord_channel_id
+                WHERE c.execute_enabled = 1 OR c.track_enabled = 1
+            '''
+            params = []
+            
+            if channel_filter:
+                query += ' AND cm.channel_id = ?'
+                params.append(channel_filter)
+            
+            query += ' ORDER BY cm.created_at DESC LIMIT ?'
+            params.append(limit)
+            
+            cursor.execute(query, params)
+            messages = [dict(row) for row in cursor.fetchall()]
+            
+            # Parse signals from messages and apply symbol filter
+            from src.signals.parser import parse_signal
+            result_messages = []
+            
+            for msg in messages:
+                content = msg.get('message_content', '')
+                parsed = None
+                symbol = None
+                
+                # Try to parse signal
+                try:
+                    parsed = parse_signal(content)
+                    if parsed and parsed.get('symbol'):
+                        symbol = parsed['symbol'].upper()
+                except:
+                    pass
+                
+                # Apply symbol filter if specified
+                if symbol_filter:
+                    if not symbol or symbol_filter not in symbol:
+                        continue
+                
+                result_messages.append({
+                    'id': msg['id'],
+                    'channel_id': msg['channel_id'],
+                    'channel_name': msg.get('configured_channel_name') or msg.get('channel_name') or 'Unknown',
+                    'message_content': content,
+                    'author_name': msg.get('author_name', 'Unknown'),
+                    'created_at': msg.get('created_at'),
+                    'broker_override': msg.get('broker_override'),
+                    'parsed_signal': parsed,
+                    'symbol': symbol
+                })
+            
+            # Get list of channels for filter dropdown
+            cursor.execute('''
+                SELECT DISTINCT c.discord_channel_id, c.name 
+                FROM channels c
+                WHERE c.execute_enabled = 1 OR c.track_enabled = 1
+                ORDER BY c.name
+            ''')
+            channels = [{'id': row['discord_channel_id'], 'name': row['name']} for row in cursor.fetchall()]
+            
+            return jsonify({
+                'messages': result_messages,
+                'channels': channels,
+                'total': len(result_messages)
+            })
+        except Exception as e:
+            print(f"[API] Error getting channel messages: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
     # Bot status
     @app.route('/api/status', methods=['GET'])
     def api_bot_status():
