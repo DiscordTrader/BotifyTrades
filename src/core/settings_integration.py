@@ -33,20 +33,19 @@ def get_trading_settings_via_service() -> Dict[str, Any]:
 
 def get_slippage_settings_via_service() -> Dict[str, Any]:
     """
-    Get slippage settings through SettingsService.
-    Falls back to database if service unavailable.
+    Get slippage settings directly from slippage_settings table.
+    This ensures the GUI toggle is always respected.
     """
     try:
-        from .settings_service import get_settings_service
-        service = get_settings_service()
-        
+        from gui_app import database as db
+        settings = db.get_slippage_settings()
         return {
-            'enabled': service.get('trading.slippage_protection_enabled', module='selfbot_webull'),
-            'threshold_percent': service.get('trading.slippage_percent', module='selfbot_webull'),
+            'enabled': settings.get('enabled', True),
+            'threshold_percent': settings.get('threshold_percent', 10.0),
         }
     except Exception as e:
-        logger.warning(f"[SETTINGS] Could not load slippage via service: {e}")
-        return _fallback_slippage_settings()
+        logger.warning(f"[SETTINGS] Could not load slippage from database: {e}")
+        return {'enabled': True, 'threshold_percent': 10.0}
 
 
 def get_risk_settings_via_service() -> Dict[str, Any]:
