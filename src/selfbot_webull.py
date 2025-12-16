@@ -1396,6 +1396,14 @@ PRICE_ONLY_STC_PATTERN = r'^[$]?([0-9.]+)\s+(out\s*half|out\s*all\s*but\s*[0-9]+
 # Groups: (direction, symbol, strike, opt_type, month, day, price)
 JC_OPT_PATTERN = r'(BTO|STC)\s+[$]?([A-Za-z]+)\s+[$]?([0-9.]+)([CPcp])\s+([0-9]{1,2})/([0-9]{1,2})\s+[.]?([0-9.]+)'
 
+# SPX/NDX shorthand patterns (0DTE style)
+# Format 1: Just strike+type - "6900c" → BTO 1 SPX 6900C <today> @ m
+# Format 2: With action - "BTO 25 6900c" or "STC 25 15000p"
+# Format 3: Action + strike only - "STC 6900c" → STC 1 SPX 6900C <today> @ m
+# Strike >= 10000 = NDX, Strike < 10000 = SPX
+# Groups: (action, qty, strike, opt_type)
+SPX_NDX_SHORTHAND_PATTERN = r'^(?:(BTO|STC)\s+)?(?:(\d+)\s+)?(\d{4,5})([CPcp])$'
+
 # Waxui-style patterns (LOTTO alerts)
 # Entry format: SPX here 12/05 6880C Avg. 4.00 or "SPX here 12/13 6100C Avg .35"
 # Groups: (symbol, month, day, strike, opt_type, price)
@@ -3415,6 +3423,7 @@ SIMPLE_STC_REGEX = re.compile(SIMPLE_STC_PATTERN, re.IGNORECASE)
 SIRENRED_PRICE_STC_REGEX = re.compile(SIRENRED_PRICE_STC_PATTERN, re.IGNORECASE)
 PRICE_ONLY_STC_REGEX = re.compile(PRICE_ONLY_STC_PATTERN, re.IGNORECASE)
 JC_OPT_REGEX = re.compile(JC_OPT_PATTERN, re.IGNORECASE)
+SPX_NDX_SHORTHAND_REGEX = re.compile(SPX_NDX_SHORTHAND_PATTERN, re.IGNORECASE)
 WAXUI_ENTRY_REGEX = re.compile(WAXUI_ENTRY_PATTERN, re.IGNORECASE)
 WAXUI_TRIM_REGEX = re.compile(WAXUI_TRIM_PATTERN, re.IGNORECASE)
 WAXUI_CLOSE_REGEX = re.compile(WAXUI_CLOSE_PATTERN, re.IGNORECASE)
@@ -3540,9 +3549,36 @@ def parse_option_signal(text: str) -> Optional[dict]:
                                                     "_exit_type": "HALF"
                                                 }
                                             else:
-                                                # Silently return None - let the caller try other formats (stock, TRADE IDEA)
-                                                # before printing "NOT matched"
-                                                return None
+                                                # Try SPX/NDX shorthand: 6900c, BTO 25 6900c, STC 15000p
+                                                m = SPX_NDX_SHORTHAND_REGEX.search(text.strip())
+                                                if m:
+                                                    action, qty_str, strike_str, opt_type = m.groups()
+                                                    strike = float(strike_str)
+                                                    # Determine symbol based on strike: >= 10000 = NDX, else SPX
+                                                    symbol = "NDX" if strike >= 10000 else "SPX"
+                                                    action = (action or "BTO").upper()
+                                                    qty = int(qty_str) if qty_str else 1
+                                                    # Use today's date for expiry
+                                                    from datetime import datetime
+                                                    today = datetime.now()
+                                                    expiry = today.strftime("%m/%d")
+                                                    print(f"[Discord] ✓ Matched SPX/NDX shorthand: {action} {qty} {symbol} {strike}{opt_type.upper()} {expiry} @ MARKET")
+                                                    return {
+                                                        "asset": "option",
+                                                        "action": action,
+                                                        "qty": qty,
+                                                        "symbol": symbol,
+                                                        "strike": strike,
+                                                        "opt_type": opt_type.upper(),
+                                                        "expiry": expiry,
+                                                        "price": None,
+                                                        "is_market_order": True,
+                                                        "_spx_ndx_shorthand": True
+                                                    }
+                                                else:
+                                                    # Silently return None - let the caller try other formats (stock, TRADE IDEA)
+                                                    # before printing "NOT matched"
+                                                    return None
     
     if use_steel_stc:
         # Handle various STC formats with different group structures
