@@ -1932,7 +1932,7 @@ def register_routes(app):
             messages = [dict(row) for row in cursor.fetchall()]
             
             # Parse signals from messages and apply symbol filter
-            from src.signals.parser import parse_signal
+            from src.signals.parser import parse_option_signal, parse_stock_signal
             result_messages = []
             
             for msg in messages:
@@ -1940,9 +1940,11 @@ def register_routes(app):
                 parsed = None
                 symbol = None
                 
-                # Try to parse signal
+                # Try to parse signal (option first, then stock)
                 try:
-                    parsed = parse_signal(content)
+                    parsed = parse_option_signal(content)
+                    if not parsed:
+                        parsed = parse_stock_signal(content)
                     if parsed and parsed.get('symbol'):
                         symbol = parsed['symbol'].upper()
                 except:
