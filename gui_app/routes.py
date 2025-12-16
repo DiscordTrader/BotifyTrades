@@ -4025,6 +4025,7 @@ def register_routes(app):
                         'pnl': live_pos['unrealized_pl'],
                         'pnl_percent': ((live_pos['current_price'] - (avg_entry or live_pos['avg_cost'])) / (avg_entry or live_pos['avg_cost']) * 100) if (avg_entry or live_pos['avg_cost']) > 0 else 0,
                         'source': 'live_brokerage',
+                        'status': 'OPEN',  # Live brokerage positions are always OPEN
                         'fill_status': 'Filled',
                         'option_id': live_pos.get('option_id') or first_trade.get('option_id'),
                         'source_display': first_trade.get('source_display') or db.get_trade_source_display(first_trade),
