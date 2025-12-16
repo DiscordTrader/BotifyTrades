@@ -1711,7 +1711,7 @@
   },
   "ALPACA_PAPER_DAL_75.0_2025-12-19_C": {
     "entry_price": 0.32,
-    "highest_price": 0.33,
+    "highest_price": 0.34,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -1726,7 +1726,7 @@
   },
   "ALPACA_PAPER_GOOGL_295.0_2025-12-26_P": {
     "entry_price": 1.2,
-    "highest_price": 1.47,
+    "highest_price": 2.05,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -1741,17 +1741,17 @@
   },
   "ALPACA_PAPER_NOW_750.0_2025-12-19_P": {
     "entry_price": 3.1,
-    "highest_price": 3.2,
+    "highest_price": 3.8,
     "trailing_activated": false,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "ALPACA_PAPER",
     "raw_symbol": "NOW251219P00750000",
-    "tier1_hit": false,
-    "tier2_hit": false,
-    "tier3_hit": false,
+    "tier1_hit": true,
+    "tier2_hit": true,
+    "tier3_hit": true,
     "created_at": "2025-12-16T15:01:51.280975"
   },
   "ALPACA_PAPER_QQQ_615.0_2025-12-16_C": {
@@ -1768,5 +1768,35 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-16T15:01:51.283589"
+  },
+  "Webull_NOW_750.0_12/19_P": {
+    "entry_price": 3.1,
+    "highest_price": 5.25,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "Webull",
+    "raw_symbol": null,
+    "tier1_hit": true,
+    "tier2_hit": true,
+    "tier3_hit": true,
+    "created_at": "2025-12-16T15:11:43.822878"
+  },
+  "ALPACA_PAPER_PLTR_195.0_2025-12-19_C": {
+    "entry_price": 0.44,
+    "highest_price": 0.61,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "PLTR251219C00195000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-16T15:21:27.477532"
   }
 }

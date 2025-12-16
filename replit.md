@@ -1,5 +1,15 @@
 # BotifyTrades - Discord Trading Bot
 
+## Version
+**v3.3.0 - MILESTONE 3** (2025-12-16)
+
+## Recent Changes (Milestone 3)
+- **SPX/NDX Shorthand Format**: Added support for quick 0DTE signals like "6900c" → BTO 1 SPX 6900C, auto-detects symbol based on strike (≥10000 = NDX, <10000 = SPX)
+- **Slippage Settings Fix**: Fixed bug where slippage protection was not respecting GUI toggle - now reads directly from slippage_settings table
+- **Message Purge System**: Configurable retention dropdown (1/3/7/14/30 days) in Signals tab
+- **Live Position Status Fix**: Live brokerage positions now correctly show "OPEN" status when merged with broker data
+- **TRADE IDEA Fallback**: Auto Signal Conversion now falls back to originating channel's broker settings when target not configured
+
 ## Overview
 BotifyTrades is a cross-platform Discord self-bot designed for automated stock and options trading. It provides automated trading across Webull, Alpaca, Interactive Brokers, and Tastytrade, featuring advanced analytics, a dual-broker architecture for paper and live trading, and comprehensive risk management. The bot monitors Discord for trading signals, executes trades with pre-trade swing analysis, AI-powered post-trade analysis, and interactive commands, all managed via a Flask web control panel. The project aims to provide a robust, automated trading solution, enhancing user control and analytical capabilities in a Discord-centric workflow, with a focus on comprehensive automation and analytical tools.
 
