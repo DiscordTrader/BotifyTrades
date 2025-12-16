@@ -4874,6 +4874,11 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                     conversion_settings = db.get_signal_conversion_settings()
                     target_channel_id = conversion_settings.get('target_execution_channel_id', '')
                     
+                    # FALLBACK: If no target channel configured, use the originating channel
+                    if not target_channel_id:
+                        target_channel_id = str(message.channel.id)
+                        print(f"[ALERT PARSER] Using originating channel {target_channel_id} as execution target")
+                    
                     if target_channel_id:
                         # Get target channel info
                         target_channel_info = next((ch for ch in db.get_channels() if str(ch['discord_channel_id']) == target_channel_id), None)
@@ -4928,9 +4933,7 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                             print(f"[ALERT PARSER]    → Channel: {target_channel_info['name']} | Paper: {bool(target_channel_info.get('paper_trade_enabled', 0))} | Signal ID: {signal_id}")
                             # Note: Worker will send notification to execution channel after order completes
                         else:
-                            print(f"[ALERT PARSER] ⚠️ Target channel {target_channel_id} not found in database")
-                    else:
-                        print(f"[ALERT PARSER] ⚠️ No target execution channel configured - please configure in Settings")
+                            print(f"[ALERT PARSER] ⚠️ Channel {target_channel_id} not configured in database - please add it in Channels page")
                 else:
                     print(f"[ALERT PARSER] ⚠️ Database not available - cannot add signal to queue")
             except Exception as e:
