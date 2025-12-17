@@ -956,12 +956,97 @@ def run_exact_historical_simulation(
     first_trade_date = trades[0].closed_at[:10] if trades else ''
     last_trade_date = trades[-1].closed_at[:10] if trades else ''
     
+    # Calculate capital requirements from actual trade values
+    max_position_value = max(actual_position_values) if actual_position_values else 0
+    min_position_value = min(actual_position_values) if actual_position_values else 0
+    sorted_values = sorted(actual_position_values)
+    position_75th = sorted_values[int(len(sorted_values) * 0.75)] if sorted_values else 0
+    
+    # Capital requirement calculations
+    min_portfolio_all_trades = max_position_value  # To take ALL trades
+    min_portfolio_75pct = position_75th  # For 75% of trades
+    recommended_portfolio = max_position_value * 4  # 25% max position rule
+    
+    # Suggested position size based on trade history
+    suggested_fixed_size = round(median_position_size / 100) * 100  # Round to nearest $100
+    suggested_percent = round((median_position_size / recommended_portfolio) * 100, 1) if recommended_portfolio > 0 else 10
+    
+    # Generate recommendations
+    recommendations = []
+    
+    # Portfolio size recommendation
+    if portfolio_start < min_portfolio_all_trades:
+        recommendations.append({
+            'type': 'warning',
+            'title': 'Portfolio Below Minimum',
+            'message': f'Your portfolio ${portfolio_start:,.0f} is below the ${min_portfolio_all_trades:,.0f} needed to take all trades from this {entity_type}. '
+                      f'Some trades may be skipped if requiring full contracts.'
+        })
+    
+    recommendations.append({
+        'type': 'suggestion',
+        'title': 'Recommended Portfolio Size',
+        'message': f'Based on trade history: Minimum ${min_portfolio_all_trades:,.0f} to take all trades, '
+                  f'or ${recommended_portfolio:,.0f} for safe 25% max position sizing.'
+    })
+    
+    # Position size recommendation
+    recommendations.append({
+        'type': 'info',
+        'title': 'Suggested Position Size',
+        'message': f'Based on this {entity_type}\'s trades: ${suggested_fixed_size:,.0f} fixed per trade, '
+                  f'or {suggested_percent}% of portfolio. Median trade value was ${median_position_size:,.0f}.'
+    })
+    
+    # Risk analysis
+    if risk_per_trade_mode == 'fixed':
+        max_consecutive_losses = int(portfolio_start / risk_per_trade_value) if risk_per_trade_value > 0 else 0
+    else:
+        max_consecutive_losses = int(1 / risk_per_trade_value) if risk_per_trade_value > 0 else 0
+    
+    recommendations.append({
+        'type': 'info',
+        'title': 'Risk Tolerance',
+        'message': f'With current settings, portfolio can sustain {max_consecutive_losses} consecutive 100% losses before depletion.'
+    })
+    
+    # Win rate analysis
+    if win_rate < 50:
+        recommendations.append({
+            'type': 'warning',
+            'title': 'Win Rate Below 50%',
+            'message': f'This {entity_type} has {win_rate:.1f}% win rate. Consider smaller position sizes or higher win rate targets.'
+        })
+    elif win_rate >= 70:
+        recommendations.append({
+            'type': 'success',
+            'title': 'Strong Win Rate',
+            'message': f'This {entity_type} has {win_rate:.1f}% win rate. Consider compound mode for accelerated growth.'
+        })
+    
     return {
         'success': True,
         'simulation_mode': 'exact_historical',
         'entity_type': entity_type,
         'entity_id': entity_id,
         'label': f'{entity_type.capitalize()}: {entity_id}',
+        
+        'capital_requirements': {
+            'min_to_take_all_trades': round(min_portfolio_all_trades, 2),
+            'min_for_75pct_trades': round(min_portfolio_75pct, 2),
+            'recommended_portfolio': round(recommended_portfolio, 2),
+            'max_trade_value': round(max_position_value, 2),
+            'avg_trade_value': round(avg_position_size, 2),
+            'min_trade_value': round(min_position_value, 2),
+            'median_trade_value': round(median_position_size, 2),
+        },
+        
+        'suggested_settings': {
+            'fixed_position_size': suggested_fixed_size,
+            'percent_position_size': suggested_percent,
+            'recommended_portfolio': round(recommended_portfolio, 2),
+            'based_on_trades': total_trades,
+        },
         
         'stats_used': {
             'name': entity_id,
@@ -996,6 +1081,7 @@ def run_exact_historical_simulation(
             'is_profitable': total_profit > 0
         },
         
+        'recommendations': recommendations,
         'trade_breakdown': trade_breakdown
     }
 

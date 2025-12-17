@@ -431,6 +431,42 @@
         <div class="simulation-grid">
             <div class="form-container">
                 <div class="card">
+                    <h3 class="card-title"><span>📁</span> Load Trade Data</h3>
+                    <p class="form-hint" style="margin-bottom: 16px;">Load real trades from a user or channel to get recommendations</p>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Entity Type</label>
+                            <select id="entity-type" class="form-select" style="background-color: #2C2C2E; color: #FFFFFF;">
+                                <option value="user" style="background-color: #2C2C2E; color: #FFFFFF;">User</option>
+                                <option value="channel" style="background-color: #2C2C2E; color: #FFFFFF;">Channel</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Name</label>
+                            <input type="text" id="entity-name" class="form-input" placeholder="Enter username or channel name">
+                        </div>
+                    </div>
+                    
+                    <button onclick="loadHistoricalData()" id="load-btn" class="btn btn-primary" style="background: linear-gradient(135deg, #7C3AED, #5B21B6); margin-bottom: 16px;">
+                        📊 Load & Analyze Trades
+                    </button>
+                    
+                    <div id="recommendations-container" style="display: none;">
+                        <div class="divider"></div>
+                        <h4 style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">📋 Capital Requirements</h4>
+                        <div id="capital-requirements" class="stats-grid" style="grid-template-columns: 1fr 1fr; gap: 8px;"></div>
+                        
+                        <h4 style="font-size: 14px; color: var(--text-secondary); margin: 16px 0 12px 0;">💡 Recommendations</h4>
+                        <div id="recommendations-list"></div>
+                        
+                        <button onclick="applyRecommendedSettings()" class="btn btn-primary" style="margin-top: 12px; background: linear-gradient(135deg, #10b981, #059669);">
+                            ✓ Apply Recommended Settings
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 16px;">
                     <h3 class="card-title"><span>⚙️</span> Configuration</h3>
                     
                     <div class="form-group">
@@ -581,6 +617,234 @@
     
     <script>
         let growthChart = null;
+        let loadedData = null;
+        
+        function loadHistoricalData() {
+            const btn = document.getElementById('load-btn');
+            const entityType = document.getElementById('entity-type').value;
+            const entityName = document.getElementById('entity-name').value.trim();
+            
+            if (!entityName) {
+                alert('Please enter a user or channel name');
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.textContent = 'Loading...';
+            
+            fetch('/api/simulate/historical', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    entity_type: entityType,
+                    entity_id: entityName,
+                    portfolio_start: parseFloat(document.getElementById('portfolio-start').value) || 3000,
+                    risk_per_trade_mode: document.getElementById('risk-mode').value,
+                    risk_per_trade_value: parseFloat(document.getElementById('risk-value').value) || 300
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.textContent = '📊 Load & Analyze Trades';
+                
+                if (data.success) {
+                    loadedData = data;
+                    displayRecommendations(data);
+                    displayHistoricalResults(data);
+                } else {
+                    alert(data.error || 'Failed to load trade data');
+                }
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.textContent = '📊 Load & Analyze Trades';
+                alert('Error: ' + err.message);
+            });
+        }
+        
+        function displayRecommendations(data) {
+            const container = document.getElementById('recommendations-container');
+            container.style.display = 'block';
+            
+            // Display capital requirements
+            const capReqs = data.capital_requirements;
+            if (capReqs) {
+                document.getElementById('capital-requirements').innerHTML = `
+                    <div class="stat-card" style="padding: 12px;">
+                        <div class="stat-label" style="font-size: 11px;">Min for All Trades</div>
+                        <div class="stat-value" style="font-size: 16px; color: var(--warning);">$${capReqs.min_to_take_all_trades.toLocaleString()}</div>
+                    </div>
+                    <div class="stat-card" style="padding: 12px;">
+                        <div class="stat-label" style="font-size: 11px;">Recommended (25% Rule)</div>
+                        <div class="stat-value" style="font-size: 16px; color: var(--success);">$${capReqs.recommended_portfolio.toLocaleString()}</div>
+                    </div>
+                    <div class="stat-card" style="padding: 12px;">
+                        <div class="stat-label" style="font-size: 11px;">Avg Trade Value</div>
+                        <div class="stat-value" style="font-size: 16px;">$${capReqs.avg_trade_value.toLocaleString()}</div>
+                    </div>
+                    <div class="stat-card" style="padding: 12px;">
+                        <div class="stat-label" style="font-size: 11px;">Max Trade Value</div>
+                        <div class="stat-value" style="font-size: 16px;">$${capReqs.max_trade_value.toLocaleString()}</div>
+                    </div>
+                `;
+            }
+            
+            // Display recommendations
+            const recs = data.recommendations || [];
+            const recsHtml = recs.map(rec => {
+                let color = 'var(--info)';
+                let icon = '💡';
+                if (rec.type === 'warning') { color = 'var(--warning)'; icon = '⚠️'; }
+                else if (rec.type === 'success') { color = 'var(--success)'; icon = '✅'; }
+                else if (rec.type === 'suggestion') { color = 'var(--mint)'; icon = '💡'; }
+                
+                return `<div style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 12px; margin-bottom: 8px; border-left: 3px solid ${color};">
+                    <div style="font-weight: 600; font-size: 13px; color: ${color}; margin-bottom: 4px;">${icon} ${rec.title}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">${rec.message}</div>
+                </div>`;
+            }).join('');
+            document.getElementById('recommendations-list').innerHTML = recsHtml;
+        }
+        
+        function applyRecommendedSettings() {
+            if (!loadedData || !loadedData.suggested_settings) {
+                alert('No data loaded. Please load trades first.');
+                return;
+            }
+            
+            const settings = loadedData.suggested_settings;
+            const stats = loadedData.stats_used;
+            
+            document.getElementById('portfolio-start').value = settings.recommended_portfolio;
+            document.getElementById('risk-value').value = settings.fixed_position_size;
+            document.getElementById('risk-mode').value = 'fixed';
+            
+            if (stats) {
+                document.getElementById('win-rate').value = stats.win_rate;
+            }
+            
+            alert('Settings applied! Click "Run Simulation" to project growth.');
+        }
+        
+        function displayHistoricalResults(data) {
+            document.getElementById('results-placeholder').style.display = 'none';
+            document.getElementById('results-container').style.display = 'block';
+            
+            const summary = data.summary;
+            const stats = data.stats_used;
+            
+            document.getElementById('result-final-balance').textContent = '$' + summary.final_balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            
+            const profitEl = document.getElementById('result-total-profit');
+            profitEl.textContent = '$' + summary.total_profit.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            profitEl.className = 'stat-value ' + (summary.total_profit >= 0 ? 'success' : 'danger');
+            
+            document.getElementById('result-total-return').textContent = summary.total_return_pct.toFixed(1) + '%';
+            document.getElementById('result-expected-trade').textContent = (summary.total_profit / summary.total_trades).toFixed(2) + '/trade';
+            document.getElementById('result-avg-daily').textContent = summary.wins + ' wins';
+            document.getElementById('result-weekly').textContent = summary.losses + ' losses';
+            document.getElementById('result-monthly').textContent = summary.win_rate ? summary.win_rate.toFixed(1) + '%' : stats.win_rate.toFixed(1) + '%';
+            
+            const edgeEl = document.getElementById('result-edge');
+            const winRate = stats.win_rate;
+            if (winRate >= 70) {
+                edgeEl.textContent = 'Excellent';
+                edgeEl.className = 'stat-value success';
+            } else if (winRate >= 55) {
+                edgeEl.textContent = 'Good';
+                edgeEl.className = 'stat-value info';
+            } else if (winRate >= 45) {
+                edgeEl.textContent = 'Average';
+                edgeEl.className = 'stat-value warning';
+            } else {
+                edgeEl.textContent = 'Needs Work';
+                edgeEl.className = 'stat-value danger';
+            }
+            
+            document.getElementById('strategy-text').textContent = 
+                `Analyzed ${summary.total_trades} actual trades from ${stats.first_trade_date} to ${stats.last_trade_date}. ` +
+                `Win rate: ${stats.win_rate.toFixed(1)}%. ` +
+                `Average trade value: $${stats.avg_position_size.toLocaleString()}. ` +
+                `With your settings, this would have generated $${summary.total_profit.toFixed(2)} profit.`;
+            
+            const paramsHtml = `
+                <div class="param-item"><div class="param-label">Starting Portfolio</div><div class="param-value">$${data.params_used.portfolio_start.toLocaleString()}</div></div>
+                <div class="param-item"><div class="param-label">Total Trades</div><div class="param-value">${summary.total_trades}</div></div>
+                <div class="param-item"><div class="param-label">Win Rate</div><div class="param-value">${stats.win_rate.toFixed(1)}%</div></div>
+                <div class="param-item"><div class="param-label">Wins / Losses</div><div class="param-value">${summary.wins} / ${summary.losses}</div></div>
+                <div class="param-item"><div class="param-label">Avg Win</div><div class="param-value">$${summary.avg_win_dollar.toFixed(2)}</div></div>
+                <div class="param-item"><div class="param-label">Avg Loss</div><div class="param-value">$${summary.avg_loss_dollar.toFixed(2)}</div></div>
+                <div class="param-item"><div class="param-label">Date Range</div><div class="param-value">${stats.first_trade_date} to ${stats.last_trade_date}</div></div>
+                <div class="param-item"><div class="param-label">Risk Mode</div><div class="param-value">${data.params_used.risk_per_trade_mode === 'fixed' ? '$' + data.params_used.risk_per_trade_value : data.params_used.risk_per_trade_value + '%'}</div></div>
+            `;
+            document.getElementById('params-used').innerHTML = paramsHtml;
+            
+            // Update chart with trade-by-trade breakdown
+            if (data.trade_breakdown) {
+                updateTradeChart(data.trade_breakdown);
+            }
+        }
+        
+        function updateTradeChart(breakdown) {
+            const ctx = document.getElementById('growth-chart').getContext('2d');
+            
+            if (growthChart) {
+                growthChart.destroy();
+            }
+            
+            const labels = breakdown.map(d => '#' + d.trade_num + ' ' + d.ticker);
+            const balances = breakdown.map(d => d.end_balance);
+            
+            growthChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Portfolio Value',
+                        data: balances,
+                        borderColor: '#0FF0B3',
+                        backgroundColor: 'rgba(15, 240, 179, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 3,
+                        pointHoverRadius: 6,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(26, 26, 46, 0.95)',
+                            titleColor: '#fff',
+                            bodyColor: '#0FF0B3',
+                            borderColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    const trade = breakdown[context.dataIndex];
+                                    return [
+                                        'Balance: $' + trade.end_balance.toLocaleString(),
+                                        'P&L: $' + trade.trade_pnl.toFixed(2) + ' (' + trade.pnl_pct.toFixed(1) + '%)',
+                                        'Result: ' + trade.result
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { display: false },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#888', callback: v => '$' + v.toLocaleString() }
+                        }
+                    }
+                }
+            });
+        }
         
         const presets = {
             conservative: {
