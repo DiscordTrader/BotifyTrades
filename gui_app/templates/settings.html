@@ -1123,6 +1123,7 @@ input:checked + .slider:before {
         </div>
         <div class="btn-group">
             <button id="save-notification-settings" class="btn btn-success">💾 Save Notification Settings</button>
+            <span id="notification-save-status" style="margin-left: 12px; font-size: 13px;"></span>
         </div>
     </div>
 
@@ -1919,6 +1920,10 @@ document.getElementById('save-notification-settings').addEventListener('click', 
         notifications_enabled: document.getElementById('notifications-enabled').checked
     };
     
+    const inlineStatus = document.getElementById('notification-save-status');
+    inlineStatus.textContent = '⏳ Saving...';
+    inlineStatus.style.color = '#ffc107';
+    
     console.log('[Notifications] Saving settings:', data);
     
     try {
@@ -1930,31 +1935,23 @@ document.getElementById('save-notification-settings').addEventListener('click', 
         
         const result = await response.json();
         
-        const msg = document.getElementById('save-message');
         if (result.success) {
-            msg.textContent = '✅ Notification settings saved successfully!';
-            msg.className = 'message success';
-            msg.style.display = 'block';
-            msg.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            inlineStatus.textContent = '✅ Saved!';
+            inlineStatus.style.color = '#00ff88';
         } else {
-            msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');
-            msg.className = 'message error';
-            msg.style.display = 'block';
+            inlineStatus.textContent = '❌ ' + (result.error || 'Failed');
+            inlineStatus.style.color = '#ff6b6b';
         }
         setTimeout(() => {
-            msg.textContent = '';
-            msg.style.display = 'none';
-        }, 4000);
+            inlineStatus.textContent = '';
+        }, 3000);
     } catch (error) {
         console.error('[Notifications] Save error:', error);
-        const msg = document.getElementById('save-message');
-        msg.textContent = '❌ Error: ' + error.message;
-        msg.className = 'message error';
-        msg.style.display = 'block';
+        inlineStatus.textContent = '❌ ' + error.message;
+        inlineStatus.style.color = '#ff6b6b';
         setTimeout(() => {
-            msg.textContent = '';
-            msg.style.display = 'none';
-        }, 4000);
+            inlineStatus.textContent = '';
+        }, 3000);
     }
 });
 
