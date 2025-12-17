@@ -992,15 +992,15 @@ def run_exact_historical_simulation(
         recommendations.append({
             'type': 'warning',
             'title': 'Portfolio Below Minimum',
-            'message': f'Your portfolio ${portfolio_start:,.0f} is below the ${min_portfolio_all_trades:,.0f} needed to take all trades from this {entity_type}. '
-                      f'Some trades may be skipped if requiring full contracts.'
+            'message': f'Your portfolio ${portfolio_start:,.0f} is below the ${min_portfolio_all_trades:,.0f} largest trade from this {entity_type}. '
+                      f'You may not be able to take all trades at their original sizes.'
         })
     
     recommendations.append({
         'type': 'suggestion',
-        'title': 'Recommended Portfolio Size',
-        'message': f'Based on trade history: Minimum ${min_portfolio_all_trades:,.0f} to take all trades, '
-                  f'or ${recommended_portfolio:,.0f} for safe 25% max position sizing.'
+        'title': 'Safe Position Size',
+        'message': f'With your ${portfolio_start:,.0f} portfolio, a safe 25% max position is ${safe_position_25pct:,.0f}. '
+                  f'Largest trade taken was ${min_portfolio_all_trades:,.0f}, median was ${median_position_size:,.0f}.'
     })
     
     # Position size recommendation

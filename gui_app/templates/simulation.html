@@ -180,22 +180,22 @@
                     <div class="stat-value info" id="result-total-return">0%</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">Expected/Trade</div>
+                    <div class="stat-label" for-stat="expected-trade">Expected/Trade</div>
                     <div class="stat-value" id="result-expected-trade">0%</div>
                 </div>
             </div>
             
             <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 24px;">
                 <div class="stat-card">
-                    <div class="stat-label">Avg Daily Profit</div>
+                    <div class="stat-label" for-stat="avg-daily">Avg Daily Profit</div>
                     <div class="stat-value" id="result-avg-daily">$0.00</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">Weekly Estimate</div>
+                    <div class="stat-label" for-stat="weekly">Weekly Estimate</div>
                     <div class="stat-value" id="result-weekly">$0.00</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">Monthly Estimate</div>
+                    <div class="stat-label" for-stat="monthly">Monthly Estimate</div>
                     <div class="stat-value" id="result-monthly">$0.00</div>
                 </div>
                 <div class="stat-card">
@@ -725,15 +725,20 @@ function displayHistoricalResults(data) {
     document.getElementById('result-total-return').textContent = (summary.total_return_pct >= 0 ? '+' : '') + summary.total_return_pct.toFixed(1) + '%';
     document.getElementById('result-total-return').className = 'stat-value ' + (summary.total_return_pct >= 0 ? 'success' : 'danger');
     
+    // Update labels for historical mode
+    document.querySelector('[for-stat="expected-trade"]').textContent = 'Wins';
     document.getElementById('result-expected-trade').textContent = summary.wins + ' wins';
     document.getElementById('result-expected-trade').className = 'stat-value success';
     
+    document.querySelector('[for-stat="avg-daily"]').textContent = 'Losses';
     document.getElementById('result-avg-daily').textContent = summary.losses + ' losses';
     document.getElementById('result-avg-daily').className = 'stat-value danger';
     
+    document.querySelector('[for-stat="weekly"]').textContent = 'Total Trades';
     document.getElementById('result-weekly').textContent = summary.total_trades + ' trades';
     document.getElementById('result-weekly').className = 'stat-value info';
     
+    document.querySelector('[for-stat="monthly"]').textContent = 'Win Rate';
     document.getElementById('result-monthly').textContent = stats.win_rate + '%';
     document.getElementById('result-monthly').className = 'stat-value ' + (stats.win_rate >= 50 ? 'success' : 'warning');
     
