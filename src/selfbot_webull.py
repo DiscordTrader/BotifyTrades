@@ -4250,18 +4250,24 @@ class SelfClient(discord.Client):
 
         # CRITICAL: Set broker_ready if ANY broker is available (not just Webull)
         # This fixes user builds where only Alpaca/Tastytrade are configured
+        _original_print(f"[DEBUG] Checking broker_ready: is_set={self.broker_ready.is_set()}", flush=True)
+        _original_print(f"[DEBUG] Broker states: webull={self.broker is not None and getattr(self.broker, 'is_logged_in', False)}, alpaca={self.paper_broker is not None}, tastytrade={self.tastytrade_broker is not None}", flush=True)
+        
         if not self.broker_ready.is_set():
             any_broker_available = (
-                (self.broker and self.broker.is_logged_in) or
+                (self.broker and getattr(self.broker, 'is_logged_in', False)) or
                 self.paper_broker or
                 self.tastytrade_broker
             )
+            _original_print(f"[DEBUG] any_broker_available={any_broker_available}", flush=True)
             if any_broker_available:
                 _original_print("[DEBUG] 📣 Setting broker_ready - at least one broker is available!", flush=True)
                 self.broker_ready.set()
                 _original_print("[DEBUG] ✅ broker_ready event SET (non-Webull broker)!", flush=True)
             else:
                 _original_print("[WARNING] ⚠️ No brokers available - order worker will wait until a broker connects", flush=True)
+        else:
+            _original_print("[DEBUG] broker_ready already set (by Webull login)", flush=True)
 
         # Initialize and start BrokerSyncService for real-time trade synchronization
         try:
