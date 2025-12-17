@@ -105,6 +105,7 @@
                     <select id="risk-mode" class="form-select" onchange="updateRiskPlaceholder()" style="background-color: #2C2C2E; color: #FFFFFF;">
                         <option value="fixed" style="background-color: #2C2C2E; color: #FFFFFF;">$ Fixed</option>
                         <option value="percent" style="background-color: #2C2C2E; color: #FFFFFF;">% of Balance</option>
+                        <option value="actual" style="background-color: #2C2C2E; color: #FFFFFF;">Replay Actual</option>
                     </select>
                 </div>
             </div>
@@ -1216,16 +1217,21 @@ function applyPreset(preset) {
 function updateRiskPlaceholder() {
     const mode = document.getElementById('risk-mode').value;
     const input = document.getElementById('risk-value');
-    if (mode === 'percent') {
-        if (input.value > 1) {
-            input.value = input.value / 100;
+    if (mode === 'actual') {
+        input.disabled = true;
+        input.placeholder = 'Uses actual trade sizes';
+        input.style.opacity = '0.5';
+    } else if (mode === 'percent') {
+        input.disabled = false;
+        input.style.opacity = '1';
+        input.step = '1';
+        input.placeholder = '3 for 3%';
+        if (parseFloat(input.value) > 100) {
+            input.value = 3;
         }
-        input.step = '0.01';
-        input.placeholder = '0.05 = 5%';
     } else {
-        if (input.value < 1) {
-            input.value = input.value * 1000;
-        }
+        input.disabled = false;
+        input.style.opacity = '1';
         input.step = '10';
         input.placeholder = '300';
     }

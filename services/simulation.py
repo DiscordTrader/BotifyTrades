@@ -542,6 +542,9 @@ def run_simulation(
         
         if risk_per_trade_mode == "fixed":
             position_size = min(risk_per_trade_value, balance)
+        elif risk_per_trade_mode == "percent":
+            # User enters percentage (e.g., 3 for 3%), convert to decimal
+            position_size = balance * (risk_per_trade_value / 100)
         else:
             position_size = balance * risk_per_trade_value
         
@@ -742,6 +745,9 @@ def run_exact_trades_simulation(
         # Calculate position size
         if risk_per_trade_mode == "fixed":
             position_size = min(risk_per_trade_value, balance)
+        elif risk_per_trade_mode == "percent":
+            # User enters percentage (e.g., 3 for 3%), convert to decimal
+            position_size = balance * (risk_per_trade_value / 100)
         else:
             position_size = balance * risk_per_trade_value
         
@@ -838,7 +844,7 @@ def run_exact_historical_simulation(
     entity_type: Literal["user", "channel"],
     entity_id: str,
     portfolio_start: float = DEFAULT_PORTFOLIO,
-    risk_per_trade_mode: Literal["fixed", "percent"] = "fixed",
+    risk_per_trade_mode: Literal["fixed", "percent", "actual"] = "fixed",
     risk_per_trade_value: float = DEFAULT_RISK_VALUE,
 ) -> Dict[str, Any]:
     """
@@ -852,8 +858,8 @@ def run_exact_historical_simulation(
         entity_type: "user" or "channel"
         entity_id: Username or channel name
         portfolio_start: Starting portfolio value
-        risk_per_trade_mode: "fixed" (dollar amount) or "percent" (of balance)
-        risk_per_trade_value: Risk amount per trade
+        risk_per_trade_mode: "fixed" (dollar amount), "percent" (of balance), or "actual" (use real trade values)
+        risk_per_trade_value: Risk amount per trade (ignored if mode is "actual")
     
     Returns:
         Dict with actual trade-by-trade results including ticker and dates
@@ -898,14 +904,21 @@ def run_exact_historical_simulation(
         multiplier = 100 if trade.asset_type == 'option' else 1
         actual_position_value = trade.open_price * trade.quantity * multiplier
         
-        # Calculate simulated position size (user's risk setting)
-        if risk_per_trade_mode == "fixed":
+        # Calculate simulated position size based on mode
+        if risk_per_trade_mode == "actual":
+            # Use actual trade value from database - replicate real position sizes
+            sim_position_size = actual_position_value
+        elif risk_per_trade_mode == "fixed":
             sim_position_size = min(risk_per_trade_value, balance)
+        elif risk_per_trade_mode == "percent":
+            # User enters percentage (e.g., 3 for 3%), convert to decimal
+            sim_position_size = balance * (risk_per_trade_value / 100)
         else:
             sim_position_size = balance * risk_per_trade_value
         
-        # Cap at 50% of balance
-        sim_position_size = min(sim_position_size, balance * 0.5)
+        # Cap at 50% of balance for safety (except for "actual" mode which replicates real trades)
+        if risk_per_trade_mode != "actual":
+            sim_position_size = min(sim_position_size, balance * 0.5)
         
         # Use actual P&L percent from the trade
         pnl_pct = trade.pnl_percent / 100  # Convert to decimal
