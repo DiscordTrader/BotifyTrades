@@ -6701,7 +6701,7 @@ def register_routes(app):
                 access_token = ''
                 refresh_token = ''
                 # Clear region data too when credentials change
-                zone_var = ''
+                zone_id = ''
                 rzone = ''
                 region_id = ''
                 print("[Webull] Credentials changed - clearing old tokens and region data for fresh authentication")
@@ -6709,7 +6709,7 @@ def register_routes(app):
                 access_token = data.get('access_token', existing.get('access_token', ''))
                 refresh_token = data.get('refresh_token', existing.get('refresh_token', ''))
                 # PRESERVE region metadata from existing credentials (fixes rzone error)
-                zone_var = data.get('zone_var', existing.get('zone_var', ''))
+                zone_id = data.get('zone_id', existing.get('zone_id', ''))
                 rzone = data.get('rzone', existing.get('rzone', ''))
                 region_id = data.get('region_id', existing.get('region_id', ''))
             
@@ -6726,7 +6726,7 @@ def register_routes(app):
                 access_token=access_token,
                 refresh_token=refresh_token,
                 paper_mode=data.get('paper_mode', existing.get('paper_mode', True)),
-                zone_var=zone_var,
+                zone_id=zone_id,
                 rzone=rzone,
                 region_id=region_id
             )
@@ -6764,7 +6764,7 @@ def register_routes(app):
                 access_token='',
                 refresh_token='',
                 paper_mode=existing.get('paper_mode', True),
-                zone_var=existing.get('zone_var', ''),
+                zone_id=existing.get('zone_id', ''),
                 rzone=existing.get('rzone', ''),
                 region_id=existing.get('region_id', '')
             )
@@ -6926,7 +6926,7 @@ def register_routes(app):
             print(f"[ROUTES DEBUG] Creds keys: {list(creds.keys())}", flush=True)
             print(f"[ROUTES DEBUG] access_token: {'yes' if creds.get('access_token') else 'no'}", flush=True)
             print(f"[ROUTES DEBUG] rzone: {creds.get('rzone', 'NOT SET')}", flush=True)
-            print(f"[ROUTES DEBUG] zone_var: {creds.get('zone_var', 'NOT SET')}", flush=True)
+            print(f"[ROUTES DEBUG] zone_id: {creds.get('zone_id', 'NOT SET')}", flush=True)
             
             trade_pin = data.get('trade_pin', creds.get('trade_pin', ''))
             paper_mode = data.get('paper_mode', creds.get('paper_mode', True))
