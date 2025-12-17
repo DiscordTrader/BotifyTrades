@@ -6487,6 +6487,38 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/simulate/custom', methods=['POST'])
+    def api_simulate_custom():
+        """Run custom trade simulation with manually provided trade data"""
+        try:
+            data = request.get_json()
+            
+            trades_data = data.get('trades', [])
+            if not trades_data:
+                return jsonify({'success': False, 'error': 'trades array is required'}), 400
+            
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from services.simulation import run_custom_trade_simulation
+            
+            result = run_custom_trade_simulation(
+                trades_data=trades_data,
+                portfolio_start=float(data.get('portfolio_start', 3000)),
+                position_size_mode=data.get('position_size_mode', 'fixed'),
+                position_size_value=float(data.get('position_size_value', 300)),
+                require_full_contract=data.get('require_full_contract', True),
+                max_position_pct=float(data.get('max_position_pct', 25)) / 100,
+                slippage_pct=float(data.get('slippage_pct', 0.5)),
+                apply_pdt_rules=data.get('apply_pdt_rules', False),
+            )
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            print(f"[API] Custom trade simulation error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/api/simulate/autocomplete/<entity_type>', methods=['GET'])
     def api_simulate_autocomplete(entity_type):
         """Autocomplete search for users or channels"""

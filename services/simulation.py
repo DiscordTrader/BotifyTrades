@@ -1053,3 +1053,296 @@ def get_simulation_presets() -> List[Dict[str, Any]]:
             }
         }
     ]
+
+
+def run_custom_trade_simulation(
+    trades_data: List[Dict[str, Any]],
+    portfolio_start: float = DEFAULT_PORTFOLIO,
+    position_size_mode: Literal["fixed", "percent", "contract"] = "fixed",
+    position_size_value: float = DEFAULT_RISK_VALUE,
+    require_full_contract: bool = True,
+    max_position_pct: float = 0.25,
+    slippage_pct: float = 0.5,
+    apply_pdt_rules: bool = False,
+) -> Dict[str, Any]:
+    """
+    Run a simulation on custom trade data with trading standard rules.
+    
+    This function simulates portfolio growth using manually provided trade data,
+    calculating minimum capital requirements, position sizing, and applying
+    real-world trading constraints.
+    
+    Args:
+        trades_data: List of trade dictionaries with:
+            - symbol: Stock/option symbol
+            - date: Trade date (YYYY-MM-DD)
+            - trade_price: Total cost for 1 option contract (price * 100)
+            - result: "WIN" or "LOSS"
+            - return_pct: Return percentage (e.g., 22.5 for 22.5%)
+        portfolio_start: Starting portfolio value
+        position_size_mode: 
+            - "fixed": Fixed dollar amount per trade
+            - "percent": Percentage of current portfolio
+            - "contract": Buy as many contracts as position allows
+        position_size_value: Amount for position sizing
+        require_full_contract: If True, skip trades if can't afford 1 contract
+        max_position_pct: Maximum % of portfolio per single trade
+        slippage_pct: Estimated slippage percentage (reduces gains, increases losses)
+        apply_pdt_rules: Apply Pattern Day Trader rules ($25k minimum for 4+ day trades/week)
+    
+    Returns:
+        Dict with simulation results and capital requirement analysis
+    """
+    if not trades_data:
+        return {
+            'success': False,
+            'error': 'No trade data provided'
+        }
+    
+    # Calculate capital requirements from trade data
+    trade_prices = [float(t.get('trade_price', 0)) for t in trades_data if t.get('trade_price')]
+    max_trade_price = max(trade_prices) if trade_prices else 0
+    avg_trade_price = sum(trade_prices) / len(trade_prices) if trade_prices else 0
+    min_trade_price = min(trade_prices) if trade_prices else 0
+    
+    # Calculate minimum portfolio requirements
+    min_portfolio_all_trades = max_trade_price  # To take ALL trades
+    min_portfolio_most_trades = sorted(trade_prices)[int(len(trade_prices) * 0.75)] if trade_prices else 0  # For 75% of trades
+    recommended_portfolio = max_trade_price * 4  # 25% max position rule
+    
+    # PDT rule check
+    pdt_minimum = 25000.0
+    pdt_warning = None
+    if apply_pdt_rules and portfolio_start < pdt_minimum:
+        pdt_warning = f"Portfolio ${portfolio_start:,.2f} is below PDT minimum ${pdt_minimum:,.2f}. Limited to 3 day trades per 5 business days."
+    
+    # Run simulation
+    balance = portfolio_start
+    trade_breakdown = []
+    skipped_trades = []
+    wins = 0
+    losses = 0
+    total_win_pnl = 0
+    total_loss_pnl = 0
+    day_trades_this_week = 0
+    current_week = None
+    
+    for i, trade in enumerate(trades_data, 1):
+        symbol = trade.get('symbol', 'UNKNOWN')
+        trade_date = trade.get('date', '')
+        trade_price = float(trade.get('trade_price', 0))
+        result = trade.get('result', 'LOSS').upper()
+        return_pct = float(trade.get('return_pct', 0))
+        
+        trade_start_balance = balance
+        
+        # Calculate week for PDT tracking
+        if trade_date:
+            try:
+                from datetime import datetime as dt
+                trade_dt = dt.strptime(trade_date, '%Y-%m-%d')
+                week_num = trade_dt.isocalendar()[1]
+                if current_week != week_num:
+                    current_week = week_num
+                    day_trades_this_week = 0
+            except:
+                pass
+        
+        # Calculate position size based on mode
+        if position_size_mode == "fixed":
+            raw_position_size = position_size_value
+        elif position_size_mode == "percent":
+            raw_position_size = balance * (position_size_value / 100)
+        else:  # contract mode
+            if trade_price > 0:
+                contracts = int(position_size_value)
+                raw_position_size = trade_price * contracts
+            else:
+                raw_position_size = position_size_value
+        
+        # Apply max position limit
+        max_position = balance * max_position_pct
+        position_size = min(raw_position_size, max_position, balance)
+        
+        # Check if can afford trade
+        can_afford = True
+        skip_reason = None
+        contracts_bought = 0
+        
+        if trade_price > 0:
+            if require_full_contract:
+                contracts_bought = int(position_size / trade_price)
+                if contracts_bought < 1:
+                    can_afford = False
+                    skip_reason = f"Cannot afford 1 contract (${trade_price:,.0f} > ${position_size:,.0f} position)"
+                else:
+                    # Adjust position size to actual contracts
+                    position_size = contracts_bought * trade_price
+            else:
+                # Fractional position (simulated)
+                contracts_bought = position_size / trade_price if trade_price > 0 else 0
+        else:
+            contracts_bought = 1  # Stock trade
+        
+        # PDT check
+        if apply_pdt_rules and portfolio_start < pdt_minimum and day_trades_this_week >= 3:
+            can_afford = False
+            skip_reason = "PDT limit reached (3 day trades this week)"
+        
+        if not can_afford:
+            skipped_trades.append({
+                'trade_num': i,
+                'symbol': symbol,
+                'date': trade_date,
+                'trade_price': trade_price,
+                'reason': skip_reason,
+                'balance_at_skip': round(balance, 2)
+            })
+            trade_breakdown.append({
+                'trade_num': i,
+                'symbol': symbol,
+                'date': trade_date,
+                'trade_price': trade_price,
+                'start_balance': round(trade_start_balance, 2),
+                'position_size': 0,
+                'contracts': 0,
+                'result': 'SKIPPED',
+                'return_pct': 0,
+                'pnl': 0,
+                'end_balance': round(balance, 2),
+                'cumulative_return_pct': round(((balance - portfolio_start) / portfolio_start) * 100, 2),
+                'skip_reason': skip_reason
+            })
+            continue
+        
+        # Apply slippage
+        adjusted_return = return_pct
+        if slippage_pct > 0:
+            if return_pct > 0:
+                adjusted_return = return_pct - slippage_pct  # Reduce gains
+            elif return_pct < 0:
+                adjusted_return = return_pct - slippage_pct  # Increase losses
+        
+        # Calculate P&L
+        pnl = position_size * (adjusted_return / 100)
+        balance += pnl
+        balance = max(0, balance)
+        
+        is_win = result == 'WIN' and adjusted_return > 0
+        if is_win:
+            wins += 1
+            total_win_pnl += pnl
+        else:
+            losses += 1
+            total_loss_pnl += pnl
+        
+        day_trades_this_week += 1
+        
+        trade_breakdown.append({
+            'trade_num': i,
+            'symbol': symbol,
+            'date': trade_date,
+            'trade_price': trade_price,
+            'start_balance': round(trade_start_balance, 2),
+            'position_size': round(position_size, 2),
+            'contracts': contracts_bought if isinstance(contracts_bought, int) else round(contracts_bought, 2),
+            'result': result,
+            'return_pct': round(adjusted_return, 2),
+            'pnl': round(pnl, 2),
+            'end_balance': round(balance, 2),
+            'cumulative_return_pct': round(((balance - portfolio_start) / portfolio_start) * 100, 2)
+        })
+    
+    # Calculate summary
+    final_balance = balance
+    total_profit = final_balance - portfolio_start
+    total_return_pct = (total_profit / portfolio_start) * 100 if portfolio_start > 0 else 0
+    executed_trades = [t for t in trade_breakdown if t['result'] != 'SKIPPED']
+    
+    avg_win_dollar = total_win_pnl / wins if wins > 0 else 0
+    avg_loss_dollar = total_loss_pnl / losses if losses > 0 else 0
+    win_rate = (wins / len(executed_trades) * 100) if executed_trades else 0
+    
+    # Generate recommendations
+    recommendations = []
+    
+    if len(skipped_trades) > len(trades_data) * 0.3:
+        recommendations.append({
+            'type': 'warning',
+            'title': 'High Skip Rate',
+            'message': f'{len(skipped_trades)} of {len(trades_data)} trades ({len(skipped_trades)/len(trades_data)*100:.0f}%) were skipped. '
+                      f'Consider increasing portfolio to ${min_portfolio_all_trades:,.0f} or position size to take all trades.'
+        })
+    
+    if position_size_value < avg_trade_price and position_size_mode == 'fixed':
+        recommendations.append({
+            'type': 'info',
+            'title': 'Position Size Below Average Trade',
+            'message': f'Fixed position size ${position_size_value:,.0f} is below average trade price ${avg_trade_price:,.0f}. '
+                      f'You may miss trades or need fractional positions.'
+        })
+    
+    if portfolio_start < recommended_portfolio:
+        recommendations.append({
+            'type': 'suggestion',
+            'title': 'Recommended Portfolio Size',
+            'message': f'For 25% max position rule with these trades, recommended portfolio is ${recommended_portfolio:,.0f}. '
+                      f'Current: ${portfolio_start:,.0f}'
+        })
+    
+    if win_rate > 0:
+        # Risk of ruin calculation (simplified)
+        avg_risk = position_size_value if position_size_mode == 'fixed' else portfolio_start * (position_size_value / 100)
+        max_consecutive_losses = int(portfolio_start / avg_risk) if avg_risk > 0 else 0
+        recommendations.append({
+            'type': 'info',
+            'title': 'Risk Analysis',
+            'message': f'With ${avg_risk:,.0f} per trade, portfolio can sustain {max_consecutive_losses} consecutive losses before depletion.'
+        })
+    
+    return {
+        'success': True,
+        'simulation_mode': 'custom_trades',
+        
+        'capital_requirements': {
+            'min_to_take_all_trades': round(max_trade_price, 2),
+            'min_for_75pct_trades': round(min_portfolio_most_trades, 2),
+            'recommended_portfolio': round(recommended_portfolio, 2),
+            'max_trade_price': round(max_trade_price, 2),
+            'avg_trade_price': round(avg_trade_price, 2),
+            'min_trade_price': round(min_trade_price, 2),
+            'pdt_minimum': pdt_minimum if apply_pdt_rules else None,
+            'pdt_warning': pdt_warning
+        },
+        
+        'params_used': {
+            'portfolio_start': portfolio_start,
+            'position_size_mode': position_size_mode,
+            'position_size_value': position_size_value,
+            'require_full_contract': require_full_contract,
+            'max_position_pct': max_position_pct * 100,
+            'slippage_pct': slippage_pct,
+            'apply_pdt_rules': apply_pdt_rules
+        },
+        
+        'summary': {
+            'final_balance': round(final_balance, 2),
+            'total_profit': round(total_profit, 2),
+            'total_return_pct': round(total_return_pct, 2),
+            'total_trades': len(trades_data),
+            'executed_trades': len(executed_trades),
+            'skipped_trades': len(skipped_trades),
+            'wins': wins,
+            'losses': losses,
+            'win_rate': round(win_rate, 1),
+            'total_win_pnl': round(total_win_pnl, 2),
+            'total_loss_pnl': round(total_loss_pnl, 2),
+            'avg_win_dollar': round(avg_win_dollar, 2),
+            'avg_loss_dollar': round(avg_loss_dollar, 2),
+            'is_profitable': total_profit > 0
+        },
+        
+        'recommendations': recommendations,
+        'trade_breakdown': trade_breakdown,
+        'skipped_trades': skipped_trades
+    }
