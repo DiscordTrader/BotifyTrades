@@ -1893,7 +1893,9 @@ def register_routes(app):
                 'pnl_percent': round(signal['final_pnl_percent'], 2),
                 'closed_qty': signal.get('closed_qty', 0),
                 'remaining_qty': signal.get('remaining_qty', 0),
-                'status': signal['status']
+                'status': signal['status'],
+                'execution_status': signal.get('execution_status', 'PENDING'),
+                'execution_reason': signal.get('execution_reason', '')
             })
         
         return jsonify(formatted_signals)

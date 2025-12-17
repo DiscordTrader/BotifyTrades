@@ -511,6 +511,16 @@ def init_db():
         )
     ''')
     
+    # Migration: Add execution_status and execution_reason to signals table
+    try:
+        cursor.execute('SELECT execution_status FROM signals LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding execution_status and execution_reason columns to signals table...")
+        cursor.execute("ALTER TABLE signals ADD COLUMN execution_status TEXT DEFAULT 'PENDING'")
+        cursor.execute("ALTER TABLE signals ADD COLUMN execution_reason TEXT")
+        conn.commit()
+        print("[DATABASE] ✓ Signal execution status tracking columns added")
+    
     # Signal lots (BTO positions tracking for FIFO matching)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS signal_lots (
@@ -2142,6 +2152,31 @@ def add_signal(discord_channel_id: str, message_id: str, signal_type: str, symbo
         return None  # Signal already exists
 
 
+def update_signal_execution_status(message_id: str, status: str, reason: str = None):
+    """Update signal execution status and reason after order attempt
+    
+    Args:
+        message_id: Discord message ID of the signal
+        status: EXECUTED, FAILED, SKIPPED, PENDING
+        reason: Detailed reason for the status (e.g., "Price slippage 15%", "Broker disconnected")
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            UPDATE signals 
+            SET execution_status = ?, execution_reason = ?, executed = ?
+            WHERE message_id = ?
+        ''', (status, reason, 1 if status == 'EXECUTED' else 0, str(message_id)))
+        
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error updating signal execution status: {e}")
+        return False
+
+
 def get_channel_leaderboard(time_period='all', start_date=None, end_date=None):
     """
     Get channel performance leaderboard with TQS scoring.
@@ -2420,6 +2455,8 @@ def get_signal_history(channel_id=None, period='all', limit=100):
             s.executed,
             s.author_name,
             s.message_id,
+            s.execution_status,
+            s.execution_reason,
             c.name as channel_name,
             c.id as channel_id,
             

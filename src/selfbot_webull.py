@@ -6553,6 +6553,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     error_type = resp.get('error', 'ORDER_FAILED')
                     _original_print(f"[ORDER FAILED] ❌ {signal['action']} {signal['symbol']} - {error_msg}", flush=True)
                     
+                    # Update signal execution status in database
+                    if DATABASE_MODULE_AVAILABLE and signal.get('message_id'):
+                        try:
+                            from gui_app import database as db
+                            db.update_signal_execution_status(
+                                str(signal['message_id']), 
+                                'FAILED', 
+                                error_msg[:200]  # Limit reason length
+                            )
+                        except Exception as e:
+                            _original_print(f"[DATABASE] ⚠️ Could not update signal status: {e}")
+                    
                     # Log to database for AI assistant awareness
                     log_error_to_db('order_execution', f"Order failed: {error_msg}", 
                                    'OrderProcessor', 'error', 
@@ -6574,6 +6586,27 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 # Post-execution: Send Discord notification and save to database
                 if order_success:
+                    # Update signal execution status to EXECUTED
+                    if DATABASE_MODULE_AVAILABLE and signal.get('message_id'):
+                        try:
+                            from gui_app import database as db
+                            # Build success reason with broker info
+                            success_brokers = []
+                            multi_results = resp.get('_multi_broker_results', [])
+                            if multi_results:
+                                success_brokers = [r.get('broker', 'Unknown') for r in multi_results if r.get('success') or 'orderId' in r]
+                            else:
+                                success_brokers = [resp.get('broker', 'Webull')]
+                            
+                            success_reason = f"Executed on {', '.join(success_brokers)}"
+                            db.update_signal_execution_status(
+                                str(signal['message_id']), 
+                                'EXECUTED', 
+                                success_reason
+                            )
+                        except Exception as e:
+                            _original_print(f"[DATABASE] ⚠️ Could not update signal status: {e}")
+                    
                     # 1. Send notification to execution channel (if forward_channel_id is set)
                     forward_channel_id = signal.get('forward_channel_id')
                     if forward_channel_id:

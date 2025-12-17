@@ -113,10 +113,10 @@ async function loadSignalHistory() {
                         <th style="padding: 12px; text-align: left; font-weight: 600;">Symbol</th>
                         <th style="padding: 12px; text-align: center; font-weight: 600;">QTY</th>
                         <th style="padding: 12px; text-align: right; font-weight: 600;">Entry Price</th>
-                        <th style="padding: 12px; text-align: center; font-weight: 600;">Closed QTY</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 600;">Execution</th>
                         <th style="padding: 12px; text-align: right; font-weight: 600;">P&L Cash</th>
                         <th style="padding: 12px; text-align: right; font-weight: 600;">P&L %</th>
-                        <th style="padding: 12px; text-align: center; font-weight: 600;">Status</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 600;">Position</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -128,6 +128,33 @@ async function loadSignalHistory() {
                             ? '<span style="background: #28a745; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">BTO</span>'
                             : '<span style="background: #dc3545; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">STC</span>';
                         
+                        // Execution status badge with color coding
+                        const execStatus = signal.execution_status || 'PENDING';
+                        const execReason = signal.execution_reason || '';
+                        let execBadge = '';
+                        let execColor = '#6c757d';
+                        let execIcon = '';
+                        
+                        if (execStatus === 'EXECUTED') {
+                            execColor = '#28a745';
+                            execIcon = '✓';
+                        } else if (execStatus === 'FAILED') {
+                            execColor = '#dc3545';
+                            execIcon = '✗';
+                        } else if (execStatus === 'SKIPPED') {
+                            execColor = '#fd7e14';
+                            execIcon = '⊘';
+                        } else {
+                            execColor = '#6c757d';
+                            execIcon = '⏳';
+                        }
+                        
+                        const reasonTooltip = execReason ? ` title="${execReason.replace(/"/g, '&quot;')}"` : '';
+                        execBadge = `<span style="background: ${execColor}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85em; cursor: ${execReason ? 'help' : 'default'};"${reasonTooltip}>${execIcon} ${execStatus}</span>`;
+                        
+                        // Show reason on new line if exists
+                        const reasonLine = execReason ? `<div style="font-size: 0.75em; color: #6c757d; margin-top: 4px; max-width: 150px; word-wrap: break-word;">${execReason}</div>` : '';
+                        
                         return `
                             <tr style="border-bottom: 1px solid #e9ecef;">
                                 <td style="padding: 12px; color: #6c757d; font-size: 0.9em;">${time}</td>
@@ -136,7 +163,7 @@ async function loadSignalHistory() {
                                 <td style="padding: 12px; font-weight: 600; color: #212529;">${signal.symbol}</td>
                                 <td style="padding: 12px; text-align: center; color: #212529;">${signal.quantity || '-'}</td>
                                 <td style="padding: 12px; text-align: right; color: #212529;">$${signal.price ? signal.price.toFixed(2) : '-'}</td>
-                                <td style="padding: 12px; text-align: center; color: #212529;">${signal.closed_qty || 0}</td>
+                                <td style="padding: 12px; text-align: center;">${execBadge}${reasonLine}</td>
                                 <td style="padding: 12px; text-align: right; font-weight: 600; color: ${pnlColor};">
                                     ${signal.pnl_cash >= 0 ? '+' : ''}$${signal.pnl_cash.toFixed(2)}
                                 </td>
