@@ -4,6 +4,28 @@ expertMode = true
 integrations = ["python_openai_ai_integrations:1.0.0", "github:1.0.0", "google-mail:1.0.0"]
 
 [workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "User Trading Bot"
+
+[[workflows.workflow]]
+name = "User Trading Bot"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python src/selfbot_webull.py"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
 
 [nix]
 channel = "stable-25_05"
