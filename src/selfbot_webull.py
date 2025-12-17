@@ -587,8 +587,7 @@ except Exception:
 # Only allow BUILD_TARGET=admin if running from admin entrypoint
 if _env_build_target == 'admin' and _is_admin_entrypoint and not IS_FROZEN_BUILD:
     BUILD_TARGET = 'admin'
-elif _env_build_target == 'admin' and not _is_admin_entrypoint:
-    print(f"[LICENSE] ⚠️  BUILD_TARGET=admin ignored - not running from admin_server.py")
+# Silent fallback to user mode - no warning needed for normal user builds
 
 # Admin Bypass Modes - skip license check for admin/development use
 # SECURITY: Admin bypass is ONLY allowed when:
@@ -617,8 +616,7 @@ if BUILD_TARGET == 'admin' and (LICENSE_SERVER_MODE or ADMIN_MODE or ADMIN_PASSW
     print(f"[LICENSE] ✅ {bypass_reason} - license check bypassed (unlimited access)")
     LICENSE_VALID = True
     LICENSE_DATA = {'license_type': 'admin_unlimited', 'days_remaining': 36500, 'customer_id': 'Admin/Owner'}
-elif (LICENSE_SERVER_MODE or ADMIN_MODE) and BUILD_TARGET != 'admin':
-    print(f"[LICENSE] ⚠️  Admin mode requires BUILD_TARGET=admin (current: {BUILD_TARGET})")
+# Admin env vars silently ignored in user builds - no warning needed
 
 # Step 1: Check for already-activated license file
 validate_activated = _get_activated_license_validator()
