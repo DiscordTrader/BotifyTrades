@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 CRITICAL_CHANNEL_FIELDS = {
-    'position_size_pct': {'type': float, 'required': True, 'default': 5.0, 'min': 0.1, 'max': 100.0},
+    'position_size_pct': {'type': float, 'required': False, 'default': 5.0, 'min': 0.1, 'max': 100.0, 'execution_field': True},
     'tracking_position_size_pct': {'type': float, 'required': False, 'default': 5.0, 'min': 0.1, 'max': 100.0},
     'profit_target_1_pct': {'type': float, 'required': False, 'default': 20.0, 'min': 1.0, 'max': 500.0, 'risk_field': True},
     'profit_target_2_pct': {'type': float, 'required': False, 'default': 50.0, 'min': 1.0, 'max': 500.0, 'risk_field': True},
@@ -33,8 +33,8 @@ CRITICAL_CHANNEL_FIELDS = {
     'stop_loss_pct': {'type': float, 'required': False, 'default': 50.0, 'min': 1.0, 'max': 100.0, 'risk_field': True},
     'trailing_stop_pct': {'type': float, 'required': False, 'default': 10.0, 'min': 1.0, 'max': 100.0, 'risk_field': True},
     'trailing_activation_pct': {'type': float, 'required': False, 'default': 20.0, 'min': 1.0, 'max': 100.0, 'risk_field': True},
-    'execute_enabled': {'type': int, 'required': True, 'default': 0, 'min': 0, 'max': 1},
-    'track_enabled': {'type': int, 'required': True, 'default': 0, 'min': 0, 'max': 1},
+    'execute_enabled': {'type': int, 'required': False, 'default': 0, 'min': 0, 'max': 1},
+    'track_enabled': {'type': int, 'required': False, 'default': 0, 'min': 0, 'max': 1},
     'risk_management_enabled': {'type': int, 'required': False, 'default': 0, 'min': 0, 'max': 1},
     'broker_override': {'type': str, 'required': False, 'default': None},
     'enabled_brokers': {'type': str, 'required': False, 'default': None},
@@ -181,21 +181,28 @@ class SettingsValidator:
         channel_id = channel.get('id')
         channel_name = channel.get('name', 'Unknown')
         risk_enabled = channel.get('risk_management_enabled', 0)
+        exec_enabled = channel.get('execute_enabled', 0)
         
         # Check each critical field
         for field_name, schema in CRITICAL_CHANNEL_FIELDS.items():
             value = channel.get(field_name)
             is_risk_field = schema.get('risk_field', False)
+            is_execution_field = schema.get('execution_field', False)
             
             # Skip risk field validation if risk management is not enabled
             if is_risk_field and not risk_enabled:
                 continue
             
+            # Skip execution field validation if execution is not enabled
+            if is_execution_field and not exec_enabled:
+                continue
+            
             # Check for NULL/missing required fields
             if value is None:
                 # Risk fields are only required when risk_management_enabled = 1
-                if schema['required'] or (is_risk_field and risk_enabled):
-                    severity = 'critical' if schema['required'] else 'warning'
+                # Execution fields are only required when execute_enabled = 1
+                if schema['required'] or (is_risk_field and risk_enabled) or (is_execution_field and exec_enabled):
+                    severity = 'critical' if (is_execution_field and exec_enabled) else 'warning'
                     report.add_issue(ValidationIssue(
                         severity=severity,
                         category='channel',
