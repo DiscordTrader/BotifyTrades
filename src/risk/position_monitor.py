@@ -93,16 +93,41 @@ class RiskDBAdapter:
             cursor = conn.cursor()
             
             if asset_type == 'option':
-                cursor.execute('''
-                    SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
-                           c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
-                           c.risk_management_enabled
-                    FROM trades t
-                    LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
-                    WHERE t.symbol = ? AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
-                    AND t.status = 'OPEN' AND t.direction = 'BTO'
-                    ORDER BY t.id DESC LIMIT 1
-                ''', (symbol, strike, expiry, call_put))
+                # Normalize expiry to multiple formats for matching
+                # Database may have: "12/17", "2025-12-17", "12/17/25", etc.
+                expiry_variants = [expiry] if expiry else []
+                if expiry:
+                    # If format is YYYY-MM-DD, also try MM/DD
+                    if '-' in expiry and len(expiry) == 10:
+                        parts = expiry.split('-')
+                        expiry_variants.append(f"{parts[1]}/{parts[2]}")  # 12/17
+                        expiry_variants.append(f"{parts[1]}/{parts[2]}/{parts[0][2:]}")  # 12/17/25
+                    # If format is MM/DD, also try YYYY-MM-DD
+                    elif '/' in expiry and len(expiry) <= 5:
+                        parts = expiry.split('/')
+                        from datetime import datetime
+                        year = datetime.now().year
+                        expiry_variants.append(f"{year}-{parts[0].zfill(2)}-{parts[1].zfill(2)}")
+                
+                # Try each expiry variant
+                row = None
+                for exp_try in expiry_variants:
+                    cursor.execute('''
+                        SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
+                               c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
+                               c.risk_management_enabled
+                        FROM trades t
+                        LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
+                        WHERE t.symbol = ? AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
+                        AND t.status = 'OPEN' AND t.direction = 'BTO'
+                        ORDER BY t.id DESC LIMIT 1
+                    ''', (symbol, strike, exp_try, call_put))
+                    row = cursor.fetchone()
+                    if row:
+                        break
+                
+                if not row:
+                    return None
             else:
                 cursor.execute('''
                     SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
@@ -114,10 +139,11 @@ class RiskDBAdapter:
                     AND t.status = 'OPEN' AND t.direction = 'BTO'
                     ORDER BY t.id DESC LIMIT 1
                 ''', (symbol,))
+                row = cursor.fetchone()
+                if not row:
+                    return None
             
-            row = cursor.fetchone()
-            
-            if row and row[0] is not None:
+            if row[0] is not None:
                 # Check if risk management is explicitly enabled for this channel
                 risk_enabled = row[8] if len(row) > 8 else 0
                 
