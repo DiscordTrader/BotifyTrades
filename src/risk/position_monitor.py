@@ -116,16 +116,30 @@ class RiskDBAdapter:
             row = cursor.fetchone()
             
             if row and row[0] is not None and row[1] is not None:
-                return ChannelRiskSettings(
-                    channel_id=str(row[0]),
-                    channel_name=row[7] or 'Unknown',
-                    profit_target_1_pct=row[1] or 0,
-                    profit_target_2_pct=row[2] or 0,
-                    profit_target_3_pct=row[3] or 0,
-                    stop_loss_pct=row[4] or 0,
-                    trailing_stop_pct=row[5] or 0,
-                    trailing_activation_pct=row[6] or 15.0
-                )
+                pt1 = row[1] or 0
+                pt2 = row[2] or 0
+                pt3 = row[3] or 0
+                sl = row[4] or 0
+                trail = row[5] or 0
+                
+                # Only consider risk settings "configured" if:
+                # 1. Trailing stop is set (indicates explicit configuration), OR
+                # 2. Values differ from defaults (20/50/100 with SL 50)
+                is_default = (pt1 == 20.0 and pt2 == 50.0 and pt3 == 100.0 and sl == 50.0 and trail == 0)
+                has_trailing = trail > 0
+                has_custom_targets = (pt1 != 20.0 or pt2 != 50.0 or pt3 != 100.0 or sl != 50.0)
+                
+                if has_trailing or has_custom_targets:
+                    return ChannelRiskSettings(
+                        channel_id=str(row[0]),
+                        channel_name=row[7] or 'Unknown',
+                        profit_target_1_pct=pt1,
+                        profit_target_2_pct=pt2,
+                        profit_target_3_pct=pt3,
+                        stop_loss_pct=sl,
+                        trailing_stop_pct=trail,
+                        trailing_activation_pct=row[6] or 15.0
+                    )
             
             return None
         except Exception as e:
