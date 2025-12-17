@@ -6224,7 +6224,9 @@ def register_routes(app):
             return jsonify({
                 'success': True,
                 'conversion_channel_id': settings.get('conversion_channel_id', ''),
-                'target_execution_channel_id': settings.get('target_execution_channel_id', '')
+                'target_execution_channel_id': settings.get('target_execution_channel_id', ''),
+                'notification_channel_id': settings.get('notification_channel_id', ''),
+                'notifications_enabled': settings.get('notifications_enabled', True)
             })
         except Exception as e:
             print(f"[API] Error getting signal conversion settings: {e}")
@@ -6237,8 +6239,15 @@ def register_routes(app):
             data = request.json
             conversion_channel_id = data.get('conversion_channel_id', '').strip()
             target_execution_channel_id = data.get('target_execution_channel_id', '').strip()
+            notification_channel_id = data.get('notification_channel_id', '').strip()
+            notifications_enabled = data.get('notifications_enabled', True)
             
-            success = db.save_signal_conversion_settings(conversion_channel_id, target_execution_channel_id)
+            success = db.save_signal_conversion_settings(
+                conversion_channel_id, 
+                target_execution_channel_id,
+                notification_channel_id,
+                notifications_enabled
+            )
             
             if success:
                 return jsonify({

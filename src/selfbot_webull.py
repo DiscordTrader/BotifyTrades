@@ -6638,47 +6638,59 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         except Exception as e:
                             _original_print(f"[DATABASE] ⚠️ Could not update signal status: {e}")
                     
-                    # 1. Send notification to execution channel (if forward_channel_id is set)
-                    forward_channel_id = signal.get('forward_channel_id')
-                    if forward_channel_id:
-                        try:
-                            exec_channel = self.get_channel(int(forward_channel_id))
-                            if exec_channel:
-                                # Get executed quantity and order ID from multi-broker results
-                                multi_results = resp.get('_multi_broker_results', [])
-                                if multi_results:
-                                    # Find first successful broker result
-                                    first_success = next((r for r in multi_results if r.get('success') or 'orderId' in r), None)
-                                    if first_success:
-                                        display_qty = first_success.get('executed_qty', signal['qty'])
-                                        order_id = first_success.get('orderId', 'N/A')
-                                        broker_name = first_success.get('broker', 'Unknown')
+                    # 1. Send notification to Discord channel (check settings first)
+                    try:
+                        from gui_app import database as db
+                        notif_settings = db.get_signal_conversion_settings()
+                        notifications_enabled = notif_settings.get('notifications_enabled', True)
+                        custom_notif_channel = notif_settings.get('notification_channel_id', '')
+                    except:
+                        notifications_enabled = True
+                        custom_notif_channel = ''
+                    
+                    if notifications_enabled:
+                        # Use custom notification channel if set, otherwise use forward_channel_id
+                        notif_channel_id = custom_notif_channel if custom_notif_channel else signal.get('forward_channel_id')
+                        
+                        if notif_channel_id:
+                            try:
+                                exec_channel = self.get_channel(int(notif_channel_id))
+                                if exec_channel:
+                                    # Get executed quantity and order ID from multi-broker results
+                                    multi_results = resp.get('_multi_broker_results', [])
+                                    if multi_results:
+                                        # Find first successful broker result
+                                        first_success = next((r for r in multi_results if r.get('success') or 'orderId' in r), None)
+                                        if first_success:
+                                            display_qty = first_success.get('executed_qty', signal['qty'])
+                                            order_id = first_success.get('orderId', 'N/A')
+                                            broker_name = first_success.get('broker', 'Unknown')
+                                        else:
+                                            display_qty = signal['qty']
+                                            order_id = 'N/A'
+                                            broker_name = 'Unknown'
                                     else:
-                                        display_qty = signal['qty']
-                                        order_id = 'N/A'
-                                        broker_name = 'Unknown'
-                                else:
-                                    display_qty = resp.get('executed_qty', signal['qty'])
-                                    order_id = resp.get('orderId', 'N/A')
-                                    broker_name = resp.get('broker', 'Webull')
-                                
-                                # Build execution message with actual executed quantity
-                                exec_price = f"${signal['price']}" if signal.get('price') is not None else "MARKET"
-                                if signal['asset'] == 'option':
-                                    exec_msg = f"✅ **{signal['action']} {display_qty} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @{exec_price}**"
-                                else:
-                                    exec_msg = f"✅ **{signal['action']} {display_qty} {signal['symbol']} @{exec_price}**"
-                                
-                                # Add broker info
-                                exec_msg += f"\n📊 **{broker_name}**"
-                                
-                                # Add order ID
-                                exec_msg += f"\n🔖 Order ID: `{order_id}`"
-                                
-                                await exec_channel.send(exec_msg)
-                                _original_print(f"[NOTIFICATION] ✓ Sent to channel {forward_channel_id}")
-                        except Exception as e:
-                            _original_print(f"[NOTIFICATION] ⚠️ Failed to send to channel: {e}")
+                                        display_qty = resp.get('executed_qty', signal['qty'])
+                                        order_id = resp.get('orderId', 'N/A')
+                                        broker_name = resp.get('broker', 'Webull')
+                                    
+                                    # Build execution message with actual executed quantity
+                                    exec_price = f"${signal['price']}" if signal.get('price') is not None else "MARKET"
+                                    if signal['asset'] == 'option':
+                                        exec_msg = f"✅ **{signal['action']} {display_qty} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @{exec_price}**"
+                                    else:
+                                        exec_msg = f"✅ **{signal['action']} {display_qty} {signal['symbol']} @{exec_price}**"
+                                    
+                                    # Add broker info
+                                    exec_msg += f"\n📊 **{broker_name}**"
+                                    
+                                    # Add order ID
+                                    exec_msg += f"\n🔖 Order ID: `{order_id}`"
+                                    
+                                    await exec_channel.send(exec_msg)
+                                    _original_print(f"[NOTIFICATION] ✓ Sent to channel {notif_channel_id}")
+                            except Exception as e:
+                                _original_print(f"[NOTIFICATION] ⚠️ Failed to send to channel: {e}")
                     
                     # 2. Save execution to database (if channel_record_id is set)
                     channel_record_id = signal.get('channel_record_id')

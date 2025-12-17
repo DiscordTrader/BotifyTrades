@@ -1101,6 +1101,31 @@ input:checked + .slider:before {
         </div>
     </div>
 
+    <!-- Trade Notification Settings -->
+    <div class="settings-card">
+        <h3>📢 Trade Notifications</h3>
+        <p class="description">Configure where trade execution notifications are posted</p>
+        <div class="form-group">
+            <div class="toggle-row">
+                <label class="toggle-label">
+                    <input type="checkbox" id="notifications-enabled" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <span>Enable Discord Notifications</span>
+                <span id="notifications-status" class="toggle-status">ON</span>
+            </div>
+            <p class="help-text">When enabled, trade confirmations are posted to Discord</p>
+        </div>
+        <div class="form-group">
+            <label>Notification Channel ID</label>
+            <input type="text" id="notification-channel-id" placeholder="e.g., 811364585982263306">
+            <p class="help-text">Your own Discord channel where notifications will be posted. Leave empty to post to originating channel (requires post permission)</p>
+        </div>
+        <div class="btn-group">
+            <button id="save-notification-settings" class="btn btn-success">💾 Save Notification Settings</button>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -1858,6 +1883,81 @@ document.getElementById('save-signal-conversion').addEventListener('click', asyn
     }
 });
 
+// ========== TRADE NOTIFICATION SETTINGS ==========
+
+function updateNotificationsToggleStatus() {
+    const checkbox = document.getElementById('notifications-enabled');
+    const status = document.getElementById('notifications-status');
+    if (checkbox && status) {
+        status.textContent = checkbox.checked ? 'ON' : 'OFF';
+        status.style.color = checkbox.checked ? '#00ff88' : '#6c757d';
+    }
+}
+
+async function loadNotificationSettings() {
+    try {
+        const response = await fetch('/api/settings/signal_conversion');
+        const settings = await response.json();
+        
+        if (settings.success) {
+            document.getElementById('notification-channel-id').value = settings.notification_channel_id || '';
+            document.getElementById('notifications-enabled').checked = settings.notifications_enabled !== false;
+            updateNotificationsToggleStatus();
+        }
+    } catch (error) {
+        console.error('Error loading notification settings:', error);
+    }
+}
+
+document.getElementById('notifications-enabled').addEventListener('change', updateNotificationsToggleStatus);
+
+document.getElementById('save-notification-settings').addEventListener('click', async () => {
+    const data = {
+        conversion_channel_id: document.getElementById('conversion-channel-id').value.trim(),
+        target_execution_channel_id: document.getElementById('target-execution-channel-id').value,
+        notification_channel_id: document.getElementById('notification-channel-id').value.trim(),
+        notifications_enabled: document.getElementById('notifications-enabled').checked
+    };
+    
+    console.log('[Notifications] Saving settings:', data);
+    
+    try {
+        const response = await fetch('/api/settings/signal_conversion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        const msg = document.getElementById('save-message');
+        if (result.success) {
+            msg.textContent = '✅ Notification settings saved successfully!';
+            msg.className = 'message success';
+            msg.style.display = 'block';
+            msg.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+            msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');
+            msg.className = 'message error';
+            msg.style.display = 'block';
+        }
+        setTimeout(() => {
+            msg.textContent = '';
+            msg.style.display = 'none';
+        }, 4000);
+    } catch (error) {
+        console.error('[Notifications] Save error:', error);
+        const msg = document.getElementById('save-message');
+        msg.textContent = '❌ Error: ' + error.message;
+        msg.className = 'message error';
+        msg.style.display = 'block';
+        setTimeout(() => {
+            msg.textContent = '';
+            msg.style.display = 'none';
+        }, 4000);
+    }
+});
+
 // ========== BROKER CONNECTION MANAGEMENT ==========
 
 async function loadBrokerStatus() {
@@ -2502,6 +2602,7 @@ loadRiskSettings();
 loadAISettings();
 loadTradingSettings();
 loadSignalConversionSettings();
+loadNotificationSettings();
 loadDiscordNotifications();
 
 // Refresh broker status every 30 seconds

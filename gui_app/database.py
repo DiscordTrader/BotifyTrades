@@ -3359,7 +3359,8 @@ def update_alpaca_live_settings(api_key: str, secret_key: str) -> bool:
 def get_signal_conversion_settings() -> Dict[str, Any]:
     """
     Get signal conversion settings from database
-    Returns dict with conversion_channel_id and target_execution_channel_id
+    Returns dict with conversion_channel_id, target_execution_channel_id, 
+    notification_channel_id, and notifications_enabled
     """
     conn = get_connection()
     cursor = conn.cursor()
@@ -3373,18 +3374,31 @@ def get_signal_conversion_settings() -> Dict[str, Any]:
         target_row = cursor.fetchone()
         target_execution_channel_id = target_row['value'] if target_row else ''
         
+        cursor.execute('SELECT value FROM settings WHERE key = ?', ('notification_channel_id',))
+        notif_row = cursor.fetchone()
+        notification_channel_id = notif_row['value'] if notif_row else ''
+        
+        cursor.execute('SELECT value FROM settings WHERE key = ?', ('notifications_enabled',))
+        notif_enabled_row = cursor.fetchone()
+        notifications_enabled = notif_enabled_row['value'] == '1' if notif_enabled_row else True
+        
         return {
             'conversion_channel_id': conversion_channel_id,
-            'target_execution_channel_id': target_execution_channel_id
+            'target_execution_channel_id': target_execution_channel_id,
+            'notification_channel_id': notification_channel_id,
+            'notifications_enabled': notifications_enabled
         }
     except Exception as e:
         print(f"[DATABASE] Error getting signal conversion settings: {e}")
         return {
             'conversion_channel_id': '',
-            'target_execution_channel_id': ''
+            'target_execution_channel_id': '',
+            'notification_channel_id': '',
+            'notifications_enabled': True
         }
 
-def save_signal_conversion_settings(conversion_channel_id: str, target_execution_channel_id: str) -> bool:
+def save_signal_conversion_settings(conversion_channel_id: str, target_execution_channel_id: str, 
+                                     notification_channel_id: str = None, notifications_enabled: bool = None) -> bool:
     """
     Save signal conversion settings to database
     """
@@ -3406,8 +3420,24 @@ def save_signal_conversion_settings(conversion_channel_id: str, target_execution
             ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP
         ''', ('target_execution_channel_id', target_execution_channel_id, target_execution_channel_id))
         
+        # Save notification channel ID if provided
+        if notification_channel_id is not None:
+            cursor.execute('''
+                INSERT INTO settings (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP
+            ''', ('notification_channel_id', notification_channel_id, notification_channel_id))
+        
+        # Save notifications enabled if provided
+        if notifications_enabled is not None:
+            cursor.execute('''
+                INSERT INTO settings (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP
+            ''', ('notifications_enabled', '1' if notifications_enabled else '0', '1' if notifications_enabled else '0'))
+        
         conn.commit()
-        print(f"[DATABASE] ✓ Saved signal conversion settings: conversion_channel={conversion_channel_id}, target={target_execution_channel_id}")
+        print(f"[DATABASE] ✓ Saved signal conversion settings")
         return True
     except Exception as e:
         print(f"[DATABASE] Error saving signal conversion settings: {e}")
