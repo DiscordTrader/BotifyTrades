@@ -6644,19 +6644,35 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         try:
                             exec_channel = self.get_channel(int(forward_channel_id))
                             if exec_channel:
-                                # Build execution message
+                                # Get executed quantity and order ID from multi-broker results
+                                multi_results = resp.get('_multi_broker_results', [])
+                                if multi_results:
+                                    # Find first successful broker result
+                                    first_success = next((r for r in multi_results if r.get('success') or 'orderId' in r), None)
+                                    if first_success:
+                                        display_qty = first_success.get('executed_qty', signal['qty'])
+                                        order_id = first_success.get('orderId', 'N/A')
+                                        broker_name = first_success.get('broker', 'Unknown')
+                                    else:
+                                        display_qty = signal['qty']
+                                        order_id = 'N/A'
+                                        broker_name = 'Unknown'
+                                else:
+                                    display_qty = resp.get('executed_qty', signal['qty'])
+                                    order_id = resp.get('orderId', 'N/A')
+                                    broker_name = resp.get('broker', 'Webull')
+                                
+                                # Build execution message with actual executed quantity
                                 exec_price = f"${signal['price']}" if signal.get('price') is not None else "MARKET"
                                 if signal['asset'] == 'option':
-                                    exec_msg = f"✅ **{signal['action']} {signal['qty']} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @{exec_price}**"
+                                    exec_msg = f"✅ **{signal['action']} {display_qty} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @{exec_price}**"
                                 else:
-                                    exec_msg = f"✅ **{signal['action']} {signal['qty']} {signal['symbol']} @{exec_price}**"
+                                    exec_msg = f"✅ **{signal['action']} {display_qty} {signal['symbol']} @{exec_price}**"
                                 
-                                # Add paper trade indicator
-                                if signal.get('_paper_trade_mode'):
-                                    exec_msg += "\n📊 **PAPER TRADE** (Alpaca Paper Account)"
+                                # Add broker info
+                                exec_msg += f"\n📊 **{broker_name}**"
                                 
                                 # Add order ID
-                                order_id = resp.get('orderId', 'N/A')
                                 exec_msg += f"\n🔖 Order ID: `{order_id}`"
                                 
                                 await exec_channel.send(exec_msg)
