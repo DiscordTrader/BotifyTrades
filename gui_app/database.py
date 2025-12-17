@@ -1510,14 +1510,46 @@ def find_open_bto_trade(symbol: str, asset_type: str, broker: str = None,
     
     try:
         if asset_type == 'option':
-            query = '''
-                SELECT id, channel_id, message_id, broker
-                FROM trades
-                WHERE symbol = ? AND asset_type = 'option' 
-                AND strike = ? AND expiry = ? AND call_put = ?
-                AND status = 'OPEN' AND direction = 'BTO'
-            '''
-            params = [symbol, strike, expiry, call_put]
+            # Generate expiry format variants for matching
+            # Database may have: "12/17", "2025-12-17", "12/17/25", etc.
+            expiry_variants = [expiry] if expiry else []
+            if expiry:
+                # If format is YYYY-MM-DD, also try MM/DD
+                if '-' in expiry and len(expiry) == 10:
+                    parts = expiry.split('-')
+                    expiry_variants.append(f"{parts[1]}/{parts[2]}")  # 12/17
+                    expiry_variants.append(f"{parts[1]}/{parts[2]}/{parts[0][2:]}")  # 12/17/25
+                # If format is MM/DD, also try YYYY-MM-DD
+                elif '/' in expiry and len(expiry) <= 5:
+                    parts = expiry.split('/')
+                    from datetime import datetime
+                    year = datetime.now().year
+                    expiry_variants.append(f"{year}-{parts[0].zfill(2)}-{parts[1].zfill(2)}")
+            
+            # Try each expiry variant
+            for exp_try in expiry_variants:
+                query = '''
+                    SELECT id, channel_id, message_id, broker
+                    FROM trades
+                    WHERE symbol = ? AND asset_type = 'option' 
+                    AND strike = ? AND expiry = ? AND call_put = ?
+                    AND status = 'OPEN' AND direction = 'BTO'
+                '''
+                params = [symbol, strike, exp_try, call_put]
+                if broker:
+                    query += ' AND broker = ?'
+                    params.append(broker)
+                query += ' ORDER BY id DESC LIMIT 1'
+                cursor.execute(query, params)
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        'id': row[0],
+                        'channel_id': row[1],
+                        'message_id': row[2],
+                        'broker': row[3]
+                    }
+            return None
         else:
             query = '''
                 SELECT id, channel_id, message_id, broker
