@@ -10,6 +10,7 @@ import re
 from datetime import datetime
 from typing import List, Dict, Optional, Any
 from gui_app.database import Database
+from gui_app.lot_matcher import get_matcher
 
 # Use print() for logging - it's redirected to the logging system in selfbot_webull.py
 # logger = logging.getLogger(__name__)  # Not configured, logs go nowhere
@@ -438,11 +439,68 @@ class BrokerSyncService:
                 elif current_status == 'OPEN':
                     # Open position no longer exists = broker closed it (manual close, stop/target hit, or liquidation)
                     print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) not in positions: OPEN → CLOSED (broker closed)")
+                    
+                    # Use existing PNL data from last sync update (already calculated with live prices)
+                    # This is more reliable than recalculating since position is now gone
+                    exit_price = float(trade.get('current_price') or 0)
+                    entry_price = float(trade.get('executed_price') or 0)
+                    quantity = float(trade.get('quantity') or 0)
+                    asset_type = trade.get('asset_type', 'option')
+                    discord_channel_id = trade.get('channel_id')
+                    
+                    # Use existing PNL from last sync update (calculated while position was still open)
+                    pnl = float(trade.get('pnl') or 0)
+                    pnl_percent = float(trade.get('pnl_percent') or 0)
+                    
+                    # Only recalculate if we have valid prices and no existing PNL
+                    if pnl == 0 and entry_price > 0 and exit_price > 0:
+                        multiplier = 100 if asset_type == 'option' else 1
+                        pnl = (exit_price - entry_price) * quantity * multiplier
+                        pnl_percent = ((exit_price - entry_price) / entry_price) * 100
+                    
+                    # Update trade with final status
                     self.db.update_trade(
                         trade_id,
                         status='CLOSED',
-                        closed_at=datetime.now().isoformat()
+                        closed_at=datetime.now().isoformat(),
+                        pnl=pnl,
+                        pnl_percent=pnl_percent
                     )
+                    
+                    # Create lot_closure for PNL/leaderboard tracking
+                    # Note: exit_price can be 0 for expired worthless options - still valid closure
+                    if discord_channel_id and quantity > 0:
+                        try:
+                            # Lookup db_channel_id using database module function
+                            from gui_app.database import get_channel_by_discord_id
+                            channel_row = get_channel_by_discord_id(str(discord_channel_id))
+                            
+                            if channel_row:
+                                db_channel_id = channel_row['id']
+                                
+                                matcher = get_matcher()
+                                lot_signal = {
+                                    'action': 'STC',
+                                    'symbol': symbol,
+                                    'asset': asset_type,
+                                    'qty': quantity,  # Preserve as float for partial positions
+                                    'price': exit_price,  # Can be 0 for expired options
+                                    'strike': trade.get('strike'),
+                                    'expiry': trade.get('expiry'),
+                                    'opt_type': trade.get('call_put'),
+                                    'channel_id': discord_channel_id,
+                                    'db_channel_id': db_channel_id,
+                                    'received_at': datetime.now()
+                                }
+                                lot_result = matcher.process_signal(lot_signal)
+                                if lot_result:
+                                    print(f"[SYNC] ✓ Created {len(lot_result)} lot_closure(s) for PNL tracking (exit=${exit_price})")
+                            else:
+                                print(f"[SYNC] ⚠️ Channel {discord_channel_id} not found in database")
+                        except Exception as le:
+                            print(f"[SYNC] ⚠️ Lot matching warning: {le}")
+                    elif not discord_channel_id:
+                        print(f"[SYNC] ⚠️ No channel_id for trade #{trade_id} - PNL updated but leaderboard not updated")
     
     def _normalize_expiry(self, expiry: str) -> str:
         """Normalize expiry date to YYYY-MM-DD format for consistent matching"""
