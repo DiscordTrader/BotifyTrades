@@ -774,16 +774,19 @@ function displayCapitalRequirements(capReqs, suggestedSettings, recommendations)
     const section = document.getElementById('capital-requirements-section');
     section.style.display = 'block';
     
-    // Display capital stats
+    // Display capital stats - show 25% of user's portfolio as safe position size
     const statsGrid = document.getElementById('capital-stats-grid');
+    const userPortfolio = capReqs.user_portfolio || 14000;
+    const safe25pct = capReqs.safe_position_25pct || (userPortfolio * 0.25);
+    
     statsGrid.innerHTML = `
         <div class="stat-card" style="padding: 12px; text-align: center;">
-            <div class="stat-label" style="font-size: 0.6875rem;">Min for All Trades</div>
-            <div class="stat-value" style="font-size: 1rem; color: var(--warning);">$${capReqs.min_to_take_all_trades.toLocaleString()}</div>
+            <div class="stat-label" style="font-size: 0.6875rem;">Your 25% Safe Size</div>
+            <div class="stat-value" style="font-size: 1rem; color: var(--success);">$${safe25pct.toLocaleString()}</div>
         </div>
         <div class="stat-card" style="padding: 12px; text-align: center;">
-            <div class="stat-label" style="font-size: 0.6875rem;">Recommended (25%)</div>
-            <div class="stat-value" style="font-size: 1rem; color: var(--success);">$${capReqs.recommended_portfolio.toLocaleString()}</div>
+            <div class="stat-label" style="font-size: 0.6875rem;">Largest Trade Taken</div>
+            <div class="stat-value" style="font-size: 1rem; color: var(--warning);">$${capReqs.max_trade_value.toLocaleString()}</div>
         </div>
         <div class="stat-card" style="padding: 12px; text-align: center;">
             <div class="stat-label" style="font-size: 0.6875rem;">Avg Trade Value</div>

@@ -975,10 +975,10 @@ def run_exact_historical_simulation(
     sorted_values = sorted(actual_position_values)
     position_75th = sorted_values[int(len(sorted_values) * 0.75)] if sorted_values else 0
     
-    # Capital requirement calculations
-    min_portfolio_all_trades = max_position_value  # To take ALL trades
-    min_portfolio_75pct = position_75th  # For 75% of trades
-    recommended_portfolio = max_position_value * 4  # 25% max position rule
+    # Capital requirement calculations based on user's portfolio
+    min_portfolio_all_trades = max_position_value  # To take ALL trades (largest trade size)
+    safe_position_25pct = portfolio_start * 0.25  # 25% of user's current portfolio
+    recommended_portfolio = max_position_value * 4  # If user wants largest trade to be only 25%
     
     # Suggested position size based on trade history
     suggested_fixed_size = round(median_position_size / 100) * 100  # Round to nearest $100
@@ -1046,12 +1046,13 @@ def run_exact_historical_simulation(
         
         'capital_requirements': {
             'min_to_take_all_trades': round(min_portfolio_all_trades, 2),
-            'min_for_75pct_trades': round(min_portfolio_75pct, 2),
+            'safe_position_25pct': round(safe_position_25pct, 2),  # 25% of user's portfolio
             'recommended_portfolio': round(recommended_portfolio, 2),
             'max_trade_value': round(max_position_value, 2),
             'avg_trade_value': round(avg_position_size, 2),
             'min_trade_value': round(min_position_value, 2),
             'median_trade_value': round(median_position_size, 2),
+            'user_portfolio': round(portfolio_start, 2),
         },
         
         'suggested_settings': {
