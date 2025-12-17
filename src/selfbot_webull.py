@@ -4962,7 +4962,9 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                                 'signal_id': signal_id,
                                 # Add bracket order prices from alert
                                 'stop_loss_price': structured.get('stop_loss'),
-                                'profit_target_price': structured.get('target_price')
+                                'profit_target_price': structured.get('target_price'),
+                                # Flag to calculate qty from position sizing (TRADE IDEA has no explicit qty)
+                                '_calculate_qty': True
                             }
                             
                             # Add position sizing from channel settings
@@ -5728,33 +5730,45 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     # Calculate max affordable qty based on actual buying power
                                     affordable_qty = max(0, int(buying_power / price))
                                     
-                                    # FIXED LOGIC: If position size budget can't afford 1 share but 
-                                    # buying power CAN afford it, execute at least 1 share
-                                    if pct_qty == 0 and affordable_qty >= 1:
-                                        # Budget too small for even 1 share, but we CAN afford it
-                                        new_qty = min(original_qty, affordable_qty)
-                                        _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ {position_size_pct}% budget (${position_dollars:.0f}) < 1 share (${price:.2f}), using buying power instead")
-                                    else:
-                                        # Take the minimum of: original signal, percentage limit, and affordable
-                                        new_qty = min(original_qty, pct_qty, affordable_qty)
+                                    # Check if signal requests qty calculation (TRADE IDEA format has no explicit qty)
+                                    calculate_qty = signal.get('_calculate_qty', False)
                                     
-                                    # If we truly can't afford any shares, skip this trade
-                                    if new_qty == 0:
-                                        _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 share (price: ${price:.2f}, budget: ${position_dollars:.0f}, buying power: ${buying_power:.0f})")
-                                        return {'success': False, 'error': f'Insufficient funds for 1 share (need ${price:.2f}, have ${buying_power:.0f})'}
-                                    
-                                    if new_qty < original_qty:
+                                    if calculate_qty:
+                                        # TRADE IDEA: Calculate qty from position sizing, don't cap at signal default
+                                        new_qty = min(pct_qty, affordable_qty)
+                                        if new_qty == 0:
+                                            _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 share (price: ${price:.2f}, budget: ${position_dollars:.0f}, buying power: ${buying_power:.0f})")
+                                            return {'success': False, 'error': f'Insufficient funds for 1 share (need ${price:.2f}, have ${buying_power:.0f})'}
                                         signal['qty'] = new_qty
-                                        # Determine the limiting factor
-                                        if affordable_qty < pct_qty and affordable_qty < original_qty:
-                                            reason = f"insufficient buying power (${buying_power:.0f} available, ${original_qty * price:.0f} needed)"
-                                            _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ Reduced qty: {original_qty} -> {new_qty} shares - {reason}")
-                                        else:
-                                            reason = f"{position_size_pct}% position limit (${position_dollars:.0f} budget)"
-                                            _original_print(f"[{broker_name}] [POSITION SIZE] Reduced qty: {original_qty} -> {new_qty} shares - {reason}")
+                                        _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Calculated qty: {new_qty} shares ({position_size_pct}% = ${position_dollars:.0f} budget, ${price:.2f}/share)")
                                     else:
-                                        cost_info = f"${original_qty * price:.0f}"
-                                        _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Using full signal qty: {original_qty} shares (cost: {cost_info}, buying power: ${buying_power:.0f})")
+                                        # FIXED LOGIC: If position size budget can't afford 1 share but 
+                                        # buying power CAN afford it, execute at least 1 share
+                                        if pct_qty == 0 and affordable_qty >= 1:
+                                            # Budget too small for even 1 share, but we CAN afford it
+                                            new_qty = min(original_qty, affordable_qty)
+                                            _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ {position_size_pct}% budget (${position_dollars:.0f}) < 1 share (${price:.2f}), using buying power instead")
+                                        else:
+                                            # Take the minimum of: original signal, percentage limit, and affordable
+                                            new_qty = min(original_qty, pct_qty, affordable_qty)
+                                        
+                                        # If we truly can't afford any shares, skip this trade
+                                        if new_qty == 0:
+                                            _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 share (price: ${price:.2f}, budget: ${position_dollars:.0f}, buying power: ${buying_power:.0f})")
+                                            return {'success': False, 'error': f'Insufficient funds for 1 share (need ${price:.2f}, have ${buying_power:.0f})'}
+                                        
+                                        if new_qty < original_qty:
+                                            signal['qty'] = new_qty
+                                            # Determine the limiting factor
+                                            if affordable_qty < pct_qty and affordable_qty < original_qty:
+                                                reason = f"insufficient buying power (${buying_power:.0f} available, ${original_qty * price:.0f} needed)"
+                                                _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ Reduced qty: {original_qty} -> {new_qty} shares - {reason}")
+                                            else:
+                                                reason = f"{position_size_pct}% position limit (${position_dollars:.0f} budget)"
+                                                _original_print(f"[{broker_name}] [POSITION SIZE] Reduced qty: {original_qty} -> {new_qty} shares - {reason}")
+                                        else:
+                                            cost_info = f"${original_qty * price:.0f}"
+                                            _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Using full signal qty: {original_qty} shares (cost: {cost_info}, buying power: ${buying_power:.0f})")
                 except Exception as e:
                     _original_print(f"[{broker_name}] [POSITION SIZE] Could not get account info for qty adjustment: {e}")
             
@@ -6367,24 +6381,37 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                         pct_qty = max(0, int(position_dollars / price))
                                                         affordable_qty = max(0, int(buying_power / price))
                                                         
-                                                        # FIXED LOGIC: If position size budget can't afford 1 share but 
-                                                        # buying power CAN afford it, execute at least 1 share
-                                                        if pct_qty == 0 and affordable_qty >= 1:
-                                                            new_qty = min(original_qty, affordable_qty)
-                                                            _original_print(f"[PAPER TRADE] [POSITION SIZE] ⚠️ {position_size_pct}% budget (${position_dollars:.0f}) < 1 share (${price:.2f}), using buying power instead")
-                                                        else:
-                                                            new_qty = min(original_qty, pct_qty, affordable_qty)
+                                                        # Check if signal requests qty calculation (TRADE IDEA format has no explicit qty)
+                                                        calculate_qty = signal.get('_calculate_qty', False)
                                                         
-                                                        if new_qty == 0:
-                                                            _original_print(f"[PAPER TRADE] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 share (price: ${price:.2f}, budget: ${position_dollars:.0f})")
-                                                            resp = {'success': False, 'msg': f'Insufficient funds for 1 share', 'paper_trade': True}
-                                                            raise Exception("Skip order - insufficient funds")
-                                                        
-                                                        if new_qty < original_qty:
+                                                        if calculate_qty:
+                                                            # TRADE IDEA: Calculate qty from position sizing, don't cap at signal default
+                                                            new_qty = min(pct_qty, affordable_qty)
+                                                            if new_qty == 0:
+                                                                _original_print(f"[PAPER TRADE] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 share (price: ${price:.2f}, budget: ${position_dollars:.0f})")
+                                                                resp = {'success': False, 'msg': f'Insufficient funds for 1 share', 'paper_trade': True}
+                                                                raise Exception("Skip order - insufficient funds")
                                                             signal['qty'] = new_qty
-                                                            _original_print(f"[PAPER TRADE] [POSITION SIZE] Reduced qty: {original_qty} -> {new_qty} shares ({position_size_pct}% = ${position_dollars:.0f} budget)")
+                                                            _original_print(f"[PAPER TRADE] [POSITION SIZE] ✓ Calculated qty: {new_qty} shares ({position_size_pct}% = ${position_dollars:.0f} budget, ${price:.2f}/share)")
                                                         else:
-                                                            _original_print(f"[PAPER TRADE] [POSITION SIZE] ✓ Using signal qty: {original_qty} shares")
+                                                            # FIXED LOGIC: If position size budget can't afford 1 share but 
+                                                            # buying power CAN afford it, execute at least 1 share
+                                                            if pct_qty == 0 and affordable_qty >= 1:
+                                                                new_qty = min(original_qty, affordable_qty)
+                                                                _original_print(f"[PAPER TRADE] [POSITION SIZE] ⚠️ {position_size_pct}% budget (${position_dollars:.0f}) < 1 share (${price:.2f}), using buying power instead")
+                                                            else:
+                                                                new_qty = min(original_qty, pct_qty, affordable_qty)
+                                                            
+                                                            if new_qty == 0:
+                                                                _original_print(f"[PAPER TRADE] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 share (price: ${price:.2f}, budget: ${position_dollars:.0f})")
+                                                                resp = {'success': False, 'msg': f'Insufficient funds for 1 share', 'paper_trade': True}
+                                                                raise Exception("Skip order - insufficient funds")
+                                                            
+                                                            if new_qty < original_qty:
+                                                                signal['qty'] = new_qty
+                                                                _original_print(f"[PAPER TRADE] [POSITION SIZE] Reduced qty: {original_qty} -> {new_qty} shares ({position_size_pct}% = ${position_dollars:.0f} budget)")
+                                                            else:
+                                                                _original_print(f"[PAPER TRADE] [POSITION SIZE] ✓ Using signal qty: {original_qty} shares")
                                     except Exception as e:
                                         if "Skip order" in str(e):
                                             raise  # Re-raise to skip order
