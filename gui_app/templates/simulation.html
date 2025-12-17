@@ -229,6 +229,21 @@
                 </div>
             </div>
             
+            <div id="capital-requirements-section" class="card" style="display: none; margin-bottom: 24px;">
+                <h4 class="card-header" style="display: flex; align-items: center; justify-content: space-between;">
+                    <span style="display: flex; align-items: center; gap: 8px;">
+                        <span>💰</span> Capital Requirements & Recommendations
+                    </span>
+                    <button onclick="applyRecommendedSettings()" class="btn" style="padding: 6px 12px; font-size: 0.75rem; background: linear-gradient(135deg, #10b981, #059669);">
+                        ✓ Apply Recommended
+                    </button>
+                </h4>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;" id="capital-stats-grid">
+                </div>
+                <div id="recommendations-list" style="margin-top: 12px;">
+                </div>
+            </div>
+            
             <div class="card" id="daily-breakdown-card">
                 <h4 class="card-header" style="display: flex; align-items: center; justify-content: space-between;">
                     <span style="display: flex; align-items: center; gap: 8px;">
@@ -739,6 +754,11 @@ function displayHistoricalResults(data) {
     // Hide warnings for historical
     document.getElementById('warnings-section').style.display = 'none';
     
+    // Display capital requirements if available
+    if (data.capital_requirements) {
+        displayCapitalRequirements(data.capital_requirements, data.suggested_settings, data.recommendations);
+    }
+    
     // Render chart
     renderHistoricalChart(data.trade_breakdown, params.portfolio_start);
     
@@ -747,6 +767,69 @@ function displayHistoricalResults(data) {
     
     // Render params
     renderHistoricalParams(data);
+}
+
+function displayCapitalRequirements(capReqs, suggestedSettings, recommendations) {
+    const section = document.getElementById('capital-requirements-section');
+    section.style.display = 'block';
+    
+    // Display capital stats
+    const statsGrid = document.getElementById('capital-stats-grid');
+    statsGrid.innerHTML = `
+        <div class="stat-card" style="padding: 12px; text-align: center;">
+            <div class="stat-label" style="font-size: 0.6875rem;">Min for All Trades</div>
+            <div class="stat-value" style="font-size: 1rem; color: var(--warning);">$${capReqs.min_to_take_all_trades.toLocaleString()}</div>
+        </div>
+        <div class="stat-card" style="padding: 12px; text-align: center;">
+            <div class="stat-label" style="font-size: 0.6875rem;">Recommended (25%)</div>
+            <div class="stat-value" style="font-size: 1rem; color: var(--success);">$${capReqs.recommended_portfolio.toLocaleString()}</div>
+        </div>
+        <div class="stat-card" style="padding: 12px; text-align: center;">
+            <div class="stat-label" style="font-size: 0.6875rem;">Avg Trade Value</div>
+            <div class="stat-value" style="font-size: 1rem;">$${capReqs.avg_trade_value.toLocaleString()}</div>
+        </div>
+        <div class="stat-card" style="padding: 12px; text-align: center;">
+            <div class="stat-label" style="font-size: 0.6875rem;">Suggested Position</div>
+            <div class="stat-value" style="font-size: 1rem; color: var(--mint);">$${suggestedSettings ? suggestedSettings.fixed_position_size.toLocaleString() : capReqs.median_trade_value.toLocaleString()}</div>
+        </div>
+    `;
+    
+    // Display recommendations
+    const recsList = document.getElementById('recommendations-list');
+    if (recommendations && recommendations.length > 0) {
+        recsList.innerHTML = recommendations.map(rec => {
+            let color = 'var(--info)';
+            let icon = '💡';
+            if (rec.type === 'warning') { color = 'var(--warning)'; icon = '⚠️'; }
+            else if (rec.type === 'success') { color = 'var(--success)'; icon = '✅'; }
+            else if (rec.type === 'suggestion') { color = 'var(--mint)'; icon = '💡'; }
+            
+            return `<div style="background: rgba(255,255,255,0.03); border-radius: 6px; padding: 10px; margin-bottom: 6px; border-left: 3px solid ${color};">
+                <div style="font-weight: 600; font-size: 0.75rem; color: ${color}; margin-bottom: 3px;">${icon} ${rec.title}</div>
+                <div style="font-size: 0.6875rem; color: var(--text-secondary); line-height: 1.4;">${rec.message}</div>
+            </div>`;
+        }).join('');
+    } else {
+        recsList.innerHTML = '';
+    }
+    
+    // Store for apply button
+    window.lastCapitalRecommendations = { capReqs, suggestedSettings };
+}
+
+function applyRecommendedSettings() {
+    if (!window.lastCapitalRecommendations) {
+        showToast('Load trade data first to get recommendations', 'warning');
+        return;
+    }
+    
+    const { suggestedSettings } = window.lastCapitalRecommendations;
+    if (suggestedSettings) {
+        document.getElementById('portfolio-start').value = suggestedSettings.recommended_portfolio;
+        document.getElementById('risk-value').value = suggestedSettings.fixed_position_size;
+        document.getElementById('risk-mode').value = 'fixed';
+        showToast('Recommended settings applied! Run simulation again to see updated results.', 'success');
+    }
 }
 
 function renderHistoricalChart(breakdown, startBalance) {
