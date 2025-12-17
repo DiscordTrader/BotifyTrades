@@ -377,6 +377,14 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added tracking_position_size_pct column for paper trading position sizing")
     
+    # Migrate: Add risk_management_enabled column for per-channel risk opt-in
+    try:
+        cursor.execute('SELECT risk_management_enabled FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN risk_management_enabled INTEGER DEFAULT 0')
+        conn.commit()
+        print("[DATABASE] ✓ Added risk_management_enabled column for per-channel risk opt-in")
+    
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (

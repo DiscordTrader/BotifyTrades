@@ -60,7 +60,7 @@ class RiskDBAdapter:
         return None
     
     def count_channels_with_risk(self) -> int:
-        """Count channels with risk settings configured."""
+        """Count channels with risk management explicitly enabled."""
         if not self._db:
             return 0
         try:
@@ -68,7 +68,7 @@ class RiskDBAdapter:
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT COUNT(*) FROM channels 
-                WHERE (profit_target_1_pct > 0 OR stop_loss_pct > 0 OR trailing_stop_pct > 0)
+                WHERE risk_management_enabled = 1
             ''')
             return cursor.fetchone()[0]
         except Exception as e:
@@ -95,7 +95,8 @@ class RiskDBAdapter:
             if asset_type == 'option':
                 cursor.execute('''
                     SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
-                           c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name
+                           c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
+                           c.risk_management_enabled
                     FROM trades t
                     LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
                     WHERE t.symbol = ? AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
@@ -105,7 +106,8 @@ class RiskDBAdapter:
             else:
                 cursor.execute('''
                     SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
-                           c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name
+                           c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
+                           c.risk_management_enabled
                     FROM trades t
                     LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
                     WHERE t.symbol = ? AND t.asset_type = 'stock'
@@ -115,31 +117,31 @@ class RiskDBAdapter:
             
             row = cursor.fetchone()
             
-            if row and row[0] is not None and row[1] is not None:
+            if row and row[0] is not None:
+                # Check if risk management is explicitly enabled for this channel
+                risk_enabled = row[8] if len(row) > 8 else 0
+                
+                # Only apply risk management if explicitly enabled
+                if not risk_enabled:
+                    return None
+                
                 pt1 = row[1] or 0
                 pt2 = row[2] or 0
                 pt3 = row[3] or 0
                 sl = row[4] or 0
                 trail = row[5] or 0
                 
-                # Only consider risk settings "configured" if:
-                # 1. Trailing stop is set (indicates explicit configuration), OR
-                # 2. Values differ from defaults (20/50/100 with SL 50)
-                is_default = (pt1 == 20.0 and pt2 == 50.0 and pt3 == 100.0 and sl == 50.0 and trail == 0)
-                has_trailing = trail > 0
-                has_custom_targets = (pt1 != 20.0 or pt2 != 50.0 or pt3 != 100.0 or sl != 50.0)
-                
-                if has_trailing or has_custom_targets:
-                    return ChannelRiskSettings(
-                        channel_id=str(row[0]),
-                        channel_name=row[7] or 'Unknown',
-                        profit_target_1_pct=pt1,
-                        profit_target_2_pct=pt2,
-                        profit_target_3_pct=pt3,
-                        stop_loss_pct=sl,
-                        trailing_stop_pct=trail,
-                        trailing_activation_pct=row[6] or 15.0
-                    )
+                # Risk management is enabled - return settings
+                return ChannelRiskSettings(
+                    channel_id=str(row[0]),
+                    channel_name=row[7] or 'Unknown',
+                    profit_target_1_pct=pt1,
+                    profit_target_2_pct=pt2,
+                    profit_target_3_pct=pt3,
+                    stop_loss_pct=sl,
+                    trailing_stop_pct=trail,
+                    trailing_activation_pct=row[6] or 15.0
+                )
             
             return None
         except Exception as e:
