@@ -532,11 +532,19 @@ class AlpacaBroker(BrokerInterface):
             print(f"[{self.name}] Option order response: {order}", flush=True)
             
             if order:
+                filled_price = float(order.filled_avg_price or price or 0)
+                total_cost = filled_price * quantity * 100
+                order_type = "LIMIT" if price else "MARKET"
+                action_label = "Bought" if action.upper() == "BTO" else "Sold"
+                opt_label = "Call" if option_type.upper().startswith("C") else "Put"
+                
+                success_msg = f"✅ {action_label} {quantity}x {symbol} ${strike} {opt_label} exp {expiry} @ ${filled_price:.2f} ({order_type}) - Total: ${total_cost:.2f}"
+                
                 return OrderResult(
                     success=True,
                     order_id=str(order.id),
-                    message=f"Option order placed: {action} {quantity} {symbol} ${strike}{option_type} {expiry}",
-                    price=price if price else float(order.filled_avg_price or 0),
+                    message=success_msg,
+                    price=filled_price,
                     quantity=quantity,
                     symbol=symbol,
                     action=action
@@ -582,10 +590,31 @@ class AlpacaBroker(BrokerInterface):
                     symbol=symbol,
                     action=action
                 )
+            elif 'invalid underlying' in error_msg.lower() or 'invalid symbol' in error_msg.lower():
+                return OrderResult(
+                    success=False,
+                    message=f"❌ Symbol '{symbol}' not supported on Alpaca. Index options (SPX/NDX/VIX) require SPXW/NDXP/VIXW symbols. Try using SPY for S&P 500 exposure.",
+                    symbol=symbol,
+                    action=action
+                )
+            elif 'no option contract' in error_msg.lower() or 'contract not found' in error_msg.lower():
+                return OrderResult(
+                    success=False,
+                    message=f"❌ No option contract found for {symbol} ${strike}{option_type} exp {expiry}. Check strike price and expiration date.",
+                    symbol=symbol,
+                    action=action
+                )
+            elif 'buying power' in error_msg.lower() or 'insufficient funds' in error_msg.lower():
+                return OrderResult(
+                    success=False,
+                    message=f"❌ Insufficient buying power for {quantity}x {symbol} ${strike}{option_type} @ ${price}. Reduce quantity or add funds.",
+                    symbol=symbol,
+                    action=action
+                )
             
             return OrderResult(
                 success=False,
-                message=f"Exception: {error_msg}",
+                message=f"❌ Order failed: {error_msg}",
                 symbol=symbol,
                 action=action
             )
@@ -609,6 +638,22 @@ class AlpacaBroker(BrokerInterface):
         Returns:
             OrderResult with success status and message
         """
+        original_symbol = symbol
+        
+        # Index options conversion - Alpaca doesn't support SPX/NDX directly
+        # Convert to SPXW (SPX Weeklys) which Alpaca supports
+        INDEX_SYMBOL_MAP = {
+            'SPX': 'SPXW',   # S&P 500 Index → SPX Weeklys
+            'NDX': 'NDXP',   # Nasdaq 100 Index → NDX P.M. settled
+            'RUT': 'RUTW',   # Russell 2000 Index → RUT Weeklys
+            'VIX': 'VIXW',   # VIX Index → VIX Weeklys
+        }
+        
+        if symbol.upper() in INDEX_SYMBOL_MAP:
+            converted_symbol = INDEX_SYMBOL_MAP[symbol.upper()]
+            print(f"[{self.name}] ⚠️  Index symbol conversion: {symbol} → {converted_symbol} (Alpaca doesn't support {symbol} directly)")
+            symbol = converted_symbol
+        
         # Convert GUI-style side to action format
         # BUY -> BTO (Buy To Open), SELL -> STC (Sell To Close)
         if side.upper() == 'BUY':
@@ -621,7 +666,8 @@ class AlpacaBroker(BrokerInterface):
         # Convert option_type to single letter format
         opt_type = 'C' if option_type.upper().startswith('C') else 'P'
         
-        print(f"[{self.name}] place_option_order_simple: {side} {quantity} {symbol} ${strike}{opt_type} {expiry} @ ${price}")
+        conversion_note = f" (converted from {original_symbol})" if original_symbol != symbol else ""
+        print(f"[{self.name}] place_option_order_simple: {side} {quantity} {symbol}{conversion_note} ${strike}{opt_type} {expiry} @ ${price}")
         
         # Call the main option order method
         return await self.place_option_order(

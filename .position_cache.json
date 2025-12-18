@@ -1936,7 +1936,7 @@
   },
   "Webull_NKE_70.0_12/19_C": {
     "entry_price": 0.99,
-    "highest_price": 1.265,
+    "highest_price": 1.275,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -2026,7 +2026,7 @@
   },
   "ALPACA_PAPER_SPY_674.0_2025-12-18_P": {
     "entry_price": 0.75,
-    "highest_price": 0.82,
+    "highest_price": 0.85,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,

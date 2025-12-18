@@ -4,6 +4,14 @@
 **v3.4.0 - MILESTONE 4** (2025-12-18)
 
 ## Recent Changes (Milestone 4)
+- **Alpaca Index Options Auto-Conversion**: Automatic symbol conversion for index options on Alpaca
+  - SPX → SPXW (S&P 500 Weeklys)
+  - NDX → NDXP (Nasdaq 100 P.M. settled)
+  - RUT → RUTW (Russell 2000 Weeklys)
+  - VIX → VIXW (VIX Weeklys)
+- **Enhanced Option Order Messages**: Meaningful success/failure messages with details
+  - Success: Shows action, quantity, symbol, strike, expiry, price, order type, total cost
+  - Failures: Specific error messages for invalid symbols, insufficient funds, expired contracts, account issues
 - **Robinhood Broker Integration**: Added support for Robinhood brokerage via robin-stocks library
   - Stocks: Market, Limit, Stop orders supported
   - Options: Limit orders only (Robinhood API constraint)
