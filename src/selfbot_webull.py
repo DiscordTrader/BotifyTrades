@@ -85,6 +85,14 @@ except ImportError as e:
     print(f"[WARNING] Could not import TastytradeBroker: {e}")
     TASTYTRADE_AVAILABLE = False
 
+# Import Robinhood broker (WARNING: No paper trading - all trades are LIVE)
+try:
+    from brokers.robinhood_broker import RobinhoodBroker
+    ROBINHOOD_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARNING] Could not import RobinhoodBroker: {e}")
+    ROBINHOOD_AVAILABLE = False
+
 # Import BrokerSyncService for real-time trade synchronization
 from broker_sync_service import BrokerSyncService
 
@@ -4264,16 +4272,64 @@ class SelfClient(discord.Client):
             traceback.print_exc()
             self.tastytrade_broker = None
 
+        # Initialize Robinhood broker (WARNING: No paper trading - all trades are LIVE)
+        self.robinhood_broker = None
+        try:
+            if ROBINHOOD_AVAILABLE:
+                _original_print("[ROBINHOOD] Starting broker initialization...", flush=True)
+                _original_print("[ROBINHOOD] ⚠️  WARNING: Robinhood has NO paper trading mode", flush=True)
+                _original_print("[ROBINHOOD] ⚠️  ALL trades will be executed with REAL money", flush=True)
+                
+                from gui_app import database as db
+                rh_settings = db.get_robinhood_settings()
+                rh_username = rh_settings.get('robinhood_username', '')
+                rh_password = rh_settings.get('robinhood_password', '')
+                rh_totp_secret = rh_settings.get('robinhood_totp_secret', '')
+                
+                if rh_username and rh_password:
+                    _original_print(f"[ROBINHOOD] ✓ Loaded credentials from DATABASE", flush=True)
+                    _original_print(f"[ROBINHOOD] Creating RobinhoodBroker instance...", flush=True)
+                    
+                    self.robinhood_broker = RobinhoodBroker({
+                        'username': rh_username,
+                        'password': rh_password,
+                        'totp_secret': rh_totp_secret
+                    })
+                    
+                    connected = await self.robinhood_broker.connect()
+                    if connected:
+                        _original_print(f"[ROBINHOOD] ✓ Connected successfully (LIVE)", flush=True)
+                        try:
+                            from gui_app.broker_credentials_service import set_broker_status
+                            account_info = await self.robinhood_broker.get_account_info()
+                            set_broker_status('robinhood', True, 'connected', account_info=account_info)
+                            _original_print(f"[ROBINHOOD] ✓ Broker status updated in GUI", flush=True)
+                        except Exception as status_err:
+                            _original_print(f"[ROBINHOOD] ⚠️ Failed to update broker status: {status_err}", flush=True)
+                    else:
+                        _original_print("[ROBINHOOD] ⚠️ Connection failed", flush=True)
+                        self.robinhood_broker = None
+                else:
+                    _original_print("[ROBINHOOD] No credentials configured - broker disabled", flush=True)
+            else:
+                _original_print("[ROBINHOOD] RobinhoodBroker not available", flush=True)
+        except Exception as e:
+            _original_print(f"[ROBINHOOD] ⚠️ Initialization failed: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            self.robinhood_broker = None
+
         # CRITICAL: Set broker_ready if ANY broker is available (not just Webull)
         # This fixes user builds where only Alpaca/Tastytrade are configured
         _original_print(f"[DEBUG] Checking broker_ready: is_set={self.broker_ready.is_set()}", flush=True)
-        _original_print(f"[DEBUG] Broker states: webull={self.broker is not None and getattr(self.broker, 'is_logged_in', False)}, alpaca={self.paper_broker is not None}, tastytrade={self.tastytrade_broker is not None}", flush=True)
+        _original_print(f"[DEBUG] Broker states: webull={self.broker is not None and getattr(self.broker, 'is_logged_in', False)}, alpaca={self.paper_broker is not None}, tastytrade={self.tastytrade_broker is not None}, robinhood={self.robinhood_broker is not None}", flush=True)
         
         if not self.broker_ready.is_set():
             any_broker_available = (
                 (self.broker and getattr(self.broker, 'is_logged_in', False)) or
                 self.paper_broker or
-                self.tastytrade_broker
+                self.tastytrade_broker or
+                self.robinhood_broker
             )
             _original_print(f"[DEBUG] any_broker_available={any_broker_available}", flush=True)
             if any_broker_available:
@@ -4292,12 +4348,13 @@ class SelfClient(discord.Client):
             
             # Create simple broker manager for sync service
             class BrokerManager:
-                def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None):
+                def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None):
                     self.webull_broker = webull_broker
                     self.alpaca_paper_broker = alpaca_paper_broker
                     self.tastytrade_broker = tastytrade_broker
+                    self.robinhood_broker = robinhood_broker
             
-            broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker)
+            broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker)
             db_instance = Database()
             
             self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=30)

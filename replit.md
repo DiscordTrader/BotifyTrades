@@ -3,13 +3,15 @@
 ## Version
 **v3.2.4** (2025-12-18)
 
-## Recent Changes (Milestone 5) - Database Synchronization Fixes
+## Recent Changes (Milestone 5) - Database Synchronization & Credential Consistency
 - **Fixed _save_trade_to_db() Signature**: Corrected function to use dict parameter instead of kwargs
 - **Order ID Tracking**: Now saves order_id to database for proper trade-to-order matching
 - **Quantity Sync from Broker**: Database quantities now sync with actual broker positions in real-time
 - **60-Second Grace Period**: PENDING trades won't be prematurely closed (prevents race condition)
 - **Broker Name Normalization**: All broker names now saved as uppercase for consistency
 - **Close Reason Tracking**: Added close_reason field when sync closes positions
+- **Robinhood Auto-Initialization**: Bot now auto-initializes Robinhood broker from database credentials on startup
+- **Credential Consistency**: All broker credentials (Webull, Alpaca, Tastytrade, Robinhood) load from database on restart
 
 ## Previous Milestone (4)
 - **Alpaca Index Options Rejection**: Clear error when attempting index options on Alpaca
