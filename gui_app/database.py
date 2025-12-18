@@ -1472,10 +1472,10 @@ def add_trade(signal_data: Dict) -> int:
         INSERT INTO trades (
             channel_id, message_id, direction, asset_type, symbol,
             strike, expiry, call_put, quantity, intended_price,
-            executed_price, executed_at, status, broker,
+            executed_price, executed_at, status, broker, order_id,
             stop_loss_price, profit_target_price, risk_trigger, origin_trade_id,
             user_id, source
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         signal_data.get('channel_id'),
         signal_data.get('message_id'),
@@ -1491,6 +1491,7 @@ def add_trade(signal_data: Dict) -> int:
         datetime.now() if signal_data.get('executed') else None,
         signal_data.get('status', 'PENDING'),
         signal_data.get('broker'),
+        signal_data.get('order_id'),
         signal_data.get('stop_loss_price'),
         signal_data.get('profit_target_price'),
         signal_data.get('risk_trigger'),
