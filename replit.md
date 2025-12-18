@@ -1,9 +1,17 @@
 # BotifyTrades - Discord Trading Bot
 
 ## Version
-**v3.4.0 - MILESTONE 4** (2025-12-18)
+**v3.5.0 - MILESTONE 5** (2025-12-18)
 
-## Recent Changes (Milestone 4)
+## Recent Changes (Milestone 5) - Database Synchronization Fixes
+- **Fixed _save_trade_to_db() Signature**: Corrected function to use dict parameter instead of kwargs
+- **Order ID Tracking**: Now saves order_id to database for proper trade-to-order matching
+- **Quantity Sync from Broker**: Database quantities now sync with actual broker positions in real-time
+- **60-Second Grace Period**: PENDING trades won't be prematurely closed (prevents race condition)
+- **Broker Name Normalization**: All broker names now saved as uppercase for consistency
+- **Close Reason Tracking**: Added close_reason field when sync closes positions
+
+## Previous Milestone (4)
 - **Alpaca Index Options Rejection**: Clear error when attempting index options on Alpaca
   - SPX, SPXW, NDX, NDXP, RUT, VIX, etc. NOT supported on Alpaca (CBOE cash-settled)
   - Error message suggests using Tastytrade/IBKR or QQQ/SPY alternatives
