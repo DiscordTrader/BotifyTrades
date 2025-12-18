@@ -557,45 +557,62 @@ def check_ibkr_broker() -> CheckResult:
 
 
 def check_version_update() -> CheckResult:
-    """Check GitHub for available updates."""
+    """Check GitHub for available updates using the existing VersionChecker."""
     try:
-        from upgrade.version import check_for_updates, APP_VERSION
+        from upgrade.version import get_current_version
+        from upgrade.version_checker import get_version_checker
+        from datetime import datetime, timedelta
         
-        result = check_for_updates(timeout=5)
+        current_version = get_current_version()
+        checker = get_version_checker()
         
-        if result['error']:
+        status_before = checker.get_status()
+        last_check_before = status_before.get('last_check')
+        
+        update_info = checker.check_for_updates(force=True)
+        
+        status_after = checker.get_status()
+        last_check_after = status_after.get('last_check')
+        
+        check_timestamp_updated = last_check_after and last_check_after != last_check_before
+        
+        if update_info:
             return CheckResult(
                 name="Version Update",
                 category=DiagnosticCategory.SYSTEM,
                 status=CheckStatus.WARN,
-                message=f"Could not check: {result['error']}",
-                details={'current_version': result['current_version'], 'error': result['error']},
-                remediation="Check internet connection or try again later"
+                message=f"Update available: v{update_info.version} (current: v{current_version})",
+                details={
+                    'current_version': current_version,
+                    'latest_version': update_info.version,
+                    'release_url': update_info.download_url,
+                    'is_critical': update_info.is_critical,
+                    'release_date': update_info.release_date
+                },
+                remediation=f"Download latest version from {update_info.download_url}" if update_info.download_url else "Check GitHub releases for the latest version"
             )
         
-        if result['update_available']:
+        if not check_timestamp_updated:
             return CheckResult(
                 name="Version Update",
                 category=DiagnosticCategory.SYSTEM,
                 status=CheckStatus.WARN,
-                message=f"Update available: v{result['latest_version']} (current: v{result['current_version']})",
+                message=f"Could not check for updates (v{current_version})",
                 details={
-                    'current_version': result['current_version'],
-                    'latest_version': result['latest_version'],
-                    'release_url': result['release_url'],
-                    'published_at': result['published_at']
+                    'current_version': current_version,
+                    'error': 'GitHub API check failed - no response received'
                 },
-                remediation=f"Download latest version from {result['release_url']}"
+                remediation="Check internet connection or try again later"
             )
         
         return CheckResult(
             name="Version Update",
             category=DiagnosticCategory.SYSTEM,
             status=CheckStatus.PASS,
-            message=f"Up to date (v{result['current_version']})",
+            message=f"Up to date (v{current_version})",
             details={
-                'current_version': result['current_version'],
-                'latest_version': result['latest_version']
+                'current_version': current_version,
+                'last_check': last_check_after
             }
         )
     except ImportError as e:
@@ -611,8 +628,9 @@ def check_version_update() -> CheckResult:
             name="Version Update",
             category=DiagnosticCategory.SYSTEM,
             status=CheckStatus.WARN,
-            message=f"Check failed: {str(e)}",
-            details={'error': str(e)}
+            message=f"Could not check: {str(e)}",
+            details={'error': str(e)},
+            remediation="Check internet connection or try again later"
         )
 
 
