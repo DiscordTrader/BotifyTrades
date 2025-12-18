@@ -4,11 +4,9 @@
 **v3.4.0 - MILESTONE 4** (2025-12-18)
 
 ## Recent Changes (Milestone 4)
-- **Alpaca Index Options Auto-Conversion**: Automatic symbol conversion for index options on Alpaca
-  - SPX → SPXW (S&P 500 Weeklys)
-  - NDX → NDXP (Nasdaq 100 P.M. settled)
-  - RUT → RUTW (Russell 2000 Weeklys)
-  - VIX → VIXW (VIX Weeklys)
+- **Alpaca Index Options Rejection**: Clear error when attempting index options on Alpaca
+  - SPX, SPXW, NDX, NDXP, RUT, VIX, etc. NOT supported on Alpaca (CBOE cash-settled)
+  - Error message suggests using Tastytrade/IBKR or QQQ/SPY alternatives
 - **Enhanced Option Order Messages**: Meaningful success/failure messages with details
   - Success: Shows action, quantity, symbol, strike, expiry, price, order type, total cost
   - Failures: Specific error messages for invalid symbols, insufficient funds, expired contracts, account issues

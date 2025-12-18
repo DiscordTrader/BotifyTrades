@@ -638,21 +638,18 @@ class AlpacaBroker(BrokerInterface):
         Returns:
             OrderResult with success status and message
         """
-        original_symbol = symbol
+        # Index options are NOT supported on Alpaca - reject early with clear message
+        # Alpaca only supports equity options, not cash-settled index options (CBOE)
+        INDEX_SYMBOLS = {'SPX', 'SPXW', 'NDX', 'NDXP', 'RUT', 'RUTW', 'VIX', 'VIXW', 'XSP', 'DJX'}
         
-        # Index options conversion - Alpaca doesn't support SPX/NDX directly
-        # Convert to SPXW (SPX Weeklys) which Alpaca supports
-        INDEX_SYMBOL_MAP = {
-            'SPX': 'SPXW',   # S&P 500 Index → SPX Weeklys
-            'NDX': 'NDXP',   # Nasdaq 100 Index → NDX P.M. settled
-            'RUT': 'RUTW',   # Russell 2000 Index → RUT Weeklys
-            'VIX': 'VIXW',   # VIX Index → VIX Weeklys
-        }
-        
-        if symbol.upper() in INDEX_SYMBOL_MAP:
-            converted_symbol = INDEX_SYMBOL_MAP[symbol.upper()]
-            print(f"[{self.name}] ⚠️  Index symbol conversion: {symbol} → {converted_symbol} (Alpaca doesn't support {symbol} directly)")
-            symbol = converted_symbol
+        if symbol.upper() in INDEX_SYMBOLS:
+            print(f"[{self.name}] ❌ Index options not supported: {symbol} - Use Tastytrade or IBKR for index options")
+            return OrderResult(
+                success=False,
+                message=f"❌ Index options ({symbol}) are NOT supported on Alpaca. Alpaca only supports equity options. Use Tastytrade or IBKR for SPX/NDX/VIX trading, or use QQQ/SPY for similar exposure.",
+                symbol=symbol,
+                action='BTO' if side.upper() == 'BUY' else 'STC'
+            )
         
         # Convert GUI-style side to action format
         # BUY -> BTO (Buy To Open), SELL -> STC (Sell To Close)
@@ -666,8 +663,7 @@ class AlpacaBroker(BrokerInterface):
         # Convert option_type to single letter format
         opt_type = 'C' if option_type.upper().startswith('C') else 'P'
         
-        conversion_note = f" (converted from {original_symbol})" if original_symbol != symbol else ""
-        print(f"[{self.name}] place_option_order_simple: {side} {quantity} {symbol}{conversion_note} ${strike}{opt_type} {expiry} @ ${price}")
+        print(f"[{self.name}] place_option_order_simple: {side} {quantity} {symbol} ${strike}{opt_type} {expiry} @ ${price}")
         
         # Call the main option order method
         return await self.place_option_order(
