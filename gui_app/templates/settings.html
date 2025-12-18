@@ -670,15 +670,26 @@ input:checked + .slider:before {
             <input type="password" id="robinhood-password" placeholder="Password">
         </div>
         <div class="form-group">
-            <label>2FA TOTP Secret</label>
-            <input type="password" id="robinhood-totp-secret" placeholder="JBSWY3DPEHPK3PXP...">
-            <p class="help-text">From Robinhood app → Settings → Security → 2FA → Select "Other" authenticator app → Copy the secret code</p>
+            <label>2FA TOTP Secret (Optional)</label>
+            <input type="password" id="robinhood-totp-secret" placeholder="KACUJH6EKZZCVZ6K...">
+            <p class="help-text" style="font-size: 11px; line-height: 1.5;">
+                <strong>To get this code:</strong><br>
+                1. Robinhood App/Web → Settings → Security & Privacy<br>
+                2. Enable Two-Factor Authentication → Select "Authenticator app"<br>
+                3. Click <strong>"Can't scan?"</strong> or <strong>"Enter code manually"</strong><br>
+                4. Copy the 16-character alphanumeric code shown (e.g., KACUJH6EKZZCVZ6K)<br>
+                <span style="color: #ffc107;">If you don't provide this, you'll need to manually enter SMS codes during login.</span>
+            </p>
         </div>
         
         <div style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
-            <p style="font-size: 11px; color: #ffc107; margin: 0;">
+            <p style="font-size: 11px; color: #ffc107; margin: 0; margin-bottom: 8px;">
                 <strong>Options Note:</strong> Robinhood only supports LIMIT orders for options (no market orders). 
                 The bot will automatically use limit prices based on current bid/ask.
+            </p>
+            <p style="font-size: 11px; color: #ff9800; margin: 0;">
+                <strong>⚠️ API Stability:</strong> This uses an unofficial API (robin-stocks). Robinhood can break this at any time without notice. 
+                Check <a href="https://github.com/jmfernandes/robin_stocks/issues" target="_blank" style="color: #00d4ff;">GitHub issues</a> if authentication fails.
             </p>
         </div>
         
