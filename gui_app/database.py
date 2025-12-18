@@ -100,6 +100,26 @@ def get_trade_source_display(trade: Dict) -> Dict[str, Any]:
         channel_map = get_channel_map()
         channel_info = channel_map.get(str(channel_id))
         
+        # Fallback: If not found by discord_channel_id, try internal database ID lookup
+        if not channel_info:
+            try:
+                conn = get_connection()
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT discord_channel_id, name, category, execute_enabled, track_enabled
+                    FROM channels WHERE id = ?
+                ''', (channel_id,))
+                row = cursor.fetchone()
+                if row:
+                    channel_info = {
+                        'name': row[1] or 'Unknown',
+                        'category': row[2] or '',
+                        'execute_enabled': bool(row[3]),
+                        'track_enabled': bool(row[4])
+                    }
+            except Exception:
+                pass
+        
         if channel_info:
             # Found the channel - display it with proper color coding
             if channel_info.get('execute_enabled'):
