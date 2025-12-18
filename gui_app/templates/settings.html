@@ -338,6 +338,7 @@ input:checked + .slider:before {
         <span id="tastytrade-paper-status-badge" class="status-badge disconnected">Tasty Paper</span>
         <span id="tastytrade-live-status-badge" class="status-badge disconnected">Tasty Live</span>
         <span id="ibkr-status-badge" class="status-badge disconnected">IBKR</span>
+        <span id="robinhood-status-badge" class="status-badge disconnected" style="background: rgba(0, 200, 83, 0.15); border-color: rgba(0, 200, 83, 0.3);">Robinhood</span>
     </div>
     <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid rgba(0, 212, 255, 0.2);">
         <button id="btn-reload-credentials" onclick="reloadCredentials()" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px;">
@@ -636,6 +637,56 @@ input:checked + .slider:before {
             <button id="connect-tastytrade-live" class="btn btn-connect">🔌 Connect</button>
         </div>
         <div id="tastytrade-live-account-info" class="account-info" style="display: none;"></div>
+    </div>
+    
+    <!-- Robinhood LIVE Trading (NO PAPER MODE) -->
+    <div class="settings-card" style="background: linear-gradient(135deg, #1a2f1a 0%, #0d1f0d 100%); border-color: rgba(0, 200, 83, 0.4);">
+        <h3 style="color: #00c853;">🪶 Robinhood (LIVE Only)</h3>
+        <p class="description">Connect your Robinhood account for stock and options trading</p>
+        
+        <div style="background: rgba(255, 82, 82, 0.15); border: 2px solid rgba(255, 82, 82, 0.5); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                <span style="font-size: 20px;">⚠️</span>
+                <span style="font-size: 14px; font-weight: 700; color: #ff5252;">LIVE TRADING ONLY - NO PAPER MODE</span>
+            </div>
+            <p style="font-size: 12px; color: rgba(255, 82, 82, 0.9); margin: 0;">
+                Robinhood does NOT have paper trading. All trades executed through this integration are <strong>REAL</strong> and use <strong>REAL MONEY</strong>. 
+                This uses an unofficial API that may break without notice.
+            </p>
+        </div>
+        
+        <div id="robinhood-connection-status" class="connection-status disconnected">
+            <span class="status-dot"></span>
+            <span id="robinhood-status-text">Not connected</span>
+        </div>
+        
+        <div class="form-group">
+            <label>Email (Username)</label>
+            <input type="email" id="robinhood-username" placeholder="your@email.com">
+            <p class="help-text">Your Robinhood account email</p>
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="robinhood-password" placeholder="Password">
+        </div>
+        <div class="form-group">
+            <label>2FA TOTP Secret</label>
+            <input type="password" id="robinhood-totp-secret" placeholder="JBSWY3DPEHPK3PXP...">
+            <p class="help-text">From Robinhood app → Settings → Security → 2FA → Select "Other" authenticator app → Copy the secret code</p>
+        </div>
+        
+        <div style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+            <p style="font-size: 11px; color: #ffc107; margin: 0;">
+                <strong>Options Note:</strong> Robinhood only supports LIMIT orders for options (no market orders). 
+                The bot will automatically use limit prices based on current bid/ask.
+            </p>
+        </div>
+        
+        <div class="btn-group">
+            <button id="save-robinhood" class="btn btn-success">💾 Save</button>
+            <button id="connect-robinhood" class="btn btn-connect" style="background: linear-gradient(135deg, #00c853 0%, #00a843 100%);">🔌 Connect</button>
+        </div>
+        <div id="robinhood-account-info" class="account-info" style="display: none;"></div>
     </div>
     
     <!-- Clear Stale Trades - Data Management -->
@@ -1451,6 +1502,123 @@ document.getElementById('save-alpaca').addEventListener('click', async () => {
     }
 });
 
+// ========== ROBINHOOD SETTINGS ==========
+
+async function loadRobinhoodSettings() {
+    try {
+        const response = await fetch('/api/settings/robinhood');
+        const data = await response.json();
+        
+        if (data.robinhood_username) {
+            document.getElementById('robinhood-username').placeholder = data.robinhood_username.substring(0, 3) + '***@***';
+        }
+        if (data.robinhood_totp_secret) {
+            document.getElementById('robinhood-totp-secret').placeholder = '2FA configured ✓';
+        }
+    } catch (error) {
+        console.error('Error loading Robinhood settings:', error);
+    }
+}
+
+document.getElementById('save-robinhood').addEventListener('click', async () => {
+    const username = document.getElementById('robinhood-username').value.trim();
+    const password = document.getElementById('robinhood-password').value.trim();
+    const totp_secret = document.getElementById('robinhood-totp-secret').value.trim();
+    
+    if (!username || !password) {
+        const msg = document.getElementById('save-message');
+        msg.textContent = '❌ Email and password are required for Robinhood';
+        msg.className = 'message error';
+        setTimeout(() => msg.textContent = '', 3000);
+        return;
+    }
+    
+    // Show warning confirmation
+    if (!confirm('⚠️ WARNING: Robinhood has NO paper trading mode!\\n\\nAll trades executed through this integration will use REAL MONEY.\\n\\nAre you sure you want to save these credentials?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/settings/robinhood', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                robinhood_username: username,
+                robinhood_password: password,
+                robinhood_totp_secret: totp_secret
+            })
+        });
+        
+        const result = await response.json();
+        const msg = document.getElementById('save-message');
+        if (result.success) {
+            msg.textContent = '✅ Robinhood credentials saved! WARNING: All trades are LIVE.';
+            msg.className = 'message success';
+            // Clear password fields for security
+            document.getElementById('robinhood-password').value = '';
+        } else {
+            msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');
+            msg.className = 'message error';
+        }
+        setTimeout(() => msg.textContent = '', 5000);
+    } catch (error) {
+        const msg = document.getElementById('save-message');
+        msg.textContent = '❌ Error: ' + error.message;
+        msg.className = 'message error';
+        setTimeout(() => msg.textContent = '', 3000);
+    }
+});
+
+document.getElementById('connect-robinhood').addEventListener('click', async () => {
+    const statusEl = document.getElementById('robinhood-connection-status');
+    const statusText = document.getElementById('robinhood-status-text');
+    const accountInfo = document.getElementById('robinhood-account-info');
+    
+    statusText.textContent = 'Connecting...';
+    statusEl.className = 'connection-status connecting';
+    
+    try {
+        const response = await fetch('/api/brokers/connect/robinhood', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            statusEl.className = 'connection-status connected';
+            statusText.textContent = 'Connected (LIVE)';
+            if (result.account_info) {
+                accountInfo.style.display = 'block';
+                accountInfo.innerHTML = `
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div><span style="color: var(--text-secondary);">Buying Power:</span></div>
+                        <div style="color: #00c853; font-weight: bold;">$${parseFloat(result.account_info.buying_power || 0).toLocaleString()}</div>
+                        <div><span style="color: var(--text-secondary);">Portfolio Value:</span></div>
+                        <div style="color: #00d4ff;">$${parseFloat(result.account_info.portfolio_value || 0).toLocaleString()}</div>
+                    </div>
+                    <div style="margin-top: 8px; padding: 8px; background: rgba(255, 82, 82, 0.1); border-radius: 4px; font-size: 11px; color: #ff5252;">
+                        ⚠️ LIVE TRADING - All orders use real money
+                    </div>
+                `;
+            }
+        } else {
+            statusEl.className = 'connection-status disconnected';
+            statusText.textContent = 'Connection failed';
+            accountInfo.style.display = 'block';
+            accountInfo.innerHTML = `<div style="color: #ff6b6b;">❌ ${result.error || 'Failed to connect'}</div>`;
+        }
+    } catch (error) {
+        statusEl.className = 'connection-status disconnected';
+        statusText.textContent = 'Error';
+        accountInfo.style.display = 'block';
+        accountInfo.innerHTML = `<div style="color: #ff6b6b;">❌ ${error.message}</div>`;
+    }
+});
+
+// Load Robinhood settings on page load
+document.addEventListener('DOMContentLoaded', loadRobinhoodSettings);
+
 // ========== AI & MARKET DATA API KEYS ==========
 
 function updateAiProviderUI() {
@@ -1968,6 +2136,7 @@ async function loadBrokerStatus() {
             updateStatusBadge('webull_live', data.status.webull_live);
             updateStatusBadge('webull_paper', data.status.webull_paper);
             updateStatusBadge('ibkr_paper', data.status.ibkr_paper);
+            updateStatusBadge('robinhood', data.status.robinhood);
         }
     } catch (error) {
         console.error('Error loading broker status:', error);
@@ -1983,7 +2152,8 @@ function updateStatusBadge(brokerId, status) {
         'webull_paper': 'webull-paper-status-badge',
         'ibkr_paper': 'ibkr-status-badge',
         'tastytrade_paper': 'tastytrade-paper-status-badge',
-        'tastytrade_live': 'tastytrade-live-status-badge'
+        'tastytrade_live': 'tastytrade-live-status-badge',
+        'robinhood': 'robinhood-status-badge'
     };
     
     const badge = document.getElementById(badgeMap[brokerId]);

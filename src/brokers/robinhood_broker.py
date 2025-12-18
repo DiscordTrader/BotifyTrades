@@ -1,0 +1,571 @@
+"""
+Robinhood Broker Implementation
+Uses unofficial robin-stocks library
+WARNING: No paper trading - all trades are LIVE
+"""
+
+import sys
+import os
+import asyncio
+from typing import Optional, Dict, Any
+from datetime import datetime
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+from broker_interface import BrokerInterface, OrderResult, BrokerFactory
+
+try:
+    import robin_stocks.robinhood as rh
+    import pyotp
+    ROBIN_STOCKS_AVAILABLE = True
+except ImportError:
+    ROBIN_STOCKS_AVAILABLE = False
+    rh = None
+    pyotp = None
+
+
+class RobinhoodBroker(BrokerInterface):
+    """
+    Robinhood broker implementation using robin-stocks library
+    
+    WARNING: Robinhood does NOT have paper trading.
+    All trades executed through this broker are LIVE with real money.
+    
+    Authentication requires:
+    - Username (email)
+    - Password
+    - 2FA TOTP secret (from authenticator app setup)
+    """
+    
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self.name = "ROBINHOOD"
+        self.paper_trade = False  # Robinhood has NO paper trading
+        self._logged_in = False
+        
+        if not ROBIN_STOCKS_AVAILABLE:
+            print(f"[{self.name}] WARNING: robin-stocks library not installed")
+            print(f"[{self.name}] Install with: pip install robin-stocks pyotp")
+    
+    async def connect(self) -> bool:
+        """
+        Connect to Robinhood using credentials and 2FA
+        
+        Required config keys:
+        - username: Robinhood email
+        - password: Robinhood password
+        - totp_secret: 2FA authenticator secret (from Robinhood app setup)
+        """
+        if not ROBIN_STOCKS_AVAILABLE:
+            print(f"[{self.name}] ❌ robin-stocks library not installed")
+            return False
+        
+        try:
+            username = self.config.get('username')
+            password = self.config.get('password')
+            totp_secret = self.config.get('totp_secret')
+            
+            if not username or not password:
+                print(f"[{self.name}] ❌ Missing username or password")
+                return False
+            
+            print(f"[{self.name}] ⚠️  WARNING: Robinhood has NO paper trading mode")
+            print(f"[{self.name}] ⚠️  ALL trades will be executed with REAL money")
+            print(f"[{self.name}] Connecting to account: {username[:3]}***@***")
+            
+            def do_login():
+                mfa_code = None
+                if totp_secret:
+                    try:
+                        mfa_code = pyotp.TOTP(totp_secret).now()
+                        print(f"[{self.name}] Generated 2FA code: {mfa_code}")
+                    except Exception as e:
+                        print(f"[{self.name}] ⚠️  2FA generation failed: {e}")
+                
+                login_result = rh.login(
+                    username=username,
+                    password=password,
+                    mfa_code=mfa_code,
+                    store_session=True,
+                    expiresIn=86400
+                )
+                return login_result
+            
+            login_result = await asyncio.to_thread(do_login)
+            
+            if login_result and 'access_token' in login_result:
+                self.connected = True
+                self._logged_in = True
+                
+                account_info = await self.get_account_info()
+                buying_power = account_info.get('buying_power', 0)
+                
+                print(f"[{self.name}] ✓ Connected successfully (LIVE trading)")
+                print(f"[{self.name}]   Buying power: ${buying_power:,.2f}")
+                return True
+            else:
+                print(f"[{self.name}] ❌ Login failed")
+                if login_result:
+                    detail = login_result.get('detail', 'Unknown error')
+                    print(f"[{self.name}]   Error: {detail}")
+                return False
+                
+        except Exception as e:
+            import traceback
+            print(f"[{self.name}] ❌ Connection error: {e}")
+            traceback.print_exc()
+            return False
+    
+    async def disconnect(self):
+        """Disconnect from Robinhood"""
+        try:
+            if ROBIN_STOCKS_AVAILABLE and self._logged_in:
+                await asyncio.to_thread(rh.logout)
+        except Exception as e:
+            print(f"[{self.name}] Logout error (non-critical): {e}")
+        
+        self.connected = False
+        self._logged_in = False
+        print(f"[{self.name}] Disconnected")
+    
+    async def get_account_info(self) -> Dict[str, Any]:
+        """Get account information"""
+        if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
+            return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+        
+        try:
+            def get_profile():
+                return rh.profiles.load_account_profile()
+            
+            def get_portfolio():
+                return rh.profiles.load_portfolio_profile()
+            
+            account = await asyncio.to_thread(get_profile)
+            portfolio = await asyncio.to_thread(get_portfolio)
+            
+            buying_power = 0.0
+            cash = 0.0
+            portfolio_value = 0.0
+            
+            if account:
+                buying_power = float(account.get('buying_power', 0) or 0)
+                cash = float(account.get('cash', 0) or 0)
+            
+            if portfolio:
+                portfolio_value = float(portfolio.get('equity', 0) or 0)
+            
+            return {
+                'buying_power': buying_power,
+                'options_buying_power': buying_power,
+                'cash': cash,
+                'portfolio_value': portfolio_value
+            }
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting account info: {e}")
+            return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+    
+    async def get_positions(self) -> Dict[str, Any]:
+        """Get current stock positions"""
+        if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
+            return {}
+        
+        try:
+            def get_holdings():
+                return rh.account.build_holdings()
+            
+            holdings = await asyncio.to_thread(get_holdings)
+            
+            result = {}
+            if holdings:
+                for symbol, data in holdings.items():
+                    qty = float(data.get('quantity', 0))
+                    result[symbol] = int(qty) if qty == int(qty) else qty
+            
+            return result
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting positions: {e}")
+            return {}
+    
+    def get_all_positions(self) -> list:
+        """Get all positions as raw objects for sync service (synchronous)"""
+        if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
+            return []
+        
+        try:
+            holdings = rh.account.build_holdings()
+            positions = []
+            
+            if holdings:
+                for symbol, data in holdings.items():
+                    positions.append({
+                        'symbol': symbol,
+                        'quantity': float(data.get('quantity', 0)),
+                        'average_buy_price': float(data.get('average_buy_price', 0)),
+                        'equity': float(data.get('equity', 0)),
+                        'percent_change': float(data.get('percent_change', 0)),
+                        'type': 'stock'
+                    })
+            
+            option_positions = rh.options.get_open_option_positions()
+            if option_positions:
+                for pos in option_positions:
+                    positions.append({
+                        'symbol': pos.get('chain_symbol', ''),
+                        'quantity': float(pos.get('quantity', 0)),
+                        'average_price': float(pos.get('average_price', 0) or 0),
+                        'type': 'option',
+                        'option_type': pos.get('type', ''),
+                        'strike_price': pos.get('strike_price', ''),
+                        'expiration_date': pos.get('expiration_date', '')
+                    })
+            
+            return positions
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting all positions: {e}")
+            return []
+    
+    def get_orders(self, status: str = 'open') -> list:
+        """Get orders by status for sync service (synchronous)"""
+        if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
+            return []
+        
+        try:
+            if status == 'open':
+                stock_orders = rh.orders.get_all_open_stock_orders() or []
+                option_orders = rh.options.get_all_open_option_orders() or []
+                return list(stock_orders) + list(option_orders)
+            else:
+                stock_orders = rh.orders.get_all_stock_orders() or []
+                option_orders = rh.options.get_all_option_orders() or []
+                return list(stock_orders) + list(option_orders)
+                
+        except Exception as e:
+            print(f"[{self.name}] Error getting orders: {e}")
+            return []
+    
+    async def place_stock_order(
+        self,
+        symbol: str,
+        action: str,
+        quantity: int,
+        price: Optional[float] = None,
+        stop_price: Optional[float] = None
+    ) -> OrderResult:
+        """
+        Place a stock order
+        
+        Args:
+            symbol: Stock ticker (e.g., "AAPL")
+            action: BTO (buy) or STC (sell)
+            quantity: Number of shares
+            price: Limit price (None for market order)
+            stop_price: Stop price (for stop loss orders)
+        """
+        if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
+            return OrderResult(
+                success=False,
+                message="Robinhood not connected",
+                symbol=symbol,
+                action=action
+            )
+        
+        try:
+            is_buy = action.upper() in ['BTO', 'BUY']
+            
+            def execute_order():
+                if stop_price is not None:
+                    if is_buy:
+                        return rh.orders.order_buy_stop_loss(
+                            symbol=symbol,
+                            quantity=quantity,
+                            stopPrice=stop_price,
+                            timeInForce='gtc'
+                        )
+                    else:
+                        return rh.orders.order_sell_stop_loss(
+                            symbol=symbol,
+                            quantity=quantity,
+                            stopPrice=stop_price,
+                            timeInForce='gtc'
+                        )
+                elif price is not None:
+                    if is_buy:
+                        return rh.orders.order_buy_limit(
+                            symbol=symbol,
+                            quantity=quantity,
+                            limitPrice=price,
+                            timeInForce='gtc'
+                        )
+                    else:
+                        return rh.orders.order_sell_limit(
+                            symbol=symbol,
+                            quantity=quantity,
+                            limitPrice=price,
+                            timeInForce='gtc'
+                        )
+                else:
+                    if is_buy:
+                        return rh.orders.order_buy_market(
+                            symbol=symbol,
+                            quantity=quantity,
+                            timeInForce='gtc'
+                        )
+                    else:
+                        return rh.orders.order_sell_market(
+                            symbol=symbol,
+                            quantity=quantity,
+                            timeInForce='gtc'
+                        )
+            
+            order = await asyncio.to_thread(execute_order)
+            
+            if order and order.get('id'):
+                order_type = "STOP" if stop_price else ("LIMIT" if price else "MARKET")
+                return OrderResult(
+                    success=True,
+                    order_id=order.get('id'),
+                    message=f"{order_type} order placed: {action} {quantity} {symbol}",
+                    price=price or stop_price or float(order.get('average_price', 0) or 0),
+                    quantity=quantity,
+                    symbol=symbol,
+                    action=action
+                )
+            else:
+                error_detail = order.get('detail', 'Unknown error') if order else 'No response'
+                return OrderResult(
+                    success=False,
+                    message=f"Order failed: {error_detail}",
+                    symbol=symbol,
+                    action=action
+                )
+                
+        except Exception as e:
+            return OrderResult(
+                success=False,
+                message=f"Exception: {str(e)}",
+                symbol=symbol,
+                action=action
+            )
+    
+    async def place_option_order(
+        self,
+        symbol: str,
+        strike: float,
+        expiry: str,
+        option_type: str,
+        action: str,
+        quantity: int,
+        price: Optional[float] = None
+    ) -> OrderResult:
+        """
+        Place an options order
+        
+        NOTE: Robinhood only supports LIMIT orders for options.
+        If price is None, we'll attempt to get current bid/ask.
+        
+        Args:
+            symbol: Underlying ticker (e.g., "AAPL")
+            strike: Strike price
+            expiry: Expiration date (YYYY-MM-DD or MM/DD/YY)
+            option_type: "call" or "put" (or "C"/"P")
+            action: BTO or STC
+            quantity: Number of contracts
+            price: Limit price (REQUIRED for Robinhood options)
+        """
+        if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
+            return OrderResult(
+                success=False,
+                message="Robinhood not connected",
+                symbol=symbol,
+                action=action
+            )
+        
+        try:
+            expiry_date = self._normalize_expiry(expiry)
+            opt_type = 'call' if option_type.upper().startswith('C') else 'put'
+            is_buy = action.upper() in ['BTO', 'BUY']
+            
+            if is_buy:
+                position_effect = 'open'
+                credit_or_debit = 'debit'
+            else:
+                position_effect = 'close'
+                credit_or_debit = 'credit'
+            
+            if price is None or price <= 0:
+                print(f"[{self.name}] ⚠️  Options require limit price - attempting to get market price")
+                market_price = await self._get_option_price(symbol, strike, expiry_date, opt_type, is_buy)
+                if market_price:
+                    price = market_price
+                    print(f"[{self.name}] Using market price: ${price:.2f}")
+                else:
+                    return OrderResult(
+                        success=False,
+                        message="Robinhood options require a limit price. Could not determine market price.",
+                        symbol=symbol,
+                        action=action
+                    )
+            
+            def execute_option_order():
+                if is_buy:
+                    return rh.orders.order_buy_option_limit(
+                        positionEffect=position_effect,
+                        creditOrDebit=credit_or_debit,
+                        price=price,
+                        symbol=symbol,
+                        quantity=quantity,
+                        expirationDate=expiry_date,
+                        strike=strike,
+                        optionType=opt_type,
+                        timeInForce='gtc'
+                    )
+                else:
+                    return rh.orders.order_sell_option_limit(
+                        positionEffect=position_effect,
+                        creditOrDebit=credit_or_debit,
+                        price=price,
+                        symbol=symbol,
+                        quantity=quantity,
+                        expirationDate=expiry_date,
+                        strike=strike,
+                        optionType=opt_type,
+                        timeInForce='gtc'
+                    )
+            
+            print(f"[{self.name}] Submitting option order: {action} {quantity} {symbol} ${strike}{opt_type[0].upper()} {expiry_date} @ ${price:.2f}")
+            order = await asyncio.to_thread(execute_option_order)
+            
+            if order and order.get('id'):
+                return OrderResult(
+                    success=True,
+                    order_id=order.get('id'),
+                    message=f"Option LIMIT order placed: {action} {quantity} {symbol} ${strike}{opt_type[0].upper()} {expiry_date}",
+                    price=price,
+                    quantity=quantity,
+                    symbol=symbol,
+                    action=action
+                )
+            else:
+                error_detail = order.get('detail', 'Unknown error') if order else 'No response'
+                return OrderResult(
+                    success=False,
+                    message=f"Option order failed: {error_detail}",
+                    symbol=symbol,
+                    action=action
+                )
+                
+        except Exception as e:
+            import traceback
+            print(f"[{self.name}] ❌ Option order exception: {e}")
+            traceback.print_exc()
+            return OrderResult(
+                success=False,
+                message=f"Exception: {str(e)}",
+                symbol=symbol,
+                action=action
+            )
+    
+    async def get_quote(self, symbol: str) -> Optional[float]:
+        """Get current price for a stock symbol"""
+        if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
+            return None
+        
+        try:
+            def get_price():
+                prices = rh.stocks.get_latest_price(symbol)
+                if prices and len(prices) > 0:
+                    return float(prices[0]) if prices[0] else None
+                return None
+            
+            return await asyncio.to_thread(get_price)
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting quote for {symbol}: {e}")
+            return None
+    
+    async def _get_option_price(
+        self,
+        symbol: str,
+        strike: float,
+        expiry: str,
+        option_type: str,
+        is_buy: bool
+    ) -> Optional[float]:
+        """Get option market price for limit order"""
+        try:
+            def get_option_data():
+                options = rh.options.find_options_by_expiration_and_strike(
+                    inputSymbols=symbol,
+                    expirationDate=expiry,
+                    strikePrice=str(strike),
+                    optionType=option_type
+                )
+                return options
+            
+            options = await asyncio.to_thread(get_option_data)
+            
+            if options and len(options) > 0:
+                option = options[0]
+                if is_buy:
+                    price = option.get('ask_price') or option.get('adjusted_mark_price')
+                else:
+                    price = option.get('bid_price') or option.get('adjusted_mark_price')
+                
+                if price:
+                    return float(price)
+            
+            return None
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting option price: {e}")
+            return None
+    
+    def _normalize_expiry(self, expiry: str) -> str:
+        """Convert various expiry formats to YYYY-MM-DD"""
+        if '-' in expiry and len(expiry) == 10:
+            return expiry
+        
+        try:
+            if "/" in expiry:
+                parts = expiry.split("/")
+                if len(parts) == 2:
+                    m, d = parts
+                    y = datetime.now().year
+                    return f"{y:04d}-{int(m):02d}-{int(d):02d}"
+                elif len(parts) == 3:
+                    m, d, y = parts
+                    if len(y) == 2:
+                        y = f"20{y}"
+                    return f"{int(y):04d}-{int(m):02d}-{int(d):02d}"
+        except Exception as e:
+            print(f"[{self.name}] Warning: Could not parse expiry '{expiry}': {e}")
+        
+        return expiry
+    
+    async def cancel_order(self, order_id: str, order_type: str = 'stock') -> bool:
+        """Cancel an open order"""
+        if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
+            return False
+        
+        try:
+            def do_cancel():
+                if order_type == 'option':
+                    return rh.orders.cancel_option_order(order_id)
+                else:
+                    return rh.orders.cancel_stock_order(order_id)
+            
+            result = await asyncio.to_thread(do_cancel)
+            return result is not None
+            
+        except Exception as e:
+            print(f"[{self.name}] Error cancelling order {order_id}: {e}")
+            return False
+
+
+BrokerFactory.register_broker('ROBINHOOD', RobinhoodBroker)

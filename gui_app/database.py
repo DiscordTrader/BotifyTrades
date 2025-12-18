@@ -1870,7 +1870,7 @@ def get_bot_trades(channel_id: Optional[str] = None, symbol: Optional[str] = Non
             'channels': channels,
             'symbols': symbols,
             'statuses': ['OPEN', 'CLOSED', 'PENDING', 'CANCELLED'],
-            'brokers': ['WEBULL', 'WEBULL_PAPER', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'IBKR_PAPER']
+            'brokers': ['WEBULL', 'WEBULL_PAPER', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'IBKR_PAPER', 'ROBINHOOD']
         }
     }
 
@@ -3391,6 +3391,67 @@ def update_alpaca_live_settings(api_key: str, secret_key: str) -> bool:
         return True
     except Exception as e:
         print(f"[DATABASE] Error updating Alpaca Live settings: {e}")
+        return False
+
+
+# ============ ROBINHOOD SETTINGS ============
+
+def get_robinhood_settings() -> Dict[str, str]:
+    """Get Robinhood credentials from database
+    
+    WARNING: Robinhood has NO paper trading mode.
+    All trades are executed with REAL money.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT key, value FROM settings WHERE key IN ("robinhood_username", "robinhood_password", "robinhood_totp_secret")')
+        rows = cursor.fetchall()
+        settings = {}
+        for row in rows:
+            settings[row['key']] = row['value'] or ''
+        return settings
+    except Exception as e:
+        print(f"[DATABASE] Error getting Robinhood settings: {e}")
+        return {'robinhood_username': '', 'robinhood_password': '', 'robinhood_totp_secret': ''}
+
+
+def update_robinhood_settings(username: str, password: str, totp_secret: str) -> bool:
+    """Update Robinhood credentials in database
+    
+    Args:
+        username: Robinhood account email
+        password: Robinhood account password
+        totp_secret: 2FA TOTP secret from authenticator setup
+    
+    WARNING: Robinhood has NO paper trading mode.
+    All trades are executed with REAL money.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT OR REPLACE INTO settings (key, value, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+        ''', ('robinhood_username', username))
+        
+        cursor.execute('''
+            INSERT OR REPLACE INTO settings (key, value, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+        ''', ('robinhood_password', password))
+        
+        cursor.execute('''
+            INSERT OR REPLACE INTO settings (key, value, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+        ''', ('robinhood_totp_secret', totp_secret))
+        
+        conn.commit()
+        print("[DATABASE] ✓ Robinhood credentials updated (WARNING: LIVE trading only)")
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error updating Robinhood settings: {e}")
         return False
 
 

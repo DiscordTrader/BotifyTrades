@@ -4999,6 +4999,51 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    # Robinhood Settings (WARNING: LIVE trading only, no paper mode)
+    @app.route('/api/settings/robinhood', methods=['GET'])
+    def api_get_robinhood_settings():
+        """Get Robinhood settings"""
+        try:
+            settings = db.get_robinhood_settings()
+            return jsonify(settings)
+        except Exception as e:
+            print(f"[API] Error fetching Robinhood settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/settings/robinhood', methods=['POST'])
+    def api_update_robinhood_settings():
+        """Update Robinhood settings
+        
+        WARNING: Robinhood has NO paper trading mode.
+        All trades executed will be with REAL money.
+        """
+        try:
+            data = request.json
+            username = data.get('robinhood_username', '').strip()
+            password = data.get('robinhood_password', '').strip()
+            totp_secret = data.get('robinhood_totp_secret', '').strip()
+            
+            if not username or not password:
+                return jsonify({'success': False, 'error': 'Username and password are required'}), 400
+            
+            print(f"[API] Saving Robinhood credentials - Username: {username[:3]}***")
+            print(f"[API] ⚠️  WARNING: Robinhood has NO paper trading - all trades are LIVE")
+            success = db.update_robinhood_settings(username, password, totp_secret)
+            if success:
+                print(f"[API] ✓ Robinhood credentials saved successfully")
+                return jsonify({
+                    'success': True, 
+                    'message': 'Robinhood credentials saved. WARNING: All trades are LIVE (no paper trading).'
+                })
+            else:
+                print(f"[API] ✗ Failed to save Robinhood credentials")
+                return jsonify({'success': False, 'error': 'Failed to save credentials'}), 500
+        except Exception as e:
+            print(f"[API] ✗ Error updating Robinhood settings: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/api/trades/clear-stale', methods=['POST'])
     @login_required
     def api_clear_stale_trades():
@@ -6635,6 +6680,14 @@ def register_routes(app):
                 else:
                     set_broker_status('ibkr_live', False, 'disconnected')
                     status['ibkr_live'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+                
+                # Robinhood broker (LIVE only - no paper mode)
+                if hasattr(_bot_instance, 'robinhood_broker') and _bot_instance.robinhood_broker:
+                    set_broker_status('robinhood', True, 'connected')
+                    status['robinhood'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': {'mode': 'LIVE'}}
+                else:
+                    set_broker_status('robinhood', False, 'disconnected')
+                    status['robinhood'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
             
             return jsonify({
                 'success': True,
@@ -7219,7 +7272,7 @@ def register_routes(app):
         try:
             from .broker_credentials_service import set_broker_status, get_discord_credentials, get_webull_credentials, get_alpaca_credentials, get_ibkr_credentials
             
-            valid_brokers = ['discord', 'webull_live', 'webull_paper', 'alpaca_live', 'alpaca_paper', 'ibkr_live', 'ibkr_paper', 'tastytrade_live', 'tastytrade_paper']
+            valid_brokers = ['discord', 'webull_live', 'webull_paper', 'alpaca_live', 'alpaca_paper', 'ibkr_live', 'ibkr_paper', 'tastytrade_live', 'tastytrade_paper', 'robinhood']
             
             if broker_id not in valid_brokers:
                 return jsonify({'success': False, 'error': f'Invalid broker ID: {broker_id}'}), 400
@@ -7497,6 +7550,82 @@ def register_routes(app):
                     traceback.print_exc()
                     set_broker_status(broker_id, False, 'error', error_msg)
                     return jsonify({'success': False, 'error': f'Tastytrade connection failed: {error_msg}'}), 400
+            
+            elif broker_id == 'robinhood':
+                # WARNING: Robinhood has NO paper trading - all trades are LIVE
+                print(f"[API] ⚠️  Robinhood connection - WARNING: NO PAPER MODE, ALL TRADES ARE LIVE")
+                
+                rh_settings = db.get_robinhood_settings()
+                username = rh_settings.get('robinhood_username', '')
+                password = rh_settings.get('robinhood_password', '')
+                totp_secret = rh_settings.get('robinhood_totp_secret', '')
+                
+                if not username or not password:
+                    set_broker_status(broker_id, False, 'error', 'No Robinhood credentials configured')
+                    return jsonify({'success': False, 'error': 'No Robinhood credentials configured. Please save username and password first.'}), 400
+                
+                try:
+                    import robin_stocks.robinhood as rh
+                    import pyotp
+                    
+                    # Generate TOTP code if secret is provided
+                    mfa_code = None
+                    if totp_secret:
+                        try:
+                            mfa_code = pyotp.TOTP(totp_secret).now()
+                            print(f"[API] Robinhood: Generated 2FA code")
+                        except Exception as totp_err:
+                            print(f"[API] Robinhood: 2FA generation failed: {totp_err}")
+                    
+                    # Login to Robinhood
+                    login_result = rh.login(
+                        username=username,
+                        password=password,
+                        mfa_code=mfa_code,
+                        store_session=True,
+                        expiresIn=86400
+                    )
+                    
+                    if login_result and 'access_token' in login_result:
+                        # Get account info
+                        account = rh.profiles.load_account_profile()
+                        portfolio = rh.profiles.load_portfolio_profile()
+                        
+                        buying_power = float(account.get('buying_power', 0) or 0) if account else 0
+                        portfolio_value = float(portfolio.get('equity', 0) or 0) if portfolio else 0
+                        cash = float(account.get('cash', 0) or 0) if account else 0
+                        
+                        account_info = {
+                            'buying_power': buying_power,
+                            'portfolio_value': portfolio_value,
+                            'cash': cash,
+                            'mode': 'LIVE',
+                            'warning': 'NO PAPER MODE - All trades use real money'
+                        }
+                        
+                        set_broker_status(broker_id, True, 'connected', account_info=account_info)
+                        
+                        return jsonify({
+                            'success': True,
+                            'message': 'Robinhood connected successfully! WARNING: All trades are LIVE.',
+                            'status': 'connected',
+                            'account_info': account_info
+                        })
+                    else:
+                        error_detail = login_result.get('detail', 'Login failed') if login_result else 'No response'
+                        set_broker_status(broker_id, False, 'error', error_detail)
+                        return jsonify({'success': False, 'error': f'Robinhood login failed: {error_detail}'}), 400
+                        
+                except ImportError:
+                    set_broker_status(broker_id, False, 'error', 'robin-stocks library not installed')
+                    return jsonify({'success': False, 'error': 'robin-stocks library not installed. Run: pip install robin-stocks pyotp'}), 400
+                except Exception as rh_err:
+                    error_msg = str(rh_err)
+                    print(f"[API] Robinhood connection error: {error_msg}")
+                    import traceback
+                    traceback.print_exc()
+                    set_broker_status(broker_id, False, 'error', error_msg)
+                    return jsonify({'success': False, 'error': f'Robinhood connection failed: {error_msg}'}), 400
             
             return jsonify({'success': False, 'error': 'Broker connection not implemented'}), 501
             
