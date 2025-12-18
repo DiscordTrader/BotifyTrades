@@ -6818,13 +6818,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 'intended_price': signal.get('price'),
                                                 'executed_price': signal.get('price'),
                                                 'executed': True,
-                                                'broker': broker_resp.get('broker', 'Webull'),
+                                                'broker': (broker_resp.get('broker') or 'WEBULL').upper(),
                                                 'order_id': broker_resp.get('orderId'),
                                                 'stop_loss_price': signal.get('stop_loss_price'),
                                                 'profit_target_price': signal.get('profit_target_price')
                                             }
                                             db.add_trade(trade_data)
-                                            _original_print(f"[DATABASE] ✓ Trade saved for {broker_resp.get('broker')} qty={executed_qty} with SL=${trade_data.get('stop_loss_price')} Target=${trade_data.get('profit_target_price')}")
+                                            _original_print(f"[DATABASE] ✓ Trade saved for {trade_data['broker']} qty={executed_qty} with SL=${trade_data.get('stop_loss_price')} Target=${trade_data.get('profit_target_price')}")
                                 else:
                                     # Single broker execution - use executed_qty from response
                                     executed_qty = resp.get('executed_qty', signal['qty'])
@@ -6841,13 +6841,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         'intended_price': signal.get('price'),
                                         'executed_price': signal.get('price'),
                                         'executed': True,
-                                        'broker': resp.get('broker', 'Webull'),
+                                        'broker': (resp.get('broker') or 'WEBULL').upper(),
                                         'order_id': resp.get('orderId'),
                                         'stop_loss_price': signal.get('stop_loss_price'),
                                         'profit_target_price': signal.get('profit_target_price')
                                     }
                                     db.add_trade(trade_data)
-                                    _original_print(f"[DATABASE] ✓ Trade saved qty={executed_qty} with SL=${trade_data.get('stop_loss_price')} Target=${trade_data.get('profit_target_price')}")
+                                    _original_print(f"[DATABASE] ✓ Trade saved qty={executed_qty} broker={trade_data['broker']} with SL=${trade_data.get('stop_loss_price')} Target=${trade_data.get('profit_target_price')}")
                             
                             elif signal['action'] == 'STC':
                                 # Handle STC trades - especially for risk management exits
@@ -6866,13 +6866,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     'executed_price': signal.get('price'),
                                     'executed': True,
                                     'status': 'CLOSED',
-                                    'broker': resp.get('broker', 'Webull'),
+                                    'broker': (resp.get('broker') or 'WEBULL').upper(),
                                     'order_id': resp.get('orderId'),
                                     'risk_trigger': signal.get('risk_trigger'),
                                     'origin_trade_id': signal.get('origin_trade_id')
                                 }
                                 stc_trade_id = db.add_trade(trade_data)
-                                _original_print(f"[DATABASE] ✓ STC Trade #{stc_trade_id} saved")
+                                _original_print(f"[DATABASE] ✓ STC Trade #{stc_trade_id} saved broker={trade_data['broker']}")
                                 
                                 # If this is a risk management exit, close the original BTO trade
                                 if signal.get('origin_trade_id'):
