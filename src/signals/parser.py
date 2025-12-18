@@ -14,6 +14,56 @@ from .patterns import (
 )
 
 
+# Bullwinkle format patterns
+# Entry: :green_alert: NVDA | $177.5 C 1.32
+BULLWINKLE_ENTRY_PATTERN = re.compile(
+    r':?green_alert:?\s*([A-Z]+)\s*\|\s*\$?([\d.]+)\s*([CP])\s*([\d.]+)',
+    re.IGNORECASE
+)
+
+# Exit: :SirenRed: NVDA | 1.44 OUT ALL ✅  or  :SirenRed: TSLA | 5.00 OUT ✅
+BULLWINKLE_EXIT_PATTERN = re.compile(
+    r':?SirenRed:?\s*([A-Z]+)\s*\|\s*([\d.]+)\s*OUT',
+    re.IGNORECASE
+)
+
+
+def normalize_bullwinkle_format(text: str) -> str:
+    """
+    Convert Bullwinkle scalp format to standard BTO/STC format.
+    
+    Entry: :green_alert: NVDA | $177.5 C 1.32 → BTO NVDA 177.5 C @ 1.32
+    Exit: :SirenRed: NVDA | 1.44 OUT ALL ✅ → STC NVDA @ 1.44
+    
+    Note: Exit signals don't include strike/expiry, so they need position lookup.
+    """
+    # Check for exit signal first (more specific pattern)
+    exit_match = BULLWINKLE_EXIT_PATTERN.search(text)
+    if exit_match:
+        symbol, price = exit_match.groups()
+        # Return as stock-style STC - the caller will need to find the matching position
+        normalized = f"STC {symbol.upper()} @ {price}"
+        print(f"[BULLWINKLE] Converted exit: '{text[:60]}' → '{normalized}'")
+        return normalized
+    
+    # Check for entry signal
+    entry_match = BULLWINKLE_ENTRY_PATTERN.search(text)
+    if entry_match:
+        symbol, strike, opt_type, price = entry_match.groups()
+        # Get current expiry (assume 0DTE or next trading day)
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        # Default to today's date for 0DTE scalps
+        expiry = now.strftime("%m/%d")
+        
+        normalized = f"BTO {symbol.upper()} {strike} {opt_type.upper()} {expiry} @ {price}"
+        print(f"[BULLWINKLE] Converted entry: '{text[:60]}' → '{normalized}'")
+        return normalized
+    
+    # Not Bullwinkle format, return original
+    return text
+
+
 _option_regex = None
 _stock_regex = None
 

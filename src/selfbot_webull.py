@@ -5412,8 +5412,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     await message.channel.send("❌ Usage: `!convert [TEXT]`\nExample: `!convert Added back 20% META`")
                 return
         
+        # Pre-process special formats (Bullwinkle scalps, etc.)
+        from src.signals.parser import normalize_bullwinkle_format
+        normalized_content = normalize_bullwinkle_format(message.content)
+        
         # Parse trading signals
-        opt = parse_option_signal(message.content)
+        opt = parse_option_signal(normalized_content)
         if opt:
             # Handle price-only STC signals - find most recent open position from this channel
             if opt.get('_price_only') and opt.get('symbol') is None:
@@ -5538,8 +5542,70 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             return
         
-        stk = parse_stock_signal(message.content)
+        stk = parse_stock_signal(normalized_content)
         if stk:
+            # Check if this is an STC that should close an option position (Bullwinkle format)
+            if stk['action'] == 'STC' and normalized_content != message.content:
+                # This was normalized from Bullwinkle format - look for matching option position
+                try:
+                    from gui_app.database import get_connection
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    # Find most recent open option position for this symbol from this channel
+                    cursor.execute('''
+                        SELECT id, symbol, strike, call_put, expiry, quantity
+                        FROM trades 
+                        WHERE symbol = ? 
+                        AND direction = 'BTO' 
+                        AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                        AND strike IS NOT NULL
+                        ORDER BY created_at DESC 
+                        LIMIT 1
+                    ''', (stk['symbol'],))
+                    open_position = cursor.fetchone()
+                    if open_position:
+                        # Convert stock STC to option STC
+                        opt = {
+                            'asset': 'option',
+                            'action': 'STC',
+                            'qty': open_position['quantity'] or 1,
+                            'symbol': stk['symbol'],
+                            'strike': open_position['strike'],
+                            'opt_type': open_position['call_put'],
+                            'expiry': open_position['expiry'],
+                            'price': stk['price'],
+                            'is_market_order': stk.get('is_market_order', False)
+                        }
+                        print(f"[BULLWINKLE STC] ✓ Converted to option close: STC {opt['qty']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ ${opt['price']}")
+                        
+                        # Now process as option signal
+                        author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                        self._save_signal_to_db(opt, message.channel.id, message.id, author_name)
+                        print(f"[DATABASE] ✓ Signal saved to database with option details")
+                        
+                        if execute_enabled:
+                            print(f"[ROUTE] EXECUTE enabled - adding to order queue")
+                            enabled_brokers_json = channel_info.get('enabled_brokers') if channel_info else None
+                            if enabled_brokers_json:
+                                try:
+                                    import json
+                                    opt['_enabled_brokers'] = json.loads(enabled_brokers_json)
+                                    print(f"[MULTI-BROKER] Enabled brokers: {opt['_enabled_brokers']}")
+                                except:
+                                    pass
+                            if channel_info:
+                                opt['channel_record_id'] = channel_info.get('id')
+                                opt['channel_id'] = str(message.channel.id)
+                                opt['message_id'] = str(message.id)
+                                opt['author'] = author_name
+                            await self.order_queue.put(opt)
+                            print(f"[QUEUE] ✓ Signal queued for execution")
+                        return
+                    else:
+                        print(f"[BULLWINKLE STC] ⚠️ No open option position found for {stk['symbol']} - processing as stock")
+                except Exception as e:
+                    print(f"[BULLWINKLE STC] ❌ Error looking up position: {e}")
+            
             print(f"[SIGNAL PARSED] ✓ Stock Signal: {stk['action']} {stk['qty']} {stk['symbol']} @ ${stk['price']}")
             print(f"[CHANNEL CONFIG] execute_enabled={execute_enabled}, track_enabled={track_enabled}, paper_trade_enabled={channel_info.get('paper_trade_enabled', 0) if channel_info else 0}")
             
