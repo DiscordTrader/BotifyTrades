@@ -1936,7 +1936,7 @@
   },
   "Webull_NKE_70.0_12/19_C": {
     "entry_price": 0.99,
-    "highest_price": 1.25,
+    "highest_price": 1.265,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -1981,7 +1981,7 @@
   },
   "ALPACA_PAPER_NKE_70.0_2025-12-19_C": {
     "entry_price": 1.17,
-    "highest_price": 1.23,
+    "highest_price": 1.25,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -1996,7 +1996,7 @@
   },
   "ALPACA_PAPER_NVDA_177.5_2025-12-19_C": {
     "entry_price": 0.28,
-    "highest_price": 0.47,
+    "highest_price": 0.49,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
