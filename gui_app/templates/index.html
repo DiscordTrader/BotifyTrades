@@ -1575,10 +1575,15 @@ function renderBotTradesTable(trades) {
         const entryPrice = parseFloat(trade.price) || 0;
         const currentPrice = parseFloat(trade.current_price) || entryPrice;
         
-        // Format time in EST
+        // Format time in EST (timestamps are stored in UTC)
         let timeDisplay = '-';
         if (trade.executed_at) {
-            const d = new Date(trade.executed_at);
+            // Ensure timestamp is treated as UTC by appending 'Z' if missing
+            let ts = trade.executed_at;
+            if (!ts.endsWith('Z') && !ts.includes('+') && !ts.includes('-', 10)) {
+                ts = ts.replace(' ', 'T') + 'Z';
+            }
+            const d = new Date(ts);
             timeDisplay = d.toLocaleString('en-US', { 
                 month: 'short', 
                 day: 'numeric', 
