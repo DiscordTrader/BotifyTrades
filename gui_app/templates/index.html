@@ -1575,11 +1575,17 @@ function renderBotTradesTable(trades) {
         const entryPrice = parseFloat(trade.price) || 0;
         const currentPrice = parseFloat(trade.current_price) || entryPrice;
         
-        // Format time
+        // Format time in EST
         let timeDisplay = '-';
         if (trade.executed_at) {
             const d = new Date(trade.executed_at);
-            timeDisplay = d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            timeDisplay = d.toLocaleString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                hour: '2-digit', 
+                minute: '2-digit',
+                timeZone: 'America/New_York'
+            });
         }
         
         html += `

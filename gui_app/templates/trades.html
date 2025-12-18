@@ -403,7 +403,7 @@ function displayFilledOrdersTable(orders) {
             '<span style="background: rgba(0,255,136,0.2); color: #0f8; padding: 2px 8px; border-radius: 4px; font-weight: 600;">BUY</span>' : 
             '<span style="background: rgba(255,68,68,0.2); color: #f44; padding: 2px 8px; border-radius: 4px; font-weight: 600;">SELL</span>';
         
-        const filledTime = order.filled_time ? new Date(order.filled_time).toLocaleString() : (order.created_time ? new Date(order.created_time).toLocaleString() : 'N/A');
+        const filledTime = order.filled_time ? new Date(order.filled_time).toLocaleString('en-US', { timeZone: 'America/New_York' }) : (order.created_time ? new Date(order.created_time).toLocaleString('en-US', { timeZone: 'America/New_York' }) : 'N/A');
         
         tableHTML += `<tr>
             <td><strong>${symbolDisplay}</strong></td>
@@ -835,7 +835,7 @@ function displaySignalMessagesTable(messages) {
     
     for (const msg of messages) {
         const parsed = msg.parsed_signal;
-        const time = msg.created_at ? new Date(msg.created_at).toLocaleString() : 'Unknown';
+        const time = msg.created_at ? new Date(msg.created_at).toLocaleString('en-US', { timeZone: 'America/New_York' }) : 'Unknown';
         const symbol = msg.symbol || (parsed ? parsed.symbol : '-');
         const direction = parsed ? (parsed.direction || parsed.action || '-') : '-';
         const dirClass = direction.toUpperCase().includes('BUY') || direction.toUpperCase().includes('LONG') ? 'success' : 
