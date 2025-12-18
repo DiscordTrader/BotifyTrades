@@ -4,6 +4,11 @@
 **v3.2.4** (2025-12-18)
 
 ## Recent Changes (Milestone 5) - Database Synchronization & Credential Consistency
+- **GitHub Release Update Checking**: System Health diagnostics now check GitHub releases for available updates
+  - Displays current version vs latest available version
+  - Shows WARN if update available, PASS if up to date
+  - Detects and reports network/API failures
+  - Uses existing VersionChecker infrastructure (no duplicate code)
 - **Fixed _save_trade_to_db() Signature**: Corrected function to use dict parameter instead of kwargs
 - **Order ID Tracking**: Now saves order_id to database for proper trade-to-order matching
 - **Quantity Sync from Broker**: Database quantities now sync with actual broker positions in real-time
