@@ -63,7 +63,8 @@ def send_trade_notification(
         
         # Send as plain text content (bot-readable format)
         payload = {
-            "content": message
+            "content": message,
+            "username": "BotifyTrades"
         }
         
         response = requests.post(webhook_url, json=payload, timeout=5)
@@ -148,7 +149,8 @@ def send_cancel_notification(symbol: str, quantity: int, price: float, is_option
         
         # Send as plain text content (bot-readable format)
         payload = {
-            "content": message
+            "content": message,
+            "username": "BotifyTrades"
         }
         
         response = requests.post(webhook_url, json=payload, timeout=5)

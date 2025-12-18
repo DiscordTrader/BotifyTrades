@@ -1906,7 +1906,7 @@
   },
   "ALPACA_PAPER_TSLA_507.5_2025-12-26_C": {
     "entry_price": 4.95,
-    "highest_price": 5.75,
+    "highest_price": 6.5,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -2056,7 +2056,7 @@
   },
   "ALPACA_PAPER_TSLA_502.5_2025-12-19_C": {
     "entry_price": 0.67,
-    "highest_price": 1.73,
+    "highest_price": 2.11,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -2098,5 +2098,20 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-18T15:51:34.043251"
+  },
+  "ALPACA_PAPER_SPY_682.0_2025-12-18_C": {
+    "entry_price": 0.44,
+    "highest_price": 0.4,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "SPY251218C00682000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-18T16:12:58.913550"
   }
 }
