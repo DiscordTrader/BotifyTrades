@@ -1,7 +1,7 @@
 # BotifyTrades - Discord Trading Bot
 
 ## Version
-**v3.5.0 - MILESTONE 5** (2025-12-18)
+**v3.2.4** (2025-12-18)
 
 ## Recent Changes (Milestone 5) - Database Synchronization Fixes
 - **Fixed _save_trade_to_db() Signature**: Corrected function to use dict parameter instead of kwargs

@@ -1,10 +1,10 @@
 # BotifyTrades - Discord Trading Bot
 
-**Version 3.5.0** | Multi-Broker Discord Trading Automation
+**Version 3.2.4** | Multi-Broker Discord Trading Automation
 
 A Discord self-bot that automatically detects BTO/STC trading signals in Discord channels and executes trades across multiple brokers (Webull, Alpaca, Tastytrade, IBKR, Robinhood).
 
-## What's New in v3.5.0 (Milestone 5)
+## What's New in v3.2.4
 - Fixed database synchronization bugs for reliable trade tracking
 - Quantity sync from broker positions in real-time
 - 60-second grace period prevents premature trade closures
