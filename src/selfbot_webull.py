@@ -5557,9 +5557,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         FROM trades 
                         WHERE symbol = ? 
                         AND direction = 'BTO' 
-                        AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                        AND status = 'OPEN'
                         AND strike IS NOT NULL
-                        ORDER BY created_at DESC 
+                        ORDER BY id DESC 
                         LIMIT 1
                     ''', (stk['symbol'],))
                     open_position = cursor.fetchone()
