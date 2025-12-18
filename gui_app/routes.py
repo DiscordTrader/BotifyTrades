@@ -4004,11 +4004,16 @@ def register_routes(app):
                     live_pos = live_position_map[pos_key]
                     first_trade = trades[0]  # Use first trade for metadata
                     
-                    # Calculate average entry price from all lots
-                    total_qty = sum(t.get('quantity', 0) for t in trades if t['status'] == 'OPEN')
-                    total_cost = sum(t.get('quantity', 0) * (t.get('executed_price') or t.get('intended_price', 0)) 
-                                   for t in trades if t['status'] == 'OPEN')
-                    avg_entry = (total_cost / total_qty) if total_qty > 0 else 0
+                    # Use broker's avg_cost as authoritative source for live positions
+                    # Broker tracks ALL orders including those made outside this bot
+                    broker_avg_cost = live_pos.get('avg_cost', 0)
+                    
+                    # Fallback: Calculate from database if broker doesn't provide avg_cost
+                    if not broker_avg_cost or broker_avg_cost <= 0:
+                        total_qty = sum(t.get('quantity', 0) for t in trades if t['status'] == 'OPEN')
+                        total_cost = sum(t.get('quantity', 0) * (t.get('executed_price') or t.get('intended_price', 0)) 
+                                       for t in trades if t['status'] == 'OPEN')
+                        broker_avg_cost = (total_cost / total_qty) if total_qty > 0 else 0
                     
                     # Get channel info for risk settings (use Discord channel ID lookup)
                     channel_id = first_trade.get('channel_id')
@@ -4022,10 +4027,10 @@ def register_routes(app):
                     merged.append({
                         **first_trade,
                         'quantity': int(live_pos['quantity']),
-                        'entry_price': avg_entry or live_pos['avg_cost'],
+                        'entry_price': broker_avg_cost,
                         'current_price': live_pos['current_price'],
                         'pnl': live_pos['unrealized_pl'],
-                        'pnl_percent': ((live_pos['current_price'] - (avg_entry or live_pos['avg_cost'])) / (avg_entry or live_pos['avg_cost']) * 100) if (avg_entry or live_pos['avg_cost']) > 0 else 0,
+                        'pnl_percent': ((live_pos['current_price'] - broker_avg_cost) / broker_avg_cost * 100) if broker_avg_cost > 0 else 0,
                         'source': 'live_brokerage',
                         'status': 'OPEN',  # Live brokerage positions are always OPEN
                         'fill_status': 'Filled',
