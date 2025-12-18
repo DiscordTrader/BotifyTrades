@@ -7,7 +7,7 @@ import asyncio
 import logging
 import sys
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from gui_app.database import Database
 from gui_app.lot_matcher import get_matcher
@@ -403,38 +403,82 @@ class BrokerSyncService:
                         executed_at=datetime.now().isoformat()
                     )
                 
-                # Update OPEN trade with current position data (UPDATE CURRENT PRICE AND P&L!)
+                # Update OPEN trade with current position data (UPDATE CURRENT PRICE, QUANTITY, AND P&L!)
                 elif current_status == 'OPEN':
                     current_price = position.get('current_price')
+                    broker_quantity = float(position.get('quantity', 0))
+                    db_quantity = float(trade.get('quantity') or 0)
+                    
+                    # Get entry price for P&L calculation
+                    entry_price = float(trade.get('executed_price') or trade.get('price') or 0)
+                    asset_type = trade.get('asset_type', 'option')
+                    
+                    # Use broker quantity for P&L calculation (source of truth)
+                    quantity = broker_quantity if broker_quantity > 0 else db_quantity
+                    
+                    # Calculate P&L
+                    if entry_price > 0 and current_price:
+                        multiplier = 100 if asset_type == 'option' else 1
+                        pnl = (current_price - entry_price) * quantity * multiplier
+                        pnl_percent = ((current_price - entry_price) / entry_price) * 100
+                    else:
+                        pnl = 0
+                        pnl_percent = 0
+                    
+                    # Build update dict - always sync quantity from broker
+                    update_fields = {'pnl': pnl, 'pnl_percent': pnl_percent}
                     if current_price:
-                        # Get entry price and quantity from database trade for P&L calculation
-                        entry_price = float(trade.get('executed_price') or trade.get('price') or 0)
-                        quantity = float(trade.get('quantity') or position['quantity'] or 1)
-                        asset_type = trade.get('asset_type', 'option')
-                        
-                        # Calculate P&L
-                        if entry_price > 0:
-                            multiplier = 100 if asset_type == 'option' else 1
-                            pnl = (current_price - entry_price) * quantity * multiplier
-                            pnl_percent = ((current_price - entry_price) / entry_price) * 100
-                        else:
-                            pnl = 0
-                            pnl_percent = 0
-                        
-                        # Update all price-related fields
-                        self.db.update_trade(trade_id, current_price=current_price, pnl=pnl, pnl_percent=pnl_percent)
-                    print(f"[SYNC] Trade #{trade_id} ({symbol}) still OPEN (qty={position['quantity']}, price=${current_price})")
+                        update_fields['current_price'] = current_price
+                    
+                    # CRITICAL: Sync quantity from broker if different
+                    if broker_quantity > 0 and abs(broker_quantity - db_quantity) > 0.001:
+                        update_fields['quantity'] = broker_quantity
+                        print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) quantity synced: DB={db_quantity} → Broker={broker_quantity}")
+                    
+                    # Update all fields
+                    self.db.update_trade(trade_id, **update_fields)
+                    print(f"[SYNC] Trade #{trade_id} ({symbol}) still OPEN (qty={quantity}, price=${current_price})")
             
             # CRITICAL: Trade not in pending or positions = order cancelled or position closed
             # Brokers remove closed positions entirely, so absence means it's gone
             else:
                 if current_status == 'PENDING':
-                    # Pending order no longer exists = cancelled or rejected
+                    # GRACE PERIOD: Don't close PENDING trades too quickly (prevents race condition)
+                    # Wait at least 60 seconds after trade creation before marking as cancelled
+                    trade_created_at = trade.get('created_at') or trade.get('executed_at')
+                    grace_period_seconds = 60
+                    
+                    if trade_created_at:
+                        try:
+                            # Parse creation time
+                            if isinstance(trade_created_at, str):
+                                # Handle various datetime formats
+                                for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S.%f']:
+                                    try:
+                                        created_time = datetime.strptime(trade_created_at.split('.')[0], fmt.split('.')[0])
+                                        break
+                                    except ValueError:
+                                        continue
+                                else:
+                                    created_time = datetime.now() - timedelta(seconds=grace_period_seconds + 1)
+                            else:
+                                created_time = trade_created_at
+                            
+                            seconds_since_created = (datetime.now() - created_time).total_seconds()
+                            
+                            if seconds_since_created < grace_period_seconds:
+                                print(f"[SYNC] Trade #{trade_id} ({symbol}) PENDING - within grace period ({seconds_since_created:.0f}s < {grace_period_seconds}s), skipping")
+                                continue
+                        except Exception as parse_err:
+                            print(f"[SYNC] ⚠️ Could not parse trade created_at: {parse_err}")
+                    
+                    # Pending order no longer exists after grace period = cancelled or rejected
                     print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) not in pending orders: PENDING → CLOSED (cancelled)")
                     self.db.update_trade(
                         trade_id,
                         status='CLOSED',
-                        closed_at=datetime.now().isoformat()
+                        closed_at=datetime.now().isoformat(),
+                        close_reason='order_cancelled_or_rejected'
                     )
                 elif current_status == 'OPEN':
                     # Open position no longer exists = broker closed it (manual close, stop/target hit, or liquidation)
@@ -458,13 +502,14 @@ class BrokerSyncService:
                         pnl = (exit_price - entry_price) * quantity * multiplier
                         pnl_percent = ((exit_price - entry_price) / entry_price) * 100
                     
-                    # Update trade with final status
+                    # Update trade with final status and close_reason
                     self.db.update_trade(
                         trade_id,
                         status='CLOSED',
                         closed_at=datetime.now().isoformat(),
                         pnl=pnl,
-                        pnl_percent=pnl_percent
+                        pnl_percent=pnl_percent,
+                        close_reason='broker_closed_position'
                     )
                     
                     # Create lot_closure for PNL/leaderboard tracking

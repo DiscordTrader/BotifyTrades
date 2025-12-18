@@ -4075,19 +4075,35 @@ class SelfClient(discord.Client):
         try:
             # Determine broker from execution result or signal
             broker = execution_result.get('broker', 'webull')
+            # Normalize broker name to uppercase for consistency
+            if broker:
+                broker = broker.upper()
             
-            self.db.add_trade(
-                symbol=signal['symbol'],
-                asset_type=signal['asset'],
-                action=signal['action'],
-                quantity=signal['qty'],
-                price=signal.get('price'),
-                broker=broker,
-                discord_channel_id=str(channel_id),
-                status='PENDING' if signal['action'] == 'BTO' else 'CLOSED'
-            )
+            # Build trade data dict matching add_trade() expected format
+            trade_data = {
+                'symbol': signal['symbol'],
+                'asset_type': signal.get('asset', 'stock'),
+                'direction': signal['action'],
+                'quantity': signal['qty'],
+                'intended_price': signal.get('price'),
+                'executed_price': signal.get('price'),
+                'broker': broker,
+                'channel_id': str(channel_id),
+                'message_id': signal.get('message_id'),
+                'order_id': execution_result.get('orderId') or execution_result.get('order_id'),
+                'strike': signal.get('strike'),
+                'expiry': signal.get('expiry'),
+                'call_put': signal.get('opt_type') or signal.get('call_put'),
+                'status': 'PENDING' if signal['action'] == 'BTO' else 'CLOSED',
+                'source': 'discord'
+            }
+            
+            self.db.add_trade(trade_data)
+            print(f"[DATABASE] ✓ Trade saved: {signal['symbol']} {signal['action']} qty={signal['qty']} order_id={trade_data.get('order_id')}")
         except Exception as e:
             print(f"[DATABASE] Error saving trade: {e}")
+            import traceback
+            traceback.print_exc()
 
     async def setup(self):
         # Create async objects NOW when event loop is properly set up (fixes Windows "different loop" error)
