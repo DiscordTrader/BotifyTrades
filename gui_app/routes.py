@@ -4907,15 +4907,18 @@ def register_routes(app):
             
             embed = {
                 "title": "🔔 Webhook Test",
-                "description": "**Test notification from QuantumPulse**\n\nYour webhook is configured correctly!",
+                "description": "**Test notification from BotifyTrades**\n\nYour webhook is configured correctly!",
                 "color": 0x0A84FF,  # Blue
                 "timestamp": datetime.utcnow().isoformat(),
                 "footer": {
-                    "text": "Ψ∿ QuantumPulse Trading Bot"
+                    "text": "BotifyTrades"
                 }
             }
             
-            payload = {"embeds": [embed]}
+            payload = {
+                "embeds": [embed],
+                "username": "BotifyTrades"
+            }
             response = requests.post(webhook_url, json=payload, timeout=5)
             
             if response.status_code == 204:
