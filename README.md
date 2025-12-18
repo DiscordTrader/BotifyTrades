@@ -1,6 +1,15 @@
-# Discord Trading Bot for Webull
+# BotifyTrades - Discord Trading Bot
 
-A Discord self-bot that automatically detects BTO/STC trading signals in Discord channels and executes trades on Webull brokerage.
+**Version 3.5.0** | Multi-Broker Discord Trading Automation
+
+A Discord self-bot that automatically detects BTO/STC trading signals in Discord channels and executes trades across multiple brokers (Webull, Alpaca, Tastytrade, IBKR, Robinhood).
+
+## What's New in v3.5.0 (Milestone 5)
+- Fixed database synchronization bugs for reliable trade tracking
+- Quantity sync from broker positions in real-time
+- 60-second grace period prevents premature trade closures
+- Order ID tracking for proper trade-to-order matching
+- Broker name normalization for consistency
 
 ## ⚠️ Important Disclaimers
 
@@ -10,13 +19,15 @@ A Discord self-bot that automatically detects BTO/STC trading signals in Discord
 
 ## Features
 
-- ✅ Detects BTO/STC signals for both stocks and options
-- ✅ Supports lowercase and uppercase option types (50C or 50c)
-- ✅ Paper trading mode for safe testing
-- ✅ Secure credential management via environment variables
-- ✅ Multiple channel monitoring
-- ✅ Author and guild filtering
-- ✅ Comprehensive logging
+- ✅ **Multi-Broker Support**: Webull, Alpaca, Tastytrade, IBKR, Robinhood
+- ✅ **Options & Stocks**: Full support for both asset types
+- ✅ **Paper Trading**: Safe testing with Alpaca Paper, IBKR Paper
+- ✅ **Risk Management**: Automated stop-loss, profit targets, trailing stops
+- ✅ **Web Control Panel**: Flask-based GUI for easy management
+- ✅ **Real-time Sync**: Database stays synchronized with broker positions
+- ✅ **AI Signal Learning**: Teach custom signal formats once, use forever
+- ✅ **Per-Channel Settings**: Independent risk settings per Discord channel
+- ✅ **PNL Tracking**: Comprehensive profit/loss analytics and leaderboard
 
 ## Signal Formats
 
