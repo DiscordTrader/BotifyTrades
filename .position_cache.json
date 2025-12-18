@@ -1906,7 +1906,7 @@
   },
   "ALPACA_PAPER_TSLA_507.5_2025-12-26_C": {
     "entry_price": 4.95,
-    "highest_price": 6.55,
+    "highest_price": 6.7,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -2056,7 +2056,7 @@
   },
   "ALPACA_PAPER_TSLA_502.5_2025-12-19_C": {
     "entry_price": 0.67,
-    "highest_price": 2.15,
+    "highest_price": 2.19,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
