@@ -2113,5 +2113,20 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-18T16:12:58.913550"
+  },
+  "ALPACA_PAPER_SPY_680.0_2025-12-18_C": {
+    "entry_price": 1.12,
+    "highest_price": 1.22,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "SPY251218C00680000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-18T16:22:58.227429"
   }
 }
