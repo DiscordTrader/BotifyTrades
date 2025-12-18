@@ -2315,6 +2315,7 @@ def register_routes(app):
     def api_alpaca_close_position(symbol: str) -> Any:
         """Close an Alpaca position by symbol with optional limit price and partial quantity"""
         import asyncio
+        from datetime import datetime
         
         if not _bot_instance or not hasattr(_bot_instance, 'paper_broker') or not _bot_instance.paper_broker:
             return jsonify({'success': False, 'error': 'Alpaca broker not initialized'}), 500
@@ -2323,6 +2324,11 @@ def register_routes(app):
             data = request.get_json(silent=True) or {}
             quantity = data.get('quantity')
             limit_price = data.get('limit_price')
+            
+            # Option details for OCC symbol construction
+            strike = data.get('strike')
+            expiry = data.get('expiry')
+            call_put = data.get('call_put') or data.get('option_type')
             
             # Convert limit_price to float if provided
             if limit_price is not None:
@@ -2334,11 +2340,42 @@ def register_routes(app):
                     return jsonify({'success': False, 'error': 'Invalid limit price format'}), 400
             
             order_type = f"LIMIT @ ${limit_price}" if limit_price else "MARKET"
-            print(f"[API] Closing Alpaca position: {symbol}, qty={quantity}, {order_type}")
+            
+            # Determine if this is an options close (has strike/expiry)
+            close_symbol = symbol
+            if strike and expiry and call_put:
+                # Build OCC symbol for options: SYMBOL + YYMMDD + C/P + 8-digit strike*1000
+                try:
+                    exp_str = expiry or ''
+                    if '/' in exp_str:
+                        parts = exp_str.split('/')
+                        if len(parts) == 2:
+                            month, day = parts[0].zfill(2), parts[1].zfill(2)
+                            year = str(datetime.now().year)[2:]
+                        else:
+                            month, day, year = parts[0].zfill(2), parts[1].zfill(2), parts[2][-2:]
+                    elif '-' in exp_str:
+                        parts = exp_str.split('-')
+                        year, month, day = parts[0][-2:], parts[1].zfill(2), parts[2].zfill(2)
+                    else:
+                        # Try as single format
+                        month, day = '12', '31'
+                        year = str(datetime.now().year)[2:]
+                    
+                    strike_val = float(strike)
+                    strike_occ = str(int(strike_val * 1000)).zfill(8)
+                    opt_type = call_put[0].upper() if call_put else 'C'
+                    
+                    close_symbol = f"{symbol}{year}{month}{day}{opt_type}{strike_occ}"
+                    print(f"[API] Closing Alpaca OPTIONS position: {close_symbol}, qty={quantity}, {order_type}")
+                except Exception as e:
+                    print(f"[API] Error building OCC symbol: {e}, falling back to {symbol}")
+            else:
+                print(f"[API] Closing Alpaca STOCK position: {symbol}, qty={quantity}, {order_type}")
             
             # Run close_position in the bot's event loop
             async def _close():
-                return await _bot_instance.paper_broker.close_position(symbol, quantity, limit_price)
+                return await _bot_instance.paper_broker.close_position(close_symbol, quantity, limit_price)
             
             future = asyncio.run_coroutine_threadsafe(_close(), _bot_instance.loop)
             result = future.result(timeout=15)

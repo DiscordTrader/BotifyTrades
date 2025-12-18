@@ -1041,15 +1041,15 @@ function renderPositionCards(trades) {
                         <div class="close-header">Close Position</div>
                         
                         <div class="quote-buttons">
-                            <button class="btn-quote bid" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', ${bidPrice.toFixed(2)})">
+                            <button class="btn-quote bid" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', ${bidPrice.toFixed(2)}, '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
                                 <span class="quote-label">BID</span>
                                 <span class="quote-price">$${bidPrice.toFixed(2)}</span>
                             </button>
-                            <button class="btn-quote mid" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', ${midPrice.toFixed(2)})">
+                            <button class="btn-quote mid" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', ${midPrice.toFixed(2)}, '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
                                 <span class="quote-label">MID</span>
                                 <span class="quote-price">$${midPrice.toFixed(2)}</span>
                             </button>
-                            <button class="btn-quote ask" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', ${askPrice.toFixed(2)})">
+                            <button class="btn-quote ask" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', ${askPrice.toFixed(2)}, '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
                                 <span class="quote-label">ASK</span>
                                 <span class="quote-price">$${askPrice.toFixed(2)}</span>
                             </button>
@@ -1061,10 +1061,10 @@ function renderPositionCards(trades) {
                         </div>
                         
                         <div class="close-buttons">
-                            <button class="btn-close limit" onclick="closeLimitOrder('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}')">
+                            <button class="btn-close limit" onclick="closeLimitOrder('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
                                 LIMIT
                             </button>
-                            <button class="btn-close market" onclick="closeMarketOrder('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}')">
+                            <button class="btn-close market" onclick="closeMarketOrder('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
                                 MARKET
                             </button>
                         </div>
@@ -1151,7 +1151,7 @@ function toggleDrawer(tradeId) {
 // ============== POSITION CLOSE FUNCTIONS ==============
 
 // Close at a specific price (BID/MID/ASK buttons from card)
-async function closePosition(tradeId, symbol, maxQuantity, broker, limitPrice) {
+async function closePosition(tradeId, symbol, maxQuantity, broker, limitPrice, strike, expiry, callPut) {
     const qtyInput = document.getElementById(`qty-${tradeId}`);
     const qty = qtyInput ? parseInt(qtyInput.value) : maxQuantity;
     
@@ -1160,11 +1160,11 @@ async function closePosition(tradeId, symbol, maxQuantity, broker, limitPrice) {
         return;
     }
     
-    await executeClose(tradeId, symbol, qty, broker, limitPrice, 'limit');
+    await executeClose(tradeId, symbol, qty, broker, limitPrice, 'limit', strike, expiry, callPut);
 }
 
 // Close at limit price from input field
-async function closeLimitOrder(tradeId, symbol, maxQuantity, broker) {
+async function closeLimitOrder(tradeId, symbol, maxQuantity, broker, strike, expiry, callPut) {
     const qtyInput = document.getElementById(`qty-${tradeId}`);
     const limitInput = document.getElementById(`limit-${tradeId}`);
     
@@ -1181,11 +1181,11 @@ async function closeLimitOrder(tradeId, symbol, maxQuantity, broker) {
         return;
     }
     
-    await executeClose(tradeId, symbol, qty, broker, limitPrice, 'limit');
+    await executeClose(tradeId, symbol, qty, broker, limitPrice, 'limit', strike, expiry, callPut);
 }
 
 // Close at market price
-async function closeMarketOrder(tradeId, symbol, maxQuantity, broker) {
+async function closeMarketOrder(tradeId, symbol, maxQuantity, broker, strike, expiry, callPut) {
     const qtyInput = document.getElementById(`qty-${tradeId}`);
     const qty = qtyInput ? parseInt(qtyInput.value) : maxQuantity;
     
@@ -1198,11 +1198,11 @@ async function closeMarketOrder(tradeId, symbol, maxQuantity, broker) {
         return;
     }
     
-    await executeClose(tradeId, symbol, qty, broker, null, 'market');
+    await executeClose(tradeId, symbol, qty, broker, null, 'market', strike, expiry, callPut);
 }
 
 // Core close execution function
-async function executeClose(tradeId, symbol, quantity, broker, limitPrice, orderType) {
+async function executeClose(tradeId, symbol, quantity, broker, limitPrice, orderType, strike, expiry, callPut) {
     if (isClosingPosition) {
         console.log('[CLOSE] Blocked: Another close in progress');
         alert('Please wait, another close operation is in progress');
@@ -1231,11 +1231,14 @@ async function executeClose(tradeId, symbol, quantity, broker, limitPrice, order
     try {
         let url, body;
         if (isAlpaca) {
-            // Alpaca uses symbol-based close
+            // Alpaca uses symbol-based close with option details for OCC symbol construction
             url = `/api/alpaca/positions/${encodeURIComponent(symbol)}/close`;
             body = JSON.stringify({ 
                 quantity: quantity,
-                limit_price: limitPrice
+                limit_price: limitPrice,
+                strike: strike || null,
+                expiry: expiry || null,
+                call_put: callPut || null
             });
         } else {
             // Webull uses trade ID-based close
