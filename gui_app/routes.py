@@ -3456,11 +3456,99 @@ def register_routes(app):
             strike = trade.get('strike')
             expiry = trade.get('expiry')
             call_put = (trade.get('call_put') or '').upper()
-            entry_price = float(trade.get('entry_price', 0))
+            entry_price = float(trade.get('executed_price') or trade.get('entry_price') or 0)
+            broker = (trade.get('broker') or 'Webull').upper()
             
             if not symbol:
                 return jsonify({'success': False, 'error': 'Invalid trade data - missing symbol'}), 400
             
+            print(f"[CLOSE] Trade broker: {broker}, asset_type: {asset_type}")
+            
+            # ========== ALPACA BROKER CLOSE ==========
+            if 'ALPACA' in broker:
+                print(f"[CLOSE] Routing to Alpaca broker for close...")
+                
+                # Get quantity from trade or request
+                trade_qty = int(trade.get('quantity') or 1)
+                quantity_to_close = trade_qty
+                if requested_quantity is not None:
+                    try:
+                        quantity_to_close = int(requested_quantity)
+                    except (ValueError, TypeError):
+                        pass
+                
+                # For Alpaca options, construct OCC symbol
+                if asset_type == 'option':
+                    # Build OCC symbol: TSLA251219C00502500
+                    try:
+                        from datetime import datetime
+                        # Parse expiry - handle various formats
+                        exp_str = expiry or ''
+                        if '/' in exp_str:
+                            parts = exp_str.split('/')
+                            if len(parts) == 2:
+                                month, day = parts[0].zfill(2), parts[1].zfill(2)
+                                year = str(datetime.now().year)[2:]
+                            else:
+                                month, day, year = parts[0].zfill(2), parts[1].zfill(2), parts[2][-2:]
+                        elif '-' in exp_str:
+                            parts = exp_str.split('-')
+                            year, month, day = parts[0][-2:], parts[1].zfill(2), parts[2].zfill(2)
+                        else:
+                            return jsonify({'success': False, 'error': f'Could not parse expiry: {expiry}'}), 400
+                        
+                        # Format strike for OCC: 8 digits, price * 1000
+                        strike_val = float(strike or 0)
+                        strike_occ = str(int(strike_val * 1000)).zfill(8)
+                        
+                        occ_symbol = f"{symbol}{year}{month}{day}{call_put[0]}{strike_occ}"
+                        print(f"[CLOSE] Alpaca OCC symbol: {occ_symbol}")
+                        
+                        # Close via Alpaca broker
+                        async def _alpaca_close():
+                            return await _bot_instance.paper_broker.close_position(occ_symbol, quantity_to_close, requested_limit_price)
+                        
+                        future = asyncio.run_coroutine_threadsafe(_alpaca_close(), _bot_instance.loop)
+                        result = future.result(timeout=15)
+                        
+                        if result.success:
+                            # Update trade status in database
+                            db.close_trade(trade_id, result.fill_price or requested_limit_price or 0, 'manual_close')
+                            return jsonify({
+                                'success': True,
+                                'message': f"Position closed: {quantity_to_close} {symbol} {strike}{call_put} @ {order_type}"
+                            })
+                        else:
+                            return jsonify({
+                                'success': False,
+                                'error': f'Alpaca close failed: {result.message}'
+                            }), 500
+                    except Exception as e:
+                        print(f"[CLOSE] Alpaca option close error: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        return jsonify({'success': False, 'error': f'Alpaca close error: {str(e)}'}), 500
+                else:
+                    # Stock close on Alpaca
+                    async def _alpaca_close_stock():
+                        return await _bot_instance.paper_broker.close_position(symbol, quantity_to_close, requested_limit_price)
+                    
+                    future = asyncio.run_coroutine_threadsafe(_alpaca_close_stock(), _bot_instance.loop)
+                    result = future.result(timeout=15)
+                    
+                    if result.success:
+                        db.close_trade(trade_id, result.fill_price or requested_limit_price or 0, 'manual_close')
+                        return jsonify({
+                            'success': True,
+                            'message': f"Position closed: {quantity_to_close} {symbol} @ {order_type}"
+                        })
+                    else:
+                        return jsonify({
+                            'success': False,
+                            'error': f'Alpaca close failed: {result.message}'
+                        }), 500
+            
+            # ========== WEBULL BROKER CLOSE (original logic) ==========
             # For options, we need the optionId to match positions
             # The trades table might not have option_id, so get it from live positions
             option_id = trade.get('option_id')
