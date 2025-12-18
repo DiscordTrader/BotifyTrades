@@ -556,6 +556,66 @@ def check_ibkr_broker() -> CheckResult:
         )
 
 
+def check_version_update() -> CheckResult:
+    """Check GitHub for available updates."""
+    try:
+        from upgrade.version import check_for_updates, APP_VERSION
+        
+        result = check_for_updates(timeout=5)
+        
+        if result['error']:
+            return CheckResult(
+                name="Version Update",
+                category=DiagnosticCategory.SYSTEM,
+                status=CheckStatus.WARN,
+                message=f"Could not check: {result['error']}",
+                details={'current_version': result['current_version'], 'error': result['error']},
+                remediation="Check internet connection or try again later"
+            )
+        
+        if result['update_available']:
+            return CheckResult(
+                name="Version Update",
+                category=DiagnosticCategory.SYSTEM,
+                status=CheckStatus.WARN,
+                message=f"Update available: v{result['latest_version']} (current: v{result['current_version']})",
+                details={
+                    'current_version': result['current_version'],
+                    'latest_version': result['latest_version'],
+                    'release_url': result['release_url'],
+                    'published_at': result['published_at']
+                },
+                remediation=f"Download latest version from {result['release_url']}"
+            )
+        
+        return CheckResult(
+            name="Version Update",
+            category=DiagnosticCategory.SYSTEM,
+            status=CheckStatus.PASS,
+            message=f"Up to date (v{result['current_version']})",
+            details={
+                'current_version': result['current_version'],
+                'latest_version': result['latest_version']
+            }
+        )
+    except ImportError as e:
+        return CheckResult(
+            name="Version Update",
+            category=DiagnosticCategory.SYSTEM,
+            status=CheckStatus.SKIP,
+            message=f"Version module not available: {str(e)}",
+            remediation="Ensure upgrade module is properly installed"
+        )
+    except Exception as e:
+        return CheckResult(
+            name="Version Update",
+            category=DiagnosticCategory.SYSTEM,
+            status=CheckStatus.WARN,
+            message=f"Check failed: {str(e)}",
+            details={'error': str(e)}
+        )
+
+
 def get_all_checks() -> List:
     """Return list of all check functions."""
     return [
@@ -569,5 +629,6 @@ def get_all_checks() -> List:
         check_ibkr_broker,
         check_discord_token,
         check_monitored_channels,
-        check_options_chain_availability
+        check_options_chain_availability,
+        check_version_update
     ]

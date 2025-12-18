@@ -154,3 +154,79 @@ def get_version_info() -> Dict:
         'build_date': BUILD_DATE
     }
 
+
+GITHUB_REPO = "DiscordTrader/BotifyTrades"
+GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+
+
+def check_for_updates(timeout: int = 5) -> Dict:
+    """
+    Check GitHub for the latest release version.
+    
+    Args:
+        timeout: Request timeout in seconds (default 5)
+    
+    Returns:
+        Dict with keys:
+            - update_available: bool
+            - current_version: str
+            - latest_version: str (or None if check failed)
+            - release_url: str (or None)
+            - release_notes: str (or None)
+            - error: str (or None if successful)
+    """
+    import requests
+    
+    current = get_current_version()
+    result = {
+        'update_available': False,
+        'current_version': current,
+        'latest_version': None,
+        'release_url': None,
+        'release_notes': None,
+        'published_at': None,
+        'error': None
+    }
+    
+    try:
+        headers = {
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': f'BotifyTrades/{current}'
+        }
+        
+        response = requests.get(GITHUB_API_URL, headers=headers, timeout=timeout)
+        
+        if response.status_code == 404:
+            result['error'] = "No releases found on GitHub"
+            return result
+        
+        if response.status_code == 403:
+            result['error'] = "GitHub API rate limit exceeded"
+            return result
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        latest_tag = data.get('tag_name', '')
+        latest_version = latest_tag.lstrip('v')
+        
+        result['latest_version'] = latest_version
+        result['release_url'] = data.get('html_url')
+        result['release_notes'] = data.get('body', '')[:500]
+        result['published_at'] = data.get('published_at')
+        
+        if compare_versions(current, latest_version) < 0:
+            result['update_available'] = True
+        
+        return result
+        
+    except requests.exceptions.Timeout:
+        result['error'] = "GitHub API request timed out"
+        return result
+    except requests.exceptions.ConnectionError:
+        result['error'] = "Could not connect to GitHub (no internet?)"
+        return result
+    except Exception as e:
+        result['error'] = f"Failed to check for updates: {str(e)}"
+        return result
+
