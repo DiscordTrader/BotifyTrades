@@ -2026,7 +2026,7 @@
   },
   "ALPACA_PAPER_SPY_674.0_2025-12-18_P": {
     "entry_price": 0.75,
-    "highest_price": 0.99,
+    "highest_price": 1.18,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -2071,7 +2071,7 @@
   },
   "ALPACA_PAPER_SPY_679.0_2025-12-18_P": {
     "entry_price": 0.92,
-    "highest_price": 2.02,
+    "highest_price": 3.88,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -2086,7 +2086,7 @@
   },
   "ALPACA_PAPER_SPY_678.0_2025-12-18_P": {
     "entry_price": 0.7,
-    "highest_price": 1.49,
+    "highest_price": 2.74,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -2131,7 +2131,7 @@
   },
   "ALPACA_PAPER_UPS_102.0_2025-12-19_P": {
     "entry_price": 0.75,
-    "highest_price": 0.77,
+    "highest_price": 0.94,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -2143,5 +2143,35 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-18T16:36:43.800507"
+  },
+  "ALPACA_PAPER_EOSE_stock": {
+    "entry_price": 12.31,
+    "highest_price": 12.39,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-18T17:14:25.998645"
+  },
+  "ALPACA_PAPER_NKE_67.0_2025-12-19_C": {
+    "entry_price": 2.02,
+    "highest_price": 2.03,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "NKE251219C00067000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-18T17:19:01.101807"
   }
 }
