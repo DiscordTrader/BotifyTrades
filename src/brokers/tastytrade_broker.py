@@ -28,6 +28,14 @@ except ImportError as e:
     TASTYTRADE_AVAILABLE = False
     NESTED_CHAIN_AVAILABLE = False
 
+try:
+    from tastytrade import DXLinkStreamer
+    from tastytrade.dxfeed import Quote
+    DXLINK_AVAILABLE = True
+except ImportError as e:
+    print(f"[TASTYTRADE] Warning: DXLink streaming not available: {e}")
+    DXLINK_AVAILABLE = False
+
 
 class TastytradeBroker(BrokerInterface):
     """Tastytrade broker implementation using official tastytrade SDK"""
@@ -481,6 +489,96 @@ class TastytradeBroker(BrokerInterface):
             print(f"[{self.name}] Error getting quote for {symbol}: {e}")
             return None
     
+    async def get_option_quotes_dxlink(self, symbols: list, timeout: float = 5.0) -> Dict[str, Dict[str, float]]:
+        """Fetch live bid/ask quotes for option symbols using DXLink streaming.
+        
+        DXLink streaming data is FREE for funded personal tastytrade accounts.
+        
+        Args:
+            symbols: List of option symbols (OCC format)
+            timeout: Maximum time to wait for quotes (seconds)
+            
+        Returns:
+            Dict mapping symbol to {'bid': price, 'ask': price}
+        """
+        quotes = {}
+        
+        if not DXLINK_AVAILABLE:
+            print(f"[{self.name}] DXLink streaming not available")
+            return quotes
+        
+        if not self.session:
+            print(f"[{self.name}] Not connected - cannot fetch quotes")
+            return quotes
+        
+        if not symbols:
+            return quotes
+        
+        try:
+            print(f"[{self.name}] Fetching live quotes for {len(symbols)} options via DXLink...")
+            
+            async with DXLinkStreamer(self.session) as streamer:
+                await streamer.subscribe(Quote, symbols)
+                
+                received = 0
+                start_time = asyncio.get_event_loop().time()
+                
+                while received < len(symbols):
+                    elapsed = asyncio.get_event_loop().time() - start_time
+                    if elapsed >= timeout:
+                        print(f"[{self.name}] Quote timeout after {elapsed:.1f}s, got {received}/{len(symbols)} quotes")
+                        break
+                    
+                    try:
+                        quote = await asyncio.wait_for(
+                            streamer.get_event(Quote),
+                            timeout=min(1.0, timeout - elapsed)
+                        )
+                        
+                        if quote and hasattr(quote, 'event_symbol'):
+                            sym = quote.event_symbol
+                            if sym not in quotes:
+                                bid = float(quote.bid_price) if quote.bid_price else 0.0
+                                ask = float(quote.ask_price) if quote.ask_price else 0.0
+                                quotes[sym] = {'bid': bid, 'ask': ask}
+                                received += 1
+                    except asyncio.TimeoutError:
+                        continue
+                    except Exception as e:
+                        print(f"[{self.name}] Quote event error: {e}")
+                        continue
+            
+            print(f"[{self.name}] ✓ Received {len(quotes)} live quotes")
+            return quotes
+            
+        except Exception as e:
+            print(f"[{self.name}] DXLink streaming error: {e}")
+            import traceback
+            traceback.print_exc()
+            return quotes
+    
+    def _get_option_quotes_sync(self, symbols: list, timeout: float = 5.0) -> Dict[str, Dict[str, float]]:
+        """Synchronous wrapper for get_option_quotes_dxlink for use in Flask routes."""
+        try:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            
+            if loop is not None:
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run,
+                        self.get_option_quotes_dxlink(symbols, timeout)
+                    )
+                    return future.result(timeout=timeout + 2)
+            else:
+                return asyncio.run(self.get_option_quotes_dxlink(symbols, timeout))
+        except Exception as e:
+            print(f"[{self.name}] Sync quote fetch error: {e}")
+            return {}
+    
     def get_option_chain(self, symbol: str, expiration_date: str) -> Dict[str, Any]:
         """Get option chain for a symbol and expiration date using NestedOptionChain.
         
@@ -575,11 +673,25 @@ class TastytradeBroker(BrokerInterface):
                     
                     print(f"[{self.name}] ✓ Found {len(calls)} calls, {len(puts)} puts for {symbol} exp {expiration_date}")
                     
+                    if DXLINK_AVAILABLE and (calls or puts):
+                        all_symbols = [c['symbol'] for c in calls] + [p['symbol'] for p in puts]
+                        quotes = self._get_option_quotes_sync(all_symbols, timeout=8.0)
+                        
+                        if quotes:
+                            for opt in calls + puts:
+                                if opt['symbol'] in quotes:
+                                    q = quotes[opt['symbol']]
+                                    opt['bid'] = q.get('bid', 0)
+                                    opt['ask'] = q.get('ask', 0)
+                                    if opt['bid'] > 0 and opt['ask'] > 0:
+                                        opt['last'] = (opt['bid'] + opt['ask']) / 2
+                            print(f"[{self.name}] ✓ Applied live quotes to {len(quotes)} options")
+                    
                     return {
                         'calls': calls,
                         'puts': puts,
                         'stock_price': None,
-                        'data_source': 'Tastytrade',
+                        'data_source': 'Tastytrade (DXLink Live)' if DXLINK_AVAILABLE else 'Tastytrade',
                         'expiration': expiration_date,
                         'symbol': symbol
                     }
@@ -634,11 +746,25 @@ class TastytradeBroker(BrokerInterface):
             
             print(f"[{self.name}] ✓ Found {len(calls)} calls, {len(puts)} puts for {symbol} exp {expiration_date}")
             
+            if DXLINK_AVAILABLE and (calls or puts):
+                all_symbols = [c['symbol'] for c in calls] + [p['symbol'] for p in puts]
+                quotes = self._get_option_quotes_sync(all_symbols, timeout=8.0)
+                
+                if quotes:
+                    for opt in calls + puts:
+                        if opt['symbol'] in quotes:
+                            q = quotes[opt['symbol']]
+                            opt['bid'] = q.get('bid', 0)
+                            opt['ask'] = q.get('ask', 0)
+                            if opt['bid'] > 0 and opt['ask'] > 0:
+                                opt['last'] = (opt['bid'] + opt['ask']) / 2
+                    print(f"[{self.name}] ✓ Applied live quotes to {len(quotes)} options")
+            
             return {
                 'calls': calls,
                 'puts': puts,
                 'stock_price': None,
-                'data_source': 'Tastytrade',
+                'data_source': 'Tastytrade (DXLink Live)' if DXLINK_AVAILABLE else 'Tastytrade',
                 'expiration': expiration_date,
                 'symbol': symbol
             }
