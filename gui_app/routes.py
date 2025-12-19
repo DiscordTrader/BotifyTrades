@@ -5192,6 +5192,50 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
     
+    @app.route('/api/discord/send-signal', methods=['POST'])
+    def api_send_discord_signal():
+        """Send a trading signal to Discord via webhook"""
+        try:
+            import requests as http_requests
+            from .config_service import get_discord_notifications
+            
+            data = request.json
+            signal = data.get('signal', '').strip()
+            
+            if not signal:
+                return jsonify({'success': False, 'error': 'Signal message is required'}), 400
+            
+            # Get webhook URL from settings
+            settings = get_discord_notifications()
+            webhook_url = settings.get('webhook_url', '')
+            
+            if not webhook_url:
+                return jsonify({'success': False, 'error': 'Discord webhook URL not configured. Go to Settings → Notifications to set it up.'}), 400
+            
+            if not settings.get('enabled', True):
+                return jsonify({'success': False, 'error': 'Discord notifications are disabled. Enable them in Settings → Notifications.'}), 400
+            
+            # Send plain text signal (bot-readable format)
+            payload = {
+                "content": signal,
+                "username": "BotifyTrades"
+            }
+            
+            response = http_requests.post(webhook_url, json=payload, timeout=5)
+            
+            if response.status_code == 204:
+                print(f"[DISCORD] Signal sent: {signal}")
+                return jsonify({'success': True, 'message': 'Signal sent to Discord'})
+            else:
+                print(f"[DISCORD] Webhook failed: {response.status_code} - {response.text}")
+                return jsonify({'success': False, 'error': f'Discord webhook failed: {response.status_code}'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error sending Discord signal: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/api/settings/test_webhook', methods=['POST'])
     def api_test_webhook():
         """Test Discord webhook and return channel information"""

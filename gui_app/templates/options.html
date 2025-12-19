@@ -542,6 +542,15 @@
             background: var(--danger);
             color: #fff;
         }
+        .order-btn.discord {
+            background: #5865F2;
+            color: #fff;
+            font-size: 14px;
+            min-width: 40px;
+        }
+        .order-btn.discord:hover {
+            background: #4752c4;
+        }
 
         .order-btn:hover {
             transform: translateY(-1px);
@@ -709,6 +718,7 @@
                     </div>
                     <button class="order-btn buy" onclick="placeOrder({{ i }}, 'BUY')">BUY</button>
                     <button class="order-btn sell" onclick="placeOrder({{ i }}, 'SELL')">SELL</button>
+                    <button class="order-btn discord" onclick="sendToDiscord({{ i }}, 'BTO')" title="Send BTO signal to Discord">📤</button>
                     <button class="clear-row-btn" onclick="clearRow({{ i }})" title="Clear">✕</button>
                 </div>
             </div>
@@ -1015,6 +1025,51 @@
                 }
             } catch (error) {
                 showToast('Order failed: ' + error.message, 'error');
+            }
+        }
+
+        async function sendToDiscord(row, action) {
+            const data = rowData[row];
+            if (!data.quote) {
+                showToast('Please load a quote first', 'error');
+                return;
+            }
+
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const strike = parseFloat(document.getElementById(`strike${row}`).value);
+            const expiry = document.getElementById(`expiry${row}`).value;
+            const price = parseFloat(document.getElementById(`limitPrice${row}`).value);
+            const qty = parseInt(document.getElementById(`qty${row}`).value);
+            const optionType = data.type[0].toLowerCase(); // 'c' or 'p'
+
+            // Format expiry: "2025-12-19" → "12/19"
+            let expiryFormatted = expiry;
+            if (expiry && expiry.includes('-')) {
+                const parts = expiry.split('-');
+                if (parts.length === 3) {
+                    expiryFormatted = `${parts[1]}/${parts[2]}`;
+                }
+            }
+
+            // Build signal: "BTO 10 NKE 70c 12/19 @ 1.17"
+            const signal = `${action} ${qty} ${symbol} ${Math.round(strike)}${optionType} ${expiryFormatted} @ ${price.toFixed(2)}`;
+
+            try {
+                const response = await fetch('/api/discord/send-signal', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ signal: signal })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast(`Signal sent to Discord: ${signal}`, 'success');
+                } else {
+                    showToast(result.error || 'Failed to send to Discord', 'error');
+                }
+            } catch (error) {
+                showToast('Discord send failed: ' + error.message, 'error');
             }
         }
 
