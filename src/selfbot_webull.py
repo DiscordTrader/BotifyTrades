@@ -236,7 +236,8 @@ def smart_print(*args, **kwargs):
     elif any(tag in message for tag in ['[ALPACA]', '[Discord]', '[Webull]', '[WORKER]', 
                                          '[SYNC]', '[DATABASE]', '[STARTUP]', '[POSITION SIZE]',
                                          '[SIGNAL PARSED]', '[QUEUE]', '[PAPER TRADE]',
-                                         '[ORDER', '[MULTI-BROKER]', '[RISK]']):
+                                         '[ORDER', '[MULTI-BROKER]', '[RISK]', '[TASTYTRADE]',
+                                         '[ROBINHOOD]', '[IBKR]', '[OPTIONS API]']):
         # Trading/broker messages - show in console
         logger.info(message)
         _original_print(message)

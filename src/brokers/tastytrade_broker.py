@@ -132,6 +132,34 @@ class TastytradeBroker(BrokerInterface):
             print(f"[{self.name}]   Account #: {self.account.account_number}")
             print(f"[{self.name}]   Net Liq: ${nlv:,.2f}, Cash: ${cash:,.2f}")
             
+            # Diagnostic: Test NestedOptionChain capability
+            if NESTED_CHAIN_AVAILABLE:
+                try:
+                    print(f"[{self.name}] Testing NestedOptionChain with SPY...", flush=True)
+                    result = NestedOptionChain.get(self.session, 'SPY')
+                    print(f"[{self.name}] NestedOptionChain.get returned type: {type(result)}", flush=True)
+                    
+                    # Handle list vs single object
+                    if isinstance(result, list):
+                        print(f"[{self.name}] Got list with {len(result)} item(s)", flush=True)
+                        if result:
+                            chain = result[0]
+                            print(f"[{self.name}] First item type: {type(chain)}", flush=True)
+                            if hasattr(chain, 'expirations'):
+                                print(f"[{self.name}] ✓ NestedOptionChain works! Found {len(chain.expirations)} expirations for SPY", flush=True)
+                            else:
+                                print(f"[{self.name}] Chain attrs: {[a for a in dir(chain) if not a.startswith('_')]}", flush=True)
+                    elif hasattr(result, 'expirations'):
+                        print(f"[{self.name}] ✓ NestedOptionChain works! Found {len(result.expirations)} expirations for SPY", flush=True)
+                    else:
+                        print(f"[{self.name}] ⚠ Unknown result structure", flush=True)
+                except Exception as test_err:
+                    print(f"[{self.name}] ⚠ NestedOptionChain test failed: {test_err}", flush=True)
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"[{self.name}] ⚠ NestedOptionChain not available (NESTED_CHAIN_AVAILABLE=False)", flush=True)
+            
             return True
             
         except Exception as e:
@@ -600,15 +628,43 @@ class TastytradeBroker(BrokerInterface):
             print(f"[{self.name}] Fetching expiration dates for {symbol}", flush=True)
             
             if NESTED_CHAIN_AVAILABLE:
-                nested_chain = NestedOptionChain.get(self.session, symbol)
+                result = NestedOptionChain.get(self.session, symbol)
+                print(f"[{self.name}] NestedOptionChain.get returned: {type(result)}", flush=True)
                 
-                if not nested_chain or not nested_chain.expirations:
-                    print(f"[{self.name}] No expirations returned for {symbol}")
+                # Handle both list and single object returns (SDK version differences)
+                if isinstance(result, list):
+                    # Some SDK versions return a list of chains
+                    if not result:
+                        print(f"[{self.name}] No chains returned for {symbol}")
+                        return []
+                    # Use first chain in list
+                    nested_chain = result[0]
+                    print(f"[{self.name}] Using first chain from list: {type(nested_chain)}", flush=True)
+                else:
+                    nested_chain = result
+                
+                # Try to get expirations - handle different object structures
+                expirations_data = None
+                if hasattr(nested_chain, 'expirations'):
+                    expirations_data = nested_chain.expirations
+                elif isinstance(nested_chain, dict) and 'expirations' in nested_chain:
+                    expirations_data = nested_chain['expirations']
+                
+                if not expirations_data:
+                    print(f"[{self.name}] No expirations found in chain for {symbol}")
+                    print(f"[{self.name}] Chain attributes: {dir(nested_chain) if hasattr(nested_chain, '__dict__') else nested_chain}", flush=True)
                     return []
                 
                 expirations = []
-                for exp in nested_chain.expirations:
-                    exp_str = exp.expiration_date.strftime('%Y-%m-%d')
+                for exp in expirations_data:
+                    # Handle both object and dict formats
+                    if hasattr(exp, 'expiration_date'):
+                        exp_str = exp.expiration_date.strftime('%Y-%m-%d')
+                    elif isinstance(exp, dict) and 'expiration_date' in exp:
+                        exp_str = exp['expiration_date']
+                    else:
+                        print(f"[{self.name}] Unknown expiration format: {type(exp)}", flush=True)
+                        continue
                     expirations.append(exp_str)
                 
                 expirations.sort()
