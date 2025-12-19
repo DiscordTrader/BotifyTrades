@@ -1,9 +1,19 @@
 # BotifyTrades - Discord Trading Bot
 
 ## Version
-**v3.2.4** (2025-12-18)
+**v3.2.5** (2025-12-19)
 
-## Recent Changes (Milestone 5) - Database Synchronization & Credential Consistency
+## Recent Changes (Milestone 6) - DXLink Live Option Streaming
+- **DXLink Live Option Quotes**: Tastytrade option chain now fetches live bid/ask prices
+  - Uses tastytrade DXLinkStreamer for real-time market data
+  - FREE for funded personal tastytrade accounts (no additional subscription)
+  - Added `get_option_quotes_dxlink()` async method with timeout handling
+  - Added `_get_option_quotes_sync()` wrapper for Flask route compatibility
+  - `get_option_chain()` now automatically fetches and applies live quotes
+  - Data source displays "Tastytrade (DXLink Live)" when streaming is active
+  - Proper event loop handling for both sync and async contexts
+
+## Previous Milestone (5) - Database Synchronization & Credential Consistency
 - **Tastytrade Option Chain Implementation**: TastytradeBroker now has full `get_option_chain()` method
   - Uses tastytrade SDK's `get_option_chain(session, symbol)` which returns `{expiry_date: [Option, ...]}`
   - Filters options by requested expiration date and separates calls/puts
