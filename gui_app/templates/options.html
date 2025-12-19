@@ -794,16 +794,28 @@
                     credentials: 'include'
                 });
                 const data = await response.json();
-                console.log(`[OPTIONS] Response:`, data);
+                console.log(`[OPTIONS] Response status=${response.status}:`, data);
+                
+                if (!response.ok) {
+                    console.error(`[OPTIONS] API error: ${data.error || response.status}`);
+                    expirySelect.innerHTML = `<option value="">Error: ${data.error || 'API failed'}</option>`;
+                    return;
+                }
+                
+                if (data.error) {
+                    console.error(`[OPTIONS] Error from API: ${data.error}`);
+                    expirySelect.innerHTML = `<option value="">Error: ${data.error}</option>`;
+                    return;
+                }
                 
                 if (data.expirations && data.expirations.length > 0) {
                     expiryCache[cacheKey] = data.expirations;
                     populateExpiries(row, data.expirations);
                 } else {
-                    expirySelect.innerHTML = '<option value="">No expirations</option>';
+                    expirySelect.innerHTML = '<option value="">No expirations found</option>';
                 }
             } catch (error) {
-                console.error('Error loading expirations:', error);
+                console.error('[OPTIONS] Error loading expirations:', error);
                 expirySelect.innerHTML = '<option value="">Error loading</option>';
             }
         }
