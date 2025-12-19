@@ -5520,15 +5520,28 @@ def register_routes(app):
             if 'TASTYTRADE' in selected_broker:
                 print(f"[OPTIONS API] Loading Tastytrade expirations for {symbol}...", flush=True)
                 
+                # Debug: check broker instance state
+                has_bot = _bot_instance is not None
+                has_attr = hasattr(_bot_instance, 'tastytrade_broker') if has_bot else False
+                has_broker = _bot_instance.tastytrade_broker is not None if has_attr else False
+                print(f"[OPTIONS API] Debug: bot={has_bot}, attr={has_attr}, broker={has_broker}", flush=True)
+                
                 if not _bot_instance or not hasattr(_bot_instance, 'tastytrade_broker') or not _bot_instance.tastytrade_broker:
                     print(f"[OPTIONS API] Tastytrade broker not available", flush=True)
                     return jsonify({'error': 'Tastytrade broker not configured', 'expirations': []}), 503
+                
+                # Check if broker session is connected
+                broker_session = getattr(_bot_instance.tastytrade_broker, 'session', None)
+                print(f"[OPTIONS API] Tastytrade session exists: {broker_session is not None}", flush=True)
                 
                 try:
                     import concurrent.futures
                     
                     def _get_expirations_sync():
-                        return _bot_instance.tastytrade_broker.get_options_expiration_dates(symbol)
+                        print(f"[OPTIONS API] Calling get_options_expiration_dates({symbol})...", flush=True)
+                        result = _bot_instance.tastytrade_broker.get_options_expiration_dates(symbol)
+                        print(f"[OPTIONS API] get_options_expiration_dates returned: {type(result)} with {len(result) if result else 0} items", flush=True)
+                        return result
                     
                     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                         future = executor.submit(_get_expirations_sync)
