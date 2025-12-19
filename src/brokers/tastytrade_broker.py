@@ -932,7 +932,7 @@ class TastytradeBroker(BrokerInterface):
                 streamer_symbols = list(streamer_to_occ.keys())
                 if streamer_symbols[:1]:
                     print(f"[{self.name}] Sample streamer symbol: {streamer_symbols[0]}", flush=True)
-                quotes = self._get_option_quotes_sync(streamer_symbols, timeout=8.0)
+                quotes = self._get_option_data_sync(streamer_symbols, timeout=8.0)
                 print(f"[{self.name}] DXLink returned {len(quotes)} quotes", flush=True)
                 
                 if quotes:
