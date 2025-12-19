@@ -368,12 +368,18 @@ def get_cached_option_chain_tastytrade(symbol: str, expiry: str) -> dict:
         # Fetch stock price if not in chain (Tastytrade doesn't provide stock price directly)
         if not chain.get('stock_price'):
             try:
-                # Use Webull broker's get_quote as fallback for stock price
+                # Use Webull broker's async get_quote via bot loop as fallback
                 if _bot_instance and hasattr(_bot_instance, 'broker') and _bot_instance.broker:
-                    stock_price = _bot_instance.broker.get_quote(symbol)
-                    if stock_price and stock_price > 0:
-                        chain['stock_price'] = stock_price
-                        print(f"[OPTIONS] Fetched {symbol} price via Webull (fallback): ${chain['stock_price']:.2f}", flush=True)
+                    if hasattr(_bot_instance, 'loop') and _bot_instance.loop and not _bot_instance.loop.is_closed():
+                        import asyncio
+                        quote_future = asyncio.run_coroutine_threadsafe(
+                            _bot_instance.broker.get_quote(symbol),
+                            _bot_instance.loop
+                        )
+                        stock_price = quote_future.result(timeout=5)
+                        if stock_price and stock_price > 0:
+                            chain['stock_price'] = stock_price
+                            print(f"[OPTIONS] Fetched {symbol} price via Webull (fallback): ${chain['stock_price']:.2f}", flush=True)
             except Exception as price_err:
                 print(f"[OPTIONS] Could not fetch stock price for {symbol} via Webull fallback: {price_err}", flush=True)
         
