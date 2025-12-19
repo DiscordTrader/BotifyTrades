@@ -23,6 +23,37 @@ _login_attempts: Dict[str, list] = {}  # {ip: [timestamp1, timestamp2, ...]}
 _max_attempts = 5  # Max attempts per window
 _lockout_window = 300  # 5 minutes in seconds
 
+def fetch_stock_price_reliable(symbol: str) -> float:
+    """Fetch stock price using yfinance as primary source (works for stocks and indices like SPX).
+    Returns the price or 0 if unable to fetch.
+    """
+    try:
+        import yfinance as yf
+        # For index options, map to the correct yfinance ticker
+        yf_symbol = symbol
+        if symbol == 'SPX':
+            yf_symbol = '^GSPC'  # S&P 500 Index
+        elif symbol == 'NDX':
+            yf_symbol = '^NDX'  # Nasdaq 100 Index
+        elif symbol == 'RUT':
+            yf_symbol = '^RUT'  # Russell 2000
+        elif symbol == 'VIX':
+            yf_symbol = '^VIX'  # VIX
+        elif symbol == 'DJI' or symbol == 'DJX':
+            yf_symbol = '^DJI'  # Dow Jones
+            
+        ticker = yf.Ticker(yf_symbol)
+        hist = ticker.history(period="1d")
+        if not hist.empty and 'Close' in hist.columns:
+            price = float(hist['Close'].iloc[-1])
+            if price and price > 0:
+                print(f"[OPTIONS] ✓ Fetched {symbol} price via yfinance: ${price:.2f}", flush=True)
+                return price
+        print(f"[OPTIONS] yfinance returned no data for {symbol} (yf: {yf_symbol})", flush=True)
+    except Exception as e:
+        print(f"[OPTIONS] yfinance error for {symbol}: {e}", flush=True)
+    return 0
+
 def _check_rate_limit(ip: str) -> tuple:
     """Check if IP is rate limited. Returns (is_allowed, seconds_remaining)"""
     now = time.time()
@@ -189,19 +220,11 @@ def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
             
             if chain and (chain.get('calls') or chain.get('puts')):
                 chain['data_source'] = 'Webull'
-                # Fetch stock price if not in chain
-                if not chain.get('stock_price'):
-                    try:
-                        quote_future = asyncio.run_coroutine_threadsafe(
-                            broker.get_quote(symbol),
-                            loop
-                        )
-                        stock_price = quote_future.result(timeout=5)
-                        if stock_price and stock_price > 0:
-                            chain['stock_price'] = stock_price
-                            print(f"[OPTIONS] Fetched stock price for {symbol}: ${chain['stock_price']}", flush=True)
-                    except Exception as quote_err:
-                        print(f"[OPTIONS] Could not fetch stock price for {symbol}: {quote_err}", flush=True)
+                # Fetch stock price if not in chain - use yfinance for reliability
+                if not chain.get('stock_price') or chain.get('stock_price', 0) <= 0:
+                    stock_price = fetch_stock_price_reliable(symbol)
+                    if stock_price > 0:
+                        chain['stock_price'] = stock_price
                 _option_chain_cache[cache_key] = (chain, now)
                 print(f"[OPTIONS] ✓ Using Webull data for {cache_key} (stock_price={chain.get('stock_price')})", flush=True)
                 return chain
@@ -276,8 +299,13 @@ def get_cached_option_chain_alpaca(symbol: str, expiry: str) -> dict:
     try:
         chain = new_loop.run_until_complete(alpaca.get_option_chain(symbol, expiry))
         chain['data_source'] = 'Alpaca'
+        # Fetch stock price if not in chain - use yfinance for reliability
+        if not chain.get('stock_price') or chain.get('stock_price', 0) <= 0:
+            stock_price = fetch_stock_price_reliable(symbol)
+            if stock_price > 0:
+                chain['stock_price'] = stock_price
         _option_chain_cache[cache_key] = (chain, now)
-        print(f"[OPTIONS] ✓ Using Alpaca data for {symbol} {expiry}", flush=True)
+        print(f"[OPTIONS] ✓ Using Alpaca data for {symbol} {expiry} (stock_price={chain.get('stock_price')})", flush=True)
         return chain
     except Exception as e:
         print(f"[OPTIONS] Alpaca option chain error: {e}", flush=True)
@@ -325,8 +353,13 @@ def get_cached_option_chain_ibkr(symbol: str, expiry: str) -> dict:
             return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'IBKR (no data)'}
         
         chain['data_source'] = 'IBKR'
+        # Fetch stock price if not in chain - use yfinance for reliability
+        if not chain.get('stock_price') or chain.get('stock_price', 0) <= 0:
+            stock_price = fetch_stock_price_reliable(symbol)
+            if stock_price > 0:
+                chain['stock_price'] = stock_price
         _option_chain_cache[cache_key] = (chain, now)
-        print(f"[OPTIONS] ✓ Using IBKR data for {symbol} {expiry}", flush=True)
+        print(f"[OPTIONS] ✓ Using IBKR data for {symbol} {expiry} (stock_price={chain.get('stock_price')})", flush=True)
         return chain
     except Exception as e:
         print(f"[OPTIONS] IBKR option chain error: {e}", flush=True)
@@ -365,42 +398,11 @@ def get_cached_option_chain_tastytrade(symbol: str, expiry: str) -> dict:
             print(f"[OPTIONS] Tastytrade returned empty chain for {symbol} {expiry}", flush=True)
             return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Tastytrade (no data)'}
         
-        # Fetch stock price if not in chain (Tastytrade doesn't provide stock price directly)
-        if not chain.get('stock_price'):
-            print(f"[OPTIONS] Chain has no stock_price for {symbol}, attempting Webull fallback...", flush=True)
-            try:
-                # Use yfinance as reliable fallback for stock price
-                import yfinance as yf
-                ticker = yf.Ticker(symbol)
-                hist = ticker.history(period="1d")
-                if not hist.empty and 'Close' in hist.columns:
-                    stock_price = float(hist['Close'].iloc[-1])
-                    if stock_price and stock_price > 0:
-                        chain['stock_price'] = stock_price
-                        print(f"[OPTIONS] ✓ Fetched {symbol} price via yfinance: ${stock_price:.2f}", flush=True)
-                else:
-                    print(f"[OPTIONS] yfinance returned no data for {symbol}", flush=True)
-            except Exception as yf_err:
-                print(f"[OPTIONS] yfinance fallback failed: {yf_err}", flush=True)
-                # Try Webull as secondary fallback
-                try:
-                    if _bot_instance and hasattr(_bot_instance, 'broker') and _bot_instance.broker:
-                        if hasattr(_bot_instance, 'loop') and _bot_instance.loop and not _bot_instance.loop.is_closed():
-                            import asyncio
-                            quote_future = asyncio.run_coroutine_threadsafe(
-                                _bot_instance.broker.get_quote(symbol),
-                                _bot_instance.loop
-                            )
-                            stock_price = quote_future.result(timeout=5)
-                            if stock_price and stock_price > 0:
-                                chain['stock_price'] = stock_price
-                                print(f"[OPTIONS] ✓ Fetched {symbol} price via Webull: ${stock_price:.2f}", flush=True)
-                        else:
-                            print(f"[OPTIONS] Webull loop not available for {symbol}", flush=True)
-                    else:
-                        print(f"[OPTIONS] Webull broker not available for {symbol}", flush=True)
-                except Exception as wb_err:
-                    print(f"[OPTIONS] Webull fallback also failed: {wb_err}", flush=True)
+        # Fetch stock price if not in chain - use yfinance for reliability
+        if not chain.get('stock_price') or chain.get('stock_price', 0) <= 0:
+            stock_price = fetch_stock_price_reliable(symbol)
+            if stock_price > 0:
+                chain['stock_price'] = stock_price
         
         _option_chain_cache[cache_key] = (chain, now)
         data_source = chain.get('data_source', 'Tastytrade')
