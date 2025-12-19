@@ -352,9 +352,9 @@ def get_cached_option_chain_tastytrade(symbol: str, expiry: str) -> dict:
             print(f"[OPTIONS] Tastytrade returned empty chain for {symbol} {expiry}", flush=True)
             return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Tastytrade (no data)'}
         
-        chain['data_source'] = 'Tastytrade'
         _option_chain_cache[cache_key] = (chain, now)
-        print(f"[OPTIONS] ✓ Using Tastytrade data for {symbol} {expiry}", flush=True)
+        data_source = chain.get('data_source', 'Tastytrade')
+        print(f"[OPTIONS] ✓ Using Tastytrade data for {symbol} {expiry} (source: {data_source})", flush=True)
         return chain
     except Exception as e:
         print(f"[OPTIONS] Tastytrade option chain error: {e}", flush=True)

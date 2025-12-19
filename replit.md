@@ -12,6 +12,9 @@
   - `get_option_chain()` now automatically fetches and applies live quotes
   - Data source displays "Tastytrade (DXLink Live)" when streaming is active
   - Proper event loop handling for both sync and async contexts
+- **Bug Fix**: Fixed data_source being overwritten in get_cached_option_chain_tastytrade()
+  - Previously, line 355 overwrote broker's data_source with just 'Tastytrade'
+  - Now preserves the original data_source from broker (e.g., 'Tastytrade (DXLink Live)')
 
 ## Previous Milestone (5) - Database Synchronization & Credential Consistency
 - **Tastytrade Option Chain Implementation**: TastytradeBroker now has full `get_option_chain()` method
