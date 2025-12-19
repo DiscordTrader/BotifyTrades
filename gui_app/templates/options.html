@@ -918,8 +918,25 @@
                 if (data.puts) data.puts.forEach(opt => strikes.add(opt.strike));
                 
                 const sortedStrikes = Array.from(strikes).sort((a, b) => a - b);
-                const underlyingPrice = data.stock_price || data.underlying_price || data.atm_strike || null;
-                console.log(`[OPTIONS] Loaded ${sortedStrikes.length} strikes, stock_price=${data.stock_price}, atm_strike=${data.atm_strike}`);
+                let underlyingPrice = data.stock_price || data.underlying_price || data.atm_strike || null;
+                
+                // If no stock price, estimate ATM from options with highest open interest or volume
+                if (!underlyingPrice && sortedStrikes.length > 0) {
+                    let bestOI = 0;
+                    let bestStrike = sortedStrikes[Math.floor(sortedStrikes.length / 2)]; // Default to middle
+                    const allOptions = [...(data.calls || []), ...(data.puts || [])];
+                    allOptions.forEach(opt => {
+                        const oi = opt.open_interest || 0;
+                        const vol = opt.volume || 0;
+                        if (oi + vol > bestOI) {
+                            bestOI = oi + vol;
+                            bestStrike = opt.strike;
+                        }
+                    });
+                    underlyingPrice = bestStrike;
+                    console.log(`[OPTIONS] Estimated ATM from liquidity: $${bestStrike} (OI+Vol=${bestOI})`);
+                }
+                console.log(`[OPTIONS] Loaded ${sortedStrikes.length} strikes, stock_price=${data.stock_price}, estimated_atm=${underlyingPrice}`);
                 
                 if (sortedStrikes.length > 0) {
                     strikeCache[cacheKey] = { strikes: sortedStrikes, underlying: underlyingPrice };
