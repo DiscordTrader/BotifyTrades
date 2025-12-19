@@ -562,43 +562,34 @@
             transform: none;
         }
 
-        .price-buttons {
-            display: flex;
-            gap: 2px;
-        }
-
-        .price-btn {
-            padding: 6px 8px;
-            border: 1px solid var(--border-color);
-            background: var(--bg-primary);
-            color: var(--text-muted);
-            border-radius: 4px;
-            font-size: 9px;
-            font-weight: 700;
+        .quote-box.clickable {
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.15s ease;
+            border: 1px solid transparent;
         }
 
-        .price-btn:hover {
-            background: var(--bg-tertiary);
+        .quote-box.clickable:hover {
+            transform: scale(1.05);
+            border-color: rgba(255,255,255,0.2);
         }
 
-        .price-btn.bid.active {
-            background: rgba(63, 185, 80, 0.2);
+        .quote-box.clickable.selected {
+            transform: scale(1.05);
+        }
+
+        .quote-box.clickable.selected.bid-selected {
             border-color: var(--success);
-            color: var(--success);
+            box-shadow: 0 0 8px rgba(63, 185, 80, 0.4);
         }
 
-        .price-btn.mid.active {
-            background: rgba(88, 166, 255, 0.2);
-            border-color: var(--accent-blue);
-            color: var(--accent-blue);
-        }
-
-        .price-btn.ask.active {
-            background: rgba(248, 81, 73, 0.2);
+        .quote-box.clickable.selected.ask-selected {
             border-color: var(--danger);
-            color: var(--danger);
+            box-shadow: 0 0 8px rgba(248, 81, 73, 0.4);
+        }
+
+        .quote-box.clickable.selected.mid-selected {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 8px rgba(88, 166, 255, 0.4);
         }
 
         .clear-row-btn {
@@ -743,11 +734,6 @@
                 </div>
 
                 <div class="order-section" id="orderSection{{ i }}" style="display: none;">
-                    <div class="price-buttons" id="priceButtons{{ i }}">
-                        <button class="price-btn bid" onclick="setPrice({{ i }}, 'bid')" title="Set to Bid">BID</button>
-                        <button class="price-btn mid active" onclick="setPrice({{ i }}, 'mid')" title="Set to Mid">MID</button>
-                        <button class="price-btn ask" onclick="setPrice({{ i }}, 'ask')" title="Set to Ask">ASK</button>
-                    </div>
                     <div class="stepper-input">
                         <button class="stepper-btn" onclick="adjustPrice({{ i }}, -0.05)">−</button>
                         <input type="text" class="stepper-value" id="limitPrice{{ i }}" value="0.00">
@@ -932,7 +918,8 @@
                 if (data.puts) data.puts.forEach(opt => strikes.add(opt.strike));
                 
                 const sortedStrikes = Array.from(strikes).sort((a, b) => a - b);
-                const underlyingPrice = data.stock_price || data.underlying_price || null;
+                const underlyingPrice = data.stock_price || data.underlying_price || data.atm_strike || null;
+                console.log(`[OPTIONS] Loaded ${sortedStrikes.length} strikes, stock_price=${data.stock_price}, atm_strike=${data.atm_strike}`);
                 
                 if (sortedStrikes.length > 0) {
                     strikeCache[cacheKey] = { strikes: sortedStrikes, underlying: underlyingPrice };
@@ -1040,15 +1027,15 @@
                 const sourceClass = dataSource === 'Webull' ? 'webull' : 'alpaca';
                 
                 quoteSection.innerHTML = `
-                    <div class="quote-box">
+                    <div class="quote-box clickable" onclick="setPrice(${row}, 'bid')" title="Click to use Bid price">
                         <div class="quote-label">BID</div>
                         <div class="quote-value bid">$${data.bid.toFixed(2)}</div>
                     </div>
-                    <div class="quote-box">
+                    <div class="quote-box clickable" onclick="setPrice(${row}, 'ask')" title="Click to use Ask price">
                         <div class="quote-label">ASK</div>
                         <div class="quote-value ask">$${data.ask.toFixed(2)}</div>
                     </div>
-                    <div class="quote-box">
+                    <div class="quote-box clickable selected mid-selected" onclick="setPrice(${row}, 'mid')" title="Click to use Mid price">
                         <div class="quote-label">MID</div>
                         <div class="quote-value mid">$${data.mid.toFixed(2)}</div>
                     </div>
@@ -1082,9 +1069,14 @@
             document.getElementById(`limitPrice${row}`).value = price.toFixed(2);
             updateTotal(row);
             
-            const buttons = document.querySelectorAll(`#priceButtons${row} .price-btn`);
-            buttons.forEach(btn => btn.classList.remove('active'));
-            document.querySelector(`#priceButtons${row} .price-btn.${priceType}`).classList.add('active');
+            const boxes = document.querySelectorAll(`#quoteSection${row} .quote-box.clickable`);
+            boxes.forEach(box => {
+                box.classList.remove('selected', 'bid-selected', 'ask-selected', 'mid-selected');
+            });
+            const selectedBox = document.querySelectorAll(`#quoteSection${row} .quote-box.clickable`)[priceType === 'bid' ? 0 : priceType === 'ask' ? 1 : 2];
+            if (selectedBox) {
+                selectedBox.classList.add('selected', `${priceType}-selected`);
+            }
         }
 
         function adjustPrice(row, delta) {
@@ -1094,8 +1086,10 @@
             input.value = value.toFixed(2);
             updateTotal(row);
             
-            const buttons = document.querySelectorAll(`#priceButtons${row} .price-btn`);
-            buttons.forEach(btn => btn.classList.remove('active'));
+            const boxes = document.querySelectorAll(`#quoteSection${row} .quote-box.clickable`);
+            boxes.forEach(box => {
+                box.classList.remove('selected', 'bid-selected', 'ask-selected', 'mid-selected');
+            });
         }
 
         function adjustQty(row, delta) {

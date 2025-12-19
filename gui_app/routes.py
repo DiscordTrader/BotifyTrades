@@ -189,8 +189,21 @@ def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
             
             if chain and (chain.get('calls') or chain.get('puts')):
                 chain['data_source'] = 'Webull'
+                # Fetch stock price if not in chain
+                if not chain.get('stock_price'):
+                    try:
+                        quote_future = asyncio.run_coroutine_threadsafe(
+                            broker.get_quote(symbol),
+                            loop
+                        )
+                        stock_price = quote_future.result(timeout=5)
+                        if stock_price and stock_price > 0:
+                            chain['stock_price'] = stock_price
+                            print(f"[OPTIONS] Fetched stock price for {symbol}: ${chain['stock_price']}", flush=True)
+                    except Exception as quote_err:
+                        print(f"[OPTIONS] Could not fetch stock price for {symbol}: {quote_err}", flush=True)
                 _option_chain_cache[cache_key] = (chain, now)
-                print(f"[OPTIONS] ✓ Using Webull data for {cache_key}", flush=True)
+                print(f"[OPTIONS] ✓ Using Webull data for {cache_key} (stock_price={chain.get('stock_price')})", flush=True)
                 return chain
             else:
                 print(f"[OPTIONS] Webull returned empty chain for {symbol}, trying Alpaca fallback...", flush=True)
