@@ -1201,9 +1201,23 @@
             }
         }
 
-        // Auto-refresh quotes every 1 second for loaded rows
-        const autoRefreshInterval = 1000; // 1 second
+        // Auto-refresh quotes - rate varies by broker to respect API limits
+        const brokerRefreshRates = {
+            'webull': 3000,           // 3 sec - Webull: 10 req/30 sec limit
+            'webull_paper': 3000,
+            'alpaca_live': 1000,      // 1 sec - Alpaca: 200 req/min
+            'alpaca_paper': 1000,
+            'tastytrade_paper': 2000, // 2 sec - Tastytrade: ~60 req/min estimated
+            'tastytrade_live': 2000,
+            'ibkr': 1000,             // 1 sec - IBKR: 50 req/sec
+            'robinhood': 2000         // 2 sec - conservative default
+        };
         let refreshTimer = null;
+        
+        function getRefreshInterval() {
+            const broker = document.getElementById('brokerSelect').value.toLowerCase();
+            return brokerRefreshRates[broker] || 2000; // Default 2 sec
+        }
         
         async function refreshQuoteSilent(row) {
             const data = rowData[row];
@@ -1258,17 +1272,22 @@
         
         function startAutoRefresh() {
             if (refreshTimer) clearInterval(refreshTimer);
+            const interval = getRefreshInterval();
             refreshTimer = setInterval(() => {
                 for (let i = 1; i <= 4; i++) {
                     if (rowData[i] && rowData[i].quote) {
                         refreshQuoteSilent(i);
                     }
                 }
-            }, autoRefreshInterval);
+            }, interval);
+            console.log(`Auto-refresh started: ${interval}ms interval`);
         }
         
         // Start auto-refresh when page loads
         startAutoRefresh();
+        
+        // Restart auto-refresh when broker changes (different rate limits)
+        document.getElementById('brokerSelect').addEventListener('change', startAutoRefresh);
 
         function setPrice(row, priceType) {
             const data = rowData[row];

@@ -79,9 +79,26 @@ Redesigned option rows to keep all elements in one horizontal line:
 
 ---
 
+### 5. Real-Time Price Auto-Refresh
+Added automatic bid/ask/mid price updates with broker-specific rate limits:
+- **Webull**: 3 seconds (10 req/30 sec limit)
+- **Alpaca**: 1 second (200 req/min limit)
+- **Tastytrade**: 2 seconds (~60 req/min estimated)
+- **Interactive Brokers**: 1 second (50 req/sec limit)
+- **Robinhood**: 2 seconds (conservative default)
+
+Features:
+- Silent background updates without "Loading..." message
+- Subtle flash animation on price updates
+- Automatic rate adjustment when broker selection changes
+- Respects API rate limits to prevent blocking
+
+---
+
 ## Result
 Clean, professional options trading interface with:
 - All controls visible in one row
 - Readable dark-themed dropdowns
 - Webull/TradingView-inspired styling
+- Real-time price updates respecting broker API limits
 - Optimized for usability and visual appeal
