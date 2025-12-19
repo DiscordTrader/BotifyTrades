@@ -5691,8 +5691,9 @@ def register_routes(app):
                 return jsonify({'error': 'Invalid strike price format'}), 400
             
             # Route to appropriate broker for option chain data
-            print(f"[OPTIONS API] Fetching strike quote for {symbol} ${strike} from broker: {broker}")
+            print(f"[OPTIONS API] Fetching strike quote for {symbol} ${strike} from broker: {broker}", flush=True)
             chain = get_option_chain_for_broker(symbol, expiry, broker)
+            print(f"[OPTIONS API] Got chain with data_source: {chain.get('data_source', 'unknown')}", flush=True)
             
             if not chain:
                 return jsonify({'error': 'Failed to fetch option chain data'}), 503

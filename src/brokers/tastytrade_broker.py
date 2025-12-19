@@ -671,21 +671,27 @@ class TastytradeBroker(BrokerInterface):
                     calls.sort(key=lambda x: x['strike'])
                     puts.sort(key=lambda x: x['strike'])
                     
-                    print(f"[{self.name}] ✓ Found {len(calls)} calls, {len(puts)} puts for {symbol} exp {expiration_date}")
+                    print(f"[{self.name}] ✓ Found {len(calls)} calls, {len(puts)} puts for {symbol} exp {expiration_date}", flush=True)
                     
+                    print(f"[{self.name}] DXLINK_AVAILABLE={DXLINK_AVAILABLE}, has_options={bool(calls or puts)}", flush=True)
                     if DXLINK_AVAILABLE and (calls or puts):
                         all_symbols = [c['symbol'] for c in calls] + [p['symbol'] for p in puts]
+                        print(f"[{self.name}] Fetching DXLink quotes for {len(all_symbols)} symbols...", flush=True)
                         quotes = self._get_option_quotes_sync(all_symbols, timeout=8.0)
+                        print(f"[{self.name}] DXLink returned {len(quotes)} quotes", flush=True)
                         
                         if quotes:
+                            applied_count = 0
                             for opt in calls + puts:
                                 if opt['symbol'] in quotes:
                                     q = quotes[opt['symbol']]
                                     opt['bid'] = q.get('bid', 0)
                                     opt['ask'] = q.get('ask', 0)
+                                    if opt['bid'] > 0 or opt['ask'] > 0:
+                                        applied_count += 1
                                     if opt['bid'] > 0 and opt['ask'] > 0:
                                         opt['last'] = (opt['bid'] + opt['ask']) / 2
-                            print(f"[{self.name}] ✓ Applied live quotes to {len(quotes)} options")
+                            print(f"[{self.name}] ✓ Applied live quotes to {len(quotes)} options ({applied_count} with non-zero prices)", flush=True)
                     
                     return {
                         'calls': calls,
