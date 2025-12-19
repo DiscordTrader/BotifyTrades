@@ -365,9 +365,26 @@ def get_cached_option_chain_tastytrade(symbol: str, expiry: str) -> dict:
             print(f"[OPTIONS] Tastytrade returned empty chain for {symbol} {expiry}", flush=True)
             return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Tastytrade (no data)'}
         
+        # Fetch stock price if not in chain (common for Tastytrade)
+        if not chain.get('stock_price'):
+            try:
+                # Use Tastytrade broker's async get_quote via bot loop
+                if _bot_instance and hasattr(_bot_instance, 'loop') and _bot_instance.loop and not _bot_instance.loop.is_closed():
+                    import asyncio
+                    quote_future = asyncio.run_coroutine_threadsafe(
+                        _bot_instance.tastytrade_broker.get_quote(symbol),
+                        _bot_instance.loop
+                    )
+                    stock_price = quote_future.result(timeout=5)
+                    if stock_price and stock_price > 0:
+                        chain['stock_price'] = stock_price
+                        print(f"[OPTIONS] Fetched {symbol} price via Tastytrade: ${chain['stock_price']:.2f}", flush=True)
+            except Exception as price_err:
+                print(f"[OPTIONS] Could not fetch stock price for {symbol} via Tastytrade: {price_err}", flush=True)
+        
         _option_chain_cache[cache_key] = (chain, now)
         data_source = chain.get('data_source', 'Tastytrade')
-        print(f"[OPTIONS] ✓ Using Tastytrade data for {symbol} {expiry} (source: {data_source})", flush=True)
+        print(f"[OPTIONS] ✓ Using Tastytrade data for {symbol} {expiry} (source: {data_source}, stock_price={chain.get('stock_price')})", flush=True)
         return chain
     except Exception as e:
         print(f"[OPTIONS] Tastytrade option chain error: {e}", flush=True)
