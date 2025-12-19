@@ -840,11 +840,15 @@ class TastytradeBroker(BrokerInterface):
             
             calls = []
             puts = []
+            streamer_to_occ = {}
             
             for opt in options:
                 strike = float(opt.strike_price)
                 opt_type = opt.option_type.value
                 opt_symbol = opt.symbol if hasattr(opt, 'symbol') else f"{symbol}{expiration_date.replace('-', '')}{opt_type}{int(strike*1000):08d}"
+                
+                if hasattr(opt, 'streamer_symbol') and opt.streamer_symbol:
+                    streamer_to_occ[opt.streamer_symbol] = opt_symbol
                 
                 option_data = {
                     'strike': strike,
@@ -872,20 +876,31 @@ class TastytradeBroker(BrokerInterface):
             puts.sort(key=lambda x: x['strike'])
             
             print(f"[{self.name}] ✓ Found {len(calls)} calls, {len(puts)} puts for {symbol} exp {expiration_date}")
+            print(f"[{self.name}] Got {len(streamer_to_occ)} streamer symbols from Option objects", flush=True)
             
-            if DXLINK_AVAILABLE and (calls or puts):
-                all_symbols = [c['symbol'] for c in calls] + [p['symbol'] for p in puts]
-                quotes = self._get_option_quotes_sync(all_symbols, timeout=8.0)
+            if DXLINK_AVAILABLE and streamer_to_occ:
+                streamer_symbols = list(streamer_to_occ.keys())
+                if streamer_symbols[:1]:
+                    print(f"[{self.name}] Sample streamer symbol: {streamer_symbols[0]}", flush=True)
+                quotes = self._get_option_quotes_sync(streamer_symbols, timeout=8.0)
+                print(f"[{self.name}] DXLink returned {len(quotes)} quotes", flush=True)
                 
                 if quotes:
-                    for opt in calls + puts:
-                        if opt['symbol'] in quotes:
-                            q = quotes[opt['symbol']]
-                            opt['bid'] = q.get('bid', 0)
-                            opt['ask'] = q.get('ask', 0)
-                            if opt['bid'] > 0 and opt['ask'] > 0:
-                                opt['last'] = (opt['bid'] + opt['ask']) / 2
-                    print(f"[{self.name}] ✓ Applied live quotes to {len(quotes)} options")
+                    applied_count = 0
+                    for opt_data in calls + puts:
+                        for streamer_sym, occ_sym in streamer_to_occ.items():
+                            if occ_sym == opt_data['symbol'] and streamer_sym in quotes:
+                                q = quotes[streamer_sym]
+                                opt_data['bid'] = q.get('bid', 0)
+                                opt_data['ask'] = q.get('ask', 0)
+                                if opt_data['bid'] > 0 or opt_data['ask'] > 0:
+                                    applied_count += 1
+                                if opt_data['bid'] > 0 and opt_data['ask'] > 0:
+                                    opt_data['last'] = (opt_data['bid'] + opt_data['ask']) / 2
+                                break
+                    print(f"[{self.name}] ✓ Applied live quotes to {len(quotes)} options ({applied_count} with non-zero prices)", flush=True)
+            elif DXLINK_AVAILABLE:
+                print(f"[{self.name}] No streamer symbols found in Option objects, skipping DXLink quotes", flush=True)
             
             return {
                 'calls': calls,
