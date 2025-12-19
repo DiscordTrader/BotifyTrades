@@ -319,13 +319,54 @@ def get_cached_option_chain_ibkr(symbol: str, expiry: str) -> dict:
         print(f"[OPTIONS] IBKR option chain error: {e}", flush=True)
         return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': f'Error: {str(e)}'}
 
+def get_cached_option_chain_tastytrade(symbol: str, expiry: str) -> dict:
+    """Get option chain from Tastytrade with caching.
+    Returns chain data with 'data_source' field indicating 'Tastytrade'
+    """
+    cache_key = f"TASTYTRADE_{symbol}_{expiry}"
+    now = time.time()
+    
+    print(f"[OPTIONS] get_cached_option_chain_tastytrade called for {symbol} {expiry}", flush=True)
+    
+    if cache_key in _option_chain_cache:
+        cached_data, cached_time = _option_chain_cache[cache_key]
+        if now - cached_time < _CHAIN_CACHE_TTL:
+            print(f"[OPTIONS] Using cached Tastytrade option chain for {cache_key}", flush=True)
+            return cached_data
+    
+    if not _bot_instance or not hasattr(_bot_instance, 'tastytrade_broker') or not _bot_instance.tastytrade_broker:
+        print(f"[OPTIONS] Tastytrade broker not available", flush=True)
+        return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Error: Tastytrade not configured'}
+    
+    try:
+        import concurrent.futures
+        
+        def _get_chain_sync():
+            return _bot_instance.tastytrade_broker.get_option_chain(symbol, expiry)
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_get_chain_sync)
+            chain = future.result(timeout=15)
+        
+        if not chain:
+            print(f"[OPTIONS] Tastytrade returned empty chain for {symbol} {expiry}", flush=True)
+            return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Tastytrade (no data)'}
+        
+        chain['data_source'] = 'Tastytrade'
+        _option_chain_cache[cache_key] = (chain, now)
+        print(f"[OPTIONS] ✓ Using Tastytrade data for {symbol} {expiry}", flush=True)
+        return chain
+    except Exception as e:
+        print(f"[OPTIONS] Tastytrade option chain error: {e}", flush=True)
+        return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': f'Error: {str(e)}'}
+
 def get_option_chain_for_broker(symbol: str, expiry: str, broker: str = 'WEBULL') -> dict:
     """Get option chain from the specified broker.
     
     Args:
         symbol: The stock symbol
         expiry: Expiration date (YYYY-MM-DD)
-        broker: One of 'WEBULL', 'ALPACA', 'ALPACA_PAPER', 'IBKR', etc.
+        broker: One of 'WEBULL', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'TASTYTRADE', etc.
     
     Returns:
         Chain data with 'data_source' field indicating the source
@@ -336,6 +377,8 @@ def get_option_chain_for_broker(symbol: str, expiry: str, broker: str = 'WEBULL'
         return get_cached_option_chain_alpaca(symbol, expiry)
     elif 'IBKR' in broker_upper:
         return get_cached_option_chain_ibkr(symbol, expiry)
+    elif 'TASTYTRADE' in broker_upper:
+        return get_cached_option_chain_tastytrade(symbol, expiry)
     else:
         return get_cached_option_chain_webull(symbol, expiry)
 _cache_ttl: int = 5  # 5 second cache
@@ -2511,6 +2554,22 @@ def register_routes(app):
                 'net_liquidation': 0,
                 'total_profit_loss': 0,
                 'day_profit_loss': 0
+            },
+            'tastytrade_paper': {
+                'status': 'not_initialized',
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'total_profit_loss': 0,
+                'day_profit_loss': 0
+            },
+            'tastytrade_live': {
+                'status': 'not_initialized',
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'total_profit_loss': 0,
+                'day_profit_loss': 0
             }
         }
         
@@ -2579,6 +2638,32 @@ def register_routes(app):
             except Exception as e:
                 print(f"[API] Error fetching IBKR account: {e}")
                 accounts['ibkr_paper']['status'] = 'error'
+        
+        # Fetch Tastytrade account (paper or live based on connection)
+        if _bot_instance and hasattr(_bot_instance, 'tastytrade_broker') and _bot_instance.tastytrade_broker:
+            try:
+                import concurrent.futures
+                
+                def _get_tastytrade_account_sync():
+                    return _bot_instance.tastytrade_broker.get_account_info()
+                
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_get_tastytrade_account_sync)
+                    tastytrade_data = future.result(timeout=10)
+                if tastytrade_data:
+                    is_paper = getattr(_bot_instance.tastytrade_broker, 'paper_trade', False)
+                    tastytrade_key = 'tastytrade_paper' if is_paper else 'tastytrade_live'
+                    accounts[tastytrade_key] = {
+                        'status': 'ok',
+                        'buying_power': tastytrade_data.get('buying_power', 0),
+                        'cash_balance': tastytrade_data.get('cash_balance', 0),
+                        'net_liquidation': tastytrade_data.get('net_liquidation', 0),
+                        'total_profit_loss': tastytrade_data.get('total_profit_loss', 0),
+                        'day_profit_loss': tastytrade_data.get('day_profit_loss', 0)
+                    }
+            except Exception as e:
+                print(f"[API] Error fetching Tastytrade account: {e}")
+                accounts['tastytrade_live']['status'] = 'error'
         
         return jsonify(accounts)
     

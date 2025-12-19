@@ -4,6 +4,11 @@
 **v3.2.4** (2025-12-18)
 
 ## Recent Changes (Milestone 5) - Database Synchronization & Credential Consistency
+- **Tastytrade Display Pages Integration**: Tastytrade broker now fully wired to GUI display pages
+  - Added Tastytrade to BrokerLiveAnalytics (tastytrade_live/tastytrade_paper configs, credentials, connect, get_account_info)
+  - Added Tastytrade option chain routing via get_cached_option_chain_tastytrade()
+  - Added Tastytrade to all_broker_accounts API endpoint for balance/position display
+  - Uses concurrent.futures.ThreadPoolExecutor for Flask-safe synchronous broker calls
 - **IBKR Display Pages Integration**: IBKR broker now fully wired to GUI display pages
   - Added IBKR to BrokerLiveAnalytics (ibkr_live/ibkr_paper configs, credentials, connect, get_account_info)
   - Added IBKR option chain routing via get_cached_option_chain_ibkr()

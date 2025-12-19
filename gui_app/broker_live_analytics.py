@@ -226,6 +226,46 @@ class BrokerLiveAnalytics:
             print(f"[ANALYTICS] Error connecting to {broker_id}: {e}")
             return None
     
+    async def connect_tastytrade(self, broker_id: str, credentials: Dict) -> Optional[Any]:
+        """Connect to Tastytrade account"""
+        try:
+            from src.brokers.tastytrade_broker import TastytradeBroker
+        except ImportError:
+            print(f"[ANALYTICS] Tastytrade broker module not available")
+            return None
+            
+        try:
+            config = self.BROKER_CONFIGS.get(broker_id, {})
+            is_paper = config.get('paper', True)
+            
+            username = credentials.get('username', '')
+            password = credentials.get('password', '')
+            client_id = credentials.get('client_id', '')
+            client_secret = credentials.get('client_secret', '')
+            refresh_token = credentials.get('refresh_token', '')
+            
+            if not ((username and password) or (client_id and client_secret and refresh_token)):
+                print(f"[ANALYTICS] Tastytrade credentials not configured for {broker_id}")
+                return None
+            
+            broker_config = {
+                'username': username,
+                'password': password,
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'refresh_token': refresh_token,
+                'paper_trade': is_paper
+            }
+            
+            broker = TastytradeBroker(broker_config)
+            await asyncio.to_thread(broker.connect)
+            self._clients[broker_id] = broker
+            return broker
+            
+        except Exception as e:
+            print(f"[ANALYTICS] Error connecting to {broker_id}: {e}")
+            return None
+    
     async def get_client(self, broker_id: str) -> Optional[Any]:
         """Get or create client for broker"""
         if broker_id in self._clients:
@@ -241,6 +281,8 @@ class BrokerLiveAnalytics:
             return await self.connect_alpaca(broker_id, credentials)
         elif broker_type == 'ibkr':
             return await self.connect_ibkr(broker_id, credentials)
+        elif broker_type == 'tastytrade':
+            return await self.connect_tastytrade(broker_id, credentials)
         
         return None
     
@@ -314,6 +356,23 @@ class BrokerLiveAnalytics:
                     
             elif broker_type == 'ibkr':
                 account = await client.get_account_info()
+                if account:
+                    portfolio_value = float(account.get('net_liquidation', 0) or 0)
+                    buying_power = float(account.get('buying_power', 0) or 0)
+                    cash = float(account.get('cash_balance', 0) or 0)
+                    day_pnl = float(account.get('day_profit_loss', 0) or 0)
+                    
+                    return {
+                        'connected': True,
+                        'buying_power': buying_power,
+                        'cash': cash,
+                        'portfolio_value': portfolio_value,
+                        'day_pnl': day_pnl,
+                        'day_pnl_percent': (day_pnl / portfolio_value * 100) if portfolio_value > 0 else 0
+                    }
+                    
+            elif broker_type == 'tastytrade':
+                account = await asyncio.to_thread(client.get_account_info)
                 if account:
                     portfolio_value = float(account.get('net_liquidation', 0) or 0)
                     buying_power = float(account.get('buying_power', 0) or 0)
