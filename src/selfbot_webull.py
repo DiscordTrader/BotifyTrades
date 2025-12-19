@@ -2211,11 +2211,20 @@ class WebullBroker:
         iso_exp = iso_from_mmdd(expiry_mmdd, year=expiry_year)
         target_strike = float(strike)
 
+        # Check if this is an index option (SPX, NDX, VIX, etc.)
+        index_symbols = ['SPX', 'SPXW', 'NDX', 'NDXP', 'VIX', 'VIXW', 'XSP', 'DJX', 'RUT']
+        is_index_option = symbol.upper() in index_symbols
+        
+        if is_index_option:
+            print(f"[WEBULL] 🔍 Index option detected: {symbol}")
+        
         tId = wb.get_ticker(symbol)
+        print(f"[WEBULL] get_ticker('{symbol}') returned: {tId}")
         if not tId:
             raise RuntimeError(f"Symbol not found: {symbol}")
 
         data = wb.get_options(stock=symbol, direction=direction, expireDate=iso_exp)
+        print(f"[WEBULL] get_options('{symbol}', '{direction}', '{iso_exp}') returned: {type(data)} - {len(data) if isinstance(data, (list, dict)) else 'N/A'} items")
         candidates = []
         for row in iter_rows(data):
             cand = extract_candidate(row, direction)
@@ -2237,8 +2246,11 @@ class WebullBroker:
                 if cand['expiry'] and str(cand['expiry']).startswith(iso_exp):
                     candidates.append(cand)
 
+        print(f"[WEBULL] Found {len(candidates)} candidate options for {symbol} {target_strike}{direction} {iso_exp}")
+        
         for cand in candidates:
             if abs(cand['strike'] - target_strike) < 1e-6:
+                print(f"[WEBULL] ✓ Exact match found: option_id={cand['option_id']}, strike={cand['strike']}")
                 return int(cand['option_id']), int(tId)
 
         best = None
@@ -2248,8 +2260,10 @@ class WebullBroker:
             if diff < best_diff:
                 best, best_diff = cand, diff
         if best and best_diff <= 0.01:
+            print(f"[WEBULL] ✓ Close match found: option_id={best['option_id']}, strike={best['strike']} (diff={best_diff})")
             return int(best['option_id']), int(tId)
 
+        print(f"[WEBULL] ❌ No matching option found. Candidates: {candidates[:5]}...")
         raise RuntimeError(f"OptionId not found for {symbol} {strike}{opt_type} {iso_exp}")
 
     def _get_current_option_quote(self, wb, symbol: str, strike: float, opt_type: str, expiry_mmdd: str, expiry_year: Optional[str] = None) -> Optional[float]:
