@@ -478,6 +478,95 @@ class TastytradeBroker(BrokerInterface):
         except Exception as e:
             print(f"[{self.name}] Error getting quote for {symbol}: {e}")
             return None
+    
+    def get_option_chain(self, symbol: str, expiration_date: str) -> Dict[str, Any]:
+        """Get option chain for a symbol and expiration date.
+        
+        The tastytrade SDK returns: {expiry_date: [Option, ...]}
+        where keys are date objects and values are lists of Option objects.
+        
+        Args:
+            symbol: Stock symbol (e.g., 'SPY')
+            expiration_date: Expiration date in YYYY-MM-DD format
+            
+        Returns:
+            Dictionary with 'calls', 'puts', 'stock_price', and 'data_source' keys
+        """
+        try:
+            if not TASTYTRADE_AVAILABLE:
+                print(f"[{self.name}] ❌ tastytrade package not installed")
+                return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Tastytrade (unavailable)'}
+            
+            if not self.session:
+                print(f"[{self.name}] Not connected - cannot get option chain")
+                return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Tastytrade (not connected)'}
+            
+            print(f"[{self.name}] Fetching option chain for {symbol} exp {expiration_date}")
+            
+            exp_date = datetime.strptime(expiration_date, '%Y-%m-%d').date()
+            
+            chain = get_option_chain(self.session, symbol)
+            
+            if not chain:
+                print(f"[{self.name}] No option chain returned for {symbol}")
+                return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Tastytrade (no data)'}
+            
+            if exp_date not in chain:
+                available_expiries = sorted(list(chain.keys()))[:10]
+                print(f"[{self.name}] Expiry {exp_date} not found. Available: {available_expiries}")
+                return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': f'Tastytrade (expiry {exp_date} not available)'}
+            
+            options = chain[exp_date]
+            
+            calls = []
+            puts = []
+            
+            for opt in options:
+                strike = float(opt.strike_price)
+                opt_type = opt.option_type.value
+                opt_symbol = opt.symbol if hasattr(opt, 'symbol') else f"{symbol}{expiration_date.replace('-', '')}{opt_type}{int(strike*1000):08d}"
+                
+                option_data = {
+                    'strike': strike,
+                    'symbol': opt_symbol,
+                    'type': 'call' if opt_type == 'C' else 'put',
+                    'expiry': expiration_date,
+                    'bid': 0,
+                    'ask': 0,
+                    'last': 0,
+                    'volume': 0,
+                    'open_interest': 0,
+                    'iv': 0,
+                    'delta': 0,
+                    'gamma': 0,
+                    'theta': 0,
+                    'vega': 0
+                }
+                
+                if opt_type == 'C':
+                    calls.append(option_data)
+                else:
+                    puts.append(option_data)
+            
+            calls.sort(key=lambda x: x['strike'])
+            puts.sort(key=lambda x: x['strike'])
+            
+            print(f"[{self.name}] ✓ Found {len(calls)} calls, {len(puts)} puts for {symbol} exp {expiration_date}")
+            
+            return {
+                'calls': calls,
+                'puts': puts,
+                'stock_price': None,
+                'data_source': 'Tastytrade',
+                'expiration': expiration_date,
+                'symbol': symbol
+            }
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting option chain for {symbol}: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': f'Tastytrade Error: {str(e)}'}
 
 
 BrokerFactory.register_broker('TASTYTRADE', TastytradeBroker)
