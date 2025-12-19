@@ -4,6 +4,11 @@
 **v3.2.4** (2025-12-18)
 
 ## Recent Changes (Milestone 5) - Database Synchronization & Credential Consistency
+- **Tastytrade Option Chain Implementation**: TastytradeBroker now has full `get_option_chain()` method
+  - Uses tastytrade SDK's `get_option_chain(session, symbol)` which returns `{expiry_date: [Option, ...]}`
+  - Filters options by requested expiration date and separates calls/puts
+  - Returns standardized format matching other brokers (calls, puts, data_source)
+  - Option chain GUI now works correctly when Tastytrade is selected as broker
 - **Tastytrade Display Pages Integration**: Tastytrade broker now fully wired to GUI display pages
   - Added Tastytrade to BrokerLiveAnalytics (tastytrade_live/tastytrade_paper configs, credentials, connect, get_account_info)
   - Added Tastytrade option chain routing via get_cached_option_chain_tastytrade()
