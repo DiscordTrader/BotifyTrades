@@ -5826,9 +5826,13 @@ def register_routes(app):
             selected_broker = data.get('broker', 'WEBULL').upper()  # Broker selection
             tracking_channel_id = data.get('tracking_channel_id')  # Optional: Custom channel for tracking
             
-            # Validate inputs
-            if not all([symbol, strike, expiry, option_type, price, option_id]):
-                return jsonify({'error': 'Missing required fields (symbol, strike, expiry, option_type, price, option_id)'}), 400
+            # Validate inputs - option_id only required for Webull
+            if not all([symbol, strike, expiry, option_type, price]):
+                return jsonify({'error': 'Missing required fields (symbol, strike, expiry, option_type, price)'}), 400
+            
+            # Webull requires option_id, other brokers don't
+            if selected_broker in ['WEBULL'] and not option_id:
+                return jsonify({'error': 'Missing option_id (required for Webull)'}), 400
             
             if option_type not in ['CALL', 'PUT']:
                 return jsonify({'error': 'option_type must be CALL or PUT'}), 400
@@ -5870,6 +5874,20 @@ def register_routes(app):
                 
             elif selected_broker == 'IBKR_PAPER':
                 return jsonify({'error': 'IBKR PAPER requires TWS Paper Trading connection. Please ensure TWS Paper is running.'}), 400
+            
+            elif selected_broker in ['TASTYTRADE_LIVE', 'TASTYTRADE']:
+                if hasattr(_bot_instance, 'tastytrade_broker') and _bot_instance.tastytrade_broker:
+                    broker_to_use = _bot_instance.tastytrade_broker
+                    broker_name = 'TASTYTRADE_LIVE'
+                else:
+                    return jsonify({'error': 'Tastytrade LIVE broker not connected'}), 503
+            
+            elif selected_broker == 'TASTYTRADE_PAPER':
+                if hasattr(_bot_instance, 'tastytrade_paper_broker') and _bot_instance.tastytrade_paper_broker:
+                    broker_to_use = _bot_instance.tastytrade_paper_broker
+                    broker_name = 'TASTYTRADE_PAPER'
+                else:
+                    return jsonify({'error': 'Tastytrade PAPER broker not connected'}), 503
                 
             else:
                 return jsonify({'error': f'Unknown broker: {selected_broker}'}), 400
@@ -5880,18 +5898,34 @@ def register_routes(app):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                result = loop.run_until_complete(
-                    broker_to_use.place_option_order_simple(
-                        symbol=symbol,
-                        strike=strike,
-                        expiry=expiry,
-                        option_type=option_type,
-                        quantity=quantity,
-                        side=side,
-                        price=price,
-                        option_id=option_id
+                # Tastytrade uses different method signature
+                if broker_name in ['TASTYTRADE_LIVE', 'TASTYTRADE_PAPER']:
+                    # Convert side to action format (BUY -> BTO, SELL -> STC)
+                    action_code = "BTO" if side == "BUY" else "STC"
+                    result = loop.run_until_complete(
+                        broker_to_use.place_option_order(
+                            symbol=symbol,
+                            strike=strike,
+                            expiry=expiry,
+                            option_type=option_type,
+                            action=action_code,
+                            quantity=quantity,
+                            price=price
+                        )
                     )
-                )
+                else:
+                    result = loop.run_until_complete(
+                        broker_to_use.place_option_order_simple(
+                            symbol=symbol,
+                            strike=strike,
+                            expiry=expiry,
+                            option_type=option_type,
+                            quantity=quantity,
+                            side=side,
+                            price=price,
+                            option_id=option_id
+                        )
+                    )
                 
                 # Debug: Print the actual result from Webull
                 print(f"[DEBUG] Order result type: {type(result)}")
