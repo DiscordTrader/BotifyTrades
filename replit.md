@@ -4,6 +4,11 @@
 **v3.2.5** (2025-12-19)
 
 ## Recent Changes (Milestone 6) - DXLink Live Option Streaming
+- **Bug Fix**: Discord webhook signals now execute correctly
+  - Previously, all webhook messages were being skipped (including BTO/STC signals from Options Trading page)
+  - Now allows BotifyTrades webhook messages containing BTO/STC signals to be processed
+  - Still skips notification webhooks (emoji responses like 🤖, 📊, etc.)
+  - Fix in `src/selfbot_webull.py` lines 5422-5435
 - **Bug Fix**: Tastytrade connection status now correctly displays in Settings page
   - Fixed `loadBrokerStatus()` in settings.html to include tastytrade_live and tastytrade_paper
   - Added `loadTastytradeCredentials()` function to load connection status on page load

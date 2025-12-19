@@ -5416,11 +5416,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if self.sentiment_analyzer and not message.author.bot:
             self.sentiment_analyzer.add_message(message.content)
         
-        # Skip webhook messages FIRST (prevents processing own STC/BTO notifications)
+        # Handle webhook messages - allow BotifyTrades trading signals, skip notifications
         # Discord webhook messages have webhook_id attribute
         if hasattr(message, 'webhook_id') and message.webhook_id:
-            print(f"[SKIP] Webhook message from {message.author.name} - ignoring to prevent duplicate orders")
-            return
+            content_stripped = message.content.strip()
+            # Check if this is a trading signal (starts with BTO or STC)
+            is_trading_signal = bool(re.match(r'^(BTO|STC)\s+', content_stripped, re.IGNORECASE))
+            
+            if is_trading_signal and 'BotifyTrades' in message.author.name:
+                # Allow BotifyTrades webhook signals to be processed
+                print(f"[Discord] ✅ BotifyTrades webhook signal detected: {content_stripped[:50]}...")
+            else:
+                # Skip notification webhooks (emoji responses, etc.)
+                print(f"[SKIP] Webhook message from {message.author.name} - ignoring notification webhook")
+                return
         
         # Skip bot's own response messages SECOND (before any logging)
         # This prevents the bot from processing its own 🤖/📊/❌ messages
