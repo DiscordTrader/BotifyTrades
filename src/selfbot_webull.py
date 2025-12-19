@@ -2508,10 +2508,15 @@ class WebullBroker:
 
         def _blocking_place():
             import inspect
+            import sys
             wb = self._client
             if not wb:
                 raise RuntimeError("Webull client not initialized")
+            print(f"[WEBULL] 🔍 Looking up option_id for {symbol} ${strike}{opt_type} {expiry_mmdd}")
+            sys.stdout.flush()
             option_id, tId = self._wb_get_option_id_strict(wb, symbol, strike, opt_type, expiry_mmdd, expiry_year)
+            print(f"[WEBULL] ✓ Got option_id={option_id}, ticker_id={tId} for {symbol}")
+            sys.stdout.flush()
             side = 'BUY' if action.upper() in ('BTO', 'BTC') else 'SELL'
             
             adjusted_qty = qty
