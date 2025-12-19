@@ -655,7 +655,7 @@
         <div class="page-header">
             <div>
                 <h1 class="page-title">Options Trading</h1>
-                <p class="page-subtitle">Enter strike prices to get quotes - up to 4 options at once</p>
+                <p class="page-subtitle">Select symbol, expiry, and strike to get quotes - up to 4 options at once</p>
             </div>
             <div class="broker-selector">
                 <label>Execute On:</label>
@@ -684,9 +684,11 @@
                 
                 <div class="input-section">
                     <input type="text" class="input-small input-symbol" id="symbol{{ i }}" placeholder="SPY" maxlength="5">
-                    <input type="text" class="input-small input-strike" id="strike{{ i }}" placeholder="Strike">
                     <select class="input-small input-expiry" id="expiry{{ i }}">
                         <option value="">Expiry...</option>
+                    </select>
+                    <select class="input-small input-strike" id="strike{{ i }}">
+                        <option value="">Strike...</option>
                     </select>
                     <div class="type-toggle-mini">
                         <button class="type-btn-mini active call" id="callBtn{{ i }}" onclick="setType({{ i }}, 'CALL')">C</button>
@@ -836,12 +838,10 @@
             
             expirations.forEach(exp => {
                 const option = document.createElement('option');
-                // API returns objects: {date: "2025-12-20", label: "Dec 20, 2025"}
                 if (typeof exp === 'object' && exp.date) {
                     option.value = exp.date;
                     option.textContent = exp.label || exp.date;
                 } else {
-                    // Fallback for string format
                     option.value = exp;
                     const date = new Date(exp + 'T12:00:00');
                     option.textContent = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -850,20 +850,86 @@
             });
         }
 
+        let strikeCache = {};
+
+        async function loadStrikes(row) {
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const expiry = document.getElementById(`expiry${row}`).value;
+            const broker = document.getElementById('brokerSelect').value;
+            const strikeSelect = document.getElementById(`strike${row}`);
+            
+            if (!symbol || !expiry) {
+                strikeSelect.innerHTML = '<option value="">Strike...</option>';
+                return;
+            }
+            
+            const cacheKey = `${broker}_${symbol}_${expiry}`;
+            
+            if (strikeCache[cacheKey]) {
+                populateStrikes(row, strikeCache[cacheKey]);
+                return;
+            }
+            
+            strikeSelect.innerHTML = '<option value="">Loading strikes...</option>';
+            
+            try {
+                const response = await fetch(`/api/options/chain?symbol=${symbol}&expiry=${expiry}&broker=${broker}`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                
+                if (data.error) {
+                    strikeSelect.innerHTML = `<option value="">Error: ${data.error}</option>`;
+                    return;
+                }
+                
+                const strikes = new Set();
+                if (data.calls) data.calls.forEach(opt => strikes.add(opt.strike));
+                if (data.puts) data.puts.forEach(opt => strikes.add(opt.strike));
+                
+                const sortedStrikes = Array.from(strikes).sort((a, b) => a - b);
+                
+                if (sortedStrikes.length > 0) {
+                    strikeCache[cacheKey] = sortedStrikes;
+                    populateStrikes(row, sortedStrikes);
+                } else {
+                    strikeSelect.innerHTML = '<option value="">No strikes found</option>';
+                }
+            } catch (error) {
+                console.error('[OPTIONS] Error loading strikes:', error);
+                strikeSelect.innerHTML = '<option value="">Error loading</option>';
+            }
+        }
+
+        function populateStrikes(row, strikes) {
+            const strikeSelect = document.getElementById(`strike${row}`);
+            strikeSelect.innerHTML = '<option value="">Strike...</option>';
+            
+            strikes.forEach(strike => {
+                const option = document.createElement('option');
+                option.value = strike;
+                option.textContent = `$${strike.toFixed(strike % 1 === 0 ? 0 : 2)}`;
+                strikeSelect.appendChild(option);
+            });
+        }
+
         for (let i = 1; i <= 4; i++) {
             document.getElementById(`symbol${i}`).addEventListener('blur', () => loadExpirations(i));
             document.getElementById(`symbol${i}`).addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') loadExpirations(i);
             });
+            document.getElementById(`expiry${i}`).addEventListener('change', () => loadStrikes(i));
         }
 
         document.getElementById('brokerSelect').addEventListener('change', () => {
             expiryCache = {};
+            strikeCache = {};
             for (let i = 1; i <= 4; i++) {
                 const symbol = document.getElementById(`symbol${i}`).value.trim();
                 if (symbol) {
                     loadExpirations(i);
                 }
+                document.getElementById(`strike${i}`).innerHTML = '<option value="">Strike...</option>';
             }
         });
 
@@ -972,7 +1038,7 @@
 
         function clearRow(row) {
             document.getElementById(`symbol${row}`).value = '';
-            document.getElementById(`strike${row}`).value = '';
+            document.getElementById(`strike${row}`).innerHTML = '<option value="">Strike...</option>';
             document.getElementById(`expiry${row}`).innerHTML = '<option value="">Expiry...</option>';
             document.getElementById(`quoteSection${row}`).innerHTML = '<span class="quote-placeholder">Enter details & click Load</span>';
             document.getElementById(`divider${row}`).style.display = 'none';

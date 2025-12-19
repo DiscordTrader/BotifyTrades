@@ -1,90 +1,7 @@
 # BotifyTrades - Discord Trading Bot
 
-## Version
-**v3.2.5** (2025-12-19)
-
-## Recent Changes (Milestone 6) - DXLink Live Option Streaming
-- **Bug Fix**: Discord webhook signals now execute correctly
-  - Previously, all webhook messages were being skipped (including BTO/STC signals from Options Trading page)
-  - Now allows BotifyTrades webhook messages containing BTO/STC signals to be processed
-  - Still skips notification webhooks (emoji responses like 🤖, 📊, etc.)
-  - Fix in `src/selfbot_webull.py` lines 5422-5435
-- **Bug Fix**: Tastytrade connection status now correctly displays in Settings page
-  - Fixed `loadBrokerStatus()` in settings.html to include tastytrade_live and tastytrade_paper
-  - Added `loadTastytradeCredentials()` function to load connection status on page load
-  - Status badges and connection info now properly update when Tastytrade is connected
-- **DXLink Live Option Quotes**: Tastytrade option chain now fetches live bid/ask prices
-  - Uses tastytrade DXLinkStreamer for real-time market data
-  - FREE for funded personal tastytrade accounts (no additional subscription)
-  - Added `get_option_quotes_dxlink()` async method with timeout handling
-  - Added `_get_option_quotes_sync()` wrapper for Flask route compatibility
-  - `get_option_chain()` now automatically fetches and applies live quotes
-  - Data source displays "Tastytrade (DXLink Live)" when streaming is active
-  - Proper event loop handling for both sync and async contexts
-- **Bug Fix**: Fixed data_source being overwritten in get_cached_option_chain_tastytrade()
-  - Previously, line 355 overwrote broker's data_source with just 'Tastytrade'
-  - Now preserves the original data_source from broker (e.g., 'Tastytrade (DXLink Live)')
-
-## Previous Milestone (5) - Database Synchronization & Credential Consistency
-- **Tastytrade Option Chain Implementation**: TastytradeBroker now has full `get_option_chain()` method
-  - Uses tastytrade SDK's `get_option_chain(session, symbol)` which returns `{expiry_date: [Option, ...]}`
-  - Filters options by requested expiration date and separates calls/puts
-  - Returns standardized format matching other brokers (calls, puts, data_source)
-  - Option chain GUI now works correctly when Tastytrade is selected as broker
-- **Tastytrade Display Pages Integration**: Tastytrade broker now fully wired to GUI display pages
-  - Added Tastytrade to BrokerLiveAnalytics (tastytrade_live/tastytrade_paper configs, credentials, connect, get_account_info)
-  - Added Tastytrade option chain routing via get_cached_option_chain_tastytrade()
-  - Added Tastytrade to all_broker_accounts API endpoint for balance/position display
-  - Uses concurrent.futures.ThreadPoolExecutor for Flask-safe synchronous broker calls
-- **IBKR Display Pages Integration**: IBKR broker now fully wired to GUI display pages
-  - Added IBKR to BrokerLiveAnalytics (ibkr_live/ibkr_paper configs, credentials, connect, get_account_info)
-  - Added IBKR option chain routing via get_cached_option_chain_ibkr()
-  - Added IBKR to all_broker_accounts API endpoint for balance/position display
-  - Proper loop availability checks and null-result guards for robustness
-- **IBKR Auto-Initialization**: Bot now auto-initializes Interactive Brokers from database credentials on startup
-  - Imports IBKRBroker at startup (alongside other brokers)
-  - Connects to TWS/IB Gateway using saved host, port, and client ID settings
-  - Updates broker status in GUI on successful connection
-  - Included in BrokerManager for sync service and broker_ready check
-  - Multi-broker routing fixed to use dedicated `ibkr_broker` instance
-- **GitHub Release Update Checking**: System Health diagnostics now check GitHub releases for available updates
-  - Displays current version vs latest available version
-  - Shows WARN if update available, PASS if up to date
-  - Detects and reports network/API failures
-  - Uses existing VersionChecker infrastructure (no duplicate code)
-- **Fixed _save_trade_to_db() Signature**: Corrected function to use dict parameter instead of kwargs
-- **Order ID Tracking**: Now saves order_id to database for proper trade-to-order matching
-- **Quantity Sync from Broker**: Database quantities now sync with actual broker positions in real-time
-- **60-Second Grace Period**: PENDING trades won't be prematurely closed (prevents race condition)
-- **Broker Name Normalization**: All broker names now saved as uppercase for consistency
-- **Close Reason Tracking**: Added close_reason field when sync closes positions
-- **Robinhood Auto-Initialization**: Bot now auto-initializes Robinhood broker from database credentials on startup
-- **Credential Consistency**: All broker credentials (Webull, Alpaca, Tastytrade, Robinhood, IBKR) load from database on restart
-
-## Previous Milestone (4)
-- **Alpaca Index Options Rejection**: Clear error when attempting index options on Alpaca
-  - SPX, SPXW, NDX, NDXP, RUT, VIX, etc. NOT supported on Alpaca (CBOE cash-settled)
-  - Error message suggests using Tastytrade/IBKR or QQQ/SPY alternatives
-- **Enhanced Option Order Messages**: Meaningful success/failure messages with details
-  - Success: Shows action, quantity, symbol, strike, expiry, price, order type, total cost
-  - Failures: Specific error messages for invalid symbols, insufficient funds, expired contracts, account issues
-- **Robinhood Broker Integration**: Added support for Robinhood brokerage via robin-stocks library
-  - Stocks: Market, Limit, Stop orders supported
-  - Options: Limit orders only (Robinhood API constraint)
-  - 2FA Authentication: TOTP-based authentication with pyotp
-  - WARNING: No paper trading mode - all trades are LIVE
-  - Unofficial API: May break if Robinhood updates backend
-- **GitHub README Enhancement**: Comprehensive README for better search visibility
-
-## Previous Milestone (3)
-- **SPX/NDX Shorthand Format**: Added support for quick 0DTE signals like "6900c" → BTO 1 SPX 6900C, auto-detects symbol based on strike (≥10000 = NDX, <10000 = SPX)
-- **Slippage Settings Fix**: Fixed bug where slippage protection was not respecting GUI toggle - now reads directly from slippage_settings table
-- **Message Purge System**: Configurable retention dropdown (1/3/7/14/30 days) in Signals tab
-- **Live Position Status Fix**: Live brokerage positions now correctly show "OPEN" status when merged with broker data
-- **TRADE IDEA Fallback**: Auto Signal Conversion now falls back to originating channel's broker settings when target not configured
-
 ## Overview
-BotifyTrades is a cross-platform Discord self-bot designed for automated stock and options trading. It provides automated trading across Webull, Alpaca, Interactive Brokers, Tastytrade, and Robinhood, featuring advanced analytics, a dual-broker architecture for paper and live trading, and comprehensive risk management. The bot monitors Discord for trading signals, executes trades with pre-trade swing analysis, AI-powered post-trade analysis, and interactive commands, all managed via a Flask web control panel. The project aims to provide a robust, automated trading solution, enhancing user control and analytical capabilities in a Discord-centric workflow, with a focus on comprehensive automation and analytical tools.
+BotifyTrades is a cross-platform Discord self-bot designed for automated stock and options trading across multiple brokers including Webull, Alpaca, Interactive Brokers, Tastytrade, and Robinhood. It offers automated trading, advanced analytics, a dual-broker architecture for paper and live trading, and comprehensive risk management. The bot monitors Discord for trading signals, executes trades with pre-trade swing analysis, AI-powered post-trade analysis, and interactive commands, all managed via a Flask web control panel. The project's core purpose is to provide a robust, automated trading solution, enhancing user control and analytical capabilities within a Discord-centric workflow, with a focus on comprehensive automation and analytical tools.
 
 ## User Preferences
 - **Security**: Always use environment variables (Replit Secrets) for credentials and license keys
@@ -98,26 +15,19 @@ BotifyTrades is a cross-platform Discord self-bot designed for automated stock a
 ## System Architecture
 
 ### UI/UX Decisions
-The bot utilizes a Flask-based web control panel with a dark theme, real-time dashboards, dynamic channel management, live trade monitoring, and a System Health Page. Broker-specific Live Analytics pages offer Webull/Thinkorswim-style dashboards. An integrated AI chat assistant provides smart FAQ and intent-based support. The options trading interface is optimized for performance, enabling strike-targeted lookup and displaying detailed order inputs with Greeks.
+The bot features a Flask-based web control panel with a dark theme, real-time dashboards, dynamic channel management, live trade monitoring, and a System Health Page. Broker-specific Live Analytics pages emulate Webull/Thinkorswim-style dashboards. An integrated AI chat assistant provides smart FAQ and intent-based support. The options trading interface is optimized for performance, enabling strike-targeted lookup and displaying detailed order inputs with Greeks.
 
 ### Technical Implementations
-Core technologies include `discord.py-self` and `webull`. The system employs a true dual-broker architecture for live and paper trading, with platform-specific credential encryption. A separate thread runs the web GUI, communicating via SQLite. Order execution is managed by an asynchronous, queue-based system. Signal parsing uses a multi-layer approach: 1) Learned formats from database (AI-taught), 2) Built-in regex patterns, 3) AI fallback for unrecognized formats. The system supports per-channel user filtering and a "TRADE IDEA" format. Risk management features automated profit targets, stop losses, trailing stops, intelligent price slippage protection, and auto-quantity calculation, all configurable via the GUI and stored in SQLite. Pre-trade analysis uses technical indicators, and post-execution analysis leverages OpenAI GPT models. Real-time market data is integrated, and interactive Discord commands enable on-demand analysis. The Auto Signal Conversion system executes stock alerts as Alpaca BRACKET ORDERs. Position sizing correctly applies to paper trades. An error monitoring system provides automatic detection, logging, and AI assistant contextual help. Licensing involves server-side validation with machine binding and an offline grace period.
+Core technologies include `discord.py-self` and `webull`. It employs a true dual-broker architecture for live and paper trading, with platform-specific credential encryption. A separate thread manages the web GUI, communicating via SQLite. Order execution uses an asynchronous, queue-based system. Signal parsing follows a multi-layer approach: learned formats from a database (AI-taught), built-in regex patterns, and AI fallback. The system supports per-channel user filtering and a "TRADE IDEA" format. Risk management includes automated profit targets, stop losses, trailing stops, intelligent price slippage protection, and auto-quantity calculation, all GUI-configurable and stored in SQLite. Pre-trade analysis uses technical indicators, and post-execution analysis leverages OpenAI GPT models. Real-time market data is integrated, and interactive Discord commands enable on-demand analysis. The Auto Signal Conversion system executes stock alerts as Alpaca BRACKET ORDERs. Position sizing applies correctly to paper trades. An error monitoring system provides automatic detection, logging, and AI assistant contextual help. Licensing involves server-side validation with machine binding.
 
 ### AI-Powered Signal Format Learning
-The system features a "teach once, use forever" approach for learning new signal formats:
-- **Teaching via Chatbot**: Users can teach new formats by saying "Teach this format: [signal example]"
-- **One-time AI Cost**: AI analyzes the format once and creates a reusable parsing template
-- **Database Storage**: Learned formats are stored in `signal_formats` table with regex patterns and field mappings
-- **Caching**: Parse results are cached in `signal_format_cache` to avoid duplicate processing
-- **Management**: View, enable/disable, or delete formats via chatbot commands or API (`/api/signal-formats`)
-- **Fallback Hierarchy**: Learned formats > Built-in regex > AI parsing (if OpenAI key configured)
-- **Key Files**: `gui_app/format_trainer.py` (FormatTrainer service), `gui_app/chat_assistant.py` (chat intents)
+The system includes a "teach once, use forever" feature for learning new signal formats. Users can teach new formats via a chatbot, and the AI analyzes the format to create a reusable parsing template. Learned formats are stored in a `signal_formats` database table with regex patterns and field mappings, and parse results are cached. Management of these formats is available via chatbot commands or an API. The fallback hierarchy for signal parsing is learned formats, then built-in regex, then AI parsing.
 
 ### Feature Specifications
-The system supports a dual-mode channel system for simultaneous execution and tracking with FIFO-based P&L tracking, and Multi-Broker Execution for trades across multiple accounts with per-channel broker selection. It handles market orders, comprehensive PNL page filtering, and per-channel position sizing. A Portfolio Simulation Engine projects portfolio growth. Authentication includes a setup wizard, secure login, password recovery, and a waitlist/referral system. The dashboard features live price refresh from Webull. Per-channel risk settings allow independent operation, supporting 3-tier profit targets with partial exits and trailing stops. A mandatory user agreement/risk disclosure is stored persistently.
+The system supports a dual-mode channel system for simultaneous execution and tracking with FIFO-based P&L tracking, and Multi-Broker Execution across multiple accounts with per-channel broker selection. It handles market orders, comprehensive PNL page filtering, and per-channel position sizing. A Portfolio Simulation Engine projects portfolio growth. Authentication includes a setup wizard, secure login, password recovery, and a waitlist/referral system. The dashboard features live price refresh from Webull. Per-channel risk settings allow independent operation, supporting 3-tier profit targets with partial exits and trailing stops. A mandatory user agreement/risk disclosure is stored persistently.
 
 ### System Design Choices
-The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, and Robinhood. The system emphasizes user experience through an interactive setup wizard, GUI-based credential management, automatic license renewal, and extensive documentation. Deployment options include Windows, Linux (with systemd), and AWS EC2. The Discord bot runs in a dedicated thread with an isolated asyncio event loop. Broker credentials are loaded hierarchically. Discord channel IDs and all bot settings, including signal regex patterns and allowed author/guild IDs, are GUI-manageable and stored in SQLite. Per-channel risk management can override global defaults. The `/packaging/` directory consolidates platform-specific build scripts. The `/license/` module handles licensing, supporting legacy, machine-bound, and activation-based licenses with a dedicated GUI. The BrokerSyncService handles case-insensitive broker name matching. Options data retrieval prioritizes Webull for live prices. A unified position key format (`{BROKER}_{SYMBOL}_{STRIKE}_{EXPIRY}_{C/P}`) is used across the system. The system employs a dual-build license architecture separating Admin and User deployments for license management and bot operation.
+The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, and Robinhood. The system emphasizes user experience through an interactive setup wizard, GUI-based credential management, automatic license renewal, and extensive documentation. Deployment options include Windows, Linux (with systemd), and AWS EC2. The Discord bot runs in a dedicated thread with an isolated asyncio event loop. Broker credentials are loaded hierarchically. Discord channel IDs and all bot settings, including signal regex patterns and allowed author/guild IDs, are GUI-manageable and stored in SQLite. Per-channel risk management can override global defaults. The `/packaging/` directory consolidates platform-specific build scripts. The `/license/` module handles licensing, supporting legacy, machine-bound, and activation-based licenses with a dedicated GUI. The BrokerSyncService handles case-insensitive broker name matching. Options data retrieval prioritizes Webull for live prices. A unified position key format (`{BROKER}_{SYMBOL}_{STRIKE}_{EXPIRY}_{C/P}`) is used across the system. The system employs a dual-build license architecture separating Admin and User deployments.
 
 ## External Dependencies
 

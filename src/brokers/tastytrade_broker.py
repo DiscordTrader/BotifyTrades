@@ -30,7 +30,7 @@ except ImportError as e:
 
 try:
     from tastytrade import DXLinkStreamer
-    from tastytrade.dxfeed import Quote
+    from tastytrade.dxfeed import Quote, Greeks
     DXLINK_AVAILABLE = True
 except ImportError as e:
     print(f"[TASTYTRADE] Warning: DXLink streaming not available: {e}")
@@ -517,94 +517,117 @@ class TastytradeBroker(BrokerInterface):
             print(f"[{self.name}] Error getting quote for {symbol}: {e}")
             return None
     
-    async def get_option_quotes_dxlink(self, symbols: list, timeout: float = 5.0) -> Dict[str, Dict[str, float]]:
-        """Fetch live bid/ask quotes for option symbols using DXLink streaming.
+    async def get_option_data_dxlink(self, symbols: list, timeout: float = 10.0) -> Dict[str, Dict[str, float]]:
+        """Fetch live quotes (bid/ask) AND Greeks (IV, delta, etc.) in a single DXLink session.
         
         DXLink streaming data is FREE for funded personal tastytrade accounts.
         
         Args:
-            symbols: List of option symbols (OCC format)
-            timeout: Maximum time to wait for quotes (seconds)
+            symbols: List of option streamer symbols
+            timeout: Maximum time to wait for data (seconds)
             
         Returns:
-            Dict mapping symbol to {'bid': price, 'ask': price}
+            Dict mapping symbol to {'bid': val, 'ask': val, 'iv': val, 'delta': val, 'theta': val, 'gamma': val, 'vega': val}
         """
-        quotes = {}
+        option_data = {}
         
         if not DXLINK_AVAILABLE:
             print(f"[{self.name}] DXLink streaming not available")
-            return quotes
+            return option_data
         
         if not self.session:
-            print(f"[{self.name}] Not connected - cannot fetch quotes")
-            return quotes
+            print(f"[{self.name}] Not connected - cannot fetch option data")
+            return option_data
         
         if not symbols:
-            return quotes
+            return option_data
         
         try:
-            print(f"[{self.name}] Fetching live quotes for {len(symbols)} options via DXLink...")
+            print(f"[{self.name}] Fetching live quotes + Greeks for {len(symbols)} options via DXLink...")
             
             async with DXLinkStreamer(self.session) as streamer:
                 await streamer.subscribe(Quote, symbols)
+                await streamer.subscribe(Greeks, symbols)
                 
-                received = 0
+                quotes_received = set()
+                greeks_received = set()
                 start_time = asyncio.get_event_loop().time()
                 
-                while received < len(symbols):
+                while len(quotes_received) < len(symbols) or len(greeks_received) < len(symbols):
                     elapsed = asyncio.get_event_loop().time() - start_time
                     if elapsed >= timeout:
-                        print(f"[{self.name}] Quote timeout after {elapsed:.1f}s, got {received}/{len(symbols)} quotes")
+                        print(f"[{self.name}] DXLink timeout after {elapsed:.1f}s - quotes: {len(quotes_received)}, greeks: {len(greeks_received)}")
                         break
                     
                     try:
-                        quote = await asyncio.wait_for(
-                            streamer.get_event(Quote),
-                            timeout=min(1.0, timeout - elapsed)
-                        )
+                        if len(quotes_received) < len(symbols):
+                            try:
+                                quote = await asyncio.wait_for(
+                                    streamer.get_event(Quote),
+                                    timeout=0.5
+                                )
+                                if quote and hasattr(quote, 'event_symbol'):
+                                    sym = quote.event_symbol
+                                    if sym not in quotes_received:
+                                        if sym not in option_data:
+                                            option_data[sym] = {'bid': 0, 'ask': 0, 'iv': 0, 'delta': 0, 'theta': 0, 'gamma': 0, 'vega': 0}
+                                        option_data[sym]['bid'] = float(quote.bid_price) if quote.bid_price else 0.0
+                                        option_data[sym]['ask'] = float(quote.ask_price) if quote.ask_price else 0.0
+                                        quotes_received.add(sym)
+                            except asyncio.TimeoutError:
+                                pass
                         
-                        if quote and hasattr(quote, 'event_symbol'):
-                            sym = quote.event_symbol
-                            if sym not in quotes:
-                                bid = float(quote.bid_price) if quote.bid_price else 0.0
-                                ask = float(quote.ask_price) if quote.ask_price else 0.0
-                                quotes[sym] = {'bid': bid, 'ask': ask}
-                                received += 1
-                    except asyncio.TimeoutError:
-                        continue
+                        if len(greeks_received) < len(symbols):
+                            try:
+                                greek = await asyncio.wait_for(
+                                    streamer.get_event(Greeks),
+                                    timeout=0.5
+                                )
+                                if greek and hasattr(greek, 'event_symbol'):
+                                    sym = greek.event_symbol
+                                    if sym not in greeks_received:
+                                        if sym not in option_data:
+                                            option_data[sym] = {'bid': 0, 'ask': 0, 'iv': 0, 'delta': 0, 'theta': 0, 'gamma': 0, 'vega': 0}
+                                        option_data[sym]['iv'] = float(greek.volatility) if hasattr(greek, 'volatility') and greek.volatility else 0.0
+                                        option_data[sym]['delta'] = float(greek.delta) if hasattr(greek, 'delta') and greek.delta else 0.0
+                                        option_data[sym]['theta'] = float(greek.theta) if hasattr(greek, 'theta') and greek.theta else 0.0
+                                        option_data[sym]['gamma'] = float(greek.gamma) if hasattr(greek, 'gamma') and greek.gamma else 0.0
+                                        option_data[sym]['vega'] = float(greek.vega) if hasattr(greek, 'vega') and greek.vega else 0.0
+                                        greeks_received.add(sym)
+                            except asyncio.TimeoutError:
+                                pass
+                                
                     except Exception as e:
-                        print(f"[{self.name}] Quote event error: {e}")
+                        print(f"[{self.name}] DXLink event error: {e}")
                         continue
             
-            print(f"[{self.name}] ✓ Received {len(quotes)} live quotes")
-            return quotes
+            print(f"[{self.name}] ✓ Received {len(quotes_received)} quotes, {len(greeks_received)} Greeks")
+            return option_data
             
         except Exception as e:
             print(f"[{self.name}] DXLink streaming error: {e}")
             import traceback
             traceback.print_exc()
-            return quotes
+            return option_data
     
-    def _get_option_quotes_sync(self, symbols: list, timeout: float = 5.0) -> Dict[str, Dict[str, float]]:
-        """Synchronous wrapper for get_option_quotes_dxlink for use in Flask routes."""
-        try:
+    def _get_option_data_sync(self, symbols: list, timeout: float = 10.0) -> Dict[str, Dict[str, float]]:
+        """Synchronous wrapper for get_option_data_dxlink for use in Flask routes."""
+        import concurrent.futures
+        
+        def run_async():
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
             try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
-            
-            if loop is not None:
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(
-                        asyncio.run,
-                        self.get_option_quotes_dxlink(symbols, timeout)
-                    )
-                    return future.result(timeout=timeout + 2)
-            else:
-                return asyncio.run(self.get_option_quotes_dxlink(symbols, timeout))
+                return new_loop.run_until_complete(self.get_option_data_dxlink(symbols, timeout))
+            finally:
+                new_loop.close()
+        
+        try:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(run_async)
+                return future.result(timeout=timeout + 5)
         except Exception as e:
-            print(f"[{self.name}] Sync quote fetch error: {e}")
+            print(f"[{self.name}] Sync option data fetch error: {e}")
             return {}
     
     def get_options_expiration_dates(self, symbol: str) -> list:
@@ -791,28 +814,37 @@ class TastytradeBroker(BrokerInterface):
                         
                         if streamer_to_occ:
                             streamer_symbols = list(streamer_to_occ.keys())
-                            print(f"[{self.name}] Fetching DXLink quotes for {len(streamer_symbols)} streamer symbols...", flush=True)
+                            print(f"[{self.name}] Fetching DXLink quotes + Greeks for {len(streamer_symbols)} options...", flush=True)
                             if streamer_symbols[:1]:
                                 print(f"[{self.name}] Sample streamer symbol: {streamer_symbols[0]}", flush=True)
-                            quotes = self._get_option_quotes_sync(streamer_symbols, timeout=8.0)
-                            print(f"[{self.name}] DXLink returned {len(quotes)} quotes", flush=True)
                             
-                            if quotes:
-                                applied_count = 0
+                            option_data = self._get_option_data_sync(streamer_symbols, timeout=12.0)
+                            print(f"[{self.name}] DXLink returned data for {len(option_data)} options", flush=True)
+                            
+                            if option_data:
+                                quotes_applied = 0
+                                greeks_applied = 0
                                 for opt in calls + puts:
                                     for streamer_sym, occ_sym in streamer_to_occ.items():
-                                        if occ_sym == opt['symbol'] and streamer_sym in quotes:
-                                            q = quotes[streamer_sym]
-                                            opt['bid'] = q.get('bid', 0)
-                                            opt['ask'] = q.get('ask', 0)
+                                        if occ_sym == opt['symbol'] and streamer_sym in option_data:
+                                            data = option_data[streamer_sym]
+                                            opt['bid'] = data.get('bid', 0)
+                                            opt['ask'] = data.get('ask', 0)
+                                            opt['iv'] = data.get('iv', 0)
+                                            opt['delta'] = data.get('delta', 0)
+                                            opt['theta'] = data.get('theta', 0)
+                                            opt['gamma'] = data.get('gamma', 0)
+                                            opt['vega'] = data.get('vega', 0)
                                             if opt['bid'] > 0 or opt['ask'] > 0:
-                                                applied_count += 1
+                                                quotes_applied += 1
                                             if opt['bid'] > 0 and opt['ask'] > 0:
                                                 opt['last'] = (opt['bid'] + opt['ask']) / 2
+                                            if opt['iv'] > 0:
+                                                greeks_applied += 1
                                             break
-                                print(f"[{self.name}] ✓ Applied live quotes to {len(quotes)} options ({applied_count} with non-zero prices)", flush=True)
+                                print(f"[{self.name}] ✓ Applied {quotes_applied} quotes, {greeks_applied} Greeks with non-zero values", flush=True)
                         else:
-                            print(f"[{self.name}] No streamer symbols available, skipping DXLink quotes", flush=True)
+                            print(f"[{self.name}] No streamer symbols available, skipping DXLink data", flush=True)
                     
                     return {
                         'calls': calls,

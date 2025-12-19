@@ -2131,7 +2131,7 @@
   },
   "ALPACA_PAPER_UPS_102.0_2025-12-19_P": {
     "entry_price": 0.75,
-    "highest_price": 0.99,
+    "highest_price": 1.12,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
