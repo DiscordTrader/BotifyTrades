@@ -4,6 +4,10 @@
 **v3.2.5** (2025-12-19)
 
 ## Recent Changes (Milestone 6) - DXLink Live Option Streaming
+- **Bug Fix**: Tastytrade connection status now correctly displays in Settings page
+  - Fixed `loadBrokerStatus()` in settings.html to include tastytrade_live and tastytrade_paper
+  - Added `loadTastytradeCredentials()` function to load connection status on page load
+  - Status badges and connection info now properly update when Tastytrade is connected
 - **DXLink Live Option Quotes**: Tastytrade option chain now fetches live bid/ask prices
   - Uses tastytrade DXLinkStreamer for real-time market data
   - FREE for funded personal tastytrade accounts (no additional subscription)

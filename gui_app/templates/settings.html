@@ -2144,9 +2144,13 @@ async function loadBrokerStatus() {
         if (data.success) {
             updateStatusBadge('discord', data.status.discord);
             updateStatusBadge('alpaca_paper', data.status.alpaca_paper);
+            updateStatusBadge('alpaca_live', data.status.alpaca_live);
             updateStatusBadge('webull_live', data.status.webull_live);
             updateStatusBadge('webull_paper', data.status.webull_paper);
             updateStatusBadge('ibkr_paper', data.status.ibkr_paper);
+            updateStatusBadge('ibkr_live', data.status.ibkr_live);
+            updateStatusBadge('tastytrade_paper', data.status.tastytrade_paper);
+            updateStatusBadge('tastytrade_live', data.status.tastytrade_live);
             updateStatusBadge('robinhood', data.status.robinhood);
         }
     } catch (error) {
@@ -2493,6 +2497,49 @@ document.getElementById('connect-tastytrade-live').addEventListener('click', asy
     }
 });
 
+// Load Tastytrade credentials on page load
+async function loadTastytradeCredentials() {
+    try {
+        const response = await fetch('/api/brokers/credentials/tastytrade');
+        const data = await response.json();
+        
+        if (data.success) {
+            // Update paper connection status
+            updateConnectionStatus('tastytrade-paper-connection-status',
+                data.paper_status.connected ? 'connected' : 'disconnected',
+                data.paper_status.connected ? 'Connected' : 'Not connected',
+                data.paper_status.account_info);
+            
+            // Update live connection status
+            updateConnectionStatus('tastytrade-live-connection-status',
+                data.live_status.connected ? 'connected' : 'disconnected',
+                data.live_status.connected ? 'Connected' : 'Not connected',
+                data.live_status.account_info);
+            
+            // Show account info if connected
+            if (data.live_status.connected && data.live_status.account_info) {
+                const infoDiv = document.getElementById('tastytrade-live-account-info');
+                if (infoDiv) {
+                    infoDiv.style.display = 'block';
+                    const acct = data.live_status.account_info;
+                    infoDiv.innerHTML = `<strong>Account:</strong> ${acct.account_number || 'N/A'} | <strong>Portfolio:</strong> $${(acct.portfolio_value || 0).toLocaleString()} | <strong>Buying Power:</strong> $${(acct.buying_power || 0).toLocaleString()}`;
+                }
+            }
+            
+            if (data.paper_status.connected && data.paper_status.account_info) {
+                const infoDiv = document.getElementById('tastytrade-paper-account-info');
+                if (infoDiv) {
+                    infoDiv.style.display = 'block';
+                    const acct = data.paper_status.account_info;
+                    infoDiv.innerHTML = `<strong>Account:</strong> ${acct.account_number || 'N/A'} | <strong>Portfolio:</strong> $${(acct.portfolio_value || 0).toLocaleString()} | <strong>Buying Power:</strong> $${(acct.buying_power || 0).toLocaleString()}`;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error loading Tastytrade credentials:', error);
+    }
+}
+
 // Webull credentials
 async function loadWebullCredentials() {
     try {
@@ -2773,6 +2820,7 @@ loadDiscordCredentials();
 loadWebullCredentials();
 loadIBKRCredentials();
 loadAlpacaSettings();
+loadTastytradeCredentials();
 loadStaleTradeCounts();
 loadApiKeys();
 loadSlippageSettings();
