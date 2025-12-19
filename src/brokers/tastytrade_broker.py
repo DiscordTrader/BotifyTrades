@@ -19,12 +19,14 @@ from broker_interface import BrokerInterface, OrderResult, BrokerFactory
 
 try:
     from tastytrade import Session, Account
-    from tastytrade.instruments import Equity, Option, get_option_chain
+    from tastytrade.instruments import Equity, Option, get_option_chain, NestedOptionChain
     from tastytrade.order import NewOrder, OrderAction, OrderTimeInForce, OrderType
     TASTYTRADE_AVAILABLE = True
+    NESTED_CHAIN_AVAILABLE = True
 except ImportError as e:
     print(f"[TASTYTRADE] Warning: tastytrade package not available: {e}")
     TASTYTRADE_AVAILABLE = False
+    NESTED_CHAIN_AVAILABLE = False
 
 
 class TastytradeBroker(BrokerInterface):
@@ -480,10 +482,12 @@ class TastytradeBroker(BrokerInterface):
             return None
     
     def get_option_chain(self, symbol: str, expiration_date: str) -> Dict[str, Any]:
-        """Get option chain for a symbol and expiration date.
+        """Get option chain for a symbol and expiration date using NestedOptionChain.
         
-        The tastytrade SDK returns: {expiry_date: [Option, ...]}
-        where keys are date objects and values are lists of Option objects.
+        The tastytrade SDK's NestedOptionChain returns structured data:
+        - chain.expirations[] - list of expiration objects
+        - each expiration has: expiration_date, strikes[]
+        - each strike has: strike_price, call (symbol), put (symbol)
         
         Args:
             symbol: Stock symbol (e.g., 'SPY')
@@ -504,6 +508,83 @@ class TastytradeBroker(BrokerInterface):
             print(f"[{self.name}] Fetching option chain for {symbol} exp {expiration_date}")
             
             exp_date = datetime.strptime(expiration_date, '%Y-%m-%d').date()
+            
+            if NESTED_CHAIN_AVAILABLE:
+                try:
+                    nested_chain = NestedOptionChain.get(self.session, symbol)
+                    
+                    if not nested_chain or not nested_chain.expirations:
+                        print(f"[{self.name}] No option chain returned for {symbol}")
+                        return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Tastytrade (no data)'}
+                    
+                    target_expiration = None
+                    for exp in nested_chain.expirations:
+                        if exp.expiration_date == exp_date:
+                            target_expiration = exp
+                            break
+                    
+                    if not target_expiration:
+                        available_expiries = sorted([e.expiration_date for e in nested_chain.expirations])[:10]
+                        print(f"[{self.name}] Expiry {exp_date} not found. Available: {available_expiries}")
+                        return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': f'Tastytrade (expiry {exp_date} not available)'}
+                    
+                    calls = []
+                    puts = []
+                    
+                    for strike_obj in target_expiration.strikes:
+                        strike_price = float(strike_obj.strike_price)
+                        
+                        if strike_obj.call:
+                            calls.append({
+                                'strike': strike_price,
+                                'symbol': strike_obj.call,
+                                'type': 'call',
+                                'expiry': expiration_date,
+                                'bid': 0,
+                                'ask': 0,
+                                'last': 0,
+                                'volume': 0,
+                                'open_interest': 0,
+                                'iv': 0,
+                                'delta': 0,
+                                'gamma': 0,
+                                'theta': 0,
+                                'vega': 0
+                            })
+                        
+                        if strike_obj.put:
+                            puts.append({
+                                'strike': strike_price,
+                                'symbol': strike_obj.put,
+                                'type': 'put',
+                                'expiry': expiration_date,
+                                'bid': 0,
+                                'ask': 0,
+                                'last': 0,
+                                'volume': 0,
+                                'open_interest': 0,
+                                'iv': 0,
+                                'delta': 0,
+                                'gamma': 0,
+                                'theta': 0,
+                                'vega': 0
+                            })
+                    
+                    calls.sort(key=lambda x: x['strike'])
+                    puts.sort(key=lambda x: x['strike'])
+                    
+                    print(f"[{self.name}] ✓ Found {len(calls)} calls, {len(puts)} puts for {symbol} exp {expiration_date}")
+                    
+                    return {
+                        'calls': calls,
+                        'puts': puts,
+                        'stock_price': None,
+                        'data_source': 'Tastytrade',
+                        'expiration': expiration_date,
+                        'symbol': symbol
+                    }
+                except Exception as nested_err:
+                    print(f"[{self.name}] NestedOptionChain failed: {nested_err}, falling back to get_option_chain")
             
             chain = get_option_chain(self.session, symbol)
             
