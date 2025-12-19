@@ -4,6 +4,12 @@
 **v3.2.4** (2025-12-18)
 
 ## Recent Changes (Milestone 5) - Database Synchronization & Credential Consistency
+- **IBKR Auto-Initialization**: Bot now auto-initializes Interactive Brokers from database credentials on startup
+  - Imports IBKRBroker at startup (alongside other brokers)
+  - Connects to TWS/IB Gateway using saved host, port, and client ID settings
+  - Updates broker status in GUI on successful connection
+  - Included in BrokerManager for sync service and broker_ready check
+  - Multi-broker routing fixed to use dedicated `ibkr_broker` instance
 - **GitHub Release Update Checking**: System Health diagnostics now check GitHub releases for available updates
   - Displays current version vs latest available version
   - Shows WARN if update available, PASS if up to date
@@ -16,7 +22,7 @@
 - **Broker Name Normalization**: All broker names now saved as uppercase for consistency
 - **Close Reason Tracking**: Added close_reason field when sync closes positions
 - **Robinhood Auto-Initialization**: Bot now auto-initializes Robinhood broker from database credentials on startup
-- **Credential Consistency**: All broker credentials (Webull, Alpaca, Tastytrade, Robinhood) load from database on restart
+- **Credential Consistency**: All broker credentials (Webull, Alpaca, Tastytrade, Robinhood, IBKR) load from database on restart
 
 ## Previous Milestone (4)
 - **Alpaca Index Options Rejection**: Clear error when attempting index options on Alpaca

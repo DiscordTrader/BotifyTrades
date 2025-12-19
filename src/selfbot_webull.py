@@ -93,6 +93,14 @@ except ImportError as e:
     print(f"[WARNING] Could not import RobinhoodBroker: {e}")
     ROBINHOOD_AVAILABLE = False
 
+# Import IBKR broker (requires TWS or IB Gateway running)
+try:
+    from brokers.ibkr_broker import IBKRBroker
+    IBKR_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARNING] Could not import IBKRBroker: {e}")
+    IBKR_AVAILABLE = False
+
 # Import BrokerSyncService for real-time trade synchronization
 from broker_sync_service import BrokerSyncService
 
@@ -4319,17 +4327,75 @@ class SelfClient(discord.Client):
             traceback.print_exc()
             self.robinhood_broker = None
 
+        # Initialize IBKR broker (requires TWS or IB Gateway running)
+        self.ibkr_broker = None
+        try:
+            if IBKR_AVAILABLE:
+                _original_print("[IBKR] Starting broker initialization...", flush=True)
+                _original_print("[IBKR] Note: Requires TWS or IB Gateway running", flush=True)
+                
+                from gui_app.broker_credentials_service import get_ibkr_credentials, set_broker_status
+                ibkr_creds = get_ibkr_credentials()
+                ibkr_host = ibkr_creds.get('host', '127.0.0.1')
+                ibkr_port_live = ibkr_creds.get('port_live', 7496)
+                ibkr_port_paper = ibkr_creds.get('port_paper', 7497)
+                ibkr_client_id = ibkr_creds.get('client_id', 1)
+                ibkr_paper_mode = ibkr_creds.get('paper_mode', True)
+                
+                # Select port based on paper/live mode
+                ibkr_port = ibkr_port_paper if ibkr_paper_mode else ibkr_port_live
+                
+                _original_print(f"[IBKR] ✓ Loaded credentials from DATABASE", flush=True)
+                _original_print(f"[IBKR]   Host: {ibkr_host}:{ibkr_port} (Client ID: {ibkr_client_id})", flush=True)
+                _original_print(f"[IBKR]   Mode: {'PAPER' if ibkr_paper_mode else 'LIVE'}", flush=True)
+                _original_print(f"[IBKR] Creating IBKRBroker instance...", flush=True)
+                
+                self.ibkr_broker = IBKRBroker({
+                    'host': ibkr_host,
+                    'port': ibkr_port,
+                    'client_id': ibkr_client_id,
+                    'paper_trade': ibkr_paper_mode
+                })
+                
+                connected = await self.ibkr_broker.connect()
+                if connected:
+                    mode = "PAPER" if ibkr_paper_mode else "LIVE"
+                    _original_print(f"[IBKR] ✓ Connected successfully ({mode})", flush=True)
+                    try:
+                        account_info = await self.ibkr_broker.get_account_info()
+                        broker_id = 'ibkr_paper' if ibkr_paper_mode else 'ibkr_live'
+                        set_broker_status(broker_id, True, 'connected', account_info=account_info)
+                        _original_print(f"[IBKR] ✓ Broker status updated in GUI", flush=True)
+                        nlv = account_info.get('portfolio_value', 0)
+                        if nlv > 0:
+                            _original_print(f"[IBKR]   Net Liq: ${nlv:,.2f}", flush=True)
+                            _original_print(f"[IBKR]   Buying Power: ${account_info.get('buying_power', 0):,.2f}", flush=True)
+                    except Exception as status_err:
+                        _original_print(f"[IBKR] ⚠️ Failed to update broker status: {status_err}", flush=True)
+                else:
+                    _original_print("[IBKR] ⚠️ Connection failed - TWS/Gateway may not be running", flush=True)
+                    _original_print("[IBKR]   Make sure TWS or IB Gateway is running and API is enabled", flush=True)
+                    self.ibkr_broker = None
+            else:
+                _original_print("[IBKR] IBKRBroker not available (ib_insync not installed)", flush=True)
+        except Exception as e:
+            _original_print(f"[IBKR] ⚠️ Initialization failed: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            self.ibkr_broker = None
+
         # CRITICAL: Set broker_ready if ANY broker is available (not just Webull)
         # This fixes user builds where only Alpaca/Tastytrade are configured
         _original_print(f"[DEBUG] Checking broker_ready: is_set={self.broker_ready.is_set()}", flush=True)
-        _original_print(f"[DEBUG] Broker states: webull={self.broker is not None and getattr(self.broker, 'is_logged_in', False)}, alpaca={self.paper_broker is not None}, tastytrade={self.tastytrade_broker is not None}, robinhood={self.robinhood_broker is not None}", flush=True)
+        _original_print(f"[DEBUG] Broker states: webull={self.broker is not None and getattr(self.broker, 'is_logged_in', False)}, alpaca={self.paper_broker is not None}, tastytrade={self.tastytrade_broker is not None}, robinhood={self.robinhood_broker is not None}, ibkr={self.ibkr_broker is not None}", flush=True)
         
         if not self.broker_ready.is_set():
             any_broker_available = (
                 (self.broker and getattr(self.broker, 'is_logged_in', False)) or
                 self.paper_broker or
                 self.tastytrade_broker or
-                self.robinhood_broker
+                self.robinhood_broker or
+                self.ibkr_broker
             )
             _original_print(f"[DEBUG] any_broker_available={any_broker_available}", flush=True)
             if any_broker_available:
@@ -4348,13 +4414,14 @@ class SelfClient(discord.Client):
             
             # Create simple broker manager for sync service
             class BrokerManager:
-                def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None):
+                def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None):
                     self.webull_broker = webull_broker
                     self.alpaca_paper_broker = alpaca_paper_broker
                     self.tastytrade_broker = tastytrade_broker
                     self.robinhood_broker = robinhood_broker
+                    self.ibkr_broker = ibkr_broker
             
-            broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker)
+            broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker)
             db_instance = Database()
             
             self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=30)
@@ -6165,14 +6232,32 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elif broker_name_lower == 'webull_paper' and self.paper_broker and hasattr(self.paper_broker, 'name') and self.paper_broker.name == 'WEBULL':
                             broker_instance = self.paper_broker
                             _original_print(f"[MULTI-BROKER] Using Webull PAPER broker")
-                        # IBKR Paper: 'ibkr_paper', 'IBKR_PAPER', 'ibkr', 'IBKR'
-                        elif broker_name_lower in ('ibkr_paper', 'ibkr') and self.paper_broker and hasattr(self.paper_broker, 'name') and self.paper_broker.name == 'IBKR':
-                            broker_instance = self.paper_broker
-                            _original_print(f"[MULTI-BROKER] Using IBKR PAPER broker")
-                        # IBKR Live
-                        elif broker_name_lower == 'ibkr_live' and self.broker and hasattr(self.broker, 'name') and self.broker.name == 'IBKR':
-                            broker_instance = self.broker
-                            _original_print(f"[MULTI-BROKER] Using IBKR LIVE broker")
+                        # IBKR routing - single instance supporting either paper or live mode
+                        # Note: IBKR only connects to one TWS/Gateway at a time, mode is determined at startup
+                        elif broker_name_lower in ('ibkr_paper', 'ibkr', 'ibkr_live') and self.ibkr_broker and self.ibkr_broker.connected:
+                            ibkr_is_paper = getattr(self.ibkr_broker, 'paper_trade', True)
+                            # Match the requested mode with the actual mode
+                            if broker_name_lower == 'ibkr_paper' and ibkr_is_paper:
+                                broker_instance = self.ibkr_broker
+                                _original_print(f"[MULTI-BROKER] Using IBKR PAPER broker")
+                            elif broker_name_lower == 'ibkr_live' and not ibkr_is_paper:
+                                broker_instance = self.ibkr_broker
+                                _original_print(f"[MULTI-BROKER] Using IBKR LIVE broker")
+                            elif broker_name_lower == 'ibkr':
+                                # Generic 'ibkr' route uses whatever mode is configured
+                                broker_instance = self.ibkr_broker
+                                mode = "PAPER" if ibkr_is_paper else "LIVE"
+                                _original_print(f"[MULTI-BROKER] Using IBKR broker ({mode} mode)")
+                            else:
+                                # Requested mode doesn't match configured mode - append failure response
+                                configured_mode = "PAPER" if ibkr_is_paper else "LIVE"
+                                _original_print(f"[MULTI-BROKER] ⚠️ IBKR mode mismatch: requested '{broker_name}' but configured as {configured_mode}")
+                                responses.append({
+                                    'success': False,
+                                    'msg': f'IBKR mode mismatch: requested {broker_name} but configured as {configured_mode}',
+                                    'broker': broker_name
+                                })
+                                continue
                         # Tastytrade Paper: 'tastytrade_paper', 'TASTYTRADE_PAPER'
                         elif broker_name_lower == 'tastytrade_paper' and self.tastytrade_broker and self.tastytrade_broker.connected and not self.tastytrade_broker.is_live:
                             broker_instance = self.tastytrade_broker
