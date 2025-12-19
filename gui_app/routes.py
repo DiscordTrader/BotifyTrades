@@ -367,21 +367,40 @@ def get_cached_option_chain_tastytrade(symbol: str, expiry: str) -> dict:
         
         # Fetch stock price if not in chain (Tastytrade doesn't provide stock price directly)
         if not chain.get('stock_price'):
+            print(f"[OPTIONS] Chain has no stock_price for {symbol}, attempting Webull fallback...", flush=True)
             try:
-                # Use Webull broker's async get_quote via bot loop as fallback
-                if _bot_instance and hasattr(_bot_instance, 'broker') and _bot_instance.broker:
-                    if hasattr(_bot_instance, 'loop') and _bot_instance.loop and not _bot_instance.loop.is_closed():
-                        import asyncio
-                        quote_future = asyncio.run_coroutine_threadsafe(
-                            _bot_instance.broker.get_quote(symbol),
-                            _bot_instance.loop
-                        )
-                        stock_price = quote_future.result(timeout=5)
-                        if stock_price and stock_price > 0:
-                            chain['stock_price'] = stock_price
-                            print(f"[OPTIONS] Fetched {symbol} price via Webull (fallback): ${chain['stock_price']:.2f}", flush=True)
-            except Exception as price_err:
-                print(f"[OPTIONS] Could not fetch stock price for {symbol} via Webull fallback: {price_err}", flush=True)
+                # Use yfinance as reliable fallback for stock price
+                import yfinance as yf
+                ticker = yf.Ticker(symbol)
+                hist = ticker.history(period="1d")
+                if not hist.empty and 'Close' in hist.columns:
+                    stock_price = float(hist['Close'].iloc[-1])
+                    if stock_price and stock_price > 0:
+                        chain['stock_price'] = stock_price
+                        print(f"[OPTIONS] ✓ Fetched {symbol} price via yfinance: ${stock_price:.2f}", flush=True)
+                else:
+                    print(f"[OPTIONS] yfinance returned no data for {symbol}", flush=True)
+            except Exception as yf_err:
+                print(f"[OPTIONS] yfinance fallback failed: {yf_err}", flush=True)
+                # Try Webull as secondary fallback
+                try:
+                    if _bot_instance and hasattr(_bot_instance, 'broker') and _bot_instance.broker:
+                        if hasattr(_bot_instance, 'loop') and _bot_instance.loop and not _bot_instance.loop.is_closed():
+                            import asyncio
+                            quote_future = asyncio.run_coroutine_threadsafe(
+                                _bot_instance.broker.get_quote(symbol),
+                                _bot_instance.loop
+                            )
+                            stock_price = quote_future.result(timeout=5)
+                            if stock_price and stock_price > 0:
+                                chain['stock_price'] = stock_price
+                                print(f"[OPTIONS] ✓ Fetched {symbol} price via Webull: ${stock_price:.2f}", flush=True)
+                        else:
+                            print(f"[OPTIONS] Webull loop not available for {symbol}", flush=True)
+                    else:
+                        print(f"[OPTIONS] Webull broker not available for {symbol}", flush=True)
+                except Exception as wb_err:
+                    print(f"[OPTIONS] Webull fallback also failed: {wb_err}", flush=True)
         
         _option_chain_cache[cache_key] = (chain, now)
         data_source = chain.get('data_source', 'Tastytrade')
