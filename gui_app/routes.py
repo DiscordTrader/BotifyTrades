@@ -5453,9 +5453,12 @@ def register_routes(app):
     @app.route('/api/options/expirations', methods=['GET'])
     def api_get_option_expirations():
         """Get available option expiration dates for a symbol - routes to selected broker"""
+        import sys
+        print(f"[OPTIONS API] === EXPIRATIONS ENDPOINT HIT ===", file=sys.stderr, flush=True)
         try:
             symbol = request.args.get('symbol', '').upper()
             selected_broker = request.args.get('broker', 'WEBULL').upper()
+            print(f"[OPTIONS API] symbol={symbol}, broker={selected_broker}", file=sys.stderr, flush=True)
             if not symbol:
                 return jsonify({'error': 'Symbol is required'}), 400
             
