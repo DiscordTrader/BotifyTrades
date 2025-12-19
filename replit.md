@@ -4,6 +4,11 @@
 **v3.2.4** (2025-12-18)
 
 ## Recent Changes (Milestone 5) - Database Synchronization & Credential Consistency
+- **IBKR Display Pages Integration**: IBKR broker now fully wired to GUI display pages
+  - Added IBKR to BrokerLiveAnalytics (ibkr_live/ibkr_paper configs, credentials, connect, get_account_info)
+  - Added IBKR option chain routing via get_cached_option_chain_ibkr()
+  - Added IBKR to all_broker_accounts API endpoint for balance/position display
+  - Proper loop availability checks and null-result guards for robustness
 - **IBKR Auto-Initialization**: Bot now auto-initializes Interactive Brokers from database credentials on startup
   - Imports IBKRBroker at startup (alongside other brokers)
   - Connects to TWS/IB Gateway using saved host, port, and client ID settings
