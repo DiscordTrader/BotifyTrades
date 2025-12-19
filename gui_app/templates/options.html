@@ -562,6 +562,45 @@
             transform: none;
         }
 
+        .price-buttons {
+            display: flex;
+            gap: 2px;
+        }
+
+        .price-btn {
+            padding: 6px 8px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-muted);
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .price-btn:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .price-btn.bid.active {
+            background: rgba(63, 185, 80, 0.2);
+            border-color: var(--success);
+            color: var(--success);
+        }
+
+        .price-btn.mid.active {
+            background: rgba(88, 166, 255, 0.2);
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
+        }
+
+        .price-btn.ask.active {
+            background: rgba(248, 81, 73, 0.2);
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
         .clear-row-btn {
             background: transparent;
             border: none;
@@ -704,6 +743,11 @@
                 </div>
 
                 <div class="order-section" id="orderSection{{ i }}" style="display: none;">
+                    <div class="price-buttons" id="priceButtons{{ i }}">
+                        <button class="price-btn bid" onclick="setPrice({{ i }}, 'bid')" title="Set to Bid">BID</button>
+                        <button class="price-btn mid active" onclick="setPrice({{ i }}, 'mid')" title="Set to Mid">MID</button>
+                        <button class="price-btn ask" onclick="setPrice({{ i }}, 'ask')" title="Set to Ask">ASK</button>
+                    </div>
                     <div class="stepper-input">
                         <button class="stepper-btn" onclick="adjustPrice({{ i }}, -0.05)">−</button>
                         <input type="text" class="stepper-value" id="limitPrice{{ i }}" value="0.00">
@@ -866,7 +910,7 @@
             const cacheKey = `${broker}_${symbol}_${expiry}`;
             
             if (strikeCache[cacheKey]) {
-                populateStrikes(row, strikeCache[cacheKey]);
+                populateStrikes(row, strikeCache[cacheKey].strikes, strikeCache[cacheKey].underlying);
                 return;
             }
             
@@ -888,10 +932,11 @@
                 if (data.puts) data.puts.forEach(opt => strikes.add(opt.strike));
                 
                 const sortedStrikes = Array.from(strikes).sort((a, b) => a - b);
+                const underlyingPrice = data.stock_price || data.underlying_price || null;
                 
                 if (sortedStrikes.length > 0) {
-                    strikeCache[cacheKey] = sortedStrikes;
-                    populateStrikes(row, sortedStrikes);
+                    strikeCache[cacheKey] = { strikes: sortedStrikes, underlying: underlyingPrice };
+                    populateStrikes(row, sortedStrikes, underlyingPrice);
                 } else {
                     strikeSelect.innerHTML = '<option value="">No strikes found</option>';
                 }
@@ -901,16 +946,33 @@
             }
         }
 
-        function populateStrikes(row, strikes) {
+        function populateStrikes(row, strikes, underlyingPrice = null) {
             const strikeSelect = document.getElementById(`strike${row}`);
             strikeSelect.innerHTML = '<option value="">Strike...</option>';
             
-            strikes.forEach(strike => {
+            let atmIndex = 0;
+            if (underlyingPrice && strikes.length > 0) {
+                let minDiff = Infinity;
+                strikes.forEach((strike, idx) => {
+                    const diff = Math.abs(strike - underlyingPrice);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        atmIndex = idx;
+                    }
+                });
+            }
+            
+            strikes.forEach((strike, idx) => {
                 const option = document.createElement('option');
                 option.value = strike;
-                option.textContent = `$${strike.toFixed(strike % 1 === 0 ? 0 : 2)}`;
+                const isATM = (idx === atmIndex && underlyingPrice);
+                option.textContent = isATM ? `$${strike.toFixed(strike % 1 === 0 ? 0 : 2)} (ATM)` : `$${strike.toFixed(strike % 1 === 0 ? 0 : 2)}`;
                 strikeSelect.appendChild(option);
             });
+            
+            if (underlyingPrice && strikes.length > 0) {
+                strikeSelect.selectedIndex = atmIndex + 1;
+            }
         }
 
         for (let i = 1; i <= 4; i++) {
@@ -1008,12 +1070,32 @@
             }
         }
 
+        function setPrice(row, priceType) {
+            const data = rowData[row];
+            if (!data.quote) return;
+            
+            let price;
+            if (priceType === 'bid') price = data.quote.bid;
+            else if (priceType === 'ask') price = data.quote.ask;
+            else price = data.quote.mid;
+            
+            document.getElementById(`limitPrice${row}`).value = price.toFixed(2);
+            updateTotal(row);
+            
+            const buttons = document.querySelectorAll(`#priceButtons${row} .price-btn`);
+            buttons.forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`#priceButtons${row} .price-btn.${priceType}`).classList.add('active');
+        }
+
         function adjustPrice(row, delta) {
             const input = document.getElementById(`limitPrice${row}`);
             let value = parseFloat(input.value) || 0;
             value = Math.max(0.01, value + delta);
             input.value = value.toFixed(2);
             updateTotal(row);
+            
+            const buttons = document.querySelectorAll(`#priceButtons${row} .price-btn`);
+            buttons.forEach(btn => btn.classList.remove('active'));
         }
 
         function adjustQty(row, delta) {
