@@ -7611,12 +7611,63 @@ def register_routes(app):
             
             elif broker_id.startswith('ibkr'):
                 creds = get_ibkr_credentials()
-                set_broker_status(broker_id, False, 'pending', 'IBKR requires TWS/Gateway running locally')
-                return jsonify({
-                    'success': True,
-                    'message': 'IBKR credentials saved. Ensure TWS/Gateway is running on your local machine.',
-                    'status': 'pending'
-                })
+                is_paper = broker_id == 'ibkr_paper'
+                
+                host = creds.get('host', '127.0.0.1')
+                port = creds.get('port_paper', 7497) if is_paper else creds.get('port_live', 7496)
+                client_id = creds.get('client_id', 1)
+                
+                try:
+                    from ib_insync import IB
+                    import asyncio
+                    
+                    ib = IB()
+                    
+                    async def try_connect():
+                        try:
+                            await ib.connectAsync(host=host, port=port, clientId=client_id, timeout=10)
+                            return ib.isConnected()
+                        except Exception as e:
+                            print(f"[IBKR] Connection error: {e}")
+                            return False
+                    
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        connected = loop.run_until_complete(try_connect())
+                    finally:
+                        if ib.isConnected():
+                            ib.disconnect()
+                        loop.close()
+                    
+                    if connected:
+                        account_info = {
+                            'host': host,
+                            'port': port,
+                            'client_id': client_id,
+                            'paper_mode': is_paper
+                        }
+                        set_broker_status(broker_id, True, 'connected', account_info=account_info)
+                        mode = "Paper" if is_paper else "Live"
+                        return jsonify({
+                            'success': True,
+                            'message': f'IBKR {mode} connected successfully to TWS on {host}:{port}!',
+                            'status': 'connected',
+                            'account': account_info
+                        })
+                    else:
+                        error_msg = f'Could not connect to TWS on {host}:{port}. Ensure TWS/Gateway is running and API is enabled.'
+                        set_broker_status(broker_id, False, 'error', error_msg)
+                        return jsonify({'success': False, 'error': error_msg}), 400
+                        
+                except ImportError:
+                    error_msg = 'ib_insync library not installed. Run: pip install ib_insync'
+                    set_broker_status(broker_id, False, 'error', error_msg)
+                    return jsonify({'success': False, 'error': error_msg}), 400
+                except Exception as ibkr_err:
+                    error_msg = str(ibkr_err)
+                    set_broker_status(broker_id, False, 'error', error_msg)
+                    return jsonify({'success': False, 'error': f'IBKR connection failed: {error_msg}'}), 400
             
             elif broker_id.startswith('tastytrade'):
                 from .broker_credentials_service import get_tastytrade_credentials
