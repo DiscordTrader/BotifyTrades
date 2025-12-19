@@ -5513,6 +5513,50 @@ def register_routes(app):
                 finally:
                     new_loop.close()
             
+            # Route to Tastytrade if selected
+            if 'TASTYTRADE' in selected_broker:
+                print(f"[OPTIONS API] Loading Tastytrade expirations for {symbol}...", flush=True)
+                
+                if not _bot_instance or not hasattr(_bot_instance, 'tastytrade_broker') or not _bot_instance.tastytrade_broker:
+                    print(f"[OPTIONS API] Tastytrade broker not available", flush=True)
+                    return jsonify({'error': 'Tastytrade broker not configured', 'expirations': []}), 503
+                
+                try:
+                    import concurrent.futures
+                    
+                    def _get_expirations_sync():
+                        return _bot_instance.tastytrade_broker.get_options_expiration_dates(symbol)
+                    
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(_get_expirations_sync)
+                        expirations_list = future.result(timeout=15)
+                    
+                    print(f"[OPTIONS API] Got {len(expirations_list)} expirations from Tastytrade for {symbol}", flush=True)
+                    
+                    from datetime import datetime
+                    expirations = []
+                    for exp_str in expirations_list:
+                        try:
+                            exp_date = datetime.strptime(exp_str, '%Y-%m-%d')
+                            expirations.append({
+                                'date': exp_str,
+                                'label': exp_date.strftime('%b %d, %Y')
+                            })
+                        except Exception as e:
+                            print(f"[OPTIONS API] Warning: Could not format expiration {exp_str}: {e}", flush=True)
+                            continue
+                    
+                    return jsonify({
+                        'symbol': symbol,
+                        'expirations': expirations,
+                        'data_source': 'Tastytrade'
+                    })
+                except Exception as e:
+                    print(f"[OPTIONS API] Tastytrade expirations error: {e}", flush=True)
+                    import traceback
+                    traceback.print_exc()
+                    return jsonify({'error': f'Tastytrade error: {str(e)}', 'expirations': []}), 500
+            
             # Default: Use Webull
             broker = get_webull_broker()
             loop = get_webull_loop()

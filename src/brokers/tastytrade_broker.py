@@ -579,6 +579,51 @@ class TastytradeBroker(BrokerInterface):
             print(f"[{self.name}] Sync quote fetch error: {e}")
             return {}
     
+    def get_options_expiration_dates(self, symbol: str) -> list:
+        """Get available expiration dates for a symbol using NestedOptionChain.
+        
+        Args:
+            symbol: Stock symbol (e.g., 'SPY')
+            
+        Returns:
+            List of expiration dates in YYYY-MM-DD format
+        """
+        try:
+            if not TASTYTRADE_AVAILABLE:
+                print(f"[{self.name}] ❌ tastytrade package not installed")
+                return []
+            
+            if not self.session:
+                print(f"[{self.name}] Not connected - cannot get expiration dates")
+                return []
+            
+            print(f"[{self.name}] Fetching expiration dates for {symbol}", flush=True)
+            
+            if NESTED_CHAIN_AVAILABLE:
+                nested_chain = NestedOptionChain.get(self.session, symbol)
+                
+                if not nested_chain or not nested_chain.expirations:
+                    print(f"[{self.name}] No expirations returned for {symbol}")
+                    return []
+                
+                expirations = []
+                for exp in nested_chain.expirations:
+                    exp_str = exp.expiration_date.strftime('%Y-%m-%d')
+                    expirations.append(exp_str)
+                
+                expirations.sort()
+                print(f"[{self.name}] ✓ Found {len(expirations)} expiration dates for {symbol}", flush=True)
+                return expirations
+            else:
+                print(f"[{self.name}] NestedOptionChain not available")
+                return []
+                
+        except Exception as e:
+            print(f"[{self.name}] Error getting expiration dates for {symbol}: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
     def get_option_chain(self, symbol: str, expiration_date: str) -> Dict[str, Any]:
         """Get option chain for a symbol and expiration date using NestedOptionChain.
         
