@@ -252,14 +252,28 @@
         .option-row {
             background: linear-gradient(180deg, var(--bg-secondary) 0%, rgba(22, 27, 34, 0.8) 100%);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 14px;
-            padding: 14px 16px;
+            border-radius: 10px;
+            padding: 10px 12px;
             display: flex;
-            gap: 10px;
+            gap: 6px;
             align-items: center;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
+            overflow-x: auto;
             transition: all 0.25s ease;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .option-row::-webkit-scrollbar {
+            height: 4px;
+        }
+        
+        .option-row::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .option-row::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
         }
 
         .option-row:hover {
@@ -276,22 +290,22 @@
 
         .row-number {
             font-family: 'Space Grotesk', sans-serif;
-            font-size: 18px;
+            font-size: 14px;
             font-weight: 700;
             color: var(--text-muted);
-            width: 28px;
-            height: 28px;
+            width: 22px;
+            height: 22px;
             display: flex;
             align-items: center;
             justify-content: center;
             background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
+            border-radius: 6px;
             flex-shrink: 0;
         }
 
         .input-section {
             display: flex;
-            gap: 10px;
+            gap: 6px;
             align-items: center;
             flex-shrink: 0;
         }
@@ -337,14 +351,14 @@
         }
 
         .input-symbol {
-            width: 90px;
+            width: 70px;
             text-transform: uppercase;
             font-family: 'Space Grotesk', sans-serif;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
         }
 
         .input-strike {
-            width: 110px;
+            width: 95px;
             font-family: 'Space Grotesk', sans-serif;
         }
         
@@ -367,7 +381,7 @@
         }
 
         .input-expiry {
-            width: 160px;
+            width: 120px;
             cursor: pointer;
         }
 
@@ -446,7 +460,7 @@
 
         .quote-section {
             display: flex;
-            gap: 10px;
+            gap: 4px;
             align-items: center;
             flex-shrink: 0;
         }
@@ -454,11 +468,12 @@
         .quote-box {
             background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 8px;
-            padding: 6px 10px;
+            border-radius: 6px;
+            padding: 4px 8px;
             text-align: center;
-            min-width: 60px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            min-width: 50px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            flex-shrink: 0;
         }
 
         .quote-label {
@@ -472,7 +487,7 @@
 
         .quote-value {
             font-family: 'Space Grotesk', sans-serif;
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 700;
         }
 
@@ -520,13 +535,14 @@
         }
 
         .data-source-badge {
-            font-size: 11px;
+            font-size: 9px;
             font-weight: 700;
-            padding: 6px 10px;
-            border-radius: 6px;
+            padding: 4px 6px;
+            border-radius: 4px;
             text-transform: uppercase;
             flex-shrink: 0;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
         }
 
         .data-source-badge.webull {
@@ -543,10 +559,10 @@
 
         .order-section {
             display: flex;
-            gap: 8px;
+            gap: 6px;
             align-items: center;
             flex-shrink: 0;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
         }
 
         .stepper-input {
@@ -563,8 +579,8 @@
             background: transparent;
             border: none;
             color: var(--text-secondary);
-            padding: 6px 10px;
-            font-size: 14px;
+            padding: 4px 8px;
+            font-size: 12px;
             cursor: pointer;
             transition: all 0.2s;
             font-weight: 700;
@@ -580,10 +596,10 @@
             border: none;
             color: var(--text-primary);
             text-align: center;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 700;
-            width: 50px;
-            padding: 6px 2px;
+            width: 45px;
+            padding: 4px 2px;
             font-family: 'Space Grotesk', sans-serif;
         }
 
@@ -592,17 +608,18 @@
         }
 
         .stepper-value.qty {
-            width: 40px;
+            width: 30px;
         }
 
         .total-display {
             background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 8px;
-            padding: 6px 12px;
+            border-radius: 6px;
+            padding: 4px 8px;
             text-align: center;
-            min-width: 70px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            min-width: 55px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            flex-shrink: 0;
         }
 
         .total-label {
@@ -615,10 +632,10 @@
 
         .total-value {
             font-family: 'Space Grotesk', sans-serif;
-            font-size: 16px;
+            font-size: 13px;
             font-weight: 700;
             color: var(--accent-mint);
-            text-shadow: 0 0 10px rgba(15, 240, 179, 0.4);
+            text-shadow: 0 0 8px rgba(15, 240, 179, 0.4);
         }
 
         .action-section {
@@ -629,16 +646,17 @@
         }
 
         .order-btn {
-            padding: 8px 14px;
+            padding: 6px 10px;
             border: none;
-            border-radius: 6px;
-            font-size: 12px;
+            border-radius: 4px;
+            font-size: 11px;
             font-weight: 700;
             cursor: pointer;
             transition: all 0.2s;
             white-space: nowrap;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.3px;
+            flex-shrink: 0;
         }
 
         .order-btn.buy {
@@ -653,9 +671,9 @@
         .order-btn.discord {
             background: #5865F2;
             color: #fff;
-            font-size: 12px;
-            min-width: 32px;
-            padding: 8px 10px;
+            font-size: 11px;
+            min-width: 28px;
+            padding: 6px 8px;
         }
         .order-btn.discord:hover {
             background: #4752c4;
