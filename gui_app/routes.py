@@ -272,13 +272,60 @@ def get_cached_option_chain_alpaca(symbol: str, expiry: str) -> dict:
     finally:
         new_loop.close()
 
+def get_cached_option_chain_ibkr(symbol: str, expiry: str) -> dict:
+    """Get option chain from IBKR with caching.
+    Returns chain data with 'data_source' field indicating 'IBKR'
+    """
+    cache_key = f"IBKR_{symbol}_{expiry}"
+    now = time.time()
+    
+    print(f"[OPTIONS] get_cached_option_chain_ibkr called for {symbol} {expiry}", flush=True)
+    
+    if cache_key in _option_chain_cache:
+        cached_data, cached_time = _option_chain_cache[cache_key]
+        if now - cached_time < _CHAIN_CACHE_TTL:
+            print(f"[OPTIONS] Using cached IBKR option chain for {cache_key}", flush=True)
+            return cached_data
+    
+    if not _bot_instance or not hasattr(_bot_instance, 'ibkr_broker') or not _bot_instance.ibkr_broker:
+        print(f"[OPTIONS] IBKR broker not available", flush=True)
+        return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Error: IBKR not configured'}
+    
+    if not hasattr(_bot_instance, 'loop') or not _bot_instance.loop or _bot_instance.loop.is_closed():
+        print(f"[OPTIONS] Bot event loop not available for IBKR", flush=True)
+        return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Error: Bot loop unavailable'}
+    
+    try:
+        import asyncio
+        
+        async def _get_chain():
+            return await _bot_instance.ibkr_broker.get_option_chain(symbol, expiry)
+        
+        future = asyncio.run_coroutine_threadsafe(
+            _get_chain(),
+            _bot_instance.loop
+        )
+        chain = future.result(timeout=15)
+        
+        if not chain:
+            print(f"[OPTIONS] IBKR returned empty chain for {symbol} {expiry}", flush=True)
+            return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'IBKR (no data)'}
+        
+        chain['data_source'] = 'IBKR'
+        _option_chain_cache[cache_key] = (chain, now)
+        print(f"[OPTIONS] ✓ Using IBKR data for {symbol} {expiry}", flush=True)
+        return chain
+    except Exception as e:
+        print(f"[OPTIONS] IBKR option chain error: {e}", flush=True)
+        return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': f'Error: {str(e)}'}
+
 def get_option_chain_for_broker(symbol: str, expiry: str, broker: str = 'WEBULL') -> dict:
     """Get option chain from the specified broker.
     
     Args:
         symbol: The stock symbol
         expiry: Expiration date (YYYY-MM-DD)
-        broker: One of 'WEBULL', 'ALPACA', 'ALPACA_PAPER', etc.
+        broker: One of 'WEBULL', 'ALPACA', 'ALPACA_PAPER', 'IBKR', etc.
     
     Returns:
         Chain data with 'data_source' field indicating the source
@@ -287,6 +334,8 @@ def get_option_chain_for_broker(symbol: str, expiry: str, broker: str = 'WEBULL'
     
     if 'ALPACA' in broker_upper:
         return get_cached_option_chain_alpaca(symbol, expiry)
+    elif 'IBKR' in broker_upper:
+        return get_cached_option_chain_ibkr(symbol, expiry)
     else:
         return get_cached_option_chain_webull(symbol, expiry)
 _cache_ttl: int = 5  # 5 second cache
@@ -2429,7 +2478,7 @@ def register_routes(app):
     
     @app.route('/api/brokers/all_accounts', methods=['GET'])
     def api_all_broker_accounts():
-        """Get all broker accounts (Webull LIVE + Alpaca PAPER)"""
+        """Get all broker accounts (Webull LIVE + Alpaca PAPER + IBKR)"""
         import asyncio
         
         accounts = {
@@ -2446,6 +2495,22 @@ def register_routes(app):
                 'balance': {},
                 'positions': [],
                 'orders': []
+            },
+            'ibkr_paper': {
+                'status': 'not_initialized',
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'total_profit_loss': 0,
+                'day_profit_loss': 0
+            },
+            'ibkr_live': {
+                'status': 'not_initialized',
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'total_profit_loss': 0,
+                'day_profit_loss': 0
             }
         }
         
@@ -2488,6 +2553,32 @@ def register_routes(app):
             except Exception as e:
                 print(f"[API] Error fetching Alpaca PAPER account: {e}")
                 accounts['alpaca_paper']['status'] = 'error'
+        
+        # Fetch IBKR account (paper or live based on connection)
+        if _bot_instance and hasattr(_bot_instance, 'ibkr_broker') and _bot_instance.ibkr_broker:
+            try:
+                async def _get_ibkr_account():
+                    return await _bot_instance.ibkr_broker.get_account_info()
+                
+                future = asyncio.run_coroutine_threadsafe(
+                    _get_ibkr_account(),
+                    _bot_instance.loop
+                )
+                ibkr_data = future.result(timeout=10)
+                if ibkr_data:
+                    is_paper = getattr(_bot_instance.ibkr_broker, 'paper_trade', True)
+                    ibkr_key = 'ibkr_paper' if is_paper else 'ibkr_live'
+                    accounts[ibkr_key] = {
+                        'status': 'ok',
+                        'buying_power': ibkr_data.get('buying_power', 0),
+                        'cash_balance': ibkr_data.get('cash_balance', 0),
+                        'net_liquidation': ibkr_data.get('net_liquidation', 0),
+                        'total_profit_loss': ibkr_data.get('total_profit_loss', 0),
+                        'day_profit_loss': ibkr_data.get('day_profit_loss', 0)
+                    }
+            except Exception as e:
+                print(f"[API] Error fetching IBKR account: {e}")
+                accounts['ibkr_paper']['status'] = 'error'
         
         return jsonify(accounts)
     

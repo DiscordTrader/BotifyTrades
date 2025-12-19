@@ -39,6 +39,8 @@ class BrokerLiveAnalytics:
         'alpaca_paper': {'name': 'Alpaca Paper', 'type': 'alpaca', 'paper': True},
         'tastytrade_live': {'name': 'Tastytrade Live', 'type': 'tastytrade', 'paper': False},
         'tastytrade_paper': {'name': 'Tastytrade Paper', 'type': 'tastytrade', 'paper': True},
+        'ibkr_live': {'name': 'IBKR Live', 'type': 'ibkr', 'paper': False},
+        'ibkr_paper': {'name': 'IBKR Paper', 'type': 'ibkr', 'paper': True},
     }
     
     def __init__(self):
@@ -86,6 +88,11 @@ class BrokerLiveAnalytics:
         elif broker_type == 'tastytrade':
             from .broker_credentials_service import get_tastytrade_credentials
             creds = get_tastytrade_credentials()
+            creds['paper_mode'] = is_paper
+            return creds
+        elif broker_type == 'ibkr':
+            from .broker_credentials_service import get_ibkr_credentials
+            creds = get_ibkr_credentials()
             creds['paper_mode'] = is_paper
             return creds
         return {}
@@ -181,6 +188,44 @@ class BrokerLiveAnalytics:
             print(f"[ANALYTICS] Error connecting to {broker_id}: {e}")
             return None
     
+    async def connect_ibkr(self, broker_id: str, credentials: Dict) -> Optional[Any]:
+        """Connect to Interactive Brokers account"""
+        try:
+            from src.brokers.ibkr_broker import IBKRBroker
+        except ImportError:
+            print(f"[ANALYTICS] IBKR broker module not available")
+            return None
+            
+        try:
+            config = self.BROKER_CONFIGS.get(broker_id, {})
+            is_paper = config.get('paper', True)
+            
+            host = credentials.get('host', '127.0.0.1')
+            port = credentials.get('port', 7497 if is_paper else 7496)
+            client_id = credentials.get('client_id', 1)
+            
+            if not host or not port:
+                print(f"[ANALYTICS] IBKR credentials not configured for {broker_id}")
+                return None
+            
+            broker = IBKRBroker(
+                host=host,
+                port=int(port),
+                client_id=int(client_id),
+                paper_trade=is_paper
+            )
+            
+            connected = await broker.connect()
+            if connected:
+                self._clients[broker_id] = broker
+                return broker
+                
+            return None
+            
+        except Exception as e:
+            print(f"[ANALYTICS] Error connecting to {broker_id}: {e}")
+            return None
+    
     async def get_client(self, broker_id: str) -> Optional[Any]:
         """Get or create client for broker"""
         if broker_id in self._clients:
@@ -194,6 +239,8 @@ class BrokerLiveAnalytics:
             return await self.connect_webull(broker_id, credentials)
         elif broker_type == 'alpaca':
             return await self.connect_alpaca(broker_id, credentials)
+        elif broker_type == 'ibkr':
+            return await self.connect_ibkr(broker_id, credentials)
         
         return None
     
@@ -263,6 +310,23 @@ class BrokerLiveAnalytics:
                         'portfolio_value': portfolio_value,
                         'day_pnl': day_pnl,
                         'day_pnl_percent': (day_pnl / last_equity * 100) if last_equity > 0 else 0
+                    }
+                    
+            elif broker_type == 'ibkr':
+                account = await client.get_account_info()
+                if account:
+                    portfolio_value = float(account.get('net_liquidation', 0) or 0)
+                    buying_power = float(account.get('buying_power', 0) or 0)
+                    cash = float(account.get('cash_balance', 0) or 0)
+                    day_pnl = float(account.get('day_profit_loss', 0) or 0)
+                    
+                    return {
+                        'connected': True,
+                        'buying_power': buying_power,
+                        'cash': cash,
+                        'portfolio_value': portfolio_value,
+                        'day_pnl': day_pnl,
+                        'day_pnl_percent': (day_pnl / portfolio_value * 100) if portfolio_value > 0 else 0
                     }
                     
         except Exception as e:
