@@ -52,6 +52,24 @@ class TastytradeBroker(BrokerInterface):
         """Returns True if broker is in live trading mode (not paper/sandbox)"""
         return not self.paper_trade
     
+    def _ensure_session_valid(self) -> bool:
+        """Ensure session is valid, refresh if expired (15-minute token lifetime)"""
+        if not self.session:
+            print(f"[{self.name}] No session available")
+            return False
+        try:
+            if hasattr(self.session, 'session_expiration') and hasattr(self.session, 'refresh'):
+                from datetime import datetime, timezone
+                now = datetime.now(timezone.utc)
+                if now > self.session.session_expiration:
+                    print(f"[{self.name}] Session token expired, refreshing...")
+                    self.session.refresh()
+                    print(f"[{self.name}] ✓ Session refreshed successfully")
+            return True
+        except Exception as e:
+            print(f"[{self.name}] Session refresh failed: {e}")
+            return False
+    
     async def connect(self) -> bool:
         """Connect to Tastytrade using OAuth2 (preferred) or legacy username/password"""
         try:
@@ -644,8 +662,8 @@ class TastytradeBroker(BrokerInterface):
                 print(f"[{self.name}] ❌ tastytrade package not installed")
                 return []
             
-            if not self.session:
-                print(f"[{self.name}] Not connected - cannot get expiration dates")
+            if not self._ensure_session_valid():
+                print(f"[{self.name}] Not connected or session invalid - cannot get expiration dates")
                 return []
             
             print(f"[{self.name}] Fetching expiration dates for {symbol}", flush=True)
