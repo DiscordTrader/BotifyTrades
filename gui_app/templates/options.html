@@ -253,10 +253,11 @@
             background: linear-gradient(180deg, var(--bg-secondary) 0%, rgba(22, 27, 34, 0.8) 100%);
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 14px;
-            padding: 18px 22px;
+            padding: 14px 16px;
             display: flex;
-            gap: 16px;
+            gap: 10px;
             align-items: center;
+            flex-wrap: wrap;
             transition: all 0.25s ease;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
         }
@@ -299,12 +300,12 @@
             background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
             border: 1px solid rgba(255, 255, 255, 0.12);
             color: var(--text-primary);
-            padding: 12px 14px;
-            border-radius: 8px;
-            font-size: 14px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 13px;
             font-weight: 600;
             transition: all 0.2s;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
         }
 
         .input-small:focus {
@@ -315,6 +316,24 @@
 
         .input-small::placeholder {
             color: var(--text-muted);
+        }
+        
+        /* Dark styling for all select dropdowns */
+        .input-small option,
+        select.input-small option {
+            background: #1a1f2a;
+            color: #e6edf3;
+            padding: 10px 14px;
+            font-size: 13px;
+        }
+        
+        .input-small option:hover,
+        .input-small option:checked,
+        select.input-small option:hover,
+        select.input-small option:checked {
+            background: linear-gradient(135deg, #0ff0b3 0%, #00d4aa 100%);
+            color: #0d1117;
+            font-weight: 600;
         }
 
         .input-symbol {
@@ -358,16 +377,16 @@
         }
 
         .type-btn-mini {
-            padding: 12px 18px;
+            padding: 8px 14px;
             border: 2px solid var(--border-color);
             background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
             color: var(--text-secondary);
-            border-radius: 8px;
-            font-size: 13px;
+            border-radius: 6px;
+            font-size: 12px;
             font-weight: 700;
             cursor: pointer;
             transition: all 0.2s;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
         .type-btn-mini:hover {
@@ -390,17 +409,17 @@
         }
 
         .load-btn-mini {
-            padding: 12px 20px;
+            padding: 8px 16px;
             background: linear-gradient(135deg, var(--accent-mint) 0%, #00D4AA 50%, var(--accent-violet) 100%);
             border: none;
-            border-radius: 8px;
+            border-radius: 6px;
             color: #0E1117;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 700;
             cursor: pointer;
             transition: all 0.2s;
             white-space: nowrap;
-            box-shadow: 0 4px 15px rgba(15, 240, 179, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 3px 10px rgba(15, 240, 179, 0.4);
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
@@ -435,11 +454,11 @@
         .quote-box {
             background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 10px;
-            padding: 10px 16px;
+            border-radius: 8px;
+            padding: 6px 10px;
             text-align: center;
-            min-width: 75px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            min-width: 60px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
 
         .quote-label {
@@ -453,7 +472,7 @@
 
         .quote-value {
             font-family: 'Space Grotesk', sans-serif;
-            font-size: 18px;
+            font-size: 14px;
             font-weight: 700;
         }
 
@@ -478,15 +497,7 @@
         }
 
         .greeks-inline {
-            display: flex;
-            gap: 12px;
-            font-size: 12px;
-            color: var(--text-muted);
-            flex-shrink: 0;
-            background: rgba(0, 0, 0, 0.2);
-            padding: 8px 14px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            display: none;
         }
 
         .greek-item {
@@ -532,10 +543,10 @@
 
         .order-section {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             align-items: center;
             flex-shrink: 0;
-            margin-left: auto;
+            flex-wrap: wrap;
         }
 
         .stepper-input {
@@ -552,8 +563,8 @@
             background: transparent;
             border: none;
             color: var(--text-secondary);
-            padding: 10px 12px;
-            font-size: 16px;
+            padding: 6px 10px;
+            font-size: 14px;
             cursor: pointer;
             transition: all 0.2s;
             font-weight: 700;
@@ -569,10 +580,10 @@
             border: none;
             color: var(--text-primary);
             text-align: center;
-            font-size: 15px;
+            font-size: 13px;
             font-weight: 700;
-            width: 60px;
-            padding: 10px 4px;
+            width: 50px;
+            padding: 6px 2px;
             font-family: 'Space Grotesk', sans-serif;
         }
 
@@ -587,11 +598,11 @@
         .total-display {
             background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 10px;
-            padding: 10px 16px;
+            border-radius: 8px;
+            padding: 6px 12px;
             text-align: center;
-            min-width: 85px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            min-width: 70px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
 
         .total-label {
@@ -618,10 +629,10 @@
         }
 
         .order-btn {
-            padding: 12px 20px;
+            padding: 8px 14px;
             border: none;
-            border-radius: 8px;
-            font-size: 13px;
+            border-radius: 6px;
+            font-size: 12px;
             font-weight: 700;
             cursor: pointer;
             transition: all 0.2s;
@@ -642,8 +653,9 @@
         .order-btn.discord {
             background: #5865F2;
             color: #fff;
-            font-size: 14px;
-            min-width: 40px;
+            font-size: 12px;
+            min-width: 32px;
+            padding: 8px 10px;
         }
         .order-btn.discord:hover {
             background: #4752c4;
