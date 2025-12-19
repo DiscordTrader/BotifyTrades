@@ -1201,6 +1201,75 @@
             }
         }
 
+        // Auto-refresh quotes every 5 seconds for loaded rows
+        const autoRefreshInterval = 5000; // 5 seconds
+        let refreshTimer = null;
+        
+        async function refreshQuoteSilent(row) {
+            const data = rowData[row];
+            if (!data.quote) return; // Only refresh if already loaded
+            
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const strike = document.getElementById(`strike${row}`).value.trim();
+            const expiry = document.getElementById(`expiry${row}`).value;
+            const type = data.type;
+            const broker = document.getElementById('brokerSelect').value;
+            
+            if (!symbol || !strike || !expiry) return;
+            
+            try {
+                const response = await fetch('/api/options/strike-quote', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        strike: parseFloat(strike),
+                        expiry: expiry,
+                        option_type: type,
+                        broker: broker
+                    })
+                });
+                
+                const newData = await response.json();
+                if (newData.error) return;
+                
+                // Update stored quote data
+                rowData[row].quote = newData;
+                
+                // Update displayed prices (preserve current selection)
+                const quoteSection = document.getElementById(`quoteSection${row}`);
+                const bidEl = quoteSection.querySelector('.quote-value.bid');
+                const askEl = quoteSection.querySelector('.quote-value.ask');
+                const midEl = quoteSection.querySelector('.quote-value.mid');
+                
+                if (bidEl) bidEl.textContent = '$' + newData.bid.toFixed(2);
+                if (askEl) askEl.textContent = '$' + newData.ask.toFixed(2);
+                if (midEl) midEl.textContent = '$' + newData.mid.toFixed(2);
+                
+                // Flash animation to show update
+                quoteSection.style.transition = 'opacity 0.2s';
+                quoteSection.style.opacity = '0.7';
+                setTimeout(() => { quoteSection.style.opacity = '1'; }, 200);
+                
+            } catch (error) {
+                console.error('Silent refresh error:', error);
+            }
+        }
+        
+        function startAutoRefresh() {
+            if (refreshTimer) clearInterval(refreshTimer);
+            refreshTimer = setInterval(() => {
+                for (let i = 1; i <= 4; i++) {
+                    if (rowData[i] && rowData[i].quote) {
+                        refreshQuoteSilent(i);
+                    }
+                }
+            }, autoRefreshInterval);
+        }
+        
+        // Start auto-refresh when page loads
+        startAutoRefresh();
+
         function setPrice(row, priceType) {
             const data = rowData[row];
             if (!data.quote) return;
