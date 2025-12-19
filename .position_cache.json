@@ -2383,5 +2383,20 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-19T17:46:30.693181"
+  },
+  "Webull_SPX_6860.0_12/19_C": {
+    "entry_price": 0.15,
+    "highest_price": 0.175,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "Webull",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-19T18:58:46.601815"
   }
 }
