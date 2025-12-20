@@ -4790,6 +4790,7 @@ def register_routes(app):
         import subprocess
         import sys
         import os
+        import threading
         
         try:
             # Check if PySide6 or PyQt5 is available
@@ -4814,26 +4815,49 @@ def register_routes(app):
                     'error': 'PySide6 or PyQt5 is not installed. Install with: pip install PySide6'
                 })
             
-            # Launch wizard as separate process
-            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            wizard_script = os.path.join(project_root, 'ui', 'wizard', 'launcher.py')
+            # Check if running as frozen EXE (PyInstaller bundle)
+            is_frozen = getattr(sys, 'frozen', False)
             
-            if os.path.exists(wizard_script):
-                subprocess.Popen(
-                    [sys.executable, '-m', 'ui.wizard.launcher', '--force'],
-                    cwd=project_root,
-                    start_new_session=True
-                )
+            if is_frozen:
+                # Running inside PyInstaller EXE - launch wizard directly in a thread
+                def launch_wizard_thread():
+                    try:
+                        from ui.wizard.launcher import launch_wizard
+                        launch_wizard(skip_first_run_check=True)
+                    except Exception as e:
+                        print(f"[Wizard] Error in thread: {e}")
+                        import traceback
+                        traceback.print_exc()
+                
+                wizard_thread = threading.Thread(target=launch_wizard_thread, daemon=True)
+                wizard_thread.start()
+                
                 return jsonify({
                     'success': True,
                     'launched': True,
                     'message': 'Setup Wizard launched! Check your desktop.'
                 })
             else:
-                return jsonify({
-                    'success': False,
-                    'error': 'Wizard script not found'
-                })
+                # Development mode - launch as subprocess
+                project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                wizard_script = os.path.join(project_root, 'ui', 'wizard', 'launcher.py')
+                
+                if os.path.exists(wizard_script):
+                    subprocess.Popen(
+                        [sys.executable, '-m', 'ui.wizard.launcher', '--force'],
+                        cwd=project_root,
+                        start_new_session=True
+                    )
+                    return jsonify({
+                        'success': True,
+                        'launched': True,
+                        'message': 'Setup Wizard launched! Check your desktop.'
+                    })
+                else:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Wizard script not found'
+                    })
                 
         except Exception as e:
             print(f"[API] Error launching wizard: {e}")
