@@ -4783,6 +4783,75 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
     
+    # Setup Wizard API
+    @app.route('/api/wizard/launch', methods=['POST'])
+    def api_launch_wizard():
+        """Launch the PySide6 setup wizard"""
+        import subprocess
+        import sys
+        import os
+        
+        try:
+            # Check if PySide6 or PyQt5 is available
+            pyside_available = False
+            pyqt_available = False
+            
+            try:
+                import PySide6
+                pyside_available = True
+            except ImportError:
+                pass
+            
+            try:
+                import PyQt5
+                pyqt_available = True
+            except ImportError:
+                pass
+            
+            if not pyside_available and not pyqt_available:
+                return jsonify({
+                    'success': False,
+                    'error': 'PySide6 or PyQt5 is not installed. Install with: pip install PySide6'
+                })
+            
+            # Launch wizard as separate process
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            wizard_script = os.path.join(project_root, 'ui', 'wizard', 'launcher.py')
+            
+            if os.path.exists(wizard_script):
+                subprocess.Popen(
+                    [sys.executable, '-m', 'ui.wizard.launcher', '--force'],
+                    cwd=project_root,
+                    start_new_session=True
+                )
+                return jsonify({
+                    'success': True,
+                    'launched': True,
+                    'message': 'Setup Wizard launched! Check your desktop.'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'Wizard script not found'
+                })
+                
+        except Exception as e:
+            print(f"[API] Error launching wizard: {e}")
+            return jsonify({'success': False, 'error': str(e)})
+    
+    @app.route('/api/wizard/status', methods=['GET'])
+    def api_wizard_status():
+        """Check if first-run wizard is needed"""
+        try:
+            wizard_complete = db.get_setting('wizard_completed')
+            return jsonify({
+                'success': True,
+                'wizard_completed': wizard_complete == 'true',
+                'first_run': wizard_complete != 'true'
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+    
     # General settings (Discord, Webull, API keys)
     @app.route('/api/settings', methods=['GET'])
     def api_get_settings():

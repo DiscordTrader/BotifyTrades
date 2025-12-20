@@ -324,6 +324,20 @@ input:checked + .slider:before {
     <p style="color: var(--text-secondary); margin-top: 8px; font-size: 13px;">Manage your bot credentials, API keys, and trading parameters</p>
 </div>
 
+<!-- Setup Wizard Card -->
+<div class="settings-card" style="margin-bottom: 24px; background: linear-gradient(135deg, #1a3a4a 0%, #0f4a3f 100%); border-color: rgba(74, 222, 128, 0.3);">
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+        <div>
+            <h3 style="color: #4ade80; margin-bottom: 8px;">🧙 Setup Wizard</h3>
+            <p class="description" style="margin-bottom: 0;">Run the guided setup wizard to configure Discord, brokers, channels, and risk management in one place.</p>
+        </div>
+        <button onclick="launchSetupWizard()" class="btn btn-success" style="background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%); min-width: 180px;">
+            Launch Setup Wizard
+        </button>
+    </div>
+    <div id="wizard-status" style="margin-top: 12px; font-size: 12px; color: var(--text-secondary); display: none;"></div>
+</div>
+
 <!-- Global Status Message -->
 <div id="save-message" class="message" style="margin-bottom: 24px;"></div>
 
@@ -1301,6 +1315,37 @@ function resetDiscordPatterns() {
         msg.className = 'message';
         setTimeout(() => msg.textContent = '', 3000);
     }
+}
+
+// ========== SETUP WIZARD ==========
+
+async function launchSetupWizard() {
+    const statusDiv = document.getElementById('wizard-status');
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = '<span style="color: #ffc107;">Launching Setup Wizard...</span>';
+    
+    try {
+        const response = await fetch('/api/wizard/launch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            if (result.launched) {
+                statusDiv.innerHTML = '<span style="color: #4ade80;">Setup Wizard launched! Check your desktop for the wizard window.</span>';
+            } else if (result.message) {
+                statusDiv.innerHTML = '<span style="color: #ffc107;">' + result.message + '</span>';
+            }
+        } else {
+            statusDiv.innerHTML = '<span style="color: #ff6b6b;">' + (result.error || 'Failed to launch wizard') + '</span>';
+        }
+    } catch (error) {
+        statusDiv.innerHTML = '<span style="color: #ff6b6b;">Error: ' + error.message + '</span>';
+    }
+    
+    setTimeout(() => { statusDiv.style.display = 'none'; }, 10000);
 }
 
 // ========== RELOAD CREDENTIALS & DEBUG MODE ==========
