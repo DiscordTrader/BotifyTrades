@@ -29,9 +29,48 @@ The system supports a dual-mode channel system for simultaneous execution and tr
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, and Robinhood. The system emphasizes user experience through an interactive setup wizard, GUI-based credential management, automatic license renewal, and extensive documentation. Deployment options include Windows, Linux (with systemd), and AWS EC2. The Discord bot runs in a dedicated thread with an isolated asyncio event loop. Broker credentials are loaded hierarchically. Discord channel IDs and all bot settings, including signal regex patterns and allowed author/guild IDs, are GUI-manageable and stored in SQLite. Per-channel risk management can override global defaults. The `/packaging/` directory consolidates platform-specific build scripts. The `/license/` module handles licensing, supporting legacy, machine-bound, and activation-based licenses with a dedicated GUI. The BrokerSyncService handles case-insensitive broker name matching. Options data retrieval prioritizes Webull for live prices. A unified position key format (`{BROKER}_{SYMBOL}_{STRIKE}_{EXPIRY}_{C/P}`) is used across the system. The system employs a dual-build license architecture separating Admin and User deployments.
 
+## PySide6 Setup Wizard
+
+The application includes a professional PySide6-based setup wizard located in `ui/wizard/` for first-time configuration. The wizard guides users through:
+
+1. **Welcome** - Introduction and import existing config option
+2. **App Mode** - Choose Alerts Only, Paper Trading, or Live Trading with risk disclosure
+3. **Discord Connection** - Discord token input with connection testing and server selection
+4. **Broker Selection** - Multi-select from Webull, Alpaca, IBKR, Tastytrade, Robinhood
+5. **Broker Credentials** - Per-broker credential forms with test connection buttons
+6. **Channel Config** - Configure which Discord channels to monitor with strategy selection
+7. **Risk Management** - Position sizing, stop loss, take profit, trailing stops, kill switch
+8. **Notifications** - Discord/Desktop/Email notification settings
+9. **Data & Privacy** - Analytics and crash reporting preferences
+10. **Review & Finish** - Summary of all settings before saving
+
+### Wizard Files
+- `ui/wizard/wizard.py` - Main SetupWizard QMainWindow class with sidebar navigation
+- `ui/wizard/pages/` - Individual page classes (10 pages)
+- `ui/wizard/config_db.py` - Database adapter for saving to existing bot_data.db
+- `ui/wizard/launcher.py` - Standalone launcher script with first-run detection
+- `ui/styles.qss` - Professional dark theme stylesheet
+
+### Running the Wizard
+```bash
+# Check if first-run wizard needed
+python -m ui.wizard.launcher --check
+
+# Force launch wizard (even if completed before)
+python -m ui.wizard.launcher --force
+
+# Standard launch (only if first run)
+python -m ui.wizard.launcher
+```
+
+### Requirements
+- PySide6 (preferred) or PyQt5 as fallback
+- Falls back to console message if neither is available
+
 ## External Dependencies
 
 - **Python**: 3.8+
+- **PySide6** or **PyQt5**: Setup wizard GUI (optional but recommended)
 - **discord.py-self**: Discord API interaction
 - **webull**: Webull brokerage integration
 - **Flask**: Web GUI framework
