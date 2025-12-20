@@ -29,7 +29,7 @@ outputType = "webview"
 
 [nix]
 channel = "stable-25_05"
-packages = ["cargo", "geckodriver", "gh", "glibcLocales", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc", "sqlite"]
+packages = ["cargo", "geckodriver", "gh", "glibcLocales", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc", "sqlite", "python313Packages.pyinstaller"]
 
 [[ports]]
 localPort = 5000
