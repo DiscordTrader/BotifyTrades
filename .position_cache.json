@@ -2413,5 +2413,50 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-19T20:24:56.317420"
+  },
+  "ALPACA_PAPER_IREN_42.0_2025-12-26_C": {
+    "entry_price": 1.13,
+    "highest_price": 1.06,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "IREN251226C00042000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-19T20:50:31.143281"
+  },
+  "Webull_SPX_6840.0_12/19_C": {
+    "entry_price": 0.35,
+    "highest_price": 0.3,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "Webull",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-19T20:54:11.056756"
+  },
+  "ALPACA_PAPER_NOW_stock": {
+    "entry_price": 775.0,
+    "highest_price": 155.94,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-20T02:27:36.684194"
   }
 }
