@@ -36,6 +36,7 @@ a = Analysis(
     datas=[
         (os.path.join(PROJECT_ROOT, 'gui_app'), 'gui_app'),
         (os.path.join(PROJECT_ROOT, 'src'), 'src'),
+        (os.path.join(PROJECT_ROOT, 'ui'), 'ui'),  # Setup Wizard UI
         (os.path.join(PROJECT_ROOT, 'license'), 'license'),
         (os.path.join(PROJECT_ROOT, 'services'), 'services'),
         (os.path.join(PROJECT_ROOT, 'config.ini.example'), '.'),
@@ -93,6 +94,17 @@ a = Analysis(
         'setup_wizard',
         'certifi',  # SSL certificates
         'pyarmor_runtime_000000',  # PyArmor runtime for obfuscated license
+        # PySide6 for Setup Wizard GUI
+        'PySide6',
+        'PySide6.QtWidgets',
+        'PySide6.QtCore',
+        'PySide6.QtGui',
+        'ui',
+        'ui.wizard',
+        'ui.wizard.wizard',
+        'ui.wizard.launcher',
+        'ui.wizard.config_db',
+        'ui.wizard.pages',
     ],
     hookspath=[],
     hooksconfig={},
