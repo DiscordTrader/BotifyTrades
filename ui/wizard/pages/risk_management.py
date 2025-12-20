@@ -384,9 +384,21 @@ class RiskManagementPage(BasePage):
     
     def get_data(self) -> Dict[str, Any]:
         """Get risk management data"""
+        risk_amount = self.risk_amount_spin.value()
+        risk_percent = self.risk_percent_spin.value()
+        
+        if risk_percent > 0:
+            position_sizing_mode = 'percent_of_account'
+        elif risk_amount > 0:
+            position_sizing_mode = 'fixed_amount'
+        else:
+            position_sizing_mode = 'fixed_amount'
+        
         return {
-            "risk_per_trade_amount": self.risk_amount_spin.value(),
-            "risk_per_trade_percent": self.risk_percent_spin.value(),
+            "position_sizing_mode": position_sizing_mode,
+            "risk_per_trade_amount": risk_amount,
+            "risk_per_trade_percent": risk_percent,
+            "max_position_size": risk_amount * 10 if risk_amount > 0 else 1000,
             "max_daily_loss": self.max_daily_loss_spin.value(),
             "max_open_positions": self.max_positions_spin.value(),
             "stop_loss_mode": self.stop_mode_combo.currentText().lower().replace(" ", "_").replace("-", "_"),
@@ -396,7 +408,8 @@ class RiskManagementPage(BasePage):
             "profit_target_3": self.tp3_spin.value(),
             "trailing_stop_enabled": self.trailing_stop_check.isChecked(),
             "trailing_stop_percent": self.trailing_percent_spin.value(),
-            "kill_switch_enabled": self.killswitch_check.isChecked()
+            "kill_switch_enabled": self.killswitch_check.isChecked(),
+            "kill_switch_threshold": self.max_daily_loss_spin.value()
         }
     
     def set_data(self, data: Dict[str, Any]):

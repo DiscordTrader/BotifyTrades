@@ -18,6 +18,7 @@ BROKER_STATUS = {
     'ibkr_paper': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
     'tastytrade_live': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
     'tastytrade_paper': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'robinhood_live': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
 }
 
 
@@ -238,9 +239,44 @@ def clear_tastytrade_credentials():
         'refresh_token': '',
         'paper_mode': True
     })
-    # Reset broker status
     set_broker_status('tastytrade_live', False, 'disconnected')
     set_broker_status('tastytrade_paper', False, 'disconnected')
+
+
+def save_robinhood_credentials(
+    username: str = '',
+    password: str = '',
+    totp_secret: str = '',
+    device_token: str = ''
+):
+    """Save Robinhood broker credentials"""
+    save_config('robinhood_credentials', {
+        'username': username,
+        'password': password,
+        'totp_secret': totp_secret,
+        'device_token': device_token
+    })
+
+
+def get_robinhood_credentials() -> Dict[str, Any]:
+    """Get Robinhood credentials"""
+    return load_config('robinhood_credentials') or {
+        'username': '',
+        'password': '',
+        'totp_secret': '',
+        'device_token': ''
+    }
+
+
+def clear_robinhood_credentials():
+    """Clear Robinhood credentials"""
+    save_config('robinhood_credentials', {
+        'username': '',
+        'password': '',
+        'totp_secret': '',
+        'device_token': ''
+    })
+    set_broker_status('robinhood_live', False, 'disconnected')
 
 
 def save_api_keys_extended(
@@ -307,6 +343,11 @@ def get_all_credentials_for_startup() -> Dict[str, Any]:
         'TASTYTRADE_PASSWORD': tastytrade.get('password', ''),
         'TASTYTRADE_PAPER_MODE': tastytrade.get('paper_mode', True),
         
+        'ROBINHOOD_USERNAME': get_robinhood_credentials().get('username', ''),
+        'ROBINHOOD_PASSWORD': get_robinhood_credentials().get('password', ''),
+        'ROBINHOOD_TOTP_SECRET': get_robinhood_credentials().get('totp_secret', ''),
+        'ROBINHOOD_DEVICE_TOKEN': get_robinhood_credentials().get('device_token', ''),
+        
         'OPENAI_API_KEY': api_keys.get('openai', ''),
         'ALPHA_VANTAGE_API_KEY': api_keys.get('alpha_vantage', ''),
         'FINNHUB_API_KEY': api_keys.get('finnhub', ''),
@@ -335,11 +376,13 @@ def get_enabled_brokers() -> Dict[str, bool]:
     alpaca = get_alpaca_credentials()
     ibkr = get_ibkr_credentials()
     tastytrade = get_tastytrade_credentials()
+    robinhood = get_robinhood_credentials()
     
     return {
         'discord': bool(discord.get('token')),
         'webull': bool(webull.get('email') or webull.get('access_token')),
         'alpaca': bool(alpaca.get('api_key')),
         'ibkr': bool(ibkr.get('host')),
-        'tastytrade': bool(tastytrade.get('username'))
+        'tastytrade': bool(tastytrade.get('username')),
+        'robinhood': bool(robinhood.get('username'))
     }

@@ -125,16 +125,21 @@ class WizardDatabaseAdapter:
                     paper_mode=creds.get('paper_trade', True)
                 )
             elif broker_id == 'ibkr':
+                paper_mode = creds.get('paper_trade', True)
+                port = creds.get('port', 7497 if paper_mode else 7496)
                 save_ibkr_credentials(
                     host=creds.get('host', '127.0.0.1'),
-                    port=creds.get('port', 7497),
+                    port_live=port if not paper_mode else 7496,
+                    port_paper=port if paper_mode else 7497,
                     client_id=creds.get('client_id', 1),
-                    paper_mode=creds.get('paper_trade', True)
+                    paper_mode=paper_mode
                 )
             elif broker_id == 'tastytrade':
                 save_tastytrade_credentials(
                     username=creds.get('username', ''),
                     password=creds.get('password', ''),
+                    client_secret=creds.get('client_secret', ''),
+                    refresh_token=creds.get('refresh_token', ''),
                     paper_mode=creds.get('paper_trade', True)
                 )
             elif broker_id == 'robinhood':
@@ -160,6 +165,18 @@ class WizardDatabaseAdapter:
             if not discord_id:
                 continue
             
+            execute_enabled = ch.get('execute_enabled', False)
+            track_enabled = ch.get('track_enabled', False)
+            
+            if execute_enabled and track_enabled:
+                category = 'EXECUTE'
+            elif execute_enabled:
+                category = 'EXECUTE'
+            elif track_enabled:
+                category = 'TRACK'
+            else:
+                category = 'EXECUTE'
+            
             cursor.execute('''
                 INSERT INTO channels (
                     discord_channel_id, name, category, 
@@ -176,9 +193,9 @@ class WizardDatabaseAdapter:
             ''', (
                 discord_id,
                 ch.get('channel_name', ''),
-                ch.get('category', ''),
-                1 if ch.get('strategy') in ['execute', 'both'] else 0,
-                1 if ch.get('strategy') in ['track', 'both'] else 0,
+                category,
+                1 if execute_enabled else 0,
+                1 if track_enabled else 0,
                 ch.get('broker_override')
             ))
         
@@ -191,11 +208,18 @@ class WizardDatabaseAdapter:
         save_setting('risk_per_trade_percent', str(data.get('risk_per_trade_percent', 2)))
         save_setting('max_position_size', str(data.get('max_position_size', 1000)))
         
-        save_setting('stop_loss_enabled', 'true' if data.get('stop_loss_enabled') else 'false')
+        stop_loss_mode = data.get('stop_loss_mode', 'fixed_percentage')
+        stop_loss_enabled = stop_loss_mode != 'none'
+        save_setting('stop_loss_enabled', 'true' if stop_loss_enabled else 'false')
+        save_setting('stop_loss_mode', stop_loss_mode)
         save_setting('stop_loss_percent', str(data.get('stop_loss_percent', 5)))
         
-        save_setting('take_profit_enabled', 'true' if data.get('take_profit_enabled') else 'false')
-        save_setting('take_profit_percent', str(data.get('take_profit_percent', 10)))
+        profit_target_1 = data.get('profit_target_1', 20)
+        take_profit_enabled = profit_target_1 > 0
+        save_setting('take_profit_enabled', 'true' if take_profit_enabled else 'false')
+        save_setting('profit_target_1_pct', str(profit_target_1))
+        save_setting('profit_target_2_pct', str(data.get('profit_target_2', 50)))
+        save_setting('profit_target_3_pct', str(data.get('profit_target_3', 100)))
         
         save_setting('trailing_stop_enabled', 'true' if data.get('trailing_stop_enabled') else 'false')
         save_setting('trailing_stop_percent', str(data.get('trailing_stop_percent', 3)))
