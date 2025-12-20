@@ -87,3 +87,4 @@ gunicorn
 bcrypt
 tastytrade
 openai
+PySide6
