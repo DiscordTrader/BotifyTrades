@@ -67,6 +67,13 @@ python -m ui.wizard.launcher
 - PySide6 (preferred) or PyQt5 as fallback
 - Falls back to console message if neither is available
 
+### Launching from EXE
+When running from a bundled Windows EXE:
+- Click "Launch Setup Wizard" from Settings page (http://localhost:5000/settings)
+- The wizard runs in-process via a thread (not subprocess) to work correctly inside PyInstaller
+- Qt environment paths are automatically configured for frozen EXE
+- All wizard pages and dependencies are bundled via spec file hidden imports
+
 ## External Dependencies
 
 - **Python**: 3.8+

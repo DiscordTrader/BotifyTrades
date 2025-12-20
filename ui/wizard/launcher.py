@@ -17,8 +17,10 @@ def check_pyside6_installed() -> bool:
     """Check if PySide6 is installed"""
     try:
         import PySide6
+        print(f"[Wizard] PySide6 found: {PySide6.__version__}")
         return True
-    except ImportError:
+    except ImportError as e:
+        print(f"[Wizard] PySide6 not found: {e}")
         return False
 
 
@@ -26,8 +28,10 @@ def check_pyqt5_installed() -> bool:
     """Check if PyQt5 is installed (fallback)"""
     try:
         import PyQt5
+        print("[Wizard] PyQt5 found")
         return True
-    except ImportError:
+    except ImportError as e:
+        print(f"[Wizard] PyQt5 not found: {e}")
         return False
 
 
@@ -47,6 +51,23 @@ def show_console_setup():
     print("=" * 60)
 
 
+def _setup_qt_environment():
+    """Set up Qt environment for frozen EXE"""
+    if getattr(sys, 'frozen', False):
+        base_path = sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.path.dirname(sys.executable)
+        
+        qt_plugin_path = os.path.join(base_path, 'PySide6', 'plugins')
+        if os.path.exists(qt_plugin_path):
+            os.environ['QT_PLUGIN_PATH'] = qt_plugin_path
+            print(f"[Wizard] Set QT_PLUGIN_PATH: {qt_plugin_path}")
+        
+        if 'QT_QPA_PLATFORM_PLUGIN_PATH' not in os.environ:
+            platforms_path = os.path.join(qt_plugin_path, 'platforms')
+            if os.path.exists(platforms_path):
+                os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = platforms_path
+                print(f"[Wizard] Set QT_QPA_PLATFORM_PLUGIN_PATH: {platforms_path}")
+
+
 def launch_wizard(skip_first_run_check: bool = False) -> bool:
     """
     Launch the setup wizard
@@ -57,6 +78,12 @@ def launch_wizard(skip_first_run_check: bool = False) -> bool:
     Returns:
         True if wizard completed successfully, False otherwise
     """
+    print("[Wizard] Starting wizard launcher...")
+    print(f"[Wizard] Python: {sys.version}")
+    print(f"[Wizard] Frozen: {getattr(sys, 'frozen', False)}")
+    
+    _setup_qt_environment()
+    
     if not check_pyside6_installed() and not check_pyqt5_installed():
         show_console_setup()
         return False
@@ -68,24 +95,36 @@ def launch_wizard(skip_first_run_check: bool = False) -> bool:
         return True
     
     try:
+        print("[Wizard] Importing Qt modules...")
         if check_pyside6_installed():
             from PySide6.QtWidgets import QApplication
             from PySide6.QtCore import Qt
+            print("[Wizard] Using PySide6")
         else:
             from PyQt5.QtWidgets import QApplication
             from PyQt5.QtCore import Qt
+            print("[Wizard] Using PyQt5")
         
+        print("[Wizard] Importing SetupWizard...")
         from .wizard import SetupWizard
         
+        print("[Wizard] Creating QApplication...")
         app = QApplication.instance()
+        created_app = False
         if not app:
-            app = QApplication(sys.argv)
+            app = QApplication(sys.argv if sys.argv else ['BotifyTrades'])
+            created_app = True
+            print("[Wizard] Created new QApplication")
+        else:
+            print("[Wizard] Using existing QApplication")
         
         app.setApplicationName("BotifyTrades Setup")
         app.setApplicationDisplayName("BotifyTrades Setup Wizard")
         
+        print("[Wizard] Creating database adapter...")
         db_adapter = WizardDatabaseAdapter()
         
+        print("[Wizard] Creating wizard window...")
         wizard = SetupWizard(db_adapter=db_adapter)
         
         result = {'completed': False}
@@ -100,10 +139,18 @@ def launch_wizard(skip_first_run_check: bool = False) -> bool:
         wizard.wizard_completed.connect(on_completed)
         wizard.wizard_cancelled.connect(on_cancelled)
         
+        print("[Wizard] Showing wizard window...")
         wizard.show()
+        wizard.raise_()
+        wizard.activateWindow()
         
-        app.exec()
+        print("[Wizard] Starting event loop...")
+        if created_app:
+            app.exec()
+        else:
+            wizard.exec() if hasattr(wizard, 'exec') else app.exec()
         
+        print(f"[Wizard] Event loop finished. Completed: {result['completed']}")
         return result['completed']
         
     except Exception as e:
