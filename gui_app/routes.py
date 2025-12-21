@@ -4820,31 +4820,41 @@ def register_routes(app):
             
             if is_frozen:
                 # Running inside PyInstaller EXE - launch wizard directly in a thread
-                print(f"[Wizard API] Frozen EXE detected, launching wizard in thread...")
-                print(f"[Wizard API] PySide6 available: {pyside_available}, PyQt5 available: {pyqt_available}")
+                print("=" * 60, flush=True)
+                print("[Wizard API] WIZARD LAUNCH TRIGGERED", flush=True)
+                print(f"[Wizard API] Frozen EXE detected, launching wizard in thread...", flush=True)
+                print(f"[Wizard API] PySide6 available: {pyside_available}, PyQt5 available: {pyqt_available}", flush=True)
+                sys.stdout.flush()
                 
                 def launch_wizard_thread():
                     try:
-                        print("[Wizard Thread] Starting wizard thread...")
-                        print(f"[Wizard Thread] sys._MEIPASS: {getattr(sys, '_MEIPASS', 'N/A')}")
+                        print("[Wizard Thread] Starting wizard thread...", flush=True)
+                        print(f"[Wizard Thread] sys._MEIPASS: {getattr(sys, '_MEIPASS', 'N/A')}", flush=True)
+                        sys.stdout.flush()
                         
                         from ui.wizard.launcher import launch_wizard
-                        print("[Wizard Thread] Imported launch_wizard successfully")
+                        print("[Wizard Thread] Imported launch_wizard successfully", flush=True)
+                        sys.stdout.flush()
                         
                         result = launch_wizard(skip_first_run_check=True)
-                        print(f"[Wizard Thread] launch_wizard returned: {result}")
+                        print(f"[Wizard Thread] launch_wizard returned: {result}", flush=True)
+                        sys.stdout.flush()
                     except ImportError as e:
-                        print(f"[Wizard Thread] Import error: {e}")
+                        print(f"[Wizard Thread] Import error: {e}", flush=True)
                         import traceback
                         traceback.print_exc()
+                        sys.stdout.flush()
                     except Exception as e:
-                        print(f"[Wizard Thread] Error: {e}")
+                        print(f"[Wizard Thread] Error: {e}", flush=True)
                         import traceback
                         traceback.print_exc()
+                        sys.stdout.flush()
                 
                 wizard_thread = threading.Thread(target=launch_wizard_thread, daemon=False, name="WizardThread")
                 wizard_thread.start()
-                print(f"[Wizard API] Wizard thread started: {wizard_thread.name}")
+                print(f"[Wizard API] Wizard thread started: {wizard_thread.name}", flush=True)
+                print("=" * 60, flush=True)
+                sys.stdout.flush()
                 
                 return jsonify({
                     'success': True,
