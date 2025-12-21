@@ -4820,17 +4820,31 @@ def register_routes(app):
             
             if is_frozen:
                 # Running inside PyInstaller EXE - launch wizard directly in a thread
+                print(f"[Wizard API] Frozen EXE detected, launching wizard in thread...")
+                print(f"[Wizard API] PySide6 available: {pyside_available}, PyQt5 available: {pyqt_available}")
+                
                 def launch_wizard_thread():
                     try:
+                        print("[Wizard Thread] Starting wizard thread...")
+                        print(f"[Wizard Thread] sys._MEIPASS: {getattr(sys, '_MEIPASS', 'N/A')}")
+                        
                         from ui.wizard.launcher import launch_wizard
-                        launch_wizard(skip_first_run_check=True)
+                        print("[Wizard Thread] Imported launch_wizard successfully")
+                        
+                        result = launch_wizard(skip_first_run_check=True)
+                        print(f"[Wizard Thread] launch_wizard returned: {result}")
+                    except ImportError as e:
+                        print(f"[Wizard Thread] Import error: {e}")
+                        import traceback
+                        traceback.print_exc()
                     except Exception as e:
-                        print(f"[Wizard] Error in thread: {e}")
+                        print(f"[Wizard Thread] Error: {e}")
                         import traceback
                         traceback.print_exc()
                 
-                wizard_thread = threading.Thread(target=launch_wizard_thread, daemon=True)
+                wizard_thread = threading.Thread(target=launch_wizard_thread, daemon=False, name="WizardThread")
                 wizard_thread.start()
+                print(f"[Wizard API] Wizard thread started: {wizard_thread.name}")
                 
                 return jsonify({
                     'success': True,
