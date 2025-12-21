@@ -78,85 +78,112 @@ def launch_wizard(skip_first_run_check: bool = False) -> bool:
     Returns:
         True if wizard completed successfully, False otherwise
     """
-    print("[Wizard] Starting wizard launcher...")
-    print(f"[Wizard] Python: {sys.version}")
-    print(f"[Wizard] Frozen: {getattr(sys, 'frozen', False)}")
+    import tempfile
+    import time
+    
+    log_path = os.path.join(tempfile.gettempdir(), 'botifytrades_wizard_launcher.log')
+    
+    def log(msg):
+        try:
+            with open(log_path, 'a') as f:
+                f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
+        except:
+            pass
+        print(msg, flush=True)
+    
+    log("=" * 50)
+    log("[Launcher] Starting wizard launcher...")
+    log(f"[Launcher] Python: {sys.version}")
+    log(f"[Launcher] Frozen: {getattr(sys, 'frozen', False)}")
+    log(f"[Launcher] Log file: {log_path}")
     
     _setup_qt_environment()
     
+    log("[Launcher] Checking for Qt frameworks...")
     if not check_pyside6_installed() and not check_pyqt5_installed():
+        log("[Launcher] No Qt framework available!")
         show_console_setup()
         return False
     
+    log("[Launcher] Importing config_db...")
     from .config_db import WizardDatabaseAdapter, check_first_run
     
     if not skip_first_run_check and not check_first_run():
-        print("[Wizard] Setup already completed. Use --force-wizard to run again.")
+        log("[Launcher] Setup already completed. Use --force-wizard to run again.")
         return True
     
     try:
-        print("[Wizard] Importing Qt modules...")
+        log("[Launcher] Importing Qt modules...")
         if check_pyside6_installed():
             from PySide6.QtWidgets import QApplication
             from PySide6.QtCore import Qt
-            print("[Wizard] Using PySide6")
+            log("[Launcher] Using PySide6")
         else:
             from PyQt5.QtWidgets import QApplication
             from PyQt5.QtCore import Qt
-            print("[Wizard] Using PyQt5")
+            log("[Launcher] Using PyQt5")
         
-        print("[Wizard] Importing SetupWizard...")
+        log("[Launcher] Importing SetupWizard class...")
         from .wizard import SetupWizard
+        log("[Launcher] SetupWizard imported successfully")
         
-        print("[Wizard] Creating QApplication...")
+        log("[Launcher] Checking for existing QApplication...")
         app = QApplication.instance()
         created_app = False
         if not app:
+            log("[Launcher] Creating new QApplication...")
             app = QApplication(sys.argv if sys.argv else ['BotifyTrades'])
             created_app = True
-            print("[Wizard] Created new QApplication")
+            log("[Launcher] Created new QApplication")
         else:
-            print("[Wizard] Using existing QApplication")
+            log("[Launcher] Using existing QApplication")
         
         app.setApplicationName("BotifyTrades Setup")
         app.setApplicationDisplayName("BotifyTrades Setup Wizard")
         
-        print("[Wizard] Creating database adapter...")
+        log("[Launcher] Creating database adapter...")
         db_adapter = WizardDatabaseAdapter()
+        log("[Launcher] Database adapter created")
         
-        print("[Wizard] Creating wizard window...")
+        log("[Launcher] Creating wizard window...")
         wizard = SetupWizard(db_adapter=db_adapter)
+        log("[Launcher] Wizard window created")
         
         result = {'completed': False}
         
         def on_completed(data):
             result['completed'] = True
-            print("[Wizard] Setup completed successfully!")
+            log("[Launcher] Setup completed successfully!")
         
         def on_cancelled():
-            print("[Wizard] Setup cancelled by user.")
+            log("[Launcher] Setup cancelled by user.")
         
         wizard.wizard_completed.connect(on_completed)
         wizard.wizard_cancelled.connect(on_cancelled)
         
-        print("[Wizard] Showing wizard window...")
+        log("[Launcher] Calling wizard.show()...")
         wizard.show()
+        log("[Launcher] Calling wizard.raise_()...")
         wizard.raise_()
+        log("[Launcher] Calling wizard.activateWindow()...")
         wizard.activateWindow()
+        log("[Launcher] Wizard window should now be visible!")
         
-        print("[Wizard] Starting event loop...")
+        log("[Launcher] Starting Qt event loop...")
         if created_app:
+            log("[Launcher] Calling app.exec()...")
             app.exec()
         else:
+            log("[Launcher] Calling wizard.exec() or app.exec()...")
             wizard.exec() if hasattr(wizard, 'exec') else app.exec()
         
-        print(f"[Wizard] Event loop finished. Completed: {result['completed']}")
+        log(f"[Launcher] Event loop finished. Completed: {result['completed']}")
         return result['completed']
         
     except Exception as e:
-        print(f"[Wizard] Error launching wizard: {e}")
+        log(f"[Launcher] EXCEPTION: {type(e).__name__}: {e}")
         import traceback
-        traceback.print_exc()
+        log(traceback.format_exc())
         return False
 
 
