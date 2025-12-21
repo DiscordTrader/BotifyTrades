@@ -4884,33 +4884,46 @@ def register_routes(app):
                 sys.stdout.flush()
                 
                 def launch_wizard_thread():
+                    import tempfile
+                    import time
+                    thread_log_path = os.path.join(tempfile.gettempdir(), 'botifytrades_wizard_thread.log')
+                    
+                    def log_to_file(msg):
+                        try:
+                            with open(thread_log_path, 'a') as f:
+                                f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
+                        except:
+                            pass
+                    
+                    log_to_file("=" * 50)
+                    log_to_file("[Thread] Starting wizard thread...")
+                    log_to_file(f"[Thread] sys._MEIPASS: {getattr(sys, '_MEIPASS', 'N/A')}")
+                    
                     try:
-                        print("[Wizard Thread] Starting wizard thread...", flush=True)
-                        print(f"[Wizard Thread] sys._MEIPASS: {getattr(sys, '_MEIPASS', 'N/A')}", flush=True)
-                        sys.stdout.flush()
-                        
+                        log_to_file("[Thread] Attempting to import ui.wizard.launcher...")
                         from ui.wizard.launcher import launch_wizard
-                        print("[Wizard Thread] Imported launch_wizard successfully", flush=True)
-                        sys.stdout.flush()
+                        log_to_file("[Thread] Import successful!")
                         
+                        log_to_file("[Thread] Calling launch_wizard(skip_first_run_check=True)...")
                         result = launch_wizard(skip_first_run_check=True)
-                        print(f"[Wizard Thread] launch_wizard returned: {result}", flush=True)
-                        sys.stdout.flush()
+                        log_to_file(f"[Thread] launch_wizard returned: {result}")
+                        
                     except ImportError as e:
-                        print(f"[Wizard Thread] Import error: {e}", flush=True)
+                        log_to_file(f"[Thread] IMPORT ERROR: {e}")
                         import traceback
-                        traceback.print_exc()
-                        sys.stdout.flush()
+                        log_to_file(traceback.format_exc())
                     except Exception as e:
-                        print(f"[Wizard Thread] Error: {e}", flush=True)
+                        log_to_file(f"[Thread] EXCEPTION: {type(e).__name__}: {e}")
                         import traceback
-                        traceback.print_exc()
-                        sys.stdout.flush()
+                        log_to_file(traceback.format_exc())
+                    
+                    log_to_file("[Thread] Thread function exiting")
                 
                 wizard_thread = threading.Thread(target=launch_wizard_thread, daemon=False, name="WizardThread")
                 wizard_thread.start()
                 debug_info['thread_started'] = True
                 debug_info['thread_name'] = wizard_thread.name
+                debug_info['thread_log_path'] = os.path.join(tempfile.gettempdir(), 'botifytrades_wizard_thread.log')
                 print(f"[Wizard API v3] Wizard thread started: {wizard_thread.name}", flush=True)
                 print("=" * 60, flush=True)
                 sys.stdout.flush()

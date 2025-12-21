@@ -1350,6 +1350,7 @@ async function launchSetupWizard() {
             console.log('[Wizard JS] PyQt5:', result.debug.pyqt_available);
             console.log('[Wizard JS] Log file:', result.debug.log_file_result);
             console.log('[Wizard JS] Thread started:', result.debug.thread_started);
+            console.log('[Wizard JS] Thread log path:', result.debug.thread_log_path);
             console.log('[Wizard JS] Full debug:', JSON.stringify(result.debug, null, 2));
         } else {
             console.log('[Wizard JS] No debug info in response (API < v3)');
