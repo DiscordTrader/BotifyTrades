@@ -4792,6 +4792,26 @@ def register_routes(app):
         import os
         import threading
         
+        # Immediate debug - log to file AND console
+        print("=" * 60, flush=True)
+        print("[Wizard API] === ENDPOINT CALLED ===", flush=True)
+        print(f"[Wizard API] sys.frozen = {getattr(sys, 'frozen', False)}", flush=True)
+        print(f"[Wizard API] sys.executable = {sys.executable}", flush=True)
+        sys.stdout.flush()
+        
+        # Also log to file for debugging
+        try:
+            import tempfile
+            log_path = os.path.join(tempfile.gettempdir(), 'botifytrades_wizard_debug.log')
+            with open(log_path, 'a') as f:
+                f.write(f"\n{'=' * 60}\n")
+                f.write(f"[Wizard API] === ENDPOINT CALLED ===\n")
+                f.write(f"[Wizard API] sys.frozen = {getattr(sys, 'frozen', False)}\n")
+                f.write(f"[Wizard API] sys.executable = {sys.executable}\n")
+            print(f"[Wizard API] Debug log written to: {log_path}", flush=True)
+        except Exception as log_err:
+            print(f"[Wizard API] Could not write debug log: {log_err}", flush=True)
+        
         try:
             # Check if PySide6 or PyQt5 is available
             pyside_available = False
