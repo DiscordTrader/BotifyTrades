@@ -15,6 +15,47 @@ from . import database as db
 # Admin password from environment (set via Replit Secrets)
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
 
+
+# Module-level function for multiprocessing (must be picklable)
+def _launch_wizard_process_target():
+    """Run wizard in a separate process to avoid Qt threading issues.
+    This function must be at module level for multiprocessing to work.
+    """
+    import tempfile
+    import time
+    import os
+    import sys
+    
+    process_log_path = os.path.join(tempfile.gettempdir(), 'botifytrades_wizard_process.log')
+    
+    def log_to_file(msg):
+        try:
+            with open(process_log_path, 'a') as f:
+                f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
+        except:
+            pass
+    
+    log_to_file("=" * 50)
+    log_to_file("[Process] Starting wizard process...")
+    log_to_file(f"[Process] PID: {os.getpid()}")
+    log_to_file(f"[Process] sys._MEIPASS: {getattr(sys, '_MEIPASS', 'N/A')}")
+    
+    try:
+        log_to_file("[Process] Attempting to import ui.wizard.launcher...")
+        from ui.wizard.launcher import launch_wizard
+        log_to_file("[Process] Import successful!")
+        
+        log_to_file("[Process] Calling launch_wizard(skip_first_run_check=True)...")
+        result = launch_wizard(skip_first_run_check=True)
+        log_to_file(f"[Process] launch_wizard returned: {result}")
+        
+    except Exception as e:
+        log_to_file(f"[Process] EXCEPTION: {type(e).__name__}: {e}")
+        import traceback
+        log_to_file(traceback.format_exc())
+    
+    log_to_file("[Process] Process function exiting")
+
 # Public routes that don't require authentication
 PUBLIC_ROUTES = ['/login', '/architecture', '/static', '/signup', '/user/login', '/google_login', '/consent', '/api/consent']
 
@@ -4886,50 +4927,18 @@ def register_routes(app):
                 
                 import multiprocessing
                 
-                def launch_wizard_process():
-                    """Run wizard in a separate process to avoid Qt threading issues"""
-                    import tempfile
-                    import time
-                    import os
-                    import sys
-                    
-                    process_log_path = os.path.join(tempfile.gettempdir(), 'botifytrades_wizard_process.log')
-                    
-                    def log_to_file(msg):
-                        try:
-                            with open(process_log_path, 'a') as f:
-                                f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
-                        except:
-                            pass
-                    
-                    log_to_file("=" * 50)
-                    log_to_file("[Process] Starting wizard process...")
-                    log_to_file(f"[Process] PID: {os.getpid()}")
-                    log_to_file(f"[Process] sys._MEIPASS: {getattr(sys, '_MEIPASS', 'N/A')}")
-                    
-                    try:
-                        log_to_file("[Process] Attempting to import ui.wizard.launcher...")
-                        from ui.wizard.launcher import launch_wizard
-                        log_to_file("[Process] Import successful!")
-                        
-                        log_to_file("[Process] Calling launch_wizard(skip_first_run_check=True)...")
-                        result = launch_wizard(skip_first_run_check=True)
-                        log_to_file(f"[Process] launch_wizard returned: {result}")
-                        
-                    except Exception as e:
-                        log_to_file(f"[Process] EXCEPTION: {type(e).__name__}: {e}")
-                        import traceback
-                        log_to_file(traceback.format_exc())
-                    
-                    log_to_file("[Process] Process function exiting")
-                
                 # Use 'spawn' method for clean process on Windows
                 try:
                     multiprocessing.set_start_method('spawn', force=True)
                 except RuntimeError:
                     pass  # Already set
                 
-                wizard_process = multiprocessing.Process(target=launch_wizard_process, daemon=False, name="WizardProcess")
+                # Use module-level function (required for pickling)
+                wizard_process = multiprocessing.Process(
+                    target=_launch_wizard_process_target,
+                    daemon=False,
+                    name="WizardProcess"
+                )
                 wizard_process.start()
                 debug_info['process_started'] = True
                 debug_info['process_pid'] = wizard_process.pid
