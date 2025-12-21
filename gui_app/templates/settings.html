@@ -1318,19 +1318,26 @@ function resetDiscordPatterns() {
 }
 
 // ========== SETUP WIZARD ==========
+// VERSION: 2025-12-21-v2 - API call version
 
 async function launchSetupWizard() {
     const statusDiv = document.getElementById('wizard-status');
     statusDiv.style.display = 'block';
-    statusDiv.innerHTML = '<span style="color: #ffc107;">Launching Setup Wizard...</span>';
+    
+    // Version marker - if you see this in console, the new code is running
+    console.log('[Wizard JS] VERSION: 2025-12-21-v2 - Calling API...');
+    statusDiv.innerHTML = '<span style="color: #ffc107;">Launching Setup Wizard (v2)...</span>';
     
     try {
+        console.log('[Wizard JS] Fetching /api/wizard/launch...');
         const response = await fetch('/api/wizard/launch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
         
+        console.log('[Wizard JS] Response status:', response.status);
         const result = await response.json();
+        console.log('[Wizard JS] Response data:', result);
         
         if (result.success) {
             if (result.launched) {
@@ -1342,6 +1349,7 @@ async function launchSetupWizard() {
             statusDiv.innerHTML = '<span style="color: #ff6b6b;">' + (result.error || 'Failed to launch wizard') + '</span>';
         }
     } catch (error) {
+        console.log('[Wizard JS] Error:', error);
         statusDiv.innerHTML = '<span style="color: #ff6b6b;">Error: ' + error.message + '</span>';
     }
     
