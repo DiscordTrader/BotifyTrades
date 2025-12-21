@@ -1318,15 +1318,15 @@ function resetDiscordPatterns() {
 }
 
 // ========== SETUP WIZARD ==========
-// VERSION: 2025-12-21-v2 - API call version
+// VERSION: 2025-12-21-v3 - With debug info in response
 
 async function launchSetupWizard() {
     const statusDiv = document.getElementById('wizard-status');
     statusDiv.style.display = 'block';
     
     // Version marker - if you see this in console, the new code is running
-    console.log('[Wizard JS] VERSION: 2025-12-21-v2 - Calling API...');
-    statusDiv.innerHTML = '<span style="color: #ffc107;">Launching Setup Wizard (v2)...</span>';
+    console.log('[Wizard JS] VERSION: 2025-12-21-v3 - Calling API...');
+    statusDiv.innerHTML = '<span style="color: #ffc107;">Launching Setup Wizard (v3)...</span>';
     
     try {
         console.log('[Wizard JS] Fetching /api/wizard/launch...');
@@ -1338,6 +1338,22 @@ async function launchSetupWizard() {
         console.log('[Wizard JS] Response status:', response.status);
         const result = await response.json();
         console.log('[Wizard JS] Response data:', result);
+        
+        // Log debug info if present (v3+ feature)
+        if (result.debug) {
+            console.log('[Wizard JS] === API DEBUG INFO ===');
+            console.log('[Wizard JS] API Version:', result.debug.api_version);
+            console.log('[Wizard JS] Frozen EXE:', result.debug.frozen);
+            console.log('[Wizard JS] Executable:', result.debug.executable);
+            console.log('[Wizard JS] MEIPASS:', result.debug.meipass);
+            console.log('[Wizard JS] PySide6:', result.debug.pyside_available);
+            console.log('[Wizard JS] PyQt5:', result.debug.pyqt_available);
+            console.log('[Wizard JS] Log file:', result.debug.log_file_result);
+            console.log('[Wizard JS] Thread started:', result.debug.thread_started);
+            console.log('[Wizard JS] Full debug:', JSON.stringify(result.debug, null, 2));
+        } else {
+            console.log('[Wizard JS] No debug info in response (API < v3)');
+        }
         
         if (result.success) {
             if (result.launched) {

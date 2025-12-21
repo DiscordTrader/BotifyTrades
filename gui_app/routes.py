@@ -4783,7 +4783,7 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
     
-    # Setup Wizard API
+    # Setup Wizard API - VERSION 2025-12-21-v3
     @app.route('/api/wizard/launch', methods=['POST'])
     def api_launch_wizard():
         """Launch the PySide6 setup wizard"""
@@ -4791,26 +4791,59 @@ def register_routes(app):
         import sys
         import os
         import threading
+        import time
         
-        # Immediate debug - log to file AND console
+        # Collect debug info to return in response
+        debug_info = {
+            'api_version': '2025-12-21-v3',
+            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'frozen': getattr(sys, 'frozen', False),
+            'executable': sys.executable,
+            'meipass': getattr(sys, '_MEIPASS', None),
+            'cwd': os.getcwd(),
+            'log_file_result': None
+        }
+        
+        # Console logging
         print("=" * 60, flush=True)
-        print("[Wizard API] === ENDPOINT CALLED ===", flush=True)
-        print(f"[Wizard API] sys.frozen = {getattr(sys, 'frozen', False)}", flush=True)
-        print(f"[Wizard API] sys.executable = {sys.executable}", flush=True)
+        print(f"[Wizard API v3] === ENDPOINT CALLED ===", flush=True)
+        print(f"[Wizard API v3] sys.frozen = {debug_info['frozen']}", flush=True)
+        print(f"[Wizard API v3] sys.executable = {debug_info['executable']}", flush=True)
+        print(f"[Wizard API v3] _MEIPASS = {debug_info['meipass']}", flush=True)
         sys.stdout.flush()
         
-        # Also log to file for debugging
+        # Try multiple log locations
+        log_locations = []
         try:
             import tempfile
-            log_path = os.path.join(tempfile.gettempdir(), 'botifytrades_wizard_debug.log')
-            with open(log_path, 'a') as f:
-                f.write(f"\n{'=' * 60}\n")
-                f.write(f"[Wizard API] === ENDPOINT CALLED ===\n")
-                f.write(f"[Wizard API] sys.frozen = {getattr(sys, 'frozen', False)}\n")
-                f.write(f"[Wizard API] sys.executable = {sys.executable}\n")
-            print(f"[Wizard API] Debug log written to: {log_path}", flush=True)
-        except Exception as log_err:
-            print(f"[Wizard API] Could not write debug log: {log_err}", flush=True)
+            log_locations.append(os.path.join(tempfile.gettempdir(), 'botifytrades_wizard_debug.log'))
+        except:
+            pass
+        
+        # Also try EXE directory
+        try:
+            if debug_info['frozen']:
+                exe_dir = os.path.dirname(debug_info['executable'])
+                log_locations.append(os.path.join(exe_dir, 'wizard_debug.log'))
+        except:
+            pass
+        
+        # Try to write to each location
+        for log_path in log_locations:
+            try:
+                with open(log_path, 'a') as f:
+                    f.write(f"\n{'=' * 60}\n")
+                    f.write(f"[Wizard API v3] === ENDPOINT CALLED ===\n")
+                    f.write(f"[Wizard API v3] Timestamp: {debug_info['timestamp']}\n")
+                    f.write(f"[Wizard API v3] sys.frozen = {debug_info['frozen']}\n")
+                    f.write(f"[Wizard API v3] sys.executable = {debug_info['executable']}\n")
+                    f.write(f"[Wizard API v3] _MEIPASS = {debug_info['meipass']}\n")
+                debug_info['log_file_result'] = f"Written to: {log_path}"
+                print(f"[Wizard API v3] Log written to: {log_path}", flush=True)
+                break
+            except Exception as log_err:
+                debug_info['log_file_result'] = f"Failed: {log_err}"
+                print(f"[Wizard API v3] Could not write to {log_path}: {log_err}", flush=True)
         
         try:
             # Check if PySide6 or PyQt5 is available
@@ -4829,10 +4862,14 @@ def register_routes(app):
             except ImportError:
                 pass
             
+            debug_info['pyside_available'] = pyside_available
+            debug_info['pyqt_available'] = pyqt_available
+            
             if not pyside_available and not pyqt_available:
                 return jsonify({
                     'success': False,
-                    'error': 'PySide6 or PyQt5 is not installed. Install with: pip install PySide6'
+                    'error': 'PySide6 or PyQt5 is not installed. Install with: pip install PySide6',
+                    'debug': debug_info
                 })
             
             # Check if running as frozen EXE (PyInstaller bundle)
@@ -4872,19 +4909,25 @@ def register_routes(app):
                 
                 wizard_thread = threading.Thread(target=launch_wizard_thread, daemon=False, name="WizardThread")
                 wizard_thread.start()
-                print(f"[Wizard API] Wizard thread started: {wizard_thread.name}", flush=True)
+                debug_info['thread_started'] = True
+                debug_info['thread_name'] = wizard_thread.name
+                print(f"[Wizard API v3] Wizard thread started: {wizard_thread.name}", flush=True)
                 print("=" * 60, flush=True)
                 sys.stdout.flush()
                 
                 return jsonify({
                     'success': True,
                     'launched': True,
-                    'message': 'Setup Wizard launched! Check your desktop.'
+                    'message': 'Setup Wizard launched! Check your desktop.',
+                    'debug': debug_info
                 })
             else:
                 # Development mode - launch as subprocess
                 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 wizard_script = os.path.join(project_root, 'ui', 'wizard', 'launcher.py')
+                debug_info['mode'] = 'development'
+                debug_info['wizard_script'] = wizard_script
+                debug_info['script_exists'] = os.path.exists(wizard_script)
                 
                 if os.path.exists(wizard_script):
                     subprocess.Popen(
@@ -4895,17 +4938,20 @@ def register_routes(app):
                     return jsonify({
                         'success': True,
                         'launched': True,
-                        'message': 'Setup Wizard launched! Check your desktop.'
+                        'message': 'Setup Wizard launched! Check your desktop.',
+                        'debug': debug_info
                     })
                 else:
                     return jsonify({
                         'success': False,
-                        'error': 'Wizard script not found'
+                        'error': 'Wizard script not found',
+                        'debug': debug_info
                     })
                 
         except Exception as e:
-            print(f"[API] Error launching wizard: {e}")
-            return jsonify({'success': False, 'error': str(e)})
+            print(f"[API v3] Error launching wizard: {e}")
+            debug_info['exception'] = str(e)
+            return jsonify({'success': False, 'error': str(e), 'debug': debug_info})
     
     @app.route('/api/wizard/status', methods=['GET'])
     def api_wizard_status():
