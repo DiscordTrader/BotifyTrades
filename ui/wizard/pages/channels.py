@@ -3,7 +3,7 @@ Channel Configuration Page - Step 5
 Configure which Discord channels to monitor with per-channel settings
 """
 
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Any, Tuple, List, Optional
 try:
     from PySide6.QtWidgets import (
         QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
