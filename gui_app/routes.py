@@ -4876,55 +4876,65 @@ def register_routes(app):
             is_frozen = getattr(sys, 'frozen', False)
             
             if is_frozen:
-                # Running inside PyInstaller EXE - launch wizard directly in a thread
+                # Running inside PyInstaller EXE - launch wizard using multiprocessing
+                # Threading causes Qt to freeze; multiprocessing creates a proper separate process
                 print("=" * 60, flush=True)
                 print("[Wizard API] WIZARD LAUNCH TRIGGERED", flush=True)
-                print(f"[Wizard API] Frozen EXE detected, launching wizard in thread...", flush=True)
+                print(f"[Wizard API] Frozen EXE detected, launching wizard via multiprocessing...", flush=True)
                 print(f"[Wizard API] PySide6 available: {pyside_available}, PyQt5 available: {pyqt_available}", flush=True)
                 sys.stdout.flush()
                 
-                def launch_wizard_thread():
+                import multiprocessing
+                
+                def launch_wizard_process():
+                    """Run wizard in a separate process to avoid Qt threading issues"""
                     import tempfile
                     import time
-                    thread_log_path = os.path.join(tempfile.gettempdir(), 'botifytrades_wizard_thread.log')
+                    import os
+                    import sys
+                    
+                    process_log_path = os.path.join(tempfile.gettempdir(), 'botifytrades_wizard_process.log')
                     
                     def log_to_file(msg):
                         try:
-                            with open(thread_log_path, 'a') as f:
+                            with open(process_log_path, 'a') as f:
                                 f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
                         except:
                             pass
                     
                     log_to_file("=" * 50)
-                    log_to_file("[Thread] Starting wizard thread...")
-                    log_to_file(f"[Thread] sys._MEIPASS: {getattr(sys, '_MEIPASS', 'N/A')}")
+                    log_to_file("[Process] Starting wizard process...")
+                    log_to_file(f"[Process] PID: {os.getpid()}")
+                    log_to_file(f"[Process] sys._MEIPASS: {getattr(sys, '_MEIPASS', 'N/A')}")
                     
                     try:
-                        log_to_file("[Thread] Attempting to import ui.wizard.launcher...")
+                        log_to_file("[Process] Attempting to import ui.wizard.launcher...")
                         from ui.wizard.launcher import launch_wizard
-                        log_to_file("[Thread] Import successful!")
+                        log_to_file("[Process] Import successful!")
                         
-                        log_to_file("[Thread] Calling launch_wizard(skip_first_run_check=True)...")
+                        log_to_file("[Process] Calling launch_wizard(skip_first_run_check=True)...")
                         result = launch_wizard(skip_first_run_check=True)
-                        log_to_file(f"[Thread] launch_wizard returned: {result}")
+                        log_to_file(f"[Process] launch_wizard returned: {result}")
                         
-                    except ImportError as e:
-                        log_to_file(f"[Thread] IMPORT ERROR: {e}")
-                        import traceback
-                        log_to_file(traceback.format_exc())
                     except Exception as e:
-                        log_to_file(f"[Thread] EXCEPTION: {type(e).__name__}: {e}")
+                        log_to_file(f"[Process] EXCEPTION: {type(e).__name__}: {e}")
                         import traceback
                         log_to_file(traceback.format_exc())
                     
-                    log_to_file("[Thread] Thread function exiting")
+                    log_to_file("[Process] Process function exiting")
                 
-                wizard_thread = threading.Thread(target=launch_wizard_thread, daemon=False, name="WizardThread")
-                wizard_thread.start()
-                debug_info['thread_started'] = True
-                debug_info['thread_name'] = wizard_thread.name
-                debug_info['thread_log_path'] = os.path.join(tempfile.gettempdir(), 'botifytrades_wizard_thread.log')
-                print(f"[Wizard API v3] Wizard thread started: {wizard_thread.name}", flush=True)
+                # Use 'spawn' method for clean process on Windows
+                try:
+                    multiprocessing.set_start_method('spawn', force=True)
+                except RuntimeError:
+                    pass  # Already set
+                
+                wizard_process = multiprocessing.Process(target=launch_wizard_process, daemon=False, name="WizardProcess")
+                wizard_process.start()
+                debug_info['process_started'] = True
+                debug_info['process_pid'] = wizard_process.pid
+                debug_info['process_log_path'] = os.path.join(tempfile.gettempdir(), 'botifytrades_wizard_process.log')
+                print(f"[Wizard API v3] Wizard process started: PID={wizard_process.pid}", flush=True)
                 print("=" * 60, flush=True)
                 sys.stdout.flush()
                 
