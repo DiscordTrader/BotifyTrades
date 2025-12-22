@@ -7522,10 +7522,8 @@ def register_routes(app):
                 rzone = data.get('rzone', existing.get('rzone', ''))
                 region_id = data.get('region_id', existing.get('region_id', ''))
             
-            # NOTE: Web tokens (dc_us_tech) from app.webull.com may not work for trading
-            # We warn but don't block - let user try and get proper error from API
-            if access_token and access_token.startswith('dc_'):
-                print("[Webull] Warning: Token starts with 'dc_' - this may be a web token that won't work for trading API")
+            # NOTE: Tokens starting with 'dc_' are standard Webull tokens - this is normal
+            # Previous warning was incorrect - dc_ tokens work fine for trading
             
             save_webull_credentials(
                 email=new_email,
