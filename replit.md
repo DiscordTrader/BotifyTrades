@@ -70,9 +70,11 @@ python -m ui.wizard.launcher
 ### Launching from EXE
 When running from a bundled Windows EXE:
 - Click "Launch Setup Wizard" from Settings page (http://localhost:5000/settings)
-- The wizard runs in-process via a thread (not subprocess) to work correctly inside PyInstaller
+- The wizard launches via subprocess with `--wizard` flag (spawns new EXE process)
+- The `--wizard` flag is handled in `selfbot_webull.py` to run only the wizard and exit
 - Qt environment paths are automatically configured for frozen EXE
 - All wizard pages and dependencies are bundled via spec file hidden imports
+- Uses CREATE_NEW_CONSOLE on Windows for clean separate window
 
 ## External Dependencies
 

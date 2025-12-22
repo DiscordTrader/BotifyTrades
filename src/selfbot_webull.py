@@ -7151,6 +7151,24 @@ def run_discord_bot_thread():
 if __name__ == '__main__':
     import threading
     import queue
+    import multiprocessing
+    
+    # Required for multiprocessing to work in PyInstaller frozen EXE
+    multiprocessing.freeze_support()
+    
+    # Check if launched with --wizard flag (for subprocess wizard launch)
+    if '--wizard' in sys.argv:
+        try:
+            _original_print("[WIZARD] Launching Setup Wizard...")
+            from ui.wizard.launcher import launch_wizard
+            result = launch_wizard(skip_first_run_check=True)
+            _original_print(f"[WIZARD] Wizard finished with result: {result}")
+            sys.exit(0)
+        except Exception as e:
+            _original_print(f"[WIZARD] Error launching wizard: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
     
     # Initialize global lifecycle events
     _discord_ready_event = threading.Event()

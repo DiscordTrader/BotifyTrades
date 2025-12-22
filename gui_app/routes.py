@@ -4917,42 +4917,52 @@ def register_routes(app):
             is_frozen = getattr(sys, 'frozen', False)
             
             if is_frozen:
-                # Running inside PyInstaller EXE - launch wizard using multiprocessing
-                # Threading causes Qt to freeze; multiprocessing creates a proper separate process
+                # Running inside PyInstaller EXE - launch wizard via subprocess with --wizard flag
+                # This spawns a new EXE process that runs only the wizard
                 print("=" * 60, flush=True)
                 print("[Wizard API] WIZARD LAUNCH TRIGGERED", flush=True)
-                print(f"[Wizard API] Frozen EXE detected, launching wizard via multiprocessing...", flush=True)
+                print(f"[Wizard API] Frozen EXE detected, launching wizard via subprocess...", flush=True)
+                print(f"[Wizard API] Executable: {sys.executable}", flush=True)
                 print(f"[Wizard API] PySide6 available: {pyside_available}, PyQt5 available: {pyqt_available}", flush=True)
                 sys.stdout.flush()
                 
-                import multiprocessing
+                import subprocess
                 
-                # Use 'spawn' method for clean process on Windows
+                # Launch a new instance of the EXE with --wizard flag
+                # This flag is handled in selfbot_webull.py to run only the wizard
                 try:
-                    multiprocessing.set_start_method('spawn', force=True)
-                except RuntimeError:
-                    pass  # Already set
-                
-                # Use module-level function (required for pickling)
-                wizard_process = multiprocessing.Process(
-                    target=_launch_wizard_process_target,
-                    daemon=False,
-                    name="WizardProcess"
-                )
-                wizard_process.start()
-                debug_info['process_started'] = True
-                debug_info['process_pid'] = wizard_process.pid
-                debug_info['process_log_path'] = os.path.join(tempfile.gettempdir(), 'botifytrades_wizard_process.log')
-                print(f"[Wizard API v3] Wizard process started: PID={wizard_process.pid}", flush=True)
-                print("=" * 60, flush=True)
-                sys.stdout.flush()
-                
-                return jsonify({
-                    'success': True,
-                    'launched': True,
-                    'message': 'Setup Wizard launched! Check your desktop.',
-                    'debug': debug_info
-                })
+                    # Use CREATE_NEW_CONSOLE on Windows for a clean separate window
+                    creation_flags = 0
+                    if sys.platform == 'win32':
+                        creation_flags = subprocess.CREATE_NEW_CONSOLE
+                    
+                    wizard_process = subprocess.Popen(
+                        [sys.executable, '--wizard'],
+                        creationflags=creation_flags,
+                        start_new_session=True if sys.platform != 'win32' else False
+                    )
+                    
+                    debug_info['process_started'] = True
+                    debug_info['process_pid'] = wizard_process.pid
+                    debug_info['launch_method'] = 'subprocess_with_wizard_flag'
+                    print(f"[Wizard API] Wizard subprocess started: PID={wizard_process.pid}", flush=True)
+                    print("=" * 60, flush=True)
+                    sys.stdout.flush()
+                    
+                    return jsonify({
+                        'success': True,
+                        'launched': True,
+                        'message': 'Setup Wizard launched! Check your desktop.',
+                        'debug': debug_info
+                    })
+                except Exception as subprocess_err:
+                    print(f"[Wizard API] Subprocess launch failed: {subprocess_err}", flush=True)
+                    debug_info['subprocess_error'] = str(subprocess_err)
+                    return jsonify({
+                        'success': False,
+                        'error': f'Failed to launch wizard subprocess: {subprocess_err}',
+                        'debug': debug_info
+                    })
             else:
                 # Development mode - launch as subprocess
                 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
