@@ -5014,20 +5014,21 @@ def register_routes(app):
         """Get all settings"""
         try:
             from .config_service import load_config
+            from .broker_credentials_service import get_discord_credentials, get_webull_credentials
             
-            discord_config = load_config('discord') or {}
-            webull_config = load_config('webull') or {}
+            discord_creds = get_discord_credentials()
+            webull_creds = get_webull_credentials()
             api_keys = load_config('api_keys') or {}
             notifications = load_config('discord_notifications') or {}
             
             return jsonify({
-                'discord_token': discord_config.get('token', ''),
+                'discord_token': discord_creds.get('token', ''),
                 'webhook_url': notifications.get('webhook_url', ''),
                 'webhook_channel': notifications.get('channel_id', ''),
                 'notifications_enabled': notifications.get('enabled', True),
-                'webull_email': webull_config.get('email', ''),
-                'webull_did': webull_config.get('did', ''),
-                'webull_paper': webull_config.get('paper_trading', True),
+                'webull_email': webull_creds.get('email', ''),
+                'webull_did': webull_creds.get('device_id', ''),
+                'webull_paper': webull_creds.get('paper_mode', True),
                 'openai_key': api_keys.get('openai', ''),
                 'alphavantage_key': api_keys.get('alpha_vantage', ''),
                 'finnhub_key': api_keys.get('finnhub', '')
@@ -5040,13 +5041,22 @@ def register_routes(app):
     def api_save_settings():
         """Save all settings"""
         try:
-            from .config_service import save_discord_config, save_webull_config, save_api_keys, save_discord_notifications, load_config
+            from .config_service import save_api_keys, save_discord_notifications
+            from .broker_credentials_service import (
+                save_discord_credentials, get_discord_credentials,
+                save_webull_credentials, get_webull_credentials
+            )
             
             data = request.json
             
-            # Save Discord token
+            # Save Discord token (using broker_credentials_service for consistency with wizard)
             if data.get('discord_token'):
-                save_discord_config(data['discord_token'])
+                existing_discord = get_discord_credentials()
+                save_discord_credentials(
+                    token=data['discord_token'],
+                    allowed_authors=existing_discord.get('allowed_authors', []),
+                    allowed_guilds=existing_discord.get('allowed_guilds', [])
+                )
             
             # Save Discord notifications
             save_discord_notifications(
@@ -5055,16 +5065,16 @@ def register_routes(app):
                 enabled=data.get('notifications_enabled', True)
             )
             
-            # Save Webull config
-            if data.get('webull_email'):
-                webull_config = load_config('webull') or {}
-                save_webull_config(
-                    email=data.get('webull_email', ''),
-                    password=data.get('webull_password', webull_config.get('password', '')),
-                    did=data.get('webull_did', ''),
-                    access_token=webull_config.get('access_token', ''),
-                    refresh_token=webull_config.get('refresh_token', ''),
-                    paper_trading=data.get('webull_paper', True)
+            # Save Webull config (using broker_credentials_service for consistency with wizard)
+            if data.get('webull_email') or data.get('webull_did'):
+                existing_webull = get_webull_credentials()
+                save_webull_credentials(
+                    email=data.get('webull_email', existing_webull.get('email', '')),
+                    password=data.get('webull_password', existing_webull.get('password', '')),
+                    device_id=data.get('webull_did', existing_webull.get('device_id', '')),
+                    access_token=existing_webull.get('access_token', ''),
+                    refresh_token=existing_webull.get('refresh_token', ''),
+                    paper_mode=data.get('webull_paper', existing_webull.get('paper_mode', True))
                 )
             
             # Save API keys
