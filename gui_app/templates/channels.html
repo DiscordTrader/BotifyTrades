@@ -973,6 +973,40 @@
     </div>
 </div>
 
+<div class="modal-overlay" id="editMappingModal">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h3>✏️ Edit Channel Mapping</h3>
+            <button class="modal-close" onclick="closeEditMappingModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="editMappingId">
+            <div style="display: grid; gap: 16px;">
+                <div class="form-group" style="margin: 0;">
+                    <label>Source Channel ID</label>
+                    <input type="text" class="form-input" id="editMappingSourceId" placeholder="123456789012345678">
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label>Source Channel Name (optional)</label>
+                    <input type="text" class="form-input" id="editMappingSourceName" placeholder="my-signals">
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label>Webhook URL</label>
+                    <input type="text" class="form-input" id="editMappingWebhookUrl" placeholder="https://discord.com/api/webhooks/...">
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label>Webhook Name (optional)</label>
+                    <input type="text" class="form-input" id="editMappingWebhookName" placeholder="Trade Echo">
+                </div>
+                <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px;">
+                    <button class="btn-add" onclick="closeEditMappingModal()" style="background: rgba(255,255,255,0.1);">Cancel</button>
+                    <button class="btn-add" onclick="saveChannelMappingEdit()">💾 Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 let allChannels = [];
 let currentChannelId = null;
@@ -989,6 +1023,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('userModal').addEventListener('click', function(e) {
         if (e.target === this) closeUserModal();
+    });
+    
+    document.getElementById('editMappingModal').addEventListener('click', function(e) {
+        if (e.target === this) closeEditMappingModal();
     });
 });
 
@@ -1451,6 +1489,7 @@ function renderChannelMappings() {
         html += `<td style="padding: 12px; color: var(--text-primary);">${webhookDisplay}</td>`;
         html += `<td style="padding: 12px; text-align: center;">`;
         html += `<button onclick="testChannelMapping(${m.id}, '${escapeHtml(m.webhook_url || '')}')" style="background: rgba(15,240,179,0.2); border: 1px solid rgba(15,240,179,0.3); color: var(--mint); padding: 6px 12px; border-radius: 8px; cursor: pointer; margin-right: 8px;">🧪 Test</button>`;
+        html += `<button onclick="editChannelMapping(${m.id})" style="background: rgba(99,102,241,0.2); border: 1px solid rgba(99,102,241,0.3); color: #818cf8; padding: 6px 12px; border-radius: 8px; cursor: pointer; margin-right: 8px;">✏️ Edit</button>`;
         html += `<button onclick="deleteChannelMapping(${m.id})" style="background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; padding: 6px 12px; border-radius: 8px; cursor: pointer;">🗑️ Delete</button>`;
         html += `</td></tr>`;
     });
@@ -1531,6 +1570,69 @@ async function testChannelMapping(mappingId, webhookUrl) {
         }
     } catch (error) {
         showNotification('Failed to test webhook: ' + error.message, 'error');
+    }
+}
+
+function editChannelMapping(mappingId) {
+    const mapping = channelMappings.find(m => m.id === mappingId);
+    if (!mapping) {
+        showNotification('Mapping not found', 'error');
+        return;
+    }
+    
+    document.getElementById('editMappingId').value = mapping.id;
+    document.getElementById('editMappingSourceId').value = mapping.source_channel_id || '';
+    document.getElementById('editMappingSourceName').value = mapping.source_channel_name || '';
+    document.getElementById('editMappingWebhookUrl').value = mapping.webhook_url || '';
+    document.getElementById('editMappingWebhookName').value = mapping.webhook_name || '';
+    
+    document.getElementById('editMappingModal').classList.add('active');
+}
+
+function closeEditMappingModal() {
+    document.getElementById('editMappingModal').classList.remove('active');
+}
+
+async function saveChannelMappingEdit() {
+    const mappingId = document.getElementById('editMappingId').value;
+    const sourceId = document.getElementById('editMappingSourceId').value.trim();
+    const sourceName = document.getElementById('editMappingSourceName').value.trim();
+    const webhookUrl = document.getElementById('editMappingWebhookUrl').value.trim();
+    const webhookName = document.getElementById('editMappingWebhookName').value.trim();
+    
+    if (!sourceId) {
+        showNotification('Source Channel ID is required', 'error');
+        return;
+    }
+    
+    if (!webhookUrl) {
+        showNotification('Webhook URL is required', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/channel_mappings/${mappingId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                source_channel_id: sourceId,
+                source_channel_name: sourceName,
+                webhook_url: webhookUrl,
+                webhook_name: webhookName
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification('Channel mapping updated');
+            closeEditMappingModal();
+            loadChannelMappings();
+        } else {
+            showNotification(result.error || 'Failed to update mapping', 'error');
+        }
+    } catch (error) {
+        showNotification('Failed to update mapping: ' + error.message, 'error');
     }
 }
 
