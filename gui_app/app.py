@@ -43,8 +43,20 @@ def create_app():
     return app
 
 
-def start_gui_server(host='0.0.0.0', port=5000):
-    """Start Flask server in a separate thread"""
+def get_gui_port():
+    """Get GUI port from environment variable or default to 5000"""
+    return int(os.environ.get('GUI_PORT', 5000))
+
+def start_gui_server(host='0.0.0.0', port=None):
+    """Start Flask server in a separate thread
+    
+    Args:
+        host: Host to bind to (default: 0.0.0.0)
+        port: Port to bind to (default: GUI_PORT env var or 5000)
+    """
+    if port is None:
+        port = get_gui_port()
+    
     app = create_app()
     
     def run():
@@ -56,4 +68,4 @@ def start_gui_server(host='0.0.0.0', port=5000):
     thread.start()
     print(f"[GUI] Web server thread started")
     
-    return thread
+    return thread, port

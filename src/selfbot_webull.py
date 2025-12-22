@@ -1249,7 +1249,7 @@ try:
             print("\n[CONFIG] ⚠️  No Discord token found.")
             print("[CONFIG] Please configure your Discord token in the Settings page of the web GUI.")
             print("[CONFIG] The bot will start but won't connect to Discord until configured.")
-            print("[CONFIG] Access the GUI at: http://localhost:5000/settings")
+            print("[CONFIG] Access the GUI at: http://localhost:<GUI_PORT>/settings (default port: 5000, or set GUI_PORT env var)")
             USER_TOKEN = None  # Allow startup without token - will be set via GUI
         else:
             # No GUI - try setup wizard as last resort
@@ -1801,11 +1801,11 @@ try:
     if WB_ACCESS_TOKEN and WB_REFRESH_TOKEN:
         print("[CONFIG] ✓ Using saved access/refresh tokens (skipping login)")
     elif not WB_USER or not WB_PASS:
-        print("[CONFIG] ⚠️  Webull credentials not configured - configure via GUI at http://localhost:5000/settings")
+        print("[CONFIG] ⚠️  Webull credentials not configured - configure via GUI at http://localhost:<port>/settings")
         WEBULL_CREDENTIALS_MISSING = True
     
     if not WB_PIN and not WEBULL_CREDENTIALS_MISSING:
-        print("[CONFIG] ⚠️  Webull trade PIN not configured - configure via GUI at http://localhost:5000/settings")
+        print("[CONFIG] ⚠️  Webull trade PIN not configured - configure via GUI at http://localhost:<port>/settings")
         WEBULL_CREDENTIALS_MISSING = True
     
     WB_DEVICE = cfg['webull'].get('device_name', 'MyTradingBot').strip()
@@ -1923,7 +1923,7 @@ class WebullBroker:
             # Check if credentials are available
             if WEBULL_CREDENTIALS_MISSING:
                 print("[Webull] ⚠️  Credentials not configured - skipping login")
-                print("[Webull] Configure credentials via GUI at http://localhost:5000/settings")
+                print("[Webull] Configure credentials via GUI at http://localhost:<port>/settings")
                 return None
             
             # Use paper trading account if flag is set
@@ -4173,7 +4173,7 @@ class SelfClient(discord.Client):
                 self.broker_ready.set()
                 print("[DEBUG] ✅ broker_ready event SET!", flush=True)
             else:
-                print("[Webull] ⚠️  Broker not configured - configure via GUI at http://localhost:5000/settings", flush=True)
+                print("[Webull] ⚠️  Broker not configured - configure via GUI (see startup logs for port)", flush=True)
         except Exception as e:
             print("[Webull] ✗ Login failed:", e, flush=True)
         
@@ -7206,9 +7206,10 @@ if __name__ == '__main__':
         if str(parent_dir) not in sys.path:
             sys.path.insert(0, str(parent_dir))
         
-        from gui_app import start_gui_server
-        gui_thread = start_gui_server()  # Defaults to 0.0.0.0:5000 for Replit compatibility
-        _original_print("[GUI] ✓ Web control panel started on port 5000")
+        from gui_app import start_gui_server, get_gui_port
+        gui_port = get_gui_port()
+        gui_thread, gui_port = start_gui_server()  # Port configurable via GUI_PORT env var (default: 5000)
+        _original_print(f"[GUI] ✓ Web control panel started on port {gui_port}")
     except Exception as e:
         _original_print(f"[GUI] ⚠️  Failed to start web GUI: {e}")
         _original_print("[GUI] Bot will continue without web interface")
@@ -7242,7 +7243,7 @@ if __name__ == '__main__':
                         _original_print("[MAIN] ═══════════════════════════════════════════════════════════")
                         _original_print("[MAIN] Discord token not configured or invalid.")
                         _original_print("[MAIN] Please configure your Discord token in the web GUI:")
-                        _original_print("[MAIN]   → Open http://localhost:5000/settings")
+                        _original_print(f"[MAIN]   → Open http://localhost:{gui_port}/settings")
                         _original_print("[MAIN]   → Enter your Discord token")
                         _original_print("[MAIN]   → Save and restart the application")
                         _original_print("[MAIN] ═══════════════════════════════════════════════════════════")

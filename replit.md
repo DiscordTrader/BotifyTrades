@@ -69,7 +69,7 @@ python -m ui.wizard.launcher
 
 ### Launching from EXE
 When running from a bundled Windows EXE:
-- Click "Launch Setup Wizard" from Settings page (http://localhost:5000/settings)
+- Click "Launch Setup Wizard" from Settings page (http://localhost:<GUI_PORT>/settings)
 - The wizard launches via subprocess with `--wizard` flag (spawns new EXE process)
 - The `--wizard` flag is handled in `selfbot_webull.py` to run only the wizard and exit
 - Qt environment paths are automatically configured for frozen EXE
@@ -93,6 +93,10 @@ When running from a bundled Windows EXE:
 - **ib-insync**: Interactive Brokers integration
 - **robin-stocks**: Robinhood brokerage integration (unofficial)
 - **pyotp**: TOTP 2FA code generation for Robinhood
+
+## Environment Variables
+
+- **GUI_PORT**: Web control panel port (default: 5000). Set to a different port if 5000 is in use (e.g., macOS AirPlay Receiver uses 5000)
 - **ALPHA_VANTAGE_API_KEY**: Market data
 - **FINNHUB_API_KEY**: Market data
 - **OPENAI_API_KEY**: AI analysis
