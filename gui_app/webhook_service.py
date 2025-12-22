@@ -140,27 +140,29 @@ def save_webhook_config(config: Dict[str, Any]) -> bool:
         conn.close()
 
 
+def normalize_expiry(expiry: str) -> str:
+    """Normalize expiry to MM/DD format for consistent storage and matching."""
+    if not expiry:
+        return ""
+    
+    expiry = expiry.strip()
+    
+    if '-' in expiry:
+        parts = expiry.split('-')
+        if len(parts) == 3:
+            return f"{parts[1]}/{parts[2]}"
+        elif len(parts) == 2:
+            return f"{parts[0]}/{parts[1]}"
+    
+    return expiry
+
+
 def format_option_display(symbol: str, strike: float, expiry: str, call_put: str) -> str:
     """Format option for display like: IREN 42C 12/26"""
     cp = 'C' if call_put and call_put.upper().startswith('C') else 'P'
     strike_str = f"{strike:g}" if strike else ""
     
-    if expiry:
-        try:
-            if '/' in expiry:
-                exp_display = expiry
-            elif '-' in expiry:
-                parts = expiry.split('-')
-                if len(parts) >= 2:
-                    exp_display = f"{parts[1]}/{parts[2]}" if len(parts) == 3 else expiry
-                else:
-                    exp_display = expiry
-            else:
-                exp_display = expiry
-        except:
-            exp_display = expiry
-    else:
-        exp_display = ""
+    exp_display = normalize_expiry(expiry)
     
     return f"{symbol} {strike_str}{cp} {exp_display}"
 
@@ -180,9 +182,12 @@ def open_webhook_position(
     conn = get_db_connection()
     cursor = conn.cursor()
     
+    normalized_expiry = normalize_expiry(expiry)
+    normalized_cp = call_put.upper()[0] if call_put else 'C'
+    
     try:
         cursor.execute('SELECT id, remaining_qty FROM webhook_positions WHERE symbol = ? AND strike = ? AND expiry = ? AND call_put = ? AND status = "OPEN"',
-                      (symbol.upper(), strike, expiry, call_put))
+                      (symbol.upper(), strike, normalized_expiry, normalized_cp))
         existing = cursor.fetchone()
         
         if existing:
@@ -195,7 +200,7 @@ def open_webhook_position(
         cursor.execute('''
             INSERT INTO webhook_positions (symbol, strike, expiry, call_put, original_qty, remaining_qty, entry_price, trade_type, webhook_url)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (symbol.upper(), strike, expiry, call_put, qty, qty, entry_price, trade_type, webhook_url))
+        ''', (symbol.upper(), strike, normalized_expiry, normalized_cp, qty, qty, entry_price, trade_type, webhook_url))
         conn.commit()
         return cursor.lastrowid
     except Exception as e:
@@ -218,13 +223,24 @@ def close_webhook_position(
     conn = get_db_connection()
     cursor = conn.cursor()
     
+    normalized_expiry = normalize_expiry(expiry)
+    normalized_cp = call_put.upper()[0] if call_put else 'C'
+    
     try:
         cursor.execute('''
             SELECT * FROM webhook_positions 
             WHERE symbol = ? AND strike = ? AND expiry = ? AND call_put = ? AND status = "OPEN"
             ORDER BY opened_at ASC
-        ''', (symbol.upper(), strike, expiry, call_put))
+        ''', (symbol.upper(), strike, normalized_expiry, normalized_cp))
         position = cursor.fetchone()
+        
+        if not position:
+            cursor.execute('''
+                SELECT * FROM webhook_positions 
+                WHERE symbol = ? AND strike = ? AND call_put = ? AND status = "OPEN"
+                ORDER BY opened_at ASC
+            ''', (symbol.upper(), strike, normalized_cp))
+            position = cursor.fetchone()
         
         if not position:
             return None
@@ -252,7 +268,9 @@ def close_webhook_position(
         conn.commit()
         
         cursor.execute('''
-            SELECT SUM(close_qty) as total_closed, SUM(close_qty * close_price) / SUM(close_qty) as avg_close_price, SUM(pnl_dollars) as total_pnl
+            SELECT SUM(close_qty) as total_closed, 
+                   SUM(close_qty * close_price) / SUM(close_qty) as avg_close_price, 
+                   SUM(pnl_dollars) as total_pnl
             FROM webhook_closures WHERE position_id = ?
         ''', (position['id'],))
         summary = cursor.fetchone()
@@ -270,9 +288,9 @@ def close_webhook_position(
             'pnl_percent': pnl_percent,
             'original_qty': position['original_qty'],
             'remaining_qty': new_remaining,
-            'total_closed': summary['total_closed'] if summary else actual_close_qty,
-            'avg_close_price': summary['avg_close_price'] if summary else close_price,
-            'total_pnl': summary['total_pnl'] if summary else total_pnl,
+            'total_closed': int(summary['total_closed']) if summary and summary['total_closed'] else actual_close_qty,
+            'avg_close_price': float(summary['avg_close_price']) if summary and summary['avg_close_price'] else close_price,
+            'total_pnl': float(summary['total_pnl']) if summary and summary['total_pnl'] else total_pnl,
             'is_fully_closed': new_remaining <= 0
         }
     except Exception as e:
@@ -307,11 +325,13 @@ def find_matching_position(symbol: str, strike: float = None, expiry: str = None
         query += ' AND strike = ?'
         params.append(strike)
     if expiry:
+        normalized_expiry = normalize_expiry(expiry)
         query += ' AND expiry = ?'
-        params.append(expiry)
+        params.append(normalized_expiry)
     if call_put:
+        normalized_cp = call_put.upper()[0] if call_put else 'C'
         query += ' AND call_put = ?'
-        params.append(call_put)
+        params.append(normalized_cp)
     
     query += ' ORDER BY opened_at ASC LIMIT 1'
     

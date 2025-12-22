@@ -678,6 +678,87 @@
         .order-btn.discord:hover {
             background: #4752c4;
         }
+        .order-btn.webhook {
+            background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+            color: #fff;
+            font-size: 11px;
+            min-width: 28px;
+            padding: 6px 8px;
+        }
+        .order-btn.webhook:hover {
+            background: linear-gradient(135deg, #E55A25 0%, #E5830E 100%);
+        }
+        .order-btn.webhook-stc {
+            background: linear-gradient(135deg, #E53935 0%, #FF5252 100%);
+            color: #fff;
+            font-size: 11px;
+            min-width: 28px;
+            padding: 6px 8px;
+        }
+        .order-btn.webhook-stc:hover {
+            background: linear-gradient(135deg, #C62828 0%, #E53935 100%);
+        }
+        .webhook-config {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .webhook-config label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        .webhook-config input[type="text"] {
+            flex: 1;
+            min-width: 200px;
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 12px;
+        }
+        .webhook-config input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent-mint);
+        }
+        .webhook-config .webhook-btn {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .webhook-config .webhook-btn.test {
+            background: var(--accent-blue);
+            color: #fff;
+        }
+        .webhook-config .webhook-btn.save {
+            background: var(--success);
+            color: #0E1117;
+        }
+        .webhook-status {
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .webhook-status.connected {
+            background: rgba(63, 185, 80, 0.2);
+            color: var(--success);
+        }
+        .webhook-status.disconnected {
+            background: rgba(248, 81, 73, 0.2);
+            color: var(--danger);
+        }
 
         .order-btn:hover {
             transform: translateY(-1px);
@@ -834,6 +915,15 @@
             </div>
         </div>
 
+        <div class="webhook-config">
+            <label>Webhook URL:</label>
+            <input type="text" id="webhookUrl" placeholder="https://discord.com/api/webhooks/...">
+            <input type="text" id="webhookBotName" placeholder="Bot Name" value="Trade Echo Bot" style="max-width: 120px; min-width: 100px;">
+            <button class="webhook-btn test" onclick="testWebhook()">Test</button>
+            <button class="webhook-btn save" onclick="saveWebhookConfig()">Save</button>
+            <span id="webhookStatus" class="webhook-status disconnected">Not Configured</span>
+        </div>
+
         <div class="options-table">
             {% for i in range(1, 5) %}
             <div class="option-row" id="optionRow{{ i }}" data-row="{{ i }}">
@@ -878,6 +968,8 @@
                     <button class="order-btn buy" onclick="placeOrder({{ i }}, 'BUY')">BUY</button>
                     <button class="order-btn sell" onclick="placeOrder({{ i }}, 'SELL')">SELL</button>
                     <button class="order-btn discord" onclick="sendToDiscord({{ i }}, 'BTO')" title="Send BTO signal to Discord">📤</button>
+                    <button class="order-btn webhook" onclick="postWebhookBTO({{ i }})" title="Post BTO to Webhook">BTO</button>
+                    <button class="order-btn webhook-stc" onclick="postWebhookSTC({{ i }})" title="Post STC to Webhook">STC</button>
                     <button class="clear-row-btn" onclick="clearRow({{ i }})" title="Clear">✕</button>
                 </div>
             </div>
@@ -1446,6 +1538,216 @@
                 showToast('Discord send failed: ' + error.message, 'error');
             }
         }
+
+        // ============ WEBHOOK FUNCTIONS ============
+        
+        async function loadWebhookConfig() {
+            try {
+                const response = await fetch('/api/webhook/config');
+                const data = await response.json();
+                
+                if (data.success && data.config) {
+                    const config = data.config;
+                    document.getElementById('webhookUrl').value = config.webhook_url || '';
+                    document.getElementById('webhookBotName').value = config.bot_name || 'Trade Echo Bot';
+                    
+                    if (config.webhook_url) {
+                        document.getElementById('webhookStatus').textContent = 'Configured';
+                        document.getElementById('webhookStatus').className = 'webhook-status connected';
+                    } else {
+                        document.getElementById('webhookStatus').textContent = 'Not Configured';
+                        document.getElementById('webhookStatus').className = 'webhook-status disconnected';
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading webhook config:', error);
+            }
+        }
+        
+        async function testWebhook() {
+            const webhookUrl = document.getElementById('webhookUrl').value.trim();
+            const botName = document.getElementById('webhookBotName').value.trim() || 'Trade Echo Bot';
+            
+            if (!webhookUrl) {
+                showToast('Please enter a webhook URL first', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/webhook/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ webhook_url: webhookUrl, bot_name: botName })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('Webhook test successful!', 'success');
+                    document.getElementById('webhookStatus').textContent = 'Connected';
+                    document.getElementById('webhookStatus').className = 'webhook-status connected';
+                } else {
+                    showToast(result.message || result.error || 'Webhook test failed', 'error');
+                }
+            } catch (error) {
+                showToast('Webhook test failed: ' + error.message, 'error');
+            }
+        }
+        
+        async function saveWebhookConfig() {
+            const webhookUrl = document.getElementById('webhookUrl').value.trim();
+            const botName = document.getElementById('webhookBotName').value.trim() || 'Trade Echo Bot';
+            
+            try {
+                const response = await fetch('/api/webhook/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        webhook_url: webhookUrl,
+                        bot_name: botName,
+                        enabled: true
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('Webhook configuration saved!', 'success');
+                    if (webhookUrl) {
+                        document.getElementById('webhookStatus').textContent = 'Configured';
+                        document.getElementById('webhookStatus').className = 'webhook-status connected';
+                    } else {
+                        document.getElementById('webhookStatus').textContent = 'Not Configured';
+                        document.getElementById('webhookStatus').className = 'webhook-status disconnected';
+                    }
+                } else {
+                    showToast(result.error || 'Failed to save configuration', 'error');
+                }
+            } catch (error) {
+                showToast('Failed to save: ' + error.message, 'error');
+            }
+        }
+        
+        async function postWebhookBTO(row) {
+            const data = rowData[row];
+            if (!data.quote) {
+                showToast('Please load a quote first', 'error');
+                return;
+            }
+            
+            const webhookUrl = document.getElementById('webhookUrl').value.trim();
+            if (!webhookUrl) {
+                showToast('Please configure webhook URL first', 'error');
+                return;
+            }
+            
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const strike = parseFloat(document.getElementById(`strike${row}`).value);
+            const expiry = document.getElementById(`expiry${row}`).value;
+            const price = parseFloat(document.getElementById(`limitPrice${row}`).value);
+            const qty = parseInt(document.getElementById(`qty${row}`).value);
+            const callPut = data.type === 'CALL' ? 'C' : 'P';
+            const botName = document.getElementById('webhookBotName').value.trim() || 'Trade Echo Bot';
+            
+            // Format expiry for display: "2025-12-19" → "12/19"
+            let expiryFormatted = expiry;
+            if (expiry && expiry.includes('-')) {
+                const parts = expiry.split('-');
+                if (parts.length === 3) {
+                    expiryFormatted = `${parts[1]}/${parts[2]}`;
+                }
+            }
+            
+            try {
+                const response = await fetch('/api/webhook/post_bto', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        webhook_url: webhookUrl,
+                        symbol: symbol,
+                        strike: strike,
+                        expiry: expiryFormatted,
+                        call_put: callPut,
+                        qty: qty,
+                        price: price,
+                        trade_type: 'Swing',
+                        bot_name: botName
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast(`BTO posted: ${qty}x ${symbol} $${strike}${callPut} @ $${price.toFixed(2)}`, 'success');
+                } else {
+                    showToast(result.error || 'Failed to post BTO', 'error');
+                }
+            } catch (error) {
+                showToast('BTO post failed: ' + error.message, 'error');
+            }
+        }
+        
+        async function postWebhookSTC(row) {
+            const data = rowData[row];
+            if (!data.quote) {
+                showToast('Please load a quote first', 'error');
+                return;
+            }
+            
+            const webhookUrl = document.getElementById('webhookUrl').value.trim();
+            if (!webhookUrl) {
+                showToast('Please configure webhook URL first', 'error');
+                return;
+            }
+            
+            const symbol = document.getElementById(`symbol${row}`).value.trim().toUpperCase();
+            const strike = parseFloat(document.getElementById(`strike${row}`).value);
+            const expiry = document.getElementById(`expiry${row}`).value;
+            const closePrice = parseFloat(document.getElementById(`limitPrice${row}`).value);
+            const qty = parseInt(document.getElementById(`qty${row}`).value);
+            const callPut = data.type === 'CALL' ? 'C' : 'P';
+            const botName = document.getElementById('webhookBotName').value.trim() || 'Trade Echo Bot';
+            
+            // Format expiry for display: "2025-12-19" → "12/19"
+            let expiryFormatted = expiry;
+            if (expiry && expiry.includes('-')) {
+                const parts = expiry.split('-');
+                if (parts.length === 3) {
+                    expiryFormatted = `${parts[1]}/${parts[2]}`;
+                }
+            }
+            
+            try {
+                const response = await fetch('/api/webhook/post_stc', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        webhook_url: webhookUrl,
+                        symbol: symbol,
+                        strike: strike,
+                        expiry: expiryFormatted,
+                        call_put: callPut,
+                        qty: qty,
+                        close_price: closePrice,
+                        bot_name: botName
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const pnlStr = result.pnl ? ` | P&L: ${result.pnl.pnl_percent >= 0 ? '+' : ''}${result.pnl.pnl_percent.toFixed(1)}%` : '';
+                    showToast(`STC posted: ${qty}x ${symbol} $${strike}${callPut} @ $${closePrice.toFixed(2)}${pnlStr}`, 'success');
+                } else {
+                    showToast(result.error || result.message || 'Failed to post STC - no matching open position', 'error');
+                }
+            } catch (error) {
+                showToast('STC post failed: ' + error.message, 'error');
+            }
+        }
+        
+        // Load webhook config on page load
+        document.addEventListener('DOMContentLoaded', loadWebhookConfig);
 
         function showToast(message, type) {
             const existing = document.querySelector('.toast');
