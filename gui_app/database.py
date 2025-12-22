@@ -3605,11 +3605,26 @@ def migrate_channel_mappings_to_webhook():
         cursor.execute("PRAGMA table_info(channel_mappings)")
         columns = [col[1] for col in cursor.fetchall()]
         
-        if 'webhook_url' not in columns:
-            cursor.execute('ALTER TABLE channel_mappings ADD COLUMN webhook_url TEXT DEFAULT ""')
-            cursor.execute('ALTER TABLE channel_mappings ADD COLUMN webhook_name TEXT DEFAULT ""')
+        if 'destination_channel_id' in columns or 'webhook_url' not in columns:
+            print("[DATABASE] Detected old channel_mappings schema, recreating table...")
+            cursor.execute('DROP TABLE IF EXISTS channel_mappings')
             conn.commit()
-            print("[DATABASE] ✓ Migrated channel_mappings to webhook-based structure")
+            init_channel_mappings_table()
+            print("[DATABASE] ✓ Recreated channel_mappings table with webhook URL support")
+            return
+        
+        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='channel_mappings'")
+        result = cursor.fetchone()
+        if result:
+            schema = result[0] if result[0] else ''
+            has_old_constraint = 'UNIQUE(source_channel_id)' in schema and 'UNIQUE(source_channel_id, webhook_url)' not in schema
+            if has_old_constraint:
+                print("[DATABASE] Detected old unique constraint, recreating table...")
+                cursor.execute('DROP TABLE IF EXISTS channel_mappings')
+                conn.commit()
+                init_channel_mappings_table()
+                print("[DATABASE] ✓ Recreated channel_mappings table with correct schema")
+            
     except Exception as e:
         print(f"[DATABASE] Migration skipped or error: {e}")
 
