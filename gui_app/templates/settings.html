@@ -362,7 +362,7 @@ input:checked + .slider:before {
         <div style="margin-left: auto; display: flex; align-items: center; gap: 12px;">
             <span style="font-size: 12px; color: var(--text-secondary);">Debug Mode:</span>
             <label class="toggle-switch" style="margin: 0;">
-                <input type="checkbox" id="debug-mode-toggle" onchange="toggleDebugMode(this.checked)">
+                <input type="checkbox" id="debug-mode-toggle" onchange="toggleDebugMode(this.checked); document.getElementById('debug-mode-advanced').checked = this.checked; updateDebugStatus(this.checked);">
                 <span class="toggle-slider"></span>
             </label>
             <span id="debug-status" style="font-size: 11px; font-weight: 600; color: #6c757d;">OFF</span>
@@ -1110,10 +1110,11 @@ input:checked + .slider:before {
             <label class="toggle-label">
                 <span>Debug Mode</span>
                 <label class="switch">
-                    <input type="checkbox" id="debug-mode-toggle">
+                    <input type="checkbox" id="debug-mode-advanced" onchange="toggleDebugMode(this.checked); document.getElementById('debug-mode-toggle').checked = this.checked; updateDebugStatus(this.checked);">
                     <span class="slider"></span>
                 </label>
             </label>
+            <span id="debug-advanced-status" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-left: 8px;">OFF</span>
             <p class="help-text">Show detailed CONFIG/LICENSE info in console. Restart required after change.</p>
         </div>
         <p class="help-text" style="margin-top: 12px; font-size: 11px; color: #888;">
@@ -1434,6 +1435,23 @@ async function reloadCredentials() {
     setTimeout(() => { status.textContent = ''; }, 8000);
 }
 
+function updateDebugStatus(enabled) {
+    const statusText = enabled ? 'ON' : 'OFF';
+    const statusColor = enabled ? '#00d4ff' : '#6c757d';
+    
+    const topStatus = document.getElementById('debug-status');
+    const advStatus = document.getElementById('debug-advanced-status');
+    
+    if (topStatus) {
+        topStatus.textContent = statusText;
+        topStatus.style.color = statusColor;
+    }
+    if (advStatus) {
+        advStatus.textContent = statusText;
+        advStatus.style.color = statusColor;
+    }
+}
+
 async function toggleDebugMode(enabled) {
     try {
         const response = await fetch('/api/settings/debug', {
@@ -1445,13 +1463,16 @@ async function toggleDebugMode(enabled) {
         const result = await response.json();
         
         if (result.success) {
+            updateDebugStatus(enabled);
             showToast(enabled ? 'Debug mode enabled - restart bot to apply' : 'Debug mode disabled - restart bot to apply', 'success');
         } else {
             document.getElementById('debug-mode-toggle').checked = !enabled;
+            document.getElementById('debug-mode-advanced').checked = !enabled;
             showToast('Failed to update debug mode', 'error');
         }
     } catch (error) {
         document.getElementById('debug-mode-toggle').checked = !enabled;
+        document.getElementById('debug-mode-advanced').checked = !enabled;
         showToast('Error updating debug mode', 'error');
     }
 }
@@ -1519,11 +1540,19 @@ async function loadDebugMode() {
         const response = await fetch('/api/settings/debug');
         const result = await response.json();
         
+        const enabled = result.enabled || false;
+        
         const toggle = document.getElementById('debug-mode-toggle');
+        const advToggle = document.getElementById('debug-mode-advanced');
+        
         if (toggle) {
-            toggle.checked = result.enabled || false;
-            toggle.addEventListener('change', (e) => toggleDebugMode(e.target.checked));
+            toggle.checked = enabled;
         }
+        if (advToggle) {
+            advToggle.checked = enabled;
+        }
+        
+        updateDebugStatus(enabled);
     } catch (error) {
         console.error('Error loading debug mode:', error);
     }
