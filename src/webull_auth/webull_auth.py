@@ -163,13 +163,39 @@ class WebullAuth:
             if not access_token:
                 return {"success": False, "error": "No access token configured. Please enter your Webull access token."}
             
-            # Use PUBLIC attributes (same as main bot WebullBroker.connect)
+            # Apply tokens EXACTLY like the main bot's _apply_tokens method
+            # CRITICAL: Must set BOTH private and public attributes + Authorization headers
             print(f"[WEBULL AUTH DEBUG] Applying tokens to webull client...", flush=True)
-            self.wb.access_token = access_token
-            if refresh_token:
-                self.wb.refresh_token = refresh_token
-            if creds.get('device_id'):
-                self.wb.did = creds.get('device_id')
+            
+            # Set both private and public token attributes (matches bot's _apply_tokens)
+            for attr, val in (("_access_token", access_token),
+                              ("access_token", access_token),
+                              ("_refresh_token", refresh_token),
+                              ("refresh_token", refresh_token)):
+                try:
+                    setattr(self.wb, attr, val)
+                except Exception:
+                    pass
+            
+            # CRITICAL: Update Authorization headers (this was missing!)
+            if hasattr(self.wb, "_headers") and isinstance(self.wb._headers, dict):
+                self.wb._headers['Authorization'] = f'Bearer {access_token}'
+                print(f"[WEBULL AUTH DEBUG] ✓ Set _headers Authorization")
+            if hasattr(self.wb, "_session") and hasattr(self.wb._session, 'headers'):
+                self.wb._session.headers['Authorization'] = f'Bearer {access_token}'
+                print(f"[WEBULL AUTH DEBUG] ✓ Set _session.headers Authorization")
+            
+            # Set device ID
+            device_id = creds.get('device_id')
+            if device_id:
+                try:
+                    if hasattr(self.wb, "_set_did"):
+                        self.wb._set_did(device_id)
+                    else:
+                        self.wb._did = device_id
+                        self.wb.did = device_id
+                except Exception:
+                    pass
             
             # Apply region metadata if available (required by Webull API v2 - Nov 2025+)
             # CRITICAL: zone_var is where webull library stores 'rzone' value!
