@@ -791,6 +791,11 @@ input:checked + .slider:before {
                 <label>Access Token</label>
                 <input type="password" id="webull-access-token" placeholder="Paste from browser or auto-saved after login">
             </div>
+            <div class="form-group">
+                <label>Refresh Token</label>
+                <input type="password" id="webull-refresh-token" placeholder="dummy" value="dummy">
+                <p class="help-text">Can be set to "dummy" - not required for token-only mode</p>
+            </div>
             <button id="clear-webull-tokens" class="btn" style="background: rgba(255, 100, 100, 0.2); border: 1px solid rgba(255, 100, 100, 0.5); color: #ff6b6b; font-size: 12px; padding: 6px 12px;">
                 🗑️ Clear Tokens
             </button>
@@ -2616,6 +2621,7 @@ async function loadWebullCredentials() {
             document.getElementById('webull-email').value = data.email || '';
             document.getElementById('webull-did').value = data.device_id || '';
             document.getElementById('webull-access-token').value = data.access_token || '';
+            document.getElementById('webull-refresh-token').value = data.refresh_token || 'dummy';
             document.getElementById('webull-paper').checked = data.paper_mode;
             
             const status = data.paper_mode ? data.paper_status : data.live_status;
@@ -2663,6 +2669,7 @@ document.getElementById('clear-webull-tokens').addEventListener('click', async (
         
         if (result.success) {
             document.getElementById('webull-access-token').value = '';
+            document.getElementById('webull-refresh-token').value = 'dummy';
             showMessage('success', result.message);
         } else {
             showMessage('error', result.error);
@@ -2679,6 +2686,7 @@ document.getElementById('save-webull-creds').addEventListener('click', async () 
         trade_pin: document.getElementById('webull-pin').value,
         device_id: document.getElementById('webull-did').value.trim(),
         access_token: document.getElementById('webull-access-token').value.trim(),
+        refresh_token: document.getElementById('webull-refresh-token').value.trim() || 'dummy',
         paper_mode: document.getElementById('webull-paper').checked
     };
     
