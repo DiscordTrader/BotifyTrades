@@ -39,10 +39,12 @@ class BrokerCredentialForm(QFrame):
         self.test_passed = False
         self.setStyleSheet("""
             QFrame {
-                background-color: #161b22;
-                border: 1px solid #30363d;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(13, 42, 58, 0.9),
+                    stop:1 rgba(15, 58, 79, 0.9));
+                border: 1px solid rgba(0, 212, 255, 0.15);
                 border-radius: 8px;
-                padding: 16px;
+                padding: 12px;
             }
         """)
     
@@ -53,12 +55,12 @@ class BrokerCredentialForm(QFrame):
         field.setEchoMode(QLineEdit.EchoMode.Password)
         field.setStyleSheet("""
             QLineEdit {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 10px 12px;
+                padding: 8px 10px;
                 color: #e6edf3;
-                font-size: 14px;
+                font-size: 12px;
             }
             QLineEdit:focus {
                 border-color: #00d4ff;
@@ -73,12 +75,12 @@ class BrokerCredentialForm(QFrame):
         field.setPlaceholderText(placeholder)
         field.setStyleSheet("""
             QLineEdit {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 10px 12px;
+                padding: 8px 10px;
                 color: #e6edf3;
-                font-size: 14px;
+                font-size: 12px;
             }
             QLineEdit:focus {
                 border-color: #00d4ff;
@@ -92,16 +94,18 @@ class BrokerCredentialForm(QFrame):
         btn = QPushButton("Test Login")
         btn.setStyleSheet("""
             QPushButton {
-                background-color: #1f6feb;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #00d4ff, stop:1 #0080ff);
                 border: none;
                 border-radius: 6px;
-                padding: 10px 20px;
+                padding: 8px 16px;
                 color: #ffffff;
-                font-size: 14px;
+                font-size: 12px;
                 font-weight: 500;
             }
             QPushButton:hover {
-                background-color: #388bfd;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #00e5ff, stop:1 #0090ff);
             }
             QPushButton:disabled {
                 background-color: #21262d;
@@ -137,7 +141,7 @@ class WebullCredentialForm(BrokerCredentialForm):
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(20)
+        layout.setSpacing(12)
         
         header_frame = QFrame()
         header_frame.setStyleSheet("""
@@ -146,20 +150,20 @@ class WebullCredentialForm(BrokerCredentialForm):
                     stop:0 rgba(0, 212, 255, 0.15),
                     stop:1 transparent);
                 border: none;
-                border-left: 4px solid #00d4ff;
+                border-left: 3px solid #00d4ff;
                 border-radius: 0px;
-                padding: 16px;
+                padding: 10px;
             }
         """)
         header_layout = QVBoxLayout(header_frame)
-        header_layout.setContentsMargins(12, 8, 12, 8)
+        header_layout.setContentsMargins(10, 6, 10, 6)
         
         title = QLabel("📈 Webull Token Authentication")
-        title.setStyleSheet("color: #ffffff; font-size: 20px; font-weight: 700; border: none; background: transparent;")
+        title.setStyleSheet("color: #ffffff; font-size: 14px; font-weight: 700; border: none; background: transparent;")
         header_layout.addWidget(title)
         
         desc = QLabel("Webull uses token-based authentication for secure API access. You can obtain your tokens from the Webull desktop app or web interface.")
-        desc.setStyleSheet("color: #8899a6; font-size: 13px; border: none; background: transparent; line-height: 1.4;")
+        desc.setStyleSheet("color: #8899a6; font-size: 11px; border: none; background: transparent;")
         desc.setWordWrap(True)
         header_layout.addWidget(desc)
         layout.addWidget(header_frame)
@@ -167,36 +171,36 @@ class WebullCredentialForm(BrokerCredentialForm):
         token_section = QLabel("AUTHENTICATION TOKENS")
         token_section.setStyleSheet("""
             color: #00d4ff;
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 700;
-            letter-spacing: 1.5px;
+            letter-spacing: 1.2px;
             border: none;
-            padding-bottom: 8px;
+            padding-bottom: 6px;
             border-bottom: 1px solid #1e2936;
         """)
         layout.addWidget(token_section)
         
         form = QFormLayout()
-        form.setSpacing(16)
+        form.setSpacing(10)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         
         self.device_id_field = self.create_text_field("Your Webull Device ID")
-        self.device_id_field.setMinimumHeight(44)
+        self.device_id_field.setMinimumHeight(32)
         device_label = QLabel("Device ID:")
-        device_label.setStyleSheet("color: #e6edf3; font-weight: 600; font-size: 13px;")
+        device_label.setStyleSheet("color: #e6edf3; font-weight: 600; font-size: 11px;")
         form.addRow(device_label, self.device_id_field)
         
         self.access_token_field = self.create_password_field("Your Webull Access Token")
-        self.access_token_field.setMinimumHeight(44)
+        self.access_token_field.setMinimumHeight(32)
         token_label = QLabel("Access Token:")
-        token_label.setStyleSheet("color: #e6edf3; font-weight: 600; font-size: 13px;")
+        token_label.setStyleSheet("color: #e6edf3; font-weight: 600; font-size: 11px;")
         form.addRow(token_label, self.access_token_field)
         
         self.trade_pin_field = self.create_password_field("6-digit Trading PIN")
         self.trade_pin_field.setMaxLength(6)
-        self.trade_pin_field.setMinimumHeight(44)
+        self.trade_pin_field.setMinimumHeight(32)
         pin_label = QLabel("Trade PIN:")
-        pin_label.setStyleSheet("color: #e6edf3; font-weight: 600; font-size: 13px;")
+        pin_label.setStyleSheet("color: #e6edf3; font-weight: 600; font-size: 11px;")
         form.addRow(pin_label, self.trade_pin_field)
         
         layout.addLayout(form)
@@ -206,9 +210,9 @@ class WebullCredentialForm(BrokerCredentialForm):
         self.paper_mode_check.setStyleSheet("""
             QCheckBox {
                 color: #e6edf3;
-                font-size: 14px;
+                font-size: 11px;
                 border: none;
-                spacing: 12px;
+                spacing: 8px;
             }
         """)
         layout.addWidget(self.paper_mode_check)
@@ -219,7 +223,7 @@ class WebullCredentialForm(BrokerCredentialForm):
         test_layout.addWidget(self.test_btn)
         
         self.test_status = QLabel("")
-        self.test_status.setStyleSheet("font-size: 13px; border: none;")
+        self.test_status.setStyleSheet("font-size: 11px; border: none;")
         test_layout.addWidget(self.test_status)
         test_layout.addStretch()
         layout.addLayout(test_layout)
@@ -228,16 +232,16 @@ class WebullCredentialForm(BrokerCredentialForm):
         help_frame.setStyleSheet("""
             QFrame {
                 background-color: rgba(42, 58, 74, 0.3);
-                border: 1px solid #2a3a4a;
-                border-radius: 8px;
-                padding: 12px;
+                border: 1px solid rgba(0, 212, 255, 0.15);
+                border-radius: 6px;
+                padding: 10px;
             }
         """)
         help_layout = QVBoxLayout(help_frame)
-        help_layout.setSpacing(8)
+        help_layout.setSpacing(4)
         
         help_title = QLabel("💡 How to get your Webull tokens:")
-        help_title.setStyleSheet("color: #00d4ff; font-size: 13px; font-weight: 600; border: none; background: transparent;")
+        help_title.setStyleSheet("color: #00d4ff; font-size: 11px; font-weight: 600; border: none; background: transparent;")
         help_layout.addWidget(help_title)
         
         steps = [
@@ -248,7 +252,7 @@ class WebullCredentialForm(BrokerCredentialForm):
         ]
         for step in steps:
             step_label = QLabel(step)
-            step_label.setStyleSheet("color: #8899a6; font-size: 12px; border: none; background: transparent; padding-left: 8px;")
+            step_label.setStyleSheet("color: #8899a6; font-size: 10px; border: none; background: transparent; padding-left: 6px;")
             help_layout.addWidget(step_label)
         
         layout.addWidget(help_frame)
@@ -319,7 +323,7 @@ class AlpacaCredentialForm(BrokerCredentialForm):
         test_layout.addWidget(self.test_btn)
         
         self.test_status = QLabel("")
-        self.test_status.setStyleSheet("font-size: 13px; border: none;")
+        self.test_status.setStyleSheet("font-size: 11px; border: none;")
         test_layout.addWidget(self.test_status)
         test_layout.addStretch()
         
@@ -414,7 +418,7 @@ class IBKRCredentialForm(BrokerCredentialForm):
         test_layout.addWidget(self.test_btn)
         
         self.test_status = QLabel("")
-        self.test_status.setStyleSheet("font-size: 13px; border: none;")
+        self.test_status.setStyleSheet("font-size: 11px; border: none;")
         test_layout.addWidget(self.test_status)
         test_layout.addStretch()
         
@@ -504,7 +508,7 @@ class TastytradeCredentialForm(BrokerCredentialForm):
         test_layout.addWidget(self.test_btn)
         
         self.test_status = QLabel("")
-        self.test_status.setStyleSheet("font-size: 13px; border: none;")
+        self.test_status.setStyleSheet("font-size: 11px; border: none;")
         test_layout.addWidget(self.test_status)
         test_layout.addStretch()
         
@@ -594,7 +598,7 @@ class RobinhoodCredentialForm(BrokerCredentialForm):
         test_layout.addWidget(self.test_btn)
         
         self.test_status = QLabel("")
-        self.test_status.setStyleSheet("font-size: 13px; border: none;")
+        self.test_status.setStyleSheet("font-size: 11px; border: none;")
         test_layout.addWidget(self.test_status)
         test_layout.addStretch()
         

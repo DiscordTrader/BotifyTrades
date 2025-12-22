@@ -42,43 +42,43 @@ class BrokerCard(QFrame):
     
     def _setup_ui(self, name: str, icon: str, description: str, warning: str):
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
         
         self.checkbox = QCheckBox()
         self.checkbox.stateChanged.connect(self._on_state_changed)
         layout.addWidget(self.checkbox)
         
         icon_label = QLabel(icon)
-        icon_label.setStyleSheet("font-size: 32px;")
-        icon_label.setFixedWidth(50)
+        icon_label.setStyleSheet("font-size: 22px;")
+        icon_label.setFixedWidth(36)
         layout.addWidget(icon_label)
         
         info_widget = QWidget()
         info_layout = QVBoxLayout(info_widget)
         info_layout.setContentsMargins(0, 0, 0, 0)
-        info_layout.setSpacing(4)
+        info_layout.setSpacing(3)
         
         name_label = QLabel(name)
-        name_label.setStyleSheet("color: #e6edf3; font-size: 16px; font-weight: 600;")
+        name_label.setStyleSheet("color: #e6edf3; font-size: 13px; font-weight: 600;")
         info_layout.addWidget(name_label)
         
         desc_label = QLabel(description)
-        desc_label.setStyleSheet("color: #8b949e; font-size: 12px;")
+        desc_label.setStyleSheet("color: #8b949e; font-size: 11px;")
         desc_label.setWordWrap(True)
         info_layout.addWidget(desc_label)
         
         caps_layout = QHBoxLayout()
-        caps_layout.setSpacing(8)
+        caps_layout.setSpacing(6)
         
         if self.supports_paper:
             paper_badge = QLabel("📝 Paper")
             paper_badge.setStyleSheet("""
                 background-color: #238636;
                 color: white;
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-size: 10px;
+                padding: 1px 6px;
+                border-radius: 3px;
+                font-size: 9px;
             """)
             caps_layout.addWidget(paper_badge)
         
@@ -87,9 +87,9 @@ class BrokerCard(QFrame):
             live_badge.setStyleSheet("""
                 background-color: #1f6feb;
                 color: white;
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-size: 10px;
+                padding: 1px 6px;
+                border-radius: 3px;
+                font-size: 9px;
             """)
             caps_layout.addWidget(live_badge)
         
@@ -98,9 +98,9 @@ class BrokerCard(QFrame):
             options_badge.setStyleSheet("""
                 background-color: #9e6a03;
                 color: white;
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-size: 10px;
+                padding: 1px 6px;
+                border-radius: 3px;
+                font-size: 9px;
             """)
             caps_layout.addWidget(options_badge)
         
@@ -109,7 +109,7 @@ class BrokerCard(QFrame):
         
         if warning:
             warn_label = QLabel(f"⚠️ {warning}")
-            warn_label.setStyleSheet("color: #d29922; font-size: 11px; margin-top: 4px;")
+            warn_label.setStyleSheet("color: #d29922; font-size: 10px; margin-top: 2px;")
             info_layout.addWidget(warn_label)
         
         layout.addWidget(info_widget, 1)
@@ -120,7 +120,9 @@ class BrokerCard(QFrame):
         if self.checkbox.isChecked():
             self.setStyleSheet("""
                 QFrame {
-                    background-color: #0d1117;
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                        stop:0 rgba(0, 60, 80, 0.95),
+                        stop:1 rgba(0, 100, 130, 0.95));
                     border: 2px solid #00d4ff;
                     border-radius: 8px;
                 }
@@ -128,12 +130,14 @@ class BrokerCard(QFrame):
         else:
             self.setStyleSheet("""
                 QFrame {
-                    background-color: #161b22;
-                    border: 1px solid #30363d;
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                        stop:0 rgba(13, 42, 58, 0.9),
+                        stop:1 rgba(15, 58, 79, 0.9));
+                    border: 1px solid rgba(0, 212, 255, 0.15);
                     border-radius: 8px;
                 }
                 QFrame:hover {
-                    border-color: #8b949e;
+                    border-color: rgba(0, 212, 255, 0.4);
                 }
             """)
     
@@ -234,9 +238,9 @@ class BrokerSelectionPage(BasePage):
         self.broker_cards["robinhood"] = self.robinhood_card
         self.content_layout.addWidget(self.robinhood_card)
         
-        self.content_layout.addSpacing(20)
+        self.content_layout.addSpacing(12)
         self.content_layout.addWidget(self.create_separator())
-        self.content_layout.addSpacing(16)
+        self.content_layout.addSpacing(10)
         
         matrix_header = self.create_section_header("Broker Capability Matrix")
         self.content_layout.addWidget(matrix_header)
@@ -249,7 +253,7 @@ class BrokerSelectionPage(BasePage):
         matrix_table.verticalHeader().setVisible(False)
         matrix_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         matrix_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        matrix_table.setMaximumHeight(200)
+        matrix_table.setMaximumHeight(160)
         
         brokers_data = [
             ("Webull", "✓", "✓", "✓", "Rate limits on API"),
@@ -268,22 +272,24 @@ class BrokerSelectionPage(BasePage):
         
         matrix_table.setStyleSheet("""
             QTableWidget {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
+                background: rgba(13, 42, 58, 0.7);
+                border: 1px solid rgba(0, 212, 255, 0.15);
                 border-radius: 6px;
-                gridline-color: #30363d;
+                gridline-color: rgba(0, 212, 255, 0.1);
+                font-size: 11px;
             }
             QTableWidget::item {
-                padding: 8px;
+                padding: 6px;
                 color: #e6edf3;
             }
             QHeaderView::section {
-                background-color: #161b22;
+                background: rgba(15, 58, 79, 0.9);
                 color: #8b949e;
-                padding: 10px;
+                padding: 8px;
                 border: none;
-                border-bottom: 1px solid #30363d;
+                border-bottom: 1px solid rgba(0, 212, 255, 0.15);
                 font-weight: 600;
+                font-size: 10px;
             }
         """)
         

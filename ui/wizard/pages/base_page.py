@@ -41,21 +41,21 @@ class BasePage(QWidget):
         header = QWidget()
         header.setObjectName("page-header")
         header_layout = QVBoxLayout(header)
-        header_layout.setContentsMargins(0, 0, 0, 20)
+        header_layout.setContentsMargins(0, 0, 0, 12)
         
         title_label = QLabel(self.page_title)
         title_label.setProperty("class", "page-title")
         title_font = QFont()
-        title_font.setPointSize(24)
+        title_font.setPointSize(18)
         title_font.setBold(True)
         title_label.setFont(title_font)
-        title_label.setStyleSheet("color: #e6edf3; font-size: 28px; font-weight: 600;")
+        title_label.setStyleSheet("color: #e6edf3; font-size: 22px; font-weight: 600;")
         header_layout.addWidget(title_label)
         
         if self.page_subtitle:
             subtitle_label = QLabel(self.page_subtitle)
             subtitle_label.setProperty("class", "page-subtitle")
-            subtitle_label.setStyleSheet("color: #8b949e; font-size: 14px; margin-top: 8px;")
+            subtitle_label.setStyleSheet("color: #8b949e; font-size: 12px; margin-top: 6px;")
             subtitle_label.setWordWrap(True)
             header_layout.addWidget(subtitle_label)
         
@@ -68,8 +68,8 @@ class BasePage(QWidget):
         
         self.content_widget = QWidget()
         self.content_layout = QVBoxLayout(self.content_widget)
-        self.content_layout.setContentsMargins(0, 0, 20, 20)
-        self.content_layout.setSpacing(16)
+        self.content_layout.setContentsMargins(0, 0, 16, 16)
+        self.content_layout.setSpacing(12)
         
         scroll_area.setWidget(self.content_widget)
         main_layout.addWidget(scroll_area, 1)
@@ -79,17 +79,17 @@ class BasePage(QWidget):
         label = QLabel(text)
         label.setStyleSheet("""
             color: #e6edf3;
-            font-size: 16px;
+            font-size: 13px;
             font-weight: 600;
-            margin-top: 16px;
-            margin-bottom: 8px;
+            margin-top: 10px;
+            margin-bottom: 6px;
         """)
         return label
     
     def create_helper_text(self, text: str) -> QLabel:
         """Create helper/description text"""
         label = QLabel(text)
-        label.setStyleSheet("color: #8b949e; font-size: 12px;")
+        label.setStyleSheet("color: #8b949e; font-size: 11px;")
         label.setWordWrap(True)
         return label
     
@@ -102,14 +102,16 @@ class BasePage(QWidget):
         return line
     
     def create_card(self) -> QFrame:
-        """Create a styled card container"""
+        """Create a styled card container with gradient background"""
         card = QFrame()
         card.setStyleSheet("""
             QFrame {
-                background-color: #161b22;
-                border: 1px solid #30363d;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(13, 42, 58, 0.9),
+                    stop:1 rgba(15, 58, 79, 0.9));
+                border: 1px solid rgba(0, 212, 255, 0.15);
                 border-radius: 8px;
-                padding: 16px;
+                padding: 12px;
             }
         """)
         return card
@@ -119,21 +121,21 @@ class BasePage(QWidget):
         box = QFrame()
         box.setStyleSheet("""
             QFrame {
-                background-color: #1c1c17;
+                background-color: rgba(28, 28, 23, 0.9);
                 border: 1px solid #9e6a03;
                 border-radius: 8px;
-                padding: 16px;
+                padding: 12px;
             }
         """)
         layout = QVBoxLayout(box)
-        layout.setSpacing(8)
+        layout.setSpacing(6)
         
         title_label = QLabel(title)
-        title_label.setStyleSheet("color: #d29922; font-weight: 600; font-size: 14px;")
+        title_label.setStyleSheet("color: #d29922; font-weight: 600; font-size: 12px;")
         layout.addWidget(title_label)
         
         msg_label = QLabel(message)
-        msg_label.setStyleSheet("color: #d29922; font-size: 13px;")
+        msg_label.setStyleSheet("color: #d29922; font-size: 11px;")
         msg_label.setWordWrap(True)
         layout.addWidget(msg_label)
         
@@ -142,20 +144,20 @@ class BasePage(QWidget):
     def create_validation_label(self) -> QLabel:
         """Create a validation error label"""
         label = QLabel()
-        label.setStyleSheet("color: #f85149; font-size: 12px;")
+        label.setStyleSheet("color: #f85149; font-size: 11px;")
         label.hide()
         return label
     
     def show_validation_error(self, label: QLabel, message: str):
         """Show validation error on a label"""
         label.setText(message)
-        label.setStyleSheet("color: #f85149; font-size: 12px;")
+        label.setStyleSheet("color: #f85149; font-size: 11px;")
         label.show()
     
     def show_validation_success(self, label: QLabel, message: str):
         """Show validation success on a label"""
         label.setText(message)
-        label.setStyleSheet("color: #00d4ff; font-size: 12px;")
+        label.setStyleSheet("color: #00d4ff; font-size: 11px;")
         label.show()
     
     def hide_validation(self, label: QLabel):

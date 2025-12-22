@@ -37,39 +37,39 @@ class ModeCard(QFrame):
     
     def _setup_ui(self, icon: str, title: str, description: str, warning: str):
         layout = QVBoxLayout(self)
-        layout.setSpacing(8)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(6)
+        layout.setContentsMargins(12, 12, 12, 12)
         
         header = QHBoxLayout()
         
         self.radio = QRadioButton()
         self.radio.setStyleSheet("""
             QRadioButton::indicator {
-                width: 20px;
-                height: 20px;
+                width: 16px;
+                height: 16px;
             }
         """)
         header.addWidget(self.radio)
         
         icon_label = QLabel(icon)
-        icon_label.setStyleSheet("font-size: 28px;")
+        icon_label.setStyleSheet("font-size: 20px;")
         header.addWidget(icon_label)
         
         title_label = QLabel(title)
-        title_label.setStyleSheet("color: #e6edf3; font-size: 18px; font-weight: 600;")
+        title_label.setStyleSheet("color: #e6edf3; font-size: 14px; font-weight: 600;")
         header.addWidget(title_label)
         header.addStretch()
         
         layout.addLayout(header)
         
         desc_label = QLabel(description)
-        desc_label.setStyleSheet("color: #8b949e; font-size: 13px; margin-left: 32px;")
+        desc_label.setStyleSheet("color: #8b949e; font-size: 11px; margin-left: 28px;")
         desc_label.setWordWrap(True)
         layout.addWidget(desc_label)
         
         if warning:
             warning_label = QLabel(f"⚠️ {warning}")
-            warning_label.setStyleSheet("color: #d29922; font-size: 12px; margin-left: 32px; margin-top: 8px;")
+            warning_label.setStyleSheet("color: #d29922; font-size: 10px; margin-left: 28px; margin-top: 4px;")
             warning_label.setWordWrap(True)
             layout.addWidget(warning_label)
         
@@ -79,20 +79,24 @@ class ModeCard(QFrame):
         if self.selected:
             self.setStyleSheet("""
                 QFrame {
-                    background-color: #0d1117;
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                        stop:0 rgba(0, 60, 80, 0.95),
+                        stop:1 rgba(0, 100, 130, 0.95));
                     border: 2px solid #00d4ff;
-                    border-radius: 12px;
+                    border-radius: 8px;
                 }
             """)
         else:
             self.setStyleSheet("""
                 QFrame {
-                    background-color: #161b22;
-                    border: 2px solid #30363d;
-                    border-radius: 12px;
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                        stop:0 rgba(13, 42, 58, 0.9),
+                        stop:1 rgba(15, 58, 79, 0.9));
+                    border: 1px solid rgba(0, 212, 255, 0.15);
+                    border-radius: 8px;
                 }
                 QFrame:hover {
-                    border-color: #8b949e;
+                    border-color: rgba(0, 212, 255, 0.4);
                 }
             """)
     
@@ -150,7 +154,7 @@ class AppModePage(BasePage):
         self.button_group.addButton(self.paper_card.radio, 1)
         self.button_group.addButton(self.live_card.radio, 2)
         
-        self.content_layout.addSpacing(20)
+        self.content_layout.addSpacing(12)
         
         self.warning_box = self.create_warning_box(
             "Important Risk Disclosure",
@@ -162,7 +166,7 @@ class AppModePage(BasePage):
         self.content_layout.addWidget(self.warning_box)
         
         self.accept_check = QCheckBox("I understand and accept the risks of automated trading")
-        self.accept_check.setStyleSheet("color: #e6edf3; font-size: 14px; padding: 8px;")
+        self.accept_check.setStyleSheet("color: #e6edf3; font-size: 12px; padding: 6px;")
         self.accept_check.stateChanged.connect(self._on_accept_changed)
         self.accept_check.hide()
         self.content_layout.addWidget(self.accept_check)

@@ -101,7 +101,7 @@ class DiscordPage(BasePage):
         self.content_layout.addWidget(connection_header)
         
         self.bot_token_radio = QRadioButton("Self-Bot Token (Recommended)")
-        self.bot_token_radio.setStyleSheet("color: #e6edf3; font-size: 14px;")
+        self.bot_token_radio.setStyleSheet("color: #e6edf3; font-size: 12px;")
         self.bot_token_radio.setChecked(True)
         self.content_layout.addWidget(self.bot_token_radio)
         
@@ -110,7 +110,7 @@ class DiscordPage(BasePage):
         )
         self.content_layout.addWidget(helper)
         
-        self.content_layout.addSpacing(20)
+        self.content_layout.addSpacing(12)
         
         token_header = self.create_section_header("Discord Token")
         self.content_layout.addWidget(token_header)
@@ -125,12 +125,12 @@ class DiscordPage(BasePage):
         self.token_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.token_input.setStyleSheet("""
             QLineEdit {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 12px;
+                padding: 8px 10px;
                 color: #e6edf3;
-                font-size: 14px;
+                font-size: 12px;
             }
             QLineEdit:focus {
                 border-color: #00d4ff;
@@ -146,8 +146,8 @@ class DiscordPage(BasePage):
                 background-color: transparent;
                 border: none;
                 color: #8b949e;
-                font-size: 12px;
-                padding: 4px;
+                font-size: 11px;
+                padding: 2px;
             }
             QPushButton:hover {
                 color: #e6edf3;
@@ -158,23 +158,25 @@ class DiscordPage(BasePage):
         show_token_layout.addStretch()
         self.content_layout.addLayout(show_token_layout)
         
-        self.content_layout.addSpacing(16)
+        self.content_layout.addSpacing(10)
         
         test_layout = QHBoxLayout()
         
         self.test_btn = QPushButton("Test Connection")
         self.test_btn.setStyleSheet("""
             QPushButton {
-                background-color: #1f6feb;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #00d4ff, stop:1 #0080ff);
                 border: none;
                 border-radius: 6px;
-                padding: 12px 24px;
+                padding: 8px 20px;
                 color: #ffffff;
-                font-size: 14px;
+                font-size: 12px;
                 font-weight: 500;
             }
             QPushButton:hover {
-                background-color: #388bfd;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #00e5ff, stop:1 #0090ff);
             }
             QPushButton:disabled {
                 background-color: #21262d;
@@ -185,15 +187,15 @@ class DiscordPage(BasePage):
         test_layout.addWidget(self.test_btn)
         
         self.test_status = QLabel("")
-        self.test_status.setStyleSheet("font-size: 14px; margin-left: 12px;")
+        self.test_status.setStyleSheet("font-size: 11px; margin-left: 10px;")
         test_layout.addWidget(self.test_status)
         test_layout.addStretch()
         
         self.content_layout.addLayout(test_layout)
         
-        self.content_layout.addSpacing(24)
-        self.content_layout.addWidget(self.create_separator())
         self.content_layout.addSpacing(16)
+        self.content_layout.addWidget(self.create_separator())
+        self.content_layout.addSpacing(10)
         
         self.server_section = QWidget()
         server_layout = QVBoxLayout(self.server_section)
@@ -210,21 +212,21 @@ class DiscordPage(BasePage):
         self.server_combo = QComboBox()
         self.server_combo.setStyleSheet("""
             QComboBox {
-                background-color: #21262d;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 12px;
+                padding: 8px 10px;
                 color: #e6edf3;
-                font-size: 14px;
-                min-width: 300px;
+                font-size: 12px;
+                min-width: 280px;
             }
             QComboBox::drop-down {
                 border: none;
-                width: 30px;
+                width: 24px;
             }
             QComboBox QAbstractItemView {
-                background-color: #21262d;
-                border: 1px solid #30363d;
+                background-color: rgba(13, 42, 58, 0.95);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 selection-background-color: #00d4ff;
                 selection-color: #0d1117;
             }
@@ -244,7 +246,7 @@ class DiscordPage(BasePage):
         instr_layout = QVBoxLayout(instructions)
         
         instr_title = QLabel("How to get your Discord token:")
-        instr_title.setStyleSheet("color: #e6edf3; font-size: 14px; font-weight: 600;")
+        instr_title.setStyleSheet("color: #e6edf3; font-size: 12px; font-weight: 600;")
         instr_layout.addWidget(instr_title)
         
         steps = [
@@ -259,7 +261,7 @@ class DiscordPage(BasePage):
         
         for step in steps:
             step_label = QLabel(step)
-            step_label.setStyleSheet("color: #8b949e; font-size: 12px; margin-left: 8px;")
+            step_label.setStyleSheet("color: #8b949e; font-size: 11px; margin-left: 6px;")
             instr_layout.addWidget(step_label)
         
         self.content_layout.addWidget(instructions)
@@ -317,7 +319,7 @@ class DiscordPage(BasePage):
         
         if success:
             self.test_status.setText(f"✓ {message}")
-            self.test_status.setStyleSheet("color: #00d4ff; font-size: 14px;")
+            self.test_status.setStyleSheet("color: #00d4ff; font-size: 11px;")
             self.connection_tested = True
             self.guilds = guilds
             
@@ -331,7 +333,7 @@ class DiscordPage(BasePage):
             self.hide_validation(self.validation_label)
         else:
             self.test_status.setText(f"✗ {message}")
-            self.test_status.setStyleSheet("color: #f85149; font-size: 14px;")
+            self.test_status.setStyleSheet("color: #f85149; font-size: 11px;")
             self.connection_tested = False
             self.server_section.hide()
         
