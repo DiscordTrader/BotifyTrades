@@ -85,7 +85,7 @@ The application includes a debug report system accessible from the Settings page
 - Collects recent error logs from the database automatically
 - Filters 24+ sensitive data patterns (API keys, tokens, account numbers, balances, emails, device IDs)
 - Generates unique reference numbers (format: `DBG-YYYYMMDD-XXXX`)
-- Emails filtered report to admin (uk15286@gmail.com) using Gmail connector or SMTP fallback
+- Emails filtered report to admin (admin@botifytrades.com) using Gmail connector or SMTP fallback
 - User receives only the reference number for tracking
 
 ### Files

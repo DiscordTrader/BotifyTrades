@@ -43,7 +43,7 @@ class DebugReportService:
     """Service for generating and sending debug reports."""
     
     def __init__(self, admin_email: str = None):
-        self.admin_email = admin_email or os.getenv('ADMIN_EMAIL', 'uk15286@gmail.com')
+        self.admin_email = admin_email or os.getenv('ADMIN_EMAIL', 'admin@botifytrades.com')
     
     def filter_sensitive_data(self, text: str) -> str:
         """Remove sensitive information from text."""
