@@ -76,6 +76,26 @@ When running from a bundled Windows EXE:
 - All wizard pages and dependencies are bundled via spec file hidden imports
 - Uses CREATE_NEW_CONSOLE on Windows for clean separate window
 
+## Debug Report System
+
+The application includes a debug report system accessible from the Settings page:
+
+### Features
+- **Submit Debug Report** button opens a modal for users to describe issues
+- Collects recent error logs from the database automatically
+- Filters 24+ sensitive data patterns (API keys, tokens, account numbers, balances, emails, device IDs)
+- Generates unique reference numbers (format: `DBG-YYYYMMDD-XXXX`)
+- Emails filtered report to admin (uk15286@gmail.com) using Gmail connector or SMTP fallback
+- User receives only the reference number for tracking
+
+### Files
+- `gui_app/debug_report_service.py` - Core service with filtering and email
+- `gui_app/routes.py` - API endpoints: POST `/api/debug-report/submit`, GET `/api/debug-report/history`
+- `gui_app/templates/settings.html` - UI modal and submit button
+
+### Database
+- `debug_reports` table stores reference numbers, status, and email tracking
+
 ## External Dependencies
 
 - **Python**: 3.8+
