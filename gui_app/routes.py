@@ -7124,6 +7124,169 @@ def register_routes(app):
             print(f"[API] Error deleting channel mapping: {e}")
             return jsonify({'error': str(e)}), 500
 
+    # ============ WEBHOOK SIGNAL POSTING ============
+    
+    @app.route('/api/webhook/config', methods=['GET'])
+    def api_get_webhook_config():
+        """Get webhook configuration"""
+        try:
+            from . import webhook_service
+            config = webhook_service.get_webhook_config()
+            return jsonify({'success': True, 'config': config})
+        except Exception as e:
+            print(f"[API] Error getting webhook config: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/webhook/config', methods=['POST'])
+    def api_save_webhook_config():
+        """Save webhook configuration"""
+        try:
+            from . import webhook_service
+            data = request.json or {}
+            success = webhook_service.save_webhook_config(data)
+            if success:
+                return jsonify({'success': True, 'message': 'Webhook configuration saved'})
+            return jsonify({'success': False, 'error': 'Failed to save configuration'}), 500
+        except Exception as e:
+            print(f"[API] Error saving webhook config: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/webhook/test', methods=['POST'])
+    def api_test_webhook_signal():
+        """Test webhook connection"""
+        try:
+            from . import webhook_service
+            data = request.json or {}
+            webhook_url = data.get('webhook_url', '')
+            bot_name = data.get('bot_name', 'Trade Echo Bot')
+            
+            success, message = webhook_service.test_webhook(webhook_url, bot_name)
+            return jsonify({'success': success, 'message': message})
+        except Exception as e:
+            print(f"[API] Error testing webhook: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/webhook/post_bto', methods=['POST'])
+    def api_post_bto_signal():
+        """Post a BTO (Buy to Open) signal to webhook"""
+        try:
+            from . import webhook_service
+            data = request.json or {}
+            
+            webhook_url = data.get('webhook_url')
+            if not webhook_url:
+                config = webhook_service.get_webhook_config()
+                webhook_url = config.get('webhook_url', '')
+            
+            if not webhook_url:
+                return jsonify({'success': False, 'error': 'No webhook URL configured'}), 400
+            
+            symbol = data.get('symbol', '').upper()
+            strike = float(data.get('strike', 0))
+            expiry = data.get('expiry', '')
+            call_put = data.get('call_put', 'C')
+            qty = int(data.get('qty', 1))
+            price = float(data.get('price', 0))
+            trade_type = data.get('trade_type', 'Swing')
+            bot_name = data.get('bot_name', 'Trade Echo Bot')
+            
+            if not symbol or not strike or not price:
+                return jsonify({'success': False, 'error': 'Missing required fields: symbol, strike, price'}), 400
+            
+            success, message = webhook_service.post_bto_signal(
+                webhook_url=webhook_url,
+                symbol=symbol,
+                strike=strike,
+                expiry=expiry,
+                call_put=call_put,
+                qty=qty,
+                price=price,
+                trade_type=trade_type,
+                bot_name=bot_name
+            )
+            
+            return jsonify({'success': success, 'message': message})
+        except Exception as e:
+            print(f"[API] Error posting BTO signal: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/webhook/post_stc', methods=['POST'])
+    def api_post_stc_signal():
+        """Post an STC (Sell to Close) signal to webhook with P&L"""
+        try:
+            from . import webhook_service
+            data = request.json or {}
+            
+            webhook_url = data.get('webhook_url')
+            if not webhook_url:
+                config = webhook_service.get_webhook_config()
+                webhook_url = config.get('webhook_url', '')
+            
+            if not webhook_url:
+                return jsonify({'success': False, 'error': 'No webhook URL configured'}), 400
+            
+            symbol = data.get('symbol', '').upper()
+            strike = float(data.get('strike', 0))
+            expiry = data.get('expiry', '')
+            call_put = data.get('call_put', 'C')
+            qty = int(data.get('qty', 1))
+            close_price = float(data.get('close_price', 0))
+            bot_name = data.get('bot_name', 'Trade Echo Bot')
+            
+            if not symbol or not close_price:
+                return jsonify({'success': False, 'error': 'Missing required fields: symbol, close_price'}), 400
+            
+            success, message, pnl_data = webhook_service.post_stc_signal(
+                webhook_url=webhook_url,
+                symbol=symbol,
+                strike=strike,
+                expiry=expiry,
+                call_put=call_put,
+                qty=qty,
+                close_price=close_price,
+                bot_name=bot_name
+            )
+            
+            return jsonify({'success': success, 'message': message, 'pnl': pnl_data})
+        except Exception as e:
+            print(f"[API] Error posting STC signal: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/webhook/positions', methods=['GET'])
+    def api_get_webhook_positions():
+        """Get all open webhook positions"""
+        try:
+            from . import webhook_service
+            positions = webhook_service.get_open_positions()
+            return jsonify({'success': True, 'positions': positions})
+        except Exception as e:
+            print(f"[API] Error getting webhook positions: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/webhook/find_position', methods=['POST'])
+    def api_find_webhook_position():
+        """Find a matching open position for STC"""
+        try:
+            from . import webhook_service
+            data = request.json or {}
+            
+            symbol = data.get('symbol', '').upper()
+            strike = data.get('strike')
+            expiry = data.get('expiry')
+            call_put = data.get('call_put')
+            
+            if strike:
+                strike = float(strike)
+            
+            position = webhook_service.find_matching_position(symbol, strike, expiry, call_put)
+            
+            if position:
+                return jsonify({'success': True, 'position': position})
+            return jsonify({'success': False, 'message': 'No matching position found'})
+        except Exception as e:
+            print(f"[API] Error finding webhook position: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     # ============ SIMULATION ENGINE ============
     
     @app.route('/simulation')

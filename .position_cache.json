@@ -2536,7 +2536,7 @@
   },
   "ALPACA_PAPER_QQQ_619.0_2025-12-22_C": {
     "entry_price": 0.75,
-    "highest_price": 0.88,
+    "highest_price": 0.89,
     "trailing_activated": true,
     "closing": false,
     "closing_cycles": 0,
