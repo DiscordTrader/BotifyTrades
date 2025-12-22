@@ -5122,6 +5122,57 @@ def register_routes(app):
             print(f"[API] Error saving debug mode: {e}")
             return jsonify({'error': str(e)}), 500
     
+    # Debug Report endpoints
+    @app.route('/api/debug-report/submit', methods=['POST'])
+    def api_submit_debug_report():
+        """Submit a debug report - collects errors, filters sensitive data, emails to admin."""
+        try:
+            import asyncio
+            from gui_app.debug_report_service import get_debug_report_service
+            
+            data = request.json or {}
+            user_description = data.get('description', '')
+            admin_email = data.get('admin_email', 'uk15286@gmail.com')
+            
+            service = get_debug_report_service(admin_email)
+            reference_number, report_data = service.generate_report(user_description)
+            
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(service.send_report_email(report_data))
+                loop.close()
+            except Exception as email_err:
+                print(f"[DEBUG-REPORT] Email send error: {email_err}")
+                result = {
+                    'success': False,
+                    'reference_number': reference_number,
+                    'error': str(email_err)
+                }
+            
+            return jsonify({
+                'success': True,
+                'reference_number': reference_number,
+                'email_sent': result.get('success', False),
+                'email_error': result.get('error', ''),
+                'message': f'Debug report created with reference: {reference_number}'
+            })
+            
+        except Exception as e:
+            print(f"[API] Error creating debug report: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/debug-report/history', methods=['GET'])
+    def api_get_debug_reports():
+        """Get recent debug report history."""
+        try:
+            reports = db.get_recent_debug_reports(limit=10)
+            return jsonify({'reports': reports})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
     # Slippage protection settings
     @app.route('/api/settings/slippage', methods=['GET'])
     def api_get_slippage_settings():
