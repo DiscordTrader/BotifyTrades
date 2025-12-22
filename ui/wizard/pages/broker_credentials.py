@@ -61,7 +61,7 @@ class BrokerCredentialForm(QFrame):
                 font-size: 14px;
             }
             QLineEdit:focus {
-                border-color: #4ade80;
+                border-color: #00d4ff;
             }
         """)
         field.textChanged.connect(self._on_credentials_changed)
@@ -81,7 +81,7 @@ class BrokerCredentialForm(QFrame):
                 font-size: 14px;
             }
             QLineEdit:focus {
-                border-color: #4ade80;
+                border-color: #00d4ff;
             }
         """)
         field.textChanged.connect(self._on_credentials_changed)
@@ -143,10 +143,10 @@ class WebullCredentialForm(BrokerCredentialForm):
         header_frame.setStyleSheet("""
             QFrame {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 rgba(78, 205, 196, 0.15),
+                    stop:0 rgba(0, 212, 255, 0.15),
                     stop:1 transparent);
                 border: none;
-                border-left: 4px solid #4ecdc4;
+                border-left: 4px solid #00d4ff;
                 border-radius: 0px;
                 padding: 16px;
             }
@@ -166,7 +166,7 @@ class WebullCredentialForm(BrokerCredentialForm):
         
         token_section = QLabel("AUTHENTICATION TOKENS")
         token_section.setStyleSheet("""
-            color: #4ecdc4;
+            color: #00d4ff;
             font-size: 11px;
             font-weight: 700;
             letter-spacing: 1.5px;
@@ -237,7 +237,7 @@ class WebullCredentialForm(BrokerCredentialForm):
         help_layout.setSpacing(8)
         
         help_title = QLabel("💡 How to get your Webull tokens:")
-        help_title.setStyleSheet("color: #4ecdc4; font-size: 13px; font-weight: 600; border: none; background: transparent;")
+        help_title.setStyleSheet("color: #00d4ff; font-size: 13px; font-weight: 600; border: none; background: transparent;")
         help_layout.addWidget(help_title)
         
         steps = [
@@ -731,7 +731,7 @@ class BrokerCredentialsPage(BasePage):
         
         form.test_passed = True
         form.test_status.setText("✓ Connection successful (mock)")
-        form.test_status.setStyleSheet("color: #4ade80; font-size: 13px; border: none;")
+        form.test_status.setStyleSheet("color: #00d4ff; font-size: 13px; border: none;")
         form.test_btn.setEnabled(True)
         form.test_btn.setText("Test Login")
         

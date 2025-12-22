@@ -47,7 +47,7 @@ class WelcomePage(BasePage):
         title_layout.addWidget(logo_label)
         
         tagline = QLabel("Professional Discord Signal Trading Bot")
-        tagline.setStyleSheet("color: #4ade80; font-size: 16px; font-weight: 500;")
+        tagline.setStyleSheet("color: #00d4ff; font-size: 16px; font-weight: 500;")
         tagline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_layout.addWidget(tagline)
         
@@ -103,7 +103,7 @@ class WelcomePage(BasePage):
         self.start_btn.setObjectName("primary")
         self.start_btn.setStyleSheet("""
             QPushButton {
-                background-color: #4ade80;
+                background-color: #00d4ff;
                 border: none;
                 border-radius: 6px;
                 padding: 14px 32px;
@@ -112,7 +112,7 @@ class WelcomePage(BasePage):
                 font-weight: 600;
             }
             QPushButton:hover {
-                background-color: #22c55e;
+                background-color: #00b8e0;
             }
         """)
         self.start_btn.clicked.connect(self._on_start_clicked)

@@ -121,7 +121,7 @@ class BrokerCard(QFrame):
             self.setStyleSheet("""
                 QFrame {
                     background-color: #0d1117;
-                    border: 2px solid #4ade80;
+                    border: 2px solid #00d4ff;
                     border-radius: 8px;
                 }
             """)

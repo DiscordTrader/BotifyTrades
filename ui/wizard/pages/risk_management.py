@@ -327,7 +327,7 @@ class RiskManagementPage(BasePage):
         preview_layout.addWidget(preview_title)
         
         self.preview_label = QLabel("")
-        self.preview_label.setStyleSheet("color: #4ade80; font-size: 13px; border: none;")
+        self.preview_label.setStyleSheet("color: #00d4ff; font-size: 13px; border: none;")
         self.preview_label.setWordWrap(True)
         preview_layout.addWidget(self.preview_label)
         

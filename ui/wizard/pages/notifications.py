@@ -88,7 +88,7 @@ class NotificationsPage(BasePage):
                 font-size: 14px;
             }
             QLineEdit:focus {
-                border-color: #4ade80;
+                border-color: #00d4ff;
             }
         """)
         webhook_input_layout.addWidget(self.webhook_input)
@@ -248,7 +248,7 @@ class NotificationsPage(BasePage):
             
             if response.status_code == 204:
                 self.test_status.setText("✓ Webhook test successful!")
-                self.test_status.setStyleSheet("color: #4ade80; font-size: 13px;")
+                self.test_status.setStyleSheet("color: #00d4ff; font-size: 13px;")
             else:
                 self.test_status.setText(f"✗ Webhook failed: {response.status_code}")
                 self.test_status.setStyleSheet("color: #f85149; font-size: 13px;")
@@ -269,7 +269,7 @@ class NotificationsPage(BasePage):
                 timeout=5
             )
             self.test_status.setText("✓ Desktop notification sent!")
-            self.test_status.setStyleSheet("color: #4ade80; font-size: 13px;")
+            self.test_status.setStyleSheet("color: #00d4ff; font-size: 13px;")
         except ImportError:
             self.test_status.setText("ℹ️ Desktop notifications require 'plyer' package (will work in final build)")
             self.test_status.setStyleSheet("color: #8b949e; font-size: 13px;")

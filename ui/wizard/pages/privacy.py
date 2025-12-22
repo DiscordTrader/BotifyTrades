@@ -60,7 +60,7 @@ class PrivacyPage(BasePage):
             item_layout.setContentsMargins(0, 4, 0, 4)
             
             bullet = QLabel("✓")
-            bullet.setStyleSheet("color: #4ade80; font-size: 14px; border: none;")
+            bullet.setStyleSheet("color: #00d4ff; font-size: 14px; border: none;")
             bullet.setFixedWidth(24)
             item_layout.addWidget(bullet)
             
@@ -95,7 +95,7 @@ class PrivacyPage(BasePage):
         never_layout.setSpacing(8)
         
         never_title = QLabel("🔒 Never Shared or Transmitted")
-        never_title.setStyleSheet("color: #4ade80; font-size: 14px; font-weight: 600;")
+        never_title.setStyleSheet("color: #00d4ff; font-size: 14px; font-weight: 600;")
         never_layout.addWidget(never_title)
         
         never_items = [
@@ -107,7 +107,7 @@ class PrivacyPage(BasePage):
         
         for item in never_items:
             item_label = QLabel(f"• {item}")
-            item_label.setStyleSheet("color: #4ade80; font-size: 12px;")
+            item_label.setStyleSheet("color: #00d4ff; font-size: 12px;")
             never_layout.addWidget(item_label)
         
         self.content_layout.addWidget(never_shared_card)

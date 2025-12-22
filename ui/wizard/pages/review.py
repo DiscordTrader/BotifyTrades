@@ -73,7 +73,7 @@ class SummaryCard(QFrame):
         
         if highlight:
             value_widget = QLabel(value)
-            value_widget.setStyleSheet("color: #4ade80; font-size: 12px; font-weight: 500;")
+            value_widget.setStyleSheet("color: #00d4ff; font-size: 12px; font-weight: 500;")
         else:
             value_widget = QLabel(value)
             value_widget.setStyleSheet("color: #e6edf3; font-size: 12px;")
@@ -124,11 +124,11 @@ class ReviewPage(BasePage):
         banner_layout = QHBoxLayout(success_banner)
         
         check_icon = QLabel("✓")
-        check_icon.setStyleSheet("color: #4ade80; font-size: 24px;")
+        check_icon.setStyleSheet("color: #00d4ff; font-size: 24px;")
         banner_layout.addWidget(check_icon)
         
         banner_text = QLabel("Setup Complete! Review your configuration below.")
-        banner_text.setStyleSheet("color: #4ade80; font-size: 16px; font-weight: 500;")
+        banner_text.setStyleSheet("color: #00d4ff; font-size: 16px; font-weight: 500;")
         banner_layout.addWidget(banner_text)
         banner_layout.addStretch()
         
@@ -179,7 +179,7 @@ class ReviewPage(BasePage):
         self.finish_btn = QPushButton("Finish & Start Bot")
         self.finish_btn.setStyleSheet("""
             QPushButton {
-                background-color: #4ade80;
+                background-color: #00d4ff;
                 border: none;
                 border-radius: 6px;
                 padding: 14px 32px;
@@ -188,7 +188,7 @@ class ReviewPage(BasePage):
                 font-weight: 600;
             }
             QPushButton:hover {
-                background-color: #22c55e;
+                background-color: #00b8e0;
             }
         """)
         self.finish_btn.clicked.connect(self.finish_clicked.emit)

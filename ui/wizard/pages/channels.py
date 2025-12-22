@@ -48,7 +48,7 @@ class ChannelConfigCard(QFrame):
                 padding: 20px;
             }
             QFrame:hover {
-                border-color: rgba(78, 205, 196, 0.3);
+                border-color: rgba(0, 212, 255, 0.3);
             }
         """)
         
@@ -193,7 +193,7 @@ class ChannelConfigCard(QFrame):
             }
             QCheckBox::indicator:checked {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #0ff0b3, stop:1 #06b6d4);
+                    stop:0 #00d4ff, stop:1 #06b6d4);
             }
         """)
         track_header.addWidget(self.track_check)
@@ -215,7 +215,7 @@ class ChannelConfigCard(QFrame):
                 min-width: 60px;
             }
             QSpinBox:focus {
-                border-color: #0ff0b3;
+                border-color: #00d4ff;
             }
         """)
         track_size_layout.addWidget(self.track_position_size)
@@ -273,14 +273,14 @@ class ChannelConfigPage(BasePage):
                 padding: 24px;
             }
             QFrame:hover {
-                border-color: #0ff0b3;
+                border-color: #00d4ff;
             }
         """)
         add_card_layout = QVBoxLayout(add_card)
         add_card_layout.setSpacing(20)
         
         add_title = QLabel("➕ Add New Channel")
-        add_title.setStyleSheet("color: #0ff0b3; font-size: 16px; font-weight: 600; background: transparent; border: none;")
+        add_title.setStyleSheet("color: #00d4ff; font-size: 16px; font-weight: 600; background: transparent; border: none;")
         add_card_layout.addWidget(add_title)
         
         form_layout = QHBoxLayout()
@@ -306,7 +306,7 @@ class ChannelConfigPage(BasePage):
                 min-width: 200px;
             }
             QLineEdit:focus {
-                border-color: #0ff0b3;
+                border-color: #00d4ff;
             }
             QLineEdit::placeholder {
                 color: rgba(255, 255, 255, 0.3);
@@ -335,7 +335,7 @@ class ChannelConfigPage(BasePage):
                 min-width: 180px;
             }
             QLineEdit:focus {
-                border-color: #0ff0b3;
+                border-color: #00d4ff;
             }
             QLineEdit::placeholder {
                 color: rgba(255, 255, 255, 0.3);
@@ -348,7 +348,7 @@ class ChannelConfigPage(BasePage):
         add_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #0ff0b3, stop:1 #7c3aed);
+                    stop:0 #00d4ff, stop:1 #7c3aed);
                 border: none;
                 border-radius: 12px;
                 padding: 14px 28px;
@@ -358,7 +358,7 @@ class ChannelConfigPage(BasePage):
             }
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #0dd9a2, stop:1 #6d28d9);
+                    stop:0 #00b8e0, stop:1 #6d28d9);
             }
         """)
         add_btn.clicked.connect(self._add_channel)
@@ -410,7 +410,7 @@ class ChannelConfigPage(BasePage):
                 font-size: 14px;
             }
             QTextEdit:focus {
-                border-color: #4ade80;
+                border-color: #00d4ff;
             }
         """)
         self.content_layout.addWidget(self.parse_input)
@@ -529,7 +529,7 @@ class ChannelConfigPage(BasePage):
                 border: 1px solid #238636;
                 border-radius: 6px;
                 padding: 12px;
-                color: #4ade80;
+                color: #00d4ff;
                 font-size: 13px;
             """)
         else:

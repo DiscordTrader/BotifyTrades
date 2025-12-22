@@ -133,7 +133,7 @@ class DiscordPage(BasePage):
                 font-size: 14px;
             }
             QLineEdit:focus {
-                border-color: #4ade80;
+                border-color: #00d4ff;
             }
         """)
         self.token_input.textChanged.connect(self._on_token_changed)
@@ -225,7 +225,7 @@ class DiscordPage(BasePage):
             QComboBox QAbstractItemView {
                 background-color: #21262d;
                 border: 1px solid #30363d;
-                selection-background-color: #4ade80;
+                selection-background-color: #00d4ff;
                 selection-color: #0d1117;
             }
         """)
@@ -317,7 +317,7 @@ class DiscordPage(BasePage):
         
         if success:
             self.test_status.setText(f"✓ {message}")
-            self.test_status.setStyleSheet("color: #4ade80; font-size: 14px;")
+            self.test_status.setStyleSheet("color: #00d4ff; font-size: 14px;")
             self.connection_tested = True
             self.guilds = guilds
             

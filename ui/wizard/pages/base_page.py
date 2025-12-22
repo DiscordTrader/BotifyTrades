@@ -155,7 +155,7 @@ class BasePage(QWidget):
     def show_validation_success(self, label: QLabel, message: str):
         """Show validation success on a label"""
         label.setText(message)
-        label.setStyleSheet("color: #4ade80; font-size: 12px;")
+        label.setStyleSheet("color: #00d4ff; font-size: 12px;")
         label.show()
     
     def hide_validation(self, label: QLabel):
