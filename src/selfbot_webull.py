@@ -7152,12 +7152,39 @@ if __name__ == '__main__':
     import threading
     import queue
     import multiprocessing
+    import argparse
     
     # Required for multiprocessing to work in PyInstaller frozen EXE
     multiprocessing.freeze_support()
     
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description='BotifyTrades - Discord Trading Bot',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s                    # Start with default port 5000
+  %(prog)s --port 8080        # Start on port 8080 (useful for macOS where 5000 is used by AirPlay)
+  %(prog)s --wizard           # Launch the setup wizard
+  
+Environment Variables:
+  GUI_PORT                    # Alternative way to set the web GUI port (default: 5000)
+        """
+    )
+    parser.add_argument('--port', '-p', type=int, default=None, 
+                        help='Port for web control panel (default: 5000, or GUI_PORT env var)')
+    parser.add_argument('--wizard', action='store_true', 
+                        help='Launch the setup wizard')
+    
+    args = parser.parse_args()
+    
+    # Set GUI_PORT environment variable if --port was provided
+    if args.port:
+        os.environ['GUI_PORT'] = str(args.port)
+        _original_print(f"[CONFIG] Using port {args.port} for web GUI")
+    
     # Check if launched with --wizard flag (for subprocess wizard launch)
-    if '--wizard' in sys.argv:
+    if args.wizard or '--wizard' in sys.argv:
         try:
             _original_print("[WIZARD] Launching Setup Wizard...")
             from ui.wizard.launcher import launch_wizard
