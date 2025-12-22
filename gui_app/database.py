@@ -3566,6 +3566,186 @@ def save_signal_conversion_settings(conversion_channel_id: str, target_execution
         conn.rollback()
         return False
 
+
+# ============ CHANNEL MAPPINGS (MULTI-SOURCE TO DESTINATION) ============
+
+def init_channel_mappings_table():
+    """Create channel_mappings table if it doesn't exist"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS channel_mappings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_channel_id TEXT NOT NULL,
+            source_channel_name TEXT DEFAULT '',
+            destination_channel_id TEXT NOT NULL,
+            destination_channel_name TEXT DEFAULT '',
+            is_active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(source_channel_id, destination_channel_id)
+        )
+    ''')
+    conn.commit()
+    print("[DATABASE] ✓ Channel mappings table ready")
+
+
+def get_channel_mappings() -> List[Dict[str, Any]]:
+    """Get all channel mappings"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Ensure table exists
+        init_channel_mappings_table()
+        
+        cursor.execute('''
+            SELECT id, source_channel_id, source_channel_name, 
+                   destination_channel_id, destination_channel_name, 
+                   is_active, created_at, updated_at
+            FROM channel_mappings
+            ORDER BY created_at DESC
+        ''')
+        
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DATABASE] Error getting channel mappings: {e}")
+        return []
+
+
+def add_channel_mapping(source_channel_id: str, destination_channel_id: str,
+                        source_channel_name: str = '', destination_channel_name: str = '') -> Dict[str, Any]:
+    """Add a new channel mapping"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Ensure table exists
+        init_channel_mappings_table()
+        
+        cursor.execute('''
+            INSERT INTO channel_mappings (source_channel_id, source_channel_name, 
+                                          destination_channel_id, destination_channel_name)
+            VALUES (?, ?, ?, ?)
+        ''', (source_channel_id.strip(), source_channel_name.strip(), 
+              destination_channel_id.strip(), destination_channel_name.strip()))
+        
+        mapping_id = cursor.lastrowid
+        conn.commit()
+        print(f"[DATABASE] ✓ Added channel mapping: {source_channel_id} -> {destination_channel_id}")
+        
+        return {
+            'success': True,
+            'id': mapping_id,
+            'message': 'Channel mapping added successfully'
+        }
+    except sqlite3.IntegrityError:
+        return {
+            'success': False,
+            'error': 'This mapping already exists'
+        }
+    except Exception as e:
+        print(f"[DATABASE] Error adding channel mapping: {e}")
+        conn.rollback()
+        return {
+            'success': False,
+            'error': str(e)
+        }
+
+
+def update_channel_mapping(mapping_id: int, source_channel_id: str = None, 
+                           destination_channel_id: str = None,
+                           source_channel_name: str = None, 
+                           destination_channel_name: str = None,
+                           is_active: bool = None) -> Dict[str, Any]:
+    """Update an existing channel mapping"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        updates = []
+        params = []
+        
+        if source_channel_id is not None:
+            updates.append('source_channel_id = ?')
+            params.append(source_channel_id.strip())
+        if destination_channel_id is not None:
+            updates.append('destination_channel_id = ?')
+            params.append(destination_channel_id.strip())
+        if source_channel_name is not None:
+            updates.append('source_channel_name = ?')
+            params.append(source_channel_name.strip())
+        if destination_channel_name is not None:
+            updates.append('destination_channel_name = ?')
+            params.append(destination_channel_name.strip())
+        if is_active is not None:
+            updates.append('is_active = ?')
+            params.append(1 if is_active else 0)
+        
+        if not updates:
+            return {'success': False, 'error': 'No fields to update'}
+        
+        updates.append('updated_at = CURRENT_TIMESTAMP')
+        params.append(mapping_id)
+        
+        cursor.execute(f'''
+            UPDATE channel_mappings
+            SET {', '.join(updates)}
+            WHERE id = ?
+        ''', params)
+        
+        conn.commit()
+        print(f"[DATABASE] ✓ Updated channel mapping ID {mapping_id}")
+        
+        return {'success': True, 'message': 'Channel mapping updated successfully'}
+    except Exception as e:
+        print(f"[DATABASE] Error updating channel mapping: {e}")
+        conn.rollback()
+        return {'success': False, 'error': str(e)}
+
+
+def delete_channel_mapping(mapping_id: int) -> Dict[str, Any]:
+    """Delete a channel mapping"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('DELETE FROM channel_mappings WHERE id = ?', (mapping_id,))
+        
+        if cursor.rowcount == 0:
+            return {'success': False, 'error': 'Mapping not found'}
+        
+        conn.commit()
+        print(f"[DATABASE] ✓ Deleted channel mapping ID {mapping_id}")
+        
+        return {'success': True, 'message': 'Channel mapping deleted successfully'}
+    except Exception as e:
+        print(f"[DATABASE] Error deleting channel mapping: {e}")
+        conn.rollback()
+        return {'success': False, 'error': str(e)}
+
+
+def get_destination_for_source(source_channel_id: str) -> str:
+    """Get the destination channel ID for a given source channel"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT destination_channel_id
+            FROM channel_mappings
+            WHERE source_channel_id = ? AND is_active = 1
+            LIMIT 1
+        ''', (source_channel_id,))
+        
+        row = cursor.fetchone()
+        return row['destination_channel_id'] if row else None
+    except Exception as e:
+        print(f"[DATABASE] Error getting destination for source: {e}")
+        return None
+
+
 # ============ WAITLIST MANAGEMENT ============
 
 def add_to_waitlist(email: str, name: str = None, source: str = 'docs_page', referral_code: str = None) -> Dict[str, Any]:
