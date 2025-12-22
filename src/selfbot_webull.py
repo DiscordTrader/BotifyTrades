@@ -5420,8 +5420,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         
         print(f"[Discord] Channel info: {channel_info is not None}, Execute: {execute_enabled}, Track: {track_enabled}")
         
-        # If not in database and not in legacy CHANNEL_IDS list, ignore
-        if not channel_info and message.channel.id not in CHANNEL_IDS:
+        # Check if this channel is a source in channel mappings (multi-channel conversion)
+        is_mapped_source_channel = False
+        if DATABASE_MODULE_AVAILABLE:
+            try:
+                from gui_app import database as db
+                mapped_dest = db.get_destination_for_source(str(message.channel.id))
+                if mapped_dest:
+                    is_mapped_source_channel = True
+                    print(f"[Discord] ✓ Channel is mapped source -> {mapped_dest}")
+            except Exception as e:
+                pass
+        
+        # If not in database, not in legacy CHANNEL_IDS list, AND not a mapped source, ignore
+        if not channel_info and message.channel.id not in CHANNEL_IDS and not is_mapped_source_channel:
             print(f"[Discord] ❌ Ignoring - not in database or CHANNEL_IDS")
             return
         
