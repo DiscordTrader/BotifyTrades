@@ -78,13 +78,16 @@ except ImportError:
 class SetupWizard:
     """Interactive credential setup wizard"""
     
+    _platform_warning_shown = False
+    
     def __init__(self):
         self.config_dir = Path.home() / '.discord_trading_bot'
         self.config_file = self.config_dir / 'credentials.dat'
         
         # Check platform compatibility
         self.is_windows = platform.system() == 'Windows'
-        if not self.is_windows:
+        if not self.is_windows and not SetupWizard._platform_warning_shown:
+            SetupWizard._platform_warning_shown = True
             print("⚠️  Warning: This setup wizard is optimized for Windows.")
             print("   On Mac/Linux, credentials are stored with basic protection.")
             print()
