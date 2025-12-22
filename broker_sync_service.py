@@ -437,7 +437,6 @@ class BrokerSyncService:
                     
                     # Update all fields
                     self.db.update_trade(trade_id, **update_fields)
-                    print(f"[SYNC] Trade #{trade_id} ({symbol}) still OPEN (qty={quantity}, price=${current_price})")
             
             # CRITICAL: Trade not in pending or positions = order cancelled or position closed
             # Brokers remove closed positions entirely, so absence means it's gone

@@ -3055,7 +3055,6 @@ def register_routes(app):
                                         try:
                                             buying_power = float(member_dict[bp_field])
                                             if buying_power > 0:
-                                                print(f"[API] Using '{bp_field}' from accountMembers: ${buying_power:,.2f}")
                                                 break
                                         except:
                                             pass
@@ -3103,13 +3102,9 @@ def register_routes(app):
                                 day_pl += pos_pnl
                             except:
                                 pass
-                        print(f"[API] Day P/L calculated from {len(positions)} positions: ${day_pl:,.2f}")
                     else:
                         # Fallback to account-level unrealized P&L
                         day_pl = unrealized_pl
-                        print(f"[API] Day P/L from account unrealizedProfitLoss: ${day_pl:,.2f}")
-                    
-                    print(f"[API] ✓ Webull Balance - Buying Power: ${buying_power:,.2f}, Net Liq: ${net_liq:,.2f}, Day P/L: ${day_pl:,.2f}")
                     
                     return {
                         'buying_power': buying_power,
@@ -5820,33 +5815,22 @@ def register_routes(app):
     def api_get_option_expirations():
         """Get available option expiration dates for a symbol - routes to selected broker"""
         import sys
-        print(f"[OPTIONS API] === EXPIRATIONS ENDPOINT HIT ===", file=sys.stderr, flush=True)
         try:
             symbol = request.args.get('symbol', '').upper()
             selected_broker = request.args.get('broker', 'WEBULL').upper()
-            print(f"[OPTIONS API] symbol={symbol}, broker={selected_broker}", file=sys.stderr, flush=True)
             if not symbol:
                 return jsonify({'error': 'Symbol is required'}), 400
             
-            import logging
-            logging.warning(f"[OPTIONS API] Fetching expirations for {symbol} from broker: {selected_broker}")
-            print(f"[OPTIONS API] Fetching expirations for {symbol} from broker: {selected_broker}", flush=True)
-            
             # Route to Alpaca if selected
             if 'ALPACA' in selected_broker:
-                import sys
-                logging.warning(f"[OPTIONS API] Loading Alpaca provider for {selected_broker}...")
-                print(f"[OPTIONS API] Loading Alpaca provider for {selected_broker}...", flush=True)
                 try:
                     alpaca = get_alpaca_provider()
                 except Exception as init_err:
-                    print(f"[OPTIONS API] ERROR initializing Alpaca: {init_err}", file=sys.stderr, flush=True)
+                    print(f"[OPTIONS API] ERROR: Alpaca init failed: {init_err}")
                     return jsonify({'error': f'Alpaca initialization failed: {str(init_err)}', 'expirations': []}), 503
                     
                 if not alpaca:
-                    print(f"[OPTIONS API] ERROR: Alpaca provider not initialized!", file=sys.stderr, flush=True)
                     return jsonify({'error': 'Alpaca data provider not configured. Check API credentials.', 'expirations': []}), 503
-                print(f"[OPTIONS API] Alpaca provider ready, fetching expirations for {symbol}...", file=sys.stderr, flush=True)
                 
                 new_loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(new_loop)
@@ -5854,7 +5838,6 @@ def register_routes(app):
                     expirations_list = new_loop.run_until_complete(
                         alpaca.get_options_expiration_dates(symbol)
                     )
-                    print(f"[OPTIONS API] Got {len(expirations_list)} expirations from Alpaca for {symbol}", file=sys.stderr, flush=True)
                     
                     from datetime import datetime
                     expirations = []
@@ -5865,8 +5848,7 @@ def register_routes(app):
                                 'date': exp_str,
                                 'label': exp_date.strftime('%b %d, %Y')
                             })
-                        except Exception as e:
-                            print(f"[API] Warning: Could not format expiration {exp_str}: {e}", file=sys.stderr, flush=True)
+                        except Exception:
                             continue
                     
                     return jsonify({
@@ -5875,45 +5857,25 @@ def register_routes(app):
                         'data_source': 'Alpaca'
                     })
                 except Exception as fetch_err:
-                    print(f"[OPTIONS API] ERROR fetching Alpaca expirations: {fetch_err}", file=sys.stderr, flush=True)
-                    import traceback
-                    traceback.print_exc()
+                    print(f"[OPTIONS API] ERROR: Alpaca expirations failed: {fetch_err}")
                     return jsonify({'error': f'Failed to fetch expirations: {str(fetch_err)}', 'expirations': []}), 500
                 finally:
                     new_loop.close()
             
             # Route to Tastytrade if selected
             if 'TASTYTRADE' in selected_broker:
-                print(f"[OPTIONS API] Loading Tastytrade expirations for {symbol}...", flush=True)
-                
-                # Debug: check broker instance state
-                has_bot = _bot_instance is not None
-                has_attr = hasattr(_bot_instance, 'tastytrade_broker') if has_bot else False
-                has_broker = _bot_instance.tastytrade_broker is not None if has_attr else False
-                print(f"[OPTIONS API] Debug: bot={has_bot}, attr={has_attr}, broker={has_broker}", flush=True)
-                
                 if not _bot_instance or not hasattr(_bot_instance, 'tastytrade_broker') or not _bot_instance.tastytrade_broker:
-                    print(f"[OPTIONS API] Tastytrade broker not available", flush=True)
                     return jsonify({'error': 'Tastytrade broker not configured', 'expirations': []}), 503
-                
-                # Check if broker session is connected
-                broker_session = getattr(_bot_instance.tastytrade_broker, 'session', None)
-                print(f"[OPTIONS API] Tastytrade session exists: {broker_session is not None}", flush=True)
                 
                 try:
                     import concurrent.futures
                     
                     def _get_expirations_sync():
-                        print(f"[OPTIONS API] Calling get_options_expiration_dates({symbol})...", flush=True)
-                        result = _bot_instance.tastytrade_broker.get_options_expiration_dates(symbol)
-                        print(f"[OPTIONS API] get_options_expiration_dates returned: {type(result)} with {len(result) if result else 0} items", flush=True)
-                        return result
+                        return _bot_instance.tastytrade_broker.get_options_expiration_dates(symbol)
                     
                     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                         future = executor.submit(_get_expirations_sync)
                         expirations_list = future.result(timeout=15)
-                    
-                    print(f"[OPTIONS API] Got {len(expirations_list)} expirations from Tastytrade for {symbol}", flush=True)
                     
                     from datetime import datetime
                     expirations = []
@@ -5924,8 +5886,7 @@ def register_routes(app):
                                 'date': exp_str,
                                 'label': exp_date.strftime('%b %d, %Y')
                             })
-                        except Exception as e:
-                            print(f"[OPTIONS API] Warning: Could not format expiration {exp_str}: {e}", flush=True)
+                        except Exception:
                             continue
                     
                     return jsonify({
@@ -5934,9 +5895,7 @@ def register_routes(app):
                         'data_source': 'Tastytrade'
                     })
                 except Exception as e:
-                    print(f"[OPTIONS API] Tastytrade expirations error: {e}", flush=True)
-                    import traceback
-                    traceback.print_exc()
+                    print(f"[OPTIONS API] ERROR: Tastytrade expirations failed: {e}")
                     return jsonify({'error': f'Tastytrade error: {str(e)}', 'expirations': []}), 500
             
             # Default: Use Webull
@@ -5944,12 +5903,8 @@ def register_routes(app):
             loop = get_webull_loop()
             
             # For index options (SPX, NDX, etc.), use Alpaca which has better support for daily expirations
-            # Webull only returns monthly expirations for these symbols
             index_symbols = ['SPX', 'NDX', 'RUT', 'VIX', 'DJX', 'XSP']
             use_alpaca_for_expirations = symbol in index_symbols
-            
-            if use_alpaca_for_expirations:
-                print(f"[API] Using Alpaca for {symbol} expirations (index option with daily expirations)")
             
             if broker and loop and not use_alpaca_for_expirations:
                 try:
@@ -6117,9 +6072,7 @@ def register_routes(app):
                 return jsonify({'error': 'Invalid strike price format'}), 400
             
             # Route to appropriate broker for option chain data
-            print(f"[OPTIONS API] Fetching strike quote for {symbol} ${strike} from broker: {broker}", flush=True)
             chain = get_option_chain_for_broker(symbol, expiry, broker)
-            print(f"[OPTIONS API] Got chain with data_source: {chain.get('data_source', 'unknown')}", flush=True)
             
             if not chain:
                 return jsonify({'error': 'Failed to fetch option chain data'}), 503

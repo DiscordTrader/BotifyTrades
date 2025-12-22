@@ -2088,14 +2088,6 @@ class WebullBroker:
                     if k != 'accountMembers' and k not in account_data:
                         account_data[k] = v
                 
-                # DEBUG: Print ALL fields from Webull API
-                print(f"[Webull] [DEBUG] ========== WEBULL ACCOUNT DATA ==========")
-                print(f"[Webull] [DEBUG] All parsed fields ({len(account_data)} total):")
-                for key, val in sorted(account_data.items()):
-                    if isinstance(val, (int, float, str)) and val:
-                        print(f"[Webull] [DEBUG]   {key}: {val}")
-                print(f"[Webull] [DEBUG] ==========================================")
-                
                 # Extract buying power
                 buying_power = 0.0
                 for field in ['buyingPower', 'dayBuyingPower', 'cashAvailableForTrade', 'settledFunds']:
@@ -2103,7 +2095,6 @@ class WebullBroker:
                         try:
                             buying_power = float(account_data[field])
                             if buying_power > 0:
-                                print(f"[Webull] [DEBUG] Using '{field}' for buying_power: ${buying_power:.2f}")
                                 break
                         except (ValueError, TypeError):
                             pass
@@ -2113,7 +2104,6 @@ class WebullBroker:
                 if 'optionBuyingPower' in account_data:
                     try:
                         options_bp = float(account_data['optionBuyingPower'])
-                        print(f"[Webull] [DEBUG] Found optionBuyingPower: ${options_bp:.2f}")
                     except (ValueError, TypeError):
                         pass
                 if options_bp <= 0:
@@ -2143,7 +2133,6 @@ class WebullBroker:
                             account_type = 'IRA'
                         else:
                             account_type = account_data[field]
-                        print(f"[Webull] [DEBUG] Account type from '{field}': {account_type}")
                         break
                 
                 # Get account ID for display
@@ -2157,10 +2146,9 @@ class WebullBroker:
                     'account_type': account_type,
                     'account_id': str(account_id)
                 }
-                print(f"[Webull] [DEBUG] Final: Type={account_type}, BP=${buying_power:.2f}, OptBP=${options_bp:.2f}, PortValue=${portfolio_value:.2f}")
                 return result
             except Exception as e:
-                print(f"[Webull] [DEBUG] get_account_info error: {e}")
+                print(f"[Webull] Error getting account info: {e}")
                 return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
         
         return await self.loop.run_in_executor(None, _blocking_get_account)
@@ -3061,10 +3049,7 @@ class WebullBroker:
             # Get all positions (stocks and options together)
             try:
                 all_positions = wb.get_positions()
-                print(f"[RISK] [DEBUG] Raw Webull get_positions returned {len(all_positions) if all_positions else 0} items")
                 if all_positions:
-                    for i, pos in enumerate(all_positions):
-                        print(f"[RISK] [DEBUG] Raw Webull pos[{i}]: symbol={pos.get('ticker', {}).get('symbol', 'N/A')}, assetType={pos.get('assetType', 'N/A')}, position={pos.get('position', 0)}")
                     for pos in all_positions:
                         # Convert position to float for comparison (API may return string)
                         try:
@@ -3262,20 +3247,6 @@ class WebullBroker:
             try:
                 result = wb.get_options_expiration_dates(stock=symbol)
                 
-                # Debug logging to see what Webull returns
-                print(f"[Webull] DEBUG: get_options_expiration_dates({symbol}) raw response type: {type(result)}")
-                if result:
-                    if isinstance(result, dict):
-                        print(f"[Webull] DEBUG: response keys: {list(result.keys())}")
-                        if 'expireDateList' in result:
-                            exp_list = result['expireDateList']
-                            print(f"[Webull] DEBUG: expireDateList has {len(exp_list)} items for {symbol}")
-                            if exp_list:
-                                print(f"[Webull] DEBUG: first 3 expirations: {exp_list[:3]}")
-                                print(f"[Webull] DEBUG: last 3 expirations: {exp_list[-3:]}")
-                    else:
-                        print(f"[Webull] DEBUG: response is not a dict: {result}")
-                
                 # Handle both list (new API) and dict (old API) formats
                 exp_list = []
                 if isinstance(result, list):
@@ -3299,7 +3270,6 @@ class WebullBroker:
                                 'label': exp_label,
                                 'count': exp.get('count', 0) if isinstance(exp, dict) else 0
                             })
-                    print(f"[Webull] Parsed {len(expirations)} expiration dates for {symbol}")
                     return expirations
                 return []
             except Exception as e:
@@ -3399,12 +3369,7 @@ class WebullBroker:
                     try:
                         quote = wb.get_option_quote(stock=symbol, optionId=str(option_id))
                         if not quote:
-                            print(f"[Webull] Live quote returned None for {symbol} option {option_id}")
                             return None
-                        
-                        # Debug: log first quote response
-                        if strike:
-                            print(f"[Webull] DEBUG Live quote for {symbol} ${strike}: keys={list(quote.keys())[:5]}")
                         
                         # Price data may be in 'data' field or directly
                         if 'data' in quote and isinstance(quote['data'], list):
@@ -3415,8 +3380,6 @@ class WebullBroker:
                                     ask = float(ask_list[0].get('price', 0)) if ask_list else 0
                                     bid = float(bid_list[0].get('price', 0)) if bid_list else 0
                                     last = float(opt.get('latestPrice', 0) or opt.get('close', 0) or 0)
-                                    if strike and (bid > 0 or ask > 0):
-                                        print(f"[Webull] ✓ Live quote {symbol} ${strike}: bid=${bid}, ask=${ask}")
                                     return {'bid': bid, 'ask': ask, 'last': last}
                         
                         # Try direct fields
@@ -3425,11 +3388,8 @@ class WebullBroker:
                         ask = float(ask_list[0].get('price', 0)) if ask_list else float(quote.get('askPrice', 0) or 0)
                         bid = float(bid_list[0].get('price', 0)) if bid_list else float(quote.get('bidPrice', 0) or 0)
                         last = float(quote.get('latestPrice', 0) or quote.get('close', 0) or quote.get('lastPrice', 0) or 0)
-                        if strike and (bid > 0 or ask > 0):
-                            print(f"[Webull] ✓ Live quote {symbol} ${strike}: bid=${bid}, ask=${ask}")
                         return {'bid': bid, 'ask': ask, 'last': last}
-                    except Exception as e:
-                        print(f"[Webull] Warning: Could not fetch live quote for option {option_id}: {e}")
+                    except Exception:
                         return None
                 
                 # Get call options
@@ -3437,58 +3397,42 @@ class WebullBroker:
                 seen_strikes = set()
                 needs_live_quotes = False
                 try:
-                    print(f"[Webull] Fetching calls for {symbol} exp {expiration_date}")
                     call_data = wb.get_options(stock=symbol, direction='call', expireDate=expiration_date)
                     data_list = call_data if isinstance(call_data, list) else call_data.get('data', []) if isinstance(call_data, dict) else []
-                    print(f"[Webull] Call data type: {type(call_data)}, items: {len(data_list)}")
-                    first_row_printed = False
-                    first_opt_printed = False
+                    first_row_checked = False
                     for row in data_list:
-                        if not first_row_printed and isinstance(row, dict):
-                            print(f"[Webull] DEBUG first call row keys: {list(row.keys())}")
+                        if not first_row_checked and isinstance(row, dict):
                             if 'call' in row:
                                 call_nested = row.get('call', {})
                                 if isinstance(call_nested, dict):
                                     bid_list = call_nested.get('bidList', [])
                                     ask_list = call_nested.get('askList', [])
-                                    print(f"[Webull] DEBUG bidList sample: {bid_list[:1] if bid_list else 'empty'}")
-                                    print(f"[Webull] DEBUG askList sample: {ask_list[:1] if ask_list else 'empty'}")
                                     if not bid_list and not ask_list:
                                         needs_live_quotes = True
-                            first_row_printed = True
+                            first_row_checked = True
                         opt = extract_option(row, 'call')
-                        if opt and not first_opt_printed:
-                            print(f"[Webull] DEBUG first parsed call: strike={opt.get('strike')}, bid={opt.get('bid')}, ask={opt.get('ask')}, last={opt.get('last')}")
-                            first_opt_printed = True
                         if opt and opt['strike'] not in seen_strikes:
                             seen_strikes.add(opt['strike'])
                             calls.append(opt)
-                    print(f"[Webull] Parsed {len(calls)} unique call options")
                 except Exception as e:
-                    print(f"[Webull] Warning: Could not fetch calls for {symbol}: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    print(f"[Webull] Error: Could not fetch calls for {symbol}: {e}")
                 
                 # Get put options
                 puts = []
                 seen_strikes = set()
                 try:
-                    print(f"[Webull] Fetching puts for {symbol} exp {expiration_date}")
                     put_data = wb.get_options(stock=symbol, direction='put', expireDate=expiration_date)
                     data_list = put_data if isinstance(put_data, list) else put_data.get('data', []) if isinstance(put_data, dict) else []
-                    print(f"[Webull] Put data type: {type(put_data)}, items: {len(data_list)}")
                     for row in data_list:
                         opt = extract_option(row, 'put')
                         if opt and opt['strike'] not in seen_strikes:
                             seen_strikes.add(opt['strike'])
                             puts.append(opt)
-                    print(f"[Webull] Parsed {len(puts)} unique put options")
                 except Exception as e:
-                    print(f"[Webull] Warning: Could not fetch puts for {symbol}: {e}")
+                    print(f"[Webull] Error: Could not fetch puts for {symbol}: {e}")
                 
                 # If chain data is missing bid/ask, fetch live quotes for ATM options
                 if needs_live_quotes and (calls or puts):
-                    print(f"[Webull] Chain data missing bid/ask, fetching live quotes for ATM strikes...")
                     
                     # Get stock price to determine ATM range
                     stock_price = None
@@ -3545,7 +3489,6 @@ class WebullBroker:
                                 except:
                                     pass
                         
-                        print(f"[Webull] Fetched {live_quote_count} live quotes for ATM options in parallel (stock={stock_price:.2f})")
                 
                 # Get stock price
                 stock_price = None
@@ -4331,17 +4274,7 @@ class SelfClient(discord.Client):
             await self.broker.login()
             if self.broker._logged_in:
                 print("[Webull] ✓ Login successful (LIVE account)", flush=True)
-                
-                # DEBUG: Fetch and display account data to verify field names
-                try:
-                    account_info = await self.broker.get_account_info()
-                    print(f"[Webull] [DEBUG] Account info result: {account_info}", flush=True)
-                except Exception as acct_err:
-                    print(f"[Webull] [DEBUG] Could not fetch account info: {acct_err}", flush=True)
-                
-                print("[DEBUG] 📣 Setting broker_ready event NOW!", flush=True)
                 self.broker_ready.set()
-                print("[DEBUG] ✅ broker_ready event SET!", flush=True)
             else:
                 print("[Webull] ⚠️  Broker not configured - configure via GUI (see startup logs for port)", flush=True)
         except Exception as e:
@@ -4583,9 +4516,6 @@ class SelfClient(discord.Client):
 
         # CRITICAL: Set broker_ready if ANY broker is available (not just Webull)
         # This fixes user builds where only Alpaca/Tastytrade are configured
-        _original_print(f"[DEBUG] Checking broker_ready: is_set={self.broker_ready.is_set()}", flush=True)
-        _original_print(f"[DEBUG] Broker states: webull={self.broker is not None and getattr(self.broker, 'is_logged_in', False)}, alpaca={self.paper_broker is not None}, tastytrade={self.tastytrade_broker is not None}, robinhood={self.robinhood_broker is not None}, ibkr={self.ibkr_broker is not None}", flush=True)
-        
         if not self.broker_ready.is_set():
             any_broker_available = (
                 (self.broker and getattr(self.broker, 'is_logged_in', False)) or
@@ -4594,15 +4524,10 @@ class SelfClient(discord.Client):
                 self.robinhood_broker or
                 self.ibkr_broker
             )
-            _original_print(f"[DEBUG] any_broker_available={any_broker_available}", flush=True)
             if any_broker_available:
-                _original_print("[DEBUG] 📣 Setting broker_ready - at least one broker is available!", flush=True)
                 self.broker_ready.set()
-                _original_print("[DEBUG] ✅ broker_ready event SET (non-Webull broker)!", flush=True)
             else:
                 _original_print("[WARNING] ⚠️ No brokers available - order worker will wait until a broker connects", flush=True)
-        else:
-            _original_print("[DEBUG] broker_ready already set (by Webull login)", flush=True)
 
         # Initialize and start BrokerSyncService for real-time trade synchronization
         try:
@@ -4631,11 +4556,8 @@ class SelfClient(discord.Client):
             traceback.print_exc()
             self.sync_service = None
 
-        print("[DEBUG] About to create worker task...")
         worker_task = asyncio.create_task(self.worker())
-        print(f"[DEBUG] Worker task created: {worker_task}")
         await asyncio.sleep(0)  # Yield to event loop so worker can start
-        print(f"[DEBUG] After yielding, worker task status: {worker_task}")
         self.processing_ready.set()
         print("[Init] ✓ Worker task started; processing signals.")
         
@@ -5577,18 +5499,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         print(f"[Discord RESUMED] Current latency: {self.latency * 1000:.2f}ms")
 
     async def on_message(self, message: discord.Message):
-        # Early debug: Log ALL incoming messages (before any filtering)
-        channel_name = getattr(message.channel, 'name', 'DM')
-        is_monitored = message.channel.id in CHANNEL_IDS
-        print(f"[Discord] 👁️ Message in #{channel_name} (ID:{message.channel.id}) - Monitored: {is_monitored}")
-        
         # Check database for channel info (dual-mode support)
         channel_info = self._get_channel_info(message.channel.id)
         channel_category = channel_info['category'] if channel_info else None
         execute_enabled = channel_info.get('execute_enabled', 0) if channel_info else False
         track_enabled = channel_info.get('track_enabled', 0) if channel_info else False
-        
-        print(f"[Discord] Channel info: {channel_info is not None}, Execute: {execute_enabled}, Track: {track_enabled}")
         
         # Check if this channel is a source in channel mappings (multi-channel conversion)
         is_mapped_source_channel = False
@@ -5604,7 +5519,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         
         # If not in database, not in legacy CHANNEL_IDS list, AND not a mapped source, ignore
         if not channel_info and message.channel.id not in CHANNEL_IDS and not is_mapped_source_channel:
-            print(f"[Discord] ❌ Ignoring - not in database or CHANNEL_IDS")
             return
         
         # Deduplicate messages (Discord self-bot sometimes delivers duplicate events)
