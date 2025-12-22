@@ -186,8 +186,11 @@ class SetupWizard(QMainWindow):
         sidebar.setFixedWidth(280)
         sidebar.setStyleSheet("""
             QFrame#sidebar {
-                background-color: #161b22;
-                border-right: 1px solid #30363d;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #0f1419,
+                    stop:0.5 #141b24,
+                    stop:1 #0f1419);
+                border-right: 1px solid #1e2936;
             }
         """)
         
@@ -201,14 +204,15 @@ class SetupWizard(QMainWindow):
         
         logo_label = QLabel("🤖 BotifyTrades")
         logo_label.setStyleSheet("""
-            color: #e6edf3;
-            font-size: 18px;
-            font-weight: 700;
+            color: #ffffff;
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
         """)
         header_layout.addWidget(logo_label)
         
         setup_label = QLabel("Setup Wizard")
-        setup_label.setStyleSheet("color: #8b949e; font-size: 12px; margin-top: 4px;")
+        setup_label.setStyleSheet("color: #4ecdc4; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-top: 6px;")
         header_layout.addWidget(setup_label)
         
         layout.addWidget(header)

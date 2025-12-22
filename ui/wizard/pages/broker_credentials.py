@@ -129,7 +129,7 @@ class BrokerCredentialForm(QFrame):
 
 
 class WebullCredentialForm(BrokerCredentialForm):
-    """Webull-specific credential form"""
+    """Webull-specific credential form with token-based authentication"""
     
     def __init__(self, parent=None):
         super().__init__("webull", "Webull", parent)
@@ -137,69 +137,143 @@ class WebullCredentialForm(BrokerCredentialForm):
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(16)
+        layout.setSpacing(20)
         
-        title = QLabel("📈 Webull Credentials")
-        title.setStyleSheet("color: #e6edf3; font-size: 18px; font-weight: 600; border: none;")
-        layout.addWidget(title)
+        header_frame = QFrame()
+        header_frame.setStyleSheet("""
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(78, 205, 196, 0.15),
+                    stop:1 transparent);
+                border: none;
+                border-left: 4px solid #4ecdc4;
+                border-radius: 0px;
+                padding: 16px;
+            }
+        """)
+        header_layout = QVBoxLayout(header_frame)
+        header_layout.setContentsMargins(12, 8, 12, 8)
         
-        desc = QLabel("Enter your Webull login credentials. The Trade PIN is required for order execution.")
-        desc.setStyleSheet("color: #8b949e; font-size: 12px; border: none;")
+        title = QLabel("📈 Webull Token Authentication")
+        title.setStyleSheet("color: #ffffff; font-size: 20px; font-weight: 700; border: none; background: transparent;")
+        header_layout.addWidget(title)
+        
+        desc = QLabel("Webull uses token-based authentication for secure API access. You can obtain your tokens from the Webull desktop app or web interface.")
+        desc.setStyleSheet("color: #8899a6; font-size: 13px; border: none; background: transparent; line-height: 1.4;")
         desc.setWordWrap(True)
-        layout.addWidget(desc)
+        header_layout.addWidget(desc)
+        layout.addWidget(header_frame)
+        
+        token_section = QLabel("AUTHENTICATION TOKENS")
+        token_section.setStyleSheet("""
+            color: #4ecdc4;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            border: none;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #1e2936;
+        """)
+        layout.addWidget(token_section)
         
         form = QFormLayout()
-        form.setSpacing(12)
+        form.setSpacing(16)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         
-        self.email_field = self.create_text_field("email@example.com")
-        form.addRow("Email:", self.email_field)
+        self.device_id_field = self.create_text_field("Your Webull Device ID")
+        self.device_id_field.setMinimumHeight(44)
+        device_label = QLabel("Device ID:")
+        device_label.setStyleSheet("color: #e6edf3; font-weight: 600; font-size: 13px;")
+        form.addRow(device_label, self.device_id_field)
         
-        self.password_field = self.create_password_field("Enter password...")
-        form.addRow("Password:", self.password_field)
+        self.access_token_field = self.create_password_field("Your Webull Access Token")
+        self.access_token_field.setMinimumHeight(44)
+        token_label = QLabel("Access Token:")
+        token_label.setStyleSheet("color: #e6edf3; font-weight: 600; font-size: 13px;")
+        form.addRow(token_label, self.access_token_field)
         
-        self.trade_pin_field = self.create_password_field("6-digit PIN")
+        self.trade_pin_field = self.create_password_field("6-digit Trading PIN")
         self.trade_pin_field.setMaxLength(6)
-        form.addRow("Trade PIN:", self.trade_pin_field)
+        self.trade_pin_field.setMinimumHeight(44)
+        pin_label = QLabel("Trade PIN:")
+        pin_label.setStyleSheet("color: #e6edf3; font-weight: 600; font-size: 13px;")
+        form.addRow(pin_label, self.trade_pin_field)
         
         layout.addLayout(form)
         
         self.paper_mode_check = QCheckBox("Use Paper Trading (Recommended for testing)")
         self.paper_mode_check.setChecked(True)
-        self.paper_mode_check.setStyleSheet("color: #e6edf3; font-size: 13px; border: none;")
+        self.paper_mode_check.setStyleSheet("""
+            QCheckBox {
+                color: #e6edf3;
+                font-size: 14px;
+                border: none;
+                spacing: 12px;
+            }
+        """)
         layout.addWidget(self.paper_mode_check)
         
         test_layout = QHBoxLayout()
         self.test_btn = self.create_test_button()
+        self.test_btn.setText("Validate Token")
         test_layout.addWidget(self.test_btn)
         
         self.test_status = QLabel("")
         self.test_status.setStyleSheet("font-size: 13px; border: none;")
         test_layout.addWidget(self.test_status)
         test_layout.addStretch()
-        
         layout.addLayout(test_layout)
+        
+        help_frame = QFrame()
+        help_frame.setStyleSheet("""
+            QFrame {
+                background-color: rgba(42, 58, 74, 0.3);
+                border: 1px solid #2a3a4a;
+                border-radius: 8px;
+                padding: 12px;
+            }
+        """)
+        help_layout = QVBoxLayout(help_frame)
+        help_layout.setSpacing(8)
+        
+        help_title = QLabel("💡 How to get your Webull tokens:")
+        help_title.setStyleSheet("color: #4ecdc4; font-size: 13px; font-weight: 600; border: none; background: transparent;")
+        help_layout.addWidget(help_title)
+        
+        steps = [
+            "1. Open Webull desktop app or log into web interface",
+            "2. In the bot's Settings page, click 'Connect Webull'",
+            "3. Complete login - tokens will be saved automatically",
+            "4. Copy Device ID and Access Token here"
+        ]
+        for step in steps:
+            step_label = QLabel(step)
+            step_label.setStyleSheet("color: #8899a6; font-size: 12px; border: none; background: transparent; padding-left: 8px;")
+            help_layout.addWidget(step_label)
+        
+        layout.addWidget(help_frame)
     
     def get_credentials(self) -> Dict[str, Any]:
         return {
             "broker": "webull",
-            "email": self.email_field.text().strip(),
-            "password": self.password_field.text(),
+            "device_id": self.device_id_field.text().strip(),
+            "access_token": self.access_token_field.text().strip(),
             "trade_pin": self.trade_pin_field.text(),
             "paper_trade": self.paper_mode_check.isChecked()
         }
     
     def set_credentials(self, data: Dict[str, Any]):
-        self.email_field.setText(data.get("email", ""))
-        self.password_field.setText(data.get("password", ""))
+        self.device_id_field.setText(data.get("device_id", ""))
+        self.access_token_field.setText(data.get("access_token", ""))
         self.trade_pin_field.setText(data.get("trade_pin", ""))
         self.paper_mode_check.setChecked(data.get("paper_trade", True))
     
     def is_valid(self) -> Tuple[bool, str]:
-        if not self.email_field.text().strip():
-            return False, "Webull email is required"
-        if not self.password_field.text():
-            return False, "Webull password is required"
-        if len(self.trade_pin_field.text()) != 6:
+        if not self.device_id_field.text().strip():
+            return False, "Webull Device ID is required"
+        if not self.access_token_field.text().strip():
+            return False, "Webull Access Token is required"
+        if self.trade_pin_field.text() and len(self.trade_pin_field.text()) != 6:
             return False, "Trade PIN must be 6 digits"
         return True, ""
 
