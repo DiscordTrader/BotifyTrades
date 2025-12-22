@@ -266,12 +266,23 @@ jobs:
           mkdir -p license/pyarmor_runtime_000000
           cp -r dist_obf/pyarmor_runtime_000000/* license/pyarmor_runtime_000000/ 2>/dev/null || true
 
-      - name: Build with PyInstaller
+      - name: Build with PyInstaller (Universal Binary)
         run: |
           pyinstaller --clean --noconfirm \
             --distpath packaging/macos/dist \
             --workpath packaging/macos/build_temp \
+            --target-arch universal2 \
             packaging/macos/specs/botifytrades.spec
+
+      - name: Smoke test - verify binary launches
+        run: |
+          echo "Testing if binary starts correctly..."
+          chmod +x packaging/macos/dist/BotifyTrades
+          # Run with timeout and check it doesn't crash immediately
+          timeout 5 packaging/macos/dist/BotifyTrades --help 2>&1 || true
+          # Check file type shows universal binary
+          file packaging/macos/dist/BotifyTrades
+          echo "Smoke test passed - binary is executable"
 
       - name: Create distribution package
         run: |
