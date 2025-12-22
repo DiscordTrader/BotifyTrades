@@ -5132,7 +5132,7 @@ def register_routes(app):
             
             data = request.json or {}
             user_description = data.get('description', '')
-            admin_email = data.get('admin_email', 'uk15286@gmail.com')
+            admin_email = data.get('admin_email', 'admin@botifytrades.com')
             
             service = get_debug_report_service(admin_email)
             reference_number, report_data = service.generate_report(user_description)

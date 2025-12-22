@@ -282,21 +282,26 @@ Sensitive data (credentials, balances, account numbers) has been filtered.
     
     async def send_report_email(self, report_data: Dict) -> Dict[str, Any]:
         """Send the debug report via email using Gmail service."""
+        ref = report_data.get('reference_number', 'Unknown')
+        print(f"[DEBUG-REPORT] Attempting to send report {ref} to {self.admin_email}")
+        
         try:
             from services.gmail_service import get_gmail_service
             
             gmail = get_gmail_service()
             text_body, html_body = self.format_email_body(report_data)
             
-            ref = report_data.get('reference_number', 'Unknown')
             subject = f"🔧 BotifyTrades Debug Report - {ref}"
             
+            print(f"[DEBUG-REPORT] Using Gmail connector to send email...")
             result = await gmail.send_email(
                 to=self.admin_email,
                 subject=subject,
                 body=text_body,
                 html_body=html_body
             )
+            
+            print(f"[DEBUG-REPORT] Gmail result: {result}")
             
             if result.get('success'):
                 db.update_debug_report_sent(ref)
@@ -306,42 +311,44 @@ Sensitive data (credentials, balances, account numbers) has been filtered.
                     'message': f'Debug report sent successfully. Reference: {ref}'
                 }
             else:
-                return {
-                    'success': False,
-                    'reference_number': ref,
-                    'error': result.get('error', 'Failed to send email')
-                }
-        except ImportError:
+                print(f"[DEBUG-REPORT] Gmail failed, trying SMTP fallback...")
+                return await self._send_via_smtp(report_data)
+        except ImportError as e:
+            print(f"[DEBUG-REPORT] Gmail service not available ({e}), trying SMTP...")
             return await self._send_via_smtp(report_data)
         except Exception as e:
-            return {
-                'success': False,
-                'reference_number': report_data.get('reference_number', 'Unknown'),
-                'error': str(e)
-            }
+            print(f"[DEBUG-REPORT] Gmail error ({e}), trying SMTP fallback...")
+            return await self._send_via_smtp(report_data)
     
     async def _send_via_smtp(self, report_data: Dict) -> Dict[str, Any]:
         """Fallback to SMTP email if Gmail connector not available."""
+        ref = report_data.get('reference_number', 'Unknown')
+        print(f"[DEBUG-REPORT] Attempting SMTP fallback for {ref}")
+        
         try:
             from gui_app.email_service import get_email_service
             
             email_service = get_email_service()
             if not email_service.is_configured():
+                error_msg = 'Email service not configured. Please set SENDER_EMAIL and GMAIL_APP_PASSWORD in secrets.'
+                print(f"[DEBUG-REPORT] SMTP not configured: {error_msg}")
                 return {
                     'success': False,
-                    'reference_number': report_data.get('reference_number', 'Unknown'),
-                    'error': 'Email service not configured. Please set SENDER_EMAIL and GMAIL_APP_PASSWORD.'
+                    'reference_number': ref,
+                    'error': error_msg
                 }
             
             text_body, html_body = self.format_email_body(report_data)
-            ref = report_data.get('reference_number', 'Unknown')
             
+            print(f"[DEBUG-REPORT] Sending via SMTP to {self.admin_email}...")
             result = email_service._send_email(
                 to_email=self.admin_email,
                 subject=f"🔧 BotifyTrades Debug Report - {ref}",
                 text_body=text_body,
                 html_body=html_body
             )
+            
+            print(f"[DEBUG-REPORT] SMTP result: {result}")
             
             if result.get('success'):
                 db.update_debug_report_sent(ref)
@@ -352,11 +359,21 @@ Sensitive data (credentials, balances, account numbers) has been filtered.
                 'message': result.get('message', ''),
                 'error': result.get('error', '')
             }
-        except Exception as e:
+        except ImportError as e:
+            error_msg = f'Email service module not available: {e}'
+            print(f"[DEBUG-REPORT] {error_msg}")
             return {
                 'success': False,
-                'reference_number': report_data.get('reference_number', 'Unknown'),
-                'error': str(e)
+                'reference_number': ref,
+                'error': error_msg
+            }
+        except Exception as e:
+            error_msg = f'SMTP error: {e}'
+            print(f"[DEBUG-REPORT] {error_msg}")
+            return {
+                'success': False,
+                'reference_number': ref,
+                'error': error_msg
             }
 
 
