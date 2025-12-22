@@ -27,7 +27,7 @@ from .base_page import BasePage
 
 
 class ChannelConfigCard(QFrame):
-    """Configuration card for a single channel"""
+    """Configuration card for a single channel - matches web GUI layout"""
     
     removed = Signal(str)
     
@@ -40,21 +40,44 @@ class ChannelConfigCard(QFrame):
     def _setup_ui(self):
         self.setStyleSheet("""
             QFrame {
-                background-color: #161b22;
-                border: 1px solid #30363d;
-                border-radius: 8px;
-                padding: 16px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(20, 24, 33, 0.95),
+                    stop:1 rgba(14, 17, 23, 0.95));
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 16px;
+                padding: 20px;
+            }
+            QFrame:hover {
+                border-color: rgba(78, 205, 196, 0.3);
             }
         """)
         
         layout = QVBoxLayout(self)
-        layout.setSpacing(12)
+        layout.setSpacing(16)
         
         header = QHBoxLayout()
         
+        info_widget = QWidget()
+        info_layout = QVBoxLayout(info_widget)
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(4)
+        
         name_label = QLabel(f"#{self.channel_name}")
-        name_label.setStyleSheet("color: #e6edf3; font-size: 16px; font-weight: 600;")
-        header.addWidget(name_label)
+        name_label.setStyleSheet("color: #ffffff; font-size: 18px; font-weight: 600; background: transparent; border: none;")
+        info_layout.addWidget(name_label)
+        
+        id_label = QLabel(self.channel_id)
+        id_label.setStyleSheet("""
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 11px;
+            font-family: monospace;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: none;
+        """)
+        info_layout.addWidget(id_label)
+        header.addWidget(info_widget)
         
         header.addStretch()
         
@@ -62,13 +85,15 @@ class ChannelConfigCard(QFrame):
         remove_btn.setStyleSheet("""
             QPushButton {
                 background-color: transparent;
-                border: none;
-                color: #8b949e;
-                font-size: 16px;
-                padding: 4px 8px;
+                border: 1px solid rgba(239, 68, 68, 0.3);
+                border-radius: 8px;
+                color: #ef4444;
+                font-size: 14px;
+                padding: 8px 12px;
             }
             QPushButton:hover {
-                color: #f85149;
+                background-color: rgba(239, 68, 68, 0.1);
+                border-color: #ef4444;
             }
         """)
         remove_btn.clicked.connect(lambda: self.removed.emit(self.channel_id))
@@ -76,141 +101,150 @@ class ChannelConfigCard(QFrame):
         
         layout.addLayout(header)
         
-        settings_layout = QHBoxLayout()
-        settings_layout.setSpacing(16)
+        controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(16)
         
-        strategy_widget = QWidget()
-        strategy_layout = QVBoxLayout(strategy_widget)
-        strategy_layout.setContentsMargins(0, 0, 0, 0)
-        strategy_layout.setSpacing(4)
-        
-        strategy_label = QLabel("Strategy Profile")
-        strategy_label.setStyleSheet("color: #8b949e; font-size: 11px;")
-        strategy_layout.addWidget(strategy_label)
-        
-        self.strategy_combo = QComboBox()
-        self.strategy_combo.addItems(["Scalp", "Day", "Swing"])
-        self.strategy_combo.setStyleSheet("""
-            QComboBox {
-                background-color: #21262d;
-                border: 1px solid #30363d;
-                border-radius: 4px;
-                padding: 6px 10px;
-                color: #e6edf3;
-                min-width: 100px;
+        execute_group = QFrame()
+        execute_group.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.03);
+                border-radius: 12px;
+                padding: 14px;
+                border: none;
             }
         """)
-        strategy_layout.addWidget(self.strategy_combo)
-        settings_layout.addWidget(strategy_widget)
+        execute_layout = QVBoxLayout(execute_group)
+        execute_layout.setSpacing(10)
         
-        max_trades_widget = QWidget()
-        max_trades_layout = QVBoxLayout(max_trades_widget)
-        max_trades_layout.setContentsMargins(0, 0, 0, 0)
-        max_trades_layout.setSpacing(4)
-        
-        max_trades_label = QLabel("Max Trades/Day")
-        max_trades_label.setStyleSheet("color: #8b949e; font-size: 11px;")
-        max_trades_layout.addWidget(max_trades_label)
-        
-        self.max_trades_spin = QSpinBox()
-        self.max_trades_spin.setRange(1, 100)
-        self.max_trades_spin.setValue(10)
-        self.max_trades_spin.setStyleSheet("""
-            QSpinBox {
-                background-color: #21262d;
-                border: 1px solid #30363d;
-                border-radius: 4px;
-                padding: 6px;
-                color: #e6edf3;
-            }
-        """)
-        max_trades_layout.addWidget(self.max_trades_spin)
-        settings_layout.addWidget(max_trades_widget)
-        
-        max_contracts_widget = QWidget()
-        max_contracts_layout = QVBoxLayout(max_contracts_widget)
-        max_contracts_layout.setContentsMargins(0, 0, 0, 0)
-        max_contracts_layout.setSpacing(4)
-        
-        max_contracts_label = QLabel("Max Contracts")
-        max_contracts_label.setStyleSheet("color: #8b949e; font-size: 11px;")
-        max_contracts_layout.addWidget(max_contracts_label)
-        
-        self.max_contracts_spin = QSpinBox()
-        self.max_contracts_spin.setRange(1, 100)
-        self.max_contracts_spin.setValue(5)
-        self.max_contracts_spin.setStyleSheet("""
-            QSpinBox {
-                background-color: #21262d;
-                border: 1px solid #30363d;
-                border-radius: 4px;
-                padding: 6px;
-                color: #e6edf3;
-            }
-        """)
-        max_contracts_layout.addWidget(self.max_contracts_spin)
-        settings_layout.addWidget(max_contracts_widget)
-        
-        settings_layout.addStretch()
-        layout.addLayout(settings_layout)
-        
-        options_layout = QHBoxLayout()
-        options_layout.setSpacing(16)
-        
-        self.execute_check = QCheckBox("Execute Trades")
+        execute_header = QHBoxLayout()
+        execute_label = QLabel("Execute Trades")
+        execute_label.setStyleSheet("color: rgba(255, 255, 255, 0.6); font-size: 12px; background: transparent; border: none;")
+        execute_header.addWidget(execute_label)
+        execute_header.addStretch()
+        self.execute_check = QCheckBox()
         self.execute_check.setChecked(True)
-        self.execute_check.setStyleSheet("color: #e6edf3; font-size: 12px;")
-        options_layout.addWidget(self.execute_check)
+        self.execute_check.setStyleSheet("""
+            QCheckBox::indicator {
+                width: 44px;
+                height: 24px;
+                border-radius: 12px;
+                background: rgba(255, 255, 255, 0.1);
+            }
+            QCheckBox::indicator:checked {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #10b981, stop:1 #059669);
+            }
+        """)
+        execute_header.addWidget(self.execute_check)
+        execute_layout.addLayout(execute_header)
         
-        self.track_check = QCheckBox("Track Only")
-        self.track_check.setStyleSheet("color: #e6edf3; font-size: 12px;")
-        options_layout.addWidget(self.track_check)
+        exec_size_layout = QHBoxLayout()
+        exec_size_layout.setSpacing(8)
+        self.exec_position_size = QSpinBox()
+        self.exec_position_size.setRange(1, 100)
+        self.exec_position_size.setValue(5)
+        self.exec_position_size.setStyleSheet("""
+            QSpinBox {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(16, 185, 129, 0.3);
+                border-radius: 8px;
+                padding: 8px 12px;
+                color: #ffffff;
+                font-size: 14px;
+                min-width: 60px;
+            }
+            QSpinBox:focus {
+                border-color: #10b981;
+            }
+        """)
+        exec_size_layout.addWidget(self.exec_position_size)
+        exec_pct_label = QLabel("%")
+        exec_pct_label.setStyleSheet("color: rgba(255, 255, 255, 0.4); font-size: 14px; background: transparent; border: none;")
+        exec_size_layout.addWidget(exec_pct_label)
+        exec_size_layout.addStretch()
+        execute_layout.addLayout(exec_size_layout)
         
-        self.calls_check = QCheckBox("Calls")
-        self.calls_check.setChecked(True)
-        self.calls_check.setStyleSheet("color: #e6edf3; font-size: 12px;")
-        options_layout.addWidget(self.calls_check)
+        controls_layout.addWidget(execute_group)
         
-        self.puts_check = QCheckBox("Puts")
-        self.puts_check.setChecked(True)
-        self.puts_check.setStyleSheet("color: #e6edf3; font-size: 12px;")
-        options_layout.addWidget(self.puts_check)
+        track_group = QFrame()
+        track_group.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.03);
+                border-radius: 12px;
+                padding: 14px;
+                border: none;
+            }
+        """)
+        track_layout = QVBoxLayout(track_group)
+        track_layout.setSpacing(10)
         
-        self.dte0_check = QCheckBox("0DTE")
-        self.dte0_check.setChecked(True)
-        self.dte0_check.setStyleSheet("color: #e6edf3; font-size: 12px;")
-        options_layout.addWidget(self.dte0_check)
+        track_header = QHBoxLayout()
+        track_label = QLabel("Track Only")
+        track_label.setStyleSheet("color: rgba(255, 255, 255, 0.6); font-size: 12px; background: transparent; border: none;")
+        track_header.addWidget(track_label)
+        track_header.addStretch()
+        self.track_check = QCheckBox()
+        self.track_check.setStyleSheet("""
+            QCheckBox::indicator {
+                width: 44px;
+                height: 24px;
+                border-radius: 12px;
+                background: rgba(255, 255, 255, 0.1);
+            }
+            QCheckBox::indicator:checked {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #0ff0b3, stop:1 #06b6d4);
+            }
+        """)
+        track_header.addWidget(self.track_check)
+        track_layout.addLayout(track_header)
         
-        options_layout.addStretch()
-        layout.addLayout(options_layout)
+        track_size_layout = QHBoxLayout()
+        track_size_layout.setSpacing(8)
+        self.track_position_size = QSpinBox()
+        self.track_position_size.setRange(1, 100)
+        self.track_position_size.setValue(5)
+        self.track_position_size.setStyleSheet("""
+            QSpinBox {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 8px;
+                padding: 8px 12px;
+                color: #ffffff;
+                font-size: 14px;
+                min-width: 60px;
+            }
+            QSpinBox:focus {
+                border-color: #0ff0b3;
+            }
+        """)
+        track_size_layout.addWidget(self.track_position_size)
+        track_pct_label = QLabel("%")
+        track_pct_label.setStyleSheet("color: rgba(255, 255, 255, 0.4); font-size: 14px; background: transparent; border: none;")
+        track_size_layout.addWidget(track_pct_label)
+        track_size_layout.addStretch()
+        track_layout.addLayout(track_size_layout)
+        
+        controls_layout.addWidget(track_group)
+        controls_layout.addStretch()
+        
+        layout.addLayout(controls_layout)
     
     def get_config(self) -> Dict[str, Any]:
         return {
             "channel_id": self.channel_id,
             "channel_name": self.channel_name,
-            "strategy": self.strategy_combo.currentText().lower(),
-            "max_trades_per_day": self.max_trades_spin.value(),
-            "max_contracts": self.max_contracts_spin.value(),
             "execute_enabled": self.execute_check.isChecked(),
+            "exec_position_size_pct": self.exec_position_size.value(),
             "track_enabled": self.track_check.isChecked(),
-            "allow_calls": self.calls_check.isChecked(),
-            "allow_puts": self.puts_check.isChecked(),
-            "allow_0dte": self.dte0_check.isChecked()
+            "track_position_size_pct": self.track_position_size.value()
         }
     
     def set_config(self, config: Dict[str, Any]):
-        strategy = config.get("strategy", "scalp")
-        idx = self.strategy_combo.findText(strategy.capitalize())
-        if idx >= 0:
-            self.strategy_combo.setCurrentIndex(idx)
-        
-        self.max_trades_spin.setValue(config.get("max_trades_per_day", 10))
-        self.max_contracts_spin.setValue(config.get("max_contracts", 5))
         self.execute_check.setChecked(config.get("execute_enabled", True))
+        self.exec_position_size.setValue(config.get("exec_position_size_pct", 5))
         self.track_check.setChecked(config.get("track_enabled", False))
-        self.calls_check.setChecked(config.get("allow_calls", True))
-        self.puts_check.setChecked(config.get("allow_puts", True))
-        self.dte0_check.setChecked(config.get("allow_0dte", True))
+        self.track_position_size.setValue(config.get("track_position_size_pct", 5))
 
 
 class ChannelConfigPage(BasePage):
@@ -228,53 +262,112 @@ class ChannelConfigPage(BasePage):
     
     def _setup_ui(self):
         """Set up the channel configuration UI"""
-        add_section = QWidget()
-        add_layout = QHBoxLayout(add_section)
-        add_layout.setContentsMargins(0, 0, 0, 0)
-        add_layout.setSpacing(12)
-        
-        add_label = QLabel("Add Channel:")
-        add_label.setStyleSheet("color: #8b949e; font-size: 14px;")
-        add_layout.addWidget(add_label)
-        
-        self.channel_input = QLineEdit()
-        self.channel_input.setPlaceholderText("Enter channel ID or name...")
-        self.channel_input.setStyleSheet("""
-            QLineEdit {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
-                border-radius: 6px;
-                padding: 10px 12px;
-                color: #e6edf3;
-                font-size: 14px;
-                min-width: 300px;
+        add_card = QFrame()
+        add_card.setStyleSheet("""
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(20, 24, 33, 0.85),
+                    stop:1 rgba(14, 17, 23, 0.85));
+                border: 2px dashed rgba(15, 240, 179, 0.3);
+                border-radius: 20px;
+                padding: 24px;
             }
-            QLineEdit:focus {
-                border-color: #4ade80;
+            QFrame:hover {
+                border-color: #0ff0b3;
             }
         """)
-        add_layout.addWidget(self.channel_input)
+        add_card_layout = QVBoxLayout(add_card)
+        add_card_layout.setSpacing(20)
         
-        add_btn = QPushButton("Add Channel")
+        add_title = QLabel("➕ Add New Channel")
+        add_title.setStyleSheet("color: #0ff0b3; font-size: 16px; font-weight: 600; background: transparent; border: none;")
+        add_card_layout.addWidget(add_title)
+        
+        form_layout = QHBoxLayout()
+        form_layout.setSpacing(16)
+        
+        id_group = QWidget()
+        id_layout = QVBoxLayout(id_group)
+        id_layout.setContentsMargins(0, 0, 0, 0)
+        id_layout.setSpacing(8)
+        id_label = QLabel("DISCORD CHANNEL ID")
+        id_label.setStyleSheet("color: rgba(255, 255, 255, 0.6); font-size: 11px; font-weight: 500; letter-spacing: 0.5px; background: transparent; border: none;")
+        id_layout.addWidget(id_label)
+        self.channel_id_input = QLineEdit()
+        self.channel_id_input.setPlaceholderText("123456789012345678")
+        self.channel_id_input.setStyleSheet("""
+            QLineEdit {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 12px;
+                padding: 14px 18px;
+                color: #ffffff;
+                font-size: 14px;
+                min-width: 200px;
+            }
+            QLineEdit:focus {
+                border-color: #0ff0b3;
+            }
+            QLineEdit::placeholder {
+                color: rgba(255, 255, 255, 0.3);
+            }
+        """)
+        id_layout.addWidget(self.channel_id_input)
+        form_layout.addWidget(id_group)
+        
+        name_group = QWidget()
+        name_layout = QVBoxLayout(name_group)
+        name_layout.setContentsMargins(0, 0, 0, 0)
+        name_layout.setSpacing(8)
+        name_label = QLabel("CHANNEL NAME")
+        name_label.setStyleSheet("color: rgba(255, 255, 255, 0.6); font-size: 11px; font-weight: 500; letter-spacing: 0.5px; background: transparent; border: none;")
+        name_layout.addWidget(name_label)
+        self.channel_name_input = QLineEdit()
+        self.channel_name_input.setPlaceholderText("my-signals")
+        self.channel_name_input.setStyleSheet("""
+            QLineEdit {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 12px;
+                padding: 14px 18px;
+                color: #ffffff;
+                font-size: 14px;
+                min-width: 180px;
+            }
+            QLineEdit:focus {
+                border-color: #0ff0b3;
+            }
+            QLineEdit::placeholder {
+                color: rgba(255, 255, 255, 0.3);
+            }
+        """)
+        name_layout.addWidget(self.channel_name_input)
+        form_layout.addWidget(name_group)
+        
+        add_btn = QPushButton("➕ Add Channel")
         add_btn.setStyleSheet("""
             QPushButton {
-                background-color: #4ade80;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #0ff0b3, stop:1 #7c3aed);
                 border: none;
-                border-radius: 6px;
-                padding: 10px 20px;
-                color: #0d1117;
+                border-radius: 12px;
+                padding: 14px 28px;
+                color: #000000;
                 font-size: 14px;
-                font-weight: 500;
+                font-weight: 600;
             }
             QPushButton:hover {
-                background-color: #22c55e;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #0dd9a2, stop:1 #6d28d9);
             }
         """)
         add_btn.clicked.connect(self._add_channel)
-        add_layout.addWidget(add_btn)
+        form_layout.addWidget(add_btn, 0, Qt.AlignmentFlag.AlignBottom)
         
-        add_layout.addStretch()
-        self.content_layout.addWidget(add_section)
+        form_layout.addStretch()
+        add_card_layout.addLayout(form_layout)
+        
+        self.content_layout.addWidget(add_card)
         
         self.content_layout.addSpacing(16)
         
@@ -362,17 +455,19 @@ class ChannelConfigPage(BasePage):
     
     def _add_channel(self):
         """Add a new channel"""
-        channel_input = self.channel_input.text().strip()
+        channel_id = self.channel_id_input.text().strip()
+        channel_name = self.channel_name_input.text().strip()
         
-        if not channel_input:
+        if not channel_id:
             return
         
-        channel_id = channel_input.lstrip("#")
+        if not channel_name:
+            channel_name = channel_id
         
         if channel_id in self.channel_cards:
             return
         
-        card = ChannelConfigCard(channel_id, channel_id)
+        card = ChannelConfigCard(channel_id, channel_name)
         card.removed.connect(self._remove_channel)
         
         self.channel_cards[channel_id] = card
@@ -380,7 +475,8 @@ class ChannelConfigPage(BasePage):
         
         self.no_channels_label.hide()
         
-        self.channel_input.clear()
+        self.channel_id_input.clear()
+        self.channel_name_input.clear()
         self.data_changed.emit()
         self.validation_changed.emit(True)
     

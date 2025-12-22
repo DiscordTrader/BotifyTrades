@@ -180,22 +180,27 @@ class WizardDatabaseAdapter:
                 INSERT INTO channels (
                     discord_channel_id, name, category, 
                     execute_enabled, track_enabled, 
-                    broker_override, is_active
-                ) VALUES (?, ?, ?, ?, ?, ?, 1)
+                    broker_override, is_active,
+                    position_size_pct, tracking_position_size_pct
+                ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
                 ON CONFLICT(discord_channel_id) DO UPDATE SET
                     name = excluded.name,
                     category = excluded.category,
                     execute_enabled = excluded.execute_enabled,
                     track_enabled = excluded.track_enabled,
                     broker_override = excluded.broker_override,
-                    is_active = 1
+                    is_active = 1,
+                    position_size_pct = excluded.position_size_pct,
+                    tracking_position_size_pct = excluded.tracking_position_size_pct
             ''', (
                 discord_id,
                 ch.get('channel_name', ''),
                 category,
                 1 if execute_enabled else 0,
                 1 if track_enabled else 0,
-                ch.get('broker_override')
+                ch.get('broker_override'),
+                ch.get('exec_position_size_pct', 5),
+                ch.get('track_position_size_pct', 5)
             ))
         
         conn.commit()
