@@ -359,13 +359,38 @@ input:checked + .slider:before {
             🔄 Reload Credentials
         </button>
         <span id="reload-status" style="font-size: 12px; color: var(--text-secondary);"></span>
-        <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+        <div style="margin-left: auto; display: flex; align-items: center; gap: 12px;">
             <span style="font-size: 12px; color: var(--text-secondary);">Debug Mode:</span>
             <label class="toggle-switch" style="margin: 0;">
                 <input type="checkbox" id="debug-mode-toggle" onchange="toggleDebugMode(this.checked)">
                 <span class="toggle-slider"></span>
             </label>
             <span id="debug-status" style="font-size: 11px; font-weight: 600; color: #6c757d;">OFF</span>
+            <div style="border-left: 1px solid rgba(0, 212, 255, 0.3); height: 24px; margin: 0 8px;"></div>
+            <button onclick="showDebugReportModal()" class="btn" style="padding: 6px 12px; font-size: 11px; background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%); border: none; border-radius: 6px; color: white; cursor: pointer;">
+                🔧 Send Bug Report
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Debug Report Modal -->
+<div id="debug-report-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; align-items: center; justify-content: center;">
+    <div style="background: #0d2a3a; border-radius: 12px; padding: 30px; max-width: 500px; width: 90%; border: 1px solid rgba(0, 212, 255, 0.3);">
+        <h3 style="color: #00d4ff; margin-bottom: 20px;">🔧 Send Debug Report</h3>
+        <p style="color: #8899a6; margin-bottom: 20px; font-size: 14px;">
+            This will collect error logs and system info (without sensitive data like credentials or balances) and email it for troubleshooting.
+        </p>
+        <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 8px; color: var(--text-primary);">Describe the issue (optional):</label>
+            <textarea id="debug-report-description" rows="4" style="width: 100%; padding: 12px; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(0, 212, 255, 0.2); color: var(--text-primary); resize: vertical;" placeholder="e.g., Trades not executing, options not loading..."></textarea>
+        </div>
+        <div id="debug-report-result" style="display: none; padding: 15px; border-radius: 8px; margin-bottom: 20px;"></div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+            <button onclick="closeDebugReportModal()" class="btn btn-secondary" style="padding: 10px 20px;">Cancel</button>
+            <button id="submit-debug-report-btn" onclick="submitDebugReport()" class="btn btn-primary" style="padding: 10px 20px; background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);">
+                📧 Send Report
+            </button>
         </div>
     </div>
 </div>
@@ -1428,6 +1453,64 @@ async function toggleDebugMode(enabled) {
     } catch (error) {
         document.getElementById('debug-mode-toggle').checked = !enabled;
         showToast('Error updating debug mode', 'error');
+    }
+}
+
+function showDebugReportModal() {
+    document.getElementById('debug-report-modal').style.display = 'flex';
+    document.getElementById('debug-report-description').value = '';
+    document.getElementById('debug-report-result').style.display = 'none';
+    document.getElementById('submit-debug-report-btn').disabled = false;
+    document.getElementById('submit-debug-report-btn').textContent = '📧 Send Report';
+}
+
+function closeDebugReportModal() {
+    document.getElementById('debug-report-modal').style.display = 'none';
+}
+
+async function submitDebugReport() {
+    const btn = document.getElementById('submit-debug-report-btn');
+    const resultDiv = document.getElementById('debug-report-result');
+    const description = document.getElementById('debug-report-description').value;
+    
+    btn.disabled = true;
+    btn.textContent = '⏳ Sending...';
+    resultDiv.style.display = 'none';
+    
+    try {
+        const response = await fetch('/api/debug-report/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ description: description })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            resultDiv.style.display = 'block';
+            resultDiv.style.background = 'rgba(0, 255, 136, 0.1)';
+            resultDiv.style.border = '1px solid rgba(0, 255, 136, 0.3)';
+            resultDiv.innerHTML = `
+                <div style="color: #00ff88; font-weight: 600; margin-bottom: 8px;">✅ Report Submitted</div>
+                <div style="font-family: monospace; font-size: 16px; color: #00d4ff; margin-bottom: 8px;">${result.reference_number}</div>
+                <div style="color: #8899a6; font-size: 12px;">
+                    ${result.email_sent ? '📧 Email sent successfully' : '⚠️ Report saved but email could not be sent: ' + (result.email_error || 'Unknown error')}
+                </div>
+                <div style="color: #6c757d; font-size: 11px; margin-top: 8px;">Save this reference number for tracking.</div>
+            `;
+            btn.textContent = '✅ Sent';
+            showToast('Debug report submitted: ' + result.reference_number, 'success');
+        } else {
+            throw new Error(result.error || 'Failed to submit report');
+        }
+    } catch (error) {
+        resultDiv.style.display = 'block';
+        resultDiv.style.background = 'rgba(255, 107, 107, 0.1)';
+        resultDiv.style.border = '1px solid rgba(255, 107, 107, 0.3)';
+        resultDiv.innerHTML = `<div style="color: #ff6b6b;">❌ Error: ${error.message}</div>`;
+        btn.disabled = false;
+        btn.textContent = '📧 Send Report';
+        showToast('Failed to submit report: ' + error.message, 'error');
     }
 }
 

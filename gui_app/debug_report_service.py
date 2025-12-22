@@ -14,16 +14,28 @@ from gui_app import database as db
 
 SENSITIVE_PATTERNS = [
     (r'(api[_-]?key|secret[_-]?key|password|token|credential|access[_-]?token|refresh[_-]?token)\s*[:=]\s*[\'"]?[\w\-\.]+[\'"]?', '[REDACTED]'),
-    (r'(ALPACA_API_KEY|ALPACA_SECRET_KEY|WEBULL_PASSWORD|WEBULL_TRADE_PIN|DISCORD_TOKEN|OPENAI_API_KEY)\s*[:=]\s*[^\s]+', '[REDACTED]'),
+    (r'(ALPACA_API_KEY|ALPACA_SECRET_KEY|WEBULL_PASSWORD|WEBULL_TRADE_PIN|DISCORD_TOKEN|OPENAI_API_KEY|GMAIL_APP_PASSWORD|SMTP_PASSWORD)\s*[:=]\s*[^\s]+', '[REDACTED]'),
     (r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b', '[CARD REDACTED]'),
-    (r'(buying[_\s]?power|cash[_\s]?balance|net[_\s]?liq|account[_\s]?value|balance)\s*[:=]?\s*\$?[\d,]+\.?\d*', '[BALANCE REDACTED]'),
+    (r'(buying[_\s]?power|cash[_\s]?balance|net[_\s]?liq|account[_\s]?value|balance|equity|portfolio[_\s]?value)\s*[:=]?\s*\$?[\d,]+\.?\d*', '[BALANCE REDACTED]'),
+    (r'\$[\d,]+\.?\d{0,2}\b', '[AMOUNT REDACTED]'),
     (r'Account\s*#?:?\s*[\w\d\-]+', '[ACCOUNT REDACTED]'),
     (r'Account\s*ID:?\s*[\w\d\-]+', '[ACCOUNT ID REDACTED]'),
+    (r'Token starts with[:\s]+[A-Za-z0-9]+\.{3}', '[TOKEN PREFIX REDACTED]'),
+    (r'Token ends with[:\s]+\.{3}[A-Za-z0-9\-_]+', '[TOKEN SUFFIX REDACTED]'),
     (r'NDg5MjUxODk3ODIwMDUz[A-Za-z0-9\.\-_]+', '[DISCORD TOKEN REDACTED]'),
+    (r'[A-Za-z0-9]{20,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27}', '[DISCORD TOKEN REDACTED]'),
     (r'pk_live_[A-Za-z0-9]+', '[STRIPE KEY REDACTED]'),
     (r'sk_live_[A-Za-z0-9]+', '[STRIPE SECRET REDACTED]'),
+    (r'pk_test_[A-Za-z0-9]+', '[STRIPE TEST KEY REDACTED]'),
+    (r'sk_test_[A-Za-z0-9]+', '[STRIPE TEST SECRET REDACTED]'),
     (r'xoxb-[A-Za-z0-9\-]+', '[SLACK TOKEN REDACTED]'),
     (r'ghp_[A-Za-z0-9]+', '[GITHUB TOKEN REDACTED]'),
+    (r'sk-[A-Za-z0-9]{48}', '[OPENAI KEY REDACTED]'),
+    (r'[A-Z]{2,5}[0-9]{5,10}', '[BROKER ACCOUNT REDACTED]'),
+    (r'user:\s*[^\s@]+@[^\s]+', '[EMAIL REDACTED]'),
+    (r'email[:\s]+[^\s@]+@[^\s]+', '[EMAIL REDACTED]'),
+    (r'DID:\s*[\w]+', '[DEVICE ID REDACTED]'),
+    (r'machine[_\s]?id[:\s]+[\w\-]+', '[MACHINE ID REDACTED]'),
 ]
 
 
