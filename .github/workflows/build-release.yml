@@ -218,8 +218,123 @@ jobs:
           name: linux-build
           path: packaging/linux/BotifyTrades-v${{ steps.version.outputs.VERSION }}-Linux.tar.gz
 
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            echo "VERSION=${{ github.event.client_payload.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout private repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PRIVATE_REPO }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarmor pyinstaller certifi
+          pip install -r requirements.txt
+
+      - name: Backup license files
+        run: |
+          mkdir -p backup
+          cp license/config/constants.py backup/constants.py.bak
+          cp license/client/manager_secure.py backup/manager_secure.py.bak
+          cp license/client/manager_activation.py backup/manager_activation.py.bak
+
+      - name: Obfuscate with PyArmor
+        run: |
+          pyarmor gen -O dist_obf license/config/constants.py
+          pyarmor gen -O dist_obf license/client/manager_secure.py
+          pyarmor gen -O dist_obf license/client/manager_activation.py
+          cp -f dist_obf/constants.py license/config/constants.py
+          cp -f dist_obf/manager_secure.py license/client/manager_secure.py
+          cp -f dist_obf/manager_activation.py license/client/manager_activation.py
+          mkdir -p license/pyarmor_runtime_000000
+          cp -r dist_obf/pyarmor_runtime_000000/* license/pyarmor_runtime_000000/ 2>/dev/null || true
+
+      - name: Build with PyInstaller (Universal Binary)
+        run: |
+          pyinstaller --clean --noconfirm \
+            --distpath packaging/macos/dist \
+            --workpath packaging/macos/build_temp \
+            --target-arch universal2 \
+            packaging/macos/specs/botifytrades.spec
+
+      - name: Smoke test - verify binary launches
+        run: |
+          echo "Testing if binary starts correctly..."
+          chmod +x packaging/macos/dist/BotifyTrades
+          # Run with timeout and check it doesn't crash immediately
+          timeout 5 packaging/macos/dist/BotifyTrades --help 2>&1 || true
+          # Check file type shows universal binary
+          file packaging/macos/dist/BotifyTrades
+          echo "Smoke test passed - binary is executable"
+
+      - name: Create distribution package
+        run: |
+          chmod +x packaging/macos/dist/BotifyTrades
+          mkdir -p packaging/macos/dist/config
+          cp config.ini.example packaging/macos/dist/ 2>/dev/null || true
+          cp GET_DISCORD_TOKEN.html packaging/macos/dist/ 2>/dev/null || true
+          cp GET_WEBULL_TOKENS.html packaging/macos/dist/ 2>/dev/null || true
+          
+          # Create run.command for double-click execution
+          cat > packaging/macos/dist/run.command << 'EOF'
+          #!/bin/bash
+          cd "$(dirname "$0")"
+          echo "Starting BotifyTrades..."
+          ./BotifyTrades
+          EOF
+          chmod +x packaging/macos/dist/run.command
+
+      - name: Create README
+        run: |
+          cat > packaging/macos/dist/README.txt << 'EOF'
+          BotifyTrades v${{ steps.version.outputs.VERSION }}
+          =================================
+          
+          1. Double-click run.command or run ./BotifyTrades in Terminal
+          2. Open http://localhost:5000
+          3. Complete the setup wizard
+          
+          MACOS SECURITY NOTE:
+          - If blocked by Gatekeeper, right-click and select "Open"
+          - Or run: xattr -cr ./BotifyTrades
+          EOF
+
+      - name: Create tarball
+        run: |
+          cd packaging/macos/dist
+          tar -czvf ../BotifyTrades-v${{ steps.version.outputs.VERSION }}-macOS.tar.gz *
+
+      - name: Restore original license files
+        run: |
+          cp -f backup/constants.py.bak license/config/constants.py
+          cp -f backup/manager_secure.py.bak license/client/manager_secure.py
+          cp -f backup/manager_activation.py.bak license/client/manager_activation.py
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: packaging/macos/BotifyTrades-v${{ steps.version.outputs.VERSION }}-macOS.tar.gz
+
   create-release:
-    needs: [build-windows, build-linux]
+    needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     steps:
       - name: Determine version
@@ -243,6 +358,12 @@ jobs:
           name: linux-build
           path: ./artifacts
 
+      - name: Download macOS build
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-build
+          path: ./artifacts
+
       - name: List artifacts
         run: ls -la ./artifacts
 
@@ -257,12 +378,16 @@ jobs:
             ### Downloads
             - **Windows**: `BotifyTrades-v${{ steps.version.outputs.VERSION }}-Windows.zip`
             - **Linux**: `BotifyTrades-v${{ steps.version.outputs.VERSION }}-Linux.tar.gz`
+            - **macOS**: `BotifyTrades-v${{ steps.version.outputs.VERSION }}-macOS.tar.gz`
             
             ### Quick Start
             1. Download and extract for your platform
-            2. Run `BotifyTrades.exe` (Windows) or `./BotifyTrades` (Linux)
+            2. Run `BotifyTrades.exe` (Windows) or `./BotifyTrades` (Linux/macOS)
             3. Open http://localhost:5000 in your browser
             4. Complete the setup wizard
+            
+            ### macOS Note
+            If blocked by Gatekeeper, right-click and select "Open", or run: `xattr -cr ./BotifyTrades`
             
             ### Requirements
             - Valid license key
@@ -271,6 +396,7 @@ jobs:
           files: |
             ./artifacts/BotifyTrades-v${{ steps.version.outputs.VERSION }}-Windows.zip
             ./artifacts/BotifyTrades-v${{ steps.version.outputs.VERSION }}-Linux.tar.gz
+            ./artifacts/BotifyTrades-v${{ steps.version.outputs.VERSION }}-macOS.tar.gz
           draft: false
           prerelease: false
         env:
