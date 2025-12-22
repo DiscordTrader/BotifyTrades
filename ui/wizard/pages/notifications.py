@@ -40,26 +40,27 @@ class NotificationsPage(BasePage):
         discord_group = QGroupBox("Discord Notifications")
         discord_group.setStyleSheet("""
             QGroupBox {
-                border: 1px solid #30363d;
+                border: 1px solid rgba(0, 212, 255, 0.15);
                 border-radius: 8px;
-                margin-top: 16px;
-                padding-top: 16px;
+                margin-top: 12px;
+                padding-top: 12px;
                 font-weight: 600;
+                font-size: 12px;
                 color: #e6edf3;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 subcontrol-position: top left;
-                padding: 0 8px;
+                padding: 0 6px;
                 background-color: #0d1117;
             }
         """)
         discord_layout = QVBoxLayout(discord_group)
-        discord_layout.setSpacing(12)
+        discord_layout.setSpacing(8)
         
         self.discord_reply_check = QCheckBox("Reply to signal messages with trade confirmations")
         self.discord_reply_check.setChecked(True)
-        self.discord_reply_check.setStyleSheet("color: #e6edf3; font-size: 13px;")
+        self.discord_reply_check.setStyleSheet("color: #e6edf3; font-size: 11px;")
         discord_layout.addWidget(self.discord_reply_check)
         
         webhook_section = QWidget()
@@ -68,7 +69,7 @@ class NotificationsPage(BasePage):
         webhook_layout.setSpacing(8)
         
         self.webhook_check = QCheckBox("Send notifications to Discord webhook")
-        self.webhook_check.setStyleSheet("color: #e6edf3; font-size: 13px;")
+        self.webhook_check.setStyleSheet("color: #e6edf3; font-size: 11px;")
         self.webhook_check.stateChanged.connect(self._on_webhook_toggled)
         webhook_layout.addWidget(self.webhook_check)
         
@@ -80,12 +81,12 @@ class NotificationsPage(BasePage):
         self.webhook_input.setPlaceholderText("https://discord.com/api/webhooks/...")
         self.webhook_input.setStyleSheet("""
             QLineEdit {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 10px 12px;
+                padding: 8px 10px;
                 color: #e6edf3;
-                font-size: 14px;
+                font-size: 12px;
             }
             QLineEdit:focus {
                 border-color: #00d4ff;
@@ -96,15 +97,18 @@ class NotificationsPage(BasePage):
         test_webhook_btn = QPushButton("Test")
         test_webhook_btn.setStyleSheet("""
             QPushButton {
-                background-color: #1f6feb;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #00d4ff, stop:1 #0080ff);
                 border: none;
                 border-radius: 6px;
-                padding: 10px 16px;
-                color: #ffffff;
-                font-size: 13px;
+                padding: 8px 14px;
+                color: #0d1117;
+                font-size: 11px;
+                font-weight: 600;
             }
             QPushButton:hover {
-                background-color: #388bfd;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #00e5ff, stop:1 #0090ff);
             }
         """)
         test_webhook_btn.clicked.connect(self._test_webhook)
@@ -119,11 +123,11 @@ class NotificationsPage(BasePage):
         desktop_group = QGroupBox("Desktop Notifications")
         desktop_group.setStyleSheet(discord_group.styleSheet())
         desktop_layout = QVBoxLayout(desktop_group)
-        desktop_layout.setSpacing(12)
+        desktop_layout.setSpacing(8)
         
         self.desktop_enabled_check = QCheckBox("Enable desktop notifications")
         self.desktop_enabled_check.setChecked(True)
-        self.desktop_enabled_check.setStyleSheet("color: #e6edf3; font-size: 13px;")
+        self.desktop_enabled_check.setStyleSheet("color: #e6edf3; font-size: 11px;")
         desktop_layout.addWidget(self.desktop_enabled_check)
         
         notify_options = QWidget()
@@ -133,21 +137,21 @@ class NotificationsPage(BasePage):
         
         self.notify_bto_check = QCheckBox("Notify on BTO (Buy to Open)")
         self.notify_bto_check.setChecked(True)
-        self.notify_bto_check.setStyleSheet("color: #8b949e; font-size: 12px;")
+        self.notify_bto_check.setStyleSheet("color: #8b949e; font-size: 10px;")
         options_layout.addWidget(self.notify_bto_check)
         
         self.notify_stc_check = QCheckBox("Notify on STC (Sell to Close)")
         self.notify_stc_check.setChecked(True)
-        self.notify_stc_check.setStyleSheet("color: #8b949e; font-size: 12px;")
+        self.notify_stc_check.setStyleSheet("color: #8b949e; font-size: 10px;")
         options_layout.addWidget(self.notify_stc_check)
         
         self.notify_errors_check = QCheckBox("Notify on errors")
         self.notify_errors_check.setChecked(True)
-        self.notify_errors_check.setStyleSheet("color: #8b949e; font-size: 12px;")
+        self.notify_errors_check.setStyleSheet("color: #8b949e; font-size: 10px;")
         options_layout.addWidget(self.notify_errors_check)
         
         self.notify_connection_check = QCheckBox("Notify on connection status changes")
-        self.notify_connection_check.setStyleSheet("color: #8b949e; font-size: 12px;")
+        self.notify_connection_check.setStyleSheet("color: #8b949e; font-size: 10px;")
         options_layout.addWidget(self.notify_connection_check)
         
         desktop_layout.addWidget(notify_options)
@@ -155,15 +159,16 @@ class NotificationsPage(BasePage):
         test_desktop_btn = QPushButton("Test Desktop Notification")
         test_desktop_btn.setStyleSheet("""
             QPushButton {
-                background-color: #21262d;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 10px 20px;
+                padding: 8px 16px;
                 color: #e6edf3;
-                font-size: 13px;
+                font-size: 11px;
             }
             QPushButton:hover {
-                background-color: #30363d;
+                background: rgba(0, 80, 120, 0.5);
+                border-color: rgba(0, 212, 255, 0.4);
             }
         """)
         test_desktop_btn.clicked.connect(self._test_desktop)
@@ -174,10 +179,10 @@ class NotificationsPage(BasePage):
         email_group = QGroupBox("Email/SMS Notifications (Optional)")
         email_group.setStyleSheet(discord_group.styleSheet())
         email_layout = QVBoxLayout(email_group)
-        email_layout.setSpacing(12)
+        email_layout.setSpacing(8)
         
         self.email_enabled_check = QCheckBox("Enable email notifications")
-        self.email_enabled_check.setStyleSheet("color: #e6edf3; font-size: 13px;")
+        self.email_enabled_check.setStyleSheet("color: #e6edf3; font-size: 11px;")
         self.email_enabled_check.stateChanged.connect(self._on_email_toggled)
         email_layout.addWidget(self.email_enabled_check)
         
@@ -190,12 +195,12 @@ class NotificationsPage(BasePage):
         self.email_input.setPlaceholderText("your@email.com")
         self.email_input.setStyleSheet("""
             QLineEdit {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 10px 12px;
+                padding: 8px 10px;
                 color: #e6edf3;
-                font-size: 14px;
+                font-size: 12px;
             }
         """)
         email_input_layout.addRow("Email:", self.email_input)
@@ -204,13 +209,13 @@ class NotificationsPage(BasePage):
         email_layout.addWidget(self.email_input_widget)
         
         coming_soon = QLabel("📧 Email and SMS notifications coming soon!")
-        coming_soon.setStyleSheet("color: #8b949e; font-size: 12px; font-style: italic;")
+        coming_soon.setStyleSheet("color: #8b949e; font-size: 10px; font-style: italic;")
         email_layout.addWidget(coming_soon)
         
         self.content_layout.addWidget(email_group)
         
         self.test_status = QLabel("")
-        self.test_status.setStyleSheet("font-size: 13px;")
+        self.test_status.setStyleSheet("font-size: 11px;")
         self.content_layout.addWidget(self.test_status)
         
         self.content_layout.addStretch()

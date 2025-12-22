@@ -34,23 +34,24 @@ class SummaryCard(QFrame):
     def _setup_ui(self):
         self.setStyleSheet("""
             QFrame {
-                background-color: #161b22;
-                border: 1px solid #30363d;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(0, 50, 80, 0.4), stop:1 rgba(0, 30, 50, 0.3));
+                border: 1px solid rgba(0, 212, 255, 0.15);
                 border-radius: 8px;
-                padding: 16px;
+                padding: 12px;
             }
         """)
         
         self.layout = QVBoxLayout(self)
-        self.layout.setSpacing(8)
+        self.layout.setSpacing(6)
         
         header = QHBoxLayout()
         icon_label = QLabel(self.icon)
-        icon_label.setStyleSheet("font-size: 20px; border: none;")
+        icon_label.setStyleSheet("font-size: 16px; border: none;")
         header.addWidget(icon_label)
         
         title_label = QLabel(self.title)
-        title_label.setStyleSheet("color: #e6edf3; font-size: 14px; font-weight: 600; border: none;")
+        title_label.setStyleSheet("color: #e6edf3; font-size: 12px; font-weight: 600; border: none;")
         header.addWidget(title_label)
         header.addStretch()
         
@@ -58,8 +59,8 @@ class SummaryCard(QFrame):
         
         self.items_widget = QWidget()
         self.items_layout = QVBoxLayout(self.items_widget)
-        self.items_layout.setContentsMargins(28, 0, 0, 0)
-        self.items_layout.setSpacing(4)
+        self.items_layout.setContentsMargins(24, 0, 0, 0)
+        self.items_layout.setSpacing(3)
         self.layout.addWidget(self.items_widget)
     
     def add_item(self, label: str, value: str, highlight: bool = False):
@@ -67,16 +68,16 @@ class SummaryCard(QFrame):
         item = QHBoxLayout()
         
         label_widget = QLabel(f"{label}:")
-        label_widget.setStyleSheet("color: #8b949e; font-size: 12px;")
-        label_widget.setMinimumWidth(120)
+        label_widget.setStyleSheet("color: #8b949e; font-size: 10px;")
+        label_widget.setMinimumWidth(100)
         item.addWidget(label_widget)
         
         if highlight:
             value_widget = QLabel(value)
-            value_widget.setStyleSheet("color: #00d4ff; font-size: 12px; font-weight: 500;")
+            value_widget.setStyleSheet("color: #00d4ff; font-size: 10px; font-weight: 500;")
         else:
             value_widget = QLabel(value)
-            value_widget.setStyleSheet("color: #e6edf3; font-size: 12px;")
+            value_widget.setStyleSheet("color: #e6edf3; font-size: 10px;")
         
         item.addWidget(value_widget)
         item.addStretch()
@@ -118,23 +119,23 @@ class ReviewPage(BasePage):
                 background-color: #0f291e;
                 border: 1px solid #238636;
                 border-radius: 8px;
-                padding: 16px;
+                padding: 12px;
             }
         """)
         banner_layout = QHBoxLayout(success_banner)
         
         check_icon = QLabel("✓")
-        check_icon.setStyleSheet("color: #00d4ff; font-size: 24px;")
+        check_icon.setStyleSheet("color: #00d4ff; font-size: 18px;")
         banner_layout.addWidget(check_icon)
         
         banner_text = QLabel("Setup Complete! Review your configuration below.")
-        banner_text.setStyleSheet("color: #00d4ff; font-size: 16px; font-weight: 500;")
+        banner_text.setStyleSheet("color: #00d4ff; font-size: 13px; font-weight: 500;")
         banner_layout.addWidget(banner_text)
         banner_layout.addStretch()
         
         self.content_layout.addWidget(success_banner)
         
-        self.content_layout.addSpacing(16)
+        self.content_layout.addSpacing(12)
         
         self.mode_card = SummaryCard("Trading Mode", "📊")
         self.content_layout.addWidget(self.mode_card)
@@ -151,24 +152,25 @@ class ReviewPage(BasePage):
         self.risk_card = SummaryCard("Risk Management", "⚠️")
         self.content_layout.addWidget(self.risk_card)
         
-        self.content_layout.addSpacing(24)
+        self.content_layout.addSpacing(16)
         
         buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(16)
+        buttons_layout.setSpacing(12)
         
         self.save_exit_btn = QPushButton("Save & Exit")
         self.save_exit_btn.setStyleSheet("""
             QPushButton {
-                background-color: #21262d;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 14px 28px;
+                padding: 10px 20px;
                 color: #e6edf3;
-                font-size: 14px;
+                font-size: 12px;
                 font-weight: 500;
             }
             QPushButton:hover {
-                background-color: #30363d;
+                background: rgba(0, 80, 120, 0.5);
+                border-color: rgba(0, 212, 255, 0.4);
             }
         """)
         self.save_exit_btn.clicked.connect(self.save_exit_clicked.emit)
@@ -179,16 +181,18 @@ class ReviewPage(BasePage):
         self.finish_btn = QPushButton("Finish & Start Bot")
         self.finish_btn.setStyleSheet("""
             QPushButton {
-                background-color: #00d4ff;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #00d4ff, stop:1 #0080ff);
                 border: none;
                 border-radius: 6px;
-                padding: 14px 32px;
+                padding: 10px 24px;
                 color: #0d1117;
-                font-size: 16px;
+                font-size: 13px;
                 font-weight: 600;
             }
             QPushButton:hover {
-                background-color: #00b8e0;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #00e5ff, stop:1 #0090ff);
             }
         """)
         self.finish_btn.clicked.connect(self.finish_clicked.emit)

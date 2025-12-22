@@ -43,22 +43,23 @@ class RiskManagementPage(BasePage):
         position_group = QGroupBox("Position Sizing")
         position_group.setStyleSheet("""
             QGroupBox {
-                border: 1px solid #30363d;
+                border: 1px solid rgba(0, 212, 255, 0.15);
                 border-radius: 8px;
-                margin-top: 16px;
-                padding-top: 16px;
+                margin-top: 12px;
+                padding-top: 12px;
                 font-weight: 600;
+                font-size: 12px;
                 color: #e6edf3;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 subcontrol-position: top left;
-                padding: 0 8px;
+                padding: 0 6px;
                 background-color: #0d1117;
             }
         """)
         position_layout = QFormLayout(position_group)
-        position_layout.setSpacing(16)
+        position_layout.setSpacing(10)
         
         risk_widget = QWidget()
         risk_layout = QHBoxLayout(risk_widget)
@@ -70,18 +71,19 @@ class RiskManagementPage(BasePage):
         self.risk_amount_spin.setPrefix("$")
         self.risk_amount_spin.setStyleSheet("""
             QDoubleSpinBox {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 8px;
+                padding: 6px;
+                font-size: 12px;
                 color: #e6edf3;
-                min-width: 120px;
+                min-width: 100px;
             }
         """)
         risk_layout.addWidget(self.risk_amount_spin)
         
         or_label = QLabel("OR")
-        or_label.setStyleSheet("color: #8b949e; margin: 0 10px;")
+        or_label.setStyleSheet("color: #8b949e; font-size: 11px; margin: 0 8px;")
         risk_layout.addWidget(or_label)
         
         self.risk_percent_spin = QDoubleSpinBox()
@@ -90,12 +92,13 @@ class RiskManagementPage(BasePage):
         self.risk_percent_spin.setSuffix("%")
         self.risk_percent_spin.setStyleSheet("""
             QDoubleSpinBox {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 8px;
+                padding: 6px;
+                font-size: 12px;
                 color: #e6edf3;
-                min-width: 100px;
+                min-width: 80px;
             }
         """)
         risk_layout.addWidget(self.risk_percent_spin)
@@ -109,12 +112,13 @@ class RiskManagementPage(BasePage):
         self.max_daily_loss_spin.setPrefix("$")
         self.max_daily_loss_spin.setStyleSheet("""
             QDoubleSpinBox {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 8px;
+                padding: 6px;
+                font-size: 12px;
                 color: #e6edf3;
-                min-width: 120px;
+                min-width: 100px;
             }
         """)
         position_layout.addRow("Max Daily Loss:", self.max_daily_loss_spin)
@@ -124,12 +128,13 @@ class RiskManagementPage(BasePage):
         self.max_positions_spin.setValue(5)
         self.max_positions_spin.setStyleSheet("""
             QSpinBox {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 8px;
+                padding: 6px;
+                font-size: 12px;
                 color: #e6edf3;
-                min-width: 80px;
+                min-width: 60px;
             }
         """)
         position_layout.addRow("Max Open Positions:", self.max_positions_spin)
@@ -139,23 +144,24 @@ class RiskManagementPage(BasePage):
         stop_loss_group = QGroupBox("Stop Loss Settings")
         stop_loss_group.setStyleSheet(position_group.styleSheet())
         stop_loss_layout = QVBoxLayout(stop_loss_group)
-        stop_loss_layout.setSpacing(12)
+        stop_loss_layout.setSpacing(8)
         
         mode_layout = QHBoxLayout()
         mode_label = QLabel("Stop Loss Mode:")
-        mode_label.setStyleSheet("color: #e6edf3;")
+        mode_label.setStyleSheet("color: #e6edf3; font-size: 12px;")
         mode_layout.addWidget(mode_label)
         
         self.stop_mode_combo = QComboBox()
         self.stop_mode_combo.addItems(["Fixed Percentage", "ATR-Based", "None"])
         self.stop_mode_combo.setStyleSheet("""
             QComboBox {
-                background-color: #21262d;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 8px;
+                padding: 6px;
+                font-size: 12px;
                 color: #e6edf3;
-                min-width: 150px;
+                min-width: 130px;
             }
         """)
         self.stop_mode_combo.currentIndexChanged.connect(self._on_stop_mode_changed)
@@ -168,7 +174,7 @@ class RiskManagementPage(BasePage):
         stop_percent_layout.setContentsMargins(0, 0, 0, 0)
         
         stop_percent_label = QLabel("Stop Loss Percentage:")
-        stop_percent_label.setStyleSheet("color: #e6edf3;")
+        stop_percent_label.setStyleSheet("color: #e6edf3; font-size: 12px;")
         stop_percent_layout.addWidget(stop_percent_label)
         
         self.stop_percent_spin = QDoubleSpinBox()
@@ -177,10 +183,11 @@ class RiskManagementPage(BasePage):
         self.stop_percent_spin.setSuffix("%")
         self.stop_percent_spin.setStyleSheet("""
             QDoubleSpinBox {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 8px;
+                padding: 6px;
+                font-size: 12px;
                 color: #e6edf3;
             }
         """)
@@ -193,10 +200,10 @@ class RiskManagementPage(BasePage):
         tp_group = QGroupBox("Take Profit Settings")
         tp_group.setStyleSheet(position_group.styleSheet())
         tp_layout = QVBoxLayout(tp_group)
-        tp_layout.setSpacing(12)
+        tp_layout.setSpacing(8)
         
         tp_header = QLabel("Configure profit targets for partial exits (25% / 50% / Runner)")
-        tp_header.setStyleSheet("color: #8b949e; font-size: 12px;")
+        tp_header.setStyleSheet("color: #8b949e; font-size: 11px;")
         tp_layout.addWidget(tp_header)
         
         targets_layout = QHBoxLayout()
@@ -205,7 +212,7 @@ class RiskManagementPage(BasePage):
         tp1_layout = QVBoxLayout(tp1_widget)
         tp1_layout.setContentsMargins(0, 0, 0, 0)
         tp1_label = QLabel("Target 1 (25% exit)")
-        tp1_label.setStyleSheet("color: #8b949e; font-size: 11px;")
+        tp1_label.setStyleSheet("color: #8b949e; font-size: 10px;")
         tp1_layout.addWidget(tp1_label)
         self.tp1_spin = QDoubleSpinBox()
         self.tp1_spin.setRange(1, 500)
@@ -213,10 +220,11 @@ class RiskManagementPage(BasePage):
         self.tp1_spin.setSuffix("% gain")
         self.tp1_spin.setStyleSheet("""
             QDoubleSpinBox {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 8px;
+                padding: 5px;
+                font-size: 11px;
                 color: #e6edf3;
             }
         """)
@@ -227,7 +235,7 @@ class RiskManagementPage(BasePage):
         tp2_layout = QVBoxLayout(tp2_widget)
         tp2_layout.setContentsMargins(0, 0, 0, 0)
         tp2_label = QLabel("Target 2 (50% exit)")
-        tp2_label.setStyleSheet("color: #8b949e; font-size: 11px;")
+        tp2_label.setStyleSheet("color: #8b949e; font-size: 10px;")
         tp2_layout.addWidget(tp2_label)
         self.tp2_spin = QDoubleSpinBox()
         self.tp2_spin.setRange(1, 500)
@@ -235,10 +243,11 @@ class RiskManagementPage(BasePage):
         self.tp2_spin.setSuffix("% gain")
         self.tp2_spin.setStyleSheet("""
             QDoubleSpinBox {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 8px;
+                padding: 5px;
+                font-size: 11px;
                 color: #e6edf3;
             }
         """)
@@ -249,7 +258,7 @@ class RiskManagementPage(BasePage):
         tp3_layout = QVBoxLayout(tp3_widget)
         tp3_layout.setContentsMargins(0, 0, 0, 0)
         tp3_label = QLabel("Target 3 (Runner)")
-        tp3_label.setStyleSheet("color: #8b949e; font-size: 11px;")
+        tp3_label.setStyleSheet("color: #8b949e; font-size: 10px;")
         tp3_layout.addWidget(tp3_label)
         self.tp3_spin = QDoubleSpinBox()
         self.tp3_spin.setRange(1, 1000)
@@ -257,10 +266,11 @@ class RiskManagementPage(BasePage):
         self.tp3_spin.setSuffix("% gain")
         self.tp3_spin.setStyleSheet("""
             QDoubleSpinBox {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 8px;
+                padding: 5px;
+                font-size: 11px;
                 color: #e6edf3;
             }
         """)
@@ -271,7 +281,7 @@ class RiskManagementPage(BasePage):
         tp_layout.addLayout(targets_layout)
         
         self.trailing_stop_check = QCheckBox("Enable Trailing Stop")
-        self.trailing_stop_check.setStyleSheet("color: #e6edf3; font-size: 13px;")
+        self.trailing_stop_check.setStyleSheet("color: #e6edf3; font-size: 11px;")
         self.trailing_stop_check.stateChanged.connect(self._on_trailing_changed)
         tp_layout.addWidget(self.trailing_stop_check)
         
@@ -279,7 +289,7 @@ class RiskManagementPage(BasePage):
         trailing_layout = QHBoxLayout(self.trailing_widget)
         trailing_layout.setContentsMargins(20, 0, 0, 0)
         trailing_label = QLabel("Trailing Stop Percent:")
-        trailing_label.setStyleSheet("color: #8b949e;")
+        trailing_label.setStyleSheet("color: #8b949e; font-size: 11px;")
         trailing_layout.addWidget(trailing_label)
         self.trailing_percent_spin = QDoubleSpinBox()
         self.trailing_percent_spin.setRange(0.5, 50)
@@ -287,10 +297,11 @@ class RiskManagementPage(BasePage):
         self.trailing_percent_spin.setSuffix("%")
         self.trailing_percent_spin.setStyleSheet("""
             QDoubleSpinBox {
-                background-color: #0d1117;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 8px;
+                padding: 5px;
+                font-size: 11px;
                 color: #e6edf3;
             }
         """)
@@ -306,14 +317,14 @@ class RiskManagementPage(BasePage):
         killswitch_layout = QVBoxLayout(killswitch_group)
         
         self.killswitch_check = QCheckBox("Enable Kill Switch")
-        self.killswitch_check.setStyleSheet("color: #f85149; font-size: 14px; font-weight: 600;")
+        self.killswitch_check.setStyleSheet("color: #f85149; font-size: 12px; font-weight: 600;")
         killswitch_layout.addWidget(self.killswitch_check)
         
         killswitch_desc = QLabel(
             "When enabled, the kill switch will immediately stop all trading if triggered by "
             "hitting the max daily loss or other critical conditions."
         )
-        killswitch_desc.setStyleSheet("color: #8b949e; font-size: 12px; margin-left: 24px;")
+        killswitch_desc.setStyleSheet("color: #8b949e; font-size: 10px; margin-left: 20px;")
         killswitch_desc.setWordWrap(True)
         killswitch_layout.addWidget(killswitch_desc)
         
@@ -323,11 +334,11 @@ class RiskManagementPage(BasePage):
         preview_layout = QVBoxLayout(preview_card)
         
         preview_title = QLabel("Risk Preview")
-        preview_title.setStyleSheet("color: #e6edf3; font-size: 14px; font-weight: 600; border: none;")
+        preview_title.setStyleSheet("color: #e6edf3; font-size: 12px; font-weight: 600; border: none;")
         preview_layout.addWidget(preview_title)
         
         self.preview_label = QLabel("")
-        self.preview_label.setStyleSheet("color: #00d4ff; font-size: 13px; border: none;")
+        self.preview_label.setStyleSheet("color: #00d4ff; font-size: 11px; border: none;")
         self.preview_label.setWordWrap(True)
         preview_layout.addWidget(self.preview_label)
         

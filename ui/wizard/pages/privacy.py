@@ -44,7 +44,7 @@ class PrivacyPage(BasePage):
         storage_layout.setSpacing(12)
         
         storage_title = QLabel("📁 What's Stored Locally")
-        storage_title.setStyleSheet("color: #e6edf3; font-size: 16px; font-weight: 600; border: none;")
+        storage_title.setStyleSheet("color: #e6edf3; font-size: 13px; font-weight: 600; border: none;")
         storage_layout.addWidget(storage_title)
         
         stored_items = [
@@ -60,8 +60,8 @@ class PrivacyPage(BasePage):
             item_layout.setContentsMargins(0, 4, 0, 4)
             
             bullet = QLabel("✓")
-            bullet.setStyleSheet("color: #00d4ff; font-size: 14px; border: none;")
-            bullet.setFixedWidth(24)
+            bullet.setStyleSheet("color: #00d4ff; font-size: 12px; border: none;")
+            bullet.setFixedWidth(20)
             item_layout.addWidget(bullet)
             
             text_widget = QWidget()
@@ -70,11 +70,11 @@ class PrivacyPage(BasePage):
             text_layout.setSpacing(2)
             
             title_label = QLabel(title)
-            title_label.setStyleSheet("color: #e6edf3; font-size: 13px; font-weight: 500; border: none;")
+            title_label.setStyleSheet("color: #e6edf3; font-size: 11px; font-weight: 500; border: none;")
             text_layout.addWidget(title_label)
             
             desc_label = QLabel(desc)
-            desc_label.setStyleSheet("color: #8b949e; font-size: 11px; border: none;")
+            desc_label.setStyleSheet("color: #8b949e; font-size: 10px; border: none;")
             text_layout.addWidget(desc_label)
             
             item_layout.addWidget(text_widget)
@@ -88,14 +88,14 @@ class PrivacyPage(BasePage):
                 background-color: #0f291e;
                 border: 1px solid #238636;
                 border-radius: 8px;
-                padding: 16px;
+                padding: 12px;
             }
         """)
         never_layout = QVBoxLayout(never_shared_card)
-        never_layout.setSpacing(8)
+        never_layout.setSpacing(6)
         
         never_title = QLabel("🔒 Never Shared or Transmitted")
-        never_title.setStyleSheet("color: #00d4ff; font-size: 14px; font-weight: 600;")
+        never_title.setStyleSheet("color: #00d4ff; font-size: 12px; font-weight: 600;")
         never_layout.addWidget(never_title)
         
         never_items = [
@@ -107,7 +107,7 @@ class PrivacyPage(BasePage):
         
         for item in never_items:
             item_label = QLabel(f"• {item}")
-            item_label.setStyleSheet("color: #00d4ff; font-size: 12px;")
+            item_label.setStyleSheet("color: #00d4ff; font-size: 10px;")
             never_layout.addWidget(item_label)
         
         self.content_layout.addWidget(never_shared_card)
@@ -115,31 +115,32 @@ class PrivacyPage(BasePage):
         diagnostics_group = QGroupBox("Anonymous Diagnostics")
         diagnostics_group.setStyleSheet("""
             QGroupBox {
-                border: 1px solid #30363d;
+                border: 1px solid rgba(0, 212, 255, 0.15);
                 border-radius: 8px;
-                margin-top: 16px;
-                padding-top: 16px;
+                margin-top: 12px;
+                padding-top: 12px;
                 font-weight: 600;
+                font-size: 12px;
                 color: #e6edf3;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 subcontrol-position: top left;
-                padding: 0 8px;
+                padding: 0 6px;
                 background-color: #0d1117;
             }
         """)
         diag_layout = QVBoxLayout(diagnostics_group)
         
         self.diagnostics_check = QCheckBox("Send anonymous crash reports and usage statistics")
-        self.diagnostics_check.setStyleSheet("color: #e6edf3; font-size: 13px;")
+        self.diagnostics_check.setStyleSheet("color: #e6edf3; font-size: 11px;")
         diag_layout.addWidget(self.diagnostics_check)
         
         diag_desc = QLabel(
             "Help improve BotifyTrades by sending anonymous data about crashes and feature usage. "
             "No personal information, credentials, or trade data is ever included."
         )
-        diag_desc.setStyleSheet("color: #8b949e; font-size: 11px; margin-left: 24px;")
+        diag_desc.setStyleSheet("color: #8b949e; font-size: 10px; margin-left: 20px;")
         diag_desc.setWordWrap(True)
         diag_layout.addWidget(diag_desc)
         
@@ -153,7 +154,7 @@ class PrivacyPage(BasePage):
         export_desc = QLabel(
             "Export your configuration to back it up or transfer to another machine."
         )
-        export_desc.setStyleSheet("color: #8b949e; font-size: 12px;")
+        export_desc.setStyleSheet("color: #8b949e; font-size: 10px;")
         export_desc.setWordWrap(True)
         export_layout.addWidget(export_desc)
         
@@ -163,15 +164,16 @@ class PrivacyPage(BasePage):
         view_settings_btn = QPushButton("View Stored Settings")
         view_settings_btn.setStyleSheet("""
             QPushButton {
-                background-color: #21262d;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 10px 16px;
+                padding: 8px 14px;
                 color: #e6edf3;
-                font-size: 13px;
+                font-size: 11px;
             }
             QPushButton:hover {
-                background-color: #30363d;
+                background: rgba(0, 80, 120, 0.5);
+                border-color: rgba(0, 212, 255, 0.4);
             }
         """)
         view_settings_btn.clicked.connect(self._view_settings)
@@ -180,15 +182,16 @@ class PrivacyPage(BasePage):
         export_btn = QPushButton("Export Config (No Secrets)")
         export_btn.setStyleSheet("""
             QPushButton {
-                background-color: #21262d;
-                border: 1px solid #30363d;
+                background: rgba(0, 50, 80, 0.4);
+                border: 1px solid rgba(0, 212, 255, 0.2);
                 border-radius: 6px;
-                padding: 10px 16px;
+                padding: 8px 14px;
                 color: #e6edf3;
-                font-size: 13px;
+                font-size: 11px;
             }
             QPushButton:hover {
-                background-color: #30363d;
+                background: rgba(0, 80, 120, 0.5);
+                border-color: rgba(0, 212, 255, 0.4);
             }
         """)
         export_btn.clicked.connect(self._export_config)
@@ -197,15 +200,18 @@ class PrivacyPage(BasePage):
         export_secrets_btn = QPushButton("Export with Secrets")
         export_secrets_btn.setStyleSheet("""
             QPushButton {
-                background-color: #9e6a03;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #9e6a03, stop:1 #bb8009);
                 border: none;
                 border-radius: 6px;
-                padding: 10px 16px;
+                padding: 8px 14px;
                 color: #ffffff;
-                font-size: 13px;
+                font-size: 11px;
+                font-weight: 600;
             }
             QPushButton:hover {
-                background-color: #bb8009;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #bb8009, stop:1 #cc9010);
             }
         """)
         export_secrets_btn.clicked.connect(self._export_with_secrets)
