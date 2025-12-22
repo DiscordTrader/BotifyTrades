@@ -2929,8 +2929,8 @@ async function loadChannelMappings() {
             html += '</tr></thead><tbody>';
             
             data.mappings.forEach(m => {
-                const srcDisplay = m.source_name ? `${m.source_name}<br><small style="color:#666;">${m.source_channel_id}</small>` : m.source_channel_id;
-                const destDisplay = m.destination_name ? `${m.destination_name}<br><small style="color:#666;">${m.destination_channel_id}</small>` : m.destination_channel_id;
+                const srcDisplay = m.source_channel_name ? `${m.source_channel_name}<br><small style="color:#666;">${m.source_channel_id}</small>` : m.source_channel_id;
+                const destDisplay = m.destination_channel_name ? `${m.destination_channel_name}<br><small style="color:#666;">${m.destination_channel_id}</small>` : m.destination_channel_id;
                 
                 html += `<tr style="border-bottom: 1px solid #222;">`;
                 html += `<td style="padding: 8px; color: #fff;">${srcDisplay}</td>`;
@@ -2968,9 +2968,9 @@ async function addChannelMapping() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 source_channel_id: sourceId,
-                source_name: sourceName || null,
+                source_channel_name: sourceName || '',
                 destination_channel_id: destId,
-                destination_name: destName || null
+                destination_channel_name: destName || ''
             })
         });
         const data = await response.json();
