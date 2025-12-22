@@ -7062,6 +7062,68 @@ def register_routes(app):
             print(f"[API] Error saving signal conversion settings: {e}")
             return jsonify({'error': str(e)}), 500
 
+    # ============ CHANNEL MAPPINGS API ============
+    
+    @app.route('/api/channel_mappings', methods=['GET'])
+    def api_get_channel_mappings():
+        """Get all channel mappings"""
+        try:
+            mappings = db.get_channel_mappings()
+            return jsonify({'success': True, 'mappings': mappings})
+        except Exception as e:
+            print(f"[API] Error getting channel mappings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/channel_mappings', methods=['POST'])
+    def api_add_channel_mapping():
+        """Add a new channel mapping"""
+        try:
+            data = request.json
+            source_channel_id = data.get('source_channel_id', '').strip()
+            destination_channel_id = data.get('destination_channel_id', '').strip()
+            source_channel_name = data.get('source_channel_name', '').strip()
+            destination_channel_name = data.get('destination_channel_name', '').strip()
+            
+            if not source_channel_id or not destination_channel_id:
+                return jsonify({'success': False, 'error': 'Source and destination channel IDs are required'}), 400
+            
+            result = db.add_channel_mapping(
+                source_channel_id, destination_channel_id,
+                source_channel_name, destination_channel_name
+            )
+            return jsonify(result)
+        except Exception as e:
+            print(f"[API] Error adding channel mapping: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/channel_mappings/<int:mapping_id>', methods=['PUT'])
+    def api_update_channel_mapping(mapping_id):
+        """Update an existing channel mapping"""
+        try:
+            data = request.json
+            result = db.update_channel_mapping(
+                mapping_id,
+                source_channel_id=data.get('source_channel_id'),
+                destination_channel_id=data.get('destination_channel_id'),
+                source_channel_name=data.get('source_channel_name'),
+                destination_channel_name=data.get('destination_channel_name'),
+                is_active=data.get('is_active')
+            )
+            return jsonify(result)
+        except Exception as e:
+            print(f"[API] Error updating channel mapping: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/channel_mappings/<int:mapping_id>', methods=['DELETE'])
+    def api_delete_channel_mapping(mapping_id):
+        """Delete a channel mapping"""
+        try:
+            result = db.delete_channel_mapping(mapping_id)
+            return jsonify(result)
+        except Exception as e:
+            print(f"[API] Error deleting channel mapping: {e}")
+            return jsonify({'error': str(e)}), 500
+
     # ============ SIMULATION ENGINE ============
     
     @app.route('/simulation')
