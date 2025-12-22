@@ -141,6 +141,30 @@ def launch_wizard(skip_first_run_check: bool = False) -> bool:
         app.setApplicationName("BotifyTrades Setup")
         app.setApplicationDisplayName("BotifyTrades Setup Wizard")
         
+        log("[Launcher] Loading stylesheet...")
+        stylesheet_loaded = False
+        
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.path.dirname(sys.executable)
+            styles_path = os.path.join(base_path, 'ui', 'styles.qss')
+        else:
+            styles_path = os.path.join(Path(__file__).parent.parent, 'styles.qss')
+        
+        if os.path.exists(styles_path):
+            try:
+                with open(styles_path, 'r', encoding='utf-8') as f:
+                    stylesheet = f.read()
+                app.setStyleSheet(stylesheet)
+                stylesheet_loaded = True
+                log(f"[Launcher] Loaded stylesheet from: {styles_path}")
+            except Exception as e:
+                log(f"[Launcher] Failed to load stylesheet: {e}")
+        else:
+            log(f"[Launcher] Stylesheet not found at: {styles_path}")
+        
+        if not stylesheet_loaded:
+            log("[Launcher] Using default inline styles")
+        
         log("[Launcher] Creating database adapter...")
         db_adapter = WizardDatabaseAdapter()
         log("[Launcher] Database adapter created")
