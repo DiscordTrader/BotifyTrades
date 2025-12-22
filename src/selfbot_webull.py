@@ -1198,7 +1198,7 @@ if not LICENSE_VALID:
             print(f"❌ License setup error: {e}")
             raise SystemExit("Setup cancelled - license setup failed")
     else:
-        # Replit mode - no setup wizard, just show error
+        # Replit mode or no setup wizard - show error
         print()
         print("=" * 60)
         print("  LICENSE REQUIRED - Bot cannot start without a license")
@@ -1209,12 +1209,19 @@ if not LICENSE_VALID:
         print("  HOW TO ADD YOUR LICENSE:")
         print("  -------------------------")
         print("  Replit: Go to 'Secrets' tab and add LICENSE_KEY")
+        print("  Windows: Set LICENSE_KEY environment variable or use Setup Wizard")
         print()
         print("  GET A LICENSE:")
         print("  ---------------")
         print("  Contact the bot provider for a trial or subscription.")
         print()
         print("=" * 60)
+        
+        # On Windows EXE, pause so user can read the error before window closes
+        if getattr(sys, 'frozen', False) and sys.platform == 'win32':
+            print()
+            input("Press Enter to exit...")
+        
         raise SystemExit("ERROR: Valid license required to run this bot.")
 
 # Set API keys as environment variables if present in wizard credentials
