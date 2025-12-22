@@ -260,9 +260,12 @@ def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
             print(f"[OPTIONS] Webull returned: {calls_count} calls, {puts_count} puts for {symbol}", flush=True)
             
             if chain and (chain.get('calls') or chain.get('puts')):
-                # Check if Webull returned valid bid/ask data (non-zero for at least some options)
+                # Check if Webull returned valid bid/ask data
+                # Look at ALL options, not just first 10, because ATM options may have prices
+                # while far OTM options may not
                 has_valid_prices = False
-                for opt in chain.get('calls', [])[:10] + chain.get('puts', [])[:10]:
+                all_options = chain.get('calls', []) + chain.get('puts', [])
+                for opt in all_options:
                     if opt.get('bid', 0) > 0 or opt.get('ask', 0) > 0:
                         has_valid_prices = True
                         break
