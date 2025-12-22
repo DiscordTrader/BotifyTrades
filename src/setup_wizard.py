@@ -14,18 +14,66 @@ from pathlib import Path
 # License System Configuration
 # 'offline' = Machine-bound licenses (requires pre-shared Machine ID) - USE WITH generate_license_secure.py
 # 'server' = Auto-activation (license binds on first run) - USE WITH generate_license_activation.py
-LICENSE_MODE = 'offline'  # 'offline' or 'server'
+LICENSE_MODE = 'server'  # Changed to 'server' - uses the new license client system
 
-if LICENSE_MODE == 'offline':
+# Try to import license validation functions - make optional so wizard can still load
+validate_license = None
+get_current_machine_id = None
+check_license = None
+activate_license = None
+get_machine_id = None
+
+try:
+    # Try new license client system first (preferred)
+    from src.license.client import LicenseClient
+    from src.license.crypto import get_machine_id as _get_machine_id
+    
+    def validate_license(key):
+        client = LicenseClient()
+        is_valid, result = client.validate_license(key)
+        return is_valid
+    
+    def get_current_machine_id():
+        return _get_machine_id()
+    
+    get_machine_id = get_current_machine_id
+    check_license = validate_license
+    activate_license = validate_license
+    
+except ImportError:
     try:
-        from src.license_manager_secure import validate_license, get_current_machine_id
+        from license.client import LicenseClient
+        from license.crypto import get_machine_id as _get_machine_id
+        
+        def validate_license(key):
+            client = LicenseClient()
+            is_valid, result = client.validate_license(key)
+            return is_valid
+        
+        def get_current_machine_id():
+            return _get_machine_id()
+        
+        get_machine_id = get_current_machine_id
+        check_license = validate_license
+        activate_license = validate_license
+        
     except ImportError:
-        from license_manager_secure import validate_license, get_current_machine_id
-else:
-    try:
-        from src.license_manager_activation import check_license, activate_license, get_machine_id
-    except ImportError:
-        from license_manager_activation import check_license, activate_license, get_machine_id
+        # Fallback: try legacy modules
+        try:
+            if LICENSE_MODE == 'offline':
+                try:
+                    from src.license_manager_secure import validate_license, get_current_machine_id
+                except ImportError:
+                    from license_manager_secure import validate_license, get_current_machine_id
+            else:
+                try:
+                    from src.license_manager_activation import check_license, activate_license, get_machine_id
+                except ImportError:
+                    from license_manager_activation import check_license, activate_license, get_machine_id
+        except ImportError:
+            # All imports failed - license functions will be None
+            # The wizard can still load but license validation will fail gracefully
+            pass
 
 class SetupWizard:
     """Interactive credential setup wizard"""
