@@ -965,9 +965,6 @@
                         <div class="total-label">Total</div>
                         <div class="total-value" id="totalCost{{ i }}">$0</div>
                     </div>
-                    <button class="order-btn buy" onclick="placeOrder({{ i }}, 'BUY')">BUY</button>
-                    <button class="order-btn sell" onclick="placeOrder({{ i }}, 'SELL')">SELL</button>
-                    <button class="order-btn discord" onclick="sendToDiscord({{ i }}, 'BTO')" title="Send BTO signal to Discord">📤</button>
                     <button class="order-btn webhook" onclick="postWebhookBTO({{ i }})" title="Post BTO to Webhook">BTO</button>
                     <button class="order-btn webhook-stc" onclick="postWebhookSTC({{ i }})" title="Post STC to Webhook">STC</button>
                     <button class="clear-row-btn" onclick="clearRow({{ i }})" title="Clear">✕</button>
