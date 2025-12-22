@@ -338,11 +338,8 @@ except ImportError:
 try:
     from dotenv import load_dotenv
     load_dotenv()  # Load .env file from project root
-    print("[STARTUP] .env file loaded (if present)")
 except ImportError:
-    print("[STARTUP] python-dotenv not installed, using system environment variables only")
-
-print("[STARTUP] Imports loaded successfully")
+    pass  # Using system environment variables only
 
 # ----------------------------- OPTIONAL HTTP DEBUG LOGGER -----------------------------
 # Disabled to reduce console clutter - only show position updates and signals
@@ -376,8 +373,6 @@ def debug_print(message):
     if DEBUG_MODE:
         print(message)
 
-print("[CONFIG] Starting config load...")
-
 cfg = configparser.ConfigParser()
 
 if getattr(sys, 'frozen', False):
@@ -396,10 +391,8 @@ config_paths = [
 
 config_found = False
 for config_path in config_paths:
-    print(f"[CONFIG] Checking: {config_path}")
     if config_path.exists():
         cfg.read(str(config_path))
-        print(f"[CONFIG] Loaded from: {config_path}")
         config_found = True
         break
 
@@ -432,12 +425,10 @@ def load_credentials_from_database():
     try:
         from gui_app.broker_credentials_service import get_all_credentials_for_startup
         credentials = get_all_credentials_for_startup()
-        if any(credentials.values()):
-            print("[CONFIG] ✓ Loaded credentials from database (GUI configuration)")
     except ImportError:
-        print("[CONFIG] Broker credentials service not available")
-    except Exception as e:
-        print(f"[CONFIG] Could not load credentials from database: {e}")
+        pass
+    except Exception:
+        pass
     return credentials
 
 # Load credentials from database first (takes priority over config.ini)
@@ -456,7 +447,6 @@ except Exception:
 # ============================================================================
 # MANDATORY LICENSE VALIDATION - Cannot be bypassed
 # ============================================================================
-print("[LICENSE] Checking license...")
 
 # Try to load wizard credentials first (for EXE distribution)
 wizard_credentials = {}
@@ -470,14 +460,10 @@ try:
     wizard = SetupWizard()
     if wizard.config_file.exists():
         wizard_credentials = wizard._load_credentials()
-        if wizard_credentials:
-            print("[CONFIG] ✓ Loaded credentials from setup wizard")
-            if wizard_credentials.get('LICENSE_KEY'):
-                print(f"[CONFIG] ✓ Found LICENSE_KEY in wizard credentials")
 except ImportError:
-    print("[CONFIG] SetupWizard not available - will check env vars")
-except Exception as e:
-    print(f"[CONFIG] Could not load wizard credentials: {e}")
+    pass
+except Exception:
+    pass
 
 # Import license validation functions
 def _get_license_validator():
@@ -516,19 +502,6 @@ def _get_activated_license_validator():
 def _save_license_to_cache(license_key: str, machine_id: str, result: dict) -> bool:
     """Save license key to cache file for persistence across reboots."""
     import sys
-    import builtins
-    _print = builtins.print  # Bypass any print filters
-    
-    _print(f"[LICENSE-SAVE] === SAVING LICENSE TO CACHE ===", flush=True)
-    _print(f"[LICENSE-SAVE] License key: {license_key[:12]}...", flush=True)
-    _print(f"[LICENSE-SAVE] Machine ID: {machine_id}", flush=True)
-    _print(f"[LICENSE-SAVE] Server result keys: {list(result.keys())}", flush=True)
-    _print(f"[LICENSE-SAVE] Server result has signed_token: {bool(result.get('signed_token'))}", flush=True)
-    if result.get('signed_token'):
-        _print(f"[LICENSE-SAVE] Signed token length: {len(result.get('signed_token'))}", flush=True)
-    _print(f"[LICENSE-SAVE] Server result is_valid: {result.get('is_valid')}", flush=True)
-    _print(f"[LICENSE-SAVE] Server result success: {result.get('success')}", flush=True)
-    sys.stdout.flush()
     
     try:
         from pathlib import Path
@@ -536,10 +509,8 @@ def _save_license_to_cache(license_key: str, machine_id: str, result: dict) -> b
         from datetime import datetime, timedelta
         
         cache_dir = Path.home() / '.discord_trading_bot'
-        _print(f"[LICENSE-SAVE] Cache directory: {cache_dir}", flush=True)
         cache_dir.mkdir(exist_ok=True)
         cache_file = cache_dir / 'license_cache.json'
-        _print(f"[LICENSE-SAVE] Cache file: {cache_file}", flush=True)
         
         # Calculate offline grace period (48 hours from now)
         offline_grace_expires = (datetime.now() + timedelta(hours=48)).isoformat()
@@ -555,27 +526,12 @@ def _save_license_to_cache(license_key: str, machine_id: str, result: dict) -> b
             'signed_token': result.get('signed_token')
         }
         
-        _print(f"[LICENSE-SAVE] Cache data keys: {list(cache_data.keys())}", flush=True)
-        _print(f"[LICENSE-SAVE] Cache has signed_token: {bool(cache_data.get('signed_token'))}", flush=True)
-        _print(f"[LICENSE-SAVE] Cache has result: {bool(cache_data.get('result'))}", flush=True)
-        
         with open(cache_file, 'w', encoding='utf-8') as f:
             json.dump(cache_data, f, indent=2)
         
-        # Verify the file was written
-        if cache_file.exists():
-            file_size = cache_file.stat().st_size
-            print(f"[LICENSE] ✓ License saved to cache: {cache_file} ({file_size} bytes)", flush=True)
-            sys.stdout.flush()
-            return True
-        else:
-            print(f"[LICENSE] ⚠️  Cache file not created!", flush=True)
-            return False
+        return cache_file.exists()
     except Exception as e:
-        import traceback
         print(f"[LICENSE] ⚠️  Could not save to cache: {e}", flush=True)
-        traceback.print_exc()
-        sys.stdout.flush()
         return False
 
 # Check for license - MANDATORY
@@ -650,95 +606,50 @@ if validate_activated:
         print(f"[LICENSE] Could not check activated license: {e}")
 
 # Step 2: Check LICENSE_KEY from environment, wizard credentials, or cache
-_original_print(f"[LICENSE] Step 2: LICENSE_VALID={LICENSE_VALID}", flush=True)
-sys.stdout.flush()
 if not LICENSE_VALID:
-    # Get current machine ID for diagnostics
+    # Get current machine ID
     try:
         try:
             from src.machine_fingerprint import get_machine_id as get_current_machine_id
         except ImportError:
             from machine_fingerprint import get_machine_id as get_current_machine_id
         current_machine_id = get_current_machine_id()
-        _original_print(f"[LICENSE] Current machine fingerprint: {current_machine_id}", flush=True)
-    except Exception as e:
+    except Exception:
         current_machine_id = "ERROR"
-        _original_print(f"[LICENSE] Error getting machine ID: {e}", flush=True)
-    sys.stdout.flush()
     
     # Priority: BTF-format licenses first, then fallback to legacy
     env_license = os.getenv('LICENSE_KEY', '').strip()
     wizard_license = wizard_credentials.get('LICENSE_KEY', '').strip() if wizard_credentials else ''
     
-    # NEW: Also check license cache file for previously saved license key
+    # Check license cache file for previously saved license key
     cache_license = ''
     try:
         cache_file = Path.home() / '.discord_trading_bot' / 'license_cache.json'
-        _original_print(f"[LICENSE] Cache file path: {cache_file}", flush=True)
-        _original_print(f"[LICENSE] Cache file exists: {cache_file.exists()}", flush=True)
-        sys.stdout.flush()
         if cache_file.exists():
             import json
             with open(cache_file, 'r') as f:
                 cache_data = json.load(f)
                 cache_license = cache_data.get('license_key', '').strip()
-                cache_machine = cache_data.get('machine_id', '')
-                cache_result = cache_data.get('result', {})
-                cache_token = cache_data.get('signed_token', '')
-                cache_validated = cache_data.get('last_validated', '')
-                _original_print(f"[LICENSE] Cache data loaded: license={cache_license[:8] if cache_license else 'EMPTY'}..., machine={cache_machine[:8] if cache_machine else 'EMPTY'}...", flush=True)
-                _original_print(f"[LICENSE] Cache has result data: {bool(cache_result)} (keys: {list(cache_result.keys()) if cache_result else 'NONE'})", flush=True)
-                _original_print(f"[LICENSE] Cache has signed_token: {bool(cache_token)} (len={len(cache_token) if cache_token else 0})", flush=True)
-                _original_print(f"[LICENSE] Cache last_validated: {cache_validated or 'NOT SET'}", flush=True)
-                if cache_license:
-                    _original_print(f"[LICENSE] Found license key in cache file: {cache_license[:8]}...", flush=True)
-                else:
-                    _original_print(f"[LICENSE] ⚠️  Cache file exists but license_key is empty", flush=True)
-        else:
-            _original_print(f"[LICENSE] ⚠️  Cache file does not exist at: {cache_file}", flush=True)
-    except Exception as cache_err:
-        _original_print(f"[LICENSE] Could not read cache file: {cache_err}", flush=True)
-        import traceback
-        traceback.print_exc()
-    
-    _original_print(f"[LICENSE] Step 2a: Env LICENSE_KEY exists: {bool(env_license)}", flush=True)
-    if env_license:
-        _original_print(f"[LICENSE] Step 2a: Env license format: {'BTF (new)' if env_license.startswith('BTF-') else 'Legacy (old)'}", flush=True)
-    
-    if wizard_license:
-        _original_print(f"[LICENSE] Step 2b: Wizard LICENSE_KEY exists: True", flush=True)
-        _original_print(f"[LICENSE] Step 2b: Wizard license format: {'BTF (new)' if wizard_license.startswith('BTF-') else 'Legacy (old)'}", flush=True)
+    except Exception:
+        pass
     
     # Smart priority: ENV > CACHE > WIZARD
-    # Cache is preferred over wizard because it's set when user enters a valid key
-    # Wizard credentials can become stale or corrupted
     if env_license.startswith('BTF-') or env_license.startswith('BT-'):
         license_key = env_license
-        _original_print(f"[LICENSE] Using license from environment (highest priority)", flush=True)
     elif cache_license.startswith('BTF-') or cache_license.startswith('BT-'):
-        # CACHE is now second priority - it contains the most recently validated key
         license_key = cache_license
-        _original_print(f"[LICENSE] Using license from cache file (second priority)", flush=True)
     elif wizard_license.startswith('BTF-') or wizard_license.startswith('BT-'):
         license_key = wizard_license
-        _original_print(f"[LICENSE] Using license from wizard credentials (third priority)", flush=True)
     elif env_license:
-        # Fallback to env var even if legacy format
         license_key = env_license
-        _original_print(f"[LICENSE] Using legacy license from environment", flush=True)
     elif cache_license:
         license_key = cache_license
-        _original_print(f"[LICENSE] Using legacy license from cache file", flush=True)
     elif wizard_license:
         license_key = wizard_license
-        _original_print(f"[LICENSE] Using legacy license from wizard credentials", flush=True)
     else:
         license_key = ''
-    sys.stdout.flush()
     
     if license_key:
-        _original_print(f"[LICENSE] Step 2c: Found license key: {license_key[:8]}...", flush=True)
-        sys.stdout.flush()
         # Try to load LicenseClient
         try:
             try:
@@ -748,30 +659,22 @@ if not LICENSE_VALID:
             
             client = LicenseClient()
             
-            # Step 2a: Try server validation FIRST for fresh data
-            _original_print(f"[LICENSE] Contacting license server for fresh validation...", flush=True)
-            sys.stdout.flush()
+            # Try server validation FIRST for fresh data
             is_valid, license_data = client.validate_license(license_key)
             
             # Check if we got fresh data from server (not cached/offline fallback)
             is_fresh_from_server = is_valid and not license_data.get('offline_mode') and not license_data.get('cached_mode')
             
             if is_fresh_from_server:
-                _original_print(f"[LICENSE] Got fresh data from server", flush=True)
                 # Use fresh server data
                 is_cached_valid = True
                 cached_data = license_data
             else:
                 # Server unreachable - fall back to cached validation
-                _original_print(f"[LICENSE] Server unreachable, checking cached validation...", flush=True)
-                sys.stdout.flush()
                 is_cached_valid, cached_data = client.validate_cached(license_key)
-                _original_print(f"[LICENSE] Cached validation result: valid={is_cached_valid}, data={cached_data}", flush=True)
-                sys.stdout.flush()
             
             if is_cached_valid:
-                # CRITICAL FIX: Recalculate days_remaining from expires timestamp
-                # The cached signed_token may have stale days_remaining=0 even when license is valid
+                # Recalculate days_remaining from expires timestamp
                 days_rem = cached_data.get('days_remaining', 999)
                 expires_str = cached_data.get('expires', '')
                 if expires_str:
@@ -783,24 +686,14 @@ if not LICENSE_VALID:
                             expires_dt = datetime.strptime(expires_str, '%Y-%m-%d %H:%M:%S')
                         hours_remaining = (expires_dt - datetime.now()).total_seconds() / 3600
                         days_rem = max(0, int(hours_remaining / 24)) if hours_remaining > 0 else -1
-                        _original_print(f"[LICENSE] Recalculated: {hours_remaining:.1f}h remaining ({days_rem} days)", flush=True)
-                    except Exception as calc_err:
-                        _original_print(f"[LICENSE] Could not recalculate expiry: {calc_err}", flush=True)
+                    except Exception:
+                        pass
                 
-                _original_print(f"[LICENSE] ✅ License valid (cached) - {days_rem} days remaining", flush=True)
-                _original_print(f"[LICENSE]   Customer: {cached_data.get('customer_id', 'N/A')}", flush=True)
-                _original_print(f"[LICENSE]   Expires: {cached_data.get('expires', 'N/A')}", flush=True)
-                _original_print(f"[LICENSE]   Mode: Cached ({cached_data.get('grace_message', '')})", flush=True)
-                sys.stdout.flush()
+                print(f"[LICENSE] ✅ Valid - {days_rem} days remaining")
                 
-                # CRITICAL: Block expired licenses (hours_remaining <= 0, not just days)
+                # Block expired licenses
                 if days_rem < 0:
-                    _original_print(f"[LICENSE] ❌ License has EXPIRED! Please renew your subscription.", flush=True)
-                    _original_print(f"[LICENSE] Your access ends at: {cached_data.get('expires', 'N/A')}", flush=True)
-                    _original_print(f"[LICENSE]", flush=True)
-                    _original_print(f"[LICENSE] 🔑 Enter a new license key to continue, or press Enter to exit:", flush=True)
-                    _original_print(f"[LICENSE] >>> PATH: cached_expired <<<", flush=True)
-                    sys.stdout.flush()
+                    print(f"[LICENSE] ❌ License EXPIRED! Please renew.")
                     try:
                         new_key = input("[LICENSE] New License Key: ").strip()
                         if new_key and (new_key.startswith('BT-') or new_key.startswith('BTF-') or new_key.startswith('TRIAL-')):
@@ -830,12 +723,11 @@ if not LICENSE_VALID:
                     LICENSE_DATA = cached_data
                     LICENSE_DATA['license_key'] = license_key
             else:
-                # Step 2b: Try server validation (also uses cache as fallback)
-                print(f"[LICENSE] Validating with license server...")
+                # Try server validation
                 is_valid, license_data = client.validate_license(license_key)
                 
                 if is_valid:
-                    # CRITICAL FIX: Recalculate days_remaining from expires timestamp
+                    # Recalculate days_remaining from expires timestamp
                     days_rem = license_data.get('days_remaining', 999)
                     expires_str = license_data.get('expires', '')
                     if expires_str:
@@ -847,25 +739,14 @@ if not LICENSE_VALID:
                                 expires_dt = datetime.strptime(expires_str, '%Y-%m-%d %H:%M:%S')
                             hours_remaining = (expires_dt - datetime.now()).total_seconds() / 3600
                             days_rem = max(0, int(hours_remaining / 24)) if hours_remaining > 0 else -1
-                            print(f"[LICENSE] Recalculated: {hours_remaining:.1f}h remaining ({days_rem} days)")
-                        except Exception as calc_err:
-                            print(f"[LICENSE] Could not recalculate expiry: {calc_err}")
+                        except Exception:
+                            pass
                     
-                    print(f"[LICENSE] ✅ License valid - {days_rem} days remaining")
-                    print(f"[LICENSE]   Customer: {license_data.get('customer_id', 'N/A')}")
-                    print(f"[LICENSE]   Expires: {license_data.get('expires', 'N/A')}")
-                    if license_data.get('offline_mode') or license_data.get('cached_mode'):
-                        mode = 'Offline' if license_data.get('offline_mode') else 'Cached'
-                        print(f"[LICENSE]   Mode: {mode} ({license_data.get('grace_message', '')})")
+                    print(f"[LICENSE] ✅ Valid - {days_rem} days remaining")
                     
-                    # CRITICAL: Block expired licenses (hours_remaining <= 0)
+                    # Block expired licenses
                     if days_rem < 0:
-                        _original_print(f"[LICENSE] ❌ License has EXPIRED! Please renew your subscription.", flush=True)
-                        _original_print(f"[LICENSE] Your access ends at: {license_data.get('expires', 'N/A')}", flush=True)
-                        _original_print(f"[LICENSE]", flush=True)
-                        _original_print(f"[LICENSE] 🔑 Enter a new license key to continue, or press Enter to exit:", flush=True)
-                        _original_print(f"[LICENSE] >>> PATH: server_expired <<<", flush=True)
-                        sys.stdout.flush()
+                        print(f"[LICENSE] ❌ License EXPIRED! Please renew.")
                         try:
                             new_key = input("[LICENSE] New License Key: ").strip()
                             if new_key and (new_key.startswith('BT-') or new_key.startswith('BTF-') or new_key.startswith('TRIAL-')):
@@ -896,13 +777,9 @@ if not LICENSE_VALID:
                         LICENSE_DATA['license_key'] = license_key
                 else:
                     error_msg = license_data.get('error', 'License validation failed')
-                    _original_print(f"[LICENSE] ❌ {error_msg}", flush=True)
+                    print(f"[LICENSE] ❌ {error_msg}")
                     # Check if this is an expiry/invalid error - offer to enter new key
                     if 'expired' in error_msg.lower() or 'invalid' in error_msg.lower() or 'not found' in error_msg.lower():
-                        _original_print(f"[LICENSE]", flush=True)
-                        _original_print(f"[LICENSE] 🔑 Enter a new license key to continue, or press Enter to exit:", flush=True)
-                        _original_print(f"[LICENSE] >>> PATH: server_error <<<", flush=True)
-                        sys.stdout.flush()
                         try:
                             new_key = input("[LICENSE] New License Key: ").strip()
                             if new_key and (new_key.startswith('BT-') or new_key.startswith('BTF-') or new_key.startswith('TRIAL-')):
@@ -948,13 +825,10 @@ if not LICENSE_VALID:
 # Step 3: If no valid license, try setup wizard (for EXE) or block startup (for Replit)
 if not LICENSE_VALID:
     import sys
-    print("[LICENSE] ❌ No valid license found after checking cache and server", flush=True)
-    print("[LICENSE] Entering license prompt mode...", flush=True)
-    sys.stdout.flush()
+    print("[LICENSE] ❌ No valid license found")
     
     # Check if setup wizard is available (EXE mode)
     SETUP_WIZARD_AVAILABLE = False
-    print("[LICENSE] Checking for setup wizard availability...")
     if SetupWizard is None:
         try:
             try:

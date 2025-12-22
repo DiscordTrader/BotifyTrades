@@ -49,11 +49,6 @@ class LicenseClient:
         
         # Initialize cache manager
         self._cache = LicenseCache(self.machine_id, self.cache_dir, self.cache_file)
-        
-        print(f"[LICENSE] Initialized with {len(self.server_urls)} server(s)")
-        print(f"[LICENSE] Primary: {self.server_urls[0]}")
-        if len(self.server_urls) > 1:
-            print(f"[LICENSE] Fallback(s): {', '.join(self.server_urls[1:])}")
     
     def _make_request_single(self, url: str, method: str = 'POST', data: dict = None) -> Tuple[Dict, bool]:
         """
@@ -62,8 +57,6 @@ class LicenseClient:
         Returns:
             Tuple of (response_dict, success_bool)
         """
-        print(f"[LICENSE] Trying server: {url}")
-        print(f"[LICENSE] Request data: {data}")
         
         # Get SSL certificate path for PyInstaller bundles
         ssl_cert = get_ssl_cert_path()
@@ -85,17 +78,12 @@ class LicenseClient:
                     response = requests.post(url, json=data, headers=headers, timeout=30, verify=verify)
                 else:
                     response = requests.get(url, headers=headers, timeout=30, verify=verify)
-            except requests.exceptions.SSLError as ssl_err:
-                print(f"[LICENSE] SSL verification failed: {ssl_err}")
-                print("[LICENSE] Retrying with SSL verification disabled...")
+            except requests.exceptions.SSLError:
                 # Retry without SSL verification
                 if method == 'POST':
                     response = requests.post(url, json=data, headers=headers, timeout=30, verify=False)
                 else:
                     response = requests.get(url, headers=headers, timeout=30, verify=False)
-            
-            print(f"[LICENSE] Response status: {response.status_code}")
-            print(f"[LICENSE] Response: {response.text[:200]}...")
             
             if response.status_code == 200:
                 return response.json(), True
@@ -106,15 +94,13 @@ class LicenseClient:
                     return {'success': False, 'is_valid': False, 'error': f"HTTP {response.status_code}"}, False
                     
         except ImportError:
-            print("[LICENSE] requests library not available, using urllib")
-        except requests.exceptions.ConnectionError as conn_err:
-            print(f"[LICENSE] Connection failed: {conn_err}")
+            pass  # Fall through to urllib
+        except requests.exceptions.ConnectionError:
             return {'success': False, 'is_valid': False, 'error': 'Connection failed', 'offline': True}, False
-        except requests.exceptions.Timeout as timeout_err:
-            print(f"[LICENSE] Request timeout: {timeout_err}")
+        except requests.exceptions.Timeout:
             return {'success': False, 'is_valid': False, 'error': 'Request timeout', 'offline': True}, False
-        except Exception as req_err:
-            print(f"[LICENSE] requests failed: {req_err}, trying urllib...")
+        except Exception:
+            pass  # Fall through to urllib
         
         # Fallback to urllib
         import urllib.request
@@ -139,33 +125,24 @@ class LicenseClient:
                     context.load_verify_locations(ssl_cert)
                 with urllib.request.urlopen(req, timeout=30, context=context) as response:
                     response_data = response.read().decode('utf-8')
-                    print(f"[LICENSE] Response: {response_data[:200]}...")
                     return json.loads(response_data), True
-            except ssl.SSLError as ssl_err:
-                print(f"[LICENSE] SSL Error with default context: {ssl_err}")
-                print("[LICENSE] Retrying with unverified SSL...")
+            except ssl.SSLError:
                 context = ssl.create_default_context()
                 context.check_hostname = False
                 context.verify_mode = ssl.CERT_NONE
                 with urllib.request.urlopen(req, timeout=30, context=context) as response:
                     response_data = response.read().decode('utf-8')
-                    print(f"[LICENSE] Response (unverified SSL): {response_data[:200]}...")
                     return json.loads(response_data), True
                 
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8') if e.fp else ''
-            print(f"[LICENSE] HTTP Error {e.code}: {error_body}")
             try:
                 return json.loads(error_body), False
             except:
                 return {'success': False, 'is_valid': False, 'error': f"HTTP {e.code}: {error_body}"}, False
         except urllib.error.URLError as e:
-            print(f"[LICENSE] URL Error: {e.reason}")
             return {'success': False, 'is_valid': False, 'error': f"Connection failed: {e.reason}", 'offline': True}, False
         except Exception as e:
-            print(f"[LICENSE] Unexpected error: {type(e).__name__}: {e}")
-            import traceback
-            traceback.print_exc()
             return {'success': False, 'is_valid': False, 'error': str(e), 'offline': True}, False
     
     def _make_request(self, endpoint: str, method: str = 'POST', data: dict = None) -> Dict:
@@ -179,9 +156,6 @@ class LicenseClient:
         for i, server_url in enumerate(self.server_urls):
             url = f"{server_url}/api/v1/license/{endpoint}"
             
-            if i > 0:
-                print(f"[LICENSE] Trying fallback server {i}: {server_url}")
-            
             result, success = self._make_request_single(url, method, data)
             
             # Check if this was a connection/network failure vs a valid API response
@@ -189,8 +163,6 @@ class LicenseClient:
                 # Update active server for future requests
                 self.active_server_url = server_url
                 self.server_url = server_url
-                if i > 0:
-                    print(f"[LICENSE] Fallback server succeeded: {server_url}")
                 return result
             
             # If we got a valid API response (even an error), don't try fallback
@@ -201,10 +173,8 @@ class LicenseClient:
             
             # Connection failed - save error and try next server
             last_error = result.get('error', 'Unknown error')
-            print(f"[LICENSE] Server {server_url} unreachable: {last_error}")
         
         # All servers failed
-        print(f"[LICENSE] All servers failed. Last error: {last_error}")
         return {'success': False, 'is_valid': False, 'error': f"All servers unreachable: {last_error}", 'offline': True}
     
     def _save_cache(self, license_key: str, result: Dict):

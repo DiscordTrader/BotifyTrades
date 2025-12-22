@@ -9024,8 +9024,7 @@ def register_routes(app):
                         cache_data = json.load(f)
                         cache_license = cache_data.get('license_key', '').strip()
                         if cache_license:
-                            print(f"[LICENSE] Found license key in cache file: {cache_license[:8]}...")
-                            # Also get cached validation result for quick display
+                            # Get cached validation result for quick display
                             cached_result = cache_data.get('result', {})
                             if cached_result.get('is_valid'):
                                 return jsonify({
@@ -9036,8 +9035,8 @@ def register_routes(app):
                                     'license_type': cached_result.get('license_type', 'subscription'),
                                     'message': f"License valid (cached) - {cached_result.get('days_remaining', 0)} days remaining"
                                 })
-            except Exception as cache_err:
-                print(f"[LICENSE] Could not read cache file: {cache_err}")
+            except Exception:
+                pass
             
             # Smart priority: Prefer BTF/BT-format licenses over legacy format
             if env_license.startswith('BTF-') or env_license.startswith('BT-'):
