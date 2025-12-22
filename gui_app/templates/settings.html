@@ -1233,6 +1233,37 @@ input:checked + .slider:before {
 </div>
 
 <script>
+// ========== TOAST NOTIFICATIONS ==========
+function showToast(message, type = 'info') {
+    let toast = document.getElementById('toast-notification');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast-notification';
+        toast.style.cssText = 'position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; z-index: 10000; font-size: 14px; font-weight: 500; transition: opacity 0.3s, transform 0.3s; box-shadow: 0 4px 12px rgba(0,0,0,0.3);';
+        document.body.appendChild(toast);
+    }
+    
+    if (type === 'success') {
+        toast.style.background = 'linear-gradient(135deg, #00ff88 0%, #00cc6a 100%)';
+        toast.style.color = '#000';
+    } else if (type === 'error') {
+        toast.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%)';
+        toast.style.color = '#fff';
+    } else {
+        toast.style.background = 'linear-gradient(135deg, #00d4ff 0%, #0099cc 100%)';
+        toast.style.color = '#000';
+    }
+    
+    toast.textContent = message;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-10px)';
+    }, 4000);
+}
+
 // ========== COLLAPSIBLE SECTIONS ==========
 
 function toggleSection(sectionId) {
