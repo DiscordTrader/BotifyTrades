@@ -3567,10 +3567,10 @@ def save_signal_conversion_settings(conversion_channel_id: str, target_execution
         return False
 
 
-# ============ CHANNEL MAPPINGS (MULTI-SOURCE TO DESTINATION) ============
+# ============ CHANNEL MAPPINGS (SOURCE CHANNEL TO WEBHOOK URL) ============
 
 def init_channel_mappings_table():
-    """Create channel_mappings table if it doesn't exist"""
+    """Create channel_mappings table if it doesn't exist - now maps source channels to webhook URLs"""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
@@ -3578,16 +3578,40 @@ def init_channel_mappings_table():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             source_channel_id TEXT NOT NULL,
             source_channel_name TEXT DEFAULT '',
-            destination_channel_id TEXT NOT NULL,
-            destination_channel_name TEXT DEFAULT '',
+            webhook_url TEXT NOT NULL,
+            webhook_name TEXT DEFAULT '',
             is_active INTEGER DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(source_channel_id, destination_channel_id)
+            UNIQUE(source_channel_id, webhook_url)
         )
     ''')
+    cursor.execute('''
+        ALTER TABLE channel_mappings ADD COLUMN webhook_url TEXT DEFAULT ''
+    ''') if False else None
+    cursor.execute('''
+        ALTER TABLE channel_mappings ADD COLUMN webhook_name TEXT DEFAULT ''
+    ''') if False else None
     conn.commit()
     print("[DATABASE] ✓ Channel mappings table ready")
+
+
+def migrate_channel_mappings_to_webhook():
+    """Migrate old channel_mappings table to new webhook-based structure"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("PRAGMA table_info(channel_mappings)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'webhook_url' not in columns:
+            cursor.execute('ALTER TABLE channel_mappings ADD COLUMN webhook_url TEXT DEFAULT ""')
+            cursor.execute('ALTER TABLE channel_mappings ADD COLUMN webhook_name TEXT DEFAULT ""')
+            conn.commit()
+            print("[DATABASE] ✓ Migrated channel_mappings to webhook-based structure")
+    except Exception as e:
+        print(f"[DATABASE] Migration skipped or error: {e}")
 
 
 def get_channel_mappings() -> List[Dict[str, Any]]:
@@ -3596,12 +3620,13 @@ def get_channel_mappings() -> List[Dict[str, Any]]:
     cursor = conn.cursor()
     
     try:
-        # Ensure table exists
         init_channel_mappings_table()
+        migrate_channel_mappings_to_webhook()
         
         cursor.execute('''
             SELECT id, source_channel_id, source_channel_name, 
-                   destination_channel_id, destination_channel_name, 
+                   COALESCE(webhook_url, '') as webhook_url, 
+                   COALESCE(webhook_name, '') as webhook_name, 
                    is_active, created_at, updated_at
             FROM channel_mappings
             ORDER BY created_at DESC
@@ -3614,26 +3639,26 @@ def get_channel_mappings() -> List[Dict[str, Any]]:
         return []
 
 
-def add_channel_mapping(source_channel_id: str, destination_channel_id: str,
-                        source_channel_name: str = '', destination_channel_name: str = '') -> Dict[str, Any]:
-    """Add a new channel mapping"""
+def add_channel_mapping(source_channel_id: str, webhook_url: str,
+                        source_channel_name: str = '', webhook_name: str = '') -> Dict[str, Any]:
+    """Add a new channel mapping (source channel -> webhook URL)"""
     conn = get_connection()
     cursor = conn.cursor()
     
     try:
-        # Ensure table exists
         init_channel_mappings_table()
+        migrate_channel_mappings_to_webhook()
         
         cursor.execute('''
             INSERT INTO channel_mappings (source_channel_id, source_channel_name, 
-                                          destination_channel_id, destination_channel_name)
+                                          webhook_url, webhook_name)
             VALUES (?, ?, ?, ?)
         ''', (source_channel_id.strip(), source_channel_name.strip(), 
-              destination_channel_id.strip(), destination_channel_name.strip()))
+              webhook_url.strip(), webhook_name.strip()))
         
         mapping_id = cursor.lastrowid
         conn.commit()
-        print(f"[DATABASE] ✓ Added channel mapping: {source_channel_id} -> {destination_channel_id}")
+        print(f"[DATABASE] ✓ Added channel mapping: {source_channel_id} -> {webhook_url[:50]}...")
         
         return {
             'success': True,
@@ -3655,9 +3680,9 @@ def add_channel_mapping(source_channel_id: str, destination_channel_id: str,
 
 
 def update_channel_mapping(mapping_id: int, source_channel_id: str = None, 
-                           destination_channel_id: str = None,
+                           webhook_url: str = None,
                            source_channel_name: str = None, 
-                           destination_channel_name: str = None,
+                           webhook_name: str = None,
                            is_active: bool = None) -> Dict[str, Any]:
     """Update an existing channel mapping"""
     conn = get_connection()
@@ -3670,15 +3695,15 @@ def update_channel_mapping(mapping_id: int, source_channel_id: str = None,
         if source_channel_id is not None:
             updates.append('source_channel_id = ?')
             params.append(source_channel_id.strip())
-        if destination_channel_id is not None:
-            updates.append('destination_channel_id = ?')
-            params.append(destination_channel_id.strip())
+        if webhook_url is not None:
+            updates.append('webhook_url = ?')
+            params.append(webhook_url.strip())
         if source_channel_name is not None:
             updates.append('source_channel_name = ?')
             params.append(source_channel_name.strip())
-        if destination_channel_name is not None:
-            updates.append('destination_channel_name = ?')
-            params.append(destination_channel_name.strip())
+        if webhook_name is not None:
+            updates.append('webhook_name = ?')
+            params.append(webhook_name.strip())
         if is_active is not None:
             updates.append('is_active = ?')
             params.append(1 if is_active else 0)
@@ -3726,23 +3751,26 @@ def delete_channel_mapping(mapping_id: int) -> Dict[str, Any]:
         return {'success': False, 'error': str(e)}
 
 
-def get_destination_for_source(source_channel_id: str) -> str:
-    """Get the destination channel ID for a given source channel"""
+def get_webhook_for_source(source_channel_id: str) -> Dict[str, str]:
+    """Get the webhook URL and name for a given source channel"""
     conn = get_connection()
     cursor = conn.cursor()
     
     try:
+        migrate_channel_mappings_to_webhook()
         cursor.execute('''
-            SELECT destination_channel_id
+            SELECT webhook_url, webhook_name
             FROM channel_mappings
             WHERE source_channel_id = ? AND is_active = 1
             LIMIT 1
         ''', (source_channel_id,))
         
         row = cursor.fetchone()
-        return row['destination_channel_id'] if row else None
+        if row:
+            return {'webhook_url': row['webhook_url'], 'webhook_name': row['webhook_name']}
+        return None
     except Exception as e:
-        print(f"[DATABASE] Error getting destination for source: {e}")
+        print(f"[DATABASE] Error getting webhook for source: {e}")
         return None
 
 

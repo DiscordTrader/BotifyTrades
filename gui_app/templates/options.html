@@ -1054,6 +1054,28 @@
             </div>
         </div>
 
+        <div class="webhook-channels-card" style="margin-top: 16px;">
+            <div class="webhook-channels-header">
+                <h3>Channel Mappings</h3>
+                <button class="add-channel-btn" onclick="toggleAddMappingForm()">+ Add Mapping</button>
+            </div>
+            <p style="color: #888; font-size: 12px; margin: 0 0 12px 0;">Map Discord source channels to webhook URLs for automatic signal forwarding</p>
+            <div id="mappingAddForm" class="webhook-add-form">
+                <div class="form-row">
+                    <input type="text" id="newMappingSourceId" class="name-input" placeholder="Source Channel ID" style="flex: 1;">
+                    <input type="text" id="newMappingSourceName" class="name-input" placeholder="Source Name (optional)" style="flex: 1;">
+                    <span style="color: #888; padding: 0 8px;">→</span>
+                    <input type="text" id="newMappingWebhookUrl" class="url-input" placeholder="https://discord.com/api/webhooks/..." style="flex: 2;">
+                    <input type="text" id="newMappingWebhookName" class="bot-input" placeholder="Webhook Name" style="flex: 1;">
+                    <button class="form-btn save" onclick="addChannelMapping()">Save</button>
+                    <button class="form-btn cancel" onclick="toggleAddMappingForm()">Cancel</button>
+                </div>
+            </div>
+            <div id="channelMappingsList" class="webhook-channels-list">
+                <div class="webhook-channels-empty">No channel mappings configured.</div>
+            </div>
+        </div>
+
         <div class="options-table">
             {% for i in range(1, 5) %}
             <div class="option-row" id="optionRow{{ i }}" data-row="{{ i }}">
@@ -1826,6 +1848,125 @@
             }
         }
         
+        let channelMappings = [];
+        
+        async function loadChannelMappings() {
+            try {
+                const response = await fetch('/api/channel_mappings');
+                const data = await response.json();
+                
+                if (data.success && data.mappings) {
+                    channelMappings = data.mappings;
+                    renderChannelMappings();
+                }
+            } catch (error) {
+                console.error('Error loading channel mappings:', error);
+            }
+        }
+        
+        function renderChannelMappings() {
+            const container = document.getElementById('channelMappingsList');
+            
+            if (channelMappings.length === 0) {
+                container.innerHTML = '<div class="webhook-channels-empty">No channel mappings configured.</div>';
+                return;
+            }
+            
+            container.innerHTML = channelMappings.map(mapping => `
+                <div class="webhook-channel-item" data-id="${mapping.id}">
+                    <div class="webhook-channel-color" style="background: #5865F2"></div>
+                    <div class="webhook-channel-info" style="flex: 1;">
+                        <div class="webhook-channel-name">${escapeHtml(mapping.source_channel_name || mapping.source_channel_id)}</div>
+                        <div class="webhook-channel-bot" style="font-size: 10px; color: #666;">${escapeHtml(mapping.source_channel_id)}</div>
+                    </div>
+                    <span style="color: #888; padding: 0 12px;">→</span>
+                    <div class="webhook-channel-info" style="flex: 2;">
+                        <div class="webhook-channel-name">${escapeHtml(mapping.webhook_name || 'Webhook')}</div>
+                        <div class="webhook-channel-bot" style="font-size: 10px; color: #666;">${escapeHtml(mapping.webhook_url ? mapping.webhook_url.substring(0, 50) + '...' : '')}</div>
+                    </div>
+                    <div class="webhook-channel-actions">
+                        <button class="channel-action-btn delete" onclick="deleteChannelMapping(${mapping.id})" title="Delete">✕</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function toggleAddMappingForm() {
+            const form = document.getElementById('mappingAddForm');
+            form.classList.toggle('show');
+            if (form.classList.contains('show')) {
+                document.getElementById('newMappingSourceId').focus();
+            }
+        }
+        
+        async function addChannelMapping() {
+            const sourceId = document.getElementById('newMappingSourceId').value.trim();
+            const sourceName = document.getElementById('newMappingSourceName').value.trim();
+            const webhookUrl = document.getElementById('newMappingWebhookUrl').value.trim();
+            const webhookName = document.getElementById('newMappingWebhookName').value.trim();
+            
+            if (!sourceId) {
+                showToast('Please enter a source channel ID', 'error');
+                return;
+            }
+            if (!webhookUrl) {
+                showToast('Please enter a webhook URL', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/channel_mappings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        source_channel_id: sourceId,
+                        source_channel_name: sourceName,
+                        webhook_url: webhookUrl,
+                        webhook_name: webhookName
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('Channel mapping added successfully', 'success');
+                    document.getElementById('newMappingSourceId').value = '';
+                    document.getElementById('newMappingSourceName').value = '';
+                    document.getElementById('newMappingWebhookUrl').value = '';
+                    document.getElementById('newMappingWebhookName').value = '';
+                    toggleAddMappingForm();
+                    loadChannelMappings();
+                } else {
+                    showToast(result.error || 'Failed to add mapping', 'error');
+                }
+            } catch (error) {
+                showToast('Failed to add mapping: ' + error.message, 'error');
+            }
+        }
+        
+        async function deleteChannelMapping(mappingId) {
+            if (!confirm('Are you sure you want to delete this channel mapping?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/channel_mappings/${mappingId}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('Channel mapping deleted successfully', 'success');
+                    loadChannelMappings();
+                } else {
+                    showToast(result.error || 'Failed to delete mapping', 'error');
+                }
+            } catch (error) {
+                showToast('Failed to delete mapping: ' + error.message, 'error');
+            }
+        }
+        
         function getSelectedChannel(row) {
             const select = document.getElementById(`webhookChannel${row}`);
             const channelId = select ? select.value : '';
@@ -1947,7 +2088,10 @@
             }
         }
         
-        document.addEventListener('DOMContentLoaded', loadWebhookChannels);
+        document.addEventListener('DOMContentLoaded', function() {
+            loadWebhookChannels();
+            loadChannelMappings();
+        });
 
         function showToast(message, type) {
             const existing = document.querySelector('.toast');

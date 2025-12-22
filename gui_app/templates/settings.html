@@ -1178,32 +1178,6 @@ input:checked + .slider:before {
         </div>
     </div>
 
-    <!-- Multi-Channel Mappings -->
-    <div class="settings-card">
-        <h3>🔗 Channel Mappings</h3>
-        <p class="description">Map multiple source channels to destination channels for signal forwarding</p>
-        
-        <div class="form-group">
-            <label>Add New Mapping</label>
-            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                <input type="text" id="mapping-source-id" placeholder="Source Channel ID" style="flex: 1; min-width: 150px;">
-                <input type="text" id="mapping-source-name" placeholder="Source Name (optional)" style="flex: 1; min-width: 120px;">
-                <span style="color: #888;">→</span>
-                <input type="text" id="mapping-dest-id" placeholder="Destination Channel ID" style="flex: 1; min-width: 150px;">
-                <input type="text" id="mapping-dest-name" placeholder="Dest Name (optional)" style="flex: 1; min-width: 120px;">
-                <button id="add-channel-mapping" class="btn btn-primary" style="white-space: nowrap;">➕ Add</button>
-            </div>
-            <p class="help-text">Signals from source channels will be forwarded to their mapped destination channels</p>
-        </div>
-
-        <div class="form-group">
-            <label>Existing Mappings</label>
-            <div id="channel-mappings-list" style="background: #1a1a2e; border-radius: 8px; padding: 10px; max-height: 300px; overflow-y: auto;">
-                <p style="color: #888; text-align: center;">Loading mappings...</p>
-            </div>
-        </div>
-    </div>
-
     <!-- Trade Notification Settings -->
     <div class="settings-card">
         <h3>📢 Trade Notifications</h3>
@@ -2911,109 +2885,6 @@ document.getElementById('clear-webull-trades').addEventListener('click', async (
     }
 });
 
-// ========== CHANNEL MAPPINGS ==========
-
-async function loadChannelMappings() {
-    const container = document.getElementById('channel-mappings-list');
-    try {
-        const response = await fetch('/api/channel_mappings');
-        const data = await response.json();
-        
-        if (data.success && data.mappings && data.mappings.length > 0) {
-            let html = '<table style="width: 100%; border-collapse: collapse;">';
-            html += '<thead><tr style="border-bottom: 1px solid #333;">';
-            html += '<th style="text-align: left; padding: 8px; color: #888;">Source Channel</th>';
-            html += '<th style="text-align: center; padding: 8px; color: #888;"></th>';
-            html += '<th style="text-align: left; padding: 8px; color: #888;">Destination Channel</th>';
-            html += '<th style="text-align: center; padding: 8px; color: #888;">Actions</th>';
-            html += '</tr></thead><tbody>';
-            
-            data.mappings.forEach(m => {
-                const srcDisplay = m.source_channel_name ? `${m.source_channel_name}<br><small style="color:#666;">${m.source_channel_id}</small>` : m.source_channel_id;
-                const destDisplay = m.destination_channel_name ? `${m.destination_channel_name}<br><small style="color:#666;">${m.destination_channel_id}</small>` : m.destination_channel_id;
-                
-                html += `<tr style="border-bottom: 1px solid #222;">`;
-                html += `<td style="padding: 8px; color: #fff;">${srcDisplay}</td>`;
-                html += `<td style="padding: 8px; text-align: center; color: #00ff88;">→</td>`;
-                html += `<td style="padding: 8px; color: #fff;">${destDisplay}</td>`;
-                html += `<td style="padding: 8px; text-align: center;">`;
-                html += `<button onclick="deleteChannelMapping(${m.id})" class="btn btn-danger" style="padding: 4px 10px; font-size: 12px;">🗑️</button>`;
-                html += `</td></tr>`;
-            });
-            
-            html += '</tbody></table>';
-            container.innerHTML = html;
-        } else {
-            container.innerHTML = '<p style="color: #888; text-align: center; margin: 20px 0;">No channel mappings configured yet</p>';
-        }
-    } catch (error) {
-        container.innerHTML = `<p style="color: #ff4444; text-align: center;">Error loading mappings: ${error.message}</p>`;
-    }
-}
-
-async function addChannelMapping() {
-    const sourceId = document.getElementById('mapping-source-id').value.trim();
-    const sourceName = document.getElementById('mapping-source-name').value.trim();
-    const destId = document.getElementById('mapping-dest-id').value.trim();
-    const destName = document.getElementById('mapping-dest-name').value.trim();
-    
-    if (!sourceId || !destId) {
-        showMessage('error', 'Source and Destination Channel IDs are required');
-        return;
-    }
-    
-    try {
-        const response = await fetch('/api/channel_mappings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                source_channel_id: sourceId,
-                source_channel_name: sourceName || '',
-                destination_channel_id: destId,
-                destination_channel_name: destName || ''
-            })
-        });
-        const data = await response.json();
-        
-        if (data.success) {
-            showMessage('success', 'Channel mapping added successfully');
-            document.getElementById('mapping-source-id').value = '';
-            document.getElementById('mapping-source-name').value = '';
-            document.getElementById('mapping-dest-id').value = '';
-            document.getElementById('mapping-dest-name').value = '';
-            loadChannelMappings();
-        } else {
-            showMessage('error', data.error || 'Failed to add mapping');
-        }
-    } catch (error) {
-        showMessage('error', error.message);
-    }
-}
-
-async function deleteChannelMapping(id) {
-    if (!confirm('Are you sure you want to delete this channel mapping?')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/channel_mappings/${id}`, {
-            method: 'DELETE'
-        });
-        const data = await response.json();
-        
-        if (data.success) {
-            showMessage('success', 'Channel mapping deleted');
-            loadChannelMappings();
-        } else {
-            showMessage('error', data.error || 'Failed to delete mapping');
-        }
-    } catch (error) {
-        showMessage('error', error.message);
-    }
-}
-
-document.getElementById('add-channel-mapping').addEventListener('click', addChannelMapping);
-
 // Load all settings on page load
 loadBrokerStatus();
 loadDiscordCredentials();
@@ -3030,7 +2901,6 @@ loadTradingSettings();
 loadSignalConversionSettings();
 loadNotificationSettings();
 loadDiscordNotifications();
-loadChannelMappings();
 
 // Refresh broker status every 30 seconds
 setInterval(loadBrokerStatus, 30000);

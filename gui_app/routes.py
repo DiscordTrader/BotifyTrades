@@ -7076,20 +7076,20 @@ def register_routes(app):
     
     @app.route('/api/channel_mappings', methods=['POST'])
     def api_add_channel_mapping():
-        """Add a new channel mapping"""
+        """Add a new channel mapping (source channel -> webhook URL)"""
         try:
             data = request.json
             source_channel_id = data.get('source_channel_id', '').strip()
-            destination_channel_id = data.get('destination_channel_id', '').strip()
+            webhook_url = data.get('webhook_url', '').strip()
             source_channel_name = data.get('source_channel_name', '').strip()
-            destination_channel_name = data.get('destination_channel_name', '').strip()
+            webhook_name = data.get('webhook_name', '').strip()
             
-            if not source_channel_id or not destination_channel_id:
-                return jsonify({'success': False, 'error': 'Source and destination channel IDs are required'}), 400
+            if not source_channel_id or not webhook_url:
+                return jsonify({'success': False, 'error': 'Source channel ID and webhook URL are required'}), 400
             
             result = db.add_channel_mapping(
-                source_channel_id, destination_channel_id,
-                source_channel_name, destination_channel_name
+                source_channel_id, webhook_url,
+                source_channel_name, webhook_name
             )
             return jsonify(result)
         except Exception as e:
@@ -7104,9 +7104,9 @@ def register_routes(app):
             result = db.update_channel_mapping(
                 mapping_id,
                 source_channel_id=data.get('source_channel_id'),
-                destination_channel_id=data.get('destination_channel_id'),
+                webhook_url=data.get('webhook_url'),
                 source_channel_name=data.get('source_channel_name'),
-                destination_channel_name=data.get('destination_channel_name'),
+                webhook_name=data.get('webhook_name'),
                 is_active=data.get('is_active')
             )
             return jsonify(result)
