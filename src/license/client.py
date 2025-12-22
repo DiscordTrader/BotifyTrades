@@ -377,6 +377,18 @@ class LicenseClient:
             error_msg = result.get('error', 'Unknown validation error')
             print(f"[LICENSE] Server returned error: {error_msg}")
             
+            # SECURITY: Explicit rejections should NOT fall back to cache
+            # These are hard rejections from the server, not connectivity issues
+            hard_rejection_keywords = ['revoked', 'expired', 'invalid', 'suspended', 'terminated', 'banned', 'not found']
+            is_hard_rejection = any(keyword in error_msg.lower() for keyword in hard_rejection_keywords)
+            
+            if is_hard_rejection:
+                print(f"[LICENSE] Hard rejection from server - cache bypass enforced")
+                # Clear any existing cache to prevent future use
+                self.clear_cache()
+                return False, result
+            
+            # Only use cache for ambiguous errors (rate limits, temporary issues, etc.)
             cache = self._load_cache()
             if cache and cache.get('license_key') == license_key and cache.get('machine_id') == self.machine_id:
                 is_grace_valid, message = self._check_grace_period(cache, max_offline_hours)
