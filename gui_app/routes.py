@@ -5608,8 +5608,13 @@ def register_routes(app):
     def api_get_alpaca_settings():
         """Get Alpaca settings"""
         try:
-            settings = db.get_alpaca_settings()
-            return jsonify(settings)
+            from .broker_credentials_service import get_alpaca_credentials
+            creds = get_alpaca_credentials()
+            return jsonify({
+                'alpaca_api_key': creds.get('api_key', ''),
+                'alpaca_secret_key': creds.get('secret_key', ''),
+                'paper_mode': creds.get('paper_mode', True)
+            })
         except Exception as e:
             print(f"[API] Error fetching Alpaca settings: {e}")
             return jsonify({'error': str(e)}), 500
@@ -5618,6 +5623,8 @@ def register_routes(app):
     def api_update_alpaca_settings():
         """Update Alpaca settings"""
         try:
+            from .broker_credentials_service import save_alpaca_credentials, get_alpaca_credentials
+            
             data = request.json
             api_key = data.get('alpaca_api_key', '').strip()
             secret_key = data.get('alpaca_secret_key', '').strip()
@@ -5625,14 +5632,17 @@ def register_routes(app):
             if not api_key or not secret_key:
                 return jsonify({'success': False, 'error': 'Both API key and secret key are required'}), 400
             
+            existing = get_alpaca_credentials()
+            paper_mode = data.get('paper_mode', existing.get('paper_mode', True))
+            
             print(f"[API] Saving Alpaca credentials - API Key length: {len(api_key)}, Secret length: {len(secret_key)}")
-            success = db.update_alpaca_settings(api_key, secret_key)
-            if success:
-                print(f"[API] ✓ Alpaca credentials saved successfully")
-                return jsonify({'success': True, 'message': 'Alpaca credentials saved successfully'})
-            else:
-                print(f"[API] ✗ Failed to save Alpaca credentials")
-                return jsonify({'success': False, 'error': 'Failed to save credentials'}), 500
+            save_alpaca_credentials(
+                api_key=api_key,
+                secret_key=secret_key,
+                paper_mode=paper_mode
+            )
+            print(f"[API] ✓ Alpaca credentials saved successfully")
+            return jsonify({'success': True, 'message': 'Alpaca credentials saved successfully'})
         except Exception as e:
             print(f"[API] ✗ Error updating Alpaca settings: {e}")
             import traceback
@@ -5644,8 +5654,14 @@ def register_routes(app):
     def api_get_robinhood_settings():
         """Get Robinhood settings"""
         try:
-            settings = db.get_robinhood_settings()
-            return jsonify(settings)
+            from .broker_credentials_service import get_robinhood_credentials
+            creds = get_robinhood_credentials()
+            return jsonify({
+                'robinhood_username': creds.get('username', ''),
+                'robinhood_password': creds.get('password', ''),
+                'robinhood_totp_secret': creds.get('totp_secret', ''),
+                'robinhood_device_token': creds.get('device_token', '')
+            })
         except Exception as e:
             print(f"[API] Error fetching Robinhood settings: {e}")
             return jsonify({'error': str(e)}), 500
@@ -5658,6 +5674,8 @@ def register_routes(app):
         All trades executed will be with REAL money.
         """
         try:
+            from .broker_credentials_service import save_robinhood_credentials, get_robinhood_credentials
+            
             data = request.json
             username = data.get('robinhood_username', '').strip()
             password = data.get('robinhood_password', '').strip()
@@ -5666,18 +5684,22 @@ def register_routes(app):
             if not username or not password:
                 return jsonify({'success': False, 'error': 'Username and password are required'}), 400
             
+            existing = get_robinhood_credentials()
+            device_token = data.get('robinhood_device_token', existing.get('device_token', ''))
+            
             print(f"[API] Saving Robinhood credentials - Username: {username[:3]}***")
             print(f"[API] ⚠️  WARNING: Robinhood has NO paper trading - all trades are LIVE")
-            success = db.update_robinhood_settings(username, password, totp_secret)
-            if success:
-                print(f"[API] ✓ Robinhood credentials saved successfully")
-                return jsonify({
-                    'success': True, 
-                    'message': 'Robinhood credentials saved. WARNING: All trades are LIVE (no paper trading).'
-                })
-            else:
-                print(f"[API] ✗ Failed to save Robinhood credentials")
-                return jsonify({'success': False, 'error': 'Failed to save credentials'}), 500
+            save_robinhood_credentials(
+                username=username,
+                password=password,
+                totp_secret=totp_secret,
+                device_token=device_token
+            )
+            print(f"[API] ✓ Robinhood credentials saved successfully")
+            return jsonify({
+                'success': True, 
+                'message': 'Robinhood credentials saved. WARNING: All trades are LIVE (no paper trading).'
+            })
         except Exception as e:
             print(f"[API] ✗ Error updating Robinhood settings: {e}")
             import traceback
