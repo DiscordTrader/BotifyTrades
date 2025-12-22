@@ -5075,7 +5075,7 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
         
         return alert_data
 
-    async def handle_auto_signal_conversion(self, message: discord.Message, text: str):
+    async def handle_auto_signal_conversion(self, message: discord.Message, text: str, target_channel_id: str = None):
         """Automatically convert stock alerts to BTO/STC signals - NO AI COST (Pure Regex Detection)"""
         
         print(f"[ALERT PARSER] Analyzing text from {message.author.name}: {text[:100]}")
@@ -5092,9 +5092,10 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                 if DATABASE_MODULE_AVAILABLE:
                     from gui_app import database as db
                     
-                    # Get user-configured target execution channel from settings
-                    conversion_settings = db.get_signal_conversion_settings()
-                    target_channel_id = conversion_settings.get('target_execution_channel_id', '')
+                    # Use passed target_channel_id (from channel mapping) or fall back to settings
+                    if not target_channel_id:
+                        conversion_settings = db.get_signal_conversion_settings()
+                        target_channel_id = conversion_settings.get('target_execution_channel_id', '')
                     
                     # FALLBACK: If no target channel configured, use the originating channel
                     if not target_channel_id:
@@ -5521,21 +5522,38 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # AUTO SIGNAL CONVERSION - monitor designated channel and auto-convert natural language
         # Check both config.ini and database for conversion channel ID
         active_conversion_channel_id = CONVERSION_CHANNEL_ID
+        target_execution_channel_id = None
+        
         if DATABASE_MODULE_AVAILABLE:
             from gui_app import database as db
-            conversion_settings = db.get_signal_conversion_settings()
-            db_conversion_channel_id = conversion_settings.get('conversion_channel_id', '').strip()
-            if db_conversion_channel_id:
-                active_conversion_channel_id = int(db_conversion_channel_id)
+            
+            # First check channel mappings (multi-channel support)
+            mapped_dest = db.get_destination_for_source(str(message.channel.id))
+            if mapped_dest:
+                print(f"[CHANNEL MAP] ✓ Source {message.channel.id} mapped to destination {mapped_dest}")
+                active_conversion_channel_id = message.channel.id  # Use current channel as source
+                target_execution_channel_id = mapped_dest
+            else:
+                # Fall back to single conversion channel settings
+                conversion_settings = db.get_signal_conversion_settings()
+                db_conversion_channel_id = conversion_settings.get('conversion_channel_id', '').strip()
+                if db_conversion_channel_id:
+                    active_conversion_channel_id = int(db_conversion_channel_id)
+                target_execution_channel_id = conversion_settings.get('target_execution_channel_id', '').strip()
         
         # Debug: Always log to see what's happening
-        print(f"[CONVERT DEBUG] ENABLE={ENABLE_SIGNAL_CONVERSION}, active_id={active_conversion_channel_id}, msg_channel={message.channel.id}, match={message.channel.id == active_conversion_channel_id}")
+        is_mapped_source = DATABASE_MODULE_AVAILABLE and db.get_destination_for_source(str(message.channel.id)) is not None
+        print(f"[CONVERT DEBUG] ENABLE={ENABLE_SIGNAL_CONVERSION}, active_id={active_conversion_channel_id}, msg_channel={message.channel.id}, mapped={is_mapped_source}")
         
-        if ENABLE_SIGNAL_CONVERSION and active_conversion_channel_id and message.channel.id == active_conversion_channel_id:
+        # Check if this is a mapped source channel OR the single conversion channel
+        should_convert = (is_mapped_source or 
+                         (ENABLE_SIGNAL_CONVERSION and active_conversion_channel_id and message.channel.id == active_conversion_channel_id))
+        
+        if should_convert:
             # Don't process commands, only natural language text
             if not message.content.strip().startswith('!'):
                 print(f"[AUTO CONVERT] Monitoring signal conversion channel: '{message.content[:50]}'")
-                await self.handle_auto_signal_conversion(message, message.content.strip())
+                await self.handle_auto_signal_conversion(message, message.content.strip(), target_channel_id=target_execution_channel_id)
                 return
         
         # Handle AI commands (only in designated AI channel)
