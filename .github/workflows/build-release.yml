@@ -268,10 +268,10 @@ jobs:
 
       - name: Build with PyInstaller (Universal Binary)
         run: |
+          # Note: target_arch='universal2' is set in the .spec file
           pyinstaller --clean --noconfirm \
             --distpath packaging/macos/dist \
             --workpath packaging/macos/build_temp \
-            --target-arch universal2 \
             packaging/macos/specs/botifytrades.spec
 
       - name: Smoke test - verify binary launches
