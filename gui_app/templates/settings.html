@@ -791,10 +791,6 @@ input:checked + .slider:before {
                 <label>Access Token</label>
                 <input type="password" id="webull-access-token" placeholder="Paste from browser or auto-saved after login">
             </div>
-            <div class="form-group">
-                <label>Refresh Token</label>
-                <input type="password" id="webull-refresh-token" placeholder="Paste from browser or auto-saved after login">
-            </div>
             <button id="clear-webull-tokens" class="btn" style="background: rgba(255, 100, 100, 0.2); border: 1px solid rgba(255, 100, 100, 0.5); color: #ff6b6b; font-size: 12px; padding: 6px 12px;">
                 🗑️ Clear Tokens
             </button>
@@ -809,7 +805,7 @@ input:checked + .slider:before {
                     <li>Press <strong>F12</strong> to open DevTools, go to <strong>Network</strong> tab</li>
                     <li>Refresh the page (Ctrl+R)</li>
                     <li>Click on any API request, look for <strong>Response</strong> or <strong>Headers</strong></li>
-                    <li>Find and copy: <code>access_token</code>, <code>refresh_token</code>, <code>did</code></li>
+                    <li>Find and copy: <code>access_token</code> and <code>did</code></li>
                     <li>Paste them in the fields above</li>
                 </ol>
                 <p style="margin-top: 10px; color: rgba(255, 170, 0, 0.8); font-size: 11px;">Note: Tokens are valid for ~24 hours. Use at your own risk - this uses unofficial API methods.</p>
@@ -2620,7 +2616,6 @@ async function loadWebullCredentials() {
             document.getElementById('webull-email').value = data.email || '';
             document.getElementById('webull-did').value = data.device_id || '';
             document.getElementById('webull-access-token').value = data.access_token || '';
-            document.getElementById('webull-refresh-token').value = data.refresh_token || '';
             document.getElementById('webull-paper').checked = data.paper_mode;
             
             const status = data.paper_mode ? data.paper_status : data.live_status;
@@ -2668,7 +2663,6 @@ document.getElementById('clear-webull-tokens').addEventListener('click', async (
         
         if (result.success) {
             document.getElementById('webull-access-token').value = '';
-            document.getElementById('webull-refresh-token').value = '';
             showMessage('success', result.message);
         } else {
             showMessage('error', result.error);
@@ -2685,7 +2679,6 @@ document.getElementById('save-webull-creds').addEventListener('click', async () 
         trade_pin: document.getElementById('webull-pin').value,
         device_id: document.getElementById('webull-did').value.trim(),
         access_token: document.getElementById('webull-access-token').value.trim(),
-        refresh_token: document.getElementById('webull-refresh-token').value.trim(),
         paper_mode: document.getElementById('webull-paper').checked
     };
     
