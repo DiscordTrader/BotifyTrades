@@ -260,15 +260,25 @@ def get_cached_option_chain_webull(symbol: str, expiry: str) -> dict:
             print(f"[OPTIONS] Webull returned: {calls_count} calls, {puts_count} puts for {symbol}", flush=True)
             
             if chain and (chain.get('calls') or chain.get('puts')):
-                chain['data_source'] = 'Webull'
-                # Fetch stock price if not in chain - use yfinance for reliability
-                if not chain.get('stock_price') or chain.get('stock_price', 0) <= 0:
-                    stock_price = fetch_stock_price_reliable(symbol)
-                    if stock_price > 0:
-                        chain['stock_price'] = stock_price
-                _option_chain_cache[cache_key] = (chain, now)
-                print(f"[OPTIONS] ✓ Using Webull data for {cache_key} (stock_price={chain.get('stock_price')})", flush=True)
-                return chain
+                # Check if Webull returned valid bid/ask data (non-zero for at least some options)
+                has_valid_prices = False
+                for opt in chain.get('calls', [])[:10] + chain.get('puts', [])[:10]:
+                    if opt.get('bid', 0) > 0 or opt.get('ask', 0) > 0:
+                        has_valid_prices = True
+                        break
+                
+                if has_valid_prices:
+                    chain['data_source'] = 'Webull'
+                    # Fetch stock price if not in chain - use yfinance for reliability
+                    if not chain.get('stock_price') or chain.get('stock_price', 0) <= 0:
+                        stock_price = fetch_stock_price_reliable(symbol)
+                        if stock_price > 0:
+                            chain['stock_price'] = stock_price
+                    _option_chain_cache[cache_key] = (chain, now)
+                    print(f"[OPTIONS] ✓ Using Webull data for {cache_key} (stock_price={chain.get('stock_price')})", flush=True)
+                    return chain
+                else:
+                    print(f"[OPTIONS] Webull returned chain but bid/ask all zero for {symbol}, trying Alpaca fallback...", flush=True)
             else:
                 print(f"[OPTIONS] Webull returned empty chain for {symbol}, trying Alpaca fallback...", flush=True)
         except Exception as e:

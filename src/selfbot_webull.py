@@ -3394,12 +3394,17 @@ class WebullBroker:
                     except (ValueError, TypeError):
                         return None
                 
-                def fetch_live_quote(option_id, symbol):
+                def fetch_live_quote(option_id, symbol, strike=None):
                     """Fetch real-time quote for an option when chain data is missing bid/ask"""
                     try:
                         quote = wb.get_option_quote(stock=symbol, optionId=str(option_id))
                         if not quote:
+                            print(f"[Webull] Live quote returned None for {symbol} option {option_id}")
                             return None
+                        
+                        # Debug: log first quote response
+                        if strike:
+                            print(f"[Webull] DEBUG Live quote for {symbol} ${strike}: keys={list(quote.keys())[:5]}")
                         
                         # Price data may be in 'data' field or directly
                         if 'data' in quote and isinstance(quote['data'], list):
@@ -3410,6 +3415,8 @@ class WebullBroker:
                                     ask = float(ask_list[0].get('price', 0)) if ask_list else 0
                                     bid = float(bid_list[0].get('price', 0)) if bid_list else 0
                                     last = float(opt.get('latestPrice', 0) or opt.get('close', 0) or 0)
+                                    if strike and (bid > 0 or ask > 0):
+                                        print(f"[Webull] ✓ Live quote {symbol} ${strike}: bid=${bid}, ask=${ask}")
                                     return {'bid': bid, 'ask': ask, 'last': last}
                         
                         # Try direct fields
@@ -3418,6 +3425,8 @@ class WebullBroker:
                         ask = float(ask_list[0].get('price', 0)) if ask_list else float(quote.get('askPrice', 0) or 0)
                         bid = float(bid_list[0].get('price', 0)) if bid_list else float(quote.get('bidPrice', 0) or 0)
                         last = float(quote.get('latestPrice', 0) or quote.get('close', 0) or quote.get('lastPrice', 0) or 0)
+                        if strike and (bid > 0 or ask > 0):
+                            print(f"[Webull] ✓ Live quote {symbol} ${strike}: bid=${bid}, ask=${ask}")
                         return {'bid': bid, 'ask': ask, 'last': last}
                     except Exception as e:
                         print(f"[Webull] Warning: Could not fetch live quote for option {option_id}: {e}")
@@ -3500,7 +3509,7 @@ class WebullBroker:
                             if live_quote_count >= max_live_quotes:
                                 break
                             if opt.get('needs_live_quote') and abs(opt['strike'] - stock_price) <= atm_range:
-                                live_data = fetch_live_quote(opt['option_id'], symbol)
+                                live_data = fetch_live_quote(opt['option_id'], symbol, opt['strike'])
                                 if live_data:
                                     opt['bid'] = live_data['bid']
                                     opt['ask'] = live_data['ask']
@@ -3513,7 +3522,7 @@ class WebullBroker:
                             if live_quote_count >= max_live_quotes:
                                 break
                             if opt.get('needs_live_quote') and abs(opt['strike'] - stock_price) <= atm_range:
-                                live_data = fetch_live_quote(opt['option_id'], symbol)
+                                live_data = fetch_live_quote(opt['option_id'], symbol, opt['strike'])
                                 if live_data:
                                     opt['bid'] = live_data['bid']
                                     opt['ask'] = live_data['ask']
