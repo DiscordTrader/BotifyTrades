@@ -1400,6 +1400,21 @@ STEEL_BTO_PATTERN = r'(?::green_alert:|:greencheckmark:)?\s*([A-Za-z]+)\s*[|]\s*
 # Note: OUT alone (with any trailing text) means exit all
 STEEL_STC_PATTERN = r':SirenRed:\s*([A-Za-z]+)\s*[|]\s*([0-9.]+)\s*(OUT\s*HALF|OUT\s*ALL\s*BUT\s*[0-9]+|OUT\s*ALL|OUT\s*[0-9]+/[0-9]+|SL\s*ENTRY|OUT(?=\s|$))?'
 
+# Extended STEEL_STC with optional STC prefix before symbol
+# Handles: :SirenRed: STC $RKT | .70 OUT ALL ✅
+# Groups: (symbol, price, exit_type)
+STEEL_STC_WITH_PREFIX_PATTERN = r':SirenRed:\s*STC\s*\$?([A-Za-z]+)\s*[|]\s*([0-9.]+)\s*(OUT\s*HALF|OUT\s*ALL\s*BUT\s*[0-9]+|OUT\s*ALL|OUT\s*[0-9]+/[0-9]+|SL\s*ENTRY|OUT(?=\s|$))?'
+
+# STC with qty and @ price format (no pipe separator)
+# Handles: :SirenRed: STC 4 RKT @ .75 SL .70 ON LAST ✅
+# Groups: (qty, symbol, price)
+STC_QTY_AT_PATTERN = r':?SirenRed:?\s*STC\s+(\d+)\s+\$?([A-Za-z]+)\s*@\s*\.?([0-9.]+)'
+
+# Extended entry with strike, price, then month name + day (unusual order)
+# Handles: :green_alert: TSLA | $492.5 10.10 JAN 2ND
+# Groups: (symbol, strike, price, month_name, day)
+STEEL_BTO_EXTENDED_PATTERN = r'(?::green_alert:|:greencheckmark:)?\s*([A-Za-z]+)\s*[|]\s*[$]?([0-9.]+)\s+([0-9.]+)\s+([A-Za-z]{3})\s+([0-9]+)(?:ST|ND|RD|TH)?'
+
 # Simple STC pattern: SYMBOL PRICE OUT (no prefix)
 # Groups: (symbol, price)
 SIMPLE_STC_PATTERN = r'^([A-Za-z]+)\s+([0-9.]+)\s+OUT'
@@ -3460,6 +3475,9 @@ class WebullBroker:
 ALT_OPT_REGEX = re.compile(ALT_OPT_PATTERN, re.IGNORECASE)
 STEEL_BTO_REGEX = re.compile(STEEL_BTO_PATTERN, re.IGNORECASE)
 STEEL_STC_REGEX = re.compile(STEEL_STC_PATTERN, re.IGNORECASE)
+STEEL_STC_WITH_PREFIX_REGEX = re.compile(STEEL_STC_WITH_PREFIX_PATTERN, re.IGNORECASE)
+STC_QTY_AT_REGEX = re.compile(STC_QTY_AT_PATTERN, re.IGNORECASE)
+STEEL_BTO_EXTENDED_REGEX = re.compile(STEEL_BTO_EXTENDED_PATTERN, re.IGNORECASE)
 SIMPLE_STC_REGEX = re.compile(SIMPLE_STC_PATTERN, re.IGNORECASE)
 SIRENRED_PRICE_STC_REGEX = re.compile(SIRENRED_PRICE_STC_PATTERN, re.IGNORECASE)
 PRICE_ONLY_STC_REGEX = re.compile(PRICE_ONLY_STC_PATTERN, re.IGNORECASE)
@@ -3500,126 +3518,175 @@ def parse_option_signal(text: str) -> Optional[dict]:
                     use_steel_format = True
                     print(f"[Discord] ✓ Matched steel BTO format")
                 else:
-                    # Try steel STC format: :SirenRed: AAPL | 1.82 OUT HALF
-                    m = STEEL_STC_REGEX.search(text.strip())
+                    # Try extended BTO format: :green_alert: TSLA | $492.5 10.10 JAN 2ND
+                    m = STEEL_BTO_EXTENDED_REGEX.search(text.strip())
                     if m:
-                        use_steel_stc = True
-                        print(f"[Discord] ✓ Matched steel STC format")
+                        symbol, strike, price_str, month_name, day = m.groups()
+                        month = MONTH_NAMES.get(month_name.upper(), '01')
+                        expiry = f"{month}/{day}"
+                        price = float(price_str)
+                        print(f"[Discord] ✓ Matched steel BTO extended format: {symbol} {strike}C {expiry} @ ${price}")
+                        _current_trading_settings = get_trading_settings()
+                        max_position_size = _current_trading_settings['max_position_size']
+                        actual_cost_per_contract = price * 100
+                        qty = max(1, int(max_position_size / actual_cost_per_contract)) if actual_cost_per_contract > 0 else 1
+                        print(f"[AUTO-QTY] Extended BTO: ${price} x 100 = ${actual_cost_per_contract}/contract, buying {qty} (max ${max_position_size})")
+                        return {
+                            "asset": "option",
+                            "action": "BTO",
+                            "qty": qty,
+                            "symbol": symbol.upper(),
+                            "strike": float(strike),
+                            "opt_type": "C",  # Assume call for this format
+                            "expiry": expiry,
+                            "price": price,
+                            "is_market_order": False,
+                            "_steel_extended": True
+                        }
                     else:
-                        # Try simple STC format: TSLA 5.03 OUT
-                        m = SIMPLE_STC_REGEX.search(text.strip())
+                        # Try steel STC with STC prefix: :SirenRed: STC $RKT | .70 OUT ALL
+                        m = STEEL_STC_WITH_PREFIX_REGEX.search(text.strip())
                         if m:
-                            use_steel_stc = True  # Reuse the same handling
-                            print(f"[Discord] ✓ Matched simple STC format (SYMBOL PRICE OUT)")
+                            use_steel_stc = True
+                            print(f"[Discord] ✓ Matched steel STC with prefix format")
                         else:
-                            # Try :SirenRed: with price only (no symbol): :SirenRed: 4.67 OUT
-                            m = SIRENRED_PRICE_STC_REGEX.search(text.strip())
+                            # Try STC with qty and @ price: :SirenRed: STC 4 RKT @ .75
+                            m = STC_QTY_AT_REGEX.search(text.strip())
                             if m:
-                                use_steel_stc = True
-                                print(f"[Discord] ✓ Matched SirenRed price-only STC format")
+                                qty, symbol, price_str = m.groups()
+                                price = float(price_str)
+                                print(f"[Discord] ✓ Matched STC qty @ price format: STC {qty} {symbol} @ ${price}")
+                                return {
+                                    "asset": "option",
+                                    "action": "STC",
+                                    "qty": int(qty),
+                                    "symbol": symbol.upper(),
+                                    "strike": None,
+                                    "opt_type": None,
+                                    "expiry": None,
+                                    "price": price,
+                                    "is_market_order": False,
+                                    "_exit_type": "ALL",
+                                    "_stc_qty_at": True
+                                }
                             else:
-                                # Try price-only STC: 5.38 out all but 1
-                                m = PRICE_ONLY_STC_REGEX.search(text.strip())
+                                # Try steel STC format: :SirenRed: AAPL | 1.82 OUT HALF
+                                m = STEEL_STC_REGEX.search(text.strip())
                                 if m:
                                     use_steel_stc = True
-                                    print(f"[Discord] ✓ Matched price-only STC format")
+                                    print(f"[Discord] ✓ Matched steel STC format")
                                 else:
-                                    # Try Waxui entry: SPX here 12/05 6880C Avg. 4.00
-                                    m = WAXUI_ENTRY_REGEX.search(text.strip())
+                                    # Try simple STC format: TSLA 5.03 OUT
+                                    m = SIMPLE_STC_REGEX.search(text.strip())
                                     if m:
-                                        symbol, month, day, strike, opt_type, price_str = m.groups()
-                                        expiry = f"{month}/{day}"
-                                        price = float(price_str)
-                                        print(f"[Discord] ✓ Matched Waxui entry format: {symbol} {expiry} {strike}{opt_type} Avg ${price_str}")
-                                        _current_trading_settings = get_trading_settings()
-                                        max_position_size = _current_trading_settings['max_position_size']
-                                        actual_cost_per_contract = price * 100
-                                        if actual_cost_per_contract <= 0:
-                                            qty = 1
-                                        else:
-                                            qty = max(1, int(max_position_size / actual_cost_per_contract))
-                                        print(f"[AUTO-QTY] Waxui: ${price} premium x 100 = ${actual_cost_per_contract}/contract, buying {qty} contracts (max ${max_position_size})")
-                                        return {
-                                            "asset": "option",
-                                            "action": "BTO",
-                                            "qty": qty,
-                                            "symbol": symbol.upper(),
-                                            "strike": float(strike),
-                                            "opt_type": opt_type.upper(),
-                                            "expiry": expiry,
-                                            "price": price,
-                                            "is_market_order": False,
-                                            "_waxui_format": True
-                                        }
+                                        use_steel_stc = True
+                                        print(f"[Discord] ✓ Matched simple STC format (SYMBOL PRICE OUT)")
                                     else:
-                                        # Try Waxui close: Closed SPX here
-                                        m = WAXUI_CLOSE_REGEX.search(text.strip())
+                                        # Try :SirenRed: with price only (no symbol): :SirenRed: 4.67 OUT
+                                        m = SIRENRED_PRICE_STC_REGEX.search(text.strip())
                                         if m:
-                                            symbol = m.group(1)
-                                            print(f"[Discord] ✓ Matched Waxui CLOSE format: {symbol}")
-                                            return {
-                                                "asset": "option",
-                                                "action": "STC",
-                                                "qty": 1,
-                                                "symbol": symbol.upper(),
-                                                "strike": None,
-                                                "opt_type": None,
-                                                "expiry": None,
-                                                "price": None,
-                                                "is_market_order": True,
-                                                "_waxui_close": True,
-                                                "_exit_type": "ALL"
-                                            }
+                                            use_steel_stc = True
+                                            print(f"[Discord] ✓ Matched SirenRed price-only STC format")
                                         else:
-                                            # Try Waxui trim: Trim SPX here
-                                            m = WAXUI_TRIM_REGEX.search(text.strip())
+                                            # Try price-only STC: 5.38 out all but 1
+                                            m = PRICE_ONLY_STC_REGEX.search(text.strip())
                                             if m:
-                                                symbol = m.group(1)
-                                                print(f"[Discord] ✓ Matched Waxui TRIM format: {symbol}")
-                                                return {
-                                                    "asset": "option",
-                                                    "action": "STC",
-                                                    "qty": 1,
-                                                    "symbol": symbol.upper(),
-                                                    "strike": None,
-                                                    "opt_type": None,
-                                                    "expiry": None,
-                                                    "price": None,
-                                                    "is_market_order": True,
-                                                    "_waxui_trim": True,
-                                                    "_exit_type": "HALF"
-                                                }
+                                                use_steel_stc = True
+                                                print(f"[Discord] ✓ Matched price-only STC format")
                                             else:
-                                                # Try SPX/NDX shorthand: 6900c, BTO 25 6900c, STC 15000p
-                                                m = SPX_NDX_SHORTHAND_REGEX.search(text.strip())
+                                                # Try Waxui entry: SPX here 12/05 6880C Avg. 4.00
+                                                m = WAXUI_ENTRY_REGEX.search(text.strip())
                                                 if m:
-                                                    action, qty_str, strike_str, opt_type = m.groups()
-                                                    strike = float(strike_str)
-                                                    # Determine symbol based on strike: >= 10000 = NDX, else SPX
-                                                    symbol = "NDX" if strike >= 10000 else "SPX"
-                                                    action = (action or "BTO").upper()
-                                                    qty = int(qty_str) if qty_str else 1
-                                                    # Use today's date for expiry
-                                                    from datetime import datetime
-                                                    today = datetime.now()
-                                                    expiry = today.strftime("%m/%d")
-                                                    print(f"[Discord] ✓ Matched SPX/NDX shorthand: {action} {qty} {symbol} {strike}{opt_type.upper()} {expiry} @ MARKET")
+                                                    symbol, month, day, strike, opt_type, price_str = m.groups()
+                                                    expiry = f"{month}/{day}"
+                                                    price = float(price_str)
+                                                    print(f"[Discord] ✓ Matched Waxui entry format: {symbol} {expiry} {strike}{opt_type} Avg ${price_str}")
+                                                    _current_trading_settings = get_trading_settings()
+                                                    max_position_size = _current_trading_settings['max_position_size']
+                                                    actual_cost_per_contract = price * 100
+                                                    if actual_cost_per_contract <= 0:
+                                                        qty = 1
+                                                    else:
+                                                        qty = max(1, int(max_position_size / actual_cost_per_contract))
+                                                    print(f"[AUTO-QTY] Waxui: ${price} premium x 100 = ${actual_cost_per_contract}/contract, buying {qty} contracts (max ${max_position_size})")
                                                     return {
                                                         "asset": "option",
-                                                        "action": action,
+                                                        "action": "BTO",
                                                         "qty": qty,
-                                                        "symbol": symbol,
-                                                        "strike": strike,
+                                                        "symbol": symbol.upper(),
+                                                        "strike": float(strike),
                                                         "opt_type": opt_type.upper(),
                                                         "expiry": expiry,
-                                                        "price": None,
-                                                        "is_market_order": True,
-                                                        "_spx_ndx_shorthand": True
+                                                        "price": price,
+                                                        "is_market_order": False,
+                                                        "_waxui_format": True
                                                     }
                                                 else:
-                                                    # Silently return None - let the caller try other formats (stock, TRADE IDEA)
-                                                    # before printing "NOT matched"
-                                                    return None
+                                                    # Try Waxui close: Closed SPX here
+                                                    m = WAXUI_CLOSE_REGEX.search(text.strip())
+                                                    if m:
+                                                        symbol = m.group(1)
+                                                        print(f"[Discord] ✓ Matched Waxui CLOSE format: {symbol}")
+                                                        return {
+                                                            "asset": "option",
+                                                            "action": "STC",
+                                                            "qty": 1,
+                                                            "symbol": symbol.upper(),
+                                                            "strike": None,
+                                                            "opt_type": None,
+                                                            "expiry": None,
+                                                            "price": None,
+                                                            "is_market_order": True,
+                                                            "_waxui_close": True,
+                                                            "_exit_type": "ALL"
+                                                        }
+                                                    else:
+                                                        # Try Waxui trim: Trim SPX here
+                                                        m = WAXUI_TRIM_REGEX.search(text.strip())
+                                                        if m:
+                                                            symbol = m.group(1)
+                                                            print(f"[Discord] ✓ Matched Waxui TRIM format: {symbol}")
+                                                            return {
+                                                                "asset": "option",
+                                                                "action": "STC",
+                                                                "qty": 1,
+                                                                "symbol": symbol.upper(),
+                                                                "strike": None,
+                                                                "opt_type": None,
+                                                                "expiry": None,
+                                                                "price": None,
+                                                                "is_market_order": True,
+                                                                "_waxui_trim": True,
+                                                                "_exit_type": "HALF"
+                                                            }
+                                                        else:
+                                                            # Try SPX/NDX shorthand: 6900c, BTO 25 6900c, STC 15000p
+                                                            m = SPX_NDX_SHORTHAND_REGEX.search(text.strip())
+                                                            if m:
+                                                                action, qty_str, strike_str, opt_type = m.groups()
+                                                                strike = float(strike_str)
+                                                                symbol = "NDX" if strike >= 10000 else "SPX"
+                                                                action = (action or "BTO").upper()
+                                                                qty = int(qty_str) if qty_str else 1
+                                                                from datetime import datetime
+                                                                today = datetime.now()
+                                                                expiry = today.strftime("%m/%d")
+                                                                print(f"[Discord] ✓ Matched SPX/NDX shorthand: {action} {qty} {symbol} {strike}{opt_type.upper()} {expiry} @ MARKET")
+                                                                return {
+                                                                    "asset": "option",
+                                                                    "action": action,
+                                                                    "qty": qty,
+                                                                    "symbol": symbol,
+                                                                    "strike": strike,
+                                                                    "opt_type": opt_type.upper(),
+                                                                    "expiry": expiry,
+                                                                    "price": None,
+                                                                    "is_market_order": True,
+                                                                    "_spx_ndx_shorthand": True
+                                                                }
+                                                            else:
+                                                                # Silently return None - let the caller try other formats (stock, TRADE IDEA)
+                                                                return None
     
     if use_steel_stc:
         # Handle various STC formats with different group structures
