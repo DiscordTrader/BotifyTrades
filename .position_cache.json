@@ -2446,7 +2446,7 @@
   },
   "ALPACA_PAPER_NOW_stock": {
     "entry_price": 775.0,
-    "highest_price": 156.91,
+    "highest_price": 157.05,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -2518,5 +2518,35 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-22T15:04:48.243687"
+  },
+  "ALPACA_PAPER_SPY_680.0_2025-12-22_P": {
+    "entry_price": 0.21,
+    "highest_price": 0.21,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "SPY251222P00680000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-22T15:39:40.117374"
+  },
+  "ALPACA_PAPER_QQQ_619.0_2025-12-22_C": {
+    "entry_price": 0.75,
+    "highest_price": 0.88,
+    "trailing_activated": true,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "QQQ251222C00619000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-22T15:51:00.451192"
   }
 }
