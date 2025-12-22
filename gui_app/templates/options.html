@@ -1098,6 +1098,11 @@
                     <select class="channel-select" id="webhookChannel{{ i }}" title="Select webhook channel">
                         <option value="">Channel...</option>
                     </select>
+                    <select class="channel-select" id="tradeType{{ i }}" title="Trade type" style="width: 70px; min-width: 70px;">
+                        <option value="Swing">Swing</option>
+                        <option value="Day">Day</option>
+                        <option value="Scalp">Scalp</option>
+                    </select>
                     <button class="order-btn webhook" onclick="postWebhookBTO({{ i }})" title="Post BTO to Webhook">BTO</button>
                     <button class="order-btn webhook-stc" onclick="postWebhookSTC({{ i }})" title="Post STC to Webhook">STC</button>
                     <button class="clear-row-btn" onclick="clearRow({{ i }})" title="Clear">✕</button>
@@ -1861,6 +1866,8 @@
                 }
             }
             
+            const tradeType = document.getElementById(`tradeType${row}`).value || 'Swing';
+            
             try {
                 const response = await fetch('/api/webhook/post_bto', {
                     method: 'POST',
@@ -1873,7 +1880,7 @@
                         call_put: callPut,
                         qty: qty,
                         price: price,
-                        trade_type: 'Swing',
+                        trade_type: tradeType,
                         bot_name: channel.bot_name || 'Trade Echo Bot'
                     })
                 });
@@ -1918,6 +1925,8 @@
                 }
             }
             
+            const tradeType = document.getElementById(`tradeType${row}`).value || 'Swing';
+            
             try {
                 const response = await fetch('/api/webhook/post_stc', {
                     method: 'POST',
@@ -1930,6 +1939,7 @@
                         call_put: callPut,
                         qty: qty,
                         close_price: closePrice,
+                        trade_type: tradeType,
                         bot_name: channel.bot_name || 'Trade Echo Bot'
                     })
                 });
