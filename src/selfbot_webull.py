@@ -3388,14 +3388,45 @@ class WebullBroker:
                             'open_interest': int(oi) if oi else 0,
                             'option_id': str(oid),
                             'iv': float(iv) if iv else 0.0,
-                            'delta': float(delta) if delta else 0.0
+                            'delta': float(delta) if delta else 0.0,
+                            'needs_live_quote': (float(bid) if bid else 0.0) == 0 and (float(ask) if ask else 0.0) == 0
                         }
                     except (ValueError, TypeError):
+                        return None
+                
+                def fetch_live_quote(option_id, symbol):
+                    """Fetch real-time quote for an option when chain data is missing bid/ask"""
+                    try:
+                        quote = wb.get_option_quote(stock=symbol, optionId=str(option_id))
+                        if not quote:
+                            return None
+                        
+                        # Price data may be in 'data' field or directly
+                        if 'data' in quote and isinstance(quote['data'], list):
+                            for opt in quote['data']:
+                                if str(opt.get('tickerId')) == str(option_id):
+                                    ask_list = opt.get('askList', [])
+                                    bid_list = opt.get('bidList', [])
+                                    ask = float(ask_list[0].get('price', 0)) if ask_list else 0
+                                    bid = float(bid_list[0].get('price', 0)) if bid_list else 0
+                                    last = float(opt.get('latestPrice', 0) or opt.get('close', 0) or 0)
+                                    return {'bid': bid, 'ask': ask, 'last': last}
+                        
+                        # Try direct fields
+                        ask_list = quote.get('askList', [])
+                        bid_list = quote.get('bidList', [])
+                        ask = float(ask_list[0].get('price', 0)) if ask_list else float(quote.get('askPrice', 0) or 0)
+                        bid = float(bid_list[0].get('price', 0)) if bid_list else float(quote.get('bidPrice', 0) or 0)
+                        last = float(quote.get('latestPrice', 0) or quote.get('close', 0) or quote.get('lastPrice', 0) or 0)
+                        return {'bid': bid, 'ask': ask, 'last': last}
+                    except Exception as e:
+                        print(f"[Webull] Warning: Could not fetch live quote for option {option_id}: {e}")
                         return None
                 
                 # Get call options
                 calls = []
                 seen_strikes = set()
+                needs_live_quotes = False
                 try:
                     print(f"[Webull] Fetching calls for {symbol} exp {expiration_date}")
                     call_data = wb.get_options(stock=symbol, direction='call', expireDate=expiration_date)
@@ -3413,6 +3444,8 @@ class WebullBroker:
                                     ask_list = call_nested.get('askList', [])
                                     print(f"[Webull] DEBUG bidList sample: {bid_list[:1] if bid_list else 'empty'}")
                                     print(f"[Webull] DEBUG askList sample: {ask_list[:1] if ask_list else 'empty'}")
+                                    if not bid_list and not ask_list:
+                                        needs_live_quotes = True
                             first_row_printed = True
                         opt = extract_option(row, 'call')
                         if opt and not first_opt_printed:
@@ -3443,6 +3476,53 @@ class WebullBroker:
                     print(f"[Webull] Parsed {len(puts)} unique put options")
                 except Exception as e:
                     print(f"[Webull] Warning: Could not fetch puts for {symbol}: {e}")
+                
+                # If chain data is missing bid/ask, fetch live quotes for ATM options
+                if needs_live_quotes and (calls or puts):
+                    print(f"[Webull] Chain data missing bid/ask, fetching live quotes for ATM strikes...")
+                    
+                    # Get stock price to determine ATM range
+                    stock_price = None
+                    try:
+                        quote = wb.get_quote(stock=symbol)
+                        if quote:
+                            stock_price = float(quote.get('close', 0) or quote.get('lastPrice', 0))
+                    except:
+                        pass
+                    
+                    if stock_price:
+                        # Fetch live quotes for strikes within 10% of ATM (limit to 20 options)
+                        atm_range = stock_price * 0.10
+                        live_quote_count = 0
+                        max_live_quotes = 20
+                        
+                        for opt in calls:
+                            if live_quote_count >= max_live_quotes:
+                                break
+                            if opt.get('needs_live_quote') and abs(opt['strike'] - stock_price) <= atm_range:
+                                live_data = fetch_live_quote(opt['option_id'], symbol)
+                                if live_data:
+                                    opt['bid'] = live_data['bid']
+                                    opt['ask'] = live_data['ask']
+                                    if live_data['last'] > 0:
+                                        opt['last'] = live_data['last']
+                                    opt['needs_live_quote'] = False
+                                    live_quote_count += 1
+                        
+                        for opt in puts:
+                            if live_quote_count >= max_live_quotes:
+                                break
+                            if opt.get('needs_live_quote') and abs(opt['strike'] - stock_price) <= atm_range:
+                                live_data = fetch_live_quote(opt['option_id'], symbol)
+                                if live_data:
+                                    opt['bid'] = live_data['bid']
+                                    opt['ask'] = live_data['ask']
+                                    if live_data['last'] > 0:
+                                        opt['last'] = live_data['last']
+                                    opt['needs_live_quote'] = False
+                                    live_quote_count += 1
+                        
+                        print(f"[Webull] Fetched {live_quote_count} live quotes for ATM options")
                 
                 # Get stock price
                 stock_price = None
