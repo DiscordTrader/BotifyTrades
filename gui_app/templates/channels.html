@@ -1450,6 +1450,7 @@ function renderChannelMappings() {
         html += `<td style="padding: 12px; text-align: center; color: var(--mint); font-size: 1.2rem;">→</td>`;
         html += `<td style="padding: 12px; color: var(--text-primary);">${webhookDisplay}</td>`;
         html += `<td style="padding: 12px; text-align: center;">`;
+        html += `<button onclick="testChannelMapping(${m.id}, '${escapeHtml(m.webhook_url || '')}')" style="background: rgba(15,240,179,0.2); border: 1px solid rgba(15,240,179,0.3); color: var(--mint); padding: 6px 12px; border-radius: 8px; cursor: pointer; margin-right: 8px;">🧪 Test</button>`;
         html += `<button onclick="deleteChannelMapping(${m.id})" style="background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; padding: 6px 12px; border-radius: 8px; cursor: pointer;">🗑️ Delete</button>`;
         html += `</td></tr>`;
     });
@@ -1500,6 +1501,36 @@ async function addChannelMapping() {
         }
     } catch (error) {
         showNotification('Failed to add mapping: ' + error.message, 'error');
+    }
+}
+
+async function testChannelMapping(mappingId, webhookUrl) {
+    if (!webhookUrl) {
+        showNotification('No webhook URL configured for this mapping', 'error');
+        return;
+    }
+    
+    showNotification('Testing webhook...', 'info');
+    
+    try {
+        const response = await fetch('/api/webhook/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                webhook_url: webhookUrl,
+                bot_name: 'Channel Mapping Test'
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification('Webhook test successful! Check your Discord channel.', 'success');
+        } else {
+            showNotification(result.error || result.message || 'Webhook test failed', 'error');
+        }
+    } catch (error) {
+        showNotification('Failed to test webhook: ' + error.message, 'error');
     }
 }
 
