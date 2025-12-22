@@ -914,6 +914,22 @@ def init_db():
         )
     ''')
     
+    # Debug reports table for sending bug reports to admin
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS debug_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reference_number TEXT UNIQUE NOT NULL,
+            user_description TEXT,
+            error_logs TEXT,
+            system_info TEXT,
+            email_sent INTEGER DEFAULT 0,
+            email_sent_at TIMESTAMP,
+            admin_email TEXT,
+            status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'sent', 'reviewed', 'resolved')),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     # Create indexes for license tables
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_server_licenses_key ON server_licenses(license_key)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_server_licenses_machine ON server_licenses(machine_id)')
@@ -976,6 +992,8 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_error_logs_last_seen ON error_logs(last_seen)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_error_logs_resolved ON error_logs(resolved)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_known_issues_category ON known_issues(category)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_debug_reports_ref ON debug_reports(reference_number)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_debug_reports_status ON debug_reports(status)')
     
     # Migration: Add user_id to signal_lots for user-based tracking
     try:
@@ -5403,6 +5421,88 @@ def cleanup_old_channel_messages(days: int = 30) -> int:
     except Exception as e:
         print(f"[DATABASE] Error cleaning channel messages: {e}")
         return 0
+
+
+# ==================== DEBUG REPORTS ====================
+
+def generate_debug_reference() -> str:
+    """Generate a unique debug report reference number."""
+    import random
+    import string
+    date_part = datetime.now().strftime('%Y%m%d')
+    rand_part = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+    return f"DBG-{date_part}-{rand_part}"
+
+
+def save_debug_report(reference_number: str, user_description: str, error_logs: str, 
+                      system_info: str, admin_email: str = None) -> bool:
+    """Save a debug report to the database."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO debug_reports (reference_number, user_description, error_logs, 
+                                       system_info, admin_email)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (reference_number, user_description, error_logs, system_info, admin_email))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error saving debug report: {e}")
+        return False
+
+
+def update_debug_report_sent(reference_number: str) -> bool:
+    """Mark a debug report as sent via email."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            UPDATE debug_reports 
+            SET email_sent = 1, email_sent_at = CURRENT_TIMESTAMP, status = 'sent'
+            WHERE reference_number = ?
+        ''', (reference_number,))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error updating debug report: {e}")
+        return False
+
+
+def get_debug_report(reference_number: str) -> Optional[Dict]:
+    """Get a debug report by reference number."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT * FROM debug_reports WHERE reference_number = ?
+        ''', (reference_number,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    except Exception as e:
+        print(f"[DATABASE] Error getting debug report: {e}")
+        return None
+
+
+def get_recent_debug_reports(limit: int = 10) -> List[Dict]:
+    """Get recent debug reports."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT reference_number, user_description, status, email_sent, created_at
+            FROM debug_reports
+            ORDER BY created_at DESC
+            LIMIT ?
+        ''', (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"[DATABASE] Error getting debug reports: {e}")
+        return []
 
 
 # Initialize tables
