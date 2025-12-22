@@ -3500,38 +3500,40 @@ class WebullBroker:
                         pass
                     
                     if stock_price:
-                        # Fetch live quotes for strikes within 10% of ATM (limit to 20 options)
-                        atm_range = stock_price * 0.10
+                        # Fetch live quotes for strikes closest to ATM first (limit to 40 options)
+                        atm_range = stock_price * 0.15  # 15% range
+                        max_live_quotes = 40  # Increased to cover more strikes
+                        
+                        # Sort options by distance from ATM (closest first)
+                        atm_calls = [opt for opt in calls if opt.get('needs_live_quote') and abs(opt['strike'] - stock_price) <= atm_range]
+                        atm_puts = [opt for opt in puts if opt.get('needs_live_quote') and abs(opt['strike'] - stock_price) <= atm_range]
+                        
+                        atm_calls.sort(key=lambda x: abs(x['strike'] - stock_price))
+                        atm_puts.sort(key=lambda x: abs(x['strike'] - stock_price))
+                        
                         live_quote_count = 0
-                        max_live_quotes = 20
                         
-                        for opt in calls:
+                        # Alternate between calls and puts, starting with closest to ATM
+                        all_atm_opts = []
+                        for i in range(max(len(atm_calls), len(atm_puts))):
+                            if i < len(atm_calls):
+                                all_atm_opts.append(atm_calls[i])
+                            if i < len(atm_puts):
+                                all_atm_opts.append(atm_puts[i])
+                        
+                        for opt in all_atm_opts:
                             if live_quote_count >= max_live_quotes:
                                 break
-                            if opt.get('needs_live_quote') and abs(opt['strike'] - stock_price) <= atm_range:
-                                live_data = fetch_live_quote(opt['option_id'], symbol, opt['strike'])
-                                if live_data:
-                                    opt['bid'] = live_data['bid']
-                                    opt['ask'] = live_data['ask']
-                                    if live_data['last'] > 0:
-                                        opt['last'] = live_data['last']
-                                    opt['needs_live_quote'] = False
-                                    live_quote_count += 1
+                            live_data = fetch_live_quote(opt['option_id'], symbol, opt['strike'])
+                            if live_data:
+                                opt['bid'] = live_data['bid']
+                                opt['ask'] = live_data['ask']
+                                if live_data['last'] > 0:
+                                    opt['last'] = live_data['last']
+                                opt['needs_live_quote'] = False
+                                live_quote_count += 1
                         
-                        for opt in puts:
-                            if live_quote_count >= max_live_quotes:
-                                break
-                            if opt.get('needs_live_quote') and abs(opt['strike'] - stock_price) <= atm_range:
-                                live_data = fetch_live_quote(opt['option_id'], symbol, opt['strike'])
-                                if live_data:
-                                    opt['bid'] = live_data['bid']
-                                    opt['ask'] = live_data['ask']
-                                    if live_data['last'] > 0:
-                                        opt['last'] = live_data['last']
-                                    opt['needs_live_quote'] = False
-                                    live_quote_count += 1
-                        
-                        print(f"[Webull] Fetched {live_quote_count} live quotes for ATM options")
+                        print(f"[Webull] Fetched {live_quote_count} live quotes for ATM options (stock={stock_price:.2f})")
                 
                 # Get stock price
                 stock_price = None
