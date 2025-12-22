@@ -7286,6 +7286,84 @@ def register_routes(app):
         except Exception as e:
             print(f"[API] Error finding webhook position: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/webhook/channels', methods=['GET'])
+    def api_get_webhook_channels():
+        """Get all webhook channels"""
+        try:
+            from . import webhook_service
+            channels = webhook_service.get_webhook_channels()
+            return jsonify({'success': True, 'channels': channels})
+        except Exception as e:
+            print(f"[API] Error getting webhook channels: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/webhook/channels', methods=['POST'])
+    def api_add_webhook_channel():
+        """Add a new webhook channel"""
+        try:
+            from . import webhook_service
+            data = request.json or {}
+            
+            name = data.get('name', '').strip()
+            webhook_url = data.get('webhook_url', '').strip()
+            bot_name = data.get('bot_name', 'Trade Echo Bot')
+            color = data.get('color', '#FF6B35')
+            
+            if not name or not webhook_url:
+                return jsonify({'success': False, 'error': 'Name and webhook URL are required'}), 400
+            
+            result = webhook_service.add_webhook_channel(name, webhook_url, bot_name, color)
+            return jsonify(result)
+        except Exception as e:
+            print(f"[API] Error adding webhook channel: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/webhook/channels/<int:channel_id>', methods=['PUT'])
+    def api_update_webhook_channel(channel_id):
+        """Update a webhook channel"""
+        try:
+            from . import webhook_service
+            data = request.json or {}
+            
+            result = webhook_service.update_webhook_channel(
+                channel_id,
+                name=data.get('name'),
+                webhook_url=data.get('webhook_url'),
+                bot_name=data.get('bot_name'),
+                color=data.get('color'),
+                enabled=data.get('enabled')
+            )
+            return jsonify(result)
+        except Exception as e:
+            print(f"[API] Error updating webhook channel: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/webhook/channels/<int:channel_id>', methods=['DELETE'])
+    def api_delete_webhook_channel(channel_id):
+        """Delete a webhook channel"""
+        try:
+            from . import webhook_service
+            result = webhook_service.delete_webhook_channel(channel_id)
+            return jsonify(result)
+        except Exception as e:
+            print(f"[API] Error deleting webhook channel: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/webhook/channels/<int:channel_id>/test', methods=['POST'])
+    def api_test_webhook_channel(channel_id):
+        """Test a webhook channel"""
+        try:
+            from . import webhook_service
+            channel = webhook_service.get_webhook_channel(channel_id)
+            if not channel:
+                return jsonify({'success': False, 'error': 'Channel not found'}), 404
+            
+            success, message = webhook_service.test_webhook(channel['webhook_url'], channel['bot_name'])
+            return jsonify({'success': success, 'message': message})
+        except Exception as e:
+            print(f"[API] Error testing webhook channel: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
 
     # ============ SIMULATION ENGINE ============
     

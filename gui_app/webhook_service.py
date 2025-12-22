@@ -74,6 +74,20 @@ def init_webhook_tables():
         )
     ''')
     
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS webhook_channels (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            webhook_url TEXT NOT NULL,
+            bot_name TEXT DEFAULT 'Trade Echo Bot',
+            avatar_url TEXT,
+            color TEXT DEFAULT '#FF6B35',
+            enabled INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     cursor.execute('SELECT COUNT(*) FROM webhook_config')
     if cursor.fetchone()[0] == 0:
         cursor.execute('''
@@ -136,6 +150,111 @@ def save_webhook_config(config: Dict[str, Any]) -> bool:
     except Exception as e:
         logger.error(f"Error saving webhook config: {e}")
         return False
+    finally:
+        conn.close()
+
+
+def get_webhook_channels() -> List[Dict[str, Any]]:
+    """Get all webhook channels."""
+    init_webhook_tables()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM webhook_channels ORDER BY name ASC')
+    channels = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return channels
+
+
+def get_webhook_channel(channel_id: int) -> Optional[Dict[str, Any]]:
+    """Get a specific webhook channel by ID."""
+    init_webhook_tables()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM webhook_channels WHERE id = ?', (channel_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def add_webhook_channel(name: str, webhook_url: str, bot_name: str = 'Trade Echo Bot', color: str = '#FF6B35') -> Dict[str, Any]:
+    """Add a new webhook channel."""
+    init_webhook_tables()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO webhook_channels (name, webhook_url, bot_name, color, enabled)
+            VALUES (?, ?, ?, ?, 1)
+        ''', (name, webhook_url, bot_name, color))
+        conn.commit()
+        channel_id = cursor.lastrowid
+        return {'success': True, 'id': channel_id, 'message': f'Channel "{name}" added successfully'}
+    except Exception as e:
+        logger.error(f"Error adding webhook channel: {e}")
+        return {'success': False, 'error': str(e)}
+    finally:
+        conn.close()
+
+
+def update_webhook_channel(channel_id: int, name: str = None, webhook_url: str = None, 
+                           bot_name: str = None, color: str = None, enabled: bool = None) -> Dict[str, Any]:
+    """Update an existing webhook channel."""
+    init_webhook_tables()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        updates = []
+        params = []
+        
+        if name is not None:
+            updates.append('name = ?')
+            params.append(name)
+        if webhook_url is not None:
+            updates.append('webhook_url = ?')
+            params.append(webhook_url)
+        if bot_name is not None:
+            updates.append('bot_name = ?')
+            params.append(bot_name)
+        if color is not None:
+            updates.append('color = ?')
+            params.append(color)
+        if enabled is not None:
+            updates.append('enabled = ?')
+            params.append(1 if enabled else 0)
+        
+        if not updates:
+            return {'success': False, 'error': 'No fields to update'}
+        
+        updates.append('updated_at = CURRENT_TIMESTAMP')
+        params.append(channel_id)
+        
+        query = f'UPDATE webhook_channels SET {", ".join(updates)} WHERE id = ?'
+        cursor.execute(query, params)
+        conn.commit()
+        
+        return {'success': True, 'message': 'Channel updated successfully'}
+    except Exception as e:
+        logger.error(f"Error updating webhook channel: {e}")
+        return {'success': False, 'error': str(e)}
+    finally:
+        conn.close()
+
+
+def delete_webhook_channel(channel_id: int) -> Dict[str, Any]:
+    """Delete a webhook channel."""
+    init_webhook_tables()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('DELETE FROM webhook_channels WHERE id = ?', (channel_id,))
+        conn.commit()
+        return {'success': True, 'message': 'Channel deleted successfully'}
+    except Exception as e:
+        logger.error(f"Error deleting webhook channel: {e}")
+        return {'success': False, 'error': str(e)}
     finally:
         conn.close()
 
