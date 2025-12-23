@@ -3190,38 +3190,18 @@ class WebullBroker:
                 # This is the primary method now that we've monkey-patched the URL
                 if hasattr(wb, 'get_history_orders'):
                     try:
-                        print("[Webull] Calling get_history_orders(status='Filled')...", flush=True)
                         history = wb.get_history_orders(status='Filled', count=count)
-                        print(f"[Webull] get_history_orders returned: {type(history)}", flush=True)
                         
                         if isinstance(history, list) and len(history) > 0:
                             orders_raw = history
-                            print(f"[Webull] ✓ get_history_orders: {len(orders_raw)} filled orders", flush=True)
-                            if orders_raw[0] and isinstance(orders_raw[0], dict):
-                                print(f"[Webull] First order keys: {list(orders_raw[0].keys())[:8]}", flush=True)
                         elif isinstance(history, dict):
-                            # API might return a dict with data key
                             orders_raw = history.get('data', []) or history.get('items', [])
-                            if orders_raw:
-                                print(f"[Webull] ✓ get_history_orders dict: {len(orders_raw)} orders", flush=True)
-                            else:
-                                # Log the actual error message from the API
-                                msg = history.get('msg', '')
-                                code = history.get('code', '')
-                                success = history.get('success', False)
-                                print(f"[Webull] get_history_orders API response: success={success}, code={code}, msg={msg}", flush=True)
                     except Exception as hist_err:
-                        error_str = str(hist_err)
-                        # Only log full error occasionally to avoid spam
-                        if 'startTime' in error_str or '400' in error_str or '500' in error_str:
-                            print(f"[Webull] get_history_orders API error (URL patch may not work): {error_str[:100]}", flush=True)
-                        else:
-                            print(f"[Webull] get_history_orders failed: {error_str}", flush=True)
+                        pass  # Silent fallback to other methods
                 
                 # METHOD 2: Try get_activities() as fallback
                 if not orders_raw and hasattr(wb, 'get_activities'):
                     try:
-                        print("[Webull] Trying get_activities()...", flush=True)
                         activities = wb.get_activities(index=1, size=100)
                         if isinstance(activities, dict):
                             all_items = activities.get('items', []) or activities.get('data', [])
@@ -3233,12 +3213,8 @@ class WebullBroker:
                                         item.get('action') in ('BUY', 'SELL')
                                     )
                                 ]
-                                if orders_raw:
-                                    print(f"[Webull] ✓ get_activities: {len(orders_raw)} trade items", flush=True)
-                            else:
-                                print(f"[Webull] get_activities: no items (success={activities.get('success')})", flush=True)
-                    except Exception as act_err:
-                        print(f"[Webull] get_activities failed: {act_err}", flush=True)
+                    except Exception:
+                        pass  # Silent fallback
                 
                 # METHOD 3: Direct API call with correct URL as last resort
                 if not orders_raw:
@@ -3247,9 +3223,7 @@ class WebullBroker:
                         headers = wb.build_req_headers(include_trade_token=True, include_time=True)
                         account_id = getattr(wb, '_account_id', '')
                         
-                        # Try the orders endpoint without startTime to let API use default
                         url = f"https://ustrade.webullbroker.com/api/trade/v2/option/list?secAccountId={account_id}&dateType=ORDER&pageSize={count}&status=Filled"
-                        print("[Webull] Trying direct API without startTime...", flush=True)
                         
                         response = requests.get(url, headers=headers, timeout=15)
                         if response.status_code == 200:
@@ -3258,54 +3232,23 @@ class WebullBroker:
                                 orders_raw = result
                             elif isinstance(result, dict):
                                 orders_raw = result.get('data', []) or result.get('items', [])
-                            if orders_raw:
-                                print(f"[Webull] ✓ Direct API: {len(orders_raw)} orders", flush=True)
-                        else:
-                            print(f"[Webull] Direct API: HTTP {response.status_code}", flush=True)
-                            try:
-                                err_json = response.json()
-                                print(f"[Webull] Direct API error: {err_json}", flush=True)
-                            except:
-                                print(f"[Webull] Direct API error body: {response.text[:200]}", flush=True)
-                    except Exception as direct_err:
-                        print(f"[Webull] Direct API failed: {direct_err}", flush=True)
+                    except Exception:
                         orders_raw = []
                 
                 orders = []
                 
                 if not orders_raw:
-                    # Only log warning occasionally (not every poll)
-                    import random
-                    if random.random() < 0.1:  # ~10% of polls
-                        print("[Webull] ⚠️  Order history unavailable - known webull library bug (startTime format)", flush=True)
                     return []
                 
-                # Handle case where API returns something other than a list
                 if not isinstance(orders_raw, list):
-                    print(f"[Webull] Unexpected order history format: {type(orders_raw)}", flush=True)
                     return []
-                
-                if len(orders_raw) > 0:
-                    print(f"[Webull] First order type: {type(orders_raw[0])}", flush=True)
-                    if isinstance(orders_raw[0], dict):
-                        print(f"[Webull] First order keys: {list(orders_raw[0].keys())[:10]}", flush=True)
                 
                 for combo_order in orders_raw:
-                    # Skip if order is not a dict (handle unexpected API response formats)
                     if not isinstance(combo_order, dict):
-                        print(f"[Webull] Skipping non-dict order item: {type(combo_order)}", flush=True)
                         continue
                     
-                    # Handle combo orders (options) - orders are nested inside 'orders' array
                     nested_orders = combo_order.get('orders', [])
                     if nested_orders and isinstance(nested_orders, list):
-                        # This is a combo order with nested individual orders
-                        if len(orders) == 0 and len(nested_orders) > 0:
-                            # Debug: Log first nested order structure
-                            first_nested = nested_orders[0]
-                            if isinstance(first_nested, dict):
-                                print(f"[Webull] Nested order keys: {list(first_nested.keys())[:12]}", flush=True)
-                                print(f"[Webull] Nested order ticker: {first_nested.get('ticker')}", flush=True)
                         for order in nested_orders:
                             if not isinstance(order, dict):
                                 continue
