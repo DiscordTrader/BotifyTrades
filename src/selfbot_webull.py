@@ -1339,6 +1339,24 @@ WAXUI_TRIM_PATTERN = r'[Tt]rim\s+([A-Za-z]+)\s+here'
 # Groups: (symbol)
 WAXUI_CLOSE_PATTERN = r'[Cc]lose[d]?\s+([A-Za-z]+)\s+here'
 
+# Bear-style patterns (@Stxbearish Discord format)
+# Entry format: **Contract:** $SPX 12/19 6845C\n**Entry:** @2.45
+# or: Contract: **SPX 11/18 5900c** (no entry price = track only)
+# Groups: (symbol, month, day, strike, opt_type)
+BEAR_CONTRACT_PATTERN = r'\*{0,2}Contract:?\*{0,2}\s*\*{0,2}\$?([A-Za-z]+)\s+(\d{1,2})/(\d{1,2})\s+(\d+(?:\.\d+)?)\s*([CPcp])\*{0,2}'
+
+# Bear entry price pattern - captures price after Entry:
+# Groups: (price)
+BEAR_ENTRY_PATTERN = r'\*{0,2}Entry:?\*{0,2}\s*[@]?\s*(\d+\.?\d*)'
+
+# Bear trim pattern: **I'm trimming here for XX%** or **I'm trimming here**
+# Groups: (percentage if present)
+BEAR_TRIM_PATTERN = r"[Ii]'?m\s+trimming\s+here(?:\s+for\s+(\d+)%)?"
+
+# Bear lotto pattern: SPX 11/18. 5900c @0.55 or SPX 11/18 5900c @0.55
+# Groups: (symbol, month, day, strike, opt_type, price)
+BEAR_LOTTO_PATTERN = r'([A-Za-z]+)\s+(\d{1,2})/(\d{1,2})\.?\s+(\d+(?:\.\d+)?)\s*([CPcp])\s*@\s*(\d+\.?\d*)'
+
 def calculate_next_week_expiry():
     """Calculate next Friday's date for 'NEXT WEEK' expiry"""
     from datetime import datetime, timedelta
@@ -3416,6 +3434,10 @@ SPX_NDX_SHORTHAND_REGEX = re.compile(SPX_NDX_SHORTHAND_PATTERN, re.IGNORECASE)
 WAXUI_ENTRY_REGEX = re.compile(WAXUI_ENTRY_PATTERN, re.IGNORECASE)
 WAXUI_TRIM_REGEX = re.compile(WAXUI_TRIM_PATTERN, re.IGNORECASE)
 WAXUI_CLOSE_REGEX = re.compile(WAXUI_CLOSE_PATTERN, re.IGNORECASE)
+BEAR_CONTRACT_REGEX = re.compile(BEAR_CONTRACT_PATTERN, re.IGNORECASE | re.MULTILINE)
+BEAR_ENTRY_REGEX = re.compile(BEAR_ENTRY_PATTERN, re.IGNORECASE)
+BEAR_TRIM_REGEX = re.compile(BEAR_TRIM_PATTERN, re.IGNORECASE)
+BEAR_LOTTO_REGEX = re.compile(BEAR_LOTTO_PATTERN, re.IGNORECASE)
 
 def parse_option_signal(text: str) -> Optional[dict]:
     learned_result = try_parse_with_learned_formats(text)
@@ -3615,8 +3637,102 @@ def parse_option_signal(text: str) -> Optional[dict]:
                                                                     "_spx_ndx_shorthand": True
                                                                 }
                                                             else:
-                                                                # Silently return None - let the caller try other formats (stock, TRADE IDEA)
-                                                                return None
+                                                                # Try Bear-style Contract/Entry format
+                                                                bear_contract_m = BEAR_CONTRACT_REGEX.search(text.strip())
+                                                                if bear_contract_m:
+                                                                    symbol, month, day, strike, opt_type = bear_contract_m.groups()
+                                                                    expiry = f"{month}/{day}"
+                                                                    # Check for Entry price
+                                                                    bear_entry_m = BEAR_ENTRY_REGEX.search(text.strip())
+                                                                    if bear_entry_m:
+                                                                        price_str = bear_entry_m.group(1)
+                                                                        price = float(price_str) if price_str else None
+                                                                        print(f"[Discord] ✓ Matched Bear Contract/Entry format: {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
+                                                                        _current_trading_settings = get_trading_settings()
+                                                                        max_position_size = _current_trading_settings['max_position_size']
+                                                                        actual_cost_per_contract = price * 100 if price else 100
+                                                                        qty = max(1, int(max_position_size / actual_cost_per_contract)) if actual_cost_per_contract > 0 else 1
+                                                                        print(f"[AUTO-QTY] Bear: ${price} x 100 = ${actual_cost_per_contract}/contract, buying {qty} (max ${max_position_size})")
+                                                                        return {
+                                                                            "asset": "option",
+                                                                            "action": "BTO",
+                                                                            "qty": qty,
+                                                                            "symbol": symbol.upper(),
+                                                                            "strike": float(strike),
+                                                                            "opt_type": opt_type.upper(),
+                                                                            "expiry": expiry,
+                                                                            "price": price,
+                                                                            "is_market_order": price is None,
+                                                                            "_bear_format": True
+                                                                        }
+                                                                    else:
+                                                                        # Contract without Entry - check if it's a trim
+                                                                        bear_trim_m = BEAR_TRIM_REGEX.search(text.strip())
+                                                                        if bear_trim_m:
+                                                                            print(f"[Discord] ✓ Matched Bear TRIM format: {symbol} {strike}{opt_type} {expiry}")
+                                                                            return {
+                                                                                "asset": "option",
+                                                                                "action": "STC",
+                                                                                "qty": 1,
+                                                                                "symbol": symbol.upper(),
+                                                                                "strike": float(strike),
+                                                                                "opt_type": opt_type.upper(),
+                                                                                "expiry": expiry,
+                                                                                "price": None,
+                                                                                "is_market_order": True,
+                                                                                "_bear_trim": True,
+                                                                                "_exit_type": "HALF"
+                                                                            }
+                                                                        else:
+                                                                            # Just tracking/update - no execution
+                                                                            print(f"[Discord] Bear Contract (tracking only, no Entry): {symbol} {strike}{opt_type} {expiry}")
+                                                                            return None
+                                                                else:
+                                                                    # Try Bear lotto format: SPX 11/18. 5900c @0.55
+                                                                    bear_lotto_m = BEAR_LOTTO_REGEX.search(text.strip())
+                                                                    if bear_lotto_m:
+                                                                        symbol, month, day, strike, opt_type, price_str = bear_lotto_m.groups()
+                                                                        expiry = f"{month}/{day}"
+                                                                        price = float(price_str)
+                                                                        print(f"[Discord] ✓ Matched Bear LOTTO format: {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
+                                                                        _current_trading_settings = get_trading_settings()
+                                                                        max_position_size = _current_trading_settings['max_position_size']
+                                                                        actual_cost_per_contract = price * 100
+                                                                        qty = max(1, int(max_position_size / actual_cost_per_contract)) if actual_cost_per_contract > 0 else 1
+                                                                        print(f"[AUTO-QTY] Bear Lotto: ${price} x 100 = ${actual_cost_per_contract}/contract, buying {qty} (max ${max_position_size})")
+                                                                        return {
+                                                                            "asset": "option",
+                                                                            "action": "BTO",
+                                                                            "qty": qty,
+                                                                            "symbol": symbol.upper(),
+                                                                            "strike": float(strike),
+                                                                            "opt_type": opt_type.upper(),
+                                                                            "expiry": expiry,
+                                                                            "price": price,
+                                                                            "is_market_order": False,
+                                                                            "_bear_lotto": True
+                                                                        }
+                                                                    else:
+                                                                        # Try standalone Bear trim: "I'm trimming here"
+                                                                        bear_trim_standalone_m = BEAR_TRIM_REGEX.search(text.strip())
+                                                                        if bear_trim_standalone_m:
+                                                                            print(f"[Discord] ✓ Matched standalone Bear TRIM format (no contract context)")
+                                                                            return {
+                                                                                "asset": "option",
+                                                                                "action": "STC",
+                                                                                "qty": 1,
+                                                                                "symbol": None,
+                                                                                "strike": None,
+                                                                                "opt_type": None,
+                                                                                "expiry": None,
+                                                                                "price": None,
+                                                                                "is_market_order": True,
+                                                                                "_bear_trim": True,
+                                                                                "_exit_type": "HALF"
+                                                                            }
+                                                                        else:
+                                                                            # Silently return None - let the caller try other formats (stock, TRADE IDEA)
+                                                                            return None
     
     if use_steel_stc:
         # Handle various STC formats with different group structures

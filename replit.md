@@ -23,6 +23,18 @@ Core technologies include `discord.py-self` and `webull`. It employs a true dual
 ### AI-Powered Signal Format Learning
 The system includes a "teach once, use forever" feature for learning new signal formats. Users can teach new formats via a chatbot, and the AI analyzes the format to create a reusable parsing template. Learned formats are stored in a `signal_formats` database table with regex patterns and field mappings, and parse results are cached. Management of these formats is available via chatbot commands or an API. The fallback hierarchy for signal parsing is learned formats, then built-in regex, then AI parsing.
 
+### Signal Format Support
+The parser supports multiple Discord signal formats including:
+- **Standard BTO/STC**: `BTO AAPL 200C 12/26 @ 2.61`
+- **Steel-style**: `:green_alert: COIN | $290 C 5.14 NEXT WEEK`
+- **JC-style**: `BTO $QQQ $627c 12/10 .77`
+- **Waxui LOTTO**: `SPX here 12/05 6880C Avg. 4.00`
+- **Bear-style (@Stxbearish)**: Multi-line Contract/Entry format
+  - Entry: `**Contract:** $SPX 12/19 6845C` + `**Entry:** @2.45` → BTO with auto-qty
+  - Trim: `I'm trimming here` → STC with HALF exit
+  - Lotto: `SPX 11/18 5900c @0.55` → BTO with auto-qty
+  - Contract-only (no Entry): Tracked but not auto-executed
+
 ### Feature Specifications
 The system supports a dual-mode channel system for simultaneous execution and tracking with FIFO-based P&L tracking, and Multi-Broker Execution across multiple accounts with per-channel broker selection. It handles market orders, comprehensive PNL page filtering, and per-channel position sizing. A Portfolio Simulation Engine projects portfolio growth. Authentication includes a setup wizard, secure login, password recovery, and a waitlist/referral system. The dashboard features live price refresh from Webull. Per-channel risk settings allow independent operation, supporting 3-tier profit targets with partial exits and trailing stops. A mandatory user agreement/risk disclosure is stored persistently.
 
