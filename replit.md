@@ -118,11 +118,12 @@ The Trade Monitor feature automatically detects trades executed on your broker (
 - **Copy Trading**: Mirror your broker trades to a signals channel for followers
 - **Trade Logging**: Automatic record of all executed trades
 
-### Known Issues (December 2025)
-- **Webull Order History API**: The unofficial `webull` Python library (tedchou12/webull) has a hardcoded bug in `endpoints.py` line ~138 where `startTime=1970-0-1` (malformed date, should be `1970-01-01`). This causes Webull API validation errors when calling `get_history_orders()`. 
-- **Workaround**: The Trade Monitor continues to poll and will work if Webull's API returns data via alternative endpoints. When the API fails, a warning is logged occasionally to avoid spam.
-- **Alternative**: Consider using Alpaca broker for Trade Monitor as Alpaca API works correctly.
-- **Fix Status**: Awaiting upstream library patch or manual library modification.
+### Known Issues (December 2025 - RESOLVED)
+- **Webull Order History API**: The unofficial `webull` Python library (tedchou12/webull) had a hardcoded bug in `endpoints.py` where `startTime=1970-0-1` (malformed date format).
+- **Resolution (Dec 23, 2025)**: Implemented a runtime monkey-patch in `selfbot_webull.py` that:
+  1. Overrides the `_urls.orders()` method to remove the problematic `startTime` parameter
+  2. Properly parses Webull's nested combo order response structure (orders are in `orders[]` array within each combo order)
+- **Current Status**: Trade Monitor now successfully retrieves filled orders and posts them to Discord in the format `BTO AAPL 200C 12/26 @ 2.61 @everyone`
 
 ## Debug Report System
 
