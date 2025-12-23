@@ -5847,6 +5847,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         channel_name = getattr(message.channel, 'name', str(message.channel.id))
         print(f"\n[Discord] 📨 Channel:{message.channel.id} ({channel_name}) Author:{message.author.name}")
         print(f"[Discord] Content: {message.content[:150]}")
+        print(f"[DEBUG] Stage 1: After content log, channel_info={channel_info is not None}, execute_enabled={execute_enabled}")
         
         if ALLOWED_AUTHOR_IDS and message.author.id not in ALLOWED_AUTHOR_IDS:
             print(f"[SKIP] Author {message.author.id} not in allowed list")
