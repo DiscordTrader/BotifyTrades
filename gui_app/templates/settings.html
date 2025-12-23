@@ -2472,8 +2472,10 @@ function updateTradeMonitorToggleStatus() {
 
 async function loadTradeMonitorSettings() {
     try {
+        console.log('[Trade Monitor] Loading settings...');
         const response = await fetch('/api/settings/trade_monitor');
         const settings = await response.json();
+        console.log('[Trade Monitor] API response:', settings);
         
         if (settings.success) {
             document.getElementById('trade-monitor-enabled').checked = settings.enabled;
@@ -2484,23 +2486,29 @@ async function loadTradeMonitorSettings() {
             document.getElementById('trade-monitor-stc').checked = settings.post_stc_signals !== false;
             document.getElementById('trade-monitor-test-mode').checked = settings.test_mode === true;
             updateTradeMonitorToggleStatus();
+            console.log('[Trade Monitor] UI updated: enabled=' + settings.enabled);
             
             if (settings.target_webhook_channel_id) {
                 const select = document.getElementById('trade-monitor-channel');
                 if (select) {
                     select.value = settings.target_webhook_channel_id;
+                    console.log('[Trade Monitor] Set channel dropdown to:', settings.target_webhook_channel_id);
                 }
             }
+        } else {
+            console.warn('[Trade Monitor] API returned success=false:', settings.error);
         }
     } catch (error) {
-        console.error('Error loading trade monitor settings:', error);
+        console.error('[Trade Monitor] Error loading settings:', error);
     }
 }
 
 async function loadWebhookChannelsForTradeMonitor() {
     try {
+        console.log('[Webhook Channels] Loading for Trade Monitor...');
         const response = await fetch('/api/webhook/channels');
         const data = await response.json();
+        console.log('[Webhook Channels] API response:', data);
         
         if (data.success && data.channels) {
             const select = document.getElementById('trade-monitor-channel');
@@ -2512,10 +2520,13 @@ async function loadWebhookChannelsForTradeMonitor() {
                     option.textContent = ch.name || `Channel ${ch.id}`;
                     select.appendChild(option);
                 });
+                console.log('[Webhook Channels] Loaded', data.channels.length, 'channels');
             }
+        } else {
+            console.warn('[Webhook Channels] No channels found or API error');
         }
     } catch (error) {
-        console.error('Error loading webhook channels:', error);
+        console.error('[Webhook Channels] Error loading:', error);
     }
 }
 
