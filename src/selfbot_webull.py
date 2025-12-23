@@ -4030,6 +4030,7 @@ class SelfClient(discord.Client):
         # Message deduplication (prevent duplicate event processing from Discord self-bot)
         self._processed_messages: set = set()
         self._max_processed_cache = 1000  # Keep last 1000 message IDs
+        self._message_dedupe_lock = None  # Will be created in setup() when event loop is ready
         
         # Command execution lock (prevent race conditions)
         self._executing_commands: set = set()  # Track currently executing command message IDs
@@ -4037,6 +4038,9 @@ class SelfClient(discord.Client):
         # Sent message tracking (prevent duplicate sends from discord.py-self bug)
         self._recent_sends: dict = {}  # {content_hash: timestamp}
         self._send_dedupe_window = 300.0  # 5 minutes (discord.py-self can resend messages after long delays)
+        
+        # Guard to prevent on_ready from running multiple times (Discord reconnects trigger on_ready)
+        self._on_ready_completed = False
         
         # Initialize AI analyzers if enabled
         self.trade_analyzer = None
@@ -4267,6 +4271,7 @@ class SelfClient(discord.Client):
         self.broker_ready = asyncio.Event()
         self.processing_ready = asyncio.Event()
         self._send_lock = asyncio.Lock()
+        self._message_dedupe_lock = asyncio.Lock()  # Protect message deduplication from race conditions
         print("[ASYNC] ✓ Queue and events created in event loop")
         
         self.broker = WebullBroker(loop=self.loop)
@@ -5439,6 +5444,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
     
 
     async def on_ready(self):
+        # Guard against duplicate on_ready calls (Discord reconnects can trigger this multiple times)
+        if self._on_ready_completed:
+            print("[Discord] Reconnected - skipping duplicate on_ready initialization")
+            return
+        
         if self.user:
             print(f"\n[Discord] ✓ Logged in as {self.user} (id={self.user.id})")
         else:
@@ -5529,6 +5539,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 print("[Discord] ✓ Bot ready event signaled")
         except Exception:
             pass  # Event not needed in non-threaded mode
+        
+        # Mark on_ready as completed to prevent duplicate initialization on reconnects
+        self._on_ready_completed = True
     
     async def on_error(self, event_name: str, *args, **kwargs):
         """Log Discord gateway errors that would otherwise be silent"""
@@ -5574,10 +5587,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             return
         
         # Deduplicate messages (Discord self-bot sometimes delivers duplicate events)
-        if message.id in self._processed_messages:
-            print(f"[Discord] Skipping duplicate message ID: {message.id}")
-            return
-        self._processed_messages.add(message.id)
+        # Use lock to prevent race condition where two concurrent on_message calls for same ID
+        # both pass the check before either adds to the set
+        if self._message_dedupe_lock:
+            async with self._message_dedupe_lock:
+                if message.id in self._processed_messages:
+                    print(f"[Discord] Skipping duplicate message ID: {message.id}")
+                    return
+                self._processed_messages.add(message.id)
+        else:
+            # Fallback if lock not initialized (shouldn't happen)
+            if message.id in self._processed_messages:
+                print(f"[Discord] Skipping duplicate message ID: {message.id}")
+                return
+            self._processed_messages.add(message.id)
+        
         print(f"[Discord] Processing message ID: {message.id}")
         
         # Limit cache size to prevent memory growth
