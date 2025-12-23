@@ -431,6 +431,62 @@ def get_open_positions() -> List[Dict[str, Any]]:
     return positions
 
 
+def cancel_webhook_position(
+    symbol: str,
+    strike: float,
+    expiry: str,
+    call_put: str,
+    qty: int = None
+) -> bool:
+    """Cancel/remove a webhook position (e.g., when a BTO order is canceled).
+    
+    If qty is provided and less than total position, removes that qty.
+    If qty is None or >= total, removes entire position.
+    Returns True if position was found and removed/reduced.
+    """
+    init_webhook_tables()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    normalized_expiry = normalize_expiry(expiry)
+    normalized_cp = call_put.upper()[0] if call_put else 'C'
+    
+    try:
+        cursor.execute('''
+            SELECT id, remaining_qty, original_qty FROM webhook_positions 
+            WHERE symbol = ? AND strike = ? AND expiry = ? AND call_put = ? AND status = "OPEN"
+            ORDER BY opened_at DESC LIMIT 1
+        ''', (symbol.upper(), strike, normalized_expiry, normalized_cp))
+        position = cursor.fetchone()
+        
+        if not position:
+            return False
+        
+        pos_id = position['id']
+        remaining = position['remaining_qty']
+        original = position['original_qty']
+        
+        if qty is None or qty >= remaining:
+            # Remove entire position
+            cursor.execute('UPDATE webhook_positions SET status = "CANCELED", remaining_qty = 0 WHERE id = ?', (pos_id,))
+            logger.info(f"Canceled entire position {pos_id} for {symbol} {strike}{normalized_cp} {normalized_expiry}")
+        else:
+            # Reduce position qty
+            new_remaining = remaining - qty
+            new_original = original - qty
+            cursor.execute('UPDATE webhook_positions SET remaining_qty = ?, original_qty = ? WHERE id = ?', 
+                          (new_remaining, new_original, pos_id))
+            logger.info(f"Reduced position {pos_id} by {qty}, new remaining: {new_remaining}")
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"Error canceling webhook position: {e}")
+        return False
+    finally:
+        conn.close()
+
+
 def find_matching_position(symbol: str, strike: float = None, expiry: str = None, call_put: str = None) -> Optional[Dict[str, Any]]:
     """Find a matching open position for STC."""
     init_webhook_tables()

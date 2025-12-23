@@ -396,6 +396,11 @@ class TradeMonitor:
         """Post a canceled order notification to Discord"""
         symbol = order.get('symbol', 'UNKNOWN')
         action = order.get('action', '').upper()
+        asset_type = order.get('asset_type', 'stock')
+        quantity = order.get('quantity', 0)
+        strike = order.get('strike', 0)
+        expiry = order.get('expiry', '')
+        direction = order.get('direction', 'C')
         
         is_buy = action in ['BUY', 'BTO']
         signal_type = 'BTO' if is_buy else 'STC'
@@ -404,6 +409,21 @@ class TradeMonitor:
         
         sys.stdout.write(f"[TRADE MONITOR] Posting canceled order: {signal_msg}\n")
         sys.stdout.flush()
+        
+        # If a BTO option order is canceled, remove from tracked positions
+        if is_buy and asset_type == 'option':
+            try:
+                removed = webhook_service.cancel_webhook_position(
+                    symbol=symbol,
+                    strike=strike,
+                    expiry=expiry,
+                    call_put=direction,
+                    qty=quantity
+                )
+                if removed:
+                    print(f"[TRADE MONITOR] ✓ Removed canceled BTO from position tracking: {symbol} {strike}{direction}", flush=True)
+            except Exception as e:
+                print(f"[TRADE MONITOR] Error removing canceled position: {e}", flush=True)
         
         if target_channel:
             webhook_url = self._get_webhook_url(target_channel)
