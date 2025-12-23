@@ -7235,6 +7235,18 @@ def register_routes(app):
             if not source_channel_id or not webhook_url:
                 return jsonify({'success': False, 'error': 'Source channel ID and webhook URL are required'}), 400
             
+            existing_channel = db.get_channel_by_discord_id(source_channel_id)
+            if not existing_channel:
+                channel_display_name = source_channel_name or f"Mapping-{source_channel_id[:8]}"
+                db.add_channel(
+                    discord_channel_id=source_channel_id,
+                    name=channel_display_name,
+                    category='TRACK',
+                    execute_enabled=0,
+                    track_enabled=1
+                )
+                print(f"[MAPPING] Auto-added channel {source_channel_id} to monitored channels for webhook forwarding")
+            
             result = db.add_channel_mapping(
                 source_channel_id, webhook_url,
                 source_channel_name, webhook_name
