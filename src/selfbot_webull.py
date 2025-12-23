@@ -4055,7 +4055,12 @@ def parse_option_signal(text: str) -> Optional[dict]:
     # Calculate quantity if not specified
     # CRITICAL: Options cost 100x the quoted premium (1 contract = 100 shares)
     if qty_str is None:
-        if is_market_order:
+        if direction.upper() == 'STC':
+            # For STC without qty, we'll set a flag to calculate from open position later
+            # This prevents the bug of calculating STC qty from exit price
+            qty = None  # Will be calculated from open lots in lot_matcher
+            print(f"[AUTO-QTY] STC without qty - will close based on open position size")
+        elif is_market_order:
             # For market orders without qty, default to 1 contract
             qty = 1
             print(f"[AUTO-QTY] Market order: defaulting to 1 contract")

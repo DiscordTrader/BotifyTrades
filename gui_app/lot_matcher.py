@@ -91,7 +91,14 @@ class LotMatcher:
             print(f"[LOT_MATCHER] ⚠ No open lots found for {signal['symbol']} STC")
             return []
         
-        remaining_qty = signal['qty']
+        # If qty is None, close ALL open positions for this symbol
+        if signal.get('qty') is None:
+            total_open = sum(lot['remaining_qty'] for lot in open_lots)
+            remaining_qty = total_open
+            print(f"[LOT_MATCHER] STC without qty - closing all {total_open} open contracts")
+        else:
+            remaining_qty = signal['qty']
+        
         closure_ids = []
         closed_at = signal.get('received_at', datetime.now())
         

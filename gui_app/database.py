@@ -2211,7 +2211,7 @@ def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, clos
     if not lot:
         return None
     
-    # Calculate PNL
+    # Calculate PNL with proper rounding to avoid floating point precision issues
     cost_basis = lot['open_price'] * close_qty
     if lot['asset_type'] == 'option':
         cost_basis *= 100  # Options contract multiplier
@@ -2219,8 +2219,8 @@ def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, clos
     else:
         proceeds = close_price * close_qty
     
-    pnl = proceeds - cost_basis
-    pnl_percent = (pnl / cost_basis * 100) if cost_basis > 0 else 0
+    pnl = round(proceeds - cost_basis, 2)  # Round to 2 decimal places
+    pnl_percent = round((pnl / cost_basis * 100), 4) if cost_basis > 0 else 0  # Round to 4 decimal places
     
     # Calculate holding period
     from datetime import datetime
