@@ -128,39 +128,38 @@ pip3 install --upgrade pyinstaller discord.py-self webull flask
 
 ## Intel vs Apple Silicon (M1/M2/M3) Compatibility
 
-**As of v2.1.35+**, the build creates a **Universal binary** that works on BOTH:
-- **Intel Macs** (x86_64)
-- **Apple Silicon Macs** (M1/M2/M3/arm64)
+**As of v3.2.5+**, separate builds are provided for each architecture:
+- **Intel Macs** (x86_64): Download `macOS-Intel` version
+- **Apple Silicon Macs** (M1/M2/M3): Download `macOS-AppleSilicon` version
 
 ### "Bad CPU type in executable" Error
 
 If you see this error, it means the binary was built for a different CPU architecture.
 
 **Solutions:**
-1. **Download the latest version** - Universal binary should work on both architectures
+1. **Download the correct version for your Mac:**
+   - Check your Mac: Apple menu → About This Mac → Chip/Processor
+   - **Intel processor**: Download `macOS-Intel` version
+   - **Apple M1/M2/M3**: Download `macOS-AppleSilicon` version
+
 2. **Check the binary type:**
    ```bash
    file ./BotifyTrades
    ```
-   - `universal binary with 2 architectures` = Works on both
    - `arm64` = Apple Silicon only
    - `x86_64` = Intel only
 
 3. **For Intel Mac users with ARM64-only binary:**
-   - Request an Intel or Universal build from support
+   - Download the correct `macOS-Intel` version
    - Or build locally on your Intel Mac
 
-### Building for Specific Architecture
+### Building Locally
 
-To build for a specific architecture (modify `packaging/macos/specs/botifytrades.spec`):
+The build script creates a binary for your current Mac's architecture:
+- **On Intel Mac**: Creates x86_64 binary
+- **On Apple Silicon Mac**: Creates arm64 binary
 
-```python
-target_arch='universal2',  # Both Intel + Apple Silicon (default, recommended)
-target_arch='x86_64',      # Intel only
-target_arch='arm64',       # Apple Silicon only
-```
-
-**Note:** Universal2 builds require universal2 Python from https://www.python.org/downloads/macos/ (not Homebrew)
+For cross-platform distribution, you need to build on BOTH architectures (done automatically via GitHub Actions CI).
 
 ## Support
 

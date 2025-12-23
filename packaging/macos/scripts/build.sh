@@ -31,14 +31,14 @@ fi
 
 echo "Python version: $(python3 --version)"
 
-# Check Python architecture for universal2 support
+# Check Python architecture
 PYTHON_ARCH=$(python3 -c "import platform; print(platform.machine())")
 echo "Python architecture: $PYTHON_ARCH"
-
-# Universal2 builds require universal2 Python from python.org
 echo ""
-echo "NOTE: Building universal2 binary (Intel + Apple Silicon)"
-echo "For best results, use universal2 Python from https://www.python.org/downloads/macos/"
+echo "NOTE: Building for native architecture ($PYTHON_ARCH)"
+echo "  - Intel Mac (x86_64): Creates Intel-only binary"
+echo "  - Apple Silicon (arm64): Creates Apple Silicon-only binary"
+echo "  - For cross-platform distribution, build on BOTH architectures"
 echo ""
 
 if ! pip3 show pyarmor &> /dev/null; then

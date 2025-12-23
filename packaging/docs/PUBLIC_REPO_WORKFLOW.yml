@@ -219,7 +219,16 @@ jobs:
           path: packaging/linux/BotifyTrades-v${{ steps.version.outputs.VERSION }}-Linux.tar.gz
 
   build-macos:
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-14        # Apple Silicon (arm64)
+            arch: arm64
+            arch_name: AppleSilicon
+          - os: macos-13        # Intel (x86_64)
+            arch: x86_64
+            arch_name: Intel
     steps:
       - name: Determine version
         id: version
@@ -266,22 +275,32 @@ jobs:
           mkdir -p license/pyarmor_runtime_000000
           cp -r dist_obf/pyarmor_runtime_000000/* license/pyarmor_runtime_000000/ 2>/dev/null || true
 
-      - name: Build with PyInstaller (Universal Binary)
+      - name: Build with PyInstaller (${{ matrix.arch_name }})
         run: |
-          # Note: target_arch='universal2' is set in the .spec file
+          echo "Building for ${{ matrix.arch }} architecture..."
           pyinstaller --clean --noconfirm \
             --distpath packaging/macos/dist \
             --workpath packaging/macos/build_temp \
             packaging/macos/specs/botifytrades.spec
 
+      - name: Verify binary architecture
+        run: |
+          echo "Verifying binary architecture..."
+          chmod +x packaging/macos/dist/BotifyTrades
+          file packaging/macos/dist/BotifyTrades
+          BINARY_ARCH=$(file packaging/macos/dist/BotifyTrades)
+          if echo "$BINARY_ARCH" | grep -q "${{ matrix.arch }}"; then
+            echo "✓ Binary architecture matches expected: ${{ matrix.arch }}"
+          else
+            echo "⚠ Binary architecture mismatch!"
+            exit 1
+          fi
+
       - name: Smoke test - verify binary launches
         run: |
           echo "Testing if binary starts correctly..."
-          chmod +x packaging/macos/dist/BotifyTrades
           # Run with timeout and check it doesn't crash immediately
           timeout 5 packaging/macos/dist/BotifyTrades --help 2>&1 || true
-          # Check file type shows universal binary
-          file packaging/macos/dist/BotifyTrades
           echo "Smoke test passed - binary is executable"
 
       - name: Create distribution package
@@ -303,9 +322,11 @@ jobs:
 
       - name: Create README
         run: |
-          cat > packaging/macos/dist/README.txt << 'EOF'
-          BotifyTrades v${{ steps.version.outputs.VERSION }}
+          cat > packaging/macos/dist/README.txt << EOF
+          BotifyTrades v${{ steps.version.outputs.VERSION }} (${{ matrix.arch_name }})
           =================================
+          
+          This build is for ${{ matrix.arch_name }} Macs (${{ matrix.arch }}).
           
           1. Double-click run.command or run ./BotifyTrades in Terminal
           2. Open http://localhost:5000
@@ -314,12 +335,17 @@ jobs:
           MACOS SECURITY NOTE:
           - If blocked by Gatekeeper, right-click and select "Open"
           - Or run: xattr -cr ./BotifyTrades
+          
+          WRONG ARCHITECTURE?
+          - Intel Macs (pre-2020): Download the Intel version
+          - Apple Silicon (M1/M2/M3): Download the AppleSilicon version
+          - Check your Mac: Apple menu > About This Mac > Chip/Processor
           EOF
 
       - name: Create tarball
         run: |
           cd packaging/macos/dist
-          tar -czvf ../BotifyTrades-v${{ steps.version.outputs.VERSION }}-macOS.tar.gz *
+          tar -czvf ../BotifyTrades-v${{ steps.version.outputs.VERSION }}-macOS-${{ matrix.arch_name }}.tar.gz *
 
       - name: Restore original license files
         run: |
@@ -327,11 +353,11 @@ jobs:
           cp -f backup/manager_secure.py.bak license/client/manager_secure.py
           cp -f backup/manager_activation.py.bak license/client/manager_activation.py
 
-      - name: Upload macOS artifact
+      - name: Upload macOS artifact (${{ matrix.arch_name }})
         uses: actions/upload-artifact@v4
         with:
-          name: macos-build
-          path: packaging/macos/BotifyTrades-v${{ steps.version.outputs.VERSION }}-macOS.tar.gz
+          name: macos-build-${{ matrix.arch_name }}
+          path: packaging/macos/BotifyTrades-v${{ steps.version.outputs.VERSION }}-macOS-${{ matrix.arch_name }}.tar.gz
 
   create-release:
     needs: [build-windows, build-linux, build-macos]
@@ -358,10 +384,16 @@ jobs:
           name: linux-build
           path: ./artifacts
 
-      - name: Download macOS build
+      - name: Download macOS Intel build
         uses: actions/download-artifact@v4
         with:
-          name: macos-build
+          name: macos-build-Intel
+          path: ./artifacts
+
+      - name: Download macOS Apple Silicon build
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-build-AppleSilicon
           path: ./artifacts
 
       - name: List artifacts
@@ -378,7 +410,13 @@ jobs:
             ### Downloads
             - **Windows**: `BotifyTrades-v${{ steps.version.outputs.VERSION }}-Windows.zip`
             - **Linux**: `BotifyTrades-v${{ steps.version.outputs.VERSION }}-Linux.tar.gz`
-            - **macOS**: `BotifyTrades-v${{ steps.version.outputs.VERSION }}-macOS.tar.gz`
+            - **macOS (Intel)**: `BotifyTrades-v${{ steps.version.outputs.VERSION }}-macOS-Intel.tar.gz` - For older Intel Macs
+            - **macOS (Apple Silicon)**: `BotifyTrades-v${{ steps.version.outputs.VERSION }}-macOS-AppleSilicon.tar.gz` - For M1/M2/M3 Macs
+            
+            ### Which macOS version?
+            - **Intel Macs** (pre-2020): Download the `Intel` version
+            - **Apple Silicon** (M1/M2/M3, 2020+): Download the `AppleSilicon` version
+            - **Check your Mac**: Apple menu → About This Mac → Chip/Processor
             
             ### Quick Start
             1. Download and extract for your platform
@@ -396,7 +434,8 @@ jobs:
           files: |
             ./artifacts/BotifyTrades-v${{ steps.version.outputs.VERSION }}-Windows.zip
             ./artifacts/BotifyTrades-v${{ steps.version.outputs.VERSION }}-Linux.tar.gz
-            ./artifacts/BotifyTrades-v${{ steps.version.outputs.VERSION }}-macOS.tar.gz
+            ./artifacts/BotifyTrades-v${{ steps.version.outputs.VERSION }}-macOS-Intel.tar.gz
+            ./artifacts/BotifyTrades-v${{ steps.version.outputs.VERSION }}-macOS-AppleSilicon.tar.gz
           draft: false
           prerelease: false
         env:
