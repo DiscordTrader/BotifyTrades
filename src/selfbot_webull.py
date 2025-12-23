@@ -6022,10 +6022,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             self._save_signal_to_db(opt, message.channel.id, message.id, author_name)
             print(f"[DATABASE] ✓ Signal saved to database with option details")
             
-            # Dual-mode routing: check flags instead of category
-            if execute_enabled:
+            # Dual-mode routing: require BOTH execute_enabled AND category='EXECUTE' for safety
+            # This prevents accidental execution if flags get out of sync with category
+            is_execute_channel = channel_category == 'EXECUTE' if channel_category else False
+            if execute_enabled and is_execute_channel:
                 print(f"[ROUTE] EXECUTE enabled - adding to order queue", flush=True)
                 print(f"[DEBUG] Queue size BEFORE put: {self.order_queue.qsize()}", flush=True)
+            elif execute_enabled and not is_execute_channel:
+                print(f"[ROUTE] ⚠️ SAFETY BLOCK: execute_enabled=True but category={channel_category} - NOT executing (sync issue detected)")
+                execute_enabled = False  # Force disable for rest of this signal
+            
+            if execute_enabled and is_execute_channel:
                 
                 # Add EXECUTION position size percentage for dynamic qty calculation
                 exec_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
@@ -6147,7 +6154,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         self._save_signal_to_db(opt, message.channel.id, message.id, author_name)
                         print(f"[DATABASE] ✓ Signal saved to database with option details")
                         
-                        if execute_enabled:
+                        # Safety check: require BOTH execute_enabled AND category='EXECUTE'
+                        is_exec_channel = channel_category == 'EXECUTE' if channel_category else False
+                        if execute_enabled and is_exec_channel:
                             print(f"[ROUTE] EXECUTE enabled - adding to order queue")
                             enabled_brokers_json = channel_info.get('enabled_brokers') if channel_info else None
                             if enabled_brokers_json:
@@ -6164,6 +6173,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 opt['author'] = author_name
                             await self.order_queue.put(opt)
                             print(f"[QUEUE] ✓ Signal queued for execution")
+                        elif execute_enabled and not is_exec_channel:
+                            print(f"[ROUTE] ⚠️ SAFETY BLOCK: execute_enabled=True but category={channel_category} - NOT executing")
                         return
                     else:
                         print(f"[BULLWINKLE STC] ⚠️ No open option position found for {stk['symbol']} - processing as stock")
@@ -6178,8 +6189,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             self._save_signal_to_db(stk, message.channel.id, message.id, author_name)
             print(f"[DATABASE] ✓ Signal saved to database")
             
-            # Dual-mode routing: check flags instead of category
-            if execute_enabled:
+            # Dual-mode routing: require BOTH execute_enabled AND category='EXECUTE' for safety
+            is_execute_channel = channel_category == 'EXECUTE' if channel_category else False
+            if execute_enabled and not is_execute_channel:
+                print(f"[ROUTE] ⚠️ SAFETY BLOCK: execute_enabled=True but category={channel_category} - NOT executing stock signal")
+                execute_enabled = False  # Force disable for rest of this signal
+            
+            if execute_enabled and is_execute_channel:
                 print(f"[ROUTE] EXECUTE enabled - adding to order queue")
                 
                 # Add EXECUTION position size percentage for dynamic qty calculation
