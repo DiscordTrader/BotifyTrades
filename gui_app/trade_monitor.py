@@ -1,15 +1,21 @@
 """
 Trade Monitor Service
 Monitors broker accounts for new trades and posts them as signals to Discord
+
+Optimizations:
+- Adaptive polling: 3s during market hours, 30s overnight
+- Async HTTP for Discord webhooks to avoid blocking
+- Order caching to skip already-processed orders
 """
 
 import sys
-sys.stdout.write("[TRADE MONITOR MODULE] Loading trade_monitor.py - v2\n")
+sys.stdout.write("[TRADE MONITOR MODULE] Loading trade_monitor.py - v3\n")
 sys.stdout.flush()
 
 import asyncio
 import requests
-from datetime import datetime
+import aiohttp
+from datetime import datetime, time as dt_time
 from typing import Optional, Dict, Any, List
 
 try:
@@ -18,6 +24,39 @@ try:
 except ImportError:
     import database as db
     import webhook_service
+
+
+def is_market_open() -> bool:
+    """Check if US stock market is currently open (9:30 AM - 4:00 PM ET)"""
+    try:
+        from zoneinfo import ZoneInfo
+        et_tz = ZoneInfo('America/New_York')
+    except ImportError:
+        import pytz
+        et_tz = pytz.timezone('America/New_York')
+    
+    now_et = datetime.now(et_tz)
+    
+    # Weekend check
+    if now_et.weekday() >= 5:  # Saturday=5, Sunday=6
+        return False
+    
+    # Market hours: 9:30 AM - 4:00 PM ET
+    market_open = dt_time(9, 30)
+    market_close = dt_time(16, 0)
+    current_time = now_et.time()
+    
+    return market_open <= current_time <= market_close
+
+
+def get_adaptive_poll_interval(base_interval: int) -> int:
+    """Return faster polling during market hours, slower overnight"""
+    if is_market_open():
+        # During market hours: minimum 3 seconds for real-time detection
+        return max(3, min(base_interval, 5))
+    else:
+        # After hours: slower polling to save API calls
+        return max(base_interval, 30)
 
 
 class TradeMonitor:
@@ -29,6 +68,25 @@ class TradeMonitor:
         self._task = None
         self._last_poll_time = None
         self._tracked_pending_orders = {}  # order_id -> order data for cancellation detection
+        self._http_session = None  # Reusable aiohttp session
+    
+    async def _get_http_session(self):
+        """Get or create reusable aiohttp session for non-blocking HTTP"""
+        if self._http_session is None or self._http_session.closed:
+            self._http_session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=5)  # 5 second timeout
+            )
+        return self._http_session
+    
+    async def _async_post_webhook(self, webhook_url: str, content: str) -> bool:
+        """Non-blocking async POST to Discord webhook"""
+        try:
+            session = await self._get_http_session()
+            async with session.post(webhook_url, json={"content": content}) as resp:
+                return resp.status in [200, 204]
+        except Exception as e:
+            print(f"[TRADE MONITOR] Async webhook error: {e}", flush=True)
+            return False
         
     def set_broker(self, broker):
         """Set the broker instance to monitor"""
@@ -89,11 +147,13 @@ class TradeMonitor:
                     self.running = False
                     break
                     
-                poll_interval = settings.get('poll_interval_seconds', 10)
+                base_interval = settings.get('poll_interval_seconds', 10)
+                poll_interval = get_adaptive_poll_interval(base_interval)
                 test_mode_setting = db.get_setting('trade_monitor_test_mode', 'false')
                 test_mode = test_mode_setting.lower() == 'true'
                 
-                sys.stdout.write(f"[TRADE MONITOR] Polling... (test_mode={test_mode}, interval={poll_interval}s)\n")
+                market_status = "OPEN" if is_market_open() else "CLOSED"
+                sys.stdout.write(f"[TRADE MONITOR] Polling... (market={market_status}, interval={poll_interval}s)\n")
                 sys.stdout.flush()
                 
                 await self._check_for_new_orders(settings)
@@ -326,30 +386,26 @@ class TradeMonitor:
         if webhook_url:
             if asset_type == 'option':
                 if is_buy:
-                    # BTO: Open position for webhook P&L tracking and post signal
+                    # BTO: Open position for webhook P&L tracking and post signal (async)
                     signal_msg = self._format_signal(order, signal_type)
-                    try:
-                        resp = requests.post(webhook_url, json={"content": signal_msg}, timeout=10)
-                        if resp.status_code in [200, 204]:
-                            posted = True
-                            channel_id = target_channel
-                            print(f"[TRADE MONITOR] Posted BTO {symbol} to webhook", flush=True)
-                            
-                            # Track position for webhook P&L calculation on STC
-                            position_id = webhook_service.open_webhook_position(
-                                symbol=symbol,
-                                strike=strike,
-                                expiry=expiry,
-                                call_put=direction,
-                                qty=quantity,
-                                entry_price=filled_price,
-                                trade_type='BTO',
-                                webhook_url=webhook_url
-                            )
-                            if position_id:
-                                print(f"[TRADE MONITOR] Opened webhook position {position_id}", flush=True)
-                    except Exception as e:
-                        print(f"[TRADE MONITOR] Failed to post BTO to webhook: {e}", flush=True)
+                    posted = await self._async_post_webhook(webhook_url, signal_msg)
+                    if posted:
+                        channel_id = target_channel
+                        print(f"[TRADE MONITOR] Posted BTO {symbol} to webhook", flush=True)
+                        
+                        # Track position for webhook P&L calculation on STC
+                        position_id = webhook_service.open_webhook_position(
+                            symbol=symbol,
+                            strike=strike,
+                            expiry=expiry,
+                            call_put=direction,
+                            qty=quantity,
+                            entry_price=filled_price,
+                            trade_type='BTO',
+                            webhook_url=webhook_url
+                        )
+                        if position_id:
+                            print(f"[TRADE MONITOR] Opened webhook position {position_id}", flush=True)
                 else:
                     # STC: Use post_stc_signal for rich Trade Summary embed
                     try:
@@ -367,26 +423,21 @@ class TradeMonitor:
                             channel_id = target_channel
                             print(f"[TRADE MONITOR] Posted STC {symbol} with Trade Summary", flush=True)
                         else:
-                            # No webhook position - post simple STC signal
+                            # No webhook position - post simple STC signal (async)
                             signal_msg = self._format_signal(order, signal_type)
-                            resp = requests.post(webhook_url, json={"content": signal_msg}, timeout=10)
-                            if resp.status_code in [200, 204]:
-                                posted = True
+                            posted = await self._async_post_webhook(webhook_url, signal_msg)
+                            if posted:
                                 channel_id = target_channel
                                 print(f"[TRADE MONITOR] Posted STC {symbol} (simple)", flush=True)
                     except Exception as e:
                         print(f"[TRADE MONITOR] Failed to post STC to webhook: {e}", flush=True)
             else:
-                # Stocks - use simple format
+                # Stocks - use simple format (async)
                 signal_msg = self._format_signal(order, signal_type)
-                try:
-                    resp = requests.post(webhook_url, json={"content": signal_msg}, timeout=10)
-                    if resp.status_code in [200, 204]:
-                        posted = True
-                        channel_id = target_channel
-                        print(f"[TRADE MONITOR] Posted {signal_type} {symbol} to webhook", flush=True)
-                except Exception as e:
-                    print(f"[TRADE MONITOR] Failed to post to webhook: {e}", flush=True)
+                posted = await self._async_post_webhook(webhook_url, signal_msg)
+                if posted:
+                    channel_id = target_channel
+                    print(f"[TRADE MONITOR] Posted {signal_type} {symbol} to webhook", flush=True)
         
         # Record to synced_orders table
         db.add_synced_order(
@@ -511,14 +562,11 @@ class TradeMonitor:
         if target_channel:
             webhook_url = self._get_webhook_url(target_channel)
             if webhook_url:
-                try:
-                    resp = requests.post(webhook_url, json={"content": signal_msg}, timeout=10)
-                    if resp.status_code in [200, 204]:
-                        print(f"[TRADE MONITOR] ✓ Posted CANCELED {symbol} to webhook", flush=True)
-                    else:
-                        print(f"[TRADE MONITOR] Failed to post canceled: HTTP {resp.status_code}", flush=True)
-                except Exception as e:
-                    print(f"[TRADE MONITOR] Failed to post canceled to webhook: {e}", flush=True)
+                posted = await self._async_post_webhook(webhook_url, signal_msg)
+                if posted:
+                    print(f"[TRADE MONITOR] ✓ Posted CANCELED {symbol} to webhook", flush=True)
+                else:
+                    print(f"[TRADE MONITOR] Failed to post canceled order", flush=True)
             else:
                 print(f"[TRADE MONITOR] No webhook configured for canceled order", flush=True)
             
