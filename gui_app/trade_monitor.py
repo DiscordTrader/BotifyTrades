@@ -149,7 +149,7 @@ class TradeMonitor:
         if asset_type == 'option':
             strike = order.get('strike', 0)
             expiry = order.get('expiry', '')
-            direction = order.get('direction', 'C')
+            direction = order.get('direction', 'C').lower()
             
             if expiry and '-' in expiry:
                 try:
@@ -159,21 +159,10 @@ class TradeMonitor:
                 except:
                     pass
             
-            signal_msg = f"**{signal_type} {symbol} ${strike}{direction} {expiry}**"
-            if filled_price > 0:
-                signal_msg += f" @ ${filled_price:.2f}"
-            if quantity > 1:
-                signal_msg += f" x{quantity}"
+            strike_str = f"{int(strike)}" if strike == int(strike) else f"{strike}"
+            signal_msg = f"{signal_type} {quantity} {symbol} {strike_str}{direction} {expiry} @ {filled_price:.2f}"
         else:
-            signal_msg = f"**{signal_type} {symbol}**"
-            if filled_price > 0:
-                signal_msg += f" @ ${filled_price:.2f}"
-            if quantity > 1:
-                signal_msg += f" x{quantity}"
-        
-        emoji = "🟢" if is_buy else "🔴"
-        signal_msg = f"{emoji} {signal_msg}"
-        signal_msg += f"\n📊 *Synced from {broker_name}*"
+            signal_msg = f"{signal_type} {quantity} {symbol} @ {filled_price:.2f}"
         
         posted = False
         channel_id = None
