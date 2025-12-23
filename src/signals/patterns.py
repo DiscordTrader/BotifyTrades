@@ -6,14 +6,14 @@ Contains regex patterns for options and stocks with various formats.
 import re
 from typing import Optional
 
-FLEXIBLE_OPT_PATTERN = r'^(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s+\$?([\d.]+)\s*([CPcp])\s*(\d{1,2}/\d{1,2})\s*@?\s*([\d.]+|[mM])'
+FLEXIBLE_OPT_PATTERN = r'(?:^|\s)(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s+\$?([\d.]+)\s*([CPcp])\s*(\d{1,2}/\d{1,2})\s*@?\s*([\d.]+|[mM])'
 
-DEFAULT_STK_PATTERN = r'^(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s*@?\s*([\d.]+|[mM])'
+DEFAULT_STK_PATTERN = r'(?:^|\s)(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s*@?\s*([\d.]+|[mM])'
 
 ADVANCED_OPT_PATTERNS = [
-    r'^(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s+\$?([\d.]+)\s*([CPcp])\s*(\d{1,2}/\d{1,2})\s*@?\s*([\d.]+|[mM])',
-    r'^(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s+(\d{1,2}/\d{1,2})\s+\$?([\d.]+)\s*([CPcp])\s*@?\s*([\d.]+|[mM])',
-    r'^(BTO|STC)\s+(?:(\d+)\s+)?(\d{1,2}/\d{1,2})\s+\$?([A-Za-z]+)\s+\$?([\d.]+)\s*([CPcp])\s*@?\s*([\d.]+|[mM])',
+    r'(?:^|\s)(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s+\$?([\d.]+)\s*([CPcp])\s*(\d{1,2}/\d{1,2})\s*@?\s*([\d.]+|[mM])',
+    r'(?:^|\s)(BTO|STC)\s+(?:(\d+)\s+)?\$?([A-Za-z]+)\s+(\d{1,2}/\d{1,2})\s+\$?([\d.]+)\s*([CPcp])\s*@?\s*([\d.]+|[mM])',
+    r'(?:^|\s)(BTO|STC)\s+(?:(\d+)\s+)?(\d{1,2}/\d{1,2})\s+\$?([A-Za-z]+)\s+\$?([\d.]+)\s*([CPcp])\s*@?\s*([\d.]+|[mM])',
 ]
 
 OCC_PATTERN = r'([A-Z]+)(\d{6})([CP])(\d{8})'
