@@ -7086,6 +7086,7 @@ def register_routes(app):
         """Get trade monitor settings"""
         try:
             settings = db.get_trade_monitor_settings()
+            test_mode = db.get_setting('trade_monitor_test_mode', 'false').lower() == 'true'
             return jsonify({
                 'success': True,
                 'enabled': bool(settings.get('enabled')),
@@ -7094,7 +7095,8 @@ def register_routes(app):
                 'include_stocks': bool(settings.get('include_stocks', True)),
                 'include_options': bool(settings.get('include_options', True)),
                 'post_bto_signals': bool(settings.get('post_bto_signals', True)),
-                'post_stc_signals': bool(settings.get('post_stc_signals', True))
+                'post_stc_signals': bool(settings.get('post_stc_signals', True)),
+                'test_mode': test_mode
             })
         except Exception as e:
             print(f"[API] Error getting trade monitor settings: {e}")
@@ -7112,6 +7114,7 @@ def register_routes(app):
             include_options = data.get('include_options', True)
             post_bto = data.get('post_bto_signals', True)
             post_stc = data.get('post_stc_signals', True)
+            test_mode = data.get('test_mode', False)
             
             if poll_interval < 5:
                 poll_interval = 5
@@ -7127,6 +7130,8 @@ def register_routes(app):
                 post_bto=post_bto,
                 post_stc=post_stc
             )
+            
+            db.save_setting('trade_monitor_test_mode', 'true' if test_mode else 'false')
             
             if success:
                 return jsonify({

@@ -81,17 +81,31 @@ class TradeMonitor:
                 await asyncio.sleep(10)
                 
     async def _check_for_new_orders(self, settings: Dict[str, Any]):
-        """Check broker for new filled orders"""
+        """Check broker for new filled orders (and pending orders in test mode)"""
         if not self.broker or not self.broker.connected:
             return
             
         broker_name = getattr(self.broker, 'name', 'UNKNOWN')
+        test_mode_setting = db.get_setting('trade_monitor_test_mode', 'false')
+        test_mode = test_mode_setting.lower() == 'true'
         
         try:
+            orders = []
+            
             if hasattr(self.broker, 'get_order_history'):
-                orders = await self.broker.get_order_history(count=20)
-            else:
-                return
+                filled_orders = await self.broker.get_order_history(count=20)
+                if filled_orders:
+                    for order in filled_orders:
+                        order['_status'] = 'FILLED'
+                    orders.extend(filled_orders)
+            
+            if test_mode and hasattr(self.broker, 'get_pending_orders'):
+                pending_orders = await self.broker.get_pending_orders()
+                if pending_orders:
+                    for order in pending_orders:
+                        order['_status'] = 'PENDING'
+                    orders.extend(pending_orders)
+                    print(f"[TRADE MONITOR] Test mode: Found {len(pending_orders)} pending orders")
                 
             if not orders:
                 return
@@ -140,11 +154,14 @@ class TradeMonitor:
         symbol = order.get('symbol', 'UNKNOWN')
         action = order.get('action', '').upper()
         quantity = order.get('quantity', 0)
-        filled_price = order.get('filled_price', 0)
+        filled_price = order.get('filled_price', order.get('limit_price', 0))
         asset_type = order.get('asset_type', 'stock')
+        order_status = order.get('_status', 'FILLED')
         
         is_buy = action in ['BUY', 'BTO']
         signal_type = 'BTO' if is_buy else 'STC'
+        
+        test_prefix = "[TEST] " if order_status == 'PENDING' else ""
         
         if asset_type == 'option':
             strike = order.get('strike', 0)
@@ -160,9 +177,9 @@ class TradeMonitor:
                     pass
             
             strike_str = f"{int(strike)}" if strike == int(strike) else f"{strike}"
-            signal_msg = f"{signal_type} {quantity} {symbol} {strike_str}{direction} {expiry} @ {filled_price:.2f}"
+            signal_msg = f"{test_prefix}{signal_type} {quantity} {symbol} {strike_str}{direction} {expiry} @ {filled_price:.2f}"
         else:
-            signal_msg = f"{signal_type} {quantity} {symbol} @ {filled_price:.2f}"
+            signal_msg = f"{test_prefix}{signal_type} {quantity} {symbol} @ {filled_price:.2f}"
         
         posted = False
         channel_id = None

@@ -1325,6 +1325,16 @@ input:checked + .slider:before {
                 <span>Post STC (Sell) Signals</span>
             </div>
         </div>
+        <div class="form-group" style="margin-top: 16px; padding: 12px; background: rgba(255, 193, 7, 0.1); border-radius: 8px; border: 1px solid rgba(255, 193, 7, 0.3);">
+            <div class="toggle-row">
+                <label class="toggle-label">
+                    <input type="checkbox" id="trade-monitor-test-mode">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span style="color: #ffc107; font-weight: 500;">🧪 Test Mode (Include Pending Orders)</span>
+            </div>
+            <p class="help-text" style="margin-top: 8px; color: #aaa;">When enabled, pending/working orders are also posted with [TEST] prefix. Use this to test signal posting without waiting for orders to fill.</p>
+        </div>
         <div class="btn-group">
             <button id="save-trade-monitor" class="btn btn-success">💾 Save Trade Monitor Settings</button>
             <span id="trade-monitor-save-status" style="margin-left: 12px; font-size: 13px;"></span>
@@ -2472,6 +2482,7 @@ async function loadTradeMonitorSettings() {
             document.getElementById('trade-monitor-options').checked = settings.include_options !== false;
             document.getElementById('trade-monitor-bto').checked = settings.post_bto_signals !== false;
             document.getElementById('trade-monitor-stc').checked = settings.post_stc_signals !== false;
+            document.getElementById('trade-monitor-test-mode').checked = settings.test_mode === true;
             updateTradeMonitorToggleStatus();
             
             if (settings.target_webhook_channel_id) {
@@ -2594,7 +2605,8 @@ document.getElementById('save-trade-monitor').addEventListener('click', async ()
         include_stocks: document.getElementById('trade-monitor-stocks').checked,
         include_options: document.getElementById('trade-monitor-options').checked,
         post_bto_signals: document.getElementById('trade-monitor-bto').checked,
-        post_stc_signals: document.getElementById('trade-monitor-stc').checked
+        post_stc_signals: document.getElementById('trade-monitor-stc').checked,
+        test_mode: document.getElementById('trade-monitor-test-mode').checked
     };
     
     const inlineStatus = document.getElementById('trade-monitor-save-status');
