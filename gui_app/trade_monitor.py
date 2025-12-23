@@ -80,12 +80,20 @@ class TradeMonitor:
     
     async def _async_post_webhook(self, webhook_url: str, content: str) -> bool:
         """Non-blocking async POST to Discord webhook"""
+        import time
+        request_id = f"{int(time.time() * 1000) % 100000}"  # Short unique ID for tracking
+        sys.stdout.write(f"[TRADE MONITOR] >>> Webhook POST [{request_id}]: {content[:50]}...\n")
+        sys.stdout.flush()
         try:
             session = await self._get_http_session()
             async with session.post(webhook_url, json={"content": content}) as resp:
-                return resp.status in [200, 204]
+                success = resp.status in [200, 204]
+                sys.stdout.write(f"[TRADE MONITOR] <<< Webhook response [{request_id}]: {resp.status}\n")
+                sys.stdout.flush()
+                return success
         except Exception as e:
-            print(f"[TRADE MONITOR] Async webhook error: {e}", flush=True)
+            sys.stdout.write(f"[TRADE MONITOR] !!! Webhook error [{request_id}]: {e}\n")
+            sys.stdout.flush()
             return False
         
     def set_broker(self, broker):
