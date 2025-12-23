@@ -14,8 +14,10 @@ from typing import Optional, Dict, Any, List
 
 try:
     from gui_app import database as db
+    from gui_app import webhook_service
 except ImportError:
     import database as db
+    import webhook_service
 
 
 class TradeMonitor:
@@ -294,17 +296,73 @@ class TradeMonitor:
         quantity = order.get('quantity', 0)
         filled_price = order.get('filled_price', order.get('limit_price', 0))
         asset_type = order.get('asset_type', 'stock')
+        strike = order.get('strike', 0)
+        expiry = order.get('expiry', '')
+        direction = order.get('direction', 'C')
         
         is_buy = action in ['BUY', 'BTO']
         signal_type = 'BTO' if is_buy else 'STC'
         
-        signal_msg = self._format_signal(order, signal_type)
-        
         posted = False
         channel_id = None
+        webhook_url = self._get_webhook_url(target_channel) if target_channel else None
         
-        if target_channel:
-            webhook_url = self._get_webhook_url(target_channel)
+        # For options, use webhook_service for position tracking and P&L calculation
+        if asset_type == 'option' and webhook_url:
+            if is_buy:
+                # BTO: Open a position and post signal
+                signal_msg = self._format_signal(order, signal_type)
+                try:
+                    resp = requests.post(webhook_url, json={"content": signal_msg}, timeout=10)
+                    if resp.status_code in [200, 204]:
+                        posted = True
+                        channel_id = target_channel
+                        print(f"[TRADE MONITOR] Posted BTO {symbol} to webhook", flush=True)
+                        
+                        # Track position for P&L calculation on STC
+                        position_id = webhook_service.open_webhook_position(
+                            symbol=symbol,
+                            strike=strike,
+                            expiry=expiry,
+                            call_put=direction,
+                            qty=quantity,
+                            entry_price=filled_price,
+                            trade_type='BTO',
+                            webhook_url=webhook_url
+                        )
+                        if position_id:
+                            print(f"[TRADE MONITOR] Opened position {position_id} for P&L tracking", flush=True)
+                except Exception as e:
+                    print(f"[TRADE MONITOR] Failed to post BTO to webhook: {e}", flush=True)
+            else:
+                # STC: Use post_stc_signal for P&L calculation and Trade Summary
+                try:
+                    success, message, pnl_data = webhook_service.post_stc_signal(
+                        webhook_url=webhook_url,
+                        symbol=symbol,
+                        strike=strike,
+                        expiry=expiry,
+                        call_put=direction,
+                        qty=quantity,
+                        close_price=filled_price
+                    )
+                    if success:
+                        posted = True
+                        channel_id = target_channel
+                        print(f"[TRADE MONITOR] Posted STC {symbol} with Trade Summary: {message}", flush=True)
+                    else:
+                        # No matching position - post simple STC signal
+                        signal_msg = self._format_signal(order, signal_type)
+                        resp = requests.post(webhook_url, json={"content": signal_msg}, timeout=10)
+                        if resp.status_code in [200, 204]:
+                            posted = True
+                            channel_id = target_channel
+                            print(f"[TRADE MONITOR] Posted STC {symbol} (no position found for P&L)", flush=True)
+                except Exception as e:
+                    print(f"[TRADE MONITOR] Failed to post STC to webhook: {e}", flush=True)
+        else:
+            # Stocks or no webhook - use simple format
+            signal_msg = self._format_signal(order, signal_type)
             if webhook_url:
                 try:
                     resp = requests.post(webhook_url, json={"content": signal_msg}, timeout=10)
@@ -323,9 +381,9 @@ class TradeMonitor:
             quantity=quantity,
             filled_price=filled_price,
             asset_type=asset_type,
-            strike=order.get('strike'),
-            expiry=order.get('expiry'),
-            direction=order.get('direction'),
+            strike=strike,
+            expiry=expiry,
+            direction=direction,
             discord_channel_id=channel_id
         )
         
