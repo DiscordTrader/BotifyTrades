@@ -2765,14 +2765,14 @@ def register_routes(app):
         # Fetch Tastytrade account (paper or live based on connection)
         if _bot_instance and hasattr(_bot_instance, 'tastytrade_broker') and _bot_instance.tastytrade_broker:
             try:
-                import concurrent.futures
+                async def _get_tastytrade_account():
+                    return await _bot_instance.tastytrade_broker.get_account_info()
                 
-                def _get_tastytrade_account_sync():
-                    return _bot_instance.tastytrade_broker.get_account_info()
-                
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(_get_tastytrade_account_sync)
-                    tastytrade_data = future.result(timeout=10)
+                future = asyncio.run_coroutine_threadsafe(
+                    _get_tastytrade_account(),
+                    _bot_instance.loop
+                )
+                tastytrade_data = future.result(timeout=10)
                 if tastytrade_data:
                     is_paper = getattr(_bot_instance.tastytrade_broker, 'paper_trade', False)
                     tastytrade_key = 'tastytrade_paper' if is_paper else 'tastytrade_live'

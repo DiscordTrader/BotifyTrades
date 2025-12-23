@@ -5844,7 +5844,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 return
 
         # Now log only messages from monitored channels
-        print(f"\n[Discord] 📨 Channel:{message.channel.id} Author:{message.author.name}")
+        channel_name = getattr(message.channel, 'name', str(message.channel.id))
+        print(f"\n[Discord] 📨 Channel:{message.channel.id} ({channel_name}) Author:{message.author.name}")
         print(f"[Discord] Content: {message.content[:150]}")
         
         if ALLOWED_AUTHOR_IDS and message.author.id not in ALLOWED_AUTHOR_IDS:
