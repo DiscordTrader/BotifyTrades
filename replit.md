@@ -93,10 +93,12 @@ When running from a bundled Windows EXE:
 The Trade Monitor feature automatically detects trades executed on your broker (including mobile app trades) and posts them as BTO/STC signals to Discord.
 
 ### How It Works
-1. The bot polls the connected broker for filled orders every N seconds (configurable)
-2. New filled orders are detected by comparing against previously synced orders
-3. Each new trade is formatted as a BTO/STC signal and posted to the configured webhook channel
-4. Orders are tracked in the database to prevent duplicate posts
+1. The bot polls the connected broker for filled orders every 5 seconds during market hours (3-5s adaptive polling)
+2. **Real-time detection**: Only orders filled within the last 10 seconds are posted (prevents historical order spam)
+3. **Current date filter**: Only orders from today's date are considered for posting
+4. New filled orders are detected by comparing against previously synced orders
+5. Each new trade is formatted as a BTO/STC signal and posted to the configured webhook channel
+6. Orders are tracked in the database to prevent duplicate posts
 
 ### Configuration (Settings Page)
 - **Enable/Disable**: Toggle trade monitoring on/off

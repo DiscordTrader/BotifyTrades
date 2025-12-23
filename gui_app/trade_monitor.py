@@ -49,6 +49,84 @@ def is_market_open() -> bool:
     return market_open <= current_time <= market_close
 
 
+def is_recent_fill(filled_time_str: str, max_seconds: int = 10) -> bool:
+    """Check if the order was filled within the last N seconds (real-time detection)
+    
+    Args:
+        filled_time_str: Fill time string from broker (e.g., '12/23/2025 10:07:38 EST')
+        max_seconds: Maximum age in seconds for order to be considered "recent" (default: 10)
+    
+    Returns:
+        True if order was filled within the last max_seconds, False otherwise
+    """
+    if not filled_time_str:
+        return False
+    
+    try:
+        from zoneinfo import ZoneInfo
+        et_tz = ZoneInfo('America/New_York')
+    except ImportError:
+        import pytz
+        et_tz = pytz.timezone('America/New_York')
+    
+    now_et = datetime.now(et_tz)
+    
+    # Parse various timestamp formats from brokers
+    parsed_time = None
+    
+    # Try common formats
+    formats = [
+        '%m/%d/%Y %H:%M:%S EST',  # Webull: 12/23/2025 10:07:38 EST
+        '%m/%d/%Y %H:%M:%S',      # Without timezone
+        '%Y-%m-%d %H:%M:%S',      # ISO format
+        '%Y-%m-%dT%H:%M:%S',      # ISO with T
+        '%Y-%m-%dT%H:%M:%S.%fZ',  # ISO with milliseconds
+    ]
+    
+    # Remove timezone suffix for parsing if present
+    clean_time_str = filled_time_str.replace(' EST', '').replace(' EDT', '').replace(' ET', '')
+    
+    for fmt in formats:
+        try:
+            parsed_time = datetime.strptime(clean_time_str, fmt)
+            break
+        except ValueError:
+            continue
+    
+    if not parsed_time:
+        # Try extracting just the time portion for today's date comparison
+        sys.stdout.write(f"[TRADE MONITOR] Could not parse fill time: {filled_time_str}\n")
+        sys.stdout.flush()
+        return False
+    
+    # Make parsed_time timezone aware (assume ET)
+    try:
+        parsed_time = parsed_time.replace(tzinfo=et_tz)
+    except:
+        pass
+    
+    # Check if fill is on current date
+    if parsed_time.date() != now_et.date():
+        return False
+    
+    # Calculate seconds since fill
+    try:
+        # For naive datetime comparison, strip timezone
+        now_naive = now_et.replace(tzinfo=None)
+        parsed_naive = parsed_time.replace(tzinfo=None)
+        seconds_ago = (now_naive - parsed_naive).total_seconds()
+        
+        is_recent = 0 <= seconds_ago <= max_seconds
+        if not is_recent and seconds_ago > 0:
+            # Only log if it's an old order being skipped (not future orders)
+            pass  # Reduce log spam
+        return is_recent
+    except Exception as e:
+        sys.stdout.write(f"[TRADE MONITOR] Error calculating time diff: {e}\n")
+        sys.stdout.flush()
+        return False
+
+
 def get_adaptive_poll_interval(base_interval: int) -> int:
     """Return faster polling during market hours, slower overnight"""
     if is_market_open():
@@ -282,6 +360,13 @@ class TradeMonitor:
                 if db.is_order_synced(broker_name, order_id):
                     sys.stdout.write(f"[TRADE MONITOR] Skipping order {order_id} - already synced\n")
                     sys.stdout.flush()
+                    continue
+                
+                # LIVE FILL FILTER: Only post orders filled within the last 10 seconds
+                # This prevents historical orders from being posted and only captures real-time fills
+                filled_time = order.get('filled_time', '')
+                if not is_recent_fill(filled_time, max_seconds=10):
+                    # Silently skip old orders to reduce log spam
                     continue
                     
                 asset_type = order.get('asset_type', 'stock')
