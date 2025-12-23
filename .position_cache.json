@@ -2566,7 +2566,7 @@
   },
   "Webull_NVO_48.5_12/26_C": {
     "entry_price": 0.53,
-    "highest_price": 0.575,
+    "highest_price": 4.35,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -2581,7 +2581,7 @@
   },
   "ALPACA_PAPER_NVO_48.5_2025-12-26_C": {
     "entry_price": 0.54,
-    "highest_price": 0.56,
+    "highest_price": 4.4,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
