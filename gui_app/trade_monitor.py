@@ -212,15 +212,11 @@ class TradeMonitor:
     def _get_webhook_url(self, channel_id: str) -> Optional[str]:
         """Get webhook URL for a channel from webhook_channels table"""
         try:
-            from gui_app import database as db
-            conn = db.get_connection()
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT webhook_url FROM webhook_channels 
-                WHERE id = ? OR discord_channel_id = ?
-            ''', (channel_id, channel_id))
-            row = cursor.fetchone()
-            return row[0] if row else None
+            from gui_app import webhook_service
+            channel = webhook_service.get_webhook_channel(int(channel_id))
+            if channel and channel.get('enabled'):
+                return channel.get('webhook_url')
+            return None
         except Exception as e:
             print(f"[TRADE MONITOR] Error getting webhook: {e}")
             return None
