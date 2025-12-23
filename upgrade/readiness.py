@@ -34,7 +34,7 @@ class ReadinessChecker:
     """Performs pre-upgrade readiness checks."""
     
     def __init__(self, db_path: str = None):
-        self.db_path = db_path or os.environ.get('DATABASE_PATH', 'gui_app/bot_settings.db')
+        self.db_path = db_path or os.environ.get('DATABASE_PATH', 'bot_data.db')
     
     def run_all_checks(self) -> Tuple[bool, List[ReadinessCheck]]:
         """

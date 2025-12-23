@@ -37,7 +37,7 @@ class SystemDiagnostics:
     """Run comprehensive system diagnostics."""
     
     def __init__(self, db_path: str = None):
-        self.db_path = db_path or 'gui_app/bot_settings.db'
+        self.db_path = db_path or 'bot_data.db'
         self.results: List[DiagnosticResult] = []
     
     def run_all(self) -> List[Dict]:

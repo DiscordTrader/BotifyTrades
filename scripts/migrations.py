@@ -19,7 +19,7 @@ BACKUP_DIR = Path('migrations/backups')
 
 def get_db_path() -> str:
     """Get the primary database path."""
-    return os.environ.get('DATABASE_PATH', 'gui_app/bot_settings.db')
+    return os.environ.get('DATABASE_PATH', 'bot_data.db')
 
 
 class Migration:

@@ -103,7 +103,7 @@ def check_database_tables(result):
     """Check database has required structure."""
     print("\n4. Checking Database Schema...")
     
-    db_path = 'gui_app/bot_settings.db'
+    db_path = 'bot_data.db'
     if not Path(db_path).exists():
         result.add_warning("Database file not found (will be created on first run)")
         return

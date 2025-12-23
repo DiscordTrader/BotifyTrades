@@ -137,7 +137,7 @@ class ConsistencyChecker:
         try:
             from scripts.validate_schema import validate_schema
             
-            db_paths = ['bot_data.db', 'gui_app/bot_settings.db']
+            db_paths = ['bot_data.db']
             valid_count = 0
             
             for db_path in db_paths:
