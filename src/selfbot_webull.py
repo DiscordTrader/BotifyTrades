@@ -5371,18 +5371,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             from gui_app import database as db
             
             monitor_settings = db.get_trade_monitor_settings()
+            print(f"[STARTUP] Trade Monitor settings: {monitor_settings}", flush=True)
             if monitor_settings.get('enabled'):
                 trade_monitor = get_trade_monitor()
+                print(f"[STARTUP] Trade Monitor instance: {trade_monitor}, broker: {self.broker is not None}", flush=True)
                 if self.broker:
                     trade_monitor.set_broker(self.broker)
-                    asyncio.create_task(trade_monitor.start())
-                    print("[STARTUP] ✓ Trade Monitor started - syncing broker trades to Discord")
+                    print(f"[STARTUP] Broker set, calling trade_monitor.start()...", flush=True)
+                    try:
+                        await trade_monitor.start()
+                        print("[STARTUP] ✓ Trade Monitor start() completed", flush=True)
+                    except Exception as start_err:
+                        print(f"[STARTUP] ❌ Trade Monitor start() failed: {start_err}", flush=True)
+                        import traceback
+                        traceback.print_exc()
+                    print("[STARTUP] ✓ Trade Monitor started - syncing broker trades to Discord", flush=True)
                 else:
-                    print("[STARTUP] ⚠️  Trade Monitor enabled but no broker connected")
+                    print("[STARTUP] ⚠️  Trade Monitor enabled but no broker connected", flush=True)
             else:
-                print("[STARTUP] Trade Monitor disabled (enable in Settings)")
+                print("[STARTUP] Trade Monitor disabled (enable in Settings)", flush=True)
         except Exception as e:
-            print(f"[STARTUP] Warning: Could not start Trade Monitor: {e}")
+            import traceback
+            print(f"[STARTUP] Warning: Could not start Trade Monitor: {e}", flush=True)
+            traceback.print_exc()
         
         # Signal ready event for thread synchronization (if available)
         try:
