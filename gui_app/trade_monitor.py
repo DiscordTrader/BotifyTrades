@@ -26,6 +26,7 @@ class TradeMonitor:
         self.running = False
         self._task = None
         self._last_poll_time = None
+        self._tracked_pending_orders = {}  # order_id -> order data for cancellation detection
         
     def set_broker(self, broker):
         """Set the broker instance to monitor"""
@@ -214,30 +215,48 @@ class TradeMonitor:
                 sys.stdout.write(f"[TRADE MONITOR] Posting order to Discord: {order.get('order_id')}\n")
                 sys.stdout.flush()
                 await self._post_order_to_discord(order, broker_name, target_channel)
+            
+            # Detect canceled orders (only in test mode with pending orders)
+            if test_mode:
+                current_order_ids = {o.get('order_id') for o in orders if o.get('order_id')}
+                canceled_order_ids = set(self._tracked_pending_orders.keys()) - current_order_ids
+                
+                for canceled_id in canceled_order_ids:
+                    canceled_order = self._tracked_pending_orders.pop(canceled_id, None)
+                    if canceled_order:
+                        sys.stdout.write(f"[TRADE MONITOR] Detected canceled order: {canceled_id}\n")
+                        sys.stdout.flush()
+                        await self._post_canceled_order(canceled_order, broker_name, target_channel)
+                
+                # Update tracked pending orders
+                for order in orders:
+                    order_id = order.get('order_id')
+                    if order_id and order.get('_status') == 'PENDING':
+                        self._tracked_pending_orders[order_id] = order
                 
         except Exception as e:
-            print(f"[TRADE MONITOR] Error checking orders: {e}", flush=True)
+            sys.stdout.write(f"[TRADE MONITOR] Error checking orders: {e}\n")
+            sys.stdout.flush()
+            import traceback
+            traceback.print_exc()
             
-    async def _post_order_to_discord(self, order: Dict, broker_name: str, target_channel: str = None):
-        """Post a filled order as a signal to Discord"""
-        order_id = order.get('order_id')
+    def _format_signal(self, order: Dict, signal_type: str, is_canceled: bool = False) -> str:
+        """Format order as signal message: BTO ORCL 200C 12/26 @ 2.61 @everyone"""
         symbol = order.get('symbol', 'UNKNOWN')
-        action = order.get('action', '').upper()
         quantity = order.get('quantity', 0)
         filled_price = order.get('filled_price', order.get('limit_price', 0))
         asset_type = order.get('asset_type', 'stock')
         order_status = order.get('_status', 'FILLED')
         
-        is_buy = action in ['BUY', 'BTO']
-        signal_type = 'BTO' if is_buy else 'STC'
-        
         test_prefix = "[TEST] " if order_status == 'PENDING' else ""
+        cancel_prefix = "[CANCELED] " if is_canceled else ""
         
         if asset_type == 'option':
             strike = order.get('strike', 0)
             expiry = order.get('expiry', '')
-            direction = order.get('direction', 'C').lower()
+            direction = order.get('direction', 'C').upper()
             
+            # Format expiry as MM/DD
             if expiry and '-' in expiry:
                 try:
                     from datetime import datetime as dt
@@ -246,10 +265,30 @@ class TradeMonitor:
                 except:
                     pass
             
+            # Format strike without decimal if whole number
             strike_str = f"{int(strike)}" if strike == int(strike) else f"{strike}"
-            signal_msg = f"{test_prefix}{signal_type} {quantity} {symbol} {strike_str}{direction} {expiry} @ {filled_price:.2f}"
+            
+            # Format: BTO ORCL 200C 12/26 @ 2.61 @everyone
+            signal_msg = f"{cancel_prefix}{test_prefix}{signal_type} {symbol} {strike_str}{direction} {expiry} @ {filled_price:.2f} @everyone"
         else:
-            signal_msg = f"{test_prefix}{signal_type} {quantity} {symbol} @ {filled_price:.2f}"
+            # Stock format: BTO 100 AAPL @ 150.00 @everyone
+            signal_msg = f"{cancel_prefix}{test_prefix}{signal_type} {quantity} {symbol} @ {filled_price:.2f} @everyone"
+        
+        return signal_msg
+    
+    async def _post_order_to_discord(self, order: Dict, broker_name: str, target_channel: str = None):
+        """Post a filled order as a signal to Discord"""
+        order_id = order.get('order_id')
+        symbol = order.get('symbol', 'UNKNOWN')
+        action = order.get('action', '').upper()
+        quantity = order.get('quantity', 0)
+        filled_price = order.get('filled_price', order.get('limit_price', 0))
+        asset_type = order.get('asset_type', 'stock')
+        
+        is_buy = action in ['BUY', 'BTO']
+        signal_type = 'BTO' if is_buy else 'STC'
+        
+        signal_msg = self._format_signal(order, signal_type)
         
         posted = False
         channel_id = None
@@ -284,6 +323,33 @@ class TradeMonitor:
             print(f"[TRADE MONITOR] ✓ Synced {signal_type} {symbol} from {broker_name}", flush=True)
         else:
             print(f"[TRADE MONITOR] Recorded {signal_type} {symbol} (no webhook configured)", flush=True)
+    
+    async def _post_canceled_order(self, order: Dict, broker_name: str, target_channel: str = None):
+        """Post a canceled order notification to Discord"""
+        symbol = order.get('symbol', 'UNKNOWN')
+        action = order.get('action', '').upper()
+        
+        is_buy = action in ['BUY', 'BTO']
+        signal_type = 'BTO' if is_buy else 'STC'
+        
+        signal_msg = self._format_signal(order, signal_type, is_canceled=True)
+        
+        sys.stdout.write(f"[TRADE MONITOR] Posting canceled order: {signal_msg}\n")
+        sys.stdout.flush()
+        
+        if target_channel:
+            webhook_url = self._get_webhook_url(target_channel)
+            if webhook_url:
+                try:
+                    resp = requests.post(webhook_url, json={"content": signal_msg}, timeout=10)
+                    if resp.status_code in [200, 204]:
+                        print(f"[TRADE MONITOR] ✓ Posted CANCELED {symbol} to webhook", flush=True)
+                    else:
+                        print(f"[TRADE MONITOR] Failed to post canceled: HTTP {resp.status_code}", flush=True)
+                except Exception as e:
+                    print(f"[TRADE MONITOR] Failed to post canceled to webhook: {e}", flush=True)
+            else:
+                print(f"[TRADE MONITOR] No webhook configured for canceled order", flush=True)
             
     def _get_webhook_url(self, channel_id: str) -> Optional[str]:
         """Get webhook URL for a channel from webhook_channels table"""
