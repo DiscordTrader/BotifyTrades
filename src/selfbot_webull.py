@@ -5847,18 +5847,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         channel_name = getattr(message.channel, 'name', str(message.channel.id))
         print(f"\n[Discord] 📨 Channel:{message.channel.id} ({channel_name}) Author:{message.author.name}")
         print(f"[Discord] Content: {message.content[:150]}")
-        print(f"[DEBUG] Stage 1: After content log, channel_info={channel_info is not None}, execute_enabled={execute_enabled}")
-        
         if ALLOWED_AUTHOR_IDS and message.author.id not in ALLOWED_AUTHOR_IDS:
             print(f"[SKIP] Author {message.author.id} not in allowed list")
             return
-        print(f"[DEBUG] Stage 2: Passed author check")
         
         if ALLOWED_GUILD_IDS and hasattr(message, 'guild') and message.guild:
             if message.guild.id not in ALLOWED_GUILD_IDS:
                 print(f"[SKIP] Guild {message.guild.id} not in allowed list")
                 return
-        print(f"[DEBUG] Stage 3: Passed guild check")
         
         # Check channel-specific allowed users (if configured)
         if channel_info and DATABASE_MODULE_AVAILABLE:
@@ -5872,7 +5868,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         return
             except Exception as e:
                 print(f"[WARN] Failed to check allowed users: {e}")
-        print(f"[DEBUG] Stage 4: Passed channel allowed users check")
 
         # Store message for format discovery (after all eligibility checks pass)
         if channel_info and DATABASE_MODULE_AVAILABLE:
@@ -5887,8 +5882,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     message_id=str(message.id)
                 )
             except Exception as e:
-                print(f"[DEBUG] Stage 4.5 ERROR saving message: {e}")
-        print(f"[DEBUG] Stage 5: Message storage complete")
+                pass  # Don't fail message processing if storage fails
 
         if message.content.strip().lower() == "ping":
             try:
@@ -5897,39 +5891,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 pass
             return
         
-        print(f"[DEBUG] Stage 6: Starting signal conversion check")
-        
         # AUTO SIGNAL CONVERSION - monitor designated channel and auto-convert natural language
         # Check both config.ini and database for conversion channel ID
         active_conversion_channel_id = CONVERSION_CHANNEL_ID
         target_execution_channel_id = None
         is_mapped_source = False
         
-        try:
-            if DATABASE_MODULE_AVAILABLE:
-                from gui_app import database as db
-                
-                # First check channel mappings (multi-channel support)
-                mapped_dest = db.get_destination_for_source(str(message.channel.id))
-                if mapped_dest:
-                    print(f"[CHANNEL MAP] ✓ Source {message.channel.id} mapped to destination {mapped_dest}")
-                    active_conversion_channel_id = message.channel.id  # Use current channel as source
-                    target_execution_channel_id = mapped_dest
-                    is_mapped_source = True
-                else:
-                    # Fall back to single conversion channel settings
-                    conversion_settings = db.get_signal_conversion_settings()
-                    db_conversion_channel_id = conversion_settings.get('conversion_channel_id', '').strip()
-                    if db_conversion_channel_id:
-                        active_conversion_channel_id = int(db_conversion_channel_id)
-                    target_execution_channel_id = conversion_settings.get('target_execution_channel_id', '').strip()
-        except Exception as e:
-            print(f"[DEBUG] Stage 6 ERROR: {e}")
-        
-        print(f"[DEBUG] Stage 7: Conversion check complete")
-        
-        # Debug: Always log to see what's happening
-        print(f"[CONVERT DEBUG] ENABLE={ENABLE_SIGNAL_CONVERSION}, active_id={active_conversion_channel_id}, msg_channel={message.channel.id}, mapped={is_mapped_source}")
+        if DATABASE_MODULE_AVAILABLE:
+            from gui_app import database as db
+            
+            # First check channel mappings (multi-channel support)
+            mapped_dest = db.get_destination_for_source(str(message.channel.id))
+            if mapped_dest:
+                print(f"[CHANNEL MAP] ✓ Source {message.channel.id} mapped to webhook")
+                active_conversion_channel_id = message.channel.id  # Use current channel as source
+                target_execution_channel_id = mapped_dest
+                is_mapped_source = True
+            else:
+                # Fall back to single conversion channel settings
+                conversion_settings = db.get_signal_conversion_settings()
+                db_conversion_channel_id = conversion_settings.get('conversion_channel_id', '').strip()
+                if db_conversion_channel_id:
+                    active_conversion_channel_id = int(db_conversion_channel_id)
+                target_execution_channel_id = conversion_settings.get('target_execution_channel_id', '').strip()
         
         # Check if this is a mapped source channel OR the single conversion channel
         should_convert = (is_mapped_source or 

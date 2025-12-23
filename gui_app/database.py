@@ -3767,6 +3767,29 @@ def get_channel_mappings() -> List[Dict[str, Any]]:
         return []
 
 
+def get_destination_for_source(source_channel_id: str) -> Optional[str]:
+    """Get webhook URL for a source channel (for signal forwarding).
+    Returns the webhook URL if an active mapping exists, None otherwise."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        init_channel_mappings_table()
+        
+        cursor.execute('''
+            SELECT webhook_url FROM channel_mappings
+            WHERE source_channel_id = ? AND is_active = 1
+            LIMIT 1
+        ''', (source_channel_id,))
+        
+        row = cursor.fetchone()
+        if row and row['webhook_url']:
+            return row['webhook_url']
+        return None
+    except Exception as e:
+        return None
+
+
 def add_channel_mapping(source_channel_id: str, webhook_url: str,
                         source_channel_name: str = '', webhook_name: str = '') -> Dict[str, Any]:
     """Add a new channel mapping (source channel -> webhook URL)"""
