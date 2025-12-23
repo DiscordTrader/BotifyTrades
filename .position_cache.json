@@ -2608,5 +2608,20 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-23T05:01:01.828882"
+  },
+  "Webull_SPY_680.0_12/23_P": {
+    "entry_price": 0.14,
+    "highest_price": 0.145,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "Webull",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-23T15:10:55.514385"
   }
 }

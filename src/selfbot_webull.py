@@ -3114,6 +3114,190 @@ class WebullBroker:
         
         return await self.loop.run_in_executor(None, _blocking_get_orders)
 
+    async def get_order_history(self, count: int = 50) -> list:
+        """Get filled/completed order history from Webull
+        
+        Args:
+            count: Number of recent orders to fetch (default 50)
+            
+        Returns:
+            List of filled order dicts with keys: order_id, symbol, quantity, 
+            filled_price, action, filled_time, asset_type, strike, expiry, direction
+        """
+        def _blocking_get_history():
+            wb = self._client
+            if not wb:
+                return []
+            
+            try:
+                # Debug: check available methods and trade token
+                has_activities = hasattr(wb, 'get_activities')
+                has_history = hasattr(wb, 'get_history_orders')
+                has_trade_token = bool(getattr(wb, '_trade_token', ''))
+                has_account_id = bool(getattr(wb, '_account_id', ''))
+                print(f"[Webull] API check: get_activities={has_activities}, get_history_orders={has_history}", flush=True)
+                print(f"[Webull] Trade token set: {has_trade_token}, Account ID set: {has_account_id}", flush=True)
+                
+                # Try get_activities() first - it returns trade activities reliably
+                # get_history_orders() has a known bug with date formatting (1970-0-1)
+                orders_raw = None
+                
+                if has_activities:
+                    try:
+                        print("[Webull] Calling get_activities(index=1, size=100)...", flush=True)
+                        activities = wb.get_activities(index=1, size=100)
+                        print(f"[Webull] get_activities returned: {type(activities)}", flush=True)
+                        if isinstance(activities, dict):
+                            print(f"[Webull] Activities keys: {list(activities.keys())[:10]}", flush=True)
+                            # Check both 'items' and 'data' keys
+                            all_items = activities.get('items', []) or activities.get('data', [])
+                            if all_items:
+                                print(f"[Webull] Found {len(all_items)} total activity items", flush=True)
+                                if len(all_items) > 0:
+                                    first_item = all_items[0]
+                                    if isinstance(first_item, dict):
+                                        print(f"[Webull] First item keys: {list(first_item.keys())[:8]}", flush=True)
+                                        print(f"[Webull] First item type field: {first_item.get('type', 'N/A')}", flush=True)
+                                # Filter for trade activities (BUY/SELL) - also check 'action' field
+                                orders_raw = [
+                                    item for item in all_items
+                                    if isinstance(item, dict) and (
+                                        item.get('type') in ('BUY', 'SELL', 'TRADE', 'OPTION_BUY', 'OPTION_SELL') or
+                                        item.get('action') in ('BUY', 'SELL')
+                                    )
+                                ]
+                                print(f"[Webull] Using get_activities: found {len(orders_raw)} trade items", flush=True)
+                            else:
+                                print(f"[Webull] No items found in activities (success={activities.get('success')})", flush=True)
+                    except Exception as act_err:
+                        print(f"[Webull] get_activities failed: {act_err}", flush=True)
+                        import traceback
+                        traceback.print_exc()
+                
+                # Fallback: Use open orders from account data
+                if not orders_raw:
+                    try:
+                        print("[Webull] Trying get_account() for order data...", flush=True)
+                        account_data = wb.get_account()
+                        if isinstance(account_data, dict):
+                            # Check for filled orders in account data
+                            open_orders = account_data.get('openOrders', [])
+                            print(f"[Webull] Account has {len(open_orders)} open orders", flush=True)
+                            # Note: get_account() only shows open orders, not filled history
+                            # For filled orders, we need a different approach
+                    except Exception as acc_err:
+                        print(f"[Webull] get_account failed: {acc_err}", flush=True)
+                
+                # Last resort: Direct API call using the 'history' endpoint (no date bug)
+                if not orders_raw:
+                    try:
+                        print("[Webull] Trying direct API call (history endpoint)...", flush=True)
+                        import requests
+                        
+                        headers = wb.build_req_headers(include_trade_token=True, include_time=True)
+                        account_id = getattr(wb, '_account_id', '')
+                        
+                        # Use the history endpoint that doesn't have the date bug
+                        # From webull library: base_ustrade_url/trading/v1/webull/order/list
+                        url = f"https://ustrade.webullfinance.com/api/trading/v1/webull/order/list?secAccountId={account_id}"
+                        print(f"[Webull] Direct API URL: .../order/list?secAccountId=***", flush=True)
+                        
+                        response = requests.get(url, headers=headers, timeout=15)
+                        print(f"[Webull] History API response: HTTP {response.status_code}", flush=True)
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            print(f"[Webull] History API result type: {type(result)}", flush=True)
+                            if isinstance(result, list):
+                                orders_raw = result
+                                print(f"[Webull] History API returned {len(orders_raw)} orders", flush=True)
+                            elif isinstance(result, dict):
+                                # Try various keys that might contain order data
+                                orders_raw = result.get('data', []) or result.get('items', []) or result.get('orders', [])
+                                if not orders_raw and 'success' in result:
+                                    print(f"[Webull] History API success={result.get('success')}, keys: {list(result.keys())[:5]}", flush=True)
+                                else:
+                                    print(f"[Webull] History API dict result: {len(orders_raw)} orders", flush=True)
+                                    if orders_raw and len(orders_raw) > 0:
+                                        first = orders_raw[0]
+                                        if isinstance(first, dict):
+                                            print(f"[Webull] First order keys: {list(first.keys())[:8]}", flush=True)
+                        else:
+                            print(f"[Webull] History API failed: HTTP {response.status_code}", flush=True)
+                            # Try to read error message
+                            try:
+                                err = response.json()
+                                print(f"[Webull] Error: {str(err)[:150]}", flush=True)
+                            except:
+                                pass
+                    except Exception as direct_err:
+                        print(f"[Webull] Direct API call failed: {direct_err}", flush=True)
+                        import traceback
+                        traceback.print_exc()
+                        orders_raw = []
+                
+                orders = []
+                
+                if not orders_raw:
+                    # Only log warning occasionally (not every poll)
+                    import random
+                    if random.random() < 0.1:  # ~10% of polls
+                        print("[Webull] ⚠️  Order history unavailable - known webull library bug (startTime format)", flush=True)
+                    return []
+                
+                # Handle case where API returns something other than a list
+                if not isinstance(orders_raw, list):
+                    print(f"[Webull] Unexpected order history format: {type(orders_raw)}", flush=True)
+                    return []
+                
+                if len(orders_raw) > 0:
+                    print(f"[Webull] First order type: {type(orders_raw[0])}", flush=True)
+                    if isinstance(orders_raw[0], dict):
+                        print(f"[Webull] First order keys: {list(orders_raw[0].keys())[:10]}", flush=True)
+                
+                for order in orders_raw:
+                    # Skip if order is not a dict (handle unexpected API response formats)
+                    if not isinstance(order, dict):
+                        print(f"[Webull] Skipping non-dict order item: {type(order)}", flush=True)
+                        continue
+                    status = order.get('status', '')
+                    if status != 'Filled':
+                        continue
+                        
+                    ticker = order.get('ticker', {})
+                    symbol = ticker.get('symbol', '') if ticker else ''
+                    
+                    option_data = order.get('optionExercisePrice')
+                    is_option = option_data is not None or order.get('assetType') == 'option'
+                    
+                    order_dict = {
+                        'order_id': str(order.get('orderId', '')),
+                        'symbol': symbol,
+                        'quantity': int(order.get('filledQuantity', 0) or order.get('totalQuantity', 0)),
+                        'filled_price': float(order.get('avgFilledPrice', 0) or order.get('filledPrice', 0) or 0),
+                        'action': order.get('action', ''),
+                        'filled_time': order.get('filledTime', '') or order.get('updateTime', ''),
+                        'asset_type': 'option' if is_option else 'stock',
+                        'order_type': order.get('orderType', 'LMT'),
+                    }
+                    
+                    if is_option:
+                        order_dict['strike'] = float(order.get('optionExercisePrice', 0) or 0)
+                        order_dict['expiry'] = order.get('optionExpireDate', '')
+                        direction = order.get('optionType', '')
+                        order_dict['direction'] = 'C' if direction.upper() == 'CALL' else ('P' if direction.upper() == 'PUT' else '')
+                    
+                    orders.append(order_dict)
+                
+                return orders
+            except Exception as e:
+                print(f"[Webull] Error getting order history: {e}")
+                import traceback
+                traceback.print_exc()
+                return []
+        
+        return await self.loop.run_in_executor(None, _blocking_get_history)
+
     async def get_latest_quote(self, symbol: str, asset_type: str = 'stock', option_id: Optional[int] = None):
         """Get latest price quote for a symbol"""
         def _blocking_quote():

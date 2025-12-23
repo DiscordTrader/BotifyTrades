@@ -99,6 +99,11 @@ class TradeMonitor:
     def set_broker(self, broker):
         """Set the broker instance to monitor"""
         self.broker = broker
+        sys.stdout.write(f"[TRADE MONITOR] Broker set: {type(broker).__name__}\n")
+        sys.stdout.write(f"[TRADE MONITOR] has get_order_history: {hasattr(broker, 'get_order_history')}\n")
+        sys.stdout.write(f"[TRADE MONITOR] has get_pending_orders: {hasattr(broker, 'get_pending_orders')}\n")
+        sys.stdout.write(f"[TRADE MONITOR] Broker methods: {[m for m in dir(broker) if not m.startswith('_') and 'order' in m.lower()]}\n")
+        sys.stdout.flush()
         
     async def start(self):
         """Start the trade monitor loop"""
