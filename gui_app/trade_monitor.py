@@ -219,16 +219,24 @@ class TradeMonitor:
             # Detect canceled orders (only in test mode with pending orders)
             if test_mode:
                 current_order_ids = {o.get('order_id') for o in orders if o.get('order_id')}
+                sys.stdout.write(f"[TRADE MONITOR] Tracked orders: {list(self._tracked_pending_orders.keys())}\n")
+                sys.stdout.write(f"[TRADE MONITOR] Current orders: {list(current_order_ids)}\n")
+                sys.stdout.flush()
+                
                 canceled_order_ids = set(self._tracked_pending_orders.keys()) - current_order_ids
+                
+                if canceled_order_ids:
+                    sys.stdout.write(f"[TRADE MONITOR] Canceled order IDs detected: {canceled_order_ids}\n")
+                    sys.stdout.flush()
                 
                 for canceled_id in canceled_order_ids:
                     canceled_order = self._tracked_pending_orders.pop(canceled_id, None)
                     if canceled_order:
-                        sys.stdout.write(f"[TRADE MONITOR] Detected canceled order: {canceled_id}\n")
+                        sys.stdout.write(f"[TRADE MONITOR] Posting canceled order: {canceled_id}\n")
                         sys.stdout.flush()
                         await self._post_canceled_order(canceled_order, broker_name, target_channel)
                 
-                # Update tracked pending orders
+                # Update tracked pending orders (track ALL pending orders, even if already synced)
                 for order in orders:
                     order_id = order.get('order_id')
                     if order_id and order.get('_status') == 'PENDING':
