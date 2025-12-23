@@ -6823,13 +6823,31 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _original_print(f"[LIVE TRADE] Broker response received: {resp}", flush=True)
                         
                         # Determine success for single-broker execution
-                        order_success = resp and ('orderId' in resp or resp.get('success') == True)
-                        _original_print(f"[DEBUG] After broker call, order_success: {order_success}, resp keys: {list(resp.keys()) if resp else 'None'}", flush=True)
+                        # Handle both dict responses and OrderResult dataclass objects
+                        if resp is None:
+                            order_success = False
+                        elif hasattr(resp, 'success'):
+                            # OrderResult dataclass - check .success attribute
+                            order_success = resp.success == True
+                        elif isinstance(resp, dict):
+                            # Dict response - check orderId or success key
+                            order_success = 'orderId' in resp or resp.get('success') == True
+                        else:
+                            order_success = False
+                        _original_print(f"[DEBUG] After broker call, order_success: {order_success}, resp type: {type(resp).__name__}", flush=True)
                 
                 # Handle failed orders
                 if not order_success:
-                    error_msg = resp.get('msg', 'Unknown error')
-                    error_type = resp.get('error', 'ORDER_FAILED')
+                    # Extract error message from either dict or OrderResult
+                    if hasattr(resp, 'message'):
+                        error_msg = resp.message or 'Unknown error'
+                        error_type = 'ORDER_FAILED'
+                    elif isinstance(resp, dict):
+                        error_msg = resp.get('msg') or resp.get('message') or 'Unknown error'
+                        error_type = resp.get('error', 'ORDER_FAILED')
+                    else:
+                        error_msg = 'Unknown error'
+                        error_type = 'ORDER_FAILED'
                     _original_print(f"[ORDER FAILED] ❌ {signal['action']} {signal['symbol']} - {error_msg}", flush=True)
                     
                     # Update signal execution status in database
@@ -6869,13 +6887,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     if DATABASE_MODULE_AVAILABLE and signal.get('message_id'):
                         try:
                             from gui_app import database as db
-                            # Build success reason with broker info
+                            # Build success reason with broker info - handle both dict and OrderResult
                             success_brokers = []
-                            multi_results = resp.get('_multi_broker_results', [])
-                            if multi_results:
-                                success_brokers = [r.get('broker', 'Unknown') for r in multi_results if r.get('success') or 'orderId' in r]
+                            if isinstance(resp, dict):
+                                multi_results = resp.get('_multi_broker_results', [])
+                                if multi_results:
+                                    success_brokers = [r.get('broker', 'Unknown') for r in multi_results if r.get('success') or 'orderId' in r]
+                                else:
+                                    success_brokers = [resp.get('broker', 'Webull')]
                             else:
-                                success_brokers = [resp.get('broker', 'Webull')]
+                                # OrderResult object - single broker execution
+                                multi_results = []
+                                success_brokers = [getattr(resp, 'broker', None) or 'Broker']
                             
                             success_reason = f"Executed on {', '.join(success_brokers)}"
                             db.update_signal_execution_status(
@@ -6904,23 +6927,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             try:
                                 exec_channel = self.get_channel(int(notif_channel_id))
                                 if exec_channel:
-                                    # Get executed quantity and order ID from multi-broker results
-                                    multi_results = resp.get('_multi_broker_results', [])
-                                    if multi_results:
-                                        # Find first successful broker result
-                                        first_success = next((r for r in multi_results if r.get('success') or 'orderId' in r), None)
-                                        if first_success:
-                                            display_qty = first_success.get('executed_qty', signal['qty'])
-                                            order_id = first_success.get('orderId', 'N/A')
-                                            broker_name = first_success.get('broker', 'Unknown')
+                                    # Get executed quantity and order ID - handle both dict and OrderResult
+                                    if isinstance(resp, dict):
+                                        multi_results = resp.get('_multi_broker_results', [])
+                                        if multi_results:
+                                            # Find first successful broker result
+                                            first_success = next((r for r in multi_results if r.get('success') or 'orderId' in r), None)
+                                            if first_success:
+                                                display_qty = first_success.get('executed_qty', signal['qty'])
+                                                order_id = first_success.get('orderId', 'N/A')
+                                                broker_name = first_success.get('broker', 'Unknown')
+                                            else:
+                                                display_qty = signal['qty']
+                                                order_id = 'N/A'
+                                                broker_name = 'Unknown'
                                         else:
-                                            display_qty = signal['qty']
-                                            order_id = 'N/A'
-                                            broker_name = 'Unknown'
+                                            display_qty = resp.get('executed_qty', signal['qty'])
+                                            order_id = resp.get('orderId', 'N/A')
+                                            broker_name = resp.get('broker', 'Webull')
                                     else:
-                                        display_qty = resp.get('executed_qty', signal['qty'])
-                                        order_id = resp.get('orderId', 'N/A')
-                                        broker_name = resp.get('broker', 'Webull')
+                                        # OrderResult object
+                                        display_qty = getattr(resp, 'quantity', None) or signal['qty']
+                                        order_id = getattr(resp, 'order_id', 'N/A') or 'N/A'
+                                        broker_name = getattr(resp, 'broker', None) or 'Broker'
                                     
                                     # Build execution message with actual executed quantity
                                     exec_price = f"${signal['price']}" if signal.get('price') is not None else "MARKET"
