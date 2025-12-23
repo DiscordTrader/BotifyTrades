@@ -29,6 +29,7 @@ class TradeMonitor:
         
     async def start(self):
         """Start the trade monitor loop"""
+        print(f"[TRADE MONITOR] start() called, running={self.running}, broker={self.broker is not None}")
         if self.running:
             print("[TRADE MONITOR] Already running")
             return
@@ -41,10 +42,14 @@ class TradeMonitor:
         if not self.broker:
             print("[TRADE MONITOR] No broker connected, cannot start")
             return
+        
+        broker_connected = getattr(self.broker, 'connected', False)
+        print(f"[TRADE MONITOR] Broker connected status: {broker_connected}")
             
         self.running = True
-        print("[TRADE MONITOR] Starting trade monitor...")
+        print("[TRADE MONITOR] Starting trade monitor poll loop...")
         self._task = asyncio.create_task(self._poll_loop())
+        print("[TRADE MONITOR] Poll task created")
         
     async def stop(self):
         """Stop the trade monitor"""
@@ -59,6 +64,7 @@ class TradeMonitor:
         
     async def _poll_loop(self):
         """Main polling loop"""
+        print("[TRADE MONITOR] Poll loop started")
         while self.running:
             try:
                 settings = db.get_trade_monitor_settings()
@@ -68,6 +74,10 @@ class TradeMonitor:
                     break
                     
                 poll_interval = settings.get('poll_interval_seconds', 10)
+                test_mode_setting = db.get_setting('trade_monitor_test_mode', 'false')
+                test_mode = test_mode_setting.lower() == 'true'
+                
+                print(f"[TRADE MONITOR] Polling... (test_mode={test_mode}, interval={poll_interval}s)")
                 
                 await self._check_for_new_orders(settings)
                 
@@ -78,6 +88,8 @@ class TradeMonitor:
                 break
             except Exception as e:
                 print(f"[TRADE MONITOR] Error in poll loop: {e}")
+                import traceback
+                traceback.print_exc()
                 await asyncio.sleep(10)
                 
     async def _check_for_new_orders(self, settings: Dict[str, Any]):
