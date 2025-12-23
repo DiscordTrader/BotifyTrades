@@ -2081,6 +2081,47 @@ def get_open_trades_for_broker(broker_name: str, user_id: int = None) -> list:
     return [dict(row) for row in cursor.fetchall()]
 
 
+def find_open_trade_for_stc(broker_name: str, symbol: str, strike: float = None, 
+                             expiry: str = None, call_put: str = None, 
+                             asset_type: str = 'option') -> Optional[Dict]:
+    """Find a matching open BTO trade for an STC order.
+    
+    Matches on symbol, strike, expiry, call_put for options.
+    Returns the oldest matching open trade (FIFO).
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if asset_type == 'option' and strike is not None:
+        cursor.execute('''
+            SELECT id, symbol, strike, expiry, call_put, asset_type, 
+                   executed_price, quantity, direction, broker, source
+            FROM trades
+            WHERE status = 'OPEN' 
+              AND LOWER(broker) = LOWER(?)
+              AND UPPER(symbol) = UPPER(?)
+              AND strike = ?
+              AND UPPER(call_put) = UPPER(?)
+              AND direction = 'BTO'
+            ORDER BY executed_at ASC
+            LIMIT 1
+        ''', (broker_name, symbol, strike, call_put[0].upper() if call_put else 'C'))
+    else:
+        cursor.execute('''
+            SELECT id, symbol, asset_type, executed_price, quantity, direction, broker, source
+            FROM trades
+            WHERE status = 'OPEN' 
+              AND LOWER(broker) = LOWER(?)
+              AND UPPER(symbol) = UPPER(?)
+              AND direction = 'BTO'
+            ORDER BY executed_at ASC
+            LIMIT 1
+        ''', (broker_name, symbol))
+    
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+
 def update_trade(trade_id: int, **kwargs):
     """Generic function to update any trade fields"""
     if not kwargs:
