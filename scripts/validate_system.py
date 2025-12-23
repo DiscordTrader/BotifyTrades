@@ -10,9 +10,11 @@ import sqlite3
 import json
 from datetime import datetime
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+sys.path.insert(0, PROJECT_ROOT)
 
-DB_PATH = 'bot_data.db'
+DB_PATH = os.path.join(PROJECT_ROOT, 'bot_data.db')
 
 class Colors:
     GREEN = '\033[92m'
