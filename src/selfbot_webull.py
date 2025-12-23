@@ -5852,11 +5852,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if ALLOWED_AUTHOR_IDS and message.author.id not in ALLOWED_AUTHOR_IDS:
             print(f"[SKIP] Author {message.author.id} not in allowed list")
             return
+        print(f"[DEBUG] Stage 2: Passed author check")
         
         if ALLOWED_GUILD_IDS and hasattr(message, 'guild') and message.guild:
             if message.guild.id not in ALLOWED_GUILD_IDS:
                 print(f"[SKIP] Guild {message.guild.id} not in allowed list")
                 return
+        print(f"[DEBUG] Stage 3: Passed guild check")
         
         # Check channel-specific allowed users (if configured)
         if channel_info and DATABASE_MODULE_AVAILABLE:
@@ -5870,7 +5872,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         return
             except Exception as e:
                 print(f"[WARN] Failed to check allowed users: {e}")
-                # Continue processing if check fails (fail-open for safety)
+        print(f"[DEBUG] Stage 4: Passed channel allowed users check")
 
         # Store message for format discovery (after all eligibility checks pass)
         if channel_info and DATABASE_MODULE_AVAILABLE:
@@ -5885,7 +5887,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     message_id=str(message.id)
                 )
             except Exception as e:
-                pass  # Don't fail message processing if storage fails
+                print(f"[DEBUG] Stage 4.5 ERROR saving message: {e}")
+        print(f"[DEBUG] Stage 5: Message storage complete")
 
         if message.content.strip().lower() == "ping":
             try:
