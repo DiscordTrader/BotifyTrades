@@ -223,10 +223,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: macos-14        # Apple Silicon (arm64)
+          - os: macos-15           # Apple Silicon (arm64) - default macOS 15 runner
             arch: arm64
             arch_name: AppleSilicon
-          - os: macos-13        # Intel (x86_64)
+          - os: macos-15-large     # Intel (x86_64) - macOS 15 Intel runner
             arch: x86_64
             arch_name: Intel
     steps:
