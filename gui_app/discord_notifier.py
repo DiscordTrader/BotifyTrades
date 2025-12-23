@@ -1,6 +1,9 @@
 """
 Discord Trade Notification System
 Sends BTO/STC messages to Discord via webhook
+
+NOTE: This module is DEPRECATED when Trade Monitor is enabled.
+Trade Monitor provides a more robust signal posting system with @everyone support.
 """
 import requests
 import logging
@@ -9,6 +12,16 @@ from typing import Optional
 from .config_service import get_discord_notifications
 
 logger = logging.getLogger(__name__)
+
+
+def _is_trade_monitor_enabled() -> bool:
+    """Check if Trade Monitor is enabled (should take precedence over this notifier)"""
+    try:
+        from gui_app.database import get_trade_monitor_settings
+        settings = get_trade_monitor_settings()
+        return settings.get('enabled', False)
+    except Exception:
+        return False
 
 
 def send_trade_notification(
@@ -28,8 +41,15 @@ def send_trade_notification(
     Format:
     - BTO: "BTO 1 A 130p 12/19 @ 1.15"
     - STC: "STC 3 BABA 170c 11/28 @ 2.67"
+    
+    NOTE: This function is skipped when Trade Monitor is enabled to prevent duplicates.
     """
     try:
+        # Skip if Trade Monitor is enabled (it handles signal posting)
+        if _is_trade_monitor_enabled():
+            logger.info("Discord notifier skipped - Trade Monitor is enabled")
+            return
+        
         # Get notification settings
         settings = get_discord_notifications()
         
