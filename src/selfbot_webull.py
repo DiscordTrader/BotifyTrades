@@ -5897,30 +5897,38 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 pass
             return
         
+        print(f"[DEBUG] Stage 6: Starting signal conversion check")
+        
         # AUTO SIGNAL CONVERSION - monitor designated channel and auto-convert natural language
         # Check both config.ini and database for conversion channel ID
         active_conversion_channel_id = CONVERSION_CHANNEL_ID
         target_execution_channel_id = None
+        is_mapped_source = False
         
-        if DATABASE_MODULE_AVAILABLE:
-            from gui_app import database as db
-            
-            # First check channel mappings (multi-channel support)
-            mapped_dest = db.get_destination_for_source(str(message.channel.id))
-            if mapped_dest:
-                print(f"[CHANNEL MAP] ✓ Source {message.channel.id} mapped to destination {mapped_dest}")
-                active_conversion_channel_id = message.channel.id  # Use current channel as source
-                target_execution_channel_id = mapped_dest
-            else:
-                # Fall back to single conversion channel settings
-                conversion_settings = db.get_signal_conversion_settings()
-                db_conversion_channel_id = conversion_settings.get('conversion_channel_id', '').strip()
-                if db_conversion_channel_id:
-                    active_conversion_channel_id = int(db_conversion_channel_id)
-                target_execution_channel_id = conversion_settings.get('target_execution_channel_id', '').strip()
+        try:
+            if DATABASE_MODULE_AVAILABLE:
+                from gui_app import database as db
+                
+                # First check channel mappings (multi-channel support)
+                mapped_dest = db.get_destination_for_source(str(message.channel.id))
+                if mapped_dest:
+                    print(f"[CHANNEL MAP] ✓ Source {message.channel.id} mapped to destination {mapped_dest}")
+                    active_conversion_channel_id = message.channel.id  # Use current channel as source
+                    target_execution_channel_id = mapped_dest
+                    is_mapped_source = True
+                else:
+                    # Fall back to single conversion channel settings
+                    conversion_settings = db.get_signal_conversion_settings()
+                    db_conversion_channel_id = conversion_settings.get('conversion_channel_id', '').strip()
+                    if db_conversion_channel_id:
+                        active_conversion_channel_id = int(db_conversion_channel_id)
+                    target_execution_channel_id = conversion_settings.get('target_execution_channel_id', '').strip()
+        except Exception as e:
+            print(f"[DEBUG] Stage 6 ERROR: {e}")
+        
+        print(f"[DEBUG] Stage 7: Conversion check complete")
         
         # Debug: Always log to see what's happening
-        is_mapped_source = DATABASE_MODULE_AVAILABLE and db.get_destination_for_source(str(message.channel.id)) is not None
         print(f"[CONVERT DEBUG] ENABLE={ENABLE_SIGNAL_CONVERSION}, active_id={active_conversion_channel_id}, msg_channel={message.channel.id}, mapped={is_mapped_source}")
         
         # Check if this is a mapped source channel OR the single conversion channel
