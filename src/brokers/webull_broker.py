@@ -325,6 +325,60 @@ class WebullBroker(BrokerInterface):
             traceback.print_exc()
             return []
     
+    async def get_order_history(self, count: int = 50) -> list:
+        """Get filled/completed order history from Webull
+        
+        Args:
+            count: Number of recent orders to fetch (default 50)
+            
+        Returns:
+            List of filled order dicts with keys: order_id, symbol, quantity, 
+            filled_price, action, filled_time, asset_type, strike, expiry, direction
+        """
+        try:
+            orders_raw = await asyncio.to_thread(self.wb.get_history_orders, count=count)
+            orders = []
+            
+            if not orders_raw:
+                return []
+            
+            for order in orders_raw:
+                status = order.get('status', '')
+                if status != 'Filled':
+                    continue
+                    
+                ticker = order.get('ticker', {})
+                symbol = ticker.get('symbol', '') if ticker else ''
+                
+                option_data = order.get('optionExercisePrice')
+                is_option = option_data is not None or order.get('assetType') == 'option'
+                
+                order_dict = {
+                    'order_id': str(order.get('orderId', '')),
+                    'symbol': symbol,
+                    'quantity': int(order.get('filledQuantity', 0) or order.get('totalQuantity', 0)),
+                    'filled_price': float(order.get('avgFilledPrice', 0) or order.get('filledPrice', 0) or 0),
+                    'action': order.get('action', ''),
+                    'filled_time': order.get('filledTime', '') or order.get('updateTime', ''),
+                    'asset_type': 'option' if is_option else 'stock',
+                    'order_type': order.get('orderType', 'LMT'),
+                }
+                
+                if is_option:
+                    order_dict['strike'] = float(order.get('optionExercisePrice', 0) or 0)
+                    order_dict['expiry'] = order.get('optionExpireDate', '')
+                    direction = order.get('optionType', '')
+                    order_dict['direction'] = 'C' if direction.upper() == 'CALL' else ('P' if direction.upper() == 'PUT' else '')
+                
+                orders.append(order_dict)
+            
+            return orders
+        except Exception as e:
+            print(f"[{self.name}] Error getting order history: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
     async def place_stock_order(
         self,
         symbol: str,

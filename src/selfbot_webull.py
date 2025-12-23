@@ -5343,6 +5343,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         except Exception as e:
             print(f"[STARTUP] Warning: Could not run settings validation: {e}")
         
+        # Start Trade Monitor if enabled (monitors broker for new trades)
+        try:
+            from gui_app.trade_monitor import get_trade_monitor
+            from gui_app import database as db
+            
+            monitor_settings = db.get_trade_monitor_settings()
+            if monitor_settings.get('enabled'):
+                trade_monitor = get_trade_monitor()
+                if self.broker:
+                    trade_monitor.set_broker(self.broker)
+                    asyncio.create_task(trade_monitor.start())
+                    print("[STARTUP] ✓ Trade Monitor started - syncing broker trades to Discord")
+                else:
+                    print("[STARTUP] ⚠️  Trade Monitor enabled but no broker connected")
+            else:
+                print("[STARTUP] Trade Monitor disabled (enable in Settings)")
+        except Exception as e:
+            print(f"[STARTUP] Warning: Could not start Trade Monitor: {e}")
+        
         # Signal ready event for thread synchronization (if available)
         try:
             global _discord_ready_event

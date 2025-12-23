@@ -930,6 +930,46 @@ def init_db():
         )
     ''')
     
+    # Trade monitor - track synced broker orders to prevent duplicate posts
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS synced_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            broker TEXT NOT NULL,
+            order_id TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            action TEXT NOT NULL,
+            quantity INTEGER,
+            filled_price REAL,
+            asset_type TEXT DEFAULT 'stock',
+            strike REAL,
+            expiry TEXT,
+            direction TEXT,
+            posted_to_discord INTEGER DEFAULT 0,
+            discord_channel_id TEXT,
+            synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(broker, order_id)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_synced_orders_broker ON synced_orders(broker)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_synced_orders_order_id ON synced_orders(broker, order_id)')
+    
+    # Trade monitor settings
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS trade_monitor_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            enabled INTEGER DEFAULT 0,
+            poll_interval_seconds INTEGER DEFAULT 10,
+            target_webhook_channel_id TEXT,
+            include_stocks INTEGER DEFAULT 1,
+            include_options INTEGER DEFAULT 1,
+            post_bto_signals INTEGER DEFAULT 1,
+            post_stc_signals INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    cursor.execute('INSERT OR IGNORE INTO trade_monitor_settings (id) VALUES (1)')
+    
     # Create indexes for license tables
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_server_licenses_key ON server_licenses(license_key)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_server_licenses_machine ON server_licenses(machine_id)')
@@ -5502,6 +5542,114 @@ def get_recent_debug_reports(limit: int = 10) -> List[Dict]:
         return [dict(row) for row in cursor.fetchall()]
     except Exception as e:
         print(f"[DATABASE] Error getting debug reports: {e}")
+        return []
+
+
+# ==================== TRADE MONITOR ====================
+
+def get_trade_monitor_settings() -> Dict[str, Any]:
+    """Get trade monitor settings."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT * FROM trade_monitor_settings WHERE id = 1')
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return {
+            'enabled': False,
+            'poll_interval_seconds': 10,
+            'target_webhook_channel_id': None,
+            'include_stocks': True,
+            'include_options': True,
+            'post_bto_signals': True,
+            'post_stc_signals': True
+        }
+    except Exception as e:
+        print(f"[DATABASE] Error getting trade monitor settings: {e}")
+        return {'enabled': False}
+
+
+def save_trade_monitor_settings(enabled: bool, poll_interval: int = 10, 
+                                 target_channel_id: str = None,
+                                 include_stocks: bool = True, include_options: bool = True,
+                                 post_bto: bool = True, post_stc: bool = True) -> bool:
+    """Save trade monitor settings."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            UPDATE trade_monitor_settings 
+            SET enabled = ?, poll_interval_seconds = ?, target_webhook_channel_id = ?,
+                include_stocks = ?, include_options = ?, 
+                post_bto_signals = ?, post_stc_signals = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = 1
+        ''', (1 if enabled else 0, poll_interval, target_channel_id,
+              1 if include_stocks else 0, 1 if include_options else 0,
+              1 if post_bto else 0, 1 if post_stc else 0))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error saving trade monitor settings: {e}")
+        return False
+
+
+def is_order_synced(broker: str, order_id: str) -> bool:
+    """Check if an order has already been synced."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT 1 FROM synced_orders WHERE broker = ? AND order_id = ?
+        ''', (broker, order_id))
+        return cursor.fetchone() is not None
+    except Exception as e:
+        print(f"[DATABASE] Error checking synced order: {e}")
+        return False
+
+
+def add_synced_order(broker: str, order_id: str, symbol: str, action: str,
+                     quantity: int = None, filled_price: float = None,
+                     asset_type: str = 'stock', strike: float = None,
+                     expiry: str = None, direction: str = None,
+                     discord_channel_id: str = None) -> bool:
+    """Add a synced order to prevent duplicate posts."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT OR IGNORE INTO synced_orders 
+            (broker, order_id, symbol, action, quantity, filled_price, 
+             asset_type, strike, expiry, direction, posted_to_discord, discord_channel_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        ''', (broker, order_id, symbol, action, quantity, filled_price,
+              asset_type, strike, expiry, direction, discord_channel_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error adding synced order: {e}")
+        return False
+
+
+def get_recent_synced_orders(limit: int = 50) -> List[Dict]:
+    """Get recently synced orders."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT * FROM synced_orders 
+            ORDER BY synced_at DESC 
+            LIMIT ?
+        ''', (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"[DATABASE] Error getting synced orders: {e}")
         return []
 
 

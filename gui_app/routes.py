@@ -7079,6 +7079,77 @@ def register_routes(app):
             print(f"[API] Error saving signal conversion settings: {e}")
             return jsonify({'error': str(e)}), 500
 
+    # ============ TRADE MONITOR API ============
+    
+    @app.route('/api/settings/trade_monitor', methods=['GET'])
+    def api_get_trade_monitor_settings():
+        """Get trade monitor settings"""
+        try:
+            settings = db.get_trade_monitor_settings()
+            return jsonify({
+                'success': True,
+                'enabled': bool(settings.get('enabled')),
+                'poll_interval_seconds': settings.get('poll_interval_seconds', 10),
+                'target_webhook_channel_id': settings.get('target_webhook_channel_id', ''),
+                'include_stocks': bool(settings.get('include_stocks', True)),
+                'include_options': bool(settings.get('include_options', True)),
+                'post_bto_signals': bool(settings.get('post_bto_signals', True)),
+                'post_stc_signals': bool(settings.get('post_stc_signals', True))
+            })
+        except Exception as e:
+            print(f"[API] Error getting trade monitor settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/settings/trade_monitor', methods=['POST'])
+    def api_save_trade_monitor_settings():
+        """Save trade monitor settings"""
+        try:
+            data = request.json
+            enabled = data.get('enabled', False)
+            poll_interval = int(data.get('poll_interval_seconds', 10))
+            target_channel = data.get('target_webhook_channel_id', '').strip()
+            include_stocks = data.get('include_stocks', True)
+            include_options = data.get('include_options', True)
+            post_bto = data.get('post_bto_signals', True)
+            post_stc = data.get('post_stc_signals', True)
+            
+            if poll_interval < 5:
+                poll_interval = 5
+            if poll_interval > 300:
+                poll_interval = 300
+            
+            success = db.save_trade_monitor_settings(
+                enabled=enabled,
+                poll_interval=poll_interval,
+                target_channel_id=target_channel if target_channel else None,
+                include_stocks=include_stocks,
+                include_options=include_options,
+                post_bto=post_bto,
+                post_stc=post_stc
+            )
+            
+            if success:
+                return jsonify({
+                    'success': True,
+                    'message': 'Trade monitor settings saved successfully'
+                })
+            else:
+                return jsonify({'error': 'Failed to save settings'}), 500
+        except Exception as e:
+            print(f"[API] Error saving trade monitor settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/trade_monitor/synced_orders', methods=['GET'])
+    def api_get_synced_orders():
+        """Get recently synced orders"""
+        try:
+            limit = request.args.get('limit', 50, type=int)
+            orders = db.get_recent_synced_orders(limit=limit)
+            return jsonify({'success': True, 'orders': orders})
+        except Exception as e:
+            print(f"[API] Error getting synced orders: {e}")
+            return jsonify({'error': str(e)}), 500
+
     # ============ CHANNEL MAPPINGS API ============
     
     @app.route('/api/channel_mappings', methods=['GET'])

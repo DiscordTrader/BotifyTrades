@@ -1230,6 +1230,75 @@ input:checked + .slider:before {
         </div>
     </div>
 
+    <!-- Trade Monitor Settings -->
+    <div class="settings-card">
+        <h3>📡 Trade Monitor (Broker Sync)</h3>
+        <p class="description">Automatically detect trades from your broker (Webull mobile, desktop) and post them as BTO/STC signals to Discord</p>
+        <div class="form-group">
+            <div class="toggle-row">
+                <label class="toggle-label">
+                    <input type="checkbox" id="trade-monitor-enabled">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span>Enable Trade Monitor</span>
+                <span id="trade-monitor-status" class="toggle-status">OFF</span>
+            </div>
+            <p class="help-text">When enabled, the bot polls your broker for new filled orders and posts them to Discord</p>
+        </div>
+        <div class="form-group">
+            <label>Target Webhook Channel</label>
+            <select id="trade-monitor-channel">
+                <option value="">-- Select Webhook Channel --</option>
+            </select>
+            <p class="help-text">Discord webhook channel where broker trades will be posted</p>
+        </div>
+        <div class="form-group">
+            <label>Poll Interval (seconds)</label>
+            <input type="number" id="trade-monitor-interval" value="10" min="5" max="300">
+            <p class="help-text">How often to check for new trades (5-300 seconds)</p>
+        </div>
+        <div class="form-group">
+            <div class="toggle-row">
+                <label class="toggle-label">
+                    <input type="checkbox" id="trade-monitor-stocks" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <span>Include Stock Trades</span>
+            </div>
+        </div>
+        <div class="form-group">
+            <div class="toggle-row">
+                <label class="toggle-label">
+                    <input type="checkbox" id="trade-monitor-options" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <span>Include Option Trades</span>
+            </div>
+        </div>
+        <div class="form-group">
+            <div class="toggle-row">
+                <label class="toggle-label">
+                    <input type="checkbox" id="trade-monitor-bto" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <span>Post BTO (Buy) Signals</span>
+            </div>
+        </div>
+        <div class="form-group">
+            <div class="toggle-row">
+                <label class="toggle-label">
+                    <input type="checkbox" id="trade-monitor-stc" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <span>Post STC (Sell) Signals</span>
+            </div>
+        </div>
+        <div class="btn-group">
+            <button id="save-trade-monitor" class="btn btn-success">💾 Save Trade Monitor Settings</button>
+            <span id="trade-monitor-save-status" style="margin-left: 12px; font-size: 13px;"></span>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -2348,6 +2417,111 @@ document.getElementById('save-notification-settings').addEventListener('click', 
     }
 });
 
+// ========== TRADE MONITOR SETTINGS ==========
+
+function updateTradeMonitorToggleStatus() {
+    const checkbox = document.getElementById('trade-monitor-enabled');
+    const status = document.getElementById('trade-monitor-status');
+    if (checkbox && status) {
+        status.textContent = checkbox.checked ? 'ON' : 'OFF';
+        status.style.color = checkbox.checked ? '#00ff88' : '#6c757d';
+    }
+}
+
+async function loadTradeMonitorSettings() {
+    try {
+        const response = await fetch('/api/settings/trade_monitor');
+        const settings = await response.json();
+        
+        if (settings.success) {
+            document.getElementById('trade-monitor-enabled').checked = settings.enabled;
+            document.getElementById('trade-monitor-interval').value = settings.poll_interval_seconds || 10;
+            document.getElementById('trade-monitor-stocks').checked = settings.include_stocks !== false;
+            document.getElementById('trade-monitor-options').checked = settings.include_options !== false;
+            document.getElementById('trade-monitor-bto').checked = settings.post_bto_signals !== false;
+            document.getElementById('trade-monitor-stc').checked = settings.post_stc_signals !== false;
+            updateTradeMonitorToggleStatus();
+            
+            if (settings.target_webhook_channel_id) {
+                const select = document.getElementById('trade-monitor-channel');
+                if (select) {
+                    select.value = settings.target_webhook_channel_id;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error loading trade monitor settings:', error);
+    }
+}
+
+async function loadWebhookChannelsForTradeMonitor() {
+    try {
+        const response = await fetch('/api/webhook_channels');
+        const data = await response.json();
+        
+        if (data.success && data.channels) {
+            const select = document.getElementById('trade-monitor-channel');
+            if (select) {
+                select.innerHTML = '<option value="">-- Select Webhook Channel --</option>';
+                data.channels.forEach(ch => {
+                    const option = document.createElement('option');
+                    option.value = ch.id;
+                    option.textContent = ch.name || `Channel ${ch.id}`;
+                    select.appendChild(option);
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error loading webhook channels:', error);
+    }
+}
+
+document.getElementById('trade-monitor-enabled').addEventListener('change', updateTradeMonitorToggleStatus);
+
+document.getElementById('save-trade-monitor').addEventListener('click', async () => {
+    const data = {
+        enabled: document.getElementById('trade-monitor-enabled').checked,
+        poll_interval_seconds: parseInt(document.getElementById('trade-monitor-interval').value) || 10,
+        target_webhook_channel_id: document.getElementById('trade-monitor-channel').value,
+        include_stocks: document.getElementById('trade-monitor-stocks').checked,
+        include_options: document.getElementById('trade-monitor-options').checked,
+        post_bto_signals: document.getElementById('trade-monitor-bto').checked,
+        post_stc_signals: document.getElementById('trade-monitor-stc').checked
+    };
+    
+    const inlineStatus = document.getElementById('trade-monitor-save-status');
+    inlineStatus.textContent = '⏳ Saving...';
+    inlineStatus.style.color = '#ffc107';
+    
+    try {
+        const response = await fetch('/api/settings/trade_monitor', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            inlineStatus.textContent = '✅ Saved! Restart bot to apply.';
+            inlineStatus.style.color = '#00ff88';
+        } else {
+            inlineStatus.textContent = '❌ ' + (result.error || 'Failed');
+            inlineStatus.style.color = '#ff6b6b';
+        }
+        setTimeout(() => {
+            inlineStatus.textContent = '';
+        }, 5000);
+    } catch (error) {
+        console.error('[Trade Monitor] Save error:', error);
+        inlineStatus.textContent = '❌ ' + error.message;
+        inlineStatus.style.color = '#ff6b6b';
+        setTimeout(() => {
+            inlineStatus.textContent = '';
+        }, 3000);
+    }
+});
+
 // ========== BROKER CONNECTION MANAGEMENT ==========
 
 async function loadBrokerStatus() {
@@ -3044,6 +3218,7 @@ loadTradingSettings();
 loadSignalConversionSettings();
 loadNotificationSettings();
 loadDiscordNotifications();
+loadWebhookChannelsForTradeMonitor().then(() => loadTradeMonitorSettings());
 
 // Refresh broker status every 30 seconds
 setInterval(loadBrokerStatus, 30000);
