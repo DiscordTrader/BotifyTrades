@@ -438,8 +438,8 @@ class TradeMonitor:
             # Format strike without decimal if whole number
             strike_str = f"{int(strike)}" if strike == int(strike) else f"{strike}"
             
-            # Format: BTO ORCL 200C 12/26 @ 2.61 @everyone
-            signal_msg = f"{cancel_prefix}{test_prefix}{signal_type} {symbol} {strike_str}{direction} {expiry} @ {filled_price:.2f} @everyone"
+            # Format: BTO 3 ORCL 200C 12/26 @ 2.61 @everyone (with quantity)
+            signal_msg = f"{cancel_prefix}{test_prefix}{signal_type} {quantity} {symbol} {strike_str}{direction} {expiry} @ {filled_price:.2f} @everyone"
         else:
             # Stock format: BTO 100 AAPL @ 150.00 @everyone
             signal_msg = f"{cancel_prefix}{test_prefix}{signal_type} {quantity} {symbol} @ {filled_price:.2f} @everyone"
