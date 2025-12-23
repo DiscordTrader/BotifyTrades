@@ -1372,8 +1372,9 @@ def update_channel(channel_id: int, **kwargs):
             else:
                 values.append(value)
     
-    # If category is being set, update flags accordingly for backwards compatibility
+    # Sync category and execute_enabled/track_enabled flags bidirectionally
     if 'category' in kwargs and 'execute_enabled' not in kwargs and 'track_enabled' not in kwargs:
+        # If category is being set, update flags accordingly
         category = kwargs['category']
         if category == 'EXECUTE':
             fields.append("execute_enabled = ?")
@@ -1385,6 +1386,19 @@ def update_channel(channel_id: int, **kwargs):
             values.append(0)
             fields.append("track_enabled = ?")
             values.append(1)
+    elif 'execute_enabled' in kwargs and 'category' not in kwargs:
+        # If execute_enabled is being set, update category accordingly
+        if kwargs['execute_enabled'] == 1:
+            fields.append("category = ?")
+            values.append('EXECUTE')
+        elif 'track_enabled' in kwargs and kwargs['track_enabled'] == 1:
+            fields.append("category = ?")
+            values.append('TRACK')
+    elif 'track_enabled' in kwargs and kwargs['track_enabled'] == 1 and 'category' not in kwargs:
+        # If track_enabled is being set and execute_enabled is not, set category to TRACK
+        if 'execute_enabled' not in kwargs or kwargs['execute_enabled'] == 0:
+            fields.append("category = ?")
+            values.append('TRACK')
     
     if fields:
         values.append(datetime.now())
