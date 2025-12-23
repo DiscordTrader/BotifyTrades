@@ -32,6 +32,16 @@ import hashlib
 import sys
 import ssl
 
+# BUILD TYPE: Controls feature visibility
+# ADMIN = Full features (Channel Mappings, Debug tools, etc.) - for developer use
+# USER = Limited features - for end-user distribution
+# Set via environment variable or hardcode to 'USER' before packaging user builds
+BUILD_TYPE = os.environ.get('BUILD_TYPE', 'ADMIN').upper()
+
+def is_admin_build():
+    """Check if this is an admin build with full features"""
+    return BUILD_TYPE == 'ADMIN'
+
 # Fix SSL certificate verification for cloud environments AND EXE distribution
 # This is critical for aiohttp (used by discord.py-self) which doesn't use env vars
 SSL_CONTEXT = None

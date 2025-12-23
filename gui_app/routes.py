@@ -15,6 +15,23 @@ from . import database as db
 # Admin password from environment (set via Replit Secrets)
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
 
+# Build type check - controls admin-only features
+# Import from main module if available, otherwise default to ADMIN
+BUILD_TYPE = os.environ.get('BUILD_TYPE', 'ADMIN').upper()
+
+def is_admin_build():
+    """Check if this is an admin build with full features"""
+    return BUILD_TYPE == 'ADMIN'
+
+def admin_feature_required(f):
+    """Decorator to restrict endpoints to admin builds only"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not is_admin_build():
+            return jsonify({'success': False, 'error': 'This feature is not available'}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
 
 # Module-level function for multiprocessing (must be picklable)
 def _launch_wizard_process_target():
@@ -7191,11 +7208,12 @@ def register_routes(app):
             print(f"[API] Error getting synced orders: {e}")
             return jsonify({'error': str(e)}), 500
 
-    # ============ CHANNEL MAPPINGS API ============
+    # ============ CHANNEL MAPPINGS API (ADMIN ONLY) ============
     
     @app.route('/api/channel_mappings', methods=['GET'])
+    @admin_feature_required
     def api_get_channel_mappings():
-        """Get all channel mappings"""
+        """Get all channel mappings - ADMIN BUILD ONLY"""
         try:
             mappings = db.get_channel_mappings()
             return jsonify({'success': True, 'mappings': mappings})
@@ -7204,8 +7222,9 @@ def register_routes(app):
             return jsonify({'error': str(e)}), 500
     
     @app.route('/api/channel_mappings', methods=['POST'])
+    @admin_feature_required
     def api_add_channel_mapping():
-        """Add a new channel mapping (source channel -> webhook URL)"""
+        """Add a new channel mapping - ADMIN BUILD ONLY"""
         try:
             data = request.json
             source_channel_id = data.get('source_channel_id', '').strip()
@@ -7226,8 +7245,9 @@ def register_routes(app):
             return jsonify({'error': str(e)}), 500
     
     @app.route('/api/channel_mappings/<int:mapping_id>', methods=['PUT'])
+    @admin_feature_required
     def api_update_channel_mapping(mapping_id):
-        """Update an existing channel mapping"""
+        """Update an existing channel mapping - ADMIN BUILD ONLY"""
         try:
             data = request.json
             result = db.update_channel_mapping(
@@ -7244,8 +7264,9 @@ def register_routes(app):
             return jsonify({'error': str(e)}), 500
     
     @app.route('/api/channel_mappings/<int:mapping_id>', methods=['DELETE'])
+    @admin_feature_required
     def api_delete_channel_mapping(mapping_id):
-        """Delete a channel mapping"""
+        """Delete a channel mapping - ADMIN BUILD ONLY"""
         try:
             result = db.delete_channel_mapping(mapping_id)
             return jsonify(result)
@@ -10881,6 +10902,18 @@ def register_routes(app):
             import traceback
             traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)})
+    
+    @app.route('/api/system/build-info', methods=['GET'])
+    def api_get_build_info():
+        """Get build type and version information"""
+        try:
+            return jsonify({
+                'success': True,
+                'build_type': BUILD_TYPE,
+                'is_admin_build': is_admin_build()
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/system/consistency-check', methods=['GET'])
     @login_required

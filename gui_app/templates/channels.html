@@ -900,7 +900,7 @@
         </div>
     </div>
 
-    <div class="add-channel-card" style="margin-top: 30px;">
+    <div class="add-channel-card" style="margin-top: 30px;" id="channelMappingsSection">
         <h3><span>🔗</span> Channel Mappings</h3>
         <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">
             Map Discord source channels to webhook URLs for automatic signal forwarding
@@ -1659,6 +1659,31 @@ async function deleteChannelMapping(mappingId) {
     }
 }
 
-document.addEventListener('DOMContentLoaded', loadChannelMappings);
+async function checkBuildTypeAndHideAdminFeatures() {
+    try {
+        const response = await fetch('/api/system/build-info');
+        const data = await response.json();
+        
+        if (data.success && !data.is_admin_build) {
+            // Hide Channel Mappings section for USER builds
+            const mappingsSection = document.getElementById('channelMappingsSection');
+            if (mappingsSection) {
+                mappingsSection.style.display = 'none';
+            }
+            // Also hide the edit mapping modal
+            const editModal = document.getElementById('editMappingModal');
+            if (editModal) {
+                editModal.style.display = 'none';
+            }
+        }
+    } catch (error) {
+        console.log('Build info check failed, showing all features');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    checkBuildTypeAndHideAdminFeatures();
+    loadChannelMappings();
+});
 </script>
 {% endblock %}
