@@ -4404,30 +4404,42 @@ class SelfClient(discord.Client):
                 _original_print("[WARNING] ⚠️ No brokers available - order worker will wait until a broker connects", flush=True)
 
         # Initialize and start BrokerSyncService for real-time trade synchronization
+        # Check if broker sync is enabled in settings
+        broker_sync_enabled = True
         try:
-            _original_print("[SYNC] Initializing trade synchronization service...", flush=True)
             from gui_app.database import Database
-            
-            # Create simple broker manager for sync service
-            class BrokerManager:
-                def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None):
-                    self.webull_broker = webull_broker
-                    self.alpaca_paper_broker = alpaca_paper_broker
-                    self.tastytrade_broker = tastytrade_broker
-                    self.robinhood_broker = robinhood_broker
-                    self.ibkr_broker = ibkr_broker
-            
-            broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker)
             db_instance = Database()
-            
-            self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=30)
-            await self.sync_service.start()
-            await asyncio.sleep(0)  # Yield to event loop so sync task can start
-            _original_print("[SYNC] ✓ Trade synchronization service started (30s interval)", flush=True)
-        except Exception as e:
-            _original_print(f"[SYNC] ⚠️ Sync service initialization failed: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
+            broker_sync_setting = db_instance.get_setting('broker_sync_enabled', 'true')
+            broker_sync_enabled = broker_sync_setting.lower() == 'true'
+        except Exception:
+            pass
+        
+        if broker_sync_enabled:
+            try:
+                _original_print("[SYNC] Initializing trade synchronization service...", flush=True)
+                
+                # Create simple broker manager for sync service
+                class BrokerManager:
+                    def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None):
+                        self.webull_broker = webull_broker
+                        self.alpaca_paper_broker = alpaca_paper_broker
+                        self.tastytrade_broker = tastytrade_broker
+                        self.robinhood_broker = robinhood_broker
+                        self.ibkr_broker = ibkr_broker
+                
+                broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker)
+                
+                self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=30)
+                await self.sync_service.start()
+                await asyncio.sleep(0)  # Yield to event loop so sync task can start
+                _original_print("[SYNC] ✓ Trade synchronization service started (30s interval)", flush=True)
+            except Exception as e:
+                _original_print(f"[SYNC] ⚠️ Sync service initialization failed: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
+                self.sync_service = None
+        else:
+            _original_print("[SYNC] ⏸️ Broker Sync Service DISABLED (Settings → Background Services)", flush=True)
             self.sync_service = None
 
         worker_task = asyncio.create_task(self.worker())
@@ -4449,7 +4461,15 @@ class SelfClient(discord.Client):
         
         # Start position monitoring for risk management (monitors BOTH Webull AND Alpaca positions)
         # Uses RiskManager module from src/risk/position_monitor.py (single source of truth)
-        if RISK_MODULE_AVAILABLE:
+        # Check if risk monitor is enabled in settings
+        risk_monitor_enabled = True
+        try:
+            risk_monitor_setting = db_instance.get_setting('risk_monitor_enabled', 'true')
+            risk_monitor_enabled = risk_monitor_setting.lower() == 'true'
+        except Exception:
+            pass
+        
+        if RISK_MODULE_AVAILABLE and risk_monitor_enabled:
             try:
                 # Create adapter with database access
                 risk_adapter = RiskDBAdapter(db=self.db)
@@ -4471,6 +4491,8 @@ class SelfClient(discord.Client):
                 print(f"[RISK] ⚠️ Failed to start RiskManager: {e}")
                 import traceback
                 traceback.print_exc()
+        elif not risk_monitor_enabled:
+            print("[RISK] ⏸️ Risk Monitor Service DISABLED (Settings → Background Services)")
         else:
             print("[RISK] ⚠️ RiskManager module not available - risk monitoring disabled")
         

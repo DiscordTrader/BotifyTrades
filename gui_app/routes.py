@@ -7139,6 +7139,42 @@ def register_routes(app):
             print(f"[API] Error saving trade monitor settings: {e}")
             return jsonify({'error': str(e)}), 500
     
+    @app.route('/api/settings/background_services', methods=['GET'])
+    def api_get_background_services_settings():
+        """Get background services settings"""
+        try:
+            broker_sync_enabled = db.get_setting('broker_sync_enabled', 'true').lower() == 'true'
+            risk_monitor_enabled = db.get_setting('risk_monitor_enabled', 'true').lower() == 'true'
+            return jsonify({
+                'success': True,
+                'settings': {
+                    'broker_sync_enabled': broker_sync_enabled,
+                    'risk_monitor_enabled': risk_monitor_enabled
+                }
+            })
+        except Exception as e:
+            print(f"[API] Error getting background services settings: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/settings/background_services', methods=['POST'])
+    def api_save_background_services_settings():
+        """Save background services settings"""
+        try:
+            data = request.json
+            broker_sync_enabled = data.get('broker_sync_enabled', True)
+            risk_monitor_enabled = data.get('risk_monitor_enabled', True)
+            
+            db.save_setting('broker_sync_enabled', 'true' if broker_sync_enabled else 'false')
+            db.save_setting('risk_monitor_enabled', 'true' if risk_monitor_enabled else 'false')
+            
+            return jsonify({
+                'success': True,
+                'message': 'Background services settings saved. Restart bot to apply.'
+            })
+        except Exception as e:
+            print(f"[API] Error saving background services settings: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @app.route('/api/trade_monitor/synced_orders', methods=['GET'])
     def api_get_synced_orders():
         """Get recently synced orders"""
