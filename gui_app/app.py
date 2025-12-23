@@ -32,9 +32,13 @@ def create_app():
     # Import database and config services
     from . import database
     from . import config_service
+    from . import webhook_service
     
     # Initialize database
     database.init_db()
+    
+    # Initialize webhook tables (uses same database)
+    webhook_service.init_webhook_tables()
     
     # Register routes
     from . import routes

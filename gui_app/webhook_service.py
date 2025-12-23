@@ -15,18 +15,23 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'bot_data.db')
+
+def get_db_path():
+    """Get database path - use same logic as database.py for consistency."""
+    from pathlib import Path
+    return Path.cwd() / 'bot_data.db'
 
 
 def get_db_connection():
     """Get database connection."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(get_db_path())
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_webhook_tables():
     """Initialize webhook-related database tables."""
+    print(f"[WEBHOOK] Initializing webhook tables at: {get_db_path()}")
     conn = get_db_connection()
     cursor = conn.cursor()
     

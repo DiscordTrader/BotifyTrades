@@ -7443,9 +7443,12 @@ def register_routes(app):
         try:
             from . import webhook_service
             channels = webhook_service.get_webhook_channels()
+            print(f"[API] Get webhook channels: found {len(channels)} channel(s)")
             return jsonify({'success': True, 'channels': channels})
         except Exception as e:
             print(f"[API] Error getting webhook channels: {e}")
+            import traceback
+            traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/webhook/channels', methods=['POST'])
@@ -7460,13 +7463,18 @@ def register_routes(app):
             bot_name = data.get('bot_name', 'Trade Echo Bot')
             color = data.get('color', '#FF6B35')
             
+            print(f"[API] Adding webhook channel: name={name}, bot_name={bot_name}")
+            
             if not name or not webhook_url:
                 return jsonify({'success': False, 'error': 'Name and webhook URL are required'}), 400
             
             result = webhook_service.add_webhook_channel(name, webhook_url, bot_name, color)
+            print(f"[API] Add webhook channel result: {result}")
             return jsonify(result)
         except Exception as e:
             print(f"[API] Error adding webhook channel: {e}")
+            import traceback
+            traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/webhook/channels/<int:channel_id>', methods=['PUT'])
