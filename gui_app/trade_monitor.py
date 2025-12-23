@@ -289,16 +289,16 @@ class TradeMonitor:
         return signal_msg
     
     async def _post_order_to_discord(self, order: Dict, broker_name: str, target_channel: str = None):
-        """Post a filled order as a signal to Discord"""
+        """Post a filled order as a signal to Discord and record to trades table"""
         order_id = order.get('order_id')
         symbol = order.get('symbol', 'UNKNOWN')
         action = order.get('action', '').upper()
         quantity = order.get('quantity', 0)
         filled_price = order.get('filled_price', order.get('limit_price', 0))
         asset_type = order.get('asset_type', 'stock')
-        strike = order.get('strike', 0)
-        expiry = order.get('expiry', '')
-        direction = order.get('direction', 'C')
+        strike = order.get('strike', 0) if asset_type == 'option' else None
+        expiry = order.get('expiry', '') if asset_type == 'option' else None
+        direction = order.get('direction', 'C') if asset_type == 'option' else None
         
         is_buy = action in ['BUY', 'BTO']
         signal_type = 'BTO' if is_buy else 'STC'
@@ -306,127 +306,112 @@ class TradeMonitor:
         posted = False
         channel_id = None
         webhook_url = self._get_webhook_url(target_channel) if target_channel else None
-        main_trade_id = None
+        pnl_data = None
         
-        # For options, use webhook_service for position tracking and P&L calculation
-        if asset_type == 'option' and webhook_url:
-            if is_buy:
-                # BTO: Open a position and post signal
+        # ALWAYS record to main trades table for PNL/leaderboard (regardless of webhook)
+        if is_buy:
+            # BTO: Add to main trades table
+            self._add_bto_to_trades_table(
+                broker_name, symbol, strike, expiry, direction,
+                quantity, filled_price, asset_type, order_id
+            )
+        else:
+            # STC: Close matching trade in main trades table with P&L
+            pnl_data = self._close_stc_in_trades_table(
+                broker_name, symbol, strike, expiry, direction,
+                quantity, filled_price, asset_type
+            )
+        
+        # Post to Discord webhook if configured
+        if webhook_url:
+            if asset_type == 'option':
+                if is_buy:
+                    # BTO: Open position for webhook P&L tracking and post signal
+                    signal_msg = self._format_signal(order, signal_type)
+                    try:
+                        resp = requests.post(webhook_url, json={"content": signal_msg}, timeout=10)
+                        if resp.status_code in [200, 204]:
+                            posted = True
+                            channel_id = target_channel
+                            print(f"[TRADE MONITOR] Posted BTO {symbol} to webhook", flush=True)
+                            
+                            # Track position for webhook P&L calculation on STC
+                            position_id = webhook_service.open_webhook_position(
+                                symbol=symbol,
+                                strike=strike,
+                                expiry=expiry,
+                                call_put=direction,
+                                qty=quantity,
+                                entry_price=filled_price,
+                                trade_type='BTO',
+                                webhook_url=webhook_url
+                            )
+                            if position_id:
+                                print(f"[TRADE MONITOR] Opened webhook position {position_id}", flush=True)
+                    except Exception as e:
+                        print(f"[TRADE MONITOR] Failed to post BTO to webhook: {e}", flush=True)
+                else:
+                    # STC: Use post_stc_signal for rich Trade Summary embed
+                    try:
+                        success, message, _ = webhook_service.post_stc_signal(
+                            webhook_url=webhook_url,
+                            symbol=symbol,
+                            strike=strike,
+                            expiry=expiry,
+                            call_put=direction,
+                            qty=quantity,
+                            close_price=filled_price
+                        )
+                        if success:
+                            posted = True
+                            channel_id = target_channel
+                            print(f"[TRADE MONITOR] Posted STC {symbol} with Trade Summary", flush=True)
+                        else:
+                            # No webhook position - post simple STC signal
+                            signal_msg = self._format_signal(order, signal_type)
+                            resp = requests.post(webhook_url, json={"content": signal_msg}, timeout=10)
+                            if resp.status_code in [200, 204]:
+                                posted = True
+                                channel_id = target_channel
+                                print(f"[TRADE MONITOR] Posted STC {symbol} (simple)", flush=True)
+                    except Exception as e:
+                        print(f"[TRADE MONITOR] Failed to post STC to webhook: {e}", flush=True)
+            else:
+                # Stocks - use simple format
                 signal_msg = self._format_signal(order, signal_type)
                 try:
                     resp = requests.post(webhook_url, json={"content": signal_msg}, timeout=10)
                     if resp.status_code in [200, 204]:
                         posted = True
                         channel_id = target_channel
-                        print(f"[TRADE MONITOR] Posted BTO {symbol} to webhook", flush=True)
-                        
-                        # Track position for P&L calculation on STC
-                        position_id = webhook_service.open_webhook_position(
-                            symbol=symbol,
-                            strike=strike,
-                            expiry=expiry,
-                            call_put=direction,
-                            qty=quantity,
-                            entry_price=filled_price,
-                            trade_type='BTO',
-                            webhook_url=webhook_url
-                        )
-                        if position_id:
-                            print(f"[TRADE MONITOR] Opened position {position_id} for P&L tracking", flush=True)
-                        
-                        # Add to main trades table for PNL page, leaderboard, statistics
-                        main_trade_id = self._add_bto_to_trades_table(
-                            broker_name, symbol, strike, expiry, direction,
-                            quantity, filled_price, asset_type, order_id, channel_id
-                        )
-                except Exception as e:
-                    print(f"[TRADE MONITOR] Failed to post BTO to webhook: {e}", flush=True)
-            else:
-                # STC: Use post_stc_signal for P&L calculation and Trade Summary
-                try:
-                    success, message, pnl_data = webhook_service.post_stc_signal(
-                        webhook_url=webhook_url,
-                        symbol=symbol,
-                        strike=strike,
-                        expiry=expiry,
-                        call_put=direction,
-                        qty=quantity,
-                        close_price=filled_price
-                    )
-                    if success:
-                        posted = True
-                        channel_id = target_channel
-                        print(f"[TRADE MONITOR] Posted STC {symbol} with Trade Summary: {message}", flush=True)
-                        
-                        # Close trade in main trades table with P&L
-                        self._close_stc_in_trades_table(
-                            broker_name, symbol, strike, expiry, direction,
-                            quantity, filled_price, asset_type, pnl_data
-                        )
-                    else:
-                        # No matching position - post simple STC signal
-                        signal_msg = self._format_signal(order, signal_type)
-                        resp = requests.post(webhook_url, json={"content": signal_msg}, timeout=10)
-                        if resp.status_code in [200, 204]:
-                            posted = True
-                            channel_id = target_channel
-                            print(f"[TRADE MONITOR] Posted STC {symbol} (no position found for P&L)", flush=True)
-                            
-                            # Try to close in main trades table even without webhook position
-                            self._close_stc_in_trades_table(
-                                broker_name, symbol, strike, expiry, direction,
-                                quantity, filled_price, asset_type, None
-                            )
-                except Exception as e:
-                    print(f"[TRADE MONITOR] Failed to post STC to webhook: {e}", flush=True)
-        else:
-            # Stocks or no webhook - use simple format
-            signal_msg = self._format_signal(order, signal_type)
-            if webhook_url:
-                try:
-                    resp = requests.post(webhook_url, json={"content": signal_msg}, timeout=10)
-                    if resp.status_code in [200, 204]:
-                        posted = True
-                        channel_id = target_channel
                         print(f"[TRADE MONITOR] Posted {signal_type} {symbol} to webhook", flush=True)
-                        
-                        # Add/close in main trades table for stocks too
-                        if is_buy:
-                            main_trade_id = self._add_bto_to_trades_table(
-                                broker_name, symbol, None, None, None,
-                                quantity, filled_price, asset_type, order_id, channel_id
-                            )
-                        else:
-                            self._close_stc_in_trades_table(
-                                broker_name, symbol, None, None, None,
-                                quantity, filled_price, asset_type, None
-                            )
                 except Exception as e:
                     print(f"[TRADE MONITOR] Failed to post to webhook: {e}", flush=True)
         
+        # Record to synced_orders table
         db.add_synced_order(
             broker=broker_name,
-            order_id=order_id,
+            order_id=str(order_id) if order_id else '',
             symbol=symbol,
             action=signal_type,
             quantity=quantity,
             filled_price=filled_price,
             asset_type=asset_type,
-            strike=strike,
-            expiry=expiry,
-            direction=direction,
-            discord_channel_id=channel_id
+            strike=strike or 0,
+            expiry=expiry or '',
+            direction=direction or '',
+            discord_channel_id=str(channel_id) if channel_id else ''
         )
         
         if posted:
             print(f"[TRADE MONITOR] ✓ Synced {signal_type} {symbol} from {broker_name}", flush=True)
         else:
-            print(f"[TRADE MONITOR] Recorded {signal_type} {symbol} (no webhook configured)", flush=True)
+            print(f"[TRADE MONITOR] ✓ Recorded {signal_type} {symbol} (no webhook)", flush=True)
     
-    def _add_bto_to_trades_table(self, broker_name: str, symbol: str, strike: float, 
-                                  expiry: str, call_put: str, quantity: int, 
+    def _add_bto_to_trades_table(self, broker_name: str, symbol: str, strike: Optional[float], 
+                                  expiry: Optional[str], call_put: Optional[str], quantity: int, 
                                   filled_price: float, asset_type: str, 
-                                  order_id: str, channel_id: str) -> Optional[int]:
+                                  order_id: Optional[str]) -> Optional[int]:
         """Add a BTO order to the main trades table for PNL/leaderboard tracking"""
         try:
             from datetime import datetime
@@ -440,23 +425,23 @@ class TradeMonitor:
                 'quantity': quantity,
                 'intended_price': filled_price,
                 'executed_price': filled_price,
+                'executed': True,
                 'status': 'OPEN',
                 'broker': broker_name,
-                'order_id': order_id,
-                'channel_id': int(channel_id) if channel_id else None,
+                'order_id': str(order_id) if order_id else None,
+                'channel_id': None,
                 'source': 'TRADE_MONITOR'
             }
             trade_id = db.add_trade(trade_data)
-            print(f"[TRADE MONITOR] ✓ Added BTO to trades table (ID: {trade_id}) for PNL tracking", flush=True)
+            print(f"[TRADE MONITOR] ✓ Added BTO to trades table (ID: {trade_id})", flush=True)
             return trade_id
         except Exception as e:
             print(f"[TRADE MONITOR] Error adding BTO to trades table: {e}", flush=True)
             return None
     
-    def _close_stc_in_trades_table(self, broker_name: str, symbol: str, strike: float,
-                                    expiry: str, call_put: str, quantity: int,
-                                    close_price: float, asset_type: str, 
-                                    pnl_data: Optional[Dict]) -> bool:
+    def _close_stc_in_trades_table(self, broker_name: str, symbol: str, strike: Optional[float],
+                                    expiry: Optional[str], call_put: Optional[str], quantity: int,
+                                    close_price: float, asset_type: str) -> Optional[Dict]:
         """Close a matching open trade in main trades table with P&L"""
         try:
             # Find matching open BTO trade
@@ -472,26 +457,23 @@ class TradeMonitor:
             if open_trade:
                 trade_id = open_trade['id']
                 entry_price = open_trade.get('executed_price', 0)
+                trade_qty = open_trade.get('quantity', quantity)
                 
-                # Calculate P&L if not provided
-                if pnl_data:
-                    pnl = pnl_data.get('profit', 0)
-                    pnl_percent = pnl_data.get('gain_pct', 0)
-                else:
-                    # Calculate P&L from entry/exit prices
-                    pnl = (close_price - entry_price) * quantity * 100  # Options multiplier
-                    pnl_percent = ((close_price - entry_price) / entry_price * 100) if entry_price > 0 else 0
+                # Calculate P&L - use 100x multiplier for options, 1x for stocks
+                multiplier = 100 if asset_type == 'option' else 1
+                pnl = (close_price - entry_price) * trade_qty * multiplier
+                pnl_percent = ((close_price - entry_price) / entry_price * 100) if entry_price > 0 else 0
                 
                 # Close the trade
                 db.close_trade(trade_id, close_price, pnl, pnl_percent)
-                print(f"[TRADE MONITOR] ✓ Closed trade {trade_id} in trades table - P&L: ${pnl:.2f} ({pnl_percent:.1f}%)", flush=True)
-                return True
+                print(f"[TRADE MONITOR] ✓ Closed trade {trade_id} - P&L: ${pnl:.2f} ({pnl_percent:.1f}%)", flush=True)
+                return {'profit': pnl, 'gain_pct': pnl_percent, 'entry_price': entry_price}
             else:
-                print(f"[TRADE MONITOR] No matching open trade found for STC {symbol}", flush=True)
-                return False
+                print(f"[TRADE MONITOR] No matching open trade for STC {symbol}", flush=True)
+                return None
         except Exception as e:
-            print(f"[TRADE MONITOR] Error closing trade in trades table: {e}", flush=True)
-            return False
+            print(f"[TRADE MONITOR] Error closing trade: {e}", flush=True)
+            return None
     
     async def _post_canceled_order(self, order: Dict, broker_name: str, target_channel: str = None):
         """Post a canceled order notification to Discord"""
