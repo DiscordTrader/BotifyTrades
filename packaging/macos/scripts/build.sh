@@ -31,6 +31,16 @@ fi
 
 echo "Python version: $(python3 --version)"
 
+# Check Python architecture for universal2 support
+PYTHON_ARCH=$(python3 -c "import platform; print(platform.machine())")
+echo "Python architecture: $PYTHON_ARCH"
+
+# Universal2 builds require universal2 Python from python.org
+echo ""
+echo "NOTE: Building universal2 binary (Intel + Apple Silicon)"
+echo "For best results, use universal2 Python from https://www.python.org/downloads/macos/"
+echo ""
+
 if ! pip3 show pyarmor &> /dev/null; then
     echo "Installing PyArmor..."
     pip3 install pyarmor
@@ -199,6 +209,23 @@ echo "========================================================================"
 echo "  Location: packaging/macos/dist/"
 echo "  Executable: BotifyTrades"
 echo "  Protection: PyArmor + PyInstaller"
+echo ""
+
+# Verify architecture of built binary
+echo "  Verifying binary architecture..."
+if [ -f "packaging/macos/dist/BotifyTrades" ]; then
+    BINARY_ARCH=$(file packaging/macos/dist/BotifyTrades)
+    echo "  $BINARY_ARCH"
+    if echo "$BINARY_ARCH" | grep -q "universal"; then
+        echo "  ✓ Universal binary - works on Intel AND Apple Silicon"
+    elif echo "$BINARY_ARCH" | grep -q "arm64"; then
+        echo "  ⚠ ARM64 only - works on Apple Silicon (M1/M2/M3) only"
+        echo "  ⚠ Intel Mac users will see 'Bad CPU type' error"
+    elif echo "$BINARY_ARCH" | grep -q "x86_64"; then
+        echo "  ⚠ x86_64 only - works on Intel Macs only"
+        echo "  ⚠ Apple Silicon users need Rosetta 2"
+    fi
+fi
 echo ""
 echo "  To run: cd packaging/macos/dist && ./run.command"
 echo "========================================================================"

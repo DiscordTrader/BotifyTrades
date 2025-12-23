@@ -126,16 +126,41 @@ pip3 install --upgrade pyinstaller discord.py-self webull flask
 ./packaging/macos/scripts/build_standard.sh
 ```
 
-## Apple Silicon (M1/M2/M3) Notes
+## Intel vs Apple Silicon (M1/M2/M3) Compatibility
 
-The build script automatically builds for your current architecture:
-- **Intel Mac**: Creates x86_64 binary
-- **Apple Silicon**: Creates arm64 binary
+**As of v2.1.35+**, the build creates a **Universal binary** that works on BOTH:
+- **Intel Macs** (x86_64)
+- **Apple Silicon Macs** (M1/M2/M3/arm64)
 
-To create a universal binary (both architectures), modify the spec file:
+### "Bad CPU type in executable" Error
+
+If you see this error, it means the binary was built for a different CPU architecture.
+
+**Solutions:**
+1. **Download the latest version** - Universal binary should work on both architectures
+2. **Check the binary type:**
+   ```bash
+   file ./BotifyTrades
+   ```
+   - `universal binary with 2 architectures` = Works on both
+   - `arm64` = Apple Silicon only
+   - `x86_64` = Intel only
+
+3. **For Intel Mac users with ARM64-only binary:**
+   - Request an Intel or Universal build from support
+   - Or build locally on your Intel Mac
+
+### Building for Specific Architecture
+
+To build for a specific architecture (modify `packaging/macos/specs/botifytrades.spec`):
+
 ```python
-target_arch='universal2',
+target_arch='universal2',  # Both Intel + Apple Silicon (default, recommended)
+target_arch='x86_64',      # Intel only
+target_arch='arm64',       # Apple Silicon only
 ```
+
+**Note:** Universal2 builds require universal2 Python from https://www.python.org/downloads/macos/ (not Homebrew)
 
 ## Support
 
