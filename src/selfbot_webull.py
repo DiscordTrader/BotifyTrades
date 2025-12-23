@@ -35,8 +35,8 @@ import ssl
 # BUILD TYPE: Controls feature visibility
 # ADMIN = Full features (Channel Mappings, Debug tools, etc.) - for developer use
 # USER = Limited features - for end-user distribution
-# Set via environment variable or hardcode to 'USER' before packaging user builds
-BUILD_TYPE = os.environ.get('BUILD_TYPE', 'ADMIN').upper()
+# This line is automatically updated by scripts/release.sh
+BUILD_TYPE = 'ADMIN'  # Set by release.sh
 
 def is_admin_build():
     """Check if this is an admin build with full features"""

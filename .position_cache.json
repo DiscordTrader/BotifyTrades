@@ -2593,5 +2593,20 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-22T16:16:48.384411"
+  },
+  "Webull_FDX_0.0__": {
+    "entry_price": 1.873,
+    "highest_price": 0.05,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "Webull",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-23T05:01:01.828882"
   }
 }
