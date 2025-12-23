@@ -155,6 +155,34 @@ class TradeMonitor:
                 
             sys.stdout.write(f"[TRADE MONITOR] Total orders to process: {len(orders)}\n")
             sys.stdout.flush()
+            
+            # Check for canceled orders FIRST (before early return)
+            # This must run even when there are 0 current orders
+            if test_mode:
+                current_order_ids = {o.get('order_id') for o in orders if o.get('order_id')}
+                sys.stdout.write(f"[TRADE MONITOR] Tracked orders: {list(self._tracked_pending_orders.keys())}\n")
+                sys.stdout.write(f"[TRADE MONITOR] Current orders: {list(current_order_ids)}\n")
+                sys.stdout.flush()
+                
+                canceled_order_ids = set(self._tracked_pending_orders.keys()) - current_order_ids
+                
+                if canceled_order_ids:
+                    sys.stdout.write(f"[TRADE MONITOR] Canceled order IDs detected: {canceled_order_ids}\n")
+                    sys.stdout.flush()
+                
+                target_channel = settings.get('target_webhook_channel_id')
+                for canceled_id in canceled_order_ids:
+                    canceled_order = self._tracked_pending_orders.pop(canceled_id, None)
+                    if canceled_order:
+                        sys.stdout.write(f"[TRADE MONITOR] Posting canceled order: {canceled_id}\n")
+                        sys.stdout.flush()
+                        await self._post_canceled_order(canceled_order, broker_name, target_channel)
+                
+                # Update tracked pending orders
+                for order in orders:
+                    order_id = order.get('order_id')
+                    if order_id and order.get('_status') == 'PENDING':
+                        self._tracked_pending_orders[order_id] = order
                 
             if not orders:
                 return
@@ -215,32 +243,6 @@ class TradeMonitor:
                 sys.stdout.write(f"[TRADE MONITOR] Posting order to Discord: {order.get('order_id')}\n")
                 sys.stdout.flush()
                 await self._post_order_to_discord(order, broker_name, target_channel)
-            
-            # Detect canceled orders (only in test mode with pending orders)
-            if test_mode:
-                current_order_ids = {o.get('order_id') for o in orders if o.get('order_id')}
-                sys.stdout.write(f"[TRADE MONITOR] Tracked orders: {list(self._tracked_pending_orders.keys())}\n")
-                sys.stdout.write(f"[TRADE MONITOR] Current orders: {list(current_order_ids)}\n")
-                sys.stdout.flush()
-                
-                canceled_order_ids = set(self._tracked_pending_orders.keys()) - current_order_ids
-                
-                if canceled_order_ids:
-                    sys.stdout.write(f"[TRADE MONITOR] Canceled order IDs detected: {canceled_order_ids}\n")
-                    sys.stdout.flush()
-                
-                for canceled_id in canceled_order_ids:
-                    canceled_order = self._tracked_pending_orders.pop(canceled_id, None)
-                    if canceled_order:
-                        sys.stdout.write(f"[TRADE MONITOR] Posting canceled order: {canceled_id}\n")
-                        sys.stdout.flush()
-                        await self._post_canceled_order(canceled_order, broker_name, target_channel)
-                
-                # Update tracked pending orders (track ALL pending orders, even if already synced)
-                for order in orders:
-                    order_id = order.get('order_id')
-                    if order_id and order.get('_status') == 'PENDING':
-                        self._tracked_pending_orders[order_id] = order
                 
         except Exception as e:
             sys.stdout.write(f"[TRADE MONITOR] Error checking orders: {e}\n")
