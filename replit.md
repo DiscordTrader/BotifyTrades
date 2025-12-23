@@ -76,6 +76,36 @@ When running from a bundled Windows EXE:
 - All wizard pages and dependencies are bundled via spec file hidden imports
 - Uses CREATE_NEW_CONSOLE on Windows for clean separate window
 
+## Trade Monitor (Broker Sync)
+
+The Trade Monitor feature automatically detects trades executed on your broker (including mobile app trades) and posts them as BTO/STC signals to Discord.
+
+### How It Works
+1. The bot polls the connected broker for filled orders every N seconds (configurable)
+2. New filled orders are detected by comparing against previously synced orders
+3. Each new trade is formatted as a BTO/STC signal and posted to the configured webhook channel
+4. Orders are tracked in the database to prevent duplicate posts
+
+### Configuration (Settings Page)
+- **Enable/Disable**: Toggle trade monitoring on/off
+- **Target Webhook Channel**: Select which Discord channel receives the signals
+- **Poll Interval**: How often to check for new trades (5-300 seconds)
+- **Include Stocks/Options**: Filter which asset types to sync
+- **Post BTO/STC**: Choose which signal types to post
+
+### Files
+- `gui_app/trade_monitor.py` - Core monitoring service
+- `src/brokers/webull_broker.py` - `get_order_history()` method for fetching filled orders
+
+### Database Tables
+- `synced_orders` - Tracks all synced orders to prevent duplicates
+- `trade_monitor_settings` - Stores configuration (enabled, interval, channel, filters)
+
+### Use Cases
+- **Analyst Workflow**: Trade on Webull mobile app, signals automatically post to Discord
+- **Copy Trading**: Mirror your broker trades to a signals channel for followers
+- **Trade Logging**: Automatic record of all executed trades
+
 ## Debug Report System
 
 The application includes a debug report system accessible from the Settings page:
