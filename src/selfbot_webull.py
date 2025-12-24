@@ -5985,28 +5985,27 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # Check both config.ini and database for conversion channel ID
         active_conversion_channel_id = CONVERSION_CHANNEL_ID
         target_execution_channel_id = None
-        is_mapped_source = False
         
-        if DATABASE_MODULE_AVAILABLE:
+        # Use the is_mapped_source_channel variable we already set at the start
+        if is_mapped_source_channel and DATABASE_MODULE_AVAILABLE:
             from gui_app import database as db
-            
-            # First check channel mappings (multi-channel support)
             mapped_dest = db.get_destination_for_source(str(message.channel.id))
             if mapped_dest:
                 print(f"[CHANNEL MAP] ✓ Source {message.channel.id} mapped to webhook")
                 active_conversion_channel_id = message.channel.id  # Use current channel as source
                 target_execution_channel_id = mapped_dest
-                is_mapped_source = True
-            else:
-                # Fall back to single conversion channel settings
-                conversion_settings = db.get_signal_conversion_settings()
-                db_conversion_channel_id = conversion_settings.get('conversion_channel_id', '').strip()
-                if db_conversion_channel_id:
-                    active_conversion_channel_id = int(db_conversion_channel_id)
-                target_execution_channel_id = conversion_settings.get('target_execution_channel_id', '').strip()
+        
+        if not is_mapped_source_channel and DATABASE_MODULE_AVAILABLE:
+            from gui_app import database as db
+            # Fall back to single conversion channel settings
+            conversion_settings = db.get_signal_conversion_settings()
+            db_conversion_channel_id = conversion_settings.get('conversion_channel_id', '').strip()
+            if db_conversion_channel_id:
+                active_conversion_channel_id = int(db_conversion_channel_id)
+            target_execution_channel_id = conversion_settings.get('target_execution_channel_id', '').strip()
         
         # Check if this is a mapped source channel OR the single conversion channel
-        should_convert = (is_mapped_source or 
+        should_convert = (is_mapped_source_channel or 
                          (ENABLE_SIGNAL_CONVERSION and active_conversion_channel_id and message.channel.id == active_conversion_channel_id))
         
         if should_convert:
