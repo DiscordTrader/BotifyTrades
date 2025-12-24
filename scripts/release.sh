@@ -126,6 +126,24 @@ print_success "Pushed to BotifyTradesv2 (private)"
 # Step 6: Trigger build workflow on public repo
 print_step 6 6 "Triggering build workflow..."
 
+# SAFETY CHECK: Block ADMIN builds from going to public repo
+if [ "$BUILD_TYPE_UPPER" == "ADMIN" ]; then
+    print_warning "ADMIN build detected - NOT pushing to public repository"
+    echo ""
+    echo -e "${RED}============================================${NC}"
+    echo -e "${RED}  ADMIN BUILD - PUBLIC RELEASE BLOCKED${NC}"
+    echo -e "${RED}============================================${NC}"
+    echo ""
+    echo "ADMIN builds contain sensitive features and should NEVER"
+    echo "be distributed publicly. This build has been committed to"
+    echo "the private repo only."
+    echo ""
+    echo "To create a public release, use:"
+    echo -e "  ${GREEN}./scripts/release.sh user $VERSION${NC}"
+    echo ""
+    exit 0
+fi
+
 if [ -z "$RELEASE_TOKEN" ]; then
     print_warning "RELEASE_TOKEN not set - skipping automatic build trigger"
     echo ""
