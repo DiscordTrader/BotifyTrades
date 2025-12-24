@@ -49,21 +49,20 @@ def get_slippage_settings_via_service() -> Dict[str, Any]:
 def get_risk_settings_via_service() -> Dict[str, Any]:
     """
     Get risk management settings through SettingsService.
-    Falls back to database if service unavailable.
+    Falls back to direct database access for reliability.
     """
     try:
-        from .settings_service import get_settings_service
-        service = get_settings_service()
-        
+        from gui_app import database as db
+        settings = db.get_risk_management_settings()
         return {
-            'enabled': service.get('risk.enabled', module='selfbot_webull'),
-            'profit_target_percent': service.get('risk.take_profit_percent', module='selfbot_webull'),
-            'stop_loss_percent': service.get('risk.stop_loss_percent', module='selfbot_webull'),
-            'trailing_stop_percent': service.get('risk.trailing_stop_percent', module='selfbot_webull'),
-            'trailing_stop_enabled': service.get('risk.trailing_stop_enabled', module='selfbot_webull'),
+            'enabled': settings.get('enabled', False),
+            'profit_target_percent': settings.get('profit_target_percent', 20.0),
+            'stop_loss_percent': settings.get('stop_loss_percent', 10.0),
+            'trailing_stop_percent': settings.get('trailing_stop_percent', 5.0),
+            'trailing_stop_enabled': settings.get('trailing_stop_percent', 0) > 0,
         }
     except Exception as e:
-        logger.warning(f"[SETTINGS] Could not load risk via service: {e}")
+        logger.warning(f"[SETTINGS] Could not load risk from database: {e}")
         return _fallback_risk_settings()
 
 
