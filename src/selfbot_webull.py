@@ -5987,9 +5987,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         target_execution_channel_id = None
         
         # Use the is_mapped_source_channel variable we already set at the start
+        print(f"[DEBUG] is_mapped_source_channel={is_mapped_source_channel}, DATABASE_MODULE_AVAILABLE={DATABASE_MODULE_AVAILABLE}")
         if is_mapped_source_channel and DATABASE_MODULE_AVAILABLE:
             from gui_app import database as db
             mapped_dest = db.get_destination_for_source(str(message.channel.id))
+            print(f"[DEBUG] mapped_dest={mapped_dest}")
             if mapped_dest:
                 print(f"[CHANNEL MAP] ✓ Source {message.channel.id} mapped to webhook")
                 active_conversion_channel_id = message.channel.id  # Use current channel as source
