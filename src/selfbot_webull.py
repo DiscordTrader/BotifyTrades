@@ -6426,20 +6426,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             return
         
-        # FALLBACK: Try TRADE IDEA format for execute/track channels when BTO/STC and stock patterns fail
-        if execute_enabled or track_enabled:
-            structured = self.parse_structured_alert(message.content)
-            if structured:
-                print(f"[TRADE IDEA] ✅ Parsed: {structured['symbol']} Entry=${structured['entry_price']}, SL=${structured['stop_loss']}, Target=${structured['target_price']}")
-                await self.handle_auto_signal_conversion(message, message.content.strip())
-                return
-            else:
-                # ALL pattern matching failed - print debug info
-                text_preview = message.content.strip()[:80]
-                print(f"[Discord] ❌ No pattern matched: '{text_preview}'")
-                print(f"[Discord]    Supported: BTO/STC options, BTO/STC stock, TRADE IDEA (Ticker/Entry/SL/Levels)")
-        
         # CHANNEL MAPPING FORWARDING: Forward messages (including TRADE IDEA) to webhook destinations
+        # This runs FIRST for mapped channels, regardless of execute/track status
         if is_mapped_source_channel:
             trade_idea = parse_trade_idea_signal(message.content)
             if trade_idea:
@@ -6475,6 +6463,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[CHANNEL MAP] ⚠️ No active webhook mappings found")
             except Exception as e:
                 print(f"[CHANNEL MAP] ❌ Error forwarding to webhooks: {e}")
+            return
+        
+        # FALLBACK: Try TRADE IDEA format for execute/track channels when BTO/STC and stock patterns fail
+        if execute_enabled or track_enabled:
+            structured = self.parse_structured_alert(message.content)
+            if structured:
+                print(f"[TRADE IDEA] ✅ Parsed: {structured['symbol']} Entry=${structured['entry_price']}, SL=${structured['stop_loss']}, Target=${structured['target_price']}")
+                await self.handle_auto_signal_conversion(message, message.content.strip())
+                return
+            else:
+                # ALL pattern matching failed - print debug info
+                text_preview = message.content.strip()[:80]
+                print(f"[Discord] ❌ No pattern matched: '{text_preview}'")
+                print(f"[Discord]    Supported: BTO/STC options, BTO/STC stock, TRADE IDEA (Ticker/Entry/SL/Levels)")
     
     async def execute_on_single_broker(self, signal: dict, broker_name: str, broker_instance) -> dict:
         """Execute order on a single broker instance"""
