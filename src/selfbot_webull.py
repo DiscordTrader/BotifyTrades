@@ -6019,33 +6019,49 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if should_convert:
             # Don't process commands, only natural language text
             if not message.content.strip().startswith('!'):
-                print(f"[DEBUG] Entering webhook forwarding block, target_execution_channel_id={target_execution_channel_id}")
-                # Check if target is a webhook URL (for channel mappings)
-                if target_execution_channel_id and target_execution_channel_id.startswith('https://'):
-                    # Parse TRADE IDEA format and forward to webhook
-                    trade_idea = parse_trade_idea_signal(message.content)
-                    if trade_idea:
-                        webhook_msg = format_trade_idea_for_webhook(trade_idea)
-                        print(f"[CHANNEL MAP] ✓ Parsed TRADE IDEA: {trade_idea['ticker']} @ ${trade_idea['entry']}")
-                    else:
-                        webhook_msg = message.content.strip()
-                        print(f"[CHANNEL MAP] Forwarding raw message to webhook")
-                    
-                    try:
-                        import aiohttp
-                        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
-                            async with session.post(target_execution_channel_id, json={"content": webhook_msg}) as resp:
-                                if resp.status in [200, 204]:
-                                    print(f"[CHANNEL MAP] ✓ Posted to webhook successfully")
-                                else:
-                                    print(f"[CHANNEL MAP] ⚠️ Webhook returned status {resp.status}")
-                    except Exception as e:
-                        print(f"[CHANNEL MAP] ❌ Webhook post failed: {e}")
-                    return
+                # Check if this is a BTO/STC signal - if so, skip webhook forwarding and let it go to trade execution
+                content_upper = message.content.strip().upper()
+                is_bto_stc_signal = content_upper.startswith('BTO ') or content_upper.startswith('STC ') or ' BTO ' in content_upper or ' STC ' in content_upper
                 
-                print(f"[AUTO CONVERT] Monitoring signal conversion channel: '{message.content[:50]}'")
-                await self.handle_auto_signal_conversion(message, message.content.strip(), target_channel_id=target_execution_channel_id)
-                return
+                if is_bto_stc_signal:
+                    print(f"[DEBUG] BTO/STC signal detected - skipping webhook forwarding, will process for trade execution")
+                    # Don't return here - fall through to option/stock signal parsing below
+                    pass
+                else:
+                    print(f"[DEBUG] Entering webhook forwarding block, target_execution_channel_id={target_execution_channel_id}")
+                    print(f"[DEBUG] startswith https: {target_execution_channel_id.startswith('https://') if target_execution_channel_id else 'N/A'}")
+                    # Check if target is a webhook URL (for channel mappings)
+                    if target_execution_channel_id and target_execution_channel_id.startswith('https://'):
+                        print(f"[DEBUG] Inside webhook URL block, parsing message...")
+                        # Parse TRADE IDEA format and forward to webhook
+                        try:
+                            trade_idea = parse_trade_idea_signal(message.content)
+                            print(f"[DEBUG] trade_idea result: {trade_idea}")
+                        except Exception as e:
+                            print(f"[DEBUG] parse_trade_idea_signal exception: {e}")
+                            trade_idea = None
+                        if trade_idea:
+                            webhook_msg = format_trade_idea_for_webhook(trade_idea)
+                            print(f"[CHANNEL MAP] ✓ Parsed TRADE IDEA: {trade_idea['ticker']} @ ${trade_idea['entry']}")
+                        else:
+                            webhook_msg = message.content.strip()
+                            print(f"[CHANNEL MAP] Forwarding raw message to webhook: {webhook_msg[:50]}")
+                        
+                        try:
+                            import aiohttp
+                            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+                                async with session.post(target_execution_channel_id, json={"content": webhook_msg}) as resp:
+                                    if resp.status in [200, 204]:
+                                        print(f"[CHANNEL MAP] ✓ Posted to webhook successfully")
+                                    else:
+                                        print(f"[CHANNEL MAP] ⚠️ Webhook returned status {resp.status}")
+                        except Exception as e:
+                            print(f"[CHANNEL MAP] ❌ Webhook post failed: {e}")
+                        return
+                    
+                    print(f"[AUTO CONVERT] Monitoring signal conversion channel: '{message.content[:50]}'")
+                    await self.handle_auto_signal_conversion(message, message.content.strip(), target_channel_id=target_execution_channel_id)
+                    return
         
         # Handle AI commands (only in designated AI channel)
         if ENABLE_AI_COMMANDS and AI_CHANNEL_ID and message.channel.id == AI_CHANNEL_ID:
