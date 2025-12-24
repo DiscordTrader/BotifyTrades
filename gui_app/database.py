@@ -405,6 +405,14 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added risk_management_enabled column for per-channel risk opt-in")
     
+    # Migrate: Add default_quantity column for per-channel fixed quantity default
+    try:
+        cursor.execute('SELECT default_quantity FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN default_quantity INTEGER DEFAULT NULL')
+        conn.commit()
+        print("[DATABASE] ✓ Added default_quantity column for per-channel fixed quantity default")
+    
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -689,6 +697,14 @@ def init_db():
         (id, max_position_size)
         VALUES (1, 600)
     ''')
+    
+    # Migrate: Add global_default_quantity column to trading_settings
+    try:
+        cursor.execute('SELECT global_default_quantity FROM trading_settings LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE trading_settings ADD COLUMN global_default_quantity INTEGER DEFAULT NULL')
+        conn.commit()
+        print("[DATABASE] ✓ Added global_default_quantity column to trading_settings")
     
     # Discord settings (moved from config.ini to GUI)
     cursor.execute('''
@@ -1280,7 +1296,7 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
                broker_override, is_active, paper_trade_enabled, enabled_brokers,
                profit_target_pct, profit_target_1_pct, profit_target_2_pct, profit_target_3_pct,
                stop_loss_pct, trailing_stop_pct, trailing_activation_pct, position_size_pct,
-               created_at, updated_at
+               created_at, updated_at, default_quantity
         FROM channels WHERE id = ?
     ''', (channel_id,))
     
@@ -1308,7 +1324,8 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
         'trailing_activation_pct': row[16],
         'position_size_pct': row[17],
         'created_at': row[18],
-        'updated_at': row[19]
+        'updated_at': row[19],
+        'default_quantity': row[20]
     }
 
 
@@ -1322,7 +1339,7 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
                broker_override, is_active, paper_trade_enabled, enabled_brokers,
                profit_target_pct, profit_target_1_pct, profit_target_2_pct, profit_target_3_pct,
                stop_loss_pct, trailing_stop_pct, trailing_activation_pct, position_size_pct,
-               created_at, updated_at
+               created_at, updated_at, default_quantity
         FROM channels WHERE discord_channel_id = ?
     ''', (str(discord_channel_id),))
     
@@ -1350,7 +1367,8 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
         'trailing_activation_pct': row[16],
         'position_size_pct': row[17],
         'created_at': row[18],
-        'updated_at': row[19]
+        'updated_at': row[19],
+        'default_quantity': row[20]
     }
 
 
@@ -1365,7 +1383,8 @@ def update_channel(channel_id: int, **kwargs):
     for key, value in kwargs.items():
         if key in ['name', 'category', 'execute_enabled', 'track_enabled', 'broker_override', 'is_active', 
                    'paper_trade_enabled', 'profit_target_pct', 'profit_target_1_pct', 'profit_target_2_pct', 'profit_target_3_pct',
-                   'stop_loss_pct', 'trailing_stop_pct', 'trailing_activation_pct', 'enabled_brokers', 'position_size_pct', 'tracking_position_size_pct']:
+                   'stop_loss_pct', 'trailing_stop_pct', 'trailing_activation_pct', 'enabled_brokers', 'position_size_pct', 'tracking_position_size_pct',
+                   'default_quantity']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))
@@ -3292,7 +3311,7 @@ def get_trading_settings() -> Dict[str, Any]:
     cursor = conn.cursor()
     
     cursor.execute('''
-        SELECT max_position_size, updated_at
+        SELECT max_position_size, updated_at, global_default_quantity
         FROM trading_settings
         WHERE id = 1
     ''')
@@ -3301,16 +3320,18 @@ def get_trading_settings() -> Dict[str, Any]:
     if row:
         return {
             'max_position_size': int(row['max_position_size']),
-            'updated_at': row['updated_at']
+            'updated_at': row['updated_at'],
+            'global_default_quantity': row['global_default_quantity']
         }
     
     return {
         'max_position_size': 600,
-        'updated_at': None
+        'updated_at': None,
+        'global_default_quantity': None
     }
 
 
-def update_trading_settings(max_position_size: int) -> bool:
+def update_trading_settings(max_position_size: int, global_default_quantity: int = None) -> bool:
     """Update trading settings"""
     conn = get_connection()
     cursor = conn.cursor()
@@ -3319,9 +3340,10 @@ def update_trading_settings(max_position_size: int) -> bool:
         cursor.execute('''
             UPDATE trading_settings
             SET max_position_size = ?,
+                global_default_quantity = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = 1
-        ''', (int(max_position_size),))
+        ''', (int(max_position_size), global_default_quantity))
         
         conn.commit()
         return True
