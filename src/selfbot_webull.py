@@ -5990,22 +5990,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if opt:
             # Apply tiered quantity defaults for BTO signals without qty from signal text
             if opt.get('action') == 'BTO' and opt.get('qty') is None and not opt.get('_qty_from_signal', False):
-                # Tiered default: channel → global → max_position_size calculation → 1
+                # Tiered default: channel → global → max_position_size calculation (if enabled) → 1
                 channel_default_qty = channel_info.get('default_quantity') if channel_info else None
                 
                 if channel_default_qty:
                     opt['qty'] = int(channel_default_qty)
                     print(f"[DEFAULT QTY] ✓ Using channel default: {opt['qty']} contracts")
                 else:
-                    # Check global default
+                    # Check global default and max_position_size settings
                     _current_trading_settings = get_trading_settings()
                     global_default_qty = _current_trading_settings.get('global_default_quantity')
+                    max_position_size_enabled = _current_trading_settings.get('max_position_size_enabled', True)
                     
                     if global_default_qty:
                         opt['qty'] = int(global_default_qty)
                         print(f"[DEFAULT QTY] ✓ Using global default: {opt['qty']} contracts")
-                    else:
-                        # Fallback to max_position_size calculation
+                    elif max_position_size_enabled:
+                        # Use max_position_size calculation only if enabled
                         max_position_size = _current_trading_settings['max_position_size']
                         price = opt.get('price')
                         if price and price > 0:
@@ -6015,6 +6016,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         else:
                             opt['qty'] = 1
                             print(f"[DEFAULT QTY] ✓ Fallback to 1 contract (no price available)")
+                    else:
+                        # Max position size disabled and no global default - fallback to 1
+                        opt['qty'] = 1
+                        print(f"[DEFAULT QTY] ⚠️ Max position size disabled, no global default set - using 1 contract")
             
             # Handle price-only STC signals - find most recent open position from this channel
             if opt.get('_price_only') and opt.get('symbol') is None:
@@ -6150,22 +6155,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if stk:
             # Apply tiered quantity defaults for BTO signals without qty from signal text
             if stk.get('action') == 'BTO' and stk.get('qty') is None and not stk.get('_qty_from_signal', False):
-                # Tiered default: channel → global → max_position_size calculation → 1
+                # Tiered default: channel → global → max_position_size calculation (if enabled) → 1
                 channel_default_qty = channel_info.get('default_quantity') if channel_info else None
                 
                 if channel_default_qty:
                     stk['qty'] = int(channel_default_qty)
                     print(f"[DEFAULT QTY] ✓ Using channel default: {stk['qty']} shares")
                 else:
-                    # Check global default
+                    # Check global default and max_position_size settings
                     _current_trading_settings = get_trading_settings()
                     global_default_qty = _current_trading_settings.get('global_default_quantity')
+                    max_position_size_enabled = _current_trading_settings.get('max_position_size_enabled', True)
                     
                     if global_default_qty:
                         stk['qty'] = int(global_default_qty)
                         print(f"[DEFAULT QTY] ✓ Using global default: {stk['qty']} shares")
-                    else:
-                        # Fallback to max_position_size calculation
+                    elif max_position_size_enabled:
+                        # Use max_position_size calculation only if enabled
                         max_position_size = _current_trading_settings['max_position_size']
                         price = stk.get('price')
                         if price and price > 0:
@@ -6174,6 +6180,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         else:
                             stk['qty'] = 1
                             print(f"[DEFAULT QTY] ✓ Fallback to 1 share (no price available)")
+                    else:
+                        # Max position size disabled and no global default - fallback to 1
+                        stk['qty'] = 1
+                        print(f"[DEFAULT QTY] ⚠️ Max position size disabled, no global default set - using 1 share")
             
             # Check if this is an STC that should close an option position (Bullwinkle format)
             if stk['action'] == 'STC' and normalized_content != message.content:

@@ -706,6 +706,14 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added global_default_quantity column to trading_settings")
     
+    # Migrate: Add max_position_size_enabled column to trading_settings
+    try:
+        cursor.execute('SELECT max_position_size_enabled FROM trading_settings LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE trading_settings ADD COLUMN max_position_size_enabled INTEGER DEFAULT 1')
+        conn.commit()
+        print("[DATABASE] ✓ Added max_position_size_enabled column to trading_settings")
+    
     # Discord settings (moved from config.ini to GUI)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS discord_settings (
@@ -3311,7 +3319,7 @@ def get_trading_settings() -> Dict[str, Any]:
     cursor = conn.cursor()
     
     cursor.execute('''
-        SELECT max_position_size, updated_at, global_default_quantity
+        SELECT max_position_size, updated_at, global_default_quantity, max_position_size_enabled
         FROM trading_settings
         WHERE id = 1
     ''')
@@ -3321,17 +3329,19 @@ def get_trading_settings() -> Dict[str, Any]:
         return {
             'max_position_size': int(row['max_position_size']),
             'updated_at': row['updated_at'],
-            'global_default_quantity': row['global_default_quantity']
+            'global_default_quantity': row['global_default_quantity'],
+            'max_position_size_enabled': bool(row['max_position_size_enabled']) if row['max_position_size_enabled'] is not None else True
         }
     
     return {
         'max_position_size': 600,
         'updated_at': None,
-        'global_default_quantity': None
+        'global_default_quantity': None,
+        'max_position_size_enabled': True
     }
 
 
-def update_trading_settings(max_position_size: int, global_default_quantity: int = None) -> bool:
+def update_trading_settings(max_position_size: int, global_default_quantity: int = None, max_position_size_enabled: bool = True) -> bool:
     """Update trading settings"""
     conn = get_connection()
     cursor = conn.cursor()
@@ -3341,9 +3351,10 @@ def update_trading_settings(max_position_size: int, global_default_quantity: int
             UPDATE trading_settings
             SET max_position_size = ?,
                 global_default_quantity = ?,
+                max_position_size_enabled = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = 1
-        ''', (int(max_position_size), global_default_quantity))
+        ''', (int(max_position_size), global_default_quantity, 1 if max_position_size_enabled else 0))
         
         conn.commit()
         return True

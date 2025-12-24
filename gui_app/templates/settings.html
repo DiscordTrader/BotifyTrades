@@ -1088,22 +1088,35 @@ input:checked + .slider:before {
         <h3>💰 Trading Limits</h3>
         <p class="description">Position sizing and trading constraints</p>
         <div class="form-group">
-            <label>Max Position Size: $<span class="slider-value" id="max-position-value">600</span></label>
-            <input type="range" id="max-position-size" min="100" max="10000" step="100" value="600">
-            <div class="slider-labels">
-                <span>$100</span>
-                <span>$5,500</span>
-                <span>$10,000</span>
+            <label class="toggle-label">
+                <span>Enable Max Position Size Calculation</span>
+                <label class="switch">
+                    <input type="checkbox" id="max-position-size-enabled" checked onchange="toggleMaxPositionSize(this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </label>
+            <p class="help-text">When enabled, auto-calculates quantity based on max capital. When disabled, uses default quantity.</p>
+        </div>
+        <div id="max-position-size-group">
+            <div class="form-group">
+                <label>Max Position Size: $<span class="slider-value" id="max-position-value">600</span></label>
+                <input type="range" id="max-position-size" min="100" max="10000" step="100" value="600">
+                <div class="slider-labels">
+                    <span>$100</span>
+                    <span>$5,500</span>
+                    <span>$10,000</span>
+                </div>
+                <p class="help-text">Maximum capital per trade for auto-quantity calculation</p>
             </div>
-            <p class="help-text">Maximum capital per trade for auto-quantity calculation</p>
         </div>
         <div class="form-group">
             <label>Global Default Quantity</label>
-            <input type="number" id="global-default-quantity" min="0" max="1000" step="1" placeholder="Auto">
-            <p class="help-text">Default contracts/shares when signal has no qty and channel has no default (leave empty for auto-calculation)</p>
+            <input type="number" id="global-default-quantity" min="1" max="1000" step="1" placeholder="1">
+            <p class="help-text">Default contracts/shares when signal has no qty (required when max position size is disabled)</p>
         </div>
         <div class="btn-group">
             <button id="save-trading" class="btn btn-success">💾 Save Settings</button>
+            <span id="trading-save-message" style="margin-left: 12px; font-weight: 600;"></span>
         </div>
     </div>
 
@@ -2270,6 +2283,12 @@ document.getElementById('test-webhook').addEventListener('click', async () => {
 
 // ========== TRADING SETTINGS ==========
 
+function toggleMaxPositionSize(enabled) {
+    const group = document.getElementById('max-position-size-group');
+    group.style.opacity = enabled ? '1' : '0.5';
+    group.style.pointerEvents = enabled ? 'auto' : 'none';
+}
+
 async function loadTradingSettings() {
     try {
         const response = await fetch('/api/settings/trading');
@@ -2278,6 +2297,10 @@ async function loadTradingSettings() {
         document.getElementById('max-position-size').value = settings.max_position_size;
         document.getElementById('max-position-value').textContent = settings.max_position_size;
         document.getElementById('global-default-quantity').value = settings.global_default_quantity || '';
+        
+        const enabledCheckbox = document.getElementById('max-position-size-enabled');
+        enabledCheckbox.checked = settings.max_position_size_enabled !== false;
+        toggleMaxPositionSize(enabledCheckbox.checked);
     } catch (error) {
         console.error('Error loading trading settings:', error);
     }
@@ -2285,9 +2308,21 @@ async function loadTradingSettings() {
 
 document.getElementById('save-trading').addEventListener('click', async () => {
     const globalDefaultQtyValue = document.getElementById('global-default-quantity').value;
+    const maxPositionSizeEnabled = document.getElementById('max-position-size-enabled').checked;
+    
+    // Validate: if max position size is disabled, global default quantity is required
+    if (!maxPositionSizeEnabled && (!globalDefaultQtyValue || globalDefaultQtyValue === '')) {
+        const msg = document.getElementById('trading-save-message');
+        msg.textContent = '⚠️ Global Default Quantity is required when Max Position Size is disabled';
+        msg.style.color = '#FF9500';
+        setTimeout(() => msg.textContent = '', 4000);
+        return;
+    }
+    
     const data = {
         max_position_size: parseInt(document.getElementById('max-position-size').value),
-        global_default_quantity: globalDefaultQtyValue === '' ? null : parseInt(globalDefaultQtyValue)
+        global_default_quantity: globalDefaultQtyValue === '' ? null : parseInt(globalDefaultQtyValue),
+        max_position_size_enabled: maxPositionSizeEnabled
     };
     
     try {
@@ -2298,19 +2333,19 @@ document.getElementById('save-trading').addEventListener('click', async () => {
         });
         
         const result = await response.json();
-        const msg = document.getElementById('save-message');
+        const msg = document.getElementById('trading-save-message');
         if (result.success) {
-            msg.textContent = '✅ Trading settings saved!';
-            msg.className = 'message success';
+            msg.textContent = '✅ Saved!';
+            msg.style.color = '#00C853';
         } else {
-            msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');
-            msg.className = 'message error';
+            msg.textContent = '❌ ' + (result.error || 'Failed to save');
+            msg.style.color = '#FF3B30';
         }
         setTimeout(() => msg.textContent = '', 3000);
     } catch (error) {
-        const msg = document.getElementById('save-message');
+        const msg = document.getElementById('trading-save-message');
         msg.textContent = '❌ Error: ' + error.message;
-        msg.className = 'message error';
+        msg.style.color = '#FF3B30';
         setTimeout(() => msg.textContent = '', 3000);
     }
 });
