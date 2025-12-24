@@ -6014,9 +6014,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         should_convert = (is_mapped_source_channel or 
                          (ENABLE_SIGNAL_CONVERSION and active_conversion_channel_id and message.channel.id == active_conversion_channel_id))
         
+        print(f"[DEBUG] should_convert={should_convert}, starts_with_bang={message.content.strip().startswith('!')}")
+        
         if should_convert:
             # Don't process commands, only natural language text
             if not message.content.strip().startswith('!'):
+                print(f"[DEBUG] Entering webhook forwarding block, target_execution_channel_id={target_execution_channel_id}")
                 # Check if target is a webhook URL (for channel mappings)
                 if target_execution_channel_id and target_execution_channel_id.startswith('https://'):
                     # Parse TRADE IDEA format and forward to webhook
