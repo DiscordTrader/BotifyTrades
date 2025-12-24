@@ -299,9 +299,16 @@ class TradeMonitor:
             
             if new_orders:
                 print(f"[TRADE MONITOR] Found {len(new_orders)} new order(s) to post", flush=True)
-                
+            
+            all_webhooks = db.get_all_active_webhook_mappings()
+            
             for order in new_orders:
-                await self._post_order_to_discord(order, broker_name, target_channel)
+                if all_webhooks:
+                    await self._post_order_to_all_webhooks(order, broker_name, all_webhooks)
+                elif target_channel:
+                    await self._post_order_to_discord(order, broker_name, target_channel)
+                else:
+                    print(f"[TRADE MONITOR] ⚠️  No webhooks configured - trade not posted", flush=True)
                 
         except Exception as e:
             print(f"[TRADE MONITOR] Error checking orders: {e}", flush=True)
@@ -424,7 +431,7 @@ class TradeMonitor:
                     channel_id = target_channel
         
         db.add_synced_order(
-            broker_name=broker_name,
+            broker=broker_name,
             order_id=order_id,
             symbol=symbol,
             action=action,
@@ -434,10 +441,104 @@ class TradeMonitor:
             strike=strike,
             expiry=expiry,
             direction=direction,
-            posted=posted,
-            channel_id=channel_id
+            discord_channel_id=channel_id
         )
     
+    async def _post_order_to_all_webhooks(self, order: Dict, broker_name: str, webhooks: List[Dict[str, str]]):
+        """Post a filled order to all configured webhook destinations with position tracking"""
+        order_id = order.get('order_id')
+        symbol = order.get('symbol', 'UNKNOWN')
+        action = order.get('action', '').upper()
+        quantity = order.get('quantity', 0)
+        filled_price = order.get('filled_price', order.get('limit_price', 0))
+        asset_type = order.get('asset_type', 'stock')
+        strike = order.get('strike', 0) if asset_type == 'option' else None
+        expiry = order.get('expiry', '') if asset_type == 'option' else None
+        direction = order.get('direction', 'C') if asset_type == 'option' else None
+        
+        is_buy = action in ['BUY', 'BTO']
+        signal_type = 'BTO' if is_buy else 'STC'
+        
+        if is_buy:
+            self._add_bto_to_trades_table(
+                broker_name, symbol, strike, expiry, direction,
+                quantity, filled_price, asset_type, order_id
+            )
+            print(f"[TRADE MONITOR] BTO recorded: {quantity} {symbol} @ ${filled_price:.2f}", flush=True)
+        else:
+            pnl_data = self._close_stc_in_trades_table(
+                broker_name, symbol, strike, expiry, direction,
+                quantity, filled_price, asset_type
+            )
+            if pnl_data:
+                print(f"[TRADE MONITOR] STC recorded: {quantity} {symbol} @ ${filled_price:.2f} (P&L: ${pnl_data.get('pnl', 0):.2f})", flush=True)
+            else:
+                print(f"[TRADE MONITOR] STC recorded: {quantity} {symbol} @ ${filled_price:.2f}", flush=True)
+        
+        posted_count = 0
+        for wh in webhooks:
+            webhook_url = wh.get('webhook_url')
+            webhook_name = wh.get('webhook_name', 'Unnamed')
+            if not webhook_url:
+                continue
+                
+            if asset_type == 'option':
+                if is_buy:
+                    signal_msg = self._format_signal(order, signal_type)
+                    success = await self._async_post_webhook(webhook_url, signal_msg)
+                    if success:
+                        posted_count += 1
+                        webhook_service.open_webhook_position(
+                            symbol=symbol,
+                            strike=strike or 0,
+                            expiry=expiry or '',
+                            call_put=direction or 'C',
+                            qty=quantity,
+                            entry_price=filled_price,
+                            trade_type='BTO',
+                            webhook_url=webhook_url
+                        )
+                else:
+                    try:
+                        success, message, _ = webhook_service.post_stc_signal(
+                            webhook_url=webhook_url,
+                            symbol=symbol,
+                            strike=strike or 0,
+                            expiry=expiry or '',
+                            call_put=direction or 'C',
+                            qty=quantity,
+                            close_price=filled_price
+                        )
+                        if success:
+                            posted_count += 1
+                    except Exception:
+                        signal_msg = self._format_signal(order, signal_type)
+                        success = await self._async_post_webhook(webhook_url, signal_msg)
+                        if success:
+                            posted_count += 1
+            else:
+                signal_msg = self._format_signal(order, signal_type)
+                success = await self._async_post_webhook(webhook_url, signal_msg)
+                if success:
+                    posted_count += 1
+        
+        if posted_count > 0:
+            print(f"[TRADE MONITOR] ✓ Posted {signal_type} {symbol} to {posted_count} webhook(s)", flush=True)
+        
+        db.add_synced_order(
+            broker=broker_name,
+            order_id=order_id,
+            symbol=symbol,
+            action=action,
+            quantity=quantity,
+            filled_price=filled_price,
+            asset_type=asset_type,
+            strike=strike,
+            expiry=expiry,
+            direction=direction,
+            discord_channel_id=None
+        )
+
     async def _post_canceled_order(self, order: Dict, broker_name: str, target_channel: str = None):
         """Post notification when a pending order is canceled"""
         order_id = order.get('order_id')
@@ -473,24 +574,24 @@ class TradeMonitor:
                                   entry_price: float, asset_type: str, order_id: str):
         """Add BTO entry to main trades table for P&L tracking"""
         try:
-            if asset_type == 'option':
-                position_key = f"{broker_name}_{symbol}_{strike}_{expiry}_{direction}"
-            else:
-                position_key = f"{broker_name}_{symbol}"
-            
-            db.add_trade(
-                symbol=symbol,
-                strike=strike,
-                expiry=expiry,
-                call_put=direction,
-                qty=quantity,
-                entry_price=entry_price,
-                trade_type='BTO',
-                broker=broker_name,
-                channel_id=None,
-                message_id=None,
-                source='trade_monitor'
-            )
+            signal_data = {
+                'symbol': symbol,
+                'strike': strike,
+                'expiry': expiry,
+                'call_put': direction,
+                'quantity': quantity,
+                'intended_price': entry_price,
+                'executed_price': entry_price,
+                'direction': 'BTO',
+                'asset_type': asset_type,
+                'broker': broker_name,
+                'channel_id': None,
+                'message_id': None,
+                'status': 'executed',
+                'order_id': order_id,
+                'source': 'trade_monitor'
+            }
+            db.add_trade(signal_data)
         except Exception as e:
             print(f"[TRADE MONITOR] Error adding BTO to trades: {e}", flush=True)
     
@@ -500,11 +601,12 @@ class TradeMonitor:
         """Close matching trade in main trades table with P&L calculation"""
         try:
             trade = db.find_open_trade_for_stc(
+                broker_name=broker_name,
                 symbol=symbol,
                 strike=strike,
                 expiry=expiry,
                 call_put=direction,
-                broker=broker_name
+                asset_type=asset_type
             )
             
             if not trade:

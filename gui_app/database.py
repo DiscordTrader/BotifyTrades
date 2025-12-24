@@ -3980,6 +3980,26 @@ def get_webhook_for_source(source_channel_id: str) -> Dict[str, str]:
         return None
 
 
+def get_all_active_webhook_mappings() -> List[Dict[str, str]]:
+    """Get all active webhook URLs from channel_mappings for Trade Monitor broadcasting"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        init_channel_mappings_table()
+        cursor.execute('''
+            SELECT DISTINCT webhook_url, webhook_name
+            FROM channel_mappings
+            WHERE is_active = 1 AND webhook_url IS NOT NULL AND webhook_url != ''
+        ''')
+        
+        rows = cursor.fetchall()
+        return [{'webhook_url': row['webhook_url'], 'webhook_name': row['webhook_name'] or 'Unnamed'} for row in rows]
+    except Exception as e:
+        print(f"[DATABASE] Error getting active webhook mappings: {e}")
+        return []
+
+
 # ============ WAITLIST MANAGEMENT ============
 
 def add_to_waitlist(email: str, name: str = None, source: str = 'docs_page', referral_code: str = None) -> Dict[str, Any]:
