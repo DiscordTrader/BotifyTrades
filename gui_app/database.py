@@ -5233,6 +5233,84 @@ def init_signal_formats_table():
         CREATE INDEX IF NOT EXISTS idx_signal_format_cache_hash ON signal_format_cache(message_hash)
     ''')
     
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS countries (
+            code VARCHAR(3) PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            currency VARCHAR(3) NOT NULL,
+            timezone VARCHAR(50) NOT NULL,
+            flag_emoji VARCHAR(10),
+            market_open_time VARCHAR(10),
+            market_close_time VARCHAR(10),
+            enabled INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    cursor.execute('''
+        INSERT OR IGNORE INTO countries (code, name, currency, timezone, flag_emoji, market_open_time, market_close_time)
+        VALUES 
+            ('US', 'United States', 'USD', 'America/New_York', '🇺🇸', '09:30', '16:00'),
+            ('CA', 'Canada', 'CAD', 'America/Toronto', '🇨🇦', '09:30', '16:00'),
+            ('IN', 'India', 'INR', 'Asia/Kolkata', '🇮🇳', '09:15', '15:30')
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS broker_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            country_code VARCHAR(3) NOT NULL,
+            broker_name VARCHAR(50) NOT NULL UNIQUE,
+            display_name VARCHAR(100) NOT NULL,
+            credential_fields TEXT NOT NULL,
+            python_library VARCHAR(100),
+            supports_options INTEGER DEFAULT 1,
+            supports_stocks INTEGER DEFAULT 1,
+            supports_paper INTEGER DEFAULT 0,
+            token_expiry_info VARCHAR(200),
+            enabled INTEGER DEFAULT 1,
+            display_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (country_code) REFERENCES countries(code)
+        )
+    ''')
+    
+    cursor.execute('''
+        INSERT OR IGNORE INTO broker_profiles 
+        (country_code, broker_name, display_name, credential_fields, python_library, supports_options, supports_stocks, supports_paper, token_expiry_info, display_order)
+        VALUES 
+            ('US', 'webull', 'Webull', '["email","password","device_id","trading_pin","mfa_code"]', 'webull', 1, 1, 1, 'Session-based', 1),
+            ('US', 'alpaca', 'Alpaca', '["api_key","secret_key"]', 'alpaca-py', 1, 1, 1, 'No expiry', 2),
+            ('US', 'ibkr', 'Interactive Brokers', '["username","password","account_id"]', 'ib-insync', 1, 1, 1, 'Session-based', 3),
+            ('US', 'tastytrade', 'Tastytrade', '["username","password","client_secret","refresh_token"]', 'tastytrade', 1, 1, 1, '15-minute token', 4),
+            ('US', 'robinhood', 'Robinhood', '["username","password","totp_secret"]', 'robin-stocks', 1, 1, 0, 'Session-based', 5),
+            ('CA', 'questrade', 'Questrade', '["refresh_token"]', 'qtrade', 1, 1, 0, '30-min access / 3-day refresh', 1),
+            ('IN', 'upstox', 'Upstox', '["api_key","api_secret","redirect_uri","access_token"]', 'upstox-python-sdk', 1, 1, 0, '1 day', 1),
+            ('IN', 'zerodha', 'Zerodha (Kite)', '["api_key","api_secret","user_id","password","totp_secret"]', 'kiteconnect', 1, 1, 0, 'Daily 6 AM IST', 2),
+            ('IN', 'dhan', 'Dhan', '["client_id","access_token"]', 'dhanhq', 1, 1, 0, '24 hours', 3)
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS broker_credentials (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            broker_name VARCHAR(50) NOT NULL UNIQUE,
+            country_code VARCHAR(3) NOT NULL,
+            credentials_encrypted TEXT,
+            is_connected INTEGER DEFAULT 0,
+            last_connected_at TIMESTAMP,
+            connection_status VARCHAR(200),
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (broker_name) REFERENCES broker_profiles(broker_name),
+            FOREIGN KEY (country_code) REFERENCES countries(code)
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_broker_profiles_country ON broker_profiles(country_code)
+    ''')
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_broker_credentials_broker ON broker_credentials(broker_name)
+    ''')
+    
     conn.commit()
 
 
@@ -5762,6 +5840,200 @@ def get_recent_synced_orders(limit: int = 50) -> List[Dict]:
     except Exception as e:
         print(f"[DATABASE] Error getting synced orders: {e}")
         return []
+
+
+# ==================== COUNTRY & BROKER MANAGEMENT ====================
+
+def get_all_countries(enabled_only: bool = True) -> List[Dict]:
+    """Get all countries."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        if enabled_only:
+            cursor.execute('SELECT * FROM countries WHERE enabled = 1 ORDER BY code')
+        else:
+            cursor.execute('SELECT * FROM countries ORDER BY code')
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"[DATABASE] Error getting countries: {e}")
+        return []
+
+
+def get_country(code: str) -> Optional[Dict]:
+    """Get a specific country by code."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT * FROM countries WHERE code = ?', (code,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    except Exception as e:
+        print(f"[DATABASE] Error getting country {code}: {e}")
+        return None
+
+
+def get_brokers_by_country(country_code: str, enabled_only: bool = True) -> List[Dict]:
+    """Get all brokers for a specific country."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        if enabled_only:
+            cursor.execute('''
+                SELECT * FROM broker_profiles 
+                WHERE country_code = ? AND enabled = 1 
+                ORDER BY display_order
+            ''', (country_code,))
+        else:
+            cursor.execute('''
+                SELECT * FROM broker_profiles 
+                WHERE country_code = ? 
+                ORDER BY display_order
+            ''', (country_code,))
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"[DATABASE] Error getting brokers for {country_code}: {e}")
+        return []
+
+
+def get_all_brokers_grouped() -> Dict[str, List[Dict]]:
+    """Get all brokers grouped by country."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT bp.*, c.name as country_name, c.flag_emoji, c.currency
+            FROM broker_profiles bp
+            JOIN countries c ON bp.country_code = c.code
+            WHERE bp.enabled = 1 AND c.enabled = 1
+            ORDER BY c.code, bp.display_order
+        ''')
+        
+        result = {}
+        for row in cursor.fetchall():
+            data = dict(row)
+            country = data['country_code']
+            if country not in result:
+                result[country] = {
+                    'name': data['country_name'],
+                    'flag': data['flag_emoji'],
+                    'currency': data['currency'],
+                    'brokers': []
+                }
+            result[country]['brokers'].append(data)
+        return result
+    except Exception as e:
+        print(f"[DATABASE] Error getting grouped brokers: {e}")
+        return {}
+
+
+def get_broker_profile(broker_name: str) -> Optional[Dict]:
+    """Get a specific broker profile."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT bp.*, c.name as country_name, c.flag_emoji, c.currency, c.timezone
+            FROM broker_profiles bp
+            JOIN countries c ON bp.country_code = c.code
+            WHERE bp.broker_name = ?
+        ''', (broker_name,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    except Exception as e:
+        print(f"[DATABASE] Error getting broker profile {broker_name}: {e}")
+        return None
+
+
+def save_broker_credentials(broker_name: str, country_code: str, credentials: Dict) -> bool:
+    """Save encrypted broker credentials."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        credentials_json = json.dumps(credentials)
+        
+        cursor.execute('''
+            INSERT INTO broker_credentials (broker_name, country_code, credentials_encrypted, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(broker_name) DO UPDATE SET
+                credentials_encrypted = excluded.credentials_encrypted,
+                updated_at = CURRENT_TIMESTAMP
+        ''', (broker_name, country_code, credentials_json))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error saving broker credentials for {broker_name}: {e}")
+        return False
+
+
+def get_broker_credentials(broker_name: str) -> Optional[Dict]:
+    """Get broker credentials (decrypted)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT * FROM broker_credentials WHERE broker_name = ?
+        ''', (broker_name,))
+        row = cursor.fetchone()
+        if row:
+            data = dict(row)
+            if data.get('credentials_encrypted'):
+                data['credentials'] = json.loads(data['credentials_encrypted'])
+            else:
+                data['credentials'] = {}
+            return data
+        return None
+    except Exception as e:
+        print(f"[DATABASE] Error getting broker credentials for {broker_name}: {e}")
+        return None
+
+
+def update_broker_connection_status(broker_name: str, is_connected: bool, status_message: str = None) -> bool:
+    """Update broker connection status."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        if is_connected:
+            cursor.execute('''
+                UPDATE broker_credentials 
+                SET is_connected = 1, last_connected_at = CURRENT_TIMESTAMP, 
+                    connection_status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE broker_name = ?
+            ''', (status_message or 'Connected', broker_name))
+        else:
+            cursor.execute('''
+                UPDATE broker_credentials 
+                SET is_connected = 0, connection_status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE broker_name = ?
+            ''', (status_message or 'Disconnected', broker_name))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error updating broker connection status: {e}")
+        return False
+
+
+def get_all_broker_statuses() -> Dict[str, Dict]:
+    """Get connection status for all brokers."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT broker_name, country_code, is_connected, last_connected_at, connection_status
+            FROM broker_credentials
+        ''')
+        return {row['broker_name']: dict(row) for row in cursor.fetchall()}
+    except Exception as e:
+        print(f"[DATABASE] Error getting broker statuses: {e}")
+        return {}
 
 
 # Initialize tables
