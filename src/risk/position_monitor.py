@@ -352,6 +352,8 @@ class RiskManager:
                 print("[RISK] Risk management disabled - stopping monitoring")
                 self._running = False
                 return
+            else:
+                print(f"[RISK] Per-channel risk ACTIVE for {channel_count} channel(s)")
         
         positions = await self._fetch_all_positions()
         
