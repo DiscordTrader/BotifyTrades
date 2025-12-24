@@ -173,7 +173,17 @@ async function loadChannels() {
                         </tr>
                         <tr id="risk-management-row-${channel.id}" style="display: none; background: rgba(0, 212, 255, 0.03);">
                             <td colspan="7" style="padding: 20px;">
-                                <h4 style="margin: 0 0 16px 0; font-size: 14px; color: var(--primary-blue); display: flex; align-items: center; gap: 8px;">🛡️ Risk Management Settings</h4>
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                                    <h4 style="margin: 0; font-size: 14px; color: var(--primary-blue); display: flex; align-items: center; gap: 8px;">
+                                        🛡️ Risk Management Settings
+                                        <span id="risk-status-badge-${channel.id}" style="font-size: 11px; padding: 2px 8px; background: ${channel.risk_management_enabled ? 'rgba(0, 255, 136, 0.15)' : 'rgba(142, 142, 147, 0.15)'}; border: 1px solid ${channel.risk_management_enabled ? 'rgba(0, 255, 136, 0.3)' : 'rgba(142, 142, 147, 0.3)'}; border-radius: 4px; color: ${channel.risk_management_enabled ? '#00ff88' : '#8E8E93'}; font-weight: 600;">${channel.risk_management_enabled ? '✓ ENABLED' : '✗ DISABLED'}</span>
+                                    </h4>
+                                    <label class="toggle-switch" title="Enable per-channel risk management for this channel">
+                                        <input type="checkbox" id="risk-enabled-${channel.id}" ${channel.risk_management_enabled ? 'checked' : ''} onchange="toggleChannelRisk(${channel.id}, this.checked)">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div id="risk-settings-panel-${channel.id}" style="display: ${channel.risk_management_enabled ? 'block' : 'none'};">
                                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Profit Target 1 %</label><input type="number" id="risk-profit-target-1-${channel.id}" value="${channel.profit_target_1_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Profit Target 2 %</label><input type="number" id="risk-profit-target-2-${channel.id}" value="${channel.profit_target_2_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
@@ -183,6 +193,7 @@ async function loadChannels() {
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Activation %</label><input type="number" id="risk-trailing-activation-${channel.id}" value="${channel.trailing_activation_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
                                 </div>
                                 <button onclick="saveRiskManagement(${channel.id})" style="margin-top: 12px; padding: 8px 16px; background: var(--accent-gradient); border: none; border-radius: 6px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">💾 Save Risk Settings</button>
+                                </div>
                             </td>
                         </tr>
                         ${channelCategory === 'TRACK' ? `
@@ -834,8 +845,49 @@ function toggleRiskManagement(channelId) {
 }
 
 // Save Risk Management settings
+async function toggleChannelRisk(channelId, enabled) {
+    try {
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ risk_management_enabled: enabled ? 1 : 0 })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            const badge = document.getElementById(`risk-status-badge-${channelId}`);
+            const panel = document.getElementById(`risk-settings-panel-${channelId}`);
+            
+            if (enabled) {
+                badge.textContent = '✓ ENABLED';
+                badge.style.background = 'rgba(0, 255, 136, 0.15)';
+                badge.style.borderColor = 'rgba(0, 255, 136, 0.3)';
+                badge.style.color = '#00ff88';
+                panel.style.display = 'block';
+                showMessage('✅ Per-channel risk management ENABLED');
+            } else {
+                badge.textContent = '✗ DISABLED';
+                badge.style.background = 'rgba(142, 142, 147, 0.15)';
+                badge.style.borderColor = 'rgba(142, 142, 147, 0.3)';
+                badge.style.color = '#8E8E93';
+                panel.style.display = 'none';
+                showMessage('⚠️ Per-channel risk management DISABLED');
+            }
+        } else {
+            showMessage('❌ ' + (result.error || 'Failed to update'), 'error');
+            document.getElementById(`risk-enabled-${channelId}`).checked = !enabled;
+        }
+    } catch (error) {
+        console.error('Error toggling channel risk:', error);
+        showMessage('❌ Error: ' + error.message, 'error');
+        document.getElementById(`risk-enabled-${channelId}`).checked = !enabled;
+    }
+}
+
 async function saveRiskManagement(channelId) {
     try {
+        const riskEnabled = document.getElementById(`risk-enabled-${channelId}`)?.checked ? 1 : 0;
         const profitTarget1 = document.getElementById(`risk-profit-target-1-${channelId}`).value;
         const profitTarget2 = document.getElementById(`risk-profit-target-2-${channelId}`).value;
         const profitTarget3 = document.getElementById(`risk-profit-target-3-${channelId}`).value;
@@ -847,6 +899,7 @@ async function saveRiskManagement(channelId) {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                risk_management_enabled: riskEnabled,
                 profit_target_1_pct: profitTarget1 ? parseFloat(profitTarget1) : null,
                 profit_target_2_pct: profitTarget2 ? parseFloat(profitTarget2) : null,
                 profit_target_3_pct: profitTarget3 ? parseFloat(profitTarget3) : null,

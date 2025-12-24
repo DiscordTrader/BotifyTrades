@@ -1410,7 +1410,7 @@ def update_channel(channel_id: int, **kwargs):
         if key in ['name', 'category', 'execute_enabled', 'track_enabled', 'broker_override', 'is_active', 
                    'paper_trade_enabled', 'profit_target_pct', 'profit_target_1_pct', 'profit_target_2_pct', 'profit_target_3_pct',
                    'stop_loss_pct', 'trailing_stop_pct', 'trailing_activation_pct', 'enabled_brokers', 'position_size_pct', 'tracking_position_size_pct',
-                   'default_quantity']:
+                   'default_quantity', 'risk_management_enabled']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))
