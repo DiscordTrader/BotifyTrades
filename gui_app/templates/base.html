@@ -135,6 +135,11 @@
                         <span class="dropdown-text">Settings</span>
                         <span class="dropdown-desc">Bot configuration</span>
                     </a>
+                    <a href="/brokers" class="dropdown-item {% if request.path == '/brokers' %}active{% endif %}">
+                        <span class="dropdown-icon">🏦</span>
+                        <span class="dropdown-text">Broker Config</span>
+                        <span class="dropdown-desc">Multi-country brokers</span>
+                    </a>
                     <a href="/license" class="dropdown-item {% if request.path == '/license' %}active{% endif %}">
                         <span class="dropdown-icon">🔐</span>
                         <span class="dropdown-text">License</span>
