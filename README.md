@@ -1,8 +1,14 @@
 # BotifyTrades - Discord Trading Bot
 
-**Version 3.2.4** | Multi-Broker Discord Trading Automation
+**Version 3.3.0** | Multi-Country, Multi-Broker Discord Trading Automation
 
-A Discord self-bot that automatically detects BTO/STC trading signals in Discord channels and executes trades across multiple brokers (Webull, Alpaca, Tastytrade, IBKR, Robinhood).
+A Discord self-bot that automatically detects BTO/STC trading signals in Discord channels and executes trades across multiple brokers in the USA, Canada, and India.
+
+## What's New in v3.3.0
+- **Multi-Country Broker Support**: Trade across USA, Canada, and India markets
+- **New Broker Integrations**: Questrade (Canada), Upstox, Zerodha, Dhan (India)
+- **Unified Broker Config Page**: Manage all brokers from Admin → Broker Config
+- **Country-Aware Settings**: Currency, timezone, and market hours per country
 
 ## What's New in v3.2.4
 - Fixed database synchronization bugs for reliable trade tracking
@@ -19,15 +25,48 @@ A Discord self-bot that automatically detects BTO/STC trading signals in Discord
 
 ## Features
 
-- ✅ **Multi-Broker Support**: Webull, Alpaca, Tastytrade, IBKR, Robinhood
+- ✅ **Multi-Country Support**: USA, Canada, and India brokers
+- ✅ **Multi-Broker Support**: 9 brokers across 3 countries
 - ✅ **Options & Stocks**: Full support for both asset types
-- ✅ **Paper Trading**: Safe testing with Alpaca Paper, IBKR Paper
+- ✅ **Paper Trading**: Safe testing with Alpaca Paper, IBKR Paper, Webull Paper
 - ✅ **Risk Management**: Automated stop-loss, profit targets, trailing stops
 - ✅ **Web Control Panel**: Flask-based GUI for easy management
 - ✅ **Real-time Sync**: Database stays synchronized with broker positions
 - ✅ **AI Signal Learning**: Teach custom signal formats once, use forever
 - ✅ **Per-Channel Settings**: Independent risk settings per Discord channel
 - ✅ **PNL Tracking**: Comprehensive profit/loss analytics and leaderboard
+
+## Multi-Country Broker Support
+
+BotifyTrades supports trading across multiple countries with region-specific brokers:
+
+### USA Brokers
+| Broker | Library | Options | Stocks | Paper Trading |
+|--------|---------|---------|--------|---------------|
+| Webull | `webull` | Yes | Yes | Yes |
+| Alpaca | `alpaca-py` | Yes | Yes | Yes |
+| Interactive Brokers | `ib-insync` | Yes | Yes | Yes |
+| Tastytrade | `tastytrade` | Yes | Yes | Yes |
+| Robinhood | `robin-stocks` | Yes | Yes | No |
+
+### Canada Brokers
+| Broker | Library | Options | Stocks | Token Expiry |
+|--------|---------|---------|--------|--------------|
+| Questrade | `qtrade` | Yes | Yes | 30-min access / 3-day refresh |
+
+### India Brokers
+| Broker | Library | Options | Stocks | Token Expiry |
+|--------|---------|---------|--------|--------------|
+| Upstox | `upstox-python-sdk` | Yes | Yes | 1 day |
+| Zerodha (Kite) | `kiteconnect` | Yes | Yes | Daily 6 AM IST |
+| Dhan | `dhanhq` | Yes | Yes | 24 hours |
+
+### Broker Configuration
+Access the unified broker configuration page at **Admin → Broker Config** in the web control panel. Features include:
+- Country tabs for organized broker management
+- Dynamic credential forms per broker
+- Test connection buttons with status feedback
+- Encrypted credential storage
 
 ## Signal Formats
 
