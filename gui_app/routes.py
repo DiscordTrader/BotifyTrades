@@ -11707,3 +11707,224 @@ def register_routes(app):
             import traceback
             traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # ==================== COUNTRY & BROKER MANAGEMENT ====================
+    
+    @app.route('/brokers')
+    @login_required
+    def brokers_page():
+        """Broker configuration page with country grouping"""
+        return render_template('brokers.html')
+    
+    @app.route('/api/countries', methods=['GET'])
+    @login_required
+    def api_get_countries():
+        """Get all available countries"""
+        try:
+            countries = db.get_all_countries()
+            return jsonify({'success': True, 'countries': countries})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/grouped', methods=['GET'])
+    @login_required
+    def api_get_brokers_grouped():
+        """Get all brokers grouped by country"""
+        try:
+            grouped = db.get_all_brokers_grouped()
+            statuses = db.get_all_broker_statuses()
+            
+            for country_code, country_data in grouped.items():
+                for broker in country_data['brokers']:
+                    broker_name = broker['broker_name']
+                    if broker_name in statuses:
+                        broker['connection_status'] = statuses[broker_name]
+                    else:
+                        broker['connection_status'] = {'is_connected': False}
+                    
+                    if broker.get('credential_fields'):
+                        import json
+                        broker['credential_fields'] = json.loads(broker['credential_fields'])
+            
+            return jsonify({'success': True, 'grouped_brokers': grouped})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/<broker_name>/profile', methods=['GET'])
+    @login_required
+    def api_get_broker_profile(broker_name):
+        """Get specific broker profile with credential fields"""
+        try:
+            profile = db.get_broker_profile(broker_name)
+            if not profile:
+                return jsonify({'success': False, 'error': 'Broker not found'}), 404
+            
+            if profile.get('credential_fields'):
+                import json
+                profile['credential_fields'] = json.loads(profile['credential_fields'])
+            
+            creds = db.get_broker_credentials(broker_name)
+            if creds:
+                profile['has_credentials'] = True
+                profile['is_connected'] = creds.get('is_connected', False)
+                profile['connection_status'] = creds.get('connection_status', '')
+                profile['last_connected'] = creds.get('last_connected_at', '')
+            else:
+                profile['has_credentials'] = False
+                profile['is_connected'] = False
+            
+            return jsonify({'success': True, 'profile': profile})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/<broker_name>/credentials', methods=['GET'])
+    @login_required
+    def api_get_broker_credentials(broker_name):
+        """Get broker credentials (masked for security)"""
+        try:
+            creds = db.get_broker_credentials(broker_name)
+            if not creds:
+                return jsonify({'success': True, 'credentials': {}})
+            
+            credentials = creds.get('credentials', {})
+            masked = {}
+            for key, value in credentials.items():
+                if value and len(str(value)) > 4:
+                    masked[key] = '••••' + str(value)[-4:]
+                elif value:
+                    masked[key] = '••••'
+                else:
+                    masked[key] = ''
+            
+            return jsonify({
+                'success': True,
+                'credentials': masked,
+                'is_connected': creds.get('is_connected', False),
+                'connection_status': creds.get('connection_status', ''),
+                'last_connected': creds.get('last_connected_at', '')
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/<broker_name>/credentials', methods=['POST'])
+    @login_required
+    def api_save_broker_credentials(broker_name):
+        """Save broker credentials"""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'success': False, 'error': 'No data provided'}), 400
+            
+            credentials = data.get('credentials', {})
+            
+            profile = db.get_broker_profile(broker_name)
+            if not profile:
+                return jsonify({'success': False, 'error': 'Broker not found'}), 404
+            
+            country_code = profile.get('country_code', 'US')
+            
+            success = db.save_broker_credentials(broker_name, country_code, credentials)
+            
+            if success:
+                return jsonify({'success': True, 'message': f'Credentials saved for {broker_name}'})
+            else:
+                return jsonify({'success': False, 'error': 'Failed to save credentials'}), 500
+                
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/<broker_name>/test', methods=['POST'])
+    @login_required
+    def api_test_broker_connection(broker_name):
+        """Test broker connection with provided credentials"""
+        try:
+            data = request.get_json()
+            credentials = data.get('credentials', {}) if data else {}
+            
+            if not credentials:
+                stored = db.get_broker_credentials(broker_name)
+                if stored:
+                    credentials = stored.get('credentials', {})
+            
+            if not credentials:
+                return jsonify({
+                    'success': False, 
+                    'message': 'No credentials provided. Please enter and save credentials first.'
+                })
+            
+            result = {'success': False, 'message': 'Broker test not implemented'}
+            
+            if broker_name == 'questrade':
+                from src.brokers.questrade_broker import QuestradeBroker
+                result = QuestradeBroker.test_connection(
+                    refresh_token=credentials.get('refresh_token', '')
+                )
+            
+            elif broker_name == 'upstox':
+                from src.brokers.upstox_broker import UpstoxBroker
+                result = UpstoxBroker.test_connection(
+                    access_token=credentials.get('access_token', '')
+                )
+            
+            elif broker_name == 'zerodha':
+                from src.brokers.zerodha_broker import ZerodhaBroker
+                result = ZerodhaBroker.test_connection(
+                    api_key=credentials.get('api_key', ''),
+                    access_token=credentials.get('access_token', ''),
+                    api_secret=credentials.get('api_secret', '')
+                )
+            
+            elif broker_name == 'dhan':
+                from src.brokers.dhan_broker import DhanBroker
+                result = DhanBroker.test_connection(
+                    client_id=credentials.get('client_id', ''),
+                    access_token=credentials.get('access_token', '')
+                )
+            
+            elif broker_name == 'webull':
+                result = {'success': False, 'message': 'Use the existing Webull login flow in Settings'}
+            
+            elif broker_name == 'alpaca':
+                result = {'success': False, 'message': 'Use the existing Alpaca settings in Settings page'}
+            
+            elif broker_name == 'tastytrade':
+                result = {'success': False, 'message': 'Use the existing Tastytrade settings in Settings page'}
+            
+            elif broker_name == 'ibkr':
+                result = {'success': False, 'message': 'IBKR requires TWS/Gateway running locally'}
+            
+            elif broker_name == 'robinhood':
+                result = {'success': False, 'message': 'Use the existing Robinhood settings in Settings page'}
+            
+            else:
+                result = {'success': False, 'message': f'Unknown broker: {broker_name}'}
+            
+            db.update_broker_connection_status(
+                broker_name, 
+                result.get('success', False),
+                result.get('message', '')
+            )
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'message': str(e)})
+    
+    @app.route('/api/brokers/by-country/<country_code>', methods=['GET'])
+    @login_required
+    def api_get_brokers_by_country(country_code):
+        """Get brokers for a specific country"""
+        try:
+            brokers = db.get_brokers_by_country(country_code)
+            for broker in brokers:
+                if broker.get('credential_fields'):
+                    import json
+                    broker['credential_fields'] = json.loads(broker['credential_fields'])
+            
+            return jsonify({'success': True, 'brokers': brokers})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
