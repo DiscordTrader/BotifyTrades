@@ -258,4 +258,4 @@ class UpstoxBroker(BrokerInterface):
             }
 
 
-BrokerFactory.register('upstox', UpstoxBroker)
+BrokerFactory.register_broker('UPSTOX', UpstoxBroker)

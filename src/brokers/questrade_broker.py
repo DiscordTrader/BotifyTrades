@@ -231,4 +231,4 @@ class QuestradeBroker(BrokerInterface):
             }
 
 
-BrokerFactory.register('questrade', QuestradeBroker)
+BrokerFactory.register_broker('QUESTRADE', QuestradeBroker)

@@ -305,4 +305,4 @@ class ZerodhaBroker(BrokerInterface):
             }
 
 
-BrokerFactory.register('zerodha', ZerodhaBroker)
+BrokerFactory.register_broker('ZERODHA', ZerodhaBroker)

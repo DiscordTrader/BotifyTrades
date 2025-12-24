@@ -244,4 +244,4 @@ class DhanBroker(BrokerInterface):
             }
 
 
-BrokerFactory.register('dhan', DhanBroker)
+BrokerFactory.register_broker('DHAN', DhanBroker)
