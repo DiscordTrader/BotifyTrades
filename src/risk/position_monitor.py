@@ -16,7 +16,7 @@ from .types import (
     PositionCacheEntry
 )
 from .position_cache import PositionCache
-from .tiered_targets import evaluate_tiered_targets, format_tier_reason
+from .tiered_targets import evaluate_tiered_targets, format_tier_reason, evaluate_channel_stop_loss
 from .global_risk import evaluate_global_risk, evaluate_price_based_stops
 from .trailing_stop import evaluate_trailing_stop, get_effective_trailing_settings
 
@@ -528,6 +528,11 @@ class RiskManager:
         decision = evaluate_price_based_stops(position, cache)
         if decision.should_exit:
             return decision
+        
+        if channel_settings:
+            decision = evaluate_channel_stop_loss(position, cache, channel_settings)
+            if decision.should_exit:
+                return decision
         
         if channel_settings and channel_settings.has_tiered_targets:
             decision = evaluate_tiered_targets(position, cache, channel_settings)

@@ -103,3 +103,42 @@ def format_tier_reason(decision: ExitDecision, channel_name: str) -> str:
     if decision.tier_hit:
         return f"TIER {decision.tier_hit} TARGET [{channel_name}] {decision.reason}"
     return f"PROFIT TARGET [{channel_name}] {decision.reason}"
+
+
+def evaluate_channel_stop_loss(
+    position: PositionSnapshot,
+    cache: PositionCacheEntry,
+    channel_settings: ChannelRiskSettings
+) -> ExitDecision:
+    """
+    Evaluate per-channel stop loss.
+    
+    Args:
+        position: Current position snapshot
+        cache: Cached position state
+        channel_settings: Per-channel risk settings
+        
+    Returns:
+        ExitDecision with should_exit if stop loss hit
+    """
+    if not channel_settings:
+        return ExitDecision.no_exit()
+    
+    stop_loss_pct = channel_settings.stop_loss_pct
+    if not stop_loss_pct or stop_loss_pct <= 0:
+        return ExitDecision.no_exit()
+    
+    pct_change = position.pct_change
+    current_qty = int(position.quantity)
+    channel_name = channel_settings.channel_name
+    
+    if pct_change <= -stop_loss_pct:
+        return ExitDecision(
+            should_exit=True,
+            reason=f"STOP LOSS [{channel_name}] ({pct_change:.2f}% <= -{stop_loss_pct}%) - Closing all {current_qty}",
+            exit_qty=current_qty,
+            is_partial=False,
+            risk_trigger='stop_loss'
+        )
+    
+    return ExitDecision.no_exit()
