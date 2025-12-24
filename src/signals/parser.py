@@ -177,20 +177,15 @@ def parse_option_signal(text: str) -> Optional[Dict[str, Any]]:
     else:
         price = float(price_str)
     
+    qty_from_signal = False
     if qty_str is None:
-        if is_market_order:
-            qty = 1
-            print(f"[AUTO-QTY] Market order: defaulting to 1 contract")
-        else:
-            max_position_size = _get_max_position_size()
-            actual_cost_per_contract = price * 100
-            if actual_cost_per_contract <= 0:
-                print(f"[AUTO-QTY] ✗ Invalid option price: ${price}, skipping")
-                return None
-            qty = max(1, int(max_position_size / actual_cost_per_contract))
-            print(f"[AUTO-QTY] Option: ${price} x 100 = ${actual_cost_per_contract}/contract, buying {qty} (max ${max_position_size})")
+        # Don't calculate qty here - let the handler apply tiered defaults
+        # (channel default → global default → max_position_size if enabled → 1)
+        qty = None
+        print(f"[SIGNAL] No quantity specified - handler will apply tiered defaults")
     else:
         qty = int(qty_str)
+        qty_from_signal = True
     
     return {
         "asset": "option",
@@ -201,7 +196,8 @@ def parse_option_signal(text: str) -> Optional[Dict[str, Any]]:
         "opt_type": opt_type.upper(),
         "expiry": expiry,
         "price": price,
-        "is_market_order": is_market_order
+        "is_market_order": is_market_order,
+        "_qty_from_signal": qty_from_signal
     }
 
 
@@ -234,19 +230,14 @@ def parse_stock_signal(text: str) -> Optional[Dict[str, Any]]:
     else:
         price = float(price_str)
     
+    qty_from_signal = False
     if qty_str is None:
-        if is_market_order:
-            qty = 1
-            print(f"[AUTO-QTY] Market order: defaulting to 1 share")
-        else:
-            max_position_size = _get_max_position_size()
-            if price <= 0:
-                print(f"[AUTO-QTY] ✗ Invalid stock price: ${price}, skipping")
-                return None
-            qty = max(1, int(max_position_size / price))
-            print(f"[AUTO-QTY] Stock: ${price}/share, buying {qty} shares (max ${max_position_size})")
+        # Don't calculate qty here - let the handler apply tiered defaults
+        qty = None
+        print(f"[SIGNAL] No quantity specified - handler will apply tiered defaults")
     else:
         qty = int(qty_str)
+        qty_from_signal = True
     
     return {
         "asset": "stock",
@@ -254,7 +245,8 @@ def parse_stock_signal(text: str) -> Optional[Dict[str, Any]]:
         "qty": qty,
         "symbol": symbol.upper(),
         "price": price,
-        "is_market_order": is_market_order
+        "is_market_order": is_market_order,
+        "_qty_from_signal": qty_from_signal
     }
 
 
