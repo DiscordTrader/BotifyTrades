@@ -1097,6 +1097,11 @@ input:checked + .slider:before {
             </div>
             <p class="help-text">Maximum capital per trade for auto-quantity calculation</p>
         </div>
+        <div class="form-group">
+            <label>Global Default Quantity</label>
+            <input type="number" id="global-default-quantity" min="0" max="1000" step="1" placeholder="Auto">
+            <p class="help-text">Default contracts/shares when signal has no qty and channel has no default (leave empty for auto-calculation)</p>
+        </div>
         <div class="btn-group">
             <button id="save-trading" class="btn btn-success">💾 Save Settings</button>
         </div>
@@ -2272,14 +2277,17 @@ async function loadTradingSettings() {
         
         document.getElementById('max-position-size').value = settings.max_position_size;
         document.getElementById('max-position-value').textContent = settings.max_position_size;
+        document.getElementById('global-default-quantity').value = settings.global_default_quantity || '';
     } catch (error) {
         console.error('Error loading trading settings:', error);
     }
 }
 
 document.getElementById('save-trading').addEventListener('click', async () => {
+    const globalDefaultQtyValue = document.getElementById('global-default-quantity').value;
     const data = {
-        max_position_size: parseInt(document.getElementById('max-position-size').value)
+        max_position_size: parseInt(document.getElementById('max-position-size').value),
+        global_default_quantity: globalDefaultQtyValue === '' ? null : parseInt(globalDefaultQtyValue)
     };
     
     try {

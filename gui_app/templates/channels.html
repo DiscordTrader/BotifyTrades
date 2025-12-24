@@ -1137,6 +1137,16 @@ function renderChannels() {
                                    onchange="updatePositionSize(${channel.id}, this.value, 'execution')">
                             <span>% position</span>
                         </div>
+                        <div class="position-size-input" style="margin-top: 6px;">
+                            <input type="number" 
+                                   value="${channel.default_quantity || ''}" 
+                                   placeholder="Auto"
+                                   min="1" max="1000" step="1"
+                                   class="exec-input"
+                                   onchange="updateDefaultQuantity(${channel.id}, this.value)"
+                                   title="Default quantity when signal has no qty (overrides global default)">
+                            <span>default qty</span>
+                        </div>
                     </div>
                     
                     <div class="control-group">
@@ -1280,6 +1290,35 @@ async function updatePositionSize(channelId, value, sizeType = 'execution') {
             showNotification(`${sizeType === 'tracking' ? 'Track' : 'Execute'} position size set to ${displayValue}`);
         } else {
             showNotification('Error updating position size', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function updateDefaultQuantity(channelId, value) {
+    try {
+        const defaultQuantity = value === '' ? null : parseInt(value);
+        
+        if (defaultQuantity !== null && (defaultQuantity < 1 || defaultQuantity > 1000)) {
+            showNotification('Default quantity must be between 1 and 1000', 'error');
+            await loadChannels();
+            return;
+        }
+        
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ default_quantity: defaultQuantity })
+        });
+        
+        if (response.ok) {
+            const displayValue = defaultQuantity ? `${defaultQuantity}` : 'Auto';
+            showNotification(`Default quantity set to ${displayValue}`);
+        } else {
+            showNotification('Error updating default quantity', 'error');
             await loadChannels();
         }
     } catch (error) {
