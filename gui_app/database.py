@@ -520,6 +520,24 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Trade source tracking column added")
     
+    # Migration: Add option_id column to store broker's option contract ID
+    try:
+        cursor.execute('SELECT option_id FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding option_id column to trades table...")
+        cursor.execute('ALTER TABLE trades ADD COLUMN option_id TEXT')
+        conn.commit()
+        print("[DATABASE] ✓ Option ID tracking column added")
+    
+    # Migration: Add close_reason column to track why a trade was closed
+    try:
+        cursor.execute('SELECT close_reason FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding close_reason column to trades table...")
+        cursor.execute("ALTER TABLE trades ADD COLUMN close_reason TEXT")
+        conn.commit()
+        print("[DATABASE] ✓ Close reason tracking column added")
+    
     # Migration: Fix trades with UNKNOWN broker - default to Webull
     cursor.execute("UPDATE trades SET broker = 'Webull' WHERE broker = 'UNKNOWN' OR broker IS NULL OR broker = ''")
     if cursor.rowcount > 0:
