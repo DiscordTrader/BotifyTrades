@@ -6012,6 +6012,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if should_convert:
             # Don't process commands, only natural language text
             if not message.content.strip().startswith('!'):
+                # Check if target is a webhook URL (for channel mappings)
+                if target_execution_channel_id and target_execution_channel_id.startswith('https://'):
+                    # Parse TRADE IDEA format and forward to webhook
+                    trade_idea = parse_trade_idea_signal(message.content)
+                    if trade_idea:
+                        webhook_msg = format_trade_idea_for_webhook(trade_idea)
+                        print(f"[CHANNEL MAP] ✓ Parsed TRADE IDEA: {trade_idea['ticker']} @ ${trade_idea['entry']}")
+                    else:
+                        webhook_msg = message.content.strip()
+                        print(f"[CHANNEL MAP] Forwarding raw message to webhook")
+                    
+                    try:
+                        import aiohttp
+                        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+                            async with session.post(target_execution_channel_id, json={"content": webhook_msg}) as resp:
+                                if resp.status in [200, 204]:
+                                    print(f"[CHANNEL MAP] ✓ Posted to webhook successfully")
+                                else:
+                                    print(f"[CHANNEL MAP] ⚠️ Webhook returned status {resp.status}")
+                    except Exception as e:
+                        print(f"[CHANNEL MAP] ❌ Webhook post failed: {e}")
+                    return
+                
                 print(f"[AUTO CONVERT] Monitoring signal conversion channel: '{message.content[:50]}'")
                 await self.handle_auto_signal_conversion(message, message.content.strip(), target_channel_id=target_execution_channel_id)
                 return
