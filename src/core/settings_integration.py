@@ -13,18 +13,16 @@ logger = logging.getLogger(__name__)
 
 def get_trading_settings_via_service() -> Dict[str, Any]:
     """
-    Get trading settings through SettingsService.
-    Falls back to database if service unavailable.
+    Get trading settings through database directly.
+    Includes max_position_size_enabled and global_default_quantity.
     """
     try:
-        from .settings_service import get_settings_service
-        service = get_settings_service()
-        
+        from gui_app import database as db
+        settings = db.get_trading_settings()
         return {
-            'max_position_size': service.get('trading.max_position_size', module='selfbot_webull'),
-            'position_sizing_enabled': service.get('trading.position_sizing_enabled', module='selfbot_webull'),
-            'position_size_percent': service.get('trading.position_size_percent', module='selfbot_webull'),
-            'paper_trade': service.get('trading.paper_trade', module='selfbot_webull'),
+            'max_position_size': settings.get('max_position_size', 600),
+            'max_position_size_enabled': settings.get('max_position_size_enabled', True),
+            'global_default_quantity': settings.get('global_default_quantity'),
         }
     except Exception as e:
         logger.warning(f"[SETTINGS] Could not load via service, using direct DB: {e}")

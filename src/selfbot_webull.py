@@ -1432,9 +1432,20 @@ def get_trading_settings():
 
 _trading_settings = get_trading_settings()
 MAX_POSITION_SIZE = _trading_settings['max_position_size']
+MAX_POSITION_SIZE_ENABLED = _trading_settings.get('max_position_size_enabled', True)
+GLOBAL_DEFAULT_QUANTITY = _trading_settings.get('global_default_quantity')
+
 if MAX_POSITION_SIZE <= 0:
     raise SystemExit("ERROR: max_position_size must be positive")
-print(f"[CONFIG] ✓ Max position size (auto-qty): ${MAX_POSITION_SIZE}")
+
+if MAX_POSITION_SIZE_ENABLED:
+    print(f"[CONFIG] ✓ Max position size (auto-qty): ${MAX_POSITION_SIZE}")
+else:
+    print(f"[CONFIG] ✓ Max position size calculation: DISABLED")
+    if GLOBAL_DEFAULT_QUANTITY:
+        print(f"[CONFIG] ✓ Global default quantity: {GLOBAL_DEFAULT_QUANTITY} contracts/shares")
+    else:
+        print(f"[CONFIG] ⚠️  Global default quantity not set - will fallback to 1")
 print(f"[CONFIG]   - Source: {'DATABASE' if DATABASE_MODULE_AVAILABLE else 'config.ini'}")
 
 # Price Slippage Protection - Intelligent order management
