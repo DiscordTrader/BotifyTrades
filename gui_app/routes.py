@@ -5419,19 +5419,33 @@ def register_routes(app):
         try:
             data = request.json
             max_position_size = data.get('max_position_size', 600)
+            global_default_quantity = data.get('global_default_quantity')
             
             # Validate max position size
             if not (100 <= max_position_size <= 10000):
                 return jsonify({'error': 'Max position size must be between 100 and 10000'}), 400
             
-            success = db.update_trading_settings(max_position_size)
+            # Validate global_default_quantity if provided
+            if global_default_quantity is not None:
+                if global_default_quantity == '' or global_default_quantity == 0:
+                    global_default_quantity = None  # Clear the setting
+                elif isinstance(global_default_quantity, (int, float, str)):
+                    try:
+                        global_default_quantity = int(global_default_quantity)
+                        if global_default_quantity < 1 or global_default_quantity > 1000:
+                            return jsonify({'error': 'Global default quantity must be between 1 and 1000'}), 400
+                    except ValueError:
+                        return jsonify({'error': 'Invalid global default quantity'}), 400
+            
+            success = db.update_trading_settings(max_position_size, global_default_quantity)
             
             if success:
                 return jsonify({
                     'success': True,
                     'message': 'Trading settings updated successfully',
                     'settings': {
-                        'max_position_size': max_position_size
+                        'max_position_size': max_position_size,
+                        'global_default_quantity': global_default_quantity
                     }
                 })
             else:

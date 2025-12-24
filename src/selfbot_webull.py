@@ -4054,6 +4054,8 @@ def parse_option_signal(text: str) -> Optional[dict]:
     
     # Calculate quantity if not specified
     # CRITICAL: Options cost 100x the quoted premium (1 contract = 100 shares)
+    qty_from_signal = False  # Track whether qty came from signal text
+    
     if qty_str is None:
         if direction.upper() == 'STC':
             # For STC without qty, we'll set a flag to calculate from open position later
@@ -4065,18 +4067,13 @@ def parse_option_signal(text: str) -> Optional[dict]:
             qty = 1
             print(f"[AUTO-QTY] Market order: defaulting to 1 contract")
         else:
-            # Fetch latest max position size from database
-            _current_trading_settings = get_trading_settings()
-            max_position_size = _current_trading_settings['max_position_size']
-            
-            actual_cost_per_contract = price * 100
-            if actual_cost_per_contract <= 0:
-                print(f"[AUTO-QTY] ✗ Invalid option price: ${price}, skipping auto-calculation")
-                return None
-            qty = max(1, int(max_position_size / actual_cost_per_contract))
-            print(f"[AUTO-QTY] Option: ${price} premium x 100 = ${actual_cost_per_contract}/contract, buying {qty} contracts (max ${max_position_size})")
+            # BTO without qty - set flag for tiered default system
+            # Will check: channel default → global default → max_position_size calculation
+            qty = None  # Will be set by tiered default system in handler
+            print(f"[AUTO-QTY] BTO without qty - will apply tiered default (channel → global → max_position_size)")
     else:
         qty = int(qty_str)
+        qty_from_signal = True
     
     return {
         "asset": "option",
@@ -4087,7 +4084,8 @@ def parse_option_signal(text: str) -> Optional[dict]:
         "opt_type": opt_type.upper(),
         "expiry": expiry,
         "price": price,  # None for market orders
-        "is_market_order": is_market_order
+        "is_market_order": is_market_order,
+        "_qty_from_signal": qty_from_signal  # Flag for tiered default system
     }
 
 def try_parse_with_learned_formats(text: str) -> Optional[dict]:
@@ -4194,23 +4192,24 @@ def parse_stock_signal(text: str) -> Optional[dict]:
         price = float(price_str)
     
     # Calculate quantity if not specified
+    qty_from_signal = False  # Track whether qty came from signal text
+    
     if qty_str is None:
         if is_market_order:
             # For market orders without qty, default to 1 share
             qty = 1
             print(f"[AUTO-QTY] Market order: defaulting to 1 share")
+        elif direction.upper() == 'STC':
+            # For STC without qty, close entire position
+            qty = None
+            print(f"[AUTO-QTY] STC without qty - will close based on open position size")
         else:
-            # Fetch latest max position size from database
-            _current_trading_settings = get_trading_settings()
-            max_position_size = _current_trading_settings['max_position_size']
-            
-            if price <= 0:
-                print(f"[AUTO-QTY] ✗ Invalid stock price: ${price}, skipping auto-calculation")
-                return None
-            qty = max(1, int(max_position_size / price))
-            print(f"[AUTO-QTY] Stock: ${price}/share, buying {qty} shares (max ${max_position_size})")
+            # BTO without qty - set flag for tiered default system
+            qty = None
+            print(f"[AUTO-QTY] Stock BTO without qty - will apply tiered default (channel → global → max_position_size)")
     else:
         qty = int(qty_str)
+        qty_from_signal = True
     
     return {
         "asset": "stock",
@@ -4218,7 +4217,8 @@ def parse_stock_signal(text: str) -> Optional[dict]:
         "qty": qty,
         "symbol": symbol.upper(),
         "price": price,  # None for market orders
-        "is_market_order": is_market_order
+        "is_market_order": is_market_order,
+        "_qty_from_signal": qty_from_signal  # Flag for tiered default system
     }
 
 # ------------------------------ DISCORD SELF-BOT -------------------------------------
@@ -5988,6 +5988,34 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # Parse trading signals
         opt = parse_option_signal(normalized_content)
         if opt:
+            # Apply tiered quantity defaults for BTO signals without qty from signal text
+            if opt.get('action') == 'BTO' and opt.get('qty') is None and not opt.get('_qty_from_signal', False):
+                # Tiered default: channel → global → max_position_size calculation → 1
+                channel_default_qty = channel_info.get('default_quantity') if channel_info else None
+                
+                if channel_default_qty:
+                    opt['qty'] = int(channel_default_qty)
+                    print(f"[DEFAULT QTY] ✓ Using channel default: {opt['qty']} contracts")
+                else:
+                    # Check global default
+                    _current_trading_settings = get_trading_settings()
+                    global_default_qty = _current_trading_settings.get('global_default_quantity')
+                    
+                    if global_default_qty:
+                        opt['qty'] = int(global_default_qty)
+                        print(f"[DEFAULT QTY] ✓ Using global default: {opt['qty']} contracts")
+                    else:
+                        # Fallback to max_position_size calculation
+                        max_position_size = _current_trading_settings['max_position_size']
+                        price = opt.get('price')
+                        if price and price > 0:
+                            actual_cost_per_contract = price * 100
+                            opt['qty'] = max(1, int(max_position_size / actual_cost_per_contract))
+                            print(f"[DEFAULT QTY] ✓ Using max_position_size calculation: {opt['qty']} contracts (${max_position_size} / ${actual_cost_per_contract})")
+                        else:
+                            opt['qty'] = 1
+                            print(f"[DEFAULT QTY] ✓ Fallback to 1 contract (no price available)")
+            
             # Handle price-only STC signals - find most recent open position from this channel
             if opt.get('_price_only') and opt.get('symbol') is None:
                 print(f"[STC] Price-only signal detected - looking up most recent open position for channel {message.channel.id}")
@@ -6120,6 +6148,33 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         
         stk = parse_stock_signal(normalized_content)
         if stk:
+            # Apply tiered quantity defaults for BTO signals without qty from signal text
+            if stk.get('action') == 'BTO' and stk.get('qty') is None and not stk.get('_qty_from_signal', False):
+                # Tiered default: channel → global → max_position_size calculation → 1
+                channel_default_qty = channel_info.get('default_quantity') if channel_info else None
+                
+                if channel_default_qty:
+                    stk['qty'] = int(channel_default_qty)
+                    print(f"[DEFAULT QTY] ✓ Using channel default: {stk['qty']} shares")
+                else:
+                    # Check global default
+                    _current_trading_settings = get_trading_settings()
+                    global_default_qty = _current_trading_settings.get('global_default_quantity')
+                    
+                    if global_default_qty:
+                        stk['qty'] = int(global_default_qty)
+                        print(f"[DEFAULT QTY] ✓ Using global default: {stk['qty']} shares")
+                    else:
+                        # Fallback to max_position_size calculation
+                        max_position_size = _current_trading_settings['max_position_size']
+                        price = stk.get('price')
+                        if price and price > 0:
+                            stk['qty'] = max(1, int(max_position_size / price))
+                            print(f"[DEFAULT QTY] ✓ Using max_position_size calculation: {stk['qty']} shares (${max_position_size} / ${price})")
+                        else:
+                            stk['qty'] = 1
+                            print(f"[DEFAULT QTY] ✓ Fallback to 1 share (no price available)")
+            
             # Check if this is an STC that should close an option position (Bullwinkle format)
             if stk['action'] == 'STC' and normalized_content != message.content:
                 # This was normalized from Bullwinkle format - look for matching option position
