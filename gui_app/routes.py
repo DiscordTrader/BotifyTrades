@@ -3236,7 +3236,6 @@ def register_routes(app):
         try:
             count = int(request.args.get('count', 50))
             status = request.args.get('status', 'Filled')  # Default to filled orders
-            print(f"[API] Fetching order history: status={status}, count={count}")
             
             future = asyncio.run_coroutine_threadsafe(
                 _get_webull_order_history(status=status, count=count),
@@ -3264,21 +3263,13 @@ def register_routes(app):
         
         def _blocking_call():
             try:
-                print(f"[API] Calling wb.get_history_orders(status={status}, count={count})")
                 history_orders = wb.get_history_orders(status=status, count=count)
-                print(f"[API] Raw history_orders response: {type(history_orders)} - {len(history_orders) if history_orders else 0} items")
                 
                 # If Filled returns nothing, try All status
                 if not history_orders and status == 'Filled':
-                    print("[API] No Filled orders, trying status='All'...")
                     history_orders = wb.get_history_orders(status='All', count=count)
-                    print(f"[API] All orders response: {len(history_orders) if history_orders else 0} items")
-                
-                if history_orders:
-                    print(f"[API] First order sample: {history_orders[0] if len(history_orders) > 0 else 'N/A'}")
                 
                 if not history_orders:
-                    print("[API] No history orders returned from Webull")
                     return []
                 
                 formatted_orders = []
