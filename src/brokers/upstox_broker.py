@@ -18,7 +18,7 @@ if parent_dir not in sys.path:
 from broker_interface import BrokerInterface, OrderResult, BrokerFactory
 
 try:
-    from upstox_client import Configuration, ApiClient, UserApi, OrderApi, PortfolioApi, MarketQuoteApi
+    from upstox_client import Configuration, ApiClient, UserApi, OrderApi, PortfolioApi, MarketQuoteApi, OptionsApi
     UPSTOX_AVAILABLE = True
 except ImportError:
     UPSTOX_AVAILABLE = False
@@ -39,6 +39,7 @@ class UpstoxBroker(BrokerInterface):
         self.order_api = None
         self.portfolio_api = None
         self.quote_api = None
+        self.options_api = None
         self.user_id = None
     
     @property
@@ -68,6 +69,7 @@ class UpstoxBroker(BrokerInterface):
             self.order_api = OrderApi(self.api_client)
             self.portfolio_api = PortfolioApi(self.api_client)
             self.quote_api = MarketQuoteApi(self.api_client)
+            self.options_api = OptionsApi(self.api_client)
             
             profile = await asyncio.to_thread(
                 self.user_api.get_profile,
@@ -185,6 +187,81 @@ class UpstoxBroker(BrokerInterface):
         except Exception as e:
             print(f"[{self.name}] Error getting quote for {symbol}: {e}")
             return {}
+    
+    async def get_option_chain(self, instrument_key: str, expiry_date: str) -> Dict[str, Any]:
+        """
+        Get option chain for a symbol
+        
+        Args:
+            instrument_key: Upstox instrument key (e.g., 'NSE_INDEX|Nifty 50', 'NSE_INDEX|Nifty Bank')
+            expiry_date: Expiry date in YYYY-MM-DD format (e.g., '2024-03-28')
+        
+        Returns:
+            Option chain data with put/call options and Greeks
+        """
+        if not self.options_api:
+            return {'error': 'Not connected'}
+        
+        try:
+            result = await asyncio.to_thread(
+                self.options_api.get_put_call_option_chain,
+                instrument_key,
+                expiry_date
+            )
+            
+            if result and result.data:
+                return {
+                    'success': True,
+                    'data': result.data,
+                    'count': len(result.data) if isinstance(result.data, list) else 1
+                }
+            return {'success': False, 'message': 'No option chain data returned'}
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting option chain: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    async def get_option_contracts(self, instrument_key: str) -> Dict[str, Any]:
+        """
+        Get available option contracts for a symbol
+        
+        Args:
+            instrument_key: Upstox instrument key (e.g., 'NSE_INDEX|Nifty 50')
+        
+        Returns:
+            Available option contracts with expiry dates
+        """
+        if not self.options_api:
+            return {'error': 'Not connected'}
+        
+        try:
+            result = await asyncio.to_thread(
+                self.options_api.get_option_contracts,
+                instrument_key
+            )
+            
+            if result and result.data:
+                return {
+                    'success': True,
+                    'data': result.data,
+                    'count': len(result.data) if isinstance(result.data, list) else 1
+                }
+            return {'success': False, 'message': 'No contracts data returned'}
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting option contracts: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    @staticmethod
+    def get_common_instrument_keys() -> Dict[str, str]:
+        """Get common Upstox instrument keys for Indian markets"""
+        return {
+            'NIFTY': 'NSE_INDEX|Nifty 50',
+            'BANKNIFTY': 'NSE_INDEX|Nifty Bank',
+            'FINNIFTY': 'NSE_INDEX|Nifty Fin Service',
+            'SENSEX': 'BSE_INDEX|SENSEX',
+            'BANKEX': 'BSE_INDEX|BANKEX',
+        }
 
     @staticmethod
     def get_authorization_url(api_key: str, redirect_uri: str) -> str:
