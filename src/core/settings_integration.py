@@ -111,13 +111,16 @@ def _fallback_trading_settings() -> Dict[str, Any]:
         from gui_app import database as db
         settings = db.get_trading_settings()
         return {
-            'max_position_size': settings.get('max_position_size', 200.0),
-            'position_sizing_enabled': settings.get('position_sizing_enabled', True),
-            'position_size_percent': settings.get('position_size_percent', 5.0),
-            'paper_trade': settings.get('paper_trade', True),
+            'max_position_size': settings.get('max_position_size', 600),
+            'max_position_size_enabled': settings.get('max_position_size_enabled', True),
+            'global_default_quantity': settings.get('global_default_quantity'),
         }
     except Exception:
-        return {'max_position_size': 200.0, 'position_sizing_enabled': True, 'position_size_percent': 5.0, 'paper_trade': True}
+        return {
+            'max_position_size': 600,
+            'max_position_size_enabled': True,
+            'global_default_quantity': None
+        }
 
 
 def _fallback_slippage_settings() -> Dict[str, Any]:
