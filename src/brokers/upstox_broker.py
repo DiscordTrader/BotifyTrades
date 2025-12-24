@@ -18,8 +18,7 @@ if parent_dir not in sys.path:
 from broker_interface import BrokerInterface, OrderResult, BrokerFactory
 
 try:
-    from upstox_client import Configuration, ApiClient
-    from upstox_client.api import UserApi, OrderApi, PortfolioApi, MarketQuoteApi
+    from upstox_client import Configuration, ApiClient, UserApi, OrderApi, PortfolioApi, MarketQuoteApi
     UPSTOX_AVAILABLE = True
 except ImportError:
     UPSTOX_AVAILABLE = False

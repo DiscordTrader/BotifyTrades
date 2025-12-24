@@ -88,3 +88,4 @@ bcrypt
 tastytrade
 openai
 PySide6
+upstox-python-sdk
