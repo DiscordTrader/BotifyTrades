@@ -3092,6 +3092,10 @@ class Database:
     
     def get_signal_history(self, channel_id=None, period='all', limit=100):
         return get_signal_history(channel_id, period, limit)
+    
+    def find_open_bto_trade(self, symbol: str, asset_type: str, broker: str = None,
+                            strike: float = None, expiry: str = None, call_put: str = None):
+        return find_open_bto_trade(symbol, asset_type, broker, strike, expiry, call_put)
 
 
 if __name__ == '__main__':
