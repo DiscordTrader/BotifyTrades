@@ -4232,6 +4232,80 @@ def parse_stock_signal(text: str) -> Optional[dict]:
         "_qty_from_signal": qty_from_signal  # Flag for tiered default system
     }
 
+
+# ------------------------------ TRADE IDEA PARSER ---------------------------------
+TRADE_IDEA_PATTERN = re.compile(
+    r'TRADE\s+IDEA\s*\n'
+    r'.*?Ticker:\s*(\$?[A-Za-z]+)\s*\n'
+    r'.*?Entry:\s*([\d.]+)(?:\s*\(([^)]+)\))?\s*\n'
+    r'.*?Levels?:\s*(.+?)\s*\n'
+    r'.*?SL:\s*([\d.]+)',
+    re.IGNORECASE | re.DOTALL
+)
+
+def parse_trade_idea_signal(text: str) -> Optional[dict]:
+    """Parse TRADE IDEA format signals into structured data.
+    
+    Format:
+    TRADE IDEA
+    Ticker: ENSC
+    Entry: 2.02 (break)
+    Levels: 2.10 - 2.16 - 2.22 - 2.30
+    SL: 1.78
+    """
+    m = TRADE_IDEA_PATTERN.search(text)
+    if not m:
+        return None
+    
+    ticker = m.group(1).replace('$', '').upper()
+    entry_price = float(m.group(2))
+    entry_qualifier = m.group(3) or ''  # e.g., "break"
+    levels_str = m.group(4)
+    stop_loss = float(m.group(5))
+    
+    levels = []
+    for level in re.findall(r'[\d.]+', levels_str):
+        try:
+            levels.append(float(level))
+        except ValueError:
+            pass
+    
+    return {
+        "type": "trade_idea",
+        "ticker": ticker,
+        "entry": entry_price,
+        "entry_qualifier": entry_qualifier.strip(),
+        "levels": levels,
+        "stop_loss": stop_loss,
+        "raw_text": text.strip()
+    }
+
+
+def format_trade_idea_for_webhook(parsed: dict) -> str:
+    """Format parsed trade idea for Discord webhook posting."""
+    ticker = parsed.get('ticker', 'UNKNOWN')
+    entry = parsed.get('entry', 0)
+    qualifier = parsed.get('entry_qualifier', '')
+    levels = parsed.get('levels', [])
+    stop_loss = parsed.get('stop_loss', 0)
+    
+    entry_str = f"{entry}"
+    if qualifier:
+        entry_str += f" ({qualifier})"
+    
+    levels_str = ' - '.join([str(l) for l in levels]) if levels else 'N/A'
+    if levels and any('+' in str(l) for l in levels):
+        levels_str = levels_str.rstrip('+') + '+'
+    
+    msg = f"📈 **TRADE IDEA**\n"
+    msg += f"**Ticker:** {ticker}\n"
+    msg += f"**Entry:** ${entry_str}\n"
+    msg += f"**Targets:** {levels_str}\n"
+    msg += f"**Stop Loss:** ${stop_loss}\n"
+    
+    return msg
+
+
 # ------------------------------ DISCORD SELF-BOT -------------------------------------
 class SelfClient(discord.Client):
     def __init__(self, **kwargs):
@@ -6364,6 +6438,43 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 text_preview = message.content.strip()[:80]
                 print(f"[Discord] ❌ No pattern matched: '{text_preview}'")
                 print(f"[Discord]    Supported: BTO/STC options, BTO/STC stock, TRADE IDEA (Ticker/Entry/SL/Levels)")
+        
+        # CHANNEL MAPPING FORWARDING: Forward messages (including TRADE IDEA) to webhook destinations
+        if is_mapped_source_channel:
+            trade_idea = parse_trade_idea_signal(message.content)
+            if trade_idea:
+                webhook_msg = format_trade_idea_for_webhook(trade_idea)
+                print(f"[CHANNEL MAP] ✓ Parsed TRADE IDEA: {trade_idea['ticker']} @ ${trade_idea['entry']}")
+            else:
+                webhook_msg = message.content.strip()
+                print(f"[CHANNEL MAP] Forwarding raw message to webhook(s)")
+            
+            try:
+                from gui_app import database as db
+                import aiohttp
+                
+                all_webhooks = db.get_all_active_webhook_mappings()
+                if all_webhooks:
+                    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+                        posted_count = 0
+                        for wh in all_webhooks:
+                            webhook_url = wh.get('webhook_url')
+                            if webhook_url:
+                                try:
+                                    async with session.post(webhook_url, json={"content": webhook_msg}) as resp:
+                                        if resp.status in [200, 204]:
+                                            posted_count += 1
+                                except Exception as e:
+                                    print(f"[CHANNEL MAP] ⚠️ Webhook post failed: {e}")
+                        
+                        if posted_count > 0:
+                            print(f"[CHANNEL MAP] ✓ Posted to {posted_count} webhook(s)")
+                        else:
+                            print(f"[CHANNEL MAP] ⚠️ No webhooks succeeded")
+                else:
+                    print(f"[CHANNEL MAP] ⚠️ No active webhook mappings found")
+            except Exception as e:
+                print(f"[CHANNEL MAP] ❌ Error forwarding to webhooks: {e}")
     
     async def execute_on_single_broker(self, signal: dict, broker_name: str, broker_instance) -> dict:
         """Execute order on a single broker instance"""
