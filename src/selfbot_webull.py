@@ -4306,6 +4306,65 @@ def format_trade_idea_for_webhook(parsed: dict) -> str:
     return msg
 
 
+def format_trade_idea_as_bto_stc(parsed: dict) -> str:
+    """Format parsed trade idea as BTO/STC signal format for options.
+    
+    Converts:
+        TRADE IDEA: $AAPL ENTRY $175 (break) LEVELS 180-185-190+ SL $170
+    To:
+        BTO AAPL 12/27 175C @ 1.50
+        
+    For stocks (non-options), returns a simple stock signal format.
+    """
+    ticker = parsed.get('ticker', 'UNKNOWN')
+    entry = parsed.get('entry', 0)
+    stop_loss = parsed.get('stop_loss', 0)
+    levels = parsed.get('levels', [])
+    is_option = parsed.get('is_option', False)
+    
+    if is_option:
+        # Try to extract option details if available
+        strike = parsed.get('strike', entry)
+        expiry = parsed.get('expiry', '')
+        option_type = parsed.get('option_type', 'C')  # C for calls, P for puts
+        premium = parsed.get('premium', '')
+        
+        # If no expiry provided, use a reasonable default (next Friday)
+        if not expiry:
+            from datetime import datetime, timedelta
+            today = datetime.now()
+            days_until_friday = (4 - today.weekday()) % 7
+            if days_until_friday == 0:
+                days_until_friday = 7
+            next_friday = today + timedelta(days=days_until_friday)
+            expiry = next_friday.strftime('%m/%d')
+        
+        # Format as BTO signal
+        msg = f"BTO {ticker} {expiry} {strike}{option_type}"
+        if premium:
+            msg += f" @ {premium}"
+        
+        # Add targets as profit levels
+        if levels:
+            targets_str = ', '.join([f"${l}" for l in levels[:3]])
+            msg += f"\nTargets: {targets_str}"
+        
+        # Add stop loss
+        if stop_loss:
+            msg += f"\nSL: ${stop_loss}"
+        
+        return msg
+    else:
+        # For stock signals, format as simple entry
+        msg = f"📈 **BTO {ticker}**\n"
+        msg += f"Entry: ${entry}\n"
+        if levels:
+            msg += f"Targets: {' - '.join([str(l) for l in levels])}\n"
+        if stop_loss:
+            msg += f"SL: ${stop_loss}"
+        return msg
+
+
 # ------------------------------ DISCORD SELF-BOT -------------------------------------
 class SelfClient(discord.Client):
     def __init__(self, **kwargs):
@@ -5910,14 +5969,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         track_enabled = channel_info.get('track_enabled', 0) if channel_info else False
         
         # Check if this channel is a source in channel mappings (multi-channel conversion)
+        # Use the new mapping config to get full routing configuration
         is_mapped_source_channel = False
+        mapping_config = None  # Will hold forward_enabled, execute_on_source, format_as_bto_stc
         if DATABASE_MODULE_AVAILABLE:
             try:
                 from gui_app import database as db
-                mapped_dest = db.get_destination_for_source(str(message.channel.id))
-                if mapped_dest:
+                mapping_config = db.get_mapping_config_for_source(str(message.channel.id))
+                if mapping_config:
                     is_mapped_source_channel = True
-                    print(f"[Discord] ✓ Channel is mapped source -> {mapped_dest}")
+                    print(f"[Discord] ✓ Channel mapped: forward={mapping_config['forward_enabled']}, execute={mapping_config['execute_on_source']}, format_bto_stc={mapping_config['format_as_bto_stc']}")
             except Exception as e:
                 pass
         
@@ -6026,18 +6087,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         active_conversion_channel_id = CONVERSION_CHANNEL_ID
         target_execution_channel_id = None
         
-        # Use the is_mapped_source_channel variable we already set at the start
+        # Use the mapping_config we already fetched at the start
         print(f"[DEBUG] is_mapped_source_channel={is_mapped_source_channel}, DATABASE_MODULE_AVAILABLE={DATABASE_MODULE_AVAILABLE}")
-        if is_mapped_source_channel and DATABASE_MODULE_AVAILABLE:
-            from gui_app import database as db
-            mapped_dest = db.get_destination_for_source(str(message.channel.id))
-            print(f"[DEBUG] mapped_dest={mapped_dest}")
-            if mapped_dest:
+        if is_mapped_source_channel and mapping_config:
+            webhook_url = mapping_config.get('webhook_url', '')
+            print(f"[DEBUG] webhook_url={webhook_url}")
+            if webhook_url:
                 print(f"[CHANNEL MAP] ✓ Source {message.channel.id} mapped to webhook")
                 active_conversion_channel_id = message.channel.id  # Use current channel as source
-                target_execution_channel_id = mapped_dest
+                target_execution_channel_id = webhook_url
             else:
-                print(f"[DEBUG] mapped_dest is falsy: {repr(mapped_dest)}")
+                print(f"[DEBUG] webhook_url is falsy: {repr(webhook_url)}")
         
         print(f"[DEBUG] target_execution_channel_id={target_execution_channel_id}")
         
@@ -6063,9 +6123,35 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 content_upper = message.content.strip().upper()
                 is_bto_stc_signal = content_upper.startswith('BTO ') or content_upper.startswith('STC ') or ' BTO ' in content_upper or ' STC ' in content_upper
                 
+                # DUAL-ACTION ROUTING: Check if we should execute on broker AND/OR forward to webhook
+                should_execute = False
+                should_forward = True  # Default behavior
+                format_as_bto_stc = True  # Default behavior
+                
+                if mapping_config:
+                    should_execute = mapping_config.get('execute_on_source', False)
+                    should_forward = mapping_config.get('forward_enabled', True)
+                    format_as_bto_stc = mapping_config.get('format_as_bto_stc', True)
+                    print(f"[DUAL-ACTION] Config: execute={should_execute}, forward={should_forward}, bto_stc={format_as_bto_stc}")
+                
                 if is_bto_stc_signal:
-                    print(f"[DEBUG] BTO/STC signal detected - skipping webhook forwarding, will process for trade execution")
-                    # Don't return here - fall through to option/stock signal parsing below
+                    print(f"[DEBUG] BTO/STC signal detected - will process for trade execution")
+                    # If only forwarding is enabled (no execute), we still forward BTO/STC signals
+                    if should_forward and not should_execute:
+                        # Forward the BTO/STC signal as-is to webhook
+                        if target_execution_channel_id and target_execution_channel_id.startswith('https://'):
+                            try:
+                                import aiohttp
+                                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+                                    async with session.post(target_execution_channel_id, json={"content": message.content.strip()}) as resp:
+                                        if resp.status in [200, 204]:
+                                            print(f"[CHANNEL MAP] ✓ Forwarded BTO/STC signal to webhook")
+                                        else:
+                                            print(f"[CHANNEL MAP] ⚠️ Webhook returned status {resp.status}")
+                            except Exception as e:
+                                print(f"[CHANNEL MAP] ❌ Webhook post failed: {e}")
+                        return
+                    # If execute is enabled, fall through to trade execution below
                     pass
                 else:
                     print(f"[DEBUG] Entering webhook forwarding block, target_execution_channel_id={target_execution_channel_id}")
@@ -6073,30 +6159,54 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # Check if target is a webhook URL (for channel mappings)
                     if target_execution_channel_id and target_execution_channel_id.startswith('https://'):
                         print(f"[DEBUG] Inside webhook URL block, parsing message...")
-                        # Parse TRADE IDEA format and forward to webhook
-                        try:
-                            trade_idea = parse_trade_idea_signal(message.content)
-                            print(f"[DEBUG] trade_idea result: {trade_idea}")
-                        except Exception as e:
-                            print(f"[DEBUG] parse_trade_idea_signal exception: {e}")
-                            trade_idea = None
-                        if trade_idea:
-                            webhook_msg = format_trade_idea_for_webhook(trade_idea)
-                            print(f"[CHANNEL MAP] ✓ Parsed TRADE IDEA: {trade_idea['ticker']} @ ${trade_idea['entry']}")
-                        else:
-                            webhook_msg = message.content.strip()
-                            print(f"[CHANNEL MAP] Forwarding raw message to webhook: {webhook_msg[:50]}")
                         
-                        try:
-                            import aiohttp
-                            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
-                                async with session.post(target_execution_channel_id, json={"content": webhook_msg}) as resp:
-                                    if resp.status in [200, 204]:
-                                        print(f"[CHANNEL MAP] ✓ Posted to webhook successfully")
-                                    else:
-                                        print(f"[CHANNEL MAP] ⚠️ Webhook returned status {resp.status}")
-                        except Exception as e:
-                            print(f"[CHANNEL MAP] ❌ Webhook post failed: {e}")
+                        # DUAL-ACTION: Execute on broker FIRST if enabled
+                        if should_execute:
+                            print(f"[DUAL-ACTION] Executing on broker first...")
+                            # Parse the signal and execute trade
+                            trade_idea = None
+                            try:
+                                trade_idea = parse_trade_idea_signal(message.content)
+                            except Exception as e:
+                                print(f"[DUAL-ACTION] parse_trade_idea_signal exception: {e}")
+                            
+                            if trade_idea:
+                                # Execute the trade on connected broker
+                                await self.handle_auto_signal_conversion(message, message.content.strip(), target_channel_id=None)
+                                print(f"[DUAL-ACTION] ✓ Broker execution initiated for {trade_idea['ticker']}")
+                        
+                        # THEN Forward to webhook if enabled
+                        if should_forward:
+                            # Parse TRADE IDEA format and forward to webhook
+                            try:
+                                trade_idea = parse_trade_idea_signal(message.content)
+                                print(f"[DEBUG] trade_idea result: {trade_idea}")
+                            except Exception as e:
+                                print(f"[DEBUG] parse_trade_idea_signal exception: {e}")
+                                trade_idea = None
+                            
+                            if trade_idea:
+                                # Format based on format_as_bto_stc flag
+                                if format_as_bto_stc and trade_idea.get('is_option'):
+                                    webhook_msg = format_trade_idea_as_bto_stc(trade_idea)
+                                    print(f"[CHANNEL MAP] ✓ Formatted as BTO/STC: {trade_idea['ticker']}")
+                                else:
+                                    webhook_msg = format_trade_idea_for_webhook(trade_idea)
+                                    print(f"[CHANNEL MAP] ✓ Parsed TRADE IDEA: {trade_idea['ticker']} @ ${trade_idea['entry']}")
+                            else:
+                                webhook_msg = message.content.strip()
+                                print(f"[CHANNEL MAP] Forwarding raw message to webhook: {webhook_msg[:50]}")
+                            
+                            try:
+                                import aiohttp
+                                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+                                    async with session.post(target_execution_channel_id, json={"content": webhook_msg}) as resp:
+                                        if resp.status in [200, 204]:
+                                            print(f"[CHANNEL MAP] ✓ Posted to webhook successfully")
+                                        else:
+                                            print(f"[CHANNEL MAP] ⚠️ Webhook returned status {resp.status}")
+                            except Exception as e:
+                                print(f"[CHANNEL MAP] ❌ Webhook post failed: {e}")
                         return
                     
                     print(f"[AUTO CONVERT] Monitoring signal conversion channel: '{message.content[:50]}'")
