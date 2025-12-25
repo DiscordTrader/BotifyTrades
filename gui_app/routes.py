@@ -7872,8 +7872,10 @@ def register_routes(app):
                     set_broker_status('discord', False, 'disconnected')
                     status['discord'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                 
-                # Webull Live broker
-                if hasattr(_bot_instance, 'broker') and _bot_instance.broker:
+                # Webull Live broker - check if actually logged in, not just if object exists
+                webull_broker = getattr(_bot_instance, 'broker', None)
+                webull_logged_in = webull_broker and getattr(webull_broker, '_logged_in', False)
+                if webull_logged_in:
                     set_broker_status('webull_live', True, 'connected')
                     status['webull_live'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': None}
                 else:
@@ -7925,6 +7927,25 @@ def register_routes(app):
                 else:
                     set_broker_status('robinhood', False, 'disconnected')
                     status['robinhood'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+                
+                # Tastytrade broker - check if connected property is True
+                tastytrade_broker = getattr(_bot_instance, 'tastytrade_broker', None)
+                if tastytrade_broker:
+                    is_connected = getattr(tastytrade_broker, 'connected', False)
+                    is_paper = getattr(tastytrade_broker, 'paper_trade', True)
+                    broker_id = 'tastytrade_paper' if is_paper else 'tastytrade_live'
+                    if is_connected:
+                        set_broker_status(broker_id, True, 'connected')
+                        status[broker_id] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': {'mode': 'PAPER' if is_paper else 'LIVE'}}
+                    else:
+                        set_broker_status(broker_id, False, 'disconnected')
+                        status[broker_id] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+                else:
+                    # No Tastytrade broker, mark both as disconnected
+                    set_broker_status('tastytrade_live', False, 'disconnected')
+                    set_broker_status('tastytrade_paper', False, 'disconnected')
+                    status['tastytrade_live'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+                    status['tastytrade_paper'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
             
             return jsonify({
                 'success': True,
