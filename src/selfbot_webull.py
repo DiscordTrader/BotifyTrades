@@ -4307,27 +4307,35 @@ def format_trade_idea_for_webhook(parsed: dict) -> str:
 
 
 def format_trade_idea_as_bto_stc(parsed: dict) -> str:
-    """Format parsed trade idea as BTO/STC signal format for options.
+    """Format parsed trade idea as BTO/STC signal format.
     
-    Converts:
-        TRADE IDEA: $AAPL ENTRY $175 (break) LEVELS 180-185-190+ SL $170
+    Converts TRADE IDEA format to a simpler BTO format for webhook forwarding.
+    Works with both stock and option signals.
+    
+    For stocks:
+        TRADE IDEA: $AAPL ENTRY $175 LEVELS 180-185-190 SL $170
     To:
-        BTO AAPL 12/27 175C @ 1.50
-        
-    For stocks (non-options), returns a simple stock signal format.
+        BTO AAPL @ $175
+        Targets: $180, $185, $190
+        SL: $170
     """
     ticker = parsed.get('ticker', 'UNKNOWN')
     entry = parsed.get('entry', 0)
     stop_loss = parsed.get('stop_loss', 0)
     levels = parsed.get('levels', [])
-    is_option = parsed.get('is_option', False)
+    qualifier = parsed.get('entry_qualifier', '')
     
-    if is_option:
-        # Try to extract option details if available
-        strike = parsed.get('strike', entry)
-        expiry = parsed.get('expiry', '')
-        option_type = parsed.get('option_type', 'C')  # C for calls, P for puts
-        premium = parsed.get('premium', '')
+    # Check if this looks like an option (has option_type, expiry, or strike fields)
+    is_option = parsed.get('is_option', False)
+    strike = parsed.get('strike')
+    expiry = parsed.get('expiry', '')
+    option_type = parsed.get('option_type', '')
+    premium = parsed.get('premium', '')
+    
+    if is_option and (strike or option_type):
+        # Format as BTO option signal
+        opt_type = option_type if option_type else 'C'
+        strike_val = strike if strike else entry
         
         # If no expiry provided, use a reasonable default (next Friday)
         if not expiry:
@@ -4339,30 +4347,34 @@ def format_trade_idea_as_bto_stc(parsed: dict) -> str:
             next_friday = today + timedelta(days=days_until_friday)
             expiry = next_friday.strftime('%m/%d')
         
-        # Format as BTO signal
-        msg = f"BTO {ticker} {expiry} {strike}{option_type}"
+        msg = f"BTO {ticker} {expiry} {strike_val}{opt_type}"
         if premium:
             msg += f" @ {premium}"
         
-        # Add targets as profit levels
         if levels:
             targets_str = ', '.join([f"${l}" for l in levels[:3]])
             msg += f"\nTargets: {targets_str}"
         
-        # Add stop loss
         if stop_loss:
             msg += f"\nSL: ${stop_loss}"
         
         return msg
     else:
-        # For stock signals, format as simple entry
-        msg = f"📈 **BTO {ticker}**\n"
-        msg += f"Entry: ${entry}\n"
+        # For stock signals, format as simple BTO entry
+        entry_str = f"@ ${entry}"
+        if qualifier:
+            entry_str += f" ({qualifier})"
+        
+        msg = f"BTO {ticker} {entry_str}\n"
+        
         if levels:
-            msg += f"Targets: {' - '.join([str(l) for l in levels])}\n"
+            targets_str = ', '.join([f"${l}" for l in levels[:3]])
+            msg += f"Targets: {targets_str}\n"
+        
         if stop_loss:
             msg += f"SL: ${stop_loss}"
-        return msg
+        
+        return msg.strip()
 
 
 # ------------------------------ DISCORD SELF-BOT -------------------------------------
@@ -6136,22 +6148,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 if is_bto_stc_signal:
                     print(f"[DEBUG] BTO/STC signal detected - will process for trade execution")
-                    # If only forwarding is enabled (no execute), we still forward BTO/STC signals
-                    if should_forward and not should_execute:
+                    
+                    # DUAL-ACTION for BTO/STC: Forward FIRST (if enabled), then execute (if enabled)
+                    if should_forward and target_execution_channel_id and target_execution_channel_id.startswith('https://'):
                         # Forward the BTO/STC signal as-is to webhook
-                        if target_execution_channel_id and target_execution_channel_id.startswith('https://'):
-                            try:
-                                import aiohttp
-                                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
-                                    async with session.post(target_execution_channel_id, json={"content": message.content.strip()}) as resp:
-                                        if resp.status in [200, 204]:
-                                            print(f"[CHANNEL MAP] ✓ Forwarded BTO/STC signal to webhook")
-                                        else:
-                                            print(f"[CHANNEL MAP] ⚠️ Webhook returned status {resp.status}")
-                            except Exception as e:
-                                print(f"[CHANNEL MAP] ❌ Webhook post failed: {e}")
+                        try:
+                            import aiohttp
+                            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+                                async with session.post(target_execution_channel_id, json={"content": message.content.strip()}) as resp:
+                                    if resp.status in [200, 204]:
+                                        print(f"[CHANNEL MAP] ✓ Forwarded BTO/STC signal to webhook")
+                                    else:
+                                        print(f"[CHANNEL MAP] ⚠️ Webhook returned status {resp.status}")
+                        except Exception as e:
+                            print(f"[CHANNEL MAP] ❌ Webhook post failed: {e}")
+                    
+                    # If execute is NOT enabled, we're done (already forwarded if needed)
+                    if not should_execute:
                         return
-                    # If execute is enabled, fall through to trade execution below
+                    # If execute IS enabled, fall through to trade execution below
                     pass
                 else:
                     print(f"[DEBUG] Entering webhook forwarding block, target_execution_channel_id={target_execution_channel_id}")
@@ -6187,9 +6202,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             
                             if trade_idea:
                                 # Format based on format_as_bto_stc flag
-                                if format_as_bto_stc and trade_idea.get('is_option'):
+                                if format_as_bto_stc:
                                     webhook_msg = format_trade_idea_as_bto_stc(trade_idea)
-                                    print(f"[CHANNEL MAP] ✓ Formatted as BTO/STC: {trade_idea['ticker']}")
+                                    print(f"[CHANNEL MAP] ✓ Formatted as BTO: {trade_idea['ticker']}")
                                 else:
                                     webhook_msg = format_trade_idea_for_webhook(trade_idea)
                                     print(f"[CHANNEL MAP] ✓ Parsed TRADE IDEA: {trade_idea['ticker']} @ ${trade_idea['entry']}")
