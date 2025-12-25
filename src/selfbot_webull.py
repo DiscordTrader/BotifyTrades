@@ -4579,10 +4579,32 @@ class SelfClient(discord.Client):
             if self.broker._logged_in:
                 print("[Webull] ✓ Login successful (LIVE account)", flush=True)
                 self.broker_ready.set()
+                # Update broker status in GUI
+                try:
+                    from gui_app.broker_credentials_service import set_broker_status
+                    set_broker_status('webull_live', True, 'connected', account_info={'mode': 'live'})
+                    if PAPER_TRADE:
+                        set_broker_status('webull_paper', True, 'connected', account_info={'mode': 'paper'})
+                except Exception:
+                    pass
             else:
                 print("[Webull] ⚠️  Broker not configured - configure via GUI (see startup logs for port)", flush=True)
+                # Update broker status to disconnected
+                try:
+                    from gui_app.broker_credentials_service import set_broker_status
+                    set_broker_status('webull_live', False, 'disconnected', error='Credentials not configured')
+                    set_broker_status('webull_paper', False, 'disconnected', error='Credentials not configured')
+                except Exception:
+                    pass
         except Exception as e:
             print("[Webull] ✗ Login failed:", e, flush=True)
+            # Update broker status to disconnected on error
+            try:
+                from gui_app.broker_credentials_service import set_broker_status
+                set_broker_status('webull_live', False, 'disconnected', error=str(e))
+                set_broker_status('webull_paper', False, 'disconnected', error=str(e))
+            except Exception:
+                pass
         
         # Initialize Alpaca paper trading broker for tracking channels
         try:
@@ -4618,6 +4640,12 @@ class SelfClient(discord.Client):
                 if not alpaca_api_key or not alpaca_secret_key:
                     _original_print("[ALPACA] ⚠️ Missing API credentials - paper trading disabled", flush=True)
                     self.paper_broker = None
+                    # Update broker status to disconnected
+                    try:
+                        from gui_app.broker_credentials_service import set_broker_status
+                        set_broker_status('alpaca_paper', False, 'disconnected', error='Missing API credentials')
+                    except Exception:
+                        pass
                 else:
                     # Create Alpaca broker instance in PAPER mode
                     _original_print("[ALPACA] Creating AlpacaBroker instance...", flush=True)
@@ -4636,9 +4664,21 @@ class SelfClient(discord.Client):
                     
                     if connected:
                         _original_print("[ALPACA] ✓ Paper trading broker connected (PAPER account)", flush=True)
+                        # Update broker status in GUI
+                        try:
+                            from gui_app.broker_credentials_service import set_broker_status
+                            set_broker_status('alpaca_paper', True, 'connected', account_info={'mode': 'paper'})
+                        except Exception:
+                            pass
                     else:
                         _original_print("[ALPACA] ⚠️ Paper broker connection failed", flush=True)
                         self.paper_broker = None
+                        # Update broker status to disconnected
+                        try:
+                            from gui_app.broker_credentials_service import set_broker_status
+                            set_broker_status('alpaca_paper', False, 'disconnected', error='Connection failed')
+                        except Exception:
+                            pass
                     
         except Exception as e:
             _original_print(f"[ALPACA] ⚠️ Paper broker initialization failed: {e}", flush=True)
