@@ -7239,24 +7239,33 @@ def register_routes(app):
             source_channel_name = data.get('source_channel_name', '').strip()
             webhook_name = data.get('webhook_name', '').strip()
             
+            # New dual-action flags
+            forward_enabled = data.get('forward_enabled', True)
+            execute_on_source = data.get('execute_on_source', False)
+            format_as_bto_stc = data.get('format_as_bto_stc', True)
+            
             if not source_channel_id or not webhook_url:
                 return jsonify({'success': False, 'error': 'Source channel ID and webhook URL are required'}), 400
             
             existing_channel = db.get_channel_by_discord_id(source_channel_id)
             if not existing_channel:
                 channel_display_name = source_channel_name or f"Mapping-{source_channel_id[:8]}"
+                # If execute_on_source is enabled, set up channel for execution too
                 db.add_channel(
                     discord_channel_id=source_channel_id,
                     name=channel_display_name,
-                    category='TRACK',
-                    execute_enabled=0,
+                    category='EXECUTE' if execute_on_source else 'TRACK',
+                    execute_enabled=1 if execute_on_source else 0,
                     track_enabled=1
                 )
-                print(f"[MAPPING] Auto-added channel {source_channel_id} to monitored channels for webhook forwarding")
+                print(f"[MAPPING] Auto-added channel {source_channel_id} (execute={execute_on_source}, forward={forward_enabled})")
             
             result = db.add_channel_mapping(
                 source_channel_id, webhook_url,
-                source_channel_name, webhook_name
+                source_channel_name, webhook_name,
+                forward_enabled=forward_enabled,
+                execute_on_source=execute_on_source,
+                format_as_bto_stc=format_as_bto_stc
             )
             return jsonify(result)
         except Exception as e:
@@ -7275,7 +7284,10 @@ def register_routes(app):
                 webhook_url=data.get('webhook_url'),
                 source_channel_name=data.get('source_channel_name'),
                 webhook_name=data.get('webhook_name'),
-                is_active=data.get('is_active')
+                is_active=data.get('is_active'),
+                forward_enabled=data.get('forward_enabled'),
+                execute_on_source=data.get('execute_on_source'),
+                format_as_bto_stc=data.get('format_as_bto_stc')
             )
             return jsonify(result)
         except Exception as e:

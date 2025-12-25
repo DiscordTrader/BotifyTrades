@@ -3749,17 +3749,34 @@ def init_channel_mappings_table():
             webhook_url TEXT NOT NULL,
             webhook_name TEXT DEFAULT '',
             is_active INTEGER DEFAULT 1,
+            forward_enabled INTEGER DEFAULT 1,
+            execute_on_source INTEGER DEFAULT 0,
+            format_as_bto_stc INTEGER DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(source_channel_id, webhook_url)
         )
     ''')
-    cursor.execute('''
-        ALTER TABLE channel_mappings ADD COLUMN webhook_url TEXT DEFAULT ''
-    ''') if False else None
-    cursor.execute('''
-        ALTER TABLE channel_mappings ADD COLUMN webhook_name TEXT DEFAULT ''
-    ''') if False else None
+    
+    # Migration: Add new columns if they don't exist
+    try:
+        cursor.execute("PRAGMA table_info(channel_mappings)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'forward_enabled' not in columns:
+            cursor.execute('ALTER TABLE channel_mappings ADD COLUMN forward_enabled INTEGER DEFAULT 1')
+            print("[DATABASE] ✓ Added forward_enabled column to channel_mappings")
+        
+        if 'execute_on_source' not in columns:
+            cursor.execute('ALTER TABLE channel_mappings ADD COLUMN execute_on_source INTEGER DEFAULT 0')
+            print("[DATABASE] ✓ Added execute_on_source column to channel_mappings")
+        
+        if 'format_as_bto_stc' not in columns:
+            cursor.execute('ALTER TABLE channel_mappings ADD COLUMN format_as_bto_stc INTEGER DEFAULT 1')
+            print("[DATABASE] ✓ Added format_as_bto_stc column to channel_mappings")
+    except Exception as e:
+        pass  # Columns already exist or table just created
+    
     conn.commit()
     print("[DATABASE] ✓ Channel mappings table ready")
 
@@ -3810,7 +3827,11 @@ def get_channel_mappings() -> List[Dict[str, Any]]:
             SELECT id, source_channel_id, source_channel_name, 
                    COALESCE(webhook_url, '') as webhook_url, 
                    COALESCE(webhook_name, '') as webhook_name, 
-                   is_active, created_at, updated_at
+                   is_active, 
+                   COALESCE(forward_enabled, 1) as forward_enabled,
+                   COALESCE(execute_on_source, 0) as execute_on_source,
+                   COALESCE(format_as_bto_stc, 1) as format_as_bto_stc,
+                   created_at, updated_at
             FROM channel_mappings
             ORDER BY created_at DESC
         ''')
@@ -3845,9 +3866,65 @@ def get_destination_for_source(source_channel_id: str) -> Optional[str]:
         return None
 
 
+def get_mapping_config_for_source(source_channel_id: str) -> Optional[Dict[str, Any]]:
+    """Get full mapping configuration for a source channel.
+    Returns dict with all mapping settings if active mapping exists, None otherwise.
+    
+    Returns:
+        {
+            'webhook_url': str,
+            'webhook_name': str,
+            'forward_enabled': bool,
+            'execute_on_source': bool,
+            'format_as_bto_stc': bool
+        }
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        init_channel_mappings_table()
+        
+        cursor.execute('''
+            SELECT webhook_url, webhook_name, 
+                   COALESCE(forward_enabled, 1) as forward_enabled,
+                   COALESCE(execute_on_source, 0) as execute_on_source,
+                   COALESCE(format_as_bto_stc, 1) as format_as_bto_stc
+            FROM channel_mappings
+            WHERE source_channel_id = ? AND is_active = 1
+            LIMIT 1
+        ''', (source_channel_id,))
+        
+        row = cursor.fetchone()
+        if row and row['webhook_url']:
+            return {
+                'webhook_url': row['webhook_url'],
+                'webhook_name': row['webhook_name'] or '',
+                'forward_enabled': bool(row['forward_enabled']),
+                'execute_on_source': bool(row['execute_on_source']),
+                'format_as_bto_stc': bool(row['format_as_bto_stc'])
+            }
+        return None
+    except Exception as e:
+        print(f"[DATABASE] Error getting mapping config: {e}")
+        return None
+
+
 def add_channel_mapping(source_channel_id: str, webhook_url: str,
-                        source_channel_name: str = '', webhook_name: str = '') -> Dict[str, Any]:
-    """Add a new channel mapping (source channel -> webhook URL)"""
+                        source_channel_name: str = '', webhook_name: str = '',
+                        forward_enabled: bool = True, execute_on_source: bool = False,
+                        format_as_bto_stc: bool = True) -> Dict[str, Any]:
+    """Add a new channel mapping (source channel -> webhook URL)
+    
+    Args:
+        source_channel_id: Discord channel ID to monitor
+        webhook_url: Destination webhook URL
+        source_channel_name: Human-readable source channel name
+        webhook_name: Human-readable webhook name
+        forward_enabled: Whether to forward signals to webhook (default True)
+        execute_on_source: Whether to ALSO execute trades on broker (default False)
+        format_as_bto_stc: Whether to format options as BTO/STC (default True)
+    """
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -3857,14 +3934,18 @@ def add_channel_mapping(source_channel_id: str, webhook_url: str,
         
         cursor.execute('''
             INSERT INTO channel_mappings (source_channel_id, source_channel_name, 
-                                          webhook_url, webhook_name)
-            VALUES (?, ?, ?, ?)
+                                          webhook_url, webhook_name,
+                                          forward_enabled, execute_on_source, format_as_bto_stc)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (source_channel_id.strip(), source_channel_name.strip(), 
-              webhook_url.strip(), webhook_name.strip()))
+              webhook_url.strip(), webhook_name.strip(),
+              1 if forward_enabled else 0,
+              1 if execute_on_source else 0,
+              1 if format_as_bto_stc else 0))
         
         mapping_id = cursor.lastrowid
         conn.commit()
-        print(f"[DATABASE] ✓ Added channel mapping: {source_channel_id} -> {webhook_url[:50]}...")
+        print(f"[DATABASE] ✓ Added channel mapping: {source_channel_id} -> {webhook_url[:50]}... (forward={forward_enabled}, execute={execute_on_source})")
         
         return {
             'success': True,
@@ -3889,7 +3970,10 @@ def update_channel_mapping(mapping_id: int, source_channel_id: str = None,
                            webhook_url: str = None,
                            source_channel_name: str = None, 
                            webhook_name: str = None,
-                           is_active: bool = None) -> Dict[str, Any]:
+                           is_active: bool = None,
+                           forward_enabled: bool = None,
+                           execute_on_source: bool = None,
+                           format_as_bto_stc: bool = None) -> Dict[str, Any]:
     """Update an existing channel mapping"""
     conn = get_connection()
     cursor = conn.cursor()
@@ -3913,6 +3997,15 @@ def update_channel_mapping(mapping_id: int, source_channel_id: str = None,
         if is_active is not None:
             updates.append('is_active = ?')
             params.append(1 if is_active else 0)
+        if forward_enabled is not None:
+            updates.append('forward_enabled = ?')
+            params.append(1 if forward_enabled else 0)
+        if execute_on_source is not None:
+            updates.append('execute_on_source = ?')
+            params.append(1 if execute_on_source else 0)
+        if format_as_bto_stc is not None:
+            updates.append('format_as_bto_stc = ?')
+            params.append(1 if format_as_bto_stc else 0)
         
         if not updates:
             return {'success': False, 'error': 'No fields to update'}
