@@ -287,8 +287,10 @@
                                 <th style="width: 40px;">#</th>
                                 <th>Ticker</th>
                                 <th style="text-align: center;">Date</th>
-                                <th style="text-align: right;">Actual Position</th>
-                                <th style="text-align: right;">Sim Position</th>
+                                <th style="text-align: right;">Contract $</th>
+                                <th style="text-align: right;">Actual Pos</th>
+                                <th style="text-align: right;">Sim Qty</th>
+                                <th style="text-align: right;">Sim Pos</th>
                                 <th style="text-align: center;">Result</th>
                                 <th style="text-align: right;">P&L %</th>
                                 <th style="text-align: right;">Sim P&L</th>
@@ -1195,12 +1197,19 @@ function renderHistoricalChart(breakdown, startBalance) {
 
 function renderHistoricalTable(breakdown) {
     const tbody = document.getElementById('historical-breakdown-body');
-    tbody.innerHTML = breakdown.map(d => `
+    tbody.innerHTML = breakdown.map(d => {
+        // Calculate contract price (for options: entry_price × 100, for stocks: entry_price)
+        const isOption = d.asset_type === 'option';
+        const contractPrice = isOption ? (d.entry_price * 100) : d.entry_price;
+        
+        return `
         <tr>
             <td style="font-weight: 600;">${d.trade_num}</td>
             <td style="font-weight: 600; color: var(--primary);">${d.ticker}</td>
             <td style="text-align: center; font-size: 0.75rem; color: var(--text-muted);">${d.closed_at}</td>
+            <td style="text-align: right; font-size: 0.8125rem; color: var(--info);">$${contractPrice.toLocaleString(undefined, {minimumFractionDigits: 0})}</td>
             <td style="text-align: right; font-size: 0.8125rem; color: var(--text-secondary);">$${(d.actual_position_value || 0).toLocaleString(undefined, {minimumFractionDigits: 0})}</td>
+            <td style="text-align: center; font-weight: 600; color: var(--mint);">${d.sim_quantity || 0}</td>
             <td style="text-align: right;">$${d.position_size.toLocaleString(undefined, {minimumFractionDigits: 0})}</td>
             <td style="text-align: center;">
                 <span style="padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; background: ${d.result === 'WIN' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${d.result === 'WIN' ? 'var(--success)' : 'var(--danger)'};">
@@ -1215,7 +1224,7 @@ function renderHistoricalTable(breakdown) {
             </td>
             <td style="text-align: right; font-weight: 600;">$${d.end_balance.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
         </tr>
-    `).join('');
+    `}).join('');
 }
 
 function toggleHistoricalBreakdown() {
