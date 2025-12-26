@@ -2704,7 +2704,7 @@
     "highest_price": 0.08,
     "trailing_activated": false,
     "closing": true,
-    "closing_cycles": 1,
+    "closing_cycles": 2,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "ALPACA_PAPER",
