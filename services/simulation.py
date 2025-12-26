@@ -892,10 +892,16 @@ def run_exact_historical_simulation(
     # Simulate each actual trade
     balance = portfolio_start
     trade_breakdown = []
+    equity_curve = [portfolio_start]  # Start with initial balance
     wins = 0
     losses = 0
     total_win_pnl = 0
     total_loss_pnl = 0
+    
+    # Max drawdown tracking
+    peak_balance = portfolio_start
+    max_drawdown = 0
+    max_drawdown_pct = 0
     
     for i, trade in enumerate(trades, 1):
         trade_start_balance = balance
@@ -928,6 +934,18 @@ def run_exact_historical_simulation(
         balance += trade_pnl
         balance = max(0, balance)
         
+        # Track equity curve
+        equity_curve.append(round(balance, 2))
+        
+        # Update peak and drawdown
+        if balance > peak_balance:
+            peak_balance = balance
+        current_drawdown = peak_balance - balance
+        current_drawdown_pct = (current_drawdown / peak_balance * 100) if peak_balance > 0 else 0
+        if current_drawdown > max_drawdown:
+            max_drawdown = current_drawdown
+            max_drawdown_pct = current_drawdown_pct
+        
         if is_win:
             wins += 1
             total_win_pnl += trade_pnl
@@ -952,7 +970,8 @@ def run_exact_historical_simulation(
             'pnl_pct': round(pnl_pct * 100, 1),
             'trade_pnl': round(trade_pnl, 2),
             'end_balance': round(balance, 2),
-            'cumulative_return_pct': round(((balance - portfolio_start) / portfolio_start) * 100, 1)
+            'cumulative_return_pct': round(((balance - portfolio_start) / portfolio_start) * 100, 1),
+            'drawdown_pct': round(current_drawdown_pct, 1)
         })
     
     final_balance = balance
@@ -1078,7 +1097,10 @@ def run_exact_historical_simulation(
         'params_used': {
             'portfolio_start': portfolio_start,
             'risk_per_trade_mode': risk_per_trade_mode,
-            'risk_per_trade_value': risk_per_trade_value if risk_per_trade_mode == 'fixed' else round(risk_per_trade_value * 100, 1),
+            'risk_per_trade_value': risk_per_trade_value if risk_per_trade_mode in ['fixed', 'actual'] else round(risk_per_trade_value, 1),
+            'risk_per_trade_display': f"${risk_per_trade_value:,.0f}" if risk_per_trade_mode == 'fixed' else (
+                "Original trade sizes" if risk_per_trade_mode == 'actual' else f"{risk_per_trade_value}%"
+            ),
         },
         
         'summary': {
@@ -1092,9 +1114,14 @@ def run_exact_historical_simulation(
             'total_loss_pnl': round(total_loss_pnl, 2),
             'avg_win_dollar': round(avg_win_pnl, 2),
             'avg_loss_dollar': round(avg_loss_pnl, 2),
-            'is_profitable': total_profit > 0
+            'is_profitable': total_profit > 0,
+            'avg_simulated_position': round(sum(t['position_size'] for t in trade_breakdown) / len(trade_breakdown), 2) if trade_breakdown else 0,
+            'max_drawdown': round(max_drawdown, 2),
+            'max_drawdown_pct': round(max_drawdown_pct, 1),
+            'peak_balance': round(peak_balance, 2),
         },
         
+        'equity_curve': equity_curve,
         'recommendations': recommendations,
         'trade_breakdown': trade_breakdown
     }

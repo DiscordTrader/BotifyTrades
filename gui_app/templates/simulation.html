@@ -748,13 +748,19 @@ function displayHistoricalResults(data) {
     
     // Strategy text with position size suggestion
     const suggestedSize = stats.suggested_position_size || stats.median_position_size || 0;
+    const positionSizeDisplay = params.risk_per_trade_display || (params.risk_per_trade_mode === 'fixed' ? `$${params.risk_per_trade_value}` : (params.risk_per_trade_mode === 'actual' ? 'Original trade sizes' : `${params.risk_per_trade_value}%`));
+    const avgSimPosition = summary.avg_simulated_position || 0;
+    const maxDrawdown = summary.max_drawdown_pct || 0;
+    
     document.getElementById('strategy-text').textContent = 
         `ACTUAL HISTORICAL TRADES REPLAY\n\nReplayed ${summary.total_trades} real trades from ${stats.first_trade_date} to ${stats.last_trade_date}:\n` +
         `• ${summary.wins} wins totaling +$${summary.total_win_pnl.toLocaleString()}\n` +
         `• ${summary.losses} losses totaling $${summary.total_loss_pnl.toLocaleString()}\n\n` +
         `Each trade used its ACTUAL P&L % from the database.\n` +
-        `With $${params.portfolio_start.toLocaleString()} starting and $${params.risk_per_trade_value} per trade, ` +
+        `With $${params.portfolio_start.toLocaleString()} starting and ${positionSizeDisplay} per trade, ` +
         `you would have ${summary.is_profitable ? 'made' : 'lost'} $${Math.abs(summary.total_profit).toLocaleString()}.\n\n` +
+        `📊 Avg Position Size: $${avgSimPosition.toLocaleString()}\n` +
+        `📉 Max Drawdown: ${maxDrawdown.toFixed(1)}%\n\n` +
         `💡 Suggested Position Size: $${suggestedSize.toLocaleString()} (based on their median trade size)`;
     
     // Hide warnings for historical
