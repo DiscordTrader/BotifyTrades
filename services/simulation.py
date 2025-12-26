@@ -14,6 +14,10 @@ from datetime import datetime, timedelta
 import sqlite3
 import os
 
+import random
+import math
+from statistics import mean, stdev
+
 MAX_EXPOSURE_PCT = 0.40
 MAX_EXPECTED_PCT_PER_TRADE = 0.50  # Cap at 50% expected return per trade
 MIN_WIN_RATE_FOR_REALISTIC = 0.40  # Below 40% or above 95% triggers warning
@@ -21,6 +25,57 @@ MAX_WIN_RATE_FOR_REALISTIC = 0.95
 DEFAULT_PORTFOLIO = 3000.0
 DEFAULT_DAYS = 30
 DEFAULT_RISK_VALUE = 300.0
+
+# Risk optimizer position size percentages to test
+RISK_OPTIMIZER_PERCENTAGES = [1, 2, 3, 5, 10, 15, 20, 25]
+
+# Monte Carlo settings
+MONTE_CARLO_ITERATIONS = 1000
+
+
+def get_asset_multiplier(asset_type: str) -> int:
+    """Get the contract multiplier for an asset type."""
+    if asset_type and asset_type.lower() == 'option':
+        return 100
+    return 1
+
+
+def calculate_affordable_quantity(
+    budget: float,
+    price_per_share: float,
+    asset_type: str
+) -> tuple:
+    """
+    Calculate how many contracts/shares can be afforded with the given budget.
+    
+    Args:
+        budget: Dollar amount available for position
+        price_per_share: Price per share (for options, this is the premium per share)
+        asset_type: 'option' or 'stock'
+    
+    Returns:
+        Tuple of (quantity, actual_position_value, skip_reason or None)
+    """
+    if budget <= 0:
+        return (0, 0, "Zero budget")
+    
+    if price_per_share is None or price_per_share <= 0:
+        return (0, 0, "Invalid price (zero or negative)")
+    
+    multiplier = get_asset_multiplier(asset_type)
+    cost_per_unit = price_per_share * multiplier
+    
+    if cost_per_unit <= 0:
+        return (0, 0, "Zero cost per unit")
+    
+    # Calculate affordable quantity (floor to whole number)
+    quantity = int(budget / cost_per_unit)
+    
+    if quantity < 1:
+        return (0, 0, f"Cannot afford 1 unit (need ${cost_per_unit:.2f}, have ${budget:.2f})")
+    
+    actual_position_value = quantity * cost_per_unit
+    return (quantity, actual_position_value, None)
 
 
 @dataclass
@@ -903,28 +958,63 @@ def run_exact_historical_simulation(
     max_drawdown = 0
     max_drawdown_pct = 0
     
+    # Track skipped trades
+    skipped_trades = []
+    executed_trades_count = 0
+    
     for i, trade in enumerate(trades, 1):
         trade_start_balance = balance
         
-        # Calculate actual position value for this trade
-        multiplier = 100 if trade.asset_type == 'option' else 1
-        actual_position_value = trade.open_price * trade.quantity * multiplier
+        # Calculate actual position value for this trade (what the original trader used)
+        multiplier = get_asset_multiplier(trade.asset_type)
+        actual_position_value = trade.open_price * trade.quantity * multiplier if trade.open_price else 0
         
         # Calculate simulated position size based on mode
+        skip_reason = None
+        sim_quantity = 0
+        budget = 0  # Initialize budget
+        
         if risk_per_trade_mode == "actual":
             # Use actual trade value from database - replicate real position sizes
             sim_position_size = actual_position_value
-        elif risk_per_trade_mode == "fixed":
-            sim_position_size = min(risk_per_trade_value, balance)
-        elif risk_per_trade_mode == "percent":
-            # User enters percentage (e.g., 3 for 3%), convert to decimal
-            sim_position_size = balance * (risk_per_trade_value / 100)
+            sim_quantity = trade.quantity
         else:
-            sim_position_size = balance * risk_per_trade_value
+            # Calculate budget based on mode
+            if risk_per_trade_mode == "fixed":
+                budget = min(risk_per_trade_value, balance)
+            elif risk_per_trade_mode == "percent":
+                # User enters percentage (e.g., 3 for 3%), convert to decimal
+                budget = balance * (risk_per_trade_value / 100)
+            else:
+                budget = balance * risk_per_trade_value
+            
+            # Cap at 50% of balance for safety
+            budget = min(budget, balance * 0.5)
+            
+            # Calculate affordable quantity based on actual trade price
+            sim_quantity, sim_position_size, skip_reason = calculate_affordable_quantity(
+                budget=budget,
+                price_per_share=trade.open_price,
+                asset_type=trade.asset_type
+            )
         
-        # Cap at 50% of balance for safety (except for "actual" mode which replicates real trades)
-        if risk_per_trade_mode != "actual":
-            sim_position_size = min(sim_position_size, balance * 0.5)
+        # Handle skipped trades
+        if skip_reason:
+            skipped_trades.append({
+                'trade_num': i,
+                'ticker': trade.ticker,
+                'asset_type': trade.asset_type,
+                'closed_at': trade.closed_at[:10] if trade.closed_at else '',
+                'original_position': round(actual_position_value, 2),
+                'required_budget': round(trade.open_price * multiplier, 2) if trade.open_price else 0,
+                'available_budget': round(budget, 2),
+                'reason': skip_reason,
+                'missed_pnl_pct': round(trade.pnl_percent, 1)
+            })
+            # Don't update equity curve for skipped trades - just continue
+            continue
+        
+        executed_trades_count += 1
         
         # Use actual P&L percent from the trade
         pnl_pct = trade.pnl_percent / 100  # Convert to decimal
@@ -961,6 +1051,9 @@ def run_exact_historical_simulation(
             'ticker': trade.ticker,
             'asset_type': trade.asset_type,
             'closed_at': closed_date,
+            'original_qty': trade.quantity,
+            'sim_quantity': sim_quantity,
+            'entry_price': round(trade.open_price, 4) if trade.open_price else 0,
             'actual_position_value': round(actual_position_value, 2),
             'actual_pnl_pct': round(trade.pnl_percent, 1),
             'actual_pnl': round(trade.pnl, 2),
@@ -979,10 +1072,13 @@ def run_exact_historical_simulation(
     total_return_pct = (total_profit / portfolio_start) * 100 if portfolio_start > 0 else 0
     total_trades = len(trades)
     
-    # Calculate averages
+    # Calculate averages based on executed trades (not skipped)
     avg_win_pnl = total_win_pnl / wins if wins > 0 else 0
     avg_loss_pnl = total_loss_pnl / losses if losses > 0 else 0
-    win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
+    win_rate = (wins / executed_trades_count * 100) if executed_trades_count > 0 else 0
+    
+    # Calculate average simulated position size
+    avg_sim_position = sum(t['position_size'] for t in trade_breakdown) / len(trade_breakdown) if trade_breakdown else 0
     
     # Get date range
     first_trade_date = trades[0].closed_at[:10] if trades else ''
@@ -1041,6 +1137,17 @@ def run_exact_historical_simulation(
         'title': 'Risk Tolerance',
         'message': f'With current settings, portfolio can sustain {max_consecutive_losses} consecutive 100% losses before depletion.'
     })
+    
+    # Skipped trades warning
+    if skipped_trades:
+        skipped_count = len(skipped_trades)
+        skipped_pct = (skipped_count / total_trades * 100) if total_trades > 0 else 0
+        recommendations.append({
+            'type': 'warning',
+            'title': f'{skipped_count} Trades Skipped',
+            'message': f'{skipped_count} of {total_trades} trades ({skipped_pct:.0f}%) were skipped because your position size budget couldn\'t afford them. '
+                      f'Consider increasing your portfolio or position size %.'
+        })
     
     # Win rate analysis
     if win_rate < 50:
@@ -1108,6 +1215,8 @@ def run_exact_historical_simulation(
             'total_profit': round(total_profit, 2),
             'total_return_pct': round(total_return_pct, 1),
             'total_trades': total_trades,
+            'executed_trades': executed_trades_count,
+            'skipped_trades': len(skipped_trades),
             'wins': wins,
             'losses': losses,
             'total_win_pnl': round(total_win_pnl, 2),
@@ -1115,13 +1224,14 @@ def run_exact_historical_simulation(
             'avg_win_dollar': round(avg_win_pnl, 2),
             'avg_loss_dollar': round(avg_loss_pnl, 2),
             'is_profitable': total_profit > 0,
-            'avg_simulated_position': round(sum(t['position_size'] for t in trade_breakdown) / len(trade_breakdown), 2) if trade_breakdown else 0,
+            'avg_simulated_position': round(avg_sim_position, 2),
             'max_drawdown': round(max_drawdown, 2),
             'max_drawdown_pct': round(max_drawdown_pct, 1),
             'peak_balance': round(peak_balance, 2),
         },
         
         'equity_curve': equity_curve,
+        'skipped_trades': skipped_trades,
         'recommendations': recommendations,
         'trade_breakdown': trade_breakdown
     }
@@ -1180,6 +1290,305 @@ def get_simulation_presets() -> List[Dict[str, Any]]:
             }
         }
     ]
+
+
+def run_risk_optimizer(
+    entity_type: Literal["user", "channel"],
+    entity_id: str,
+    portfolio_start: float = DEFAULT_PORTFOLIO,
+) -> Dict[str, Any]:
+    """
+    Run risk optimization by testing multiple position size percentages.
+    
+    Tests positions sizes at 1%, 2%, 3%, 5%, 10%, 15%, 20%, 25% and 
+    recommends the optimal setting based on risk-adjusted returns.
+    
+    Args:
+        entity_type: "user" or "channel"
+        entity_id: Username or channel name
+        portfolio_start: Starting portfolio value
+    
+    Returns:
+        Dict with comparison table and recommendation
+    """
+    results = []
+    
+    for pct in RISK_OPTIMIZER_PERCENTAGES:
+        result = run_exact_historical_simulation(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            portfolio_start=portfolio_start,
+            risk_per_trade_mode="percent",
+            risk_per_trade_value=pct
+        )
+        
+        if not result.get('success'):
+            return result  # Return error if simulation fails
+        
+        summary = result['summary']
+        
+        # Calculate risk-adjusted score (simplified Sharpe-like ratio)
+        # Higher return with lower drawdown = better score
+        total_return_pct = summary['total_return_pct']
+        max_drawdown_pct = summary['max_drawdown_pct'] or 1  # Avoid division by zero
+        risk_score = total_return_pct / max_drawdown_pct if max_drawdown_pct > 0 else total_return_pct
+        
+        results.append({
+            'position_pct': pct,
+            'final_balance': summary['final_balance'],
+            'total_profit': summary['total_profit'],
+            'total_return_pct': summary['total_return_pct'],
+            'max_drawdown_pct': summary['max_drawdown_pct'],
+            'executed_trades': summary['executed_trades'],
+            'skipped_trades': summary['skipped_trades'],
+            'wins': summary['wins'],
+            'losses': summary['losses'],
+            'win_rate': round(summary['wins'] / summary['executed_trades'] * 100, 1) if summary['executed_trades'] > 0 else 0,
+            'avg_position': summary['avg_simulated_position'],
+            'risk_score': round(risk_score, 2),
+        })
+    
+    # Find best result (highest risk-adjusted score with reasonable execution)
+    valid_results = [r for r in results if r['executed_trades'] > 0]
+    if not valid_results:
+        return {
+            'success': False,
+            'error': 'No trades could be executed at any position size. Portfolio too small.',
+            'entity_type': entity_type,
+            'entity_id': entity_id
+        }
+    
+    # Sort by risk score descending
+    sorted_results = sorted(valid_results, key=lambda x: x['risk_score'], reverse=True)
+    best_result = sorted_results[0]
+    
+    # Generate recommendation message
+    recommendation_msg = f"Based on historical trades, {best_result['position_pct']}% position size offers the best risk-adjusted returns. "
+    if best_result['skipped_trades'] > 0:
+        recommendation_msg += f"Note: {best_result['skipped_trades']} trades would be skipped at this level."
+    
+    return {
+        'success': True,
+        'entity_type': entity_type,
+        'entity_id': entity_id,
+        'portfolio_start': portfolio_start,
+        'comparison': results,
+        'recommended': best_result,
+        'recommendation_message': recommendation_msg,
+        'total_trades_in_history': results[0]['executed_trades'] + results[0]['skipped_trades'] if results else 0
+    }
+
+
+def run_recovery_calculator(
+    entity_type: Literal["user", "channel"],
+    entity_id: str,
+    loss_amount: float,
+    available_capital: float,
+    target_recovery: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    Calculate recovery timeline and probability for a trader who has lost money.
+    
+    Uses Monte Carlo simulation to estimate success probability and timeline.
+    
+    Args:
+        entity_type: "user" or "channel"
+        entity_id: Username or channel name
+        loss_amount: Amount lost that user wants to recover
+        available_capital: Current capital available for trading
+        target_recovery: Target amount to recover (defaults to loss_amount)
+    
+    Returns:
+        Dict with recovery projections for different risk profiles
+    """
+    if target_recovery is None:
+        target_recovery = loss_amount
+    
+    # Fetch trade history
+    if entity_type == "user":
+        trades = fetch_user_trade_history(entity_id)
+    else:
+        trades = fetch_channel_trade_history(entity_id)
+    
+    if not trades:
+        return {
+            'success': False,
+            'error': f'{entity_type.capitalize()} "{entity_id}" not found or has no trade history.',
+            'entity_type': entity_type,
+            'entity_id': entity_id
+        }
+    
+    # Calculate trade frequency (trades per day)
+    if len(trades) >= 2:
+        first_date = datetime.fromisoformat(trades[0].closed_at[:10]) if trades[0].closed_at else datetime.now()
+        last_date = datetime.fromisoformat(trades[-1].closed_at[:10]) if trades[-1].closed_at else datetime.now()
+        days_span = max((last_date - first_date).days, 1)
+        trades_per_day = len(trades) / days_span
+    else:
+        trades_per_day = 1  # Default
+    
+    # Extract P&L percentages for Monte Carlo
+    pnl_percentages = [t.pnl_percent for t in trades]
+    
+    # Define risk profiles
+    profiles = [
+        {'name': 'Conservative', 'pct': 2, 'color': '#10b981'},
+        {'name': 'Moderate', 'pct': 5, 'color': '#3b82f6'},
+        {'name': 'Aggressive', 'pct': 10, 'color': '#ef4444'},
+    ]
+    
+    profile_results = []
+    
+    for profile in profiles:
+        pct = profile['pct']
+        
+        # Run deterministic simulation first
+        det_result = run_exact_historical_simulation(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            portfolio_start=available_capital,
+            risk_per_trade_mode="percent",
+            risk_per_trade_value=pct
+        )
+        
+        if not det_result.get('success'):
+            continue
+        
+        # Monte Carlo simulation with proper affordability constraints
+        success_count = 0
+        total_trades_to_goal = []
+        ruin_count = 0
+        max_drawdowns_per_run = []  # Track max drawdown for each iteration
+        skipped_in_mc = 0
+        
+        # Extract trade details for proper position sizing
+        trade_details = [(t.pnl_percent, t.open_price, t.asset_type) for t in trades]
+        
+        for iteration in range(MONTE_CARLO_ITERATIONS):
+            balance = available_capital
+            peak = available_capital
+            trades_count = 0
+            skipped_this_run = 0
+            max_drawdown_this_run = 0  # Reset per iteration
+            target_balance = available_capital + target_recovery
+            ruin_threshold = available_capital * 0.1  # 90% loss = ruin
+            
+            # Shuffle trade order for Monte Carlo (truly random - no fixed seed)
+            shuffled_trades = trade_details.copy()
+            random.shuffle(shuffled_trades)
+            
+            for pnl_pct, open_price, asset_type in shuffled_trades:
+                if balance <= ruin_threshold:
+                    ruin_count += 1
+                    break
+                
+                # Calculate position budget with compounding
+                budget = balance * (pct / 100)
+                budget = min(budget, balance * 0.5)  # Cap at 50%
+                
+                # Use the shared calculate_affordable_quantity function
+                sim_qty, actual_position, skip_reason = calculate_affordable_quantity(
+                    budget=budget,
+                    price_per_share=open_price,
+                    asset_type=asset_type
+                )
+                
+                if skip_reason:
+                    # Skip this trade - can't afford
+                    skipped_this_run += 1
+                    continue
+                
+                trade_pnl = actual_position * (pnl_pct / 100)
+                balance += trade_pnl
+                balance = max(0, balance)
+                trades_count += 1
+                
+                # Track peak and drawdown per iteration
+                if balance > peak:
+                    peak = balance
+                drawdown = (peak - balance) / peak * 100 if peak > 0 else 0
+                if drawdown > max_drawdown_this_run:
+                    max_drawdown_this_run = drawdown
+                
+                if balance >= target_balance:
+                    success_count += 1
+                    total_trades_to_goal.append(trades_count)
+                    break
+            
+            max_drawdowns_per_run.append(max_drawdown_this_run)
+            skipped_in_mc += skipped_this_run
+        
+        # Calculate statistics
+        success_probability = (success_count / MONTE_CARLO_ITERATIONS) * 100
+        risk_of_ruin = (ruin_count / MONTE_CARLO_ITERATIONS) * 100
+        avg_trades_to_goal = sum(total_trades_to_goal) / len(total_trades_to_goal) if total_trades_to_goal else len(trades) * 2
+        
+        # Calculate max drawdown as 95th percentile for realistic worst-case
+        sorted_drawdowns = sorted(max_drawdowns_per_run)
+        percentile_95_idx = int(len(sorted_drawdowns) * 0.95)
+        max_dd_95th_percentile = sorted_drawdowns[percentile_95_idx] if sorted_drawdowns else 0
+        
+        # Estimate days to goal
+        days_to_goal = avg_trades_to_goal / trades_per_day if trades_per_day > 0 else 999
+        
+        # Average skipped trades per run
+        avg_skipped_per_run = skipped_in_mc / MONTE_CARLO_ITERATIONS
+        
+        profile_results.append({
+            'profile': profile['name'],
+            'position_pct': pct,
+            'color': profile['color'],
+            'success_probability': round(success_probability, 1),
+            'risk_of_ruin': round(risk_of_ruin, 1),
+            'avg_trades_to_goal': round(avg_trades_to_goal, 0),
+            'estimated_days': round(days_to_goal, 0),
+            'estimated_weeks': round(days_to_goal / 7, 1),
+            'expected_final_balance': det_result['summary']['final_balance'],
+            'max_drawdown_pct': round(max_dd_95th_percentile, 1),
+            'skipped_trades': round(avg_skipped_per_run, 0),
+        })
+    
+    # Find recommended profile (highest success probability with reasonable risk)
+    valid_profiles = [p for p in profile_results if p['success_probability'] > 20]
+    if valid_profiles:
+        # Prefer moderate risk with good success rate
+        recommended = max(valid_profiles, key=lambda x: x['success_probability'] - x['risk_of_ruin'])
+    else:
+        recommended = profile_results[0] if profile_results else None
+    
+    # Minimum capital calculation (binary search)
+    min_capital = available_capital
+    if recommended and recommended['success_probability'] < 50:
+        # User needs more capital - estimate minimum
+        for multiplier in [1.5, 2, 3, 5, 10]:
+            test_capital = available_capital * multiplier
+            # Simple estimate: more capital = higher success
+            estimated_success = min(95, recommended['success_probability'] * multiplier * 0.5)
+            if estimated_success >= 70:
+                min_capital = test_capital
+                break
+    
+    return {
+        'success': True,
+        'entity_type': entity_type,
+        'entity_id': entity_id,
+        'inputs': {
+            'loss_amount': loss_amount,
+            'available_capital': available_capital,
+            'target_recovery': target_recovery,
+        },
+        'trade_stats': {
+            'total_trades': len(trades),
+            'trades_per_day': round(trades_per_day, 2),
+            'win_rate': round(sum(1 for t in trades if t.pnl_percent > 0) / len(trades) * 100, 1),
+            'avg_win_pct': round(mean([t.pnl_percent for t in trades if t.pnl_percent > 0]) if any(t.pnl_percent > 0 for t in trades) else 0, 1),
+            'avg_loss_pct': round(mean([t.pnl_percent for t in trades if t.pnl_percent <= 0]) if any(t.pnl_percent <= 0 for t in trades) else 0, 1),
+        },
+        'profiles': profile_results,
+        'recommended': recommended,
+        'minimum_capital_for_70pct_success': round(min_capital, 2),
+        'warning': 'Recovery target may be unrealistic' if (recommended and recommended['success_probability'] < 30) else None,
+    }
 
 
 def run_custom_trade_simulation(

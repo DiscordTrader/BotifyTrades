@@ -7860,6 +7860,78 @@ def register_routes(app):
             print(f"[API] Autocomplete error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/simulate/optimizer', methods=['POST'])
+    def api_risk_optimizer():
+        """Run risk optimization to find optimal position size percentage"""
+        try:
+            data = request.get_json()
+            
+            entity_type = data.get('entity_type', 'user')
+            entity_id = data.get('entity_id', '')
+            
+            if not entity_id:
+                return jsonify({'success': False, 'error': 'entity_id is required'}), 400
+            
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from services.simulation import run_risk_optimizer
+            
+            result = run_risk_optimizer(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                portfolio_start=float(data.get('portfolio_start', 3000)),
+            )
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            print(f"[API] Risk optimizer error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/simulate/recovery', methods=['POST'])
+    def api_recovery_calculator():
+        """Calculate recovery timeline and probability for loss recovery"""
+        try:
+            data = request.get_json()
+            
+            entity_type = data.get('entity_type', 'user')
+            entity_id = data.get('entity_id', '')
+            
+            if not entity_id:
+                return jsonify({'success': False, 'error': 'entity_id is required'}), 400
+            
+            loss_amount = float(data.get('loss_amount', 0))
+            if loss_amount <= 0:
+                return jsonify({'success': False, 'error': 'loss_amount must be positive'}), 400
+            
+            available_capital = float(data.get('available_capital', 0))
+            if available_capital <= 0:
+                return jsonify({'success': False, 'error': 'available_capital must be positive'}), 400
+            
+            target_recovery = data.get('target_recovery')
+            if target_recovery is not None:
+                target_recovery = float(target_recovery)
+            
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from services.simulation import run_recovery_calculator
+            
+            result = run_recovery_calculator(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                loss_amount=loss_amount,
+                available_capital=available_capital,
+                target_recovery=target_recovery,
+            )
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            print(f"[API] Recovery calculator error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     # ============ BROKER CONNECTION MANAGEMENT API ============
     
     @app.route('/api/brokers/status', methods=['GET'])

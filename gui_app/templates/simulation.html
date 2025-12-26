@@ -49,27 +49,23 @@
                         <button onclick="runHistoricalSimulation()" class="btn" style="width: 100%; padding: 10px; font-size: 0.8125rem; font-weight: 600; background: linear-gradient(135deg, #8b5cf6, #6366f1); border: none;">
                             📜 Replay Actual Trades
                         </button>
-                        <button onclick="runExactTradesSimulation()" class="btn" style="width: 100%; padding: 10px; font-size: 0.8125rem; font-weight: 600; background: linear-gradient(135deg, #10b981, #059669); border: none;">
-                            🎯 Simulate Averages
+                        <button onclick="runRiskOptimizer()" class="btn" style="width: 100%; padding: 10px; font-size: 0.8125rem; font-weight: 600; background: linear-gradient(135deg, #10b981, #059669); border: none;">
+                            🎯 Find Optimal Risk
                         </button>
                     </div>
                     
                     <div style="font-size: 0.6875rem; color: var(--text-muted); margin-bottom: 8px; padding: 6px; background: rgba(139, 92, 246, 0.1); border-radius: 4px;">
-                        <strong>📜 Replay Actual</strong>: Uses each trade's real P&L % (e.g., AAPL +25%, TSLA -8%)
+                        <strong>📜 Replay Actual</strong>: Uses each trade's real P&L % with quantity-based sizing
                     </div>
                     <div style="font-size: 0.6875rem; color: var(--text-muted); margin-bottom: 10px; padding: 6px; background: rgba(16, 185, 129, 0.1); border-radius: 4px;">
-                        <strong>🎯 Simulate Averages</strong>: Uses avg win/loss % with optional overrides below
+                        <strong>🎯 Find Optimal Risk</strong>: Tests 1-25% position sizes to find best risk-adjusted returns
                     </div>
                     
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
-                        <div>
-                            <label style="font-size: 0.6875rem; color: var(--text-muted); display: block; margin-bottom: 3px;">Win % Override</label>
-                            <input type="number" id="exact-win-rate-override" placeholder="From stats" step="0.1" min="0" max="100" style="width: 100%; padding: 6px 8px; background: var(--bg-darker); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 0.8125rem;">
-                        </div>
-                        <div>
-                            <label style="font-size: 0.6875rem; color: var(--text-muted); display: block; margin-bottom: 3px;">Avg Loss % Override</label>
-                            <input type="number" id="exact-avg-loss-override" placeholder="e.g. 30 = -30%" step="0.1" style="width: 100%; padding: 6px 8px; background: var(--bg-darker); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 0.8125rem;">
-                        </div>
+                    <button onclick="runRecoveryCalculator()" class="btn" style="width: 100%; padding: 10px; font-size: 0.8125rem; font-weight: 600; background: linear-gradient(135deg, #f59e0b, #d97706); border: none; margin-bottom: 8px;">
+                        💰 Recovery Calculator
+                    </button>
+                    <div style="font-size: 0.6875rem; color: var(--text-muted); padding: 6px; background: rgba(245, 158, 11, 0.1); border-radius: 4px;">
+                        <strong>💰 Recovery</strong>: Calculate how long to recover losses following this trader
                     </div>
                 </div>
             </div>
@@ -699,6 +695,279 @@ async function runExactTradesSimulation() {
         btns.forEach(btn => btn.disabled = false);
         btn.innerHTML = originalText;
     }
+}
+
+async function runRiskOptimizer() {
+    const entityId = document.getElementById('entity-id').value.trim();
+    if (!entityId) {
+        showToast('Please enter a ' + currentEntityType + ' name first', 'warning');
+        return;
+    }
+    
+    const btns = document.querySelectorAll('#quick-simulate-section button');
+    btns.forEach(btn => btn.disabled = true);
+    
+    try {
+        showToast('Running risk optimizer (testing 8 position sizes)...', 'info');
+        
+        const payload = {
+            entity_type: currentEntityType,
+            entity_id: entityId,
+            portfolio_start: parseFloat(document.getElementById('portfolio-start').value) || 3000,
+        };
+        
+        const response = await fetch('/api/simulate/optimizer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            showToast(data.error || 'Optimizer failed', 'error');
+            return;
+        }
+        
+        displayOptimizerResults(data);
+        showToast('Risk optimization complete!', 'success');
+        
+    } catch (error) {
+        console.error('Risk optimizer error:', error);
+        showToast('Error running optimizer: ' + error.message, 'error');
+    } finally {
+        btns.forEach(btn => btn.disabled = false);
+    }
+}
+
+function displayOptimizerResults(data) {
+    document.getElementById('results-placeholder').style.display = 'none';
+    document.getElementById('results-container').style.display = 'block';
+    document.getElementById('daily-breakdown-card').style.display = 'none';
+    document.getElementById('historical-breakdown-card').style.display = 'block';
+    
+    const recommended = data.recommended;
+    const portfolio = data.portfolio_start;
+    
+    // Update summary stats with recommended values
+    document.getElementById('result-final-balance').textContent = '$' + recommended.final_balance.toLocaleString(undefined, {minimumFractionDigits: 2});
+    document.getElementById('result-final-balance').className = 'stat-value success';
+    
+    const profitEl = document.getElementById('result-total-profit');
+    profitEl.textContent = '+$' + recommended.total_profit.toLocaleString(undefined, {minimumFractionDigits: 2});
+    profitEl.className = 'stat-value success';
+    
+    document.getElementById('result-total-return').textContent = '+' + recommended.total_return_pct.toFixed(1) + '%';
+    document.getElementById('result-total-return').className = 'stat-value success';
+    
+    document.querySelector('[for-stat="expected-trade"]').textContent = 'Optimal %';
+    document.getElementById('result-expected-trade').textContent = recommended.position_pct + '%';
+    document.getElementById('result-expected-trade').className = 'stat-value info';
+    
+    document.querySelector('[for-stat="avg-daily"]').textContent = 'Max Drawdown';
+    document.getElementById('result-avg-daily').textContent = recommended.max_drawdown_pct.toFixed(1) + '%';
+    document.getElementById('result-avg-daily').className = 'stat-value warning';
+    
+    document.querySelector('[for-stat="weekly"]').textContent = 'Skipped';
+    document.getElementById('result-weekly').textContent = recommended.skipped_trades + ' trades';
+    document.getElementById('result-weekly').className = 'stat-value ' + (recommended.skipped_trades > 0 ? 'warning' : 'info');
+    
+    document.querySelector('[for-stat="monthly"]').textContent = 'Win Rate';
+    document.getElementById('result-monthly').textContent = recommended.win_rate + '%';
+    document.getElementById('result-monthly').className = 'stat-value ' + (recommended.win_rate >= 50 ? 'success' : 'warning');
+    
+    document.getElementById('result-edge').textContent = 'Risk Score: ' + recommended.risk_score;
+    document.getElementById('result-edge').className = 'stat-value info';
+    
+    // Strategy text
+    document.getElementById('strategy-text').textContent = 
+        `RISK OPTIMIZATION RESULTS\n\n` +
+        `${data.recommendation_message}\n\n` +
+        `With $${portfolio.toLocaleString()} portfolio at ${recommended.position_pct}% per trade:\n` +
+        `• Average position: $${recommended.avg_position.toLocaleString()}\n` +
+        `• Expected return: ${recommended.total_return_pct.toFixed(1)}%\n` +
+        `• Max drawdown: ${recommended.max_drawdown_pct.toFixed(1)}%\n` +
+        `• Risk-adjusted score: ${recommended.risk_score}`;
+    
+    // Render comparison table
+    const tbody = document.getElementById('historical-breakdown-body');
+    tbody.innerHTML = data.comparison.map(r => `
+        <tr style="${r.position_pct === recommended.position_pct ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
+            <td style="font-weight: 600;">${r.position_pct}%</td>
+            <td style="font-weight: 600; color: var(--success);">$${r.final_balance.toLocaleString()}</td>
+            <td style="text-align: right; color: var(--success);">+${r.total_return_pct.toFixed(1)}%</td>
+            <td style="text-align: right; color: var(--warning);">${r.max_drawdown_pct.toFixed(1)}%</td>
+            <td style="text-align: center;">${r.executed_trades}</td>
+            <td style="text-align: center; color: ${r.skipped_trades > 0 ? 'var(--warning)' : 'var(--text-muted)'};">${r.skipped_trades}</td>
+            <td style="text-align: right;">${r.win_rate}%</td>
+            <td style="text-align: right; font-weight: 600; color: ${r.position_pct === recommended.position_pct ? 'var(--mint)' : 'var(--text-primary)'};">${r.risk_score}</td>
+            <td style="text-align: right;">$${r.avg_position.toLocaleString()}</td>
+        </tr>
+    `).join('');
+    
+    // Update table headers for optimizer view
+    document.querySelector('#historical-breakdown thead tr').innerHTML = `
+        <th>Size %</th>
+        <th>Final Balance</th>
+        <th style="text-align: right;">Return</th>
+        <th style="text-align: right;">Drawdown</th>
+        <th style="text-align: center;">Executed</th>
+        <th style="text-align: center;">Skipped</th>
+        <th style="text-align: right;">Win Rate</th>
+        <th style="text-align: right;">Risk Score</th>
+        <th style="text-align: right;">Avg Position</th>
+    `;
+    
+    document.getElementById('warnings-section').style.display = 'none';
+    document.getElementById('capital-requirements-section').style.display = 'none';
+}
+
+async function runRecoveryCalculator() {
+    const entityId = document.getElementById('entity-id').value.trim();
+    if (!entityId) {
+        showToast('Please enter a ' + currentEntityType + ' name first', 'warning');
+        return;
+    }
+    
+    // Show modal to get recovery inputs
+    const lossAmount = prompt('How much did you lose? (e.g., 50000)', '50000');
+    if (!lossAmount) return;
+    
+    const availableCapital = prompt('How much capital do you have now? (e.g., 10000)', document.getElementById('portfolio-start').value || '10000');
+    if (!availableCapital) return;
+    
+    const btns = document.querySelectorAll('#quick-simulate-section button');
+    btns.forEach(btn => btn.disabled = true);
+    
+    try {
+        showToast('Running Monte Carlo recovery simulation...', 'info');
+        
+        const payload = {
+            entity_type: currentEntityType,
+            entity_id: entityId,
+            loss_amount: parseFloat(lossAmount),
+            available_capital: parseFloat(availableCapital),
+        };
+        
+        const response = await fetch('/api/simulate/recovery', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            showToast(data.error || 'Recovery calculation failed', 'error');
+            return;
+        }
+        
+        displayRecoveryResults(data);
+        showToast('Recovery analysis complete!', 'success');
+        
+    } catch (error) {
+        console.error('Recovery calculator error:', error);
+        showToast('Error calculating recovery: ' + error.message, 'error');
+    } finally {
+        btns.forEach(btn => btn.disabled = false);
+    }
+}
+
+function displayRecoveryResults(data) {
+    document.getElementById('results-placeholder').style.display = 'none';
+    document.getElementById('results-container').style.display = 'block';
+    document.getElementById('daily-breakdown-card').style.display = 'none';
+    document.getElementById('historical-breakdown-card').style.display = 'block';
+    
+    const inputs = data.inputs;
+    const recommended = data.recommended;
+    const profiles = data.profiles;
+    
+    // Update summary stats
+    document.getElementById('result-final-balance').textContent = '$' + inputs.available_capital.toLocaleString();
+    document.getElementById('result-final-balance').className = 'stat-value info';
+    
+    const profitEl = document.getElementById('result-total-profit');
+    profitEl.textContent = 'Goal: +$' + inputs.target_recovery.toLocaleString();
+    profitEl.className = 'stat-value warning';
+    
+    document.getElementById('result-total-return').textContent = recommended ? recommended.success_probability + '% chance' : 'N/A';
+    document.getElementById('result-total-return').className = 'stat-value ' + (recommended && recommended.success_probability >= 50 ? 'success' : 'warning');
+    
+    document.querySelector('[for-stat="expected-trade"]').textContent = 'Best Profile';
+    document.getElementById('result-expected-trade').textContent = recommended ? recommended.profile : 'N/A';
+    document.getElementById('result-expected-trade').className = 'stat-value info';
+    
+    document.querySelector('[for-stat="avg-daily"]').textContent = 'Est. Time';
+    document.getElementById('result-avg-daily').textContent = recommended ? recommended.estimated_weeks + ' weeks' : 'N/A';
+    document.getElementById('result-avg-daily').className = 'stat-value info';
+    
+    document.querySelector('[for-stat="weekly"]').textContent = 'Risk of Ruin';
+    document.getElementById('result-weekly').textContent = recommended ? recommended.risk_of_ruin + '%' : 'N/A';
+    document.getElementById('result-weekly').className = 'stat-value ' + (recommended && recommended.risk_of_ruin < 20 ? 'success' : 'danger');
+    
+    document.querySelector('[for-stat="monthly"]').textContent = 'Min Capital';
+    document.getElementById('result-monthly').textContent = '$' + data.minimum_capital_for_70pct_success.toLocaleString();
+    document.getElementById('result-monthly').className = 'stat-value info';
+    
+    document.getElementById('result-edge').textContent = data.warning || (recommended && recommended.success_probability >= 50 ? 'Recovery Possible' : 'High Risk');
+    document.getElementById('result-edge').className = 'stat-value ' + (data.warning ? 'danger' : 'warning');
+    
+    // Strategy text
+    document.getElementById('strategy-text').textContent = 
+        `LOSS RECOVERY ANALYSIS\n\n` +
+        `Goal: Recover $${inputs.target_recovery.toLocaleString()} with $${inputs.available_capital.toLocaleString()} capital\n` +
+        `Following: ${data.entity_id}\n\n` +
+        `Trader Stats:\n` +
+        `• ${data.trade_stats.total_trades} trades at ${data.trade_stats.trades_per_day}/day\n` +
+        `• ${data.trade_stats.win_rate}% win rate\n\n` +
+        (recommended ? 
+            `RECOMMENDED: ${recommended.profile} (${recommended.position_pct}%)\n` +
+            `• Success probability: ${recommended.success_probability}%\n` +
+            `• Estimated trades: ${recommended.avg_trades_to_goal}\n` +
+            `• Estimated time: ${recommended.estimated_weeks} weeks\n` +
+            `• Risk of ruin: ${recommended.risk_of_ruin}%`
+            : 'No recommended profile found');
+    
+    // Render profiles table
+    const tbody = document.getElementById('historical-breakdown-body');
+    tbody.innerHTML = profiles.map(p => `
+        <tr style="${recommended && p.profile === recommended.profile ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
+            <td style="font-weight: 600; color: ${p.color};">${p.profile}</td>
+            <td style="text-align: center;">${p.position_pct}%</td>
+            <td style="text-align: center; font-weight: 600; color: ${p.success_probability >= 50 ? 'var(--success)' : 'var(--warning)'};">${p.success_probability}%</td>
+            <td style="text-align: center; color: ${p.risk_of_ruin < 20 ? 'var(--success)' : 'var(--danger)'};">${p.risk_of_ruin}%</td>
+            <td style="text-align: center;">${p.avg_trades_to_goal}</td>
+            <td style="text-align: center;">${p.estimated_days} days</td>
+            <td style="text-align: center;">${p.estimated_weeks} weeks</td>
+            <td style="text-align: center; color: var(--warning);">${p.max_drawdown_pct.toFixed(1)}%</td>
+            <td style="text-align: center; color: ${p.skipped_trades > 0 ? 'var(--warning)' : 'var(--text-muted)'};">${p.skipped_trades}</td>
+        </tr>
+    `).join('');
+    
+    // Update table headers for recovery view
+    document.querySelector('#historical-breakdown thead tr').innerHTML = `
+        <th>Profile</th>
+        <th style="text-align: center;">Size %</th>
+        <th style="text-align: center;">Success %</th>
+        <th style="text-align: center;">Ruin Risk</th>
+        <th style="text-align: center;">Trades</th>
+        <th style="text-align: center;">Days</th>
+        <th style="text-align: center;">Weeks</th>
+        <th style="text-align: center;">Max DD</th>
+        <th style="text-align: center;">Skipped</th>
+    `;
+    
+    document.getElementById('warnings-section').style.display = data.warning ? 'block' : 'none';
+    if (data.warning) {
+        document.getElementById('warnings-list').innerHTML = `
+            <div style="background: rgba(239, 68, 68, 0.1); border-radius: 6px; padding: 10px; border-left: 3px solid var(--danger);">
+                <div style="font-weight: 600; color: var(--danger);">Warning</div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary);">${data.warning}</div>
+            </div>
+        `;
+    }
+    document.getElementById('capital-requirements-section').style.display = 'none';
 }
 
 function displayHistoricalResults(data) {
