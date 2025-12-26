@@ -488,6 +488,34 @@ class AlpacaBroker(BrokerInterface):
             
             side = OrderSide.BUY if action.upper() == "BTO" else OrderSide.SELL
             
+            # CRITICAL FIX: For STC orders, verify actual position quantity to prevent "uncovered option" errors
+            # The original BTO may have been auto-reduced by Alpaca, so we must check the real held quantity
+            if action.upper() == "STC":
+                try:
+                    positions = await asyncio.to_thread(self.trading_client.get_all_positions)
+                    held_qty = 0
+                    for pos in positions:
+                        if pos.symbol == contract.symbol:
+                            held_qty = int(abs(float(pos.qty)))
+                            break
+                    
+                    print(f"[{self.name}] STC quantity check: requested={quantity}, held={held_qty}", flush=True)
+                    
+                    if held_qty == 0:
+                        return OrderResult(
+                            success=False,
+                            message=f"⚠️  No position found for {contract.symbol}. Position may have already been closed.",
+                            symbol=symbol,
+                            action=action
+                        )
+                    
+                    if quantity > held_qty:
+                        print(f"[{self.name}] ⚠️  Reducing STC quantity: {quantity} → {held_qty} (actual position size)", flush=True)
+                        quantity = held_qty
+                        
+                except Exception as e:
+                    print(f"[{self.name}] Warning: Could not verify position quantity: {e}", flush=True)
+            
             # CRITICAL: For options, specify position_intent to avoid "uncovered option" errors
             # BTO = Buy To Open (new long position)
             # STC = Sell To Close (close existing long position)
@@ -563,6 +591,35 @@ class AlpacaBroker(BrokerInterface):
             
             # Check for specific error types and provide better messages
             if 'uncovered' in error_msg.lower():
+                # For STC orders, retry with MARKET order if limit order fails
+                # Sometimes Alpaca Paper trading has issues with limit order pricing
+                if action.upper() == "STC" and price is not None:
+                    try:
+                        print(f"[{self.name}] ⚠️ Limit STC failed, retrying with MARKET order...", flush=True)
+                        market_req = MarketOrderRequest(
+                            symbol=contract.symbol,
+                            qty=quantity,
+                            side=OrderSide.SELL,
+                            time_in_force=TimeInForce.DAY,
+                            type=OrderType.MARKET,
+                            position_intent=PositionIntent.SELL_TO_CLOSE,
+                        )
+                        order = await asyncio.to_thread(self.trading_client.submit_order, order_data=market_req)
+                        if order:
+                            filled_price = float(order.filled_avg_price or 0)
+                            print(f"[{self.name}] ✅ MARKET STC order succeeded!", flush=True)
+                            return OrderResult(
+                                success=True,
+                                order_id=str(order.id),
+                                message=f"✅ Sold {quantity}x {symbol} ${strike} (MARKET)",
+                                price=filled_price,
+                                quantity=quantity,
+                                symbol=symbol,
+                                action=action
+                            )
+                    except Exception as retry_e:
+                        print(f"[{self.name}] ❌ MARKET STC retry also failed: {retry_e}", flush=True)
+                
                 return OrderResult(
                     success=False,
                     message=f"⚠️  Alpaca uncovered option error. Make sure you have the position to close: {symbol} ${strike}{option_type}",
