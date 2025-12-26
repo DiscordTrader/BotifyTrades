@@ -1583,15 +1583,20 @@ def clear_allowed_users(channel_id: int) -> int:
 def add_trade(signal_data: Dict) -> int:
     """Add a new trade to the database.
     
-    For STC trades with origin_trade_id, calculates PNL from original entry price.
+    For STC trades with origin_trade_id:
+    - Stores original BTO entry price in intended_price (for ENTRY column display)
+    - Stores exit price in executed_price (for CURRENT column display)
+    - Calculates PNL from entry to exit
     """
     conn = get_connection()
     cursor = conn.cursor()
     
     pnl = 0.0
     pnl_percent = 0.0
+    intended_price = signal_data.get('intended_price')
+    executed_price = signal_data.get('executed_price')
     
-    # Calculate PNL for STC trades linked to origin BTO
+    # For STC trades linked to origin BTO, use original entry price for display
     if signal_data.get('direction') == 'STC' and signal_data.get('origin_trade_id'):
         try:
             cursor.execute('SELECT executed_price, asset_type FROM trades WHERE id = ?', 
@@ -1602,6 +1607,10 @@ def add_trade(signal_data: Dict) -> int:
                 exit_price = float(signal_data.get('executed_price') or signal_data.get('intended_price') or 0)
                 qty = int(signal_data.get('quantity', 0))
                 asset_type = origin[1] or signal_data.get('asset_type', 'option')
+                
+                # Store original entry price for ENTRY column, exit price for CURRENT column
+                intended_price = entry_price
+                executed_price = exit_price
                 
                 if entry_price > 0 and exit_price > 0 and qty > 0:
                     multiplier = 100 if asset_type == 'option' else 1
@@ -1629,8 +1638,8 @@ def add_trade(signal_data: Dict) -> int:
         signal_data.get('expiry'),
         signal_data.get('call_put'),
         signal_data['quantity'],
-        signal_data.get('intended_price'),
-        signal_data.get('executed_price'),
+        intended_price,
+        executed_price,
         datetime.now() if signal_data.get('executed') else None,
         signal_data.get('status', 'PENDING'),
         signal_data.get('broker'),
