@@ -1362,10 +1362,19 @@ def run_risk_optimizer(
     sorted_results = sorted(valid_results, key=lambda x: x['risk_score'], reverse=True)
     best_result = sorted_results[0]
     
+    # Check if ALL results are negative (no profitable sizing exists)
+    all_negative = all(r['total_return_pct'] < 0 for r in valid_results)
+    any_profitable = any(r['total_return_pct'] > 0 for r in valid_results)
+    
     # Generate recommendation message
-    recommendation_msg = f"Based on historical trades, {best_result['position_pct']}% position size offers the best risk-adjusted returns. "
-    if best_result['skipped_trades'] > 0:
-        recommendation_msg += f"Note: {best_result['skipped_trades']} trades would be skipped at this level."
+    if all_negative:
+        recommendation_msg = f"WARNING: No position size yields positive returns with this trade history. {best_result['position_pct']}% is the LEAST BAD option (smallest loss ratio). Consider trading a different source or paper trading longer."
+    elif any_profitable:
+        recommendation_msg = f"Based on historical trades, {best_result['position_pct']}% position size offers the best risk-adjusted returns. "
+        if best_result['skipped_trades'] > 0:
+            recommendation_msg += f"Note: {best_result['skipped_trades']} trades would be skipped at this level."
+    else:
+        recommendation_msg = f"Breakeven result at {best_result['position_pct']}%. Consider paper trading longer to gather more data."
     
     return {
         'success': True,
@@ -1375,6 +1384,8 @@ def run_risk_optimizer(
         'comparison': results,
         'recommended': best_result,
         'recommendation_message': recommendation_msg,
+        'all_negative': all_negative,
+        'any_profitable': any_profitable,
         'total_trades_in_history': results[0]['executed_trades'] + results[0]['skipped_trades'] if results else 0
     }
 

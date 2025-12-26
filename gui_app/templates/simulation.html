@@ -750,21 +750,24 @@ function displayOptimizerResults(data) {
     
     const recommended = data.recommended;
     const portfolio = data.portfolio_start;
+    const allNegative = data.all_negative || false;
+    const isProfit = recommended.total_profit >= 0;
     
-    // Update summary stats with recommended values
+    // Update summary stats with recommended values - use appropriate colors
     document.getElementById('result-final-balance').textContent = '$' + recommended.final_balance.toLocaleString(undefined, {minimumFractionDigits: 2});
-    document.getElementById('result-final-balance').className = 'stat-value success';
+    document.getElementById('result-final-balance').className = 'stat-value ' + (isProfit ? 'success' : 'danger');
     
     const profitEl = document.getElementById('result-total-profit');
-    profitEl.textContent = '+$' + recommended.total_profit.toLocaleString(undefined, {minimumFractionDigits: 2});
-    profitEl.className = 'stat-value success';
+    profitEl.textContent = (isProfit ? '+$' : '-$') + Math.abs(recommended.total_profit).toLocaleString(undefined, {minimumFractionDigits: 2});
+    profitEl.className = 'stat-value ' + (isProfit ? 'success' : 'danger');
     
-    document.getElementById('result-total-return').textContent = '+' + recommended.total_return_pct.toFixed(1) + '%';
-    document.getElementById('result-total-return').className = 'stat-value success';
+    document.getElementById('result-total-return').textContent = (recommended.total_return_pct >= 0 ? '+' : '') + recommended.total_return_pct.toFixed(1) + '%';
+    document.getElementById('result-total-return').className = 'stat-value ' + (recommended.total_return_pct >= 0 ? 'success' : 'danger');
     
-    document.querySelector('[for-stat="expected-trade"]').textContent = 'Optimal %';
+    // Show "Least Bad %" instead of "Optimal %" when all negative
+    document.querySelector('[for-stat="expected-trade"]').textContent = allNegative ? 'Least Bad %' : 'Optimal %';
     document.getElementById('result-expected-trade').textContent = recommended.position_pct + '%';
-    document.getElementById('result-expected-trade').className = 'stat-value info';
+    document.getElementById('result-expected-trade').className = 'stat-value ' + (allNegative ? 'warning' : 'info');
     
     document.querySelector('[for-stat="avg-daily"]').textContent = 'Max Drawdown';
     document.getElementById('result-avg-daily').textContent = recommended.max_drawdown_pct.toFixed(1) + '%';
@@ -779,11 +782,12 @@ function displayOptimizerResults(data) {
     document.getElementById('result-monthly').className = 'stat-value ' + (recommended.win_rate >= 50 ? 'success' : 'warning');
     
     document.getElementById('result-edge').textContent = 'Risk Score: ' + recommended.risk_score;
-    document.getElementById('result-edge').className = 'stat-value info';
+    document.getElementById('result-edge').className = 'stat-value ' + (recommended.risk_score > 0 ? 'success' : 'warning');
     
-    // Strategy text
+    // Strategy text - show warning header when all negative
+    const headerText = allNegative ? '⚠️ NO PROFITABLE SIZING FOUND' : 'RISK OPTIMIZATION RESULTS';
     document.getElementById('strategy-text').textContent = 
-        `RISK OPTIMIZATION RESULTS\n\n` +
+        `${headerText}\n\n` +
         `${data.recommendation_message}\n\n` +
         `With $${portfolio.toLocaleString()} portfolio at ${recommended.position_pct}% per trade:\n` +
         `• Average position: $${recommended.avg_position.toLocaleString()}\n` +
@@ -791,21 +795,27 @@ function displayOptimizerResults(data) {
         `• Max drawdown: ${recommended.max_drawdown_pct.toFixed(1)}%\n` +
         `• Risk-adjusted score: ${recommended.risk_score}`;
     
-    // Render comparison table
+    // Render comparison table - highlight row appropriately
     const tbody = document.getElementById('historical-breakdown-body');
-    tbody.innerHTML = data.comparison.map(r => `
-        <tr style="${r.position_pct === recommended.position_pct ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
+    tbody.innerHTML = data.comparison.map(r => {
+        const isSelected = r.position_pct === recommended.position_pct;
+        const bgColor = isSelected ? (allNegative ? 'rgba(251, 191, 36, 0.15)' : 'rgba(16, 185, 129, 0.1)') : '';
+        const returnColor = r.total_return_pct >= 0 ? 'var(--success)' : 'var(--danger)';
+        const returnSign = r.total_return_pct >= 0 ? '+' : '';
+        
+        return `
+        <tr style="background: ${bgColor};">
             <td style="font-weight: 600;">${r.position_pct}%</td>
-            <td style="font-weight: 600; color: var(--success);">$${r.final_balance.toLocaleString()}</td>
-            <td style="text-align: right; color: var(--success);">+${r.total_return_pct.toFixed(1)}%</td>
+            <td style="font-weight: 600; color: ${r.final_balance >= portfolio ? 'var(--success)' : 'var(--danger)'};">$${r.final_balance.toLocaleString()}</td>
+            <td style="text-align: right; color: ${returnColor};">${returnSign}${r.total_return_pct.toFixed(1)}%</td>
             <td style="text-align: right; color: var(--warning);">${r.max_drawdown_pct.toFixed(1)}%</td>
             <td style="text-align: center;">${r.executed_trades}</td>
             <td style="text-align: center; color: ${r.skipped_trades > 0 ? 'var(--warning)' : 'var(--text-muted)'};">${r.skipped_trades}</td>
             <td style="text-align: right;">${r.win_rate}%</td>
-            <td style="text-align: right; font-weight: 600; color: ${r.position_pct === recommended.position_pct ? 'var(--mint)' : 'var(--text-primary)'};">${r.risk_score}</td>
+            <td style="text-align: right; font-weight: 600; color: ${isSelected ? (allNegative ? 'var(--warning)' : 'var(--mint)') : 'var(--text-primary)'};">${r.risk_score}</td>
             <td style="text-align: right;">$${r.avg_position.toLocaleString()}</td>
         </tr>
-    `).join('');
+    `}).join('');
     
     // Update table headers for optimizer view
     document.querySelector('#historical-breakdown thead tr').innerHTML = `
