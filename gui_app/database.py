@@ -1581,9 +1581,35 @@ def clear_allowed_users(channel_id: int) -> int:
 
 # Trade management functions
 def add_trade(signal_data: Dict) -> int:
-    """Add a new trade to the database"""
+    """Add a new trade to the database.
+    
+    For STC trades with origin_trade_id, calculates PNL from original entry price.
+    """
     conn = get_connection()
     cursor = conn.cursor()
+    
+    pnl = 0.0
+    pnl_percent = 0.0
+    
+    # Calculate PNL for STC trades linked to origin BTO
+    if signal_data.get('direction') == 'STC' and signal_data.get('origin_trade_id'):
+        try:
+            cursor.execute('SELECT executed_price, asset_type FROM trades WHERE id = ?', 
+                          (signal_data['origin_trade_id'],))
+            origin = cursor.fetchone()
+            if origin and origin[0]:
+                entry_price = float(origin[0])
+                exit_price = float(signal_data.get('executed_price') or signal_data.get('intended_price') or 0)
+                qty = int(signal_data.get('quantity', 0))
+                asset_type = origin[1] or signal_data.get('asset_type', 'option')
+                
+                if entry_price > 0 and exit_price > 0 and qty > 0:
+                    multiplier = 100 if asset_type == 'option' else 1
+                    pnl = round((exit_price - entry_price) * qty * multiplier, 2)
+                    pnl_percent = round(((exit_price - entry_price) / entry_price) * 100, 4) if entry_price else 0
+                    print(f"[DATABASE] PNL calculated for STC: entry=${entry_price}, exit=${exit_price}, qty={qty}, pnl=${pnl} ({pnl_percent}%)")
+        except Exception as e:
+            print(f"[DATABASE] Error calculating STC PNL: {e}")
     
     cursor.execute('''
         INSERT INTO trades (
@@ -1591,8 +1617,8 @@ def add_trade(signal_data: Dict) -> int:
             strike, expiry, call_put, quantity, intended_price,
             executed_price, executed_at, status, broker, order_id,
             stop_loss_price, profit_target_price, risk_trigger, origin_trade_id,
-            user_id, source
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            user_id, source, pnl, pnl_percent
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         signal_data.get('channel_id'),
         signal_data.get('message_id'),
@@ -1614,7 +1640,9 @@ def add_trade(signal_data: Dict) -> int:
         signal_data.get('risk_trigger'),
         signal_data.get('origin_trade_id'),
         signal_data.get('user_id'),
-        signal_data.get('source', 'discord')
+        signal_data.get('source', 'discord'),
+        pnl,
+        pnl_percent
     ))
     
     conn.commit()
