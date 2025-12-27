@@ -248,16 +248,19 @@ class SignalVerificationService:
             return None
     
     def get_option_market_data(self, ticker: str, strike: float, expiry: str, 
-                                direction: str) -> Optional[Dict]:
+                                direction: str, preferred_broker: str = 'auto') -> Optional[Dict]:
         """
-        Fetch options data for verification - tries brokers first, falls back to yfinance
+        Fetch options data for verification - uses preferred broker or auto-selects
         
-        Priority:
+        Args:
+            preferred_broker: 'auto', 'webull', 'tastytrade', or 'yfinance'
+        
+        Priority when auto:
         1. Webull (real-time)
         2. Tastytrade (real-time)
         3. yfinance (delayed 15-30 min)
         """
-        cache_key = f"{ticker}_{strike}_{expiry}_{direction}"
+        cache_key = f"{ticker}_{strike}_{expiry}_{direction}_{preferred_broker}"
         now = datetime.now()
         
         if cache_key in self.cache:
@@ -265,24 +268,37 @@ class SignalVerificationService:
             if (now - cached_time).seconds < self.cache_duration:
                 return cached_data
         
-        data = self._get_webull_option_quote(ticker, strike, expiry, direction)
+        data = None
         
-        if not data:
+        if preferred_broker == 'webull':
+            data = self._get_webull_option_quote(ticker, strike, expiry, direction)
+            if not data:
+                print(f"[VERIFY] Webull not available, no fallback (user selected Webull only)")
+        elif preferred_broker == 'tastytrade':
             data = self._get_tastytrade_option_quote(ticker, strike, expiry, direction)
-        
-        if not data:
+            if not data:
+                print(f"[VERIFY] Tastytrade not available, no fallback (user selected Tastytrade only)")
+        elif preferred_broker == 'yfinance':
             data = self._get_yfinance_option_quote(ticker, strike, expiry, direction)
+        else:
+            data = self._get_webull_option_quote(ticker, strike, expiry, direction)
+            if not data:
+                data = self._get_tastytrade_option_quote(ticker, strike, expiry, direction)
+            if not data:
+                data = self._get_yfinance_option_quote(ticker, strike, expiry, direction)
         
         if data:
             self.cache[cache_key] = (data, now)
         
         return data
     
-    def get_stock_market_data(self, ticker: str) -> Optional[Dict]:
-        """Fetch stock quote - tries Webull first, falls back to yfinance"""
+    def get_stock_market_data(self, ticker: str, preferred_broker: str = 'auto') -> Optional[Dict]:
+        """Fetch stock quote - uses preferred broker or auto-selects"""
         global _webull_client
         
-        if _webull_client:
+        if preferred_broker == 'yfinance':
+            pass
+        elif preferred_broker == 'webull' or (preferred_broker == 'auto' and _webull_client):
             try:
                 quote = _webull_client.get_quote(stock=ticker)
                 if quote:
@@ -320,12 +336,13 @@ class SignalVerificationService:
             print(f"[VERIFY] yfinance stock error for {ticker}: {e}")
             return None
     
-    def verify_signal(self, signal_data: Dict) -> Dict:
+    def verify_signal(self, signal_data: Dict, preferred_broker: str = 'auto') -> Dict:
         """
         Verify a single signal against market data
         
         Args:
             signal_data: Dict with ticker, strike, expiry, direction, signal_price, signal_time
+            preferred_broker: 'auto', 'webull', 'tastytrade', or 'yfinance'
         
         Returns:
             Verification result with slippage, executability, etc.
@@ -349,7 +366,8 @@ class SignalVerificationService:
             'volume_liquidity': 'UNKNOWN',
             'notes': [],
             'red_flags': [],
-            'confidence_score': 0
+            'confidence_score': 0,
+            'data_source': 'unknown'
         }
         
         if asset_type == 'option':
@@ -357,10 +375,11 @@ class SignalVerificationService:
                 ticker,
                 float(signal_data.get('strike', 0)),
                 signal_data.get('expiry', ''),
-                signal_data.get('direction', 'call')
+                signal_data.get('direction', 'call'),
+                preferred_broker=preferred_broker
             )
         else:
-            market_data = self.get_stock_market_data(ticker)
+            market_data = self.get_stock_market_data(ticker, preferred_broker=preferred_broker)
         
         if not market_data:
             result['verification_status'] = 'NO_DATA'
@@ -706,10 +725,10 @@ class SignalVerificationService:
         }
 
 
-def verify_single_signal(signal_data: Dict) -> Dict:
-    """Convenience function to verify a single signal"""
+def verify_single_signal(signal_data: Dict, preferred_broker: str = 'auto') -> Dict:
+    """Convenience function to verify a single signal with optional broker preference"""
     service = SignalVerificationService()
-    return service.verify_signal(signal_data)
+    return service.verify_signal(signal_data, preferred_broker=preferred_broker)
 
 
 def get_verification_report(entity_type: str, entity_id: str, days: int = 30) -> Dict:

@@ -86,9 +86,23 @@
             
             <div class="card" id="data-source-card">
                 <h3 class="card-title">Data Source</h3>
-                <div id="data-source-info" class="data-source-info">
-                    <div class="source-badge yfinance">yfinance (Delayed)</div>
-                    <p class="source-note">Connect Webull or Tastytrade for real-time data</p>
+                
+                <div class="form-group">
+                    <label class="form-label">Select Broker</label>
+                    <select id="broker-select" class="form-select" onchange="onBrokerChange()">
+                        <option value="auto">Auto (Best Available)</option>
+                        <option value="webull">Webull (Real-time)</option>
+                        <option value="tastytrade">Tastytrade (Real-time)</option>
+                        <option value="yfinance">yfinance (Delayed)</option>
+                    </select>
+                </div>
+                
+                <div id="broker-info" class="broker-info">
+                    <div class="broker-status" id="broker-status">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Checking...</span>
+                    </div>
+                    <div class="api-limits" id="api-limits"></div>
                 </div>
             </div>
         </div>
@@ -782,6 +796,61 @@
     margin: 0;
 }
 
+.broker-info {
+    margin-top: 12px;
+}
+
+.broker-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--bg-darker);
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+}
+
+.status-dot.connected {
+    background: var(--success);
+}
+
+.status-dot.disconnected {
+    background: var(--danger);
+}
+
+.status-dot.delayed {
+    background: var(--warning);
+}
+
+.status-text {
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+.api-limits {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    padding: 8px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+}
+
+.api-limits ul {
+    margin: 4px 0 0 16px;
+    padding: 0;
+}
+
+.api-limits li {
+    margin: 2px 0;
+}
+
 .empty-msg {
     text-align: center;
     color: var(--text-secondary);
@@ -817,10 +886,108 @@
 let currentEntityType = 'channel';
 let currentEntityId = null;
 let analysisData = null;
+let selectedBroker = 'auto';
+
+const BROKER_INFO = {
+    auto: {
+        name: 'Auto (Best Available)',
+        status: 'Auto-selects connected broker',
+        statusClass: 'delayed',
+        limits: 'Priority: Webull → Tastytrade → yfinance'
+    },
+    webull: {
+        name: 'Webull',
+        status: 'Checking connection...',
+        statusClass: 'disconnected',
+        limits: `<ul>
+            <li><strong>Data:</strong> Real-time bid/ask/volume</li>
+            <li><strong>Rate Limit:</strong> ~120 requests/min</li>
+            <li><strong>Session:</strong> Requires login (tokens expire)</li>
+            <li><strong>Note:</strong> Best for US options</li>
+        </ul>`
+    },
+    tastytrade: {
+        name: 'Tastytrade',
+        status: 'Checking connection...',
+        statusClass: 'disconnected',
+        limits: `<ul>
+            <li><strong>Data:</strong> Real-time bid/ask/volume/Greeks</li>
+            <li><strong>Rate Limit:</strong> ~60 requests/min</li>
+            <li><strong>Session:</strong> Requires login</li>
+            <li><strong>Note:</strong> Best for options analytics</li>
+        </ul>`
+    },
+    yfinance: {
+        name: 'yfinance',
+        status: 'Always available (delayed)',
+        statusClass: 'delayed',
+        limits: `<ul>
+            <li><strong>Data:</strong> Delayed 15-30 min</li>
+            <li><strong>Rate Limit:</strong> ~2000/hour (unofficial)</li>
+            <li><strong>Session:</strong> No login required</li>
+            <li><strong>Note:</strong> Free but delayed data</li>
+        </ul>`
+    }
+};
 
 document.addEventListener('DOMContentLoaded', function() {
     loadEntities();
+    checkBrokerStatus();
 });
+
+async function checkBrokerStatus() {
+    try {
+        const response = await fetch('/api/verification/broker-status');
+        const data = await response.json();
+        
+        if (data.success) {
+            if (data.webull_connected) {
+                BROKER_INFO.webull.status = 'Connected (Real-time)';
+                BROKER_INFO.webull.statusClass = 'connected';
+            } else {
+                BROKER_INFO.webull.status = 'Not connected';
+                BROKER_INFO.webull.statusClass = 'disconnected';
+            }
+            
+            if (data.tastytrade_connected) {
+                BROKER_INFO.tastytrade.status = 'Connected (Real-time)';
+                BROKER_INFO.tastytrade.statusClass = 'connected';
+            } else {
+                BROKER_INFO.tastytrade.status = 'Not connected';
+                BROKER_INFO.tastytrade.statusClass = 'disconnected';
+            }
+            
+            // Update auto status
+            if (data.webull_connected || data.tastytrade_connected) {
+                const sources = [];
+                if (data.webull_connected) sources.push('Webull');
+                if (data.tastytrade_connected) sources.push('Tastytrade');
+                BROKER_INFO.auto.status = `Using: ${sources.join(', ')}`;
+                BROKER_INFO.auto.statusClass = 'connected';
+            }
+        }
+        
+        onBrokerChange();
+    } catch (error) {
+        console.error('Error checking broker status:', error);
+        onBrokerChange();
+    }
+}
+
+function onBrokerChange() {
+    selectedBroker = document.getElementById('broker-select').value;
+    const info = BROKER_INFO[selectedBroker];
+    
+    const statusEl = document.getElementById('broker-status');
+    const limitsEl = document.getElementById('api-limits');
+    
+    statusEl.innerHTML = `
+        <span class="status-dot ${info.statusClass}"></span>
+        <span class="status-text">${info.status}</span>
+    `;
+    
+    limitsEl.innerHTML = info.limits;
+}
 
 function setEntityType(type) {
     currentEntityType = type;
@@ -1038,7 +1205,8 @@ async function verifyManualSignal() {
                 strike,
                 direction,
                 expiry,
-                signal_price: price
+                signal_price: price,
+                preferred_broker: selectedBroker
             })
         });
         

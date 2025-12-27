@@ -12033,6 +12033,28 @@ def register_routes(app):
         """Signal Verification Tool - Verify signals against real market data"""
         return render_template('verification.html')
     
+    @app.route('/api/verification/broker-status', methods=['GET'])
+    @login_required
+    def api_verification_broker_status():
+        """Get connection status of brokers for verification data source"""
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from services.signal_verification import _webull_client, _tastytrade_session
+            
+            return jsonify({
+                'success': True,
+                'webull_connected': _webull_client is not None,
+                'tastytrade_connected': _tastytrade_session is not None,
+                'yfinance_available': True
+            })
+        except Exception as e:
+            return jsonify({
+                'success': True,
+                'webull_connected': False,
+                'tastytrade_connected': False,
+                'yfinance_available': True
+            })
+    
     @app.route('/api/verification/verify', methods=['POST'])
     @login_required
     def api_verify_signal():
@@ -12050,10 +12072,11 @@ def register_routes(app):
                 'expiry': data.get('expiry'),
                 'direction': data.get('direction', 'call'),
                 'signal_price': data.get('signal_price'),
-                'signal_time': data.get('signal_time', datetime.now().isoformat())
+                'signal_time': data.get('signal_time', datetime.now().isoformat()),
+                'preferred_broker': data.get('preferred_broker', 'auto')
             }
             
-            result = verify_single_signal(signal_data)
+            result = verify_single_signal(signal_data, preferred_broker=signal_data['preferred_broker'])
             return jsonify({'success': True, **result})
             
         except Exception as e:
