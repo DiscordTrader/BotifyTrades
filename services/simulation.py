@@ -137,6 +137,368 @@ def get_db_path() -> str:
     return './bot_data.db'
 
 
+# =============================================================================
+# ADVANCED RISK METRICS
+# =============================================================================
+
+def calculate_kelly_criterion(win_rate: float, avg_win_pct: float, avg_loss_pct: float) -> Dict[str, Any]:
+    """
+    Calculate Kelly Criterion for optimal position sizing.
+    
+    Kelly % = (Win Probability × Win/Loss Ratio - Loss Probability) / Win/Loss Ratio
+    Or simplified: Kelly % = W - (1-W)/R where W=win rate, R=win/loss ratio
+    
+    Args:
+        win_rate: Win probability (0-1)
+        avg_win_pct: Average winning trade percentage (e.g., 25 for 25%)
+        avg_loss_pct: Average losing trade percentage as positive number (e.g., 15 for -15%)
+    
+    Returns:
+        Dict with full_kelly, half_kelly, quarter_kelly percentages and recommendation
+    """
+    if avg_loss_pct <= 0 or avg_win_pct <= 0:
+        return {
+            'full_kelly': 0,
+            'half_kelly': 0,
+            'quarter_kelly': 0,
+            'recommendation': 'Insufficient data',
+            'edge': 0,
+            'is_valid': False
+        }
+    
+    # Win/Loss ratio (R)
+    win_loss_ratio = avg_win_pct / avg_loss_pct
+    
+    # Kelly formula: K = W - (1-W)/R
+    loss_rate = 1 - win_rate
+    full_kelly = (win_rate - (loss_rate / win_loss_ratio)) * 100
+    
+    # Cap at reasonable levels
+    full_kelly = max(0, min(full_kelly, 50))  # Cap between 0-50%
+    half_kelly = full_kelly / 2
+    quarter_kelly = full_kelly / 4
+    
+    # Calculate edge (expected value per unit risked)
+    edge = (win_rate * win_loss_ratio) - loss_rate
+    
+    # Generate recommendation
+    if full_kelly <= 0:
+        recommendation = "AVOID: Negative edge - this strategy loses money long-term"
+    elif full_kelly < 5:
+        recommendation = f"CONSERVATIVE: Risk {quarter_kelly:.1f}-{half_kelly:.1f}% per trade (small edge)"
+    elif full_kelly < 15:
+        recommendation = f"MODERATE: Risk {half_kelly:.1f}% per trade (use Half Kelly for safety)"
+    elif full_kelly < 25:
+        recommendation = f"AGGRESSIVE: Full Kelly suggests {full_kelly:.1f}%, but use {half_kelly:.1f}% to reduce volatility"
+    else:
+        recommendation = f"CAUTION: Kelly {full_kelly:.1f}% is very high - use Quarter Kelly ({quarter_kelly:.1f}%) to avoid ruin"
+    
+    return {
+        'full_kelly': round(full_kelly, 2),
+        'half_kelly': round(half_kelly, 2),
+        'quarter_kelly': round(quarter_kelly, 2),
+        'win_loss_ratio': round(win_loss_ratio, 2),
+        'recommendation': recommendation,
+        'edge': round(edge, 3),
+        'is_valid': full_kelly > 0
+    }
+
+
+def calculate_expectancy(win_rate: float, avg_win_pct: float, avg_loss_pct: float, avg_position: float = 100) -> Dict[str, Any]:
+    """
+    Calculate trade expectancy (expected value per trade).
+    
+    Expectancy = (Win% × Avg Win) - (Loss% × Avg Loss)
+    
+    Args:
+        win_rate: Win probability (0-1)
+        avg_win_pct: Average winning trade percentage
+        avg_loss_pct: Average losing trade percentage (positive number)
+        avg_position: Average position size in dollars
+    
+    Returns:
+        Dict with expectancy metrics
+    """
+    loss_rate = 1 - win_rate
+    
+    # Expectancy as percentage
+    expectancy_pct = (win_rate * avg_win_pct) - (loss_rate * avg_loss_pct)
+    
+    # Expectancy in dollars (per trade)
+    expectancy_dollars = (expectancy_pct / 100) * avg_position
+    
+    # Profit factor = (Wins × Avg Win) / (Losses × Avg Loss)
+    if loss_rate > 0 and avg_loss_pct > 0:
+        profit_factor = (win_rate * avg_win_pct) / (loss_rate * avg_loss_pct)
+    else:
+        profit_factor = float('inf') if win_rate > 0 else 0
+    
+    # Determine quality
+    if expectancy_pct <= 0:
+        quality = 'NEGATIVE EDGE'
+        quality_color = 'danger'
+    elif expectancy_pct < 2:
+        quality = 'MARGINAL'
+        quality_color = 'warning'
+    elif expectancy_pct < 5:
+        quality = 'GOOD'
+        quality_color = 'info'
+    else:
+        quality = 'EXCELLENT'
+        quality_color = 'success'
+    
+    return {
+        'expectancy_pct': round(expectancy_pct, 2),
+        'expectancy_dollars': round(expectancy_dollars, 2),
+        'profit_factor': round(profit_factor, 2) if profit_factor != float('inf') else 999,
+        'quality': quality,
+        'quality_color': quality_color,
+        'is_positive': expectancy_pct > 0
+    }
+
+
+def calculate_risk_of_ruin(
+    win_rate: float,
+    avg_win_pct: float,
+    avg_loss_pct: float,
+    position_size_pct: float,
+    ruin_threshold: float = 0.5
+) -> Dict[str, Any]:
+    """
+    Estimate Risk of Ruin probability using simplified formula.
+    
+    Risk of Ruin approximation for fixed fractional betting:
+    RoR ≈ ((1-edge)/(1+edge))^(bankroll_units)
+    
+    Args:
+        win_rate: Win probability (0-1)
+        avg_win_pct: Average winning trade percentage
+        avg_loss_pct: Average losing trade percentage (positive)
+        position_size_pct: Position size as percentage of portfolio (e.g., 10 for 10%)
+        ruin_threshold: What percentage loss counts as "ruin" (0.5 = 50% loss)
+    
+    Returns:
+        Dict with risk of ruin probabilities at various thresholds
+    """
+    # Calculate edge
+    loss_rate = 1 - win_rate
+    edge = (win_rate * avg_win_pct) - (loss_rate * avg_loss_pct)
+    
+    # Normalize edge to per-unit
+    edge_normalized = edge / 100
+    
+    # Number of "units" in bankroll based on position size
+    if position_size_pct > 0:
+        bankroll_units = 100 / position_size_pct
+    else:
+        bankroll_units = 100
+    
+    # Calculate risk of ruin at different thresholds
+    results = {}
+    thresholds = [('50%', 0.5), ('75%', 0.75), ('100%', 1.0)]
+    
+    for label, threshold in thresholds:
+        units_to_lose = bankroll_units * threshold
+        
+        if edge_normalized <= 0:
+            # Negative or zero edge = eventual ruin is certain
+            ror = 100.0
+        elif edge_normalized >= 1:
+            # Edge > 100% = theoretically can't lose
+            ror = 0.0
+        else:
+            # Simplified RoR formula
+            try:
+                ratio = (1 - edge_normalized) / (1 + edge_normalized)
+                ror = min(100, max(0, (ratio ** units_to_lose) * 100))
+            except:
+                ror = 50.0  # Default if calculation fails
+        
+        results[f'ror_{label}'] = round(ror, 1)
+    
+    # Overall risk assessment
+    ror_50 = results['ror_50%']
+    if ror_50 >= 50:
+        risk_level = 'CRITICAL'
+        risk_color = 'danger'
+        advice = 'REDUCE position size immediately! High probability of catastrophic loss.'
+    elif ror_50 >= 20:
+        risk_level = 'HIGH'
+        risk_color = 'warning'
+        advice = 'Consider reducing position size. Risk of significant drawdown is elevated.'
+    elif ror_50 >= 5:
+        risk_level = 'MODERATE'
+        risk_color = 'info'
+        advice = 'Acceptable risk level, but monitor closely during losing streaks.'
+    else:
+        risk_level = 'LOW'
+        risk_color = 'success'
+        advice = 'Well-sized positions. Continue current risk management approach.'
+    
+    return {
+        **results,
+        'edge_pct': round(edge, 2),
+        'risk_level': risk_level,
+        'risk_color': risk_color,
+        'advice': advice,
+        'position_size_pct': position_size_pct
+    }
+
+
+def analyze_streaks(trades: List[TradeRecord]) -> Dict[str, Any]:
+    """
+    Analyze winning and losing streaks in trade history.
+    
+    Args:
+        trades: List of TradeRecord objects
+    
+    Returns:
+        Dict with streak statistics
+    """
+    if not trades:
+        return {
+            'max_win_streak': 0,
+            'max_loss_streak': 0,
+            'current_streak': 0,
+            'current_streak_type': 'none',
+            'avg_win_streak': 0,
+            'avg_loss_streak': 0,
+            'streak_insight': 'Insufficient data'
+        }
+    
+    win_streaks = []
+    loss_streaks = []
+    current_streak = 0
+    current_type = None
+    
+    for trade in trades:
+        is_win = trade.pnl >= 0
+        
+        if current_type is None:
+            current_type = 'win' if is_win else 'loss'
+            current_streak = 1
+        elif (is_win and current_type == 'win') or (not is_win and current_type == 'loss'):
+            current_streak += 1
+        else:
+            # Streak ended, save it
+            if current_type == 'win':
+                win_streaks.append(current_streak)
+            else:
+                loss_streaks.append(current_streak)
+            current_type = 'win' if is_win else 'loss'
+            current_streak = 1
+    
+    # Don't forget the last streak
+    if current_type == 'win':
+        win_streaks.append(current_streak)
+    elif current_type == 'loss':
+        loss_streaks.append(current_streak)
+    
+    max_win_streak = max(win_streaks) if win_streaks else 0
+    max_loss_streak = max(loss_streaks) if loss_streaks else 0
+    avg_win_streak = mean(win_streaks) if win_streaks else 0
+    avg_loss_streak = mean(loss_streaks) if loss_streaks else 0
+    
+    # Generate insight
+    if max_loss_streak >= 5:
+        insight = f"⚠️ Experienced {max_loss_streak} consecutive losses. Size positions to survive 2× this streak."
+    elif max_loss_streak >= 3:
+        insight = f"Max losing streak: {max_loss_streak}. Plan for at least {max_loss_streak + 2} consecutive losses."
+    else:
+        insight = f"Good streak management. Max loss streak of {max_loss_streak} is manageable."
+    
+    return {
+        'max_win_streak': max_win_streak,
+        'max_loss_streak': max_loss_streak,
+        'current_streak': current_streak,
+        'current_streak_type': current_type or 'none',
+        'avg_win_streak': round(avg_win_streak, 1),
+        'avg_loss_streak': round(avg_loss_streak, 1),
+        'streak_insight': insight,
+        'total_win_streaks': len(win_streaks),
+        'total_loss_streaks': len(loss_streaks)
+    }
+
+
+def analyze_trading_times(trades: List[TradeRecord]) -> Dict[str, Any]:
+    """
+    Analyze performance by day of week and time of day.
+    
+    Args:
+        trades: List of TradeRecord objects
+    
+    Returns:
+        Dict with time-based performance analysis
+    """
+    if len(trades) < 10:
+        return {
+            'best_day': 'N/A',
+            'worst_day': 'N/A',
+            'day_breakdown': {},
+            'has_enough_data': False,
+            'insight': 'Need at least 10 trades for time analysis'
+        }
+    
+    # Track P&L by day of week
+    day_pnl = {i: {'pnl': 0, 'count': 0, 'wins': 0} for i in range(7)}
+    day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    
+    for trade in trades:
+        try:
+            if trade.closed_at:
+                dt = datetime.fromisoformat(trade.closed_at.replace('Z', '+00:00').split('+')[0])
+                day = dt.weekday()
+                day_pnl[day]['pnl'] += trade.pnl_percent
+                day_pnl[day]['count'] += 1
+                if trade.pnl >= 0:
+                    day_pnl[day]['wins'] += 1
+        except:
+            continue
+    
+    # Find best and worst days (only consider days with trades)
+    active_days = {k: v for k, v in day_pnl.items() if v['count'] >= 2}
+    
+    if not active_days:
+        return {
+            'best_day': 'N/A',
+            'worst_day': 'N/A',
+            'day_breakdown': {},
+            'has_enough_data': False,
+            'insight': 'Not enough trades per day for analysis'
+        }
+    
+    best_day_idx = max(active_days.keys(), key=lambda x: active_days[x]['pnl'])
+    worst_day_idx = min(active_days.keys(), key=lambda x: active_days[x]['pnl'])
+    
+    # Build breakdown
+    day_breakdown = {}
+    for day_idx, data in active_days.items():
+        avg_pnl = data['pnl'] / data['count'] if data['count'] > 0 else 0
+        win_rate = (data['wins'] / data['count'] * 100) if data['count'] > 0 else 0
+        day_breakdown[day_names[day_idx]] = {
+            'avg_pnl': round(avg_pnl, 2),
+            'trades': data['count'],
+            'win_rate': round(win_rate, 1)
+        }
+    
+    # Generate insight
+    best_day = day_names[best_day_idx]
+    worst_day = day_names[worst_day_idx]
+    
+    if active_days[best_day_idx]['pnl'] > 0 and active_days[worst_day_idx]['pnl'] < 0:
+        insight = f"📅 Best: {best_day} | Worst: {worst_day}. Consider reducing size on {worst_day}s."
+    else:
+        insight = f"📅 Most active: {best_day}. Performance varies by day - track patterns."
+    
+    return {
+        'best_day': best_day,
+        'worst_day': worst_day,
+        'day_breakdown': day_breakdown,
+        'has_enough_data': True,
+        'insight': insight
+    }
+
+
 def fetch_user_trade_history(author_name: str, limit: int = 500) -> List[TradeRecord]:
     """
     Fetch actual individual trades for a user from lot_closures.
