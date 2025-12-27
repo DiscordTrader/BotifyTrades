@@ -415,6 +415,13 @@
     letter-spacing: 0.5px;
     position: sticky;
     top: 0;
+    z-index: 10;
+    /* Fix blur on scroll - force GPU layer for crisp rendering */
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+    will-change: auto;
+    /* Ensure solid background - no transparency issues */
+    background-color: #0d1117;
 }
 
 .data-table tbody tr:hover {
@@ -1133,6 +1140,21 @@ function displayHistoricalResults(data) {
     
     // Reset heading for historical replay
     document.getElementById('historical-breakdown-title').innerHTML = `<span>📜</span> Trade-by-Trade Breakdown`;
+    
+    // CRITICAL: Reset table headers for Trade-by-Trade view (they may have been changed by Risk Optimizer)
+    document.querySelector('#historical-breakdown thead tr').innerHTML = `
+        <th style="width: 40px;" title="Trade sequence number">#</th>
+        <th title="Stock or option ticker symbol">Ticker</th>
+        <th style="text-align: center;" title="Trade close date">Date</th>
+        <th style="text-align: right;" title="Cost per option contract ($) or share price">Contract $</th>
+        <th style="text-align: right;" title="Original trader's position size ($)">Actual Pos</th>
+        <th style="text-align: center;" title="Simulated quantity based on your portfolio">Sim Qty</th>
+        <th style="text-align: right;" title="Your simulated position size ($)">Sim Pos</th>
+        <th style="text-align: center;" title="Trade outcome">Result</th>
+        <th style="text-align: right;" title="Profit/loss percentage from actual trade">P&L %</th>
+        <th style="text-align: right;" title="Your simulated profit/loss in dollars">Sim P&L</th>
+        <th style="text-align: right;" title="Portfolio balance after this trade">Balance</th>
+    `;
     
     const summary = data.summary;
     const stats = data.stats_used;
