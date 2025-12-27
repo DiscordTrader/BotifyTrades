@@ -5045,6 +5045,15 @@ class SelfClient(discord.Client):
         # Start automatic token refresh task
         self.loop.create_task(self.token_refresh_scheduler())
         print("[Webull] ✓ Automatic token refresh scheduler started (every 12 hours)")
+        
+        # Initialize Signal Verification Service with real-time broker data
+        try:
+            from services.signal_verification import set_broker_clients
+            webull_client = getattr(self.broker, 'wb', None) if self.broker else None
+            tastytrade_session = getattr(self.tastytrade_broker, 'session', None) if self.tastytrade_broker else None
+            set_broker_clients(webull_client=webull_client, tastytrade_session=tastytrade_session)
+        except Exception as e:
+            print(f"[VERIFY] ⚠️ Could not initialize real-time verification: {e}")
     
     async def token_refresh_scheduler(self):
         """Automatically refresh Webull tokens every 12 hours"""

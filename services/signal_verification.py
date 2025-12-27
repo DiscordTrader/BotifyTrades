@@ -2,11 +2,17 @@
 Signal Verification Service
 Professional-grade signal verification against real-time market data
 Detects paper trading, slippage issues, and impossible fills
+
+Data Sources (priority order):
+1. Webull API - Real-time bid/ask data (when connected)
+2. Tastytrade API - Real-time bid/ask data (when connected)  
+3. yfinance - Delayed 15-30 min fallback
 """
 
 import yfinance as yf
 import sqlite3
 import os
+import sys
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 import pandas as pd
@@ -14,12 +20,32 @@ import numpy as np
 
 DATABASE_PATH = os.path.join(os.path.dirname(__file__), '..', 'bot_data.db')
 
+_webull_client = None
+_tastytrade_session = None
+
+def set_broker_clients(webull_client=None, tastytrade_session=None):
+    """Set broker clients for real-time data access"""
+    global _webull_client, _tastytrade_session
+    _webull_client = webull_client
+    _tastytrade_session = tastytrade_session
+    sources = []
+    if webull_client:
+        sources.append('Webull')
+    if tastytrade_session:
+        sources.append('Tastytrade')
+    if sources:
+        print(f"[VERIFY] Real-time data sources enabled: {', '.join(sources)}")
+    else:
+        print("[VERIFY] Using yfinance (delayed data) - no broker connected")
+
+
 class SignalVerificationService:
     """Verify trading signals against real-time market data"""
     
     def __init__(self):
         self.cache = {}
         self.cache_duration = 60
+        self.data_source = 'unknown'
     
     def get_db(self):
         """Get database connection"""
@@ -27,29 +53,157 @@ class SignalVerificationService:
         conn.row_factory = sqlite3.Row
         return conn
     
-    def get_option_market_data(self, ticker: str, strike: float, expiry: str, 
-                                direction: str) -> Optional[Dict]:
-        """
-        Fetch real-time options data for verification
+    def _get_webull_option_quote(self, ticker: str, strike: float, expiry: str, 
+                                  direction: str) -> Optional[Dict]:
+        """Get real-time option quote from Webull"""
+        global _webull_client
+        if not _webull_client:
+            return None
         
-        Args:
-            ticker: Underlying ticker (e.g., SPY, TSLA)
-            strike: Strike price
-            expiry: Expiration date (YYYY-MM-DD)
-            direction: 'call' or 'put'
-        
-        Returns:
-            Dict with bid, ask, last, volume, open_interest, iv
-        """
         try:
-            cache_key = f"{ticker}_{strike}_{expiry}_{direction}"
-            now = datetime.now()
+            try:
+                exp_date = datetime.strptime(expiry, "%Y-%m-%d")
+            except ValueError:
+                exp_date = datetime.strptime(expiry, "%m/%d/%Y")
             
-            if cache_key in self.cache:
-                cached_data, cached_time = self.cache[cache_key]
-                if (now - cached_time).seconds < self.cache_duration:
-                    return cached_data
+            iso_exp = exp_date.strftime("%Y-%m-%d")
+            opt_type = 'call' if direction.lower() == 'call' else 'put'
             
+            options = _webull_client.get_options(stock=ticker, direction=opt_type, expireDate=iso_exp)
+            
+            if not options:
+                return None
+            
+            best_match = None
+            min_diff = float('inf')
+            
+            for opt in options:
+                opt_strike = float(opt.get('strikePrice', 0))
+                diff = abs(opt_strike - strike)
+                if diff < min_diff:
+                    min_diff = diff
+                    best_match = opt
+            
+            if not best_match or min_diff > 1.0:
+                return None
+            
+            option_id = best_match.get('tickerId')
+            if not option_id:
+                return None
+            
+            quote = _webull_client.get_option_quote(stock=ticker, optionId=str(option_id))
+            
+            if not quote:
+                return None
+            
+            bid = 0.0
+            ask = 0.0
+            last = 0.0
+            volume = 0
+            
+            if 'data' in quote and isinstance(quote.get('data'), list):
+                for opt in quote.get('data', []):
+                    if opt.get('tickerId') == option_id:
+                        askList = opt.get('askList', [])
+                        bidList = opt.get('bidList', [])
+                        
+                        if askList and len(askList) > 0:
+                            ask = float(askList[0].get('price', 0))
+                        if bidList and len(bidList) > 0:
+                            bid = float(bidList[0].get('price', 0))
+                        
+                        last = float(opt.get('close', 0) or opt.get('latestPrice', 0) or 0)
+                        volume = int(opt.get('volume', 0) or 0)
+                        break
+            else:
+                ask = float(quote.get('askPrice', 0) or 0)
+                bid = float(quote.get('bidPrice', 0) or 0)
+                last = float(quote.get('lastPrice', 0) or quote.get('close', 0) or 0)
+                volume = int(quote.get('volume', 0) or 0)
+            
+            if bid > 0 or ask > 0 or last > 0:
+                self.data_source = 'webull_realtime'
+                return {
+                    'bid': bid,
+                    'ask': ask,
+                    'last': last,
+                    'volume': volume,
+                    'open_interest': int(best_match.get('openInterest', 0) or 0),
+                    'implied_volatility': float(best_match.get('impVol', 0) or 0),
+                    'strike': float(best_match.get('strikePrice', strike)),
+                    'timestamp': datetime.now().isoformat(),
+                    'source': 'webull_realtime'
+                }
+            
+            return None
+            
+        except Exception as e:
+            print(f"[VERIFY] Webull quote error: {e}")
+            return None
+    
+    def _get_tastytrade_option_quote(self, ticker: str, strike: float, expiry: str,
+                                      direction: str) -> Optional[Dict]:
+        """Get real-time option quote from Tastytrade"""
+        global _tastytrade_session
+        if not _tastytrade_session:
+            return None
+        
+        try:
+            from tastytrade.instruments import get_option_chain
+            from tastytrade.dxfeed import DXLinkStreamer
+            
+            try:
+                exp_date = datetime.strptime(expiry, "%Y-%m-%d")
+            except ValueError:
+                exp_date = datetime.strptime(expiry, "%m/%d/%Y")
+            
+            chain = get_option_chain(_tastytrade_session, ticker)
+            
+            if not chain:
+                return None
+            
+            exp_str = exp_date.strftime("%Y-%m-%d")
+            
+            if exp_str not in chain:
+                return None
+            
+            options = chain[exp_str]
+            opt_type = 'C' if direction.lower() == 'call' else 'P'
+            
+            best_match = None
+            min_diff = float('inf')
+            
+            for opt in options:
+                if opt.option_type == opt_type:
+                    diff = abs(float(opt.strike_price) - strike)
+                    if diff < min_diff:
+                        min_diff = diff
+                        best_match = opt
+            
+            if not best_match or min_diff > 1.0:
+                return None
+            
+            self.data_source = 'tastytrade_realtime'
+            return {
+                'bid': float(getattr(best_match, 'bid', 0) or 0),
+                'ask': float(getattr(best_match, 'ask', 0) or 0),
+                'last': float(getattr(best_match, 'last', 0) or 0),
+                'volume': int(getattr(best_match, 'volume', 0) or 0),
+                'open_interest': int(getattr(best_match, 'open_interest', 0) or 0),
+                'implied_volatility': float(getattr(best_match, 'implied_volatility', 0) or 0),
+                'strike': float(best_match.strike_price),
+                'timestamp': datetime.now().isoformat(),
+                'source': 'tastytrade_realtime'
+            }
+            
+        except Exception as e:
+            print(f"[VERIFY] Tastytrade quote error: {e}")
+            return None
+    
+    def _get_yfinance_option_quote(self, ticker: str, strike: float, expiry: str,
+                                    direction: str) -> Optional[Dict]:
+        """Fallback: Get delayed option quote from yfinance"""
+        try:
             stock = yf.Ticker(ticker)
             
             try:
@@ -62,7 +216,7 @@ class SignalVerificationService:
             try:
                 chain = stock.option_chain(exp_str)
             except Exception as e:
-                print(f"[VERIFY] Could not get option chain for {ticker} {exp_str}: {e}")
+                print(f"[VERIFY] yfinance chain error for {ticker} {exp_str}: {e}")
                 return None
             
             options_df = chain.calls if direction.lower() == 'call' else chain.puts
@@ -74,10 +228,10 @@ class SignalVerificationService:
             closest = options_df.loc[options_df['strike_diff'].idxmin()]
             
             if closest['strike_diff'] > 1.0:
-                print(f"[VERIFY] No close strike found. Closest: {closest['strike']} vs {strike}")
                 return None
             
-            data = {
+            self.data_source = 'yfinance_delayed'
+            return {
                 'bid': float(closest.get('bid', 0)) if pd.notna(closest.get('bid')) else 0,
                 'ask': float(closest.get('ask', 0)) if pd.notna(closest.get('ask')) else 0,
                 'last': float(closest.get('lastPrice', 0)) if pd.notna(closest.get('lastPrice')) else 0,
@@ -85,32 +239,85 @@ class SignalVerificationService:
                 'open_interest': int(closest.get('openInterest', 0)) if pd.notna(closest.get('openInterest')) else 0,
                 'implied_volatility': float(closest.get('impliedVolatility', 0)) if pd.notna(closest.get('impliedVolatility')) else 0,
                 'strike': float(closest['strike']),
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                'source': 'yfinance_delayed'
             }
             
-            self.cache[cache_key] = (data, now)
-            return data
-            
         except Exception as e:
-            print(f"[VERIFY] Error fetching option data: {e}")
+            print(f"[VERIFY] yfinance error: {e}")
             return None
     
+    def get_option_market_data(self, ticker: str, strike: float, expiry: str, 
+                                direction: str) -> Optional[Dict]:
+        """
+        Fetch options data for verification - tries brokers first, falls back to yfinance
+        
+        Priority:
+        1. Webull (real-time)
+        2. Tastytrade (real-time)
+        3. yfinance (delayed 15-30 min)
+        """
+        cache_key = f"{ticker}_{strike}_{expiry}_{direction}"
+        now = datetime.now()
+        
+        if cache_key in self.cache:
+            cached_data, cached_time = self.cache[cache_key]
+            if (now - cached_time).seconds < self.cache_duration:
+                return cached_data
+        
+        data = self._get_webull_option_quote(ticker, strike, expiry, direction)
+        
+        if not data:
+            data = self._get_tastytrade_option_quote(ticker, strike, expiry, direction)
+        
+        if not data:
+            data = self._get_yfinance_option_quote(ticker, strike, expiry, direction)
+        
+        if data:
+            self.cache[cache_key] = (data, now)
+        
+        return data
+    
     def get_stock_market_data(self, ticker: str) -> Optional[Dict]:
-        """Fetch real-time stock quote for verification"""
+        """Fetch stock quote - tries Webull first, falls back to yfinance"""
+        global _webull_client
+        
+        if _webull_client:
+            try:
+                quote = _webull_client.get_quote(stock=ticker)
+                if quote:
+                    ask = float(quote.get('askPrice', 0) or 0)
+                    bid = float(quote.get('bidPrice', 0) or 0)
+                    last = float(quote.get('close', 0) or quote.get('lastPrice', 0) or 0)
+                    
+                    if bid > 0 or ask > 0 or last > 0:
+                        self.data_source = 'webull_realtime'
+                        return {
+                            'bid': bid,
+                            'ask': ask,
+                            'last': last,
+                            'volume': int(quote.get('volume', 0) or 0),
+                            'timestamp': datetime.now().isoformat(),
+                            'source': 'webull_realtime'
+                        }
+            except Exception as e:
+                print(f"[VERIFY] Webull stock quote error: {e}")
+        
         try:
             stock = yf.Ticker(ticker)
             info = stock.info
             
+            self.data_source = 'yfinance_delayed'
             return {
-                'bid': info.get('bid', 0),
-                'ask': info.get('ask', 0),
-                'last': info.get('regularMarketPrice', info.get('currentPrice', 0)),
-                'volume': info.get('volume', 0),
-                'market_cap': info.get('marketCap', 0),
-                'timestamp': datetime.now().isoformat()
+                'bid': info.get('bid', 0) or 0,
+                'ask': info.get('ask', 0) or 0,
+                'last': info.get('regularMarketPrice', info.get('currentPrice', 0)) or 0,
+                'volume': info.get('volume', 0) or 0,
+                'timestamp': datetime.now().isoformat(),
+                'source': 'yfinance_delayed'
             }
         except Exception as e:
-            print(f"[VERIFY] Error fetching stock data for {ticker}: {e}")
+            print(f"[VERIFY] yfinance stock error for {ticker}: {e}")
             return None
     
     def verify_signal(self, signal_data: Dict) -> Dict:

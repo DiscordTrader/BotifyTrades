@@ -83,6 +83,14 @@
                 
                 <div id="manual-result" class="manual-result" style="display: none;"></div>
             </div>
+            
+            <div class="card" id="data-source-card">
+                <h3 class="card-title">Data Source</h3>
+                <div id="data-source-info" class="data-source-info">
+                    <div class="source-badge yfinance">yfinance (Delayed)</div>
+                    <p class="source-note">Connect Webull or Tastytrade for real-time data</p>
+                </div>
+            </div>
         </div>
         
         <div class="main-panel">
@@ -743,6 +751,35 @@
     background: var(--bg-darker);
     border-radius: 8px;
     font-size: 0.8125rem;
+}
+
+.data-source-info {
+    text-align: center;
+}
+
+.source-badge {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-bottom: 8px;
+}
+
+.source-badge.yfinance {
+    background: rgba(210, 153, 34, 0.2);
+    color: var(--warning);
+}
+
+.source-badge.webull, .source-badge.tastytrade {
+    background: rgba(63, 185, 80, 0.2);
+    color: var(--success);
+}
+
+.source-note {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin: 0;
 }
 
 .empty-msg {
