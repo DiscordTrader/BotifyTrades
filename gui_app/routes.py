@@ -12154,14 +12154,17 @@ def register_routes(app):
             conn = db.get_connection()
             cursor = conn.cursor()
             cursor.execute('''
-                SELECT DISTINCT user_id, COUNT(*) as trade_count
+                SELECT DISTINCT 
+                    COALESCE(author_name, 'User ' || user_id) as name,
+                    user_id,
+                    COUNT(*) as trade_count
                 FROM lot_closures
                 WHERE user_id IS NOT NULL AND user_id != ''
-                GROUP BY user_id
+                GROUP BY user_id, author_name
                 ORDER BY trade_count DESC
                 LIMIT 50
             ''')
-            users = [{'id': row[0], 'trade_count': row[1]} for row in cursor.fetchall()]
+            users = [{'name': row[0], 'id': row[1], 'trade_count': row[2]} for row in cursor.fetchall()]
             
             return jsonify({'success': True, 'users': users})
         except Exception as e:
