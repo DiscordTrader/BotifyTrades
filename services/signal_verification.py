@@ -636,10 +636,11 @@ class SignalVerificationService:
         
         cursor.execute(f'''
             SELECT 
-                lc.id, lc.ticker, lc.asset_type, lc.open_price, lc.close_price,
-                lc.pnl_percent, lc.pnl_dollars, lc.quantity, lc.closed_at,
-                lc.strike, lc.expiry, lc.direction
+                lc.id, sl.symbol as ticker, sl.asset_type, sl.open_price, lc.close_price,
+                lc.pnl_percent, lc.pnl as pnl_dollars, lc.closed_qty as quantity, lc.closed_at,
+                sl.strike, sl.expiry, sl.call_put as direction
             FROM lot_closures lc
+            LEFT JOIN signal_lots sl ON lc.lot_id = sl.id
             WHERE {where_clause} AND lc.closed_at >= ?
             ORDER BY lc.closed_at DESC
             LIMIT 200
@@ -659,6 +660,7 @@ class SignalVerificationService:
         for trade in trades:
             pnl_pct = trade.get('pnl_percent', 0) or 0
             pnl_dollars = trade.get('pnl_dollars', 0) or 0
+            ticker = trade.get('ticker') or 'UNKNOWN'
             
             if pnl_pct > 0:
                 reported_wins += 1
@@ -667,7 +669,7 @@ class SignalVerificationService:
             reported_pnl += pnl_dollars
             
             signal_data = {
-                'ticker': trade.get('ticker'),
+                'ticker': ticker,
                 'asset_type': trade.get('asset_type', 'option'),
                 'strike': trade.get('strike'),
                 'expiry': trade.get('expiry'),
@@ -689,7 +691,7 @@ class SignalVerificationService:
                 executable_pnl += adjusted_pnl
             elif verification['verification_status'] == 'SUSPICIOUS':
                 suspicious_trades.append({
-                    'ticker': trade['ticker'],
+                    'ticker': ticker,
                     'date': trade.get('closed_at', '')[:10] if trade.get('closed_at') else '',
                     'reported_pnl': pnl_pct,
                     'red_flags': verification.get('red_flags', []),
