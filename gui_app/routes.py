@@ -12151,7 +12151,8 @@ def register_routes(app):
     def api_get_verifiable_users():
         """Get list of users with trade history for verification"""
         try:
-            cursor = db.get_db().cursor()
+            conn = db.get_connection()
+            cursor = conn.cursor()
             cursor.execute('''
                 SELECT DISTINCT user_id, COUNT(*) as trade_count
                 FROM lot_closures
@@ -12164,6 +12165,7 @@ def register_routes(app):
             
             return jsonify({'success': True, 'users': users})
         except Exception as e:
+            print(f"[API] Error fetching verifiable users: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/verification/channels', methods=['GET'])
@@ -12171,7 +12173,8 @@ def register_routes(app):
     def api_get_verifiable_channels():
         """Get list of channels with trade history for verification"""
         try:
-            cursor = db.get_db().cursor()
+            conn = db.get_connection()
+            cursor = conn.cursor()
             cursor.execute('''
                 SELECT c.name, c.id, COUNT(lc.id) as trade_count
                 FROM channels c
@@ -12185,4 +12188,5 @@ def register_routes(app):
             
             return jsonify({'success': True, 'channels': channels})
         except Exception as e:
+            print(f"[API] Error fetching verifiable channels: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
