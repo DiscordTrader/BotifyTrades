@@ -846,6 +846,8 @@ function displayOptimizerResults(data) {
     // Display Advanced Risk Metrics if available
     if (data.advanced_metrics) {
         displayAdvancedMetrics(data.advanced_metrics, allNegative);
+    } else {
+        document.getElementById('advanced-metrics-card').style.display = 'none';
     }
     
     document.getElementById('warnings-section').style.display = 'none';

@@ -1675,35 +1675,7 @@ def run_risk_optimizer(
     Returns:
         Dict with comparison table, recommendation, and advanced metrics
     """
-    # First, fetch trade history for advanced metrics
-    if entity_type == "user":
-        trades = fetch_user_trade_history(entity_id)
-    else:
-        trades = fetch_channel_trade_history(entity_id)
-    
-    if not trades:
-        return {
-            'success': False,
-            'error': f'{entity_type.capitalize()} "{entity_id}" not found or has no trade history.',
-            'entity_type': entity_type,
-            'entity_id': entity_id
-        }
-    
-    # Calculate base statistics for advanced metrics
-    wins = [t for t in trades if t.pnl >= 0]
-    losses = [t for t in trades if t.pnl < 0]
-    win_rate = len(wins) / len(trades) if trades else 0
-    
-    # Calculate average win/loss percentages
-    avg_win_pct = mean([abs(t.pnl_percent) for t in wins]) if wins else 0
-    avg_loss_pct = mean([abs(t.pnl_percent) for t in losses]) if losses else 0
-    
-    # Calculate advanced metrics
-    kelly = calculate_kelly_criterion(win_rate, avg_win_pct, avg_loss_pct)
-    expectancy = calculate_expectancy(win_rate, avg_win_pct, avg_loss_pct, portfolio_start * 0.1)
-    streaks = analyze_streaks(trades)
-    timing = analyze_trading_times(trades)
-    
+    # Run simulations first - this function handles its own trade fetching
     results = []
     
     for pct in RISK_OPTIMIZER_PERCENTAGES:
@@ -1769,13 +1741,52 @@ def run_risk_optimizer(
     else:
         recommendation_msg = f"Breakeven result at {best_result['position_pct']}%. Consider paper trading longer to gather more data."
     
-    # Calculate risk of ruin for recommended position size
-    risk_of_ruin = calculate_risk_of_ruin(
-        win_rate=win_rate,
-        avg_win_pct=avg_win_pct,
-        avg_loss_pct=avg_loss_pct,
-        position_size_pct=best_result['position_pct']
-    )
+    # Now fetch trade history once for advanced metrics (after simulations complete)
+    if entity_type == "user":
+        trades = fetch_user_trade_history(entity_id)
+    else:
+        trades = fetch_channel_trade_history(entity_id)
+    
+    # Calculate base statistics for advanced metrics
+    if trades:
+        wins_list = [t for t in trades if t.pnl >= 0]
+        losses_list = [t for t in trades if t.pnl < 0]
+        win_rate = len(wins_list) / len(trades)
+        avg_win_pct = mean([abs(t.pnl_percent) for t in wins_list]) if wins_list else 0
+        avg_loss_pct = mean([abs(t.pnl_percent) for t in losses_list]) if losses_list else 0
+        
+        # Use recommended position's avg_position for dollar expectancy
+        recommended_avg_position = best_result.get('avg_position', portfolio_start * 0.1)
+        
+        # Calculate advanced metrics
+        kelly = calculate_kelly_criterion(win_rate, avg_win_pct, avg_loss_pct)
+        expectancy = calculate_expectancy(win_rate, avg_win_pct, avg_loss_pct, recommended_avg_position)
+        streaks = analyze_streaks(trades)
+        timing = analyze_trading_times(trades)
+        
+        # Calculate risk of ruin for recommended position size
+        risk_of_ruin = calculate_risk_of_ruin(
+            win_rate=win_rate,
+            avg_win_pct=avg_win_pct,
+            avg_loss_pct=avg_loss_pct,
+            position_size_pct=best_result['position_pct']
+        )
+        
+        advanced_metrics = {
+            'kelly': kelly,
+            'expectancy': expectancy,
+            'risk_of_ruin': risk_of_ruin,
+            'streaks': streaks,
+            'timing': timing,
+            'stats': {
+                'win_rate': round(win_rate * 100, 1),
+                'avg_win_pct': round(avg_win_pct, 2),
+                'avg_loss_pct': round(avg_loss_pct, 2),
+                'total_trades': len(trades)
+            }
+        }
+    else:
+        advanced_metrics = None
     
     return {
         'success': True,
@@ -1790,19 +1801,7 @@ def run_risk_optimizer(
         'total_trades_in_history': results[0]['executed_trades'] + results[0]['skipped_trades'] if results else 0,
         
         # Advanced risk metrics
-        'advanced_metrics': {
-            'kelly': kelly,
-            'expectancy': expectancy,
-            'risk_of_ruin': risk_of_ruin,
-            'streaks': streaks,
-            'timing': timing,
-            'stats': {
-                'win_rate': round(win_rate * 100, 1),
-                'avg_win_pct': round(avg_win_pct, 2),
-                'avg_loss_pct': round(avg_loss_pct, 2),
-                'total_trades': len(trades)
-            }
-        }
+        'advanced_metrics': advanced_metrics
     }
 
 
