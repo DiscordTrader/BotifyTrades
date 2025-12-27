@@ -303,6 +303,15 @@
                 </div>
             </div>
             
+            <!-- Advanced Risk Metrics Section (shown for Risk Optimizer) -->
+            <div class="card" id="advanced-metrics-card" style="display: none; margin-top: 16px;">
+                <h4 class="card-header" style="display: flex; align-items: center; gap: 8px;">
+                    <span>🎯</span> Advanced Risk Analysis
+                </h4>
+                <div id="advanced-metrics-content" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; font-size: 0.875rem;">
+                </div>
+            </div>
+            
             <div class="card" style="margin-top: 24px; background: var(--bg-darker);">
                 <h4 class="card-header" style="display: flex; align-items: center; gap: 8px;">
                     <span>📊</span> Simulation Parameters Used
@@ -834,8 +843,132 @@ function displayOptimizerResults(data) {
         <th style="text-align: right;" title="Average dollar amount per position">Avg $</th>
     `;
     
+    // Display Advanced Risk Metrics if available
+    if (data.advanced_metrics) {
+        displayAdvancedMetrics(data.advanced_metrics, allNegative);
+    }
+    
     document.getElementById('warnings-section').style.display = 'none';
     document.getElementById('capital-requirements-section').style.display = 'none';
+}
+
+function displayAdvancedMetrics(metrics, allNegative) {
+    const container = document.getElementById('advanced-metrics-content');
+    const card = document.getElementById('advanced-metrics-card');
+    card.style.display = 'block';
+    
+    const kelly = metrics.kelly || {};
+    const expectancy = metrics.expectancy || {};
+    const ror = metrics.risk_of_ruin || {};
+    const streaks = metrics.streaks || {};
+    const timing = metrics.timing || {};
+    
+    container.innerHTML = `
+        <!-- Kelly Criterion -->
+        <div class="metric-box" style="background: var(--bg-darker); padding: 16px; border-radius: 8px; border-left: 4px solid ${kelly.is_valid ? 'var(--info)' : 'var(--danger)'};">
+            <div style="font-weight: 600; margin-bottom: 8px; color: var(--info);">🎯 Kelly Criterion</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                <div>
+                    <div style="font-size: 0.7rem; color: var(--text-muted);">Full Kelly</div>
+                    <div style="font-weight: 600; color: ${kelly.full_kelly > 0 ? 'var(--success)' : 'var(--danger)'};">${kelly.full_kelly || 0}%</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.7rem; color: var(--text-muted);">Half Kelly</div>
+                    <div style="font-weight: 600; color: var(--mint);">${kelly.half_kelly || 0}%</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.7rem; color: var(--text-muted);">Quarter Kelly</div>
+                    <div style="font-weight: 600;">${kelly.quarter_kelly || 0}%</div>
+                </div>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4;">
+                ${kelly.recommendation || 'Insufficient data'}
+            </div>
+        </div>
+        
+        <!-- Expectancy -->
+        <div class="metric-box" style="background: var(--bg-darker); padding: 16px; border-radius: 8px; border-left: 4px solid var(--${expectancy.quality_color || 'info'});">
+            <div style="font-weight: 600; margin-bottom: 8px; color: var(--${expectancy.quality_color || 'info'});">💡 Trade Expectancy</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                <div>
+                    <div style="font-size: 0.7rem; color: var(--text-muted);">Per Trade</div>
+                    <div style="font-weight: 600; font-size: 1.25rem; color: ${expectancy.expectancy_pct >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                        ${expectancy.expectancy_pct >= 0 ? '+' : ''}${expectancy.expectancy_pct || 0}%
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size: 0.7rem; color: var(--text-muted);">Profit Factor</div>
+                    <div style="font-weight: 600; font-size: 1.25rem; color: ${expectancy.profit_factor >= 1 ? 'var(--success)' : 'var(--danger)'};">
+                        ${expectancy.profit_factor || 0}
+                    </div>
+                </div>
+            </div>
+            <div style="font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; background: var(--${expectancy.quality_color || 'info'}); color: white; display: inline-block;">
+                ${expectancy.quality || 'N/A'}
+            </div>
+        </div>
+        
+        <!-- Risk of Ruin -->
+        <div class="metric-box" style="background: var(--bg-darker); padding: 16px; border-radius: 8px; border-left: 4px solid var(--${ror.risk_color || 'warning'});">
+            <div style="font-weight: 600; margin-bottom: 8px; color: var(--${ror.risk_color || 'warning'});">⚠️ Risk of Ruin (at ${ror.position_size_pct || 0}%)</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                <div>
+                    <div style="font-size: 0.7rem; color: var(--text-muted);">Lose 50%</div>
+                    <div style="font-weight: 600; color: ${(ror['ror_50%'] || 0) > 20 ? 'var(--danger)' : 'var(--success)'};">${ror['ror_50%'] || 0}%</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.7rem; color: var(--text-muted);">Lose 75%</div>
+                    <div style="font-weight: 600; color: ${(ror['ror_75%'] || 0) > 10 ? 'var(--danger)' : 'var(--success)'};">${ror['ror_75%'] || 0}%</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.7rem; color: var(--text-muted);">Lose 100%</div>
+                    <div style="font-weight: 600; color: ${(ror['ror_100%'] || 0) > 5 ? 'var(--danger)' : 'var(--success)'};">${ror['ror_100%'] || 0}%</div>
+                </div>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4;">
+                <strong style="color: var(--${ror.risk_color || 'warning'});">${ror.risk_level || 'N/A'}:</strong> ${ror.advice || ''}
+            </div>
+        </div>
+        
+        <!-- Streak Analysis -->
+        <div class="metric-box" style="background: var(--bg-darker); padding: 16px; border-radius: 8px; border-left: 4px solid var(--primary);">
+            <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary);">📊 Streak Analysis</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                <div>
+                    <div style="font-size: 0.7rem; color: var(--text-muted);">Max Win Streak</div>
+                    <div style="font-weight: 600; color: var(--success);">${streaks.max_win_streak || 0} trades</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.7rem; color: var(--text-muted);">Max Loss Streak</div>
+                    <div style="font-weight: 600; color: var(--danger);">${streaks.max_loss_streak || 0} trades</div>
+                </div>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4;">
+                ${streaks.streak_insight || 'Insufficient data'}
+            </div>
+        </div>
+        
+        ${timing.has_enough_data ? `
+        <!-- Timing Analysis -->
+        <div class="metric-box" style="background: var(--bg-darker); padding: 16px; border-radius: 8px; border-left: 4px solid var(--mint); grid-column: span 2;">
+            <div style="font-weight: 600; margin-bottom: 8px; color: var(--mint);">📅 Best/Worst Days</div>
+            <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+                ${Object.entries(timing.day_breakdown || {}).map(([day, data]) => `
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">${day}</div>
+                        <div style="font-weight: 600; color: ${data.avg_pnl >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                            ${data.avg_pnl >= 0 ? '+' : ''}${data.avg_pnl}%
+                        </div>
+                        <div style="font-size: 0.65rem; color: var(--text-muted);">${data.trades} trades</div>
+                    </div>
+                `).join('')}
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 8px;">
+                ${timing.insight || ''}
+            </div>
+        </div>
+        ` : ''}
+    `;
 }
 
 async function runRecoveryCalculator() {
@@ -990,10 +1123,11 @@ function displayHistoricalResults(data) {
     document.getElementById('results-placeholder').style.display = 'none';
     document.getElementById('results-container').style.display = 'block';
     
-    // Show historical table, hide daily table
+    // Show historical table, hide daily table and advanced metrics
     document.getElementById('daily-breakdown-card').style.display = 'none';
     document.getElementById('historical-breakdown-card').style.display = 'block';
     document.getElementById('historical-breakdown').style.display = 'block';
+    document.getElementById('advanced-metrics-card').style.display = 'none';
     
     // Reset heading for historical replay
     document.getElementById('historical-breakdown-title').innerHTML = `<span>📜</span> Trade-by-Trade Breakdown`;
