@@ -1012,6 +1012,70 @@ def init_db():
     ''')
     cursor.execute('INSERT OR IGNORE INTO trade_monitor_settings (id) VALUES (1)')
     
+    # Signal Verification - Track and verify signals against real market data
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS signal_verifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            signal_id INTEGER,
+            channel_id INTEGER,
+            user_id INTEGER,
+            ticker TEXT NOT NULL,
+            asset_type TEXT DEFAULT 'option',
+            strike REAL,
+            expiry TEXT,
+            direction TEXT,
+            signal_price REAL NOT NULL,
+            signal_timestamp TIMESTAMP NOT NULL,
+            market_bid REAL,
+            market_ask REAL,
+            market_last REAL,
+            market_volume INTEGER,
+            open_interest INTEGER,
+            implied_volatility REAL,
+            market_timestamp TIMESTAMP,
+            price_difference REAL,
+            slippage_pct REAL,
+            within_spread INTEGER DEFAULT 0,
+            executable INTEGER DEFAULT 0,
+            execution_difficulty TEXT DEFAULT 'UNKNOWN',
+            volume_liquidity TEXT DEFAULT 'UNKNOWN',
+            verification_status TEXT DEFAULT 'PENDING',
+            verification_notes TEXT,
+            actual_fill_price REAL,
+            actual_fill_time TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (signal_id) REFERENCES signals(id),
+            FOREIGN KEY (channel_id) REFERENCES channels(id)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_ticker ON signal_verifications(ticker)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_channel ON signal_verifications(channel_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_user ON signal_verifications(user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_timestamp ON signal_verifications(signal_timestamp)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_status ON signal_verifications(verification_status)')
+    
+    # Verification summary stats per user/channel
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS verification_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_type TEXT NOT NULL CHECK(entity_type IN ('user', 'channel')),
+            entity_id TEXT NOT NULL,
+            period_start TIMESTAMP NOT NULL,
+            period_end TIMESTAMP NOT NULL,
+            total_signals INTEGER DEFAULT 0,
+            verified_signals INTEGER DEFAULT 0,
+            executable_signals INTEGER DEFAULT 0,
+            within_spread_signals INTEGER DEFAULT 0,
+            avg_slippage_pct REAL DEFAULT 0,
+            avg_price_difference REAL DEFAULT 0,
+            high_volume_signals INTEGER DEFAULT 0,
+            low_volume_signals INTEGER DEFAULT 0,
+            suspicious_signals INTEGER DEFAULT 0,
+            calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(entity_type, entity_id, period_start)
+        )
+    ''')
+    
     # Create indexes for license tables
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_server_licenses_key ON server_licenses(license_key)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_server_licenses_machine ON server_licenses(machine_id)')
