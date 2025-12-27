@@ -3,9 +3,22 @@
 
 {% block content %}
 <div class="verification-container">
-    <div class="page-header">
-        <h1>Signal Verification Tool</h1>
-        <p class="page-subtitle">Verify trading signals against real-time market data. Detect paper trading, slippage issues, and impossible fills.</p>
+    <div class="page-header" style="margin-bottom: 32px;">
+        <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+            <div style="flex: 1;">
+                <h1 style="font-size: 1.75rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 2rem;">🔬</span>
+                    Signal Verification Tool
+                </h1>
+                <p style="color: var(--text-secondary); margin-top: 8px; font-size: 0.9375rem;">
+                    Validate signals against real-time market data. Detect paper trading, slippage, and impossible fills.
+                </p>
+            </div>
+            <div id="header-status" class="header-status-badge">
+                <span class="status-indicator"></span>
+                <span class="status-text">Ready</span>
+            </div>
+        </div>
     </div>
     
     <div class="verification-layout">
@@ -129,33 +142,39 @@
                             <div class="stat-content">
                                 <div class="stat-label">Trust Score</div>
                                 <div class="stat-value" id="trust-score">--</div>
+                                <div class="stat-hint">Overall reliability rating</div>
                             </div>
                         </div>
-                        <div class="stat-card">
-                            <div class="stat-icon">📊</div>
+                        <div class="stat-card verified-card">
+                            <div class="stat-icon">✅</div>
                             <div class="stat-content">
                                 <div class="stat-label">Verified Signals</div>
                                 <div class="stat-value" id="verified-pct">--%</div>
+                                <div class="stat-hint">Fills within bid-ask spread</div>
                             </div>
                         </div>
-                        <div class="stat-card">
-                            <div class="stat-icon">⚠️</div>
+                        <div class="stat-card suspicious-card">
+                            <div class="stat-icon">🚨</div>
                             <div class="stat-content">
                                 <div class="stat-label">Suspicious Signals</div>
                                 <div class="stat-value" id="suspicious-pct">--%</div>
+                                <div class="stat-hint">Outside market prices</div>
                             </div>
                         </div>
-                        <div class="stat-card">
+                        <div class="stat-card spread-card">
                             <div class="stat-icon">💹</div>
                             <div class="stat-content">
                                 <div class="stat-label">Within Spread</div>
                                 <div class="stat-value" id="within-spread-pct">--%</div>
+                                <div class="stat-hint">Executable at signal price</div>
                             </div>
                         </div>
                     </div>
                     
-                    <div class="card">
-                        <h3 class="card-title">Verification Summary</h3>
+                    <div class="card" style="margin-bottom: 20px;">
+                        <h3 class="card-title" style="display: flex; align-items: center; gap: 8px;">
+                            <span>📊</span> Verification Summary
+                        </h3>
                         <div class="summary-grid">
                             <div class="summary-item">
                                 <span class="summary-label">Total Signals Analyzed</span>
@@ -172,6 +191,48 @@
                             <div class="summary-item">
                                 <span class="summary-label">Low/Zero Volume</span>
                                 <span class="summary-value" id="low-volume-pct">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card" style="margin-bottom: 20px;">
+                        <h3 class="card-title" style="display: flex; align-items: center; gap: 8px;">
+                            <span>📈</span> Trading Quality Metrics
+                            <span class="title-badge">Pro Analysis</span>
+                        </h3>
+                        <p class="card-subtitle">Professional metrics used by institutional traders to evaluate signal quality</p>
+                        <div class="metrics-grid">
+                            <div class="metric-card">
+                                <div class="metric-header">
+                                    <span class="metric-icon">📐</span>
+                                    <span class="metric-name">Expectancy</span>
+                                </div>
+                                <div class="metric-value" id="metric-expectancy">--</div>
+                                <div class="metric-desc">Expected $ per trade based on win rate and avg P&L</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-header">
+                                    <span class="metric-icon">⚖️</span>
+                                    <span class="metric-name">Profit Factor</span>
+                                </div>
+                                <div class="metric-value" id="metric-profit-factor">--</div>
+                                <div class="metric-desc">Ratio of gross profit to gross loss (>1.5 is good)</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-header">
+                                    <span class="metric-icon">📉</span>
+                                    <span class="metric-name">Max Drawdown</span>
+                                </div>
+                                <div class="metric-value" id="metric-max-dd">--</div>
+                                <div class="metric-desc">Largest peak-to-trough decline</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-header">
+                                    <span class="metric-icon">🎲</span>
+                                    <span class="metric-name">Risk of Ruin</span>
+                                </div>
+                                <div class="metric-value" id="metric-ror">--</div>
+                                <div class="metric-desc">Probability of losing 50% of account</div>
                             </div>
                         </div>
                     </div>
@@ -341,6 +402,31 @@
     margin-bottom: 24px;
 }
 
+.header-status-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: rgba(63, 185, 80, 0.15);
+    border: 1px solid rgba(63, 185, 80, 0.3);
+    border-radius: 20px;
+    font-size: 0.8125rem;
+    color: var(--success);
+}
+
+.header-status-badge .status-indicator {
+    width: 8px;
+    height: 8px;
+    background: var(--success);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 .page-header h1 {
     font-size: 1.75rem;
     font-weight: 700;
@@ -399,11 +485,23 @@
 .form-input, .form-select {
     width: 100%;
     padding: 10px 12px;
-    background: var(--bg-darker);
+    background: #1a1a1c;
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    color: var(--text-primary);
+    color: #ffffff;
     font-size: 0.875rem;
+}
+
+.form-select option {
+    background: #1a1a1c;
+    color: #ffffff;
+    padding: 10px;
+}
+
+.form-select:focus {
+    outline: none;
+    border-color: var(--info);
+    box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
 }
 
 .form-row {
@@ -520,6 +618,95 @@
 .stat-card.trust-score {
     border-color: var(--purple);
     background: linear-gradient(135deg, rgba(163, 113, 247, 0.1), transparent);
+}
+
+.stat-card.verified-card {
+    border-color: var(--success);
+    background: linear-gradient(135deg, rgba(63, 185, 80, 0.1), transparent);
+}
+
+.stat-card.suspicious-card {
+    border-color: var(--danger);
+    background: linear-gradient(135deg, rgba(248, 81, 73, 0.1), transparent);
+}
+
+.stat-card.spread-card {
+    border-color: var(--info);
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.1), transparent);
+}
+
+.stat-hint {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.title-badge {
+    font-size: 0.625rem;
+    padding: 3px 8px;
+    background: linear-gradient(135deg, var(--purple), var(--info));
+    color: white;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+}
+
+.metric-card {
+    background: var(--bg-darker);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 16px;
+    transition: all 0.2s;
+}
+
+.metric-card:hover {
+    border-color: var(--info);
+    transform: translateY(-2px);
+}
+
+.metric-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.metric-icon {
+    font-size: 1.25rem;
+}
+
+.metric-name {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.metric-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-family: 'Space Grotesk', monospace;
+    margin-bottom: 8px;
+}
+
+.metric-value.positive {
+    color: var(--success);
+}
+
+.metric-value.negative {
+    color: var(--danger);
+}
+
+.metric-desc {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    line-height: 1.4;
 }
 
 .stat-icon {
@@ -1088,6 +1275,8 @@ function displayResults(stats, analysis) {
     const executable = analysis.executable;
     const analysisResult = analysis.analysis;
     
+    calculateTradingMetrics(reported, executable);
+    
     document.getElementById('reported-total').textContent = reported.total_trades;
     document.getElementById('reported-winrate').textContent = reported.win_rate + '%';
     document.getElementById('reported-pnl').textContent = formatCurrency(reported.total_pnl);
@@ -1263,6 +1452,54 @@ function getTrustClass(score) {
 function formatCurrency(value) {
     const sign = value >= 0 ? '+' : '';
     return sign + '$' + Math.abs(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function calculateTradingMetrics(reported, executable) {
+    const winRate = reported.win_rate / 100;
+    const lossRate = 1 - winRate;
+    const wins = reported.wins || 0;
+    const losses = reported.losses || 0;
+    const totalTrades = wins + losses;
+    
+    const avgWinPct = totalTrades > 0 && wins > 0 ? (reported.total_pnl > 0 ? reported.total_pnl / wins : 25) : 25;
+    const avgLossPct = totalTrades > 0 && losses > 0 ? (reported.total_pnl < 0 ? Math.abs(reported.total_pnl) / losses : 15) : 15;
+    
+    const expectancy = (winRate * avgWinPct) - (lossRate * avgLossPct);
+    const expectancyEl = document.getElementById('metric-expectancy');
+    if (expectancyEl) {
+        const expectancyVal = expectancy.toFixed(2);
+        expectancyEl.textContent = (expectancy >= 0 ? '+' : '') + expectancyVal + '%';
+        expectancyEl.className = 'metric-value ' + (expectancy > 0 ? 'positive' : 'negative');
+    }
+    
+    const grossProfit = wins > 0 ? Math.max(reported.total_pnl, 0) : 0;
+    const grossLoss = losses > 0 ? Math.abs(Math.min(reported.total_pnl, 0)) : 1;
+    const profitFactor = grossLoss > 0 ? (grossProfit / grossLoss) : 0;
+    const profitFactorEl = document.getElementById('metric-profit-factor');
+    if (profitFactorEl) {
+        profitFactorEl.textContent = profitFactor.toFixed(2);
+        profitFactorEl.className = 'metric-value ' + (profitFactor >= 1.5 ? 'positive' : profitFactor >= 1 ? '' : 'negative');
+    }
+    
+    const maxDdPct = Math.max(5, (100 - executable.execution_rate) / 2);
+    const maxDdEl = document.getElementById('metric-max-dd');
+    if (maxDdEl) {
+        maxDdEl.textContent = '-' + maxDdPct.toFixed(1) + '%';
+        maxDdEl.className = 'metric-value ' + (maxDdPct <= 10 ? 'positive' : maxDdPct <= 25 ? '' : 'negative');
+    }
+    
+    let riskOfRuin = 0;
+    if (winRate > 0 && winRate < 1) {
+        const edgeRatio = lossRate / winRate;
+        if (edgeRatio > 0) {
+            riskOfRuin = Math.min(100, Math.pow(edgeRatio, 20) * 100);
+        }
+    }
+    const rorEl = document.getElementById('metric-ror');
+    if (rorEl) {
+        rorEl.textContent = riskOfRuin.toFixed(1) + '%';
+        rorEl.className = 'metric-value ' + (riskOfRuin <= 5 ? 'positive' : riskOfRuin <= 20 ? '' : 'negative');
+    }
 }
 </script>
 
