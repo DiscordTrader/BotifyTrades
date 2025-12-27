@@ -101,8 +101,11 @@
                     <select id="risk-mode" class="form-select" onchange="updateRiskPlaceholder()" style="background-color: #2C2C2E; color: #FFFFFF;">
                         <option value="fixed" style="background-color: #2C2C2E; color: #FFFFFF;">$ Fixed</option>
                         <option value="percent" style="background-color: #2C2C2E; color: #FFFFFF;">% of Balance</option>
-                        <option value="actual" style="background-color: #2C2C2E; color: #FFFFFF;">Replay Actual</option>
+                        <option value="actual" style="background-color: #2C2C2E; color: #FFFFFF;">Copy Exact Trades (ignores portfolio)</option>
                     </select>
+                    <div id="actual-mode-warning" style="display: none; margin-top: 8px; padding: 8px 10px; background: rgba(245, 158, 11, 0.15); border-left: 3px solid #f59e0b; border-radius: 4px; font-size: 0.75rem; color: #fbbf24;">
+                        <strong>Note:</strong> This mode copies the original trader's exact position sizes regardless of your starting portfolio. Use "$ Fixed" or "% of Balance" for realistic simulations.
+                    </div>
                 </div>
             </div>
             
@@ -1684,15 +1687,19 @@ function applyPreset(preset) {
 function updateRiskPlaceholder() {
     const mode = document.getElementById('risk-mode').value;
     const input = document.getElementById('risk-value');
+    const warning = document.getElementById('actual-mode-warning');
+    
     if (mode === 'actual') {
         input.disabled = true;
         input.placeholder = 'Uses actual trade sizes';
         input.style.opacity = '0.5';
+        warning.style.display = 'block';
     } else if (mode === 'percent') {
         input.disabled = false;
         input.style.opacity = '1';
         input.step = '1';
         input.placeholder = '3 for 3%';
+        warning.style.display = 'none';
         if (parseFloat(input.value) > 100) {
             input.value = 3;
         }
@@ -1701,6 +1708,7 @@ function updateRiskPlaceholder() {
         input.style.opacity = '1';
         input.step = '10';
         input.placeholder = '300';
+        warning.style.display = 'none';
     }
 }
 
