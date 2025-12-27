@@ -273,7 +273,7 @@
             
             <div class="card" id="historical-breakdown-card" style="display: none;">
                 <h4 class="card-header" style="display: flex; align-items: center; justify-content: space-between;">
-                    <span style="display: flex; align-items: center; gap: 8px;">
+                    <span id="historical-breakdown-title" style="display: flex; align-items: center; gap: 8px;">
                         <span>📜</span> Actual Trade History
                     </span>
                     <button onclick="toggleHistoricalBreakdown()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;">
@@ -817,17 +817,21 @@ function displayOptimizerResults(data) {
         </tr>
     `}).join('');
     
-    // Update table headers for optimizer view
+    // Update heading for optimizer view
+    const titleEl = document.getElementById('historical-breakdown-title');
+    titleEl.innerHTML = `<span>📊</span> Position Size Comparison`;
+    
+    // Update table headers with user-friendly names and tooltips
     document.querySelector('#historical-breakdown thead tr').innerHTML = `
-        <th>Size %</th>
-        <th>Final Balance</th>
-        <th style="text-align: right;">Return</th>
-        <th style="text-align: right;">Drawdown</th>
-        <th style="text-align: center;">Executed</th>
-        <th style="text-align: center;">Skipped</th>
-        <th style="text-align: right;">Win Rate</th>
-        <th style="text-align: right;">Risk Score</th>
-        <th style="text-align: right;">Avg Position</th>
+        <th title="Percentage of portfolio risked per trade">Risk %</th>
+        <th title="Portfolio value after all trades">Ending $</th>
+        <th style="text-align: right;" title="Total profit/loss as percentage">Total %</th>
+        <th style="text-align: right;" title="Worst peak-to-trough decline during trading">Max Loss %</th>
+        <th style="text-align: center;" title="Number of trades your budget could afford"># Trades</th>
+        <th style="text-align: center;" title="Trades skipped (budget too small to buy 1 contract)">Skipped</th>
+        <th style="text-align: right;" title="Percentage of executed trades that were profitable">Win %</th>
+        <th style="text-align: right;" title="Return divided by Max Loss - higher is better (positive = good)">Score</th>
+        <th style="text-align: right;" title="Average dollar amount per position">Avg $</th>
     `;
     
     document.getElementById('warnings-section').style.display = 'none';
@@ -990,6 +994,9 @@ function displayHistoricalResults(data) {
     document.getElementById('daily-breakdown-card').style.display = 'none';
     document.getElementById('historical-breakdown-card').style.display = 'block';
     document.getElementById('historical-breakdown').style.display = 'block';
+    
+    // Reset heading for historical replay
+    document.getElementById('historical-breakdown-title').innerHTML = `<span>📜</span> Trade-by-Trade Breakdown`;
     
     const summary = data.summary;
     const stats = data.stats_used;
