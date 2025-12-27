@@ -526,7 +526,7 @@ class SignalVerificationService:
             query += ' AND channel_id = ?'
             params.append(entity_id)
         elif entity_type == 'user' and entity_id:
-            query += ' AND user_id = ?'
+            query += ' AND author_name = ?'
             params.append(entity_id)
         
         if status:
@@ -553,7 +553,7 @@ class SignalVerificationService:
         if entity_type == 'channel':
             where_clause = 'channel_id = ?'
         else:
-            where_clause = 'user_id = ?'
+            where_clause = 'author_name = ?'
         
         cursor.execute(f'''
             SELECT 
@@ -632,7 +632,7 @@ class SignalVerificationService:
         if entity_type == 'channel':
             where_clause = 'lc.channel_id = ?'
         else:
-            where_clause = 'lc.user_id = ?'
+            where_clause = 'lc.author_name = ?'
         
         cursor.execute(f'''
             SELECT 

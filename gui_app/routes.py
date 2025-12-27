@@ -12155,16 +12155,15 @@ def register_routes(app):
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT DISTINCT 
-                    COALESCE(author_name, 'User ' || user_id) as name,
-                    user_id,
+                    author_name as name,
                     COUNT(*) as trade_count
                 FROM lot_closures
-                WHERE user_id IS NOT NULL AND user_id != ''
-                GROUP BY user_id, author_name
+                WHERE author_name IS NOT NULL AND author_name != ''
+                GROUP BY author_name
                 ORDER BY trade_count DESC
                 LIMIT 50
             ''')
-            users = [{'name': row[0], 'id': row[1], 'trade_count': row[2]} for row in cursor.fetchall()]
+            users = [{'name': row[0], 'id': row[0], 'trade_count': row[1]} for row in cursor.fetchall()]
             
             return jsonify({'success': True, 'users': users})
         except Exception as e:
