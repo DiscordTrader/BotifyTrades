@@ -62,7 +62,7 @@
             </div>
 
             <div class="nav-dropdown">
-                <button class="nav-dropdown-btn {% if request.path in ['/options', '/leaderboard', '/simulation', '/performance'] %}active{% endif %}">
+                <button class="nav-dropdown-btn {% if request.path in ['/options', '/leaderboard', '/simulation', '/performance', '/verification'] %}active{% endif %}">
                     Analysis
                     <span class="dropdown-arrow">▼</span>
                 </button>
@@ -86,6 +86,11 @@
                         <span class="dropdown-icon">🔮</span>
                         <span class="dropdown-text">Simulate</span>
                         <span class="dropdown-desc">Portfolio projections</span>
+                    </a>
+                    <a href="/verification" class="dropdown-item {% if request.path == '/verification' %}active{% endif %}">
+                        <span class="dropdown-icon">🔍</span>
+                        <span class="dropdown-text">Verify Signals</span>
+                        <span class="dropdown-desc">Detect paper trading</span>
                     </a>
                 </div>
             </div>

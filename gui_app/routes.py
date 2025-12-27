@@ -12024,3 +12024,142 @@ def register_routes(app):
             return jsonify({'success': True, 'brokers': brokers})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # ============ SIGNAL VERIFICATION API ============
+    
+    @app.route('/verification')
+    @login_required
+    def verification_page():
+        """Signal Verification Tool - Verify signals against real market data"""
+        return render_template('verification.html')
+    
+    @app.route('/api/verification/verify', methods=['POST'])
+    @login_required
+    def api_verify_signal():
+        """Verify a single signal against real-time market data"""
+        try:
+            data = request.get_json()
+            
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from services.signal_verification import verify_single_signal
+            
+            signal_data = {
+                'ticker': data.get('ticker', ''),
+                'asset_type': data.get('asset_type', 'option'),
+                'strike': data.get('strike'),
+                'expiry': data.get('expiry'),
+                'direction': data.get('direction', 'call'),
+                'signal_price': data.get('signal_price'),
+                'signal_time': data.get('signal_time', datetime.now().isoformat())
+            }
+            
+            result = verify_single_signal(signal_data)
+            return jsonify({'success': True, **result})
+            
+        except Exception as e:
+            print(f"[API] Signal verification error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/verification/report/<entity_type>/<entity_id>', methods=['GET'])
+    @login_required
+    def api_verification_report(entity_type, entity_id):
+        """Get comprehensive verification report for a user or channel"""
+        try:
+            days = request.args.get('days', 30, type=int)
+            
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from services.signal_verification import get_verification_report
+            
+            report = get_verification_report(entity_type, entity_id, days)
+            return jsonify(report)
+            
+        except Exception as e:
+            print(f"[API] Verification report error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/verification/analyze/<entity_type>/<entity_id>', methods=['GET'])
+    @login_required
+    def api_analyze_trades(entity_type, entity_id):
+        """Analyze trade history and compare reported vs executable performance"""
+        try:
+            days = request.args.get('days', 30, type=int)
+            
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from services.signal_verification import SignalVerificationService
+            
+            service = SignalVerificationService()
+            analysis = service.analyze_trade_history(entity_type, entity_id, days)
+            
+            return jsonify({'success': True, **analysis})
+            
+        except Exception as e:
+            print(f"[API] Trade analysis error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/verification/stats/<entity_type>/<entity_id>', methods=['GET'])
+    @login_required
+    def api_verification_stats(entity_type, entity_id):
+        """Get verification statistics for an entity"""
+        try:
+            days = request.args.get('days', 30, type=int)
+            
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from services.signal_verification import SignalVerificationService
+            
+            service = SignalVerificationService()
+            stats = service.get_verification_stats(entity_type, entity_id, days)
+            
+            return jsonify({'success': True, **stats})
+            
+        except Exception as e:
+            print(f"[API] Verification stats error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/verification/users', methods=['GET'])
+    @login_required
+    def api_get_verifiable_users():
+        """Get list of users with trade history for verification"""
+        try:
+            cursor = db.get_db().cursor()
+            cursor.execute('''
+                SELECT DISTINCT user_id, COUNT(*) as trade_count
+                FROM lot_closures
+                WHERE user_id IS NOT NULL AND user_id != ''
+                GROUP BY user_id
+                ORDER BY trade_count DESC
+                LIMIT 50
+            ''')
+            users = [{'id': row[0], 'trade_count': row[1]} for row in cursor.fetchall()]
+            
+            return jsonify({'success': True, 'users': users})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/verification/channels', methods=['GET'])
+    @login_required
+    def api_get_verifiable_channels():
+        """Get list of channels with trade history for verification"""
+        try:
+            cursor = db.get_db().cursor()
+            cursor.execute('''
+                SELECT c.name, c.id, COUNT(lc.id) as trade_count
+                FROM channels c
+                LEFT JOIN lot_closures lc ON lc.channel_id = c.id
+                GROUP BY c.id, c.name
+                HAVING trade_count > 0
+                ORDER BY trade_count DESC
+                LIMIT 50
+            ''')
+            channels = [{'name': row[0], 'id': row[1], 'trade_count': row[2]} for row in cursor.fetchall()]
+            
+            return jsonify({'success': True, 'channels': channels})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
