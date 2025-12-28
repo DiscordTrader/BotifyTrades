@@ -1076,6 +1076,36 @@ def init_db():
         )
     ''')
     
+    # Signal Instances - Deduplication tracking to prevent duplicate entries on same trade
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS signal_instances (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            channel_id TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            entry_price REAL NOT NULL,
+            direction TEXT NOT NULL,
+            author_id TEXT,
+            author_name TEXT,
+            fingerprint TEXT NOT NULL,
+            status TEXT DEFAULT 'OPEN' CHECK(status IN ('OPEN', 'CLOSED', 'EXPIRED')),
+            first_message_id TEXT,
+            last_message_id TEXT,
+            stop_loss REAL,
+            profit_targets TEXT,
+            update_count INTEGER DEFAULT 1,
+            first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            closed_at TIMESTAMP,
+            close_reason TEXT,
+            ttl_hours INTEGER DEFAULT 24,
+            UNIQUE(channel_id, fingerprint)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_instances_channel ON signal_instances(channel_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_instances_ticker ON signal_instances(ticker)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_instances_fingerprint ON signal_instances(fingerprint)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_instances_status ON signal_instances(status)')
+    
     # Create indexes for license tables
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_server_licenses_key ON server_licenses(license_key)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_server_licenses_machine ON server_licenses(machine_id)')
@@ -6270,6 +6300,201 @@ def get_all_broker_statuses() -> Dict[str, Dict]:
     except Exception as e:
         print(f"[DATABASE] Error getting broker statuses: {e}")
         return {}
+
+
+# ==================== SIGNAL DEDUPLICATION FUNCTIONS ====================
+
+def compute_signal_fingerprint(channel_id: str, ticker: str, entry_price: float, direction: str = 'BTO') -> str:
+    """
+    Compute a fingerprint for signal deduplication.
+    
+    Fingerprint = channel_id + ticker + normalized_entry_price + direction
+    Entry price is rounded to 2 decimals for fuzzy matching.
+    """
+    import hashlib
+    normalized_price = round(entry_price, 2)
+    fingerprint_data = f"{channel_id}:{ticker.upper()}:{normalized_price}:{direction.upper()}"
+    return hashlib.md5(fingerprint_data.encode()).hexdigest()[:16]
+
+
+def check_signal_instance(channel_id: str, ticker: str, entry_price: float, direction: str = 'BTO') -> Optional[Dict]:
+    """
+    Check if there's an open signal instance for this signal.
+    
+    Returns the existing instance if found and still OPEN, None otherwise.
+    Also expires instances older than their TTL.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    fingerprint = compute_signal_fingerprint(channel_id, ticker, entry_price, direction)
+    
+    try:
+        cursor.execute('''
+            UPDATE signal_instances 
+            SET status = 'EXPIRED', closed_at = CURRENT_TIMESTAMP, close_reason = 'TTL expired'
+            WHERE status = 'OPEN' 
+            AND datetime(first_seen, '+' || ttl_hours || ' hours') < datetime('now')
+        ''')
+        conn.commit()
+        
+        cursor.execute('''
+            SELECT * FROM signal_instances 
+            WHERE fingerprint = ? AND channel_id = ? AND status = 'OPEN'
+        ''', (fingerprint, str(channel_id)))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    except Exception as e:
+        print(f"[DEDUPE] Error checking signal instance: {e}")
+        return None
+
+
+def create_signal_instance(
+    channel_id: str,
+    ticker: str,
+    entry_price: float,
+    direction: str = 'BTO',
+    author_id: str = None,
+    author_name: str = None,
+    message_id: str = None,
+    stop_loss: float = None,
+    profit_targets: List[float] = None,
+    ttl_hours: int = 24
+) -> Optional[int]:
+    """
+    Create a new signal instance for tracking.
+    
+    Returns the instance ID if created, None if failed (usually duplicate).
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    fingerprint = compute_signal_fingerprint(channel_id, ticker, entry_price, direction)
+    targets_json = json.dumps(profit_targets) if profit_targets else None
+    
+    try:
+        cursor.execute('''
+            INSERT INTO signal_instances 
+            (channel_id, ticker, entry_price, direction, author_id, author_name, fingerprint, 
+             first_message_id, last_message_id, stop_loss, profit_targets, ttl_hours)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            str(channel_id), ticker.upper(), entry_price, direction.upper(),
+            author_id, author_name, fingerprint, message_id, message_id,
+            stop_loss, targets_json, ttl_hours
+        ))
+        conn.commit()
+        print(f"[DEDUPE] ✓ Created signal instance: {ticker} @ {entry_price} (fingerprint: {fingerprint})")
+        return cursor.lastrowid
+    except sqlite3.IntegrityError:
+        print(f"[DEDUPE] Signal instance already exists for {ticker} @ {entry_price}")
+        return None
+    except Exception as e:
+        print(f"[DEDUPE] Error creating signal instance: {e}")
+        return None
+
+
+def update_signal_instance(
+    instance_id: int,
+    message_id: str = None,
+    stop_loss: float = None,
+    profit_targets: List[float] = None
+) -> bool:
+    """
+    Update an existing signal instance (e.g., when SL or PTs change).
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        updates = ["update_count = update_count + 1", "last_updated = CURRENT_TIMESTAMP"]
+        params = []
+        
+        if message_id:
+            updates.append("last_message_id = ?")
+            params.append(message_id)
+        if stop_loss is not None:
+            updates.append("stop_loss = ?")
+            params.append(stop_loss)
+        if profit_targets:
+            updates.append("profit_targets = ?")
+            params.append(json.dumps(profit_targets))
+        
+        params.append(instance_id)
+        
+        cursor.execute(f'''
+            UPDATE signal_instances SET {', '.join(updates)} WHERE id = ?
+        ''', params)
+        conn.commit()
+        print(f"[DEDUPE] ✓ Updated signal instance ID {instance_id}")
+        return True
+    except Exception as e:
+        print(f"[DEDUPE] Error updating signal instance: {e}")
+        return False
+
+
+def close_signal_instance(
+    channel_id: str = None,
+    ticker: str = None,
+    instance_id: int = None,
+    close_reason: str = 'exit_signal'
+) -> bool:
+    """
+    Close a signal instance (mark as CLOSED so future signals can create new entry).
+    
+    Can close by instance_id directly, or by channel_id + ticker.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        if instance_id:
+            cursor.execute('''
+                UPDATE signal_instances 
+                SET status = 'CLOSED', closed_at = CURRENT_TIMESTAMP, close_reason = ?
+                WHERE id = ?
+            ''', (close_reason, instance_id))
+        elif channel_id and ticker:
+            cursor.execute('''
+                UPDATE signal_instances 
+                SET status = 'CLOSED', closed_at = CURRENT_TIMESTAMP, close_reason = ?
+                WHERE channel_id = ? AND ticker = ? AND status = 'OPEN'
+            ''', (close_reason, str(channel_id), ticker.upper()))
+        else:
+            return False
+        
+        conn.commit()
+        rows_affected = cursor.rowcount
+        if rows_affected > 0:
+            print(f"[DEDUPE] ✓ Closed {rows_affected} signal instance(s): {ticker or instance_id} - {close_reason}")
+        return rows_affected > 0
+    except Exception as e:
+        print(f"[DEDUPE] Error closing signal instance: {e}")
+        return False
+
+
+def get_open_signal_instances(channel_id: str = None) -> List[Dict]:
+    """Get all open signal instances, optionally filtered by channel."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        if channel_id:
+            cursor.execute('''
+                SELECT * FROM signal_instances 
+                WHERE channel_id = ? AND status = 'OPEN'
+                ORDER BY first_seen DESC
+            ''', (str(channel_id),))
+        else:
+            cursor.execute('''
+                SELECT * FROM signal_instances 
+                WHERE status = 'OPEN'
+                ORDER BY first_seen DESC
+            ''')
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"[DEDUPE] Error getting open instances: {e}")
+        return []
 
 
 # Initialize tables
