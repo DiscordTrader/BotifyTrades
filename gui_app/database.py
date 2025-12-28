@@ -5522,7 +5522,7 @@ def init_signal_formats_table():
             ('CA', 'questrade', 'Questrade', '["refresh_token"]', 'qtrade', 1, 1, 0, '30-min access / 3-day refresh', 1),
             ('IN', 'upstox', 'Upstox', '["api_key","api_secret","redirect_uri","access_token"]', 'upstox-python-sdk', 1, 1, 0, '1 day', 1),
             ('IN', 'zerodha', 'Zerodha (Kite)', '["api_key","api_secret","user_id","password","totp_secret"]', 'kiteconnect', 1, 1, 0, 'Daily 6 AM IST', 2),
-            ('IN', 'dhan', 'Dhan', '["client_id","access_token"]', 'dhanhq', 1, 1, 0, '24 hours', 3)
+            ('IN', 'dhanq', 'DhanQ', '["client_id","access_token"]', 'dhanhq', 1, 1, 0, '24 hours (auto-refresh available)', 3)
     ''')
     
     cursor.execute('''

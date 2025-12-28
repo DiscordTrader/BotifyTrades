@@ -11972,9 +11972,9 @@ def register_routes(app):
                     api_secret=credentials.get('api_secret', '')
                 )
             
-            elif broker_name == 'dhan':
-                from src.brokers.dhan_broker import DhanBroker
-                result = DhanBroker.test_connection(
+            elif broker_name == 'dhanq':
+                from src.brokers.dhanq_broker import DhanQBroker
+                result = DhanQBroker.test_connection(
                     client_id=credentials.get('client_id', ''),
                     access_token=credentials.get('access_token', '')
                 )
