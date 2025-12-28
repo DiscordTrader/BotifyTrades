@@ -6288,12 +6288,75 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 return
         
         # Pre-process special formats (Bullwinkle scalps, etc.)
-        from src.signals.parser import normalize_bullwinkle_format, is_india_signal, parse_india_option_signal, parse_india_stock_signal
+        from src.signals.parser import (
+            normalize_bullwinkle_format, is_india_signal, parse_india_option_signal, 
+            parse_india_stock_signal, parse_trade_idea, is_trade_idea_signal
+        )
+        from gui_app.database import (
+            check_signal_instance, create_signal_instance, update_signal_instance, close_signal_instance
+        )
+        
         normalized_content = normalize_bullwinkle_format(message.content)
+        
+        # Initialize variables for signal tracking
+        india_stock_signal = None
+        
+        # Check for TRADE IDEA format first (with deduplication)
+        if is_trade_idea_signal(message.content):
+            trade_idea = parse_trade_idea(message.content)
+            if trade_idea:
+                ticker = trade_idea['ticker']
+                entry_price = trade_idea['entry_price']
+                stop_loss = trade_idea.get('stop_loss')
+                profit_targets = trade_idea.get('profit_targets', [])
+                author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                
+                # Check for duplicate/update
+                existing_instance = check_signal_instance(
+                    str(message.channel.id), ticker, entry_price, 'BTO'
+                )
+                
+                if existing_instance:
+                    # This is an update to an existing signal - log but don't execute
+                    print(f"[DEDUPE] ⚠️ Update detected for {ticker} @ {entry_price} (instance #{existing_instance['id']}, update #{existing_instance['update_count'] + 1})")
+                    update_signal_instance(
+                        existing_instance['id'],
+                        message_id=str(message.id),
+                        stop_loss=stop_loss,
+                        profit_targets=profit_targets
+                    )
+                    
+                    # Check if this is an exit signal
+                    if trade_idea.get('is_exit'):
+                        close_signal_instance(instance_id=existing_instance['id'], close_reason='exit_signal')
+                        print(f"[DEDUPE] ✓ Closed signal instance for {ticker} - exit detected")
+                    
+                    return  # Skip execution, this is just an update
+                
+                # New signal - create instance and proceed
+                instance_id = create_signal_instance(
+                    channel_id=str(message.channel.id),
+                    ticker=ticker,
+                    entry_price=entry_price,
+                    direction='BTO',
+                    author_id=str(message.author.id),
+                    author_name=author_name,
+                    message_id=str(message.id),
+                    stop_loss=stop_loss,
+                    profit_targets=profit_targets,
+                    ttl_hours=24
+                )
+                
+                if instance_id:
+                    print(f"[DEDUPE] ✓ New signal instance created: {ticker} @ {entry_price} (ID: {instance_id})")
+                    # Convert to stock signal format for processing
+                    india_stock_signal = trade_idea
+                else:
+                    # Failed to create (duplicate or error), skip
+                    return
         
         # Parse trading signals - check for India format first
         opt = None
-        india_stock_signal = None
         if is_india_signal(normalized_content):
             print(f"[SIGNAL] Detected India format signal, using India parser")
             opt = parse_india_option_signal(normalized_content)

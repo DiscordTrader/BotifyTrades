@@ -31,6 +31,96 @@ BULLWINKLE_EXIT_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# TRADE IDEA format patterns (C1apped style)
+TRADE_IDEA_TICKER_PATTERN = re.compile(
+    r'(?:📌\s*)?(?:Ticker|Symbol):\s*\$?([A-Z]+)',
+    re.IGNORECASE
+)
+TRADE_IDEA_ENTRY_PATTERN = re.compile(
+    r'(?:💰\s*)?Entry:\s*\$?([\d.]+)',
+    re.IGNORECASE
+)
+TRADE_IDEA_LEVELS_PATTERN = re.compile(
+    r'(?:📈\s*)?(?:Levels|Targets|PTs?):\s*([\d.\s\-\+]+)',
+    re.IGNORECASE
+)
+TRADE_IDEA_SL_PATTERN = re.compile(
+    r'(?:⛔\s*)?(?:SL|Stop\s*Loss|Stop):\s*\$?([\d.]+)',
+    re.IGNORECASE
+)
+
+
+def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse TRADE IDEA format signals (C1apped style).
+    
+    Example:
+    | TRADE IDEA
+    📌 Ticker: TRIB
+    💰 Entry: 1.36
+    📈 Levels: 1.45 - 1.49 - 1.56 - 1.65 - 1.77+
+    ⛔ SL: 1.22
+    
+    Returns dict with parsed components or None if not a TRADE IDEA.
+    """
+    if 'TRADE IDEA' not in text.upper():
+        return None
+    
+    ticker_match = TRADE_IDEA_TICKER_PATTERN.search(text)
+    entry_match = TRADE_IDEA_ENTRY_PATTERN.search(text)
+    levels_match = TRADE_IDEA_LEVELS_PATTERN.search(text)
+    sl_match = TRADE_IDEA_SL_PATTERN.search(text)
+    
+    if not ticker_match or not entry_match:
+        return None
+    
+    ticker = ticker_match.group(1).upper()
+    entry_price = float(entry_match.group(1))
+    
+    stop_loss = float(sl_match.group(1)) if sl_match else None
+    
+    profit_targets = []
+    if levels_match:
+        levels_str = levels_match.group(1)
+        levels_str = re.sub(r'[+\s]+$', '', levels_str)
+        for level in re.split(r'\s*[-–]\s*', levels_str):
+            try:
+                level_clean = re.sub(r'[^\d.]', '', level.strip())
+                if level_clean:
+                    profit_targets.append(float(level_clean))
+            except ValueError:
+                pass
+    
+    is_exit = 'all out' in text.lower() or 'closed' in text.lower() or 'exited' in text.lower()
+    
+    result = {
+        'format': 'TRADE_IDEA',
+        'ticker': ticker,
+        'symbol': ticker,
+        'entry_price': entry_price,
+        'price': entry_price,
+        'stop_loss': stop_loss,
+        'profit_targets': profit_targets,
+        'is_exit': is_exit,
+        'action': 'STC' if is_exit else 'BTO',
+        'asset': 'stock',
+        'asset_type': 'stock',
+        'qty': 1,
+        '_qty_from_signal': False,
+        '_trade_idea': True,
+    }
+    
+    print(f"[TRADE IDEA] ✓ Parsed: {ticker} @ {entry_price}, SL={stop_loss}, PTs={profit_targets}")
+    return result
+
+
+def is_trade_idea_signal(text: str) -> bool:
+    """Check if text is a TRADE IDEA format signal."""
+    return 'TRADE IDEA' in text.upper() and (
+        TRADE_IDEA_TICKER_PATTERN.search(text) is not None or
+        TRADE_IDEA_ENTRY_PATTERN.search(text) is not None
+    )
+
 
 def normalize_bullwinkle_format(text: str) -> str:
     """
