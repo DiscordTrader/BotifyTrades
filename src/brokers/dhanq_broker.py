@@ -59,6 +59,89 @@ class DhanQBroker(BrokerInterface):
         'STOP_LOSS_MARKET': 'STOP_LOSS_MARKET'
     }
     
+    NSE_SECURITY_IDS = {
+        'NIFTY': 26000,
+        'BANKNIFTY': 26009,
+        'FINNIFTY': 26037,
+        'MIDCPNIFTY': 26074,
+        'RELIANCE': 2885,
+        'TCS': 11536,
+        'INFY': 1594,
+        'HDFCBANK': 1333,
+        'ICICIBANK': 4963,
+        'SBIN': 3045,
+        'TATAMOTORS': 3456,
+        'TATASTEEL': 3499,
+        'ITC': 1660,
+        'HINDUNILVR': 1394,
+        'BAJFINANCE': 317,
+        'LT': 11483,
+        'AXISBANK': 5900,
+        'KOTAKBANK': 1922,
+        'MARUTI': 10999,
+        'BHARTIARTL': 10604,
+        'ASIANPAINT': 236,
+        'WIPRO': 3787,
+        'HCLTECH': 7229,
+        'ADANIENT': 25,
+        'ADANIPORTS': 15083,
+        'COALINDIA': 20374,
+        'ONGC': 2475,
+        'POWERGRID': 14977,
+        'NTPC': 11630,
+        'SUNPHARMA': 3351,
+        'TITAN': 3506,
+        'TECHM': 13538,
+        'ULTRACEMCO': 11532,
+        'NESTLEIND': 17963,
+        'DRREDDY': 881,
+        'CIPLA': 694,
+        'M&M': 2031,
+        'BAJAJFINSV': 16675,
+        'EICHERMOT': 910,
+        'GRASIM': 1232,
+        'JSWSTEEL': 11723,
+        'BRITANNIA': 547,
+        'HINDALCO': 1363,
+        'DIVISLAB': 10940,
+        'APOLLOHOSP': 157,
+        'SBILIFE': 21808,
+    }
+    
+    NSE_LOT_SIZES = {
+        'NIFTY': 25,
+        'BANKNIFTY': 15,
+        'FINNIFTY': 25,
+        'MIDCPNIFTY': 50,
+        'SENSEX': 10,
+        'BANKEX': 15,
+        'RELIANCE': 250,
+        'TCS': 150,
+        'INFY': 300,
+        'HDFCBANK': 550,
+        'ICICIBANK': 1375,
+        'SBIN': 1500,
+        'TATAMOTORS': 1425,
+        'TATASTEEL': 1500,
+        'ITC': 1600,
+        'HINDUNILVR': 300,
+        'BAJFINANCE': 125,
+        'LT': 150,
+        'AXISBANK': 600,
+        'KOTAKBANK': 400,
+        'MARUTI': 100,
+        'BHARTIARTL': 950,
+        'ASIANPAINT': 200,
+        'WIPRO': 1500,
+        'HCLTECH': 350,
+        'ADANIENT': 250,
+        'ADANIPORTS': 1250,
+        'COALINDIA': 2100,
+        'ONGC': 3850,
+        'POWERGRID': 2700,
+        'NTPC': 2925,
+    }
+    
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.name = "DHANQ"
@@ -79,6 +162,75 @@ class DhanQBroker(BrokerInterface):
             'Accept': 'application/json',
             'access-token': self.access_token or ''
         }
+    
+    def get_security_id(self, symbol: str) -> Optional[int]:
+        """
+        Get security ID for a symbol.
+        
+        Args:
+            symbol: Trading symbol (e.g., NIFTY, BANKNIFTY, RELIANCE)
+            
+        Returns:
+            Security ID or None if not found
+        """
+        return self.NSE_SECURITY_IDS.get(symbol.upper())
+    
+    def get_lot_size(self, symbol: str) -> int:
+        """
+        Get lot size for F&O symbol.
+        
+        Args:
+            symbol: Trading symbol
+            
+        Returns:
+            Lot size (defaults to 1 for unknown symbols)
+        """
+        return self.NSE_LOT_SIZES.get(symbol.upper(), 1)
+    
+    def build_option_security_id(self, symbol: str, strike: float, option_type: str, expiry_date: str) -> Optional[str]:
+        """
+        Build option security ID for F&O trading.
+        
+        DhanQ option format: SYMBOL EXPIRY STRIKE OPTTYPE
+        Example: NIFTY 02JAN25 24000 CE
+        
+        Args:
+            symbol: Underlying symbol (e.g., NIFTY, BANKNIFTY)
+            strike: Strike price
+            option_type: CE or PE (Call/Put European)
+            expiry_date: Expiry in MM/DD or DD MMM YY format
+            
+        Returns:
+            Option trading symbol for DhanQ
+        """
+        symbol = symbol.upper()
+        opt_type = 'CE' if option_type.upper() in ('C', 'CE', 'CALL') else 'PE'
+        
+        try:
+            from datetime import datetime
+            
+            if '/' in expiry_date:
+                parts = expiry_date.split('/')
+                month = int(parts[0])
+                day = int(parts[1])
+                year = datetime.now().year
+                if month < datetime.now().month:
+                    year += 1
+                expiry_dt = datetime(year, month, day)
+            else:
+                expiry_dt = datetime.strptime(expiry_date, '%d %b %Y')
+            
+            expiry_str = expiry_dt.strftime('%d%b%y').upper()
+            
+            strike_str = str(int(strike)) if strike == int(strike) else str(strike)
+            
+            option_symbol = f"{symbol} {expiry_str} {strike_str} {opt_type}"
+            print(f"[{self.name}] Built option symbol: {option_symbol}")
+            return option_symbol
+            
+        except Exception as e:
+            print(f"[{self.name}] Error building option security ID: {e}")
+            return None
     
     async def connect(self) -> bool:
         """Connect to DhanQ using client ID and access token"""

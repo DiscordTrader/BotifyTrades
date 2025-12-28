@@ -6288,11 +6288,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 return
         
         # Pre-process special formats (Bullwinkle scalps, etc.)
-        from src.signals.parser import normalize_bullwinkle_format
+        from src.signals.parser import normalize_bullwinkle_format, is_india_signal, parse_india_option_signal, parse_india_stock_signal
         normalized_content = normalize_bullwinkle_format(message.content)
         
-        # Parse trading signals
-        opt = parse_option_signal(normalized_content)
+        # Parse trading signals - check for India format first
+        opt = None
+        if is_india_signal(normalized_content):
+            print(f"[SIGNAL] Detected India format signal, using India parser")
+            opt = parse_india_option_signal(normalized_content)
+            if not opt:
+                stk = parse_india_stock_signal(normalized_content)
+                if stk:
+                    opt = stk
+                    opt['asset_type'] = 'stock'
+        
+        # Fall back to US format parser if not India signal or India parser failed
+        if opt is None:
+            opt = parse_option_signal(normalized_content)
         if opt:
             # Apply tiered quantity defaults for BTO signals without qty from signal text
             if opt.get('action') == 'BTO' and opt.get('qty') is None and not opt.get('_qty_from_signal', False):
