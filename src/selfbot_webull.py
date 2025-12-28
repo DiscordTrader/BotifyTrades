@@ -6293,17 +6293,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         
         # Parse trading signals - check for India format first
         opt = None
+        india_stock_signal = None
         if is_india_signal(normalized_content):
             print(f"[SIGNAL] Detected India format signal, using India parser")
             opt = parse_india_option_signal(normalized_content)
             if not opt:
-                stk = parse_india_stock_signal(normalized_content)
-                if stk:
-                    opt = stk
-                    opt['asset_type'] = 'stock'
+                india_stock_signal = parse_india_stock_signal(normalized_content)
         
         # Fall back to US format parser if not India signal or India parser failed
-        if opt is None:
+        if opt is None and india_stock_signal is None:
             opt = parse_option_signal(normalized_content)
         if opt:
             # Apply tiered quantity defaults for BTO signals without qty from signal text
@@ -6469,7 +6467,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             return
         
-        stk = parse_stock_signal(normalized_content)
+        # Use India stock signal if parsed, otherwise try US stock parser
+        stk = india_stock_signal if india_stock_signal else parse_stock_signal(normalized_content)
         if stk:
             # Apply tiered quantity defaults for BTO signals without qty from signal text
             if stk.get('action') == 'BTO' and stk.get('qty') is None and not stk.get('_qty_from_signal', False):

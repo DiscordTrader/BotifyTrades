@@ -135,6 +135,7 @@ def parse_india_option_signal(text: str) -> Optional[Dict[str, Any]]:
                 price = None
             
             result = {
+                'asset': 'option',
                 'action': action,
                 'direction': action,
                 'symbol': symbol,
@@ -143,7 +144,8 @@ def parse_india_option_signal(text: str) -> Optional[Dict[str, Any]]:
                 'call_put': call_put,
                 'expiry': expiry,
                 'price': price,
-                'quantity': quantity,
+                'qty': quantity,
+                '_qty_from_signal': qty is not None,
                 'lots': qty or 1,
                 'lot_size': lot_size,
                 'asset_type': 'option',
@@ -191,11 +193,13 @@ def parse_india_stock_signal(text: str) -> Optional[Dict[str, Any]]:
         price = None
     
     result = {
+        'asset': 'stock',
         'action': action,
         'direction': action,
         'symbol': symbol,
         'price': price,
-        'quantity': 1,
+        'qty': 1,
+        '_qty_from_signal': False,
         'asset_type': 'stock',
         'market': 'INDIA',
         'exchange_segment': 'NSE_EQ',
