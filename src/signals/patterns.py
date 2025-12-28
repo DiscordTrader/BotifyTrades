@@ -18,6 +18,62 @@ ADVANCED_OPT_PATTERNS = [
 
 OCC_PATTERN = r'([A-Z]+)(\d{6})([CP])(\d{8})'
 
+INDIA_OPT_PATTERN_1 = r'(?:^|\s)(BUY|SELL)\s+([A-Za-z]+)\s+(\d+)\s*(CE|PE)\s*(?:@|AT)?\s*[₹]?([\d.]+)'
+
+INDIA_OPT_PATTERN_2 = r'(?:^|\s)([A-Za-z]+)\s+(\d+)\s*(CE|PE)\s*(BUY|SELL)\s*(?:@|AT)?\s*[₹]?([\d.]+)'
+
+INDIA_OPT_PATTERN_3 = r'(?:^|\s)(BUY|SELL)\s+([A-Za-z]+)\s+(\d+)\s*(CE|PE)\s+(\d{1,2}\s*(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s*\d{2,4})?\s*(?:@|AT)?\s*[₹]?([\d.]+)'
+
+INDIA_OPT_PATTERN_4 = r'(?:^|\s)(BUY|SELL)\s+(?:(\d+)\s+(?:LOT|LOTS|QTY)\s+)?([A-Za-z]+)\s+(\d+)\s*(CE|PE)\s*(?:@|AT)?\s*[₹]?([\d.]+)'
+
+INDIA_STK_PATTERN = r'(?:^|\s)(BUY|SELL)\s+([A-Za-z]+)\s*(?:@|AT)?\s*[₹]?([\d.]+)'
+
+INDIA_PATTERNS = [
+    INDIA_OPT_PATTERN_1,
+    INDIA_OPT_PATTERN_2,
+    INDIA_OPT_PATTERN_3,
+    INDIA_OPT_PATTERN_4,
+]
+
+INDIA_MONTH_MAP = {
+    'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6,
+    'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12
+}
+
+NSE_LOT_SIZES = {
+    'NIFTY': 25,
+    'BANKNIFTY': 15,
+    'FINNIFTY': 25,
+    'MIDCPNIFTY': 50,
+    'SENSEX': 10,
+    'BANKEX': 15,
+    'RELIANCE': 250,
+    'TCS': 150,
+    'INFY': 300,
+    'HDFCBANK': 550,
+    'ICICIBANK': 1375,
+    'SBIN': 1500,
+    'TATAMOTORS': 1425,
+    'TATASTEEL': 1500,
+    'ITC': 1600,
+    'HINDUNILVR': 300,
+    'BAJFINANCE': 125,
+    'LT': 150,
+    'AXISBANK': 600,
+    'KOTAKBANK': 400,
+    'MARUTI': 100,
+    'BHARTIARTL': 950,
+    'ASIANPAINT': 200,
+    'WIPRO': 1500,
+    'HCLTECH': 350,
+    'ADANIENT': 250,
+    'ADANIPORTS': 1250,
+    'COALINDIA': 2100,
+    'ONGC': 3850,
+    'POWERGRID': 2700,
+    'NTPC': 2925,
+}
+
 
 def create_option_regex(pattern: Optional[str] = None, ignore_case: bool = True) -> re.Pattern:
     """

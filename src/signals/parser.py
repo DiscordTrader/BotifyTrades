@@ -11,6 +11,10 @@ from .patterns import (
     DEFAULT_STK_PATTERN,
     create_option_regex,
     create_stock_regex,
+    INDIA_PATTERNS,
+    INDIA_STK_PATTERN,
+    INDIA_MONTH_MAP,
+    NSE_LOT_SIZES,
 )
 
 
@@ -62,6 +66,250 @@ def normalize_bullwinkle_format(text: str) -> str:
     
     # Not Bullwinkle format, return original
     return text
+
+
+def parse_india_option_signal(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse an Indian option trading signal from text.
+    
+    Supported formats:
+    - "BUY NIFTY 24000 CE @ 145"
+    - "SELL BANKNIFTY 49500 PE @ 220"
+    - "NIFTY 24100 CE BUY @ 130"
+    - "BUY 2 LOT NIFTY 24000 CE @ 145"
+    - "BUY NIFTY 24000 CE 28 DEC @ 145"
+    
+    Args:
+        text: Raw message text to parse
+        
+    Returns:
+        Dictionary with signal details or None if not matched
+    """
+    from datetime import datetime
+    
+    text_clean = text.strip()
+    
+    for pattern in INDIA_PATTERNS:
+        regex = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
+        m = regex.search(text_clean)
+        
+        if m:
+            groups = m.groups()
+            
+            if 'INDIA_OPT_PATTERN_1' in pattern or pattern == INDIA_PATTERNS[0]:
+                direction, symbol, strike, opt_type, price_str = groups[0], groups[1], groups[2], groups[3], groups[4]
+                expiry_str = None
+                qty = None
+            elif pattern == INDIA_PATTERNS[1]:
+                symbol, strike, opt_type, direction, price_str = groups[0], groups[1], groups[2], groups[3], groups[4]
+                expiry_str = None
+                qty = None
+            elif pattern == INDIA_PATTERNS[2]:
+                direction, symbol, strike, opt_type, expiry_str, price_str = groups[0], groups[1], groups[2], groups[3], groups[4], groups[5]
+                qty = None
+            elif pattern == INDIA_PATTERNS[3]:
+                direction, qty_str, symbol, strike, opt_type, price_str = groups[0], groups[1], groups[2], groups[3], groups[4], groups[5]
+                qty = int(qty_str) if qty_str else None
+                expiry_str = None
+            else:
+                continue
+            
+            symbol = symbol.upper()
+            direction = direction.upper()
+            opt_type = opt_type.upper()
+            
+            action = 'BTO' if direction == 'BUY' else 'STC'
+            call_put = 'C' if opt_type == 'CE' else 'P'
+            
+            if expiry_str:
+                expiry = _parse_india_expiry(expiry_str)
+            else:
+                expiry = _get_next_nse_expiry(symbol)
+            
+            lot_size = NSE_LOT_SIZES.get(symbol, 1)
+            quantity = (qty * lot_size) if qty else lot_size
+            
+            try:
+                price = float(price_str)
+            except (ValueError, TypeError):
+                price = None
+            
+            result = {
+                'action': action,
+                'direction': action,
+                'symbol': symbol,
+                'strike': float(strike),
+                'opt_type': call_put,
+                'call_put': call_put,
+                'expiry': expiry,
+                'price': price,
+                'quantity': quantity,
+                'lots': qty or 1,
+                'lot_size': lot_size,
+                'asset_type': 'option',
+                'market': 'INDIA',
+                'exchange_segment': 'NSE_FNO',
+                'is_market_order': price is None,
+                'original_format': 'INDIA',
+            }
+            
+            print(f"[INDIA] ✓ Parsed: {action} {quantity} {symbol} {strike}{opt_type} {expiry} @ {price}")
+            return result
+    
+    return None
+
+
+def parse_india_stock_signal(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse an Indian stock trading signal from text.
+    
+    Supported formats:
+    - "BUY RELIANCE @ 2500"
+    - "SELL TCS @ 3800"
+    
+    Args:
+        text: Raw message text to parse
+        
+    Returns:
+        Dictionary with signal details or None if not matched
+    """
+    regex = re.compile(INDIA_STK_PATTERN, re.IGNORECASE | re.MULTILINE)
+    m = regex.search(text.strip())
+    
+    if not m:
+        return None
+    
+    direction, symbol, price_str = m.groups()
+    
+    symbol = symbol.upper()
+    direction = direction.upper()
+    action = 'BTO' if direction == 'BUY' else 'STC'
+    
+    try:
+        price = float(price_str)
+    except (ValueError, TypeError):
+        price = None
+    
+    result = {
+        'action': action,
+        'direction': action,
+        'symbol': symbol,
+        'price': price,
+        'quantity': 1,
+        'asset_type': 'stock',
+        'market': 'INDIA',
+        'exchange_segment': 'NSE_EQ',
+        'is_market_order': price is None,
+        'original_format': 'INDIA',
+    }
+    
+    print(f"[INDIA] ✓ Parsed stock: {action} {symbol} @ {price}")
+    return result
+
+
+def _parse_india_expiry(expiry_str: str) -> str:
+    """
+    Parse Indian date format (DD MMM YYYY) to MM/DD format.
+    
+    Examples:
+    - "28 DEC 2025" -> "12/28"
+    - "28 DEC" -> "12/28"
+    - "28DEC25" -> "12/28"
+    """
+    from datetime import datetime
+    import re
+    
+    if not expiry_str:
+        return _get_next_nse_expiry('NIFTY')
+    
+    expiry_clean = expiry_str.upper().strip()
+    
+    match = re.match(r'(\d{1,2})\s*(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s*(\d{2,4})?', expiry_clean)
+    
+    if match:
+        day = int(match.group(1))
+        month = INDIA_MONTH_MAP.get(match.group(2), 1)
+        return f"{month:02d}/{day:02d}"
+    
+    return _get_next_nse_expiry('NIFTY')
+
+
+def _get_next_nse_expiry(symbol: str) -> str:
+    """
+    Get the next expiry date for NSE F&O.
+    
+    - NIFTY/BANKNIFTY/FINNIFTY: Weekly (Thursday)
+    - Others: Monthly (last Thursday)
+    """
+    from datetime import datetime, timedelta
+    
+    now = datetime.now()
+    
+    weekly_symbols = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'SENSEX', 'BANKEX']
+    
+    if symbol.upper() in weekly_symbols:
+        days_ahead = 3 - now.weekday()
+        if days_ahead < 0:
+            days_ahead += 7
+        elif days_ahead == 0 and now.hour >= 15:
+            days_ahead = 7
+        
+        next_thursday = now + timedelta(days=days_ahead)
+        return next_thursday.strftime("%m/%d")
+    else:
+        year = now.year
+        month = now.month
+        
+        last_day = (datetime(year, month % 12 + 1, 1) - timedelta(days=1)).day if month < 12 else 31
+        last_thursday = None
+        
+        for day in range(last_day, 0, -1):
+            test_date = datetime(year, month, day)
+            if test_date.weekday() == 3:
+                last_thursday = test_date
+                break
+        
+        if last_thursday and last_thursday <= now:
+            if month == 12:
+                month = 1
+                year += 1
+            else:
+                month += 1
+            last_day = (datetime(year, month % 12 + 1, 1) - timedelta(days=1)).day if month < 12 else 31
+            for day in range(last_day, 0, -1):
+                test_date = datetime(year, month, day)
+                if test_date.weekday() == 3:
+                    last_thursday = test_date
+                    break
+        
+        return last_thursday.strftime("%m/%d") if last_thursday else now.strftime("%m/%d")
+
+
+def is_india_signal(text: str) -> bool:
+    """
+    Check if the text appears to be an Indian market signal.
+    
+    Looks for:
+    - CE/PE option types
+    - BUY/SELL (not BTO/STC)
+    - Indian symbols like NIFTY, BANKNIFTY
+    - ₹ symbol
+    """
+    text_upper = text.upper()
+    
+    if 'CE' in text_upper or 'PE' in text_upper:
+        return True
+    
+    if ('BUY ' in text_upper or 'SELL ' in text_upper) and ('BTO ' not in text_upper and 'STC ' not in text_upper):
+        india_symbols = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'SENSEX', 'BANKEX', 'RELIANCE', 'TCS', 'INFY', 'HDFCBANK']
+        for sym in india_symbols:
+            if sym in text_upper:
+                return True
+    
+    if '₹' in text:
+        return True
+    
+    return False
 
 
 _option_regex = None
