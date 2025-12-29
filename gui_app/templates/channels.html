@@ -907,7 +907,7 @@
         </p>
         
         <div id="mappingAddForm" style="display: none; margin-bottom: 20px; padding: 20px; background: rgba(15, 240, 179, 0.05); border-radius: 12px; border: 1px solid rgba(15, 240, 179, 0.2);">
-            <div style="display: grid; grid-template-columns: 1fr 1fr auto 2fr 1fr auto; gap: 12px; align-items: end;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
                 <div class="form-group" style="margin: 0;">
                     <label>Source Channel ID</label>
                     <input type="text" class="form-input" id="newMappingSourceId" placeholder="123456789012345678">
@@ -916,19 +916,40 @@
                     <label>Source Name (optional)</label>
                     <input type="text" class="form-input" id="newMappingSourceName" placeholder="my-signals">
                 </div>
-                <span style="color: var(--mint); font-size: 1.5rem; padding-bottom: 10px;">→</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+                <span style="color: var(--mint); font-size: 1.5rem;">→</span>
+                <div class="form-group" style="margin: 0;">
+                    <label>Destination Type</label>
+                    <select class="form-input" id="newMappingDestType" onchange="toggleDestinationFields('add')">
+                        <option value="webhook">Webhook URL</option>
+                        <option value="channel">Channel ID</option>
+                    </select>
+                </div>
+            </div>
+            <div id="webhookFields" style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 16px;">
                 <div class="form-group" style="margin: 0;">
                     <label>Webhook URL</label>
                     <input type="text" class="form-input" id="newMappingWebhookUrl" placeholder="https://discord.com/api/webhooks/...">
                 </div>
                 <div class="form-group" style="margin: 0;">
-                    <label>Webhook Name</label>
+                    <label>Webhook Name (optional)</label>
                     <input type="text" class="form-input" id="newMappingWebhookName" placeholder="Trade Echo">
                 </div>
-                <div style="display: flex; gap: 8px; padding-bottom: 4px;">
-                    <button class="btn-add" onclick="addChannelMapping()">✓ Save</button>
-                    <button class="btn-add" onclick="toggleMappingForm()" style="background: rgba(255,255,255,0.1);">Cancel</button>
+            </div>
+            <div id="channelFields" style="display: none; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 16px;">
+                <div class="form-group" style="margin: 0;">
+                    <label>Destination Channel ID</label>
+                    <input type="text" class="form-input" id="newMappingDestChannelId" placeholder="987654321098765432">
                 </div>
+                <div class="form-group" style="margin: 0;">
+                    <label>Channel Name (optional)</label>
+                    <input type="text" class="form-input" id="newMappingDestChannelName" placeholder="signals-output">
+                </div>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button class="btn-add" onclick="toggleMappingForm()" style="background: rgba(255,255,255,0.1);">Cancel</button>
+                <button class="btn-add" onclick="addChannelMapping()">✓ Save Mapping</button>
             </div>
         </div>
         
@@ -991,12 +1012,31 @@
                     <input type="text" class="form-input" id="editMappingSourceName" placeholder="my-signals">
                 </div>
                 <div class="form-group" style="margin: 0;">
-                    <label>Webhook URL</label>
-                    <input type="text" class="form-input" id="editMappingWebhookUrl" placeholder="https://discord.com/api/webhooks/...">
+                    <label>Destination Type</label>
+                    <select class="form-input" id="editMappingDestType" onchange="toggleDestinationFields('edit')">
+                        <option value="webhook">Webhook URL</option>
+                        <option value="channel">Channel ID</option>
+                    </select>
                 </div>
-                <div class="form-group" style="margin: 0;">
-                    <label>Webhook Name (optional)</label>
-                    <input type="text" class="form-input" id="editMappingWebhookName" placeholder="Trade Echo">
+                <div id="editWebhookFields" style="display: grid; gap: 16px;">
+                    <div class="form-group" style="margin: 0;">
+                        <label>Webhook URL</label>
+                        <input type="text" class="form-input" id="editMappingWebhookUrl" placeholder="https://discord.com/api/webhooks/...">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label>Webhook Name (optional)</label>
+                        <input type="text" class="form-input" id="editMappingWebhookName" placeholder="Trade Echo">
+                    </div>
+                </div>
+                <div id="editChannelFields" style="display: none; grid-template-columns: 1fr; gap: 16px;">
+                    <div class="form-group" style="margin: 0;">
+                        <label>Destination Channel ID</label>
+                        <input type="text" class="form-input" id="editMappingDestChannelId" placeholder="987654321098765432">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label>Channel Name (optional)</label>
+                        <input type="text" class="form-input" id="editMappingDestChannelName" placeholder="signals-output">
+                    </div>
                 </div>
                 <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px;">
                     <button class="btn-add" onclick="closeEditMappingModal()" style="background: rgba(255,255,255,0.1);">Cancel</button>
@@ -1477,6 +1517,34 @@ function toggleMappingForm() {
     }
 }
 
+function toggleDestinationFields(mode) {
+    if (mode === 'add') {
+        const destType = document.getElementById('newMappingDestType').value;
+        const webhookFields = document.getElementById('webhookFields');
+        const channelFields = document.getElementById('channelFields');
+        
+        if (destType === 'webhook') {
+            webhookFields.style.display = 'grid';
+            channelFields.style.display = 'none';
+        } else {
+            webhookFields.style.display = 'none';
+            channelFields.style.display = 'grid';
+        }
+    } else if (mode === 'edit') {
+        const destType = document.getElementById('editMappingDestType').value;
+        const webhookFields = document.getElementById('editWebhookFields');
+        const channelFields = document.getElementById('editChannelFields');
+        
+        if (destType === 'webhook') {
+            webhookFields.style.display = 'grid';
+            channelFields.style.display = 'none';
+        } else {
+            webhookFields.style.display = 'none';
+            channelFields.style.display = 'grid';
+        }
+    }
+}
+
 async function loadChannelMappings() {
     try {
         const response = await fetch('/api/channel_mappings');
@@ -1510,7 +1578,8 @@ function renderChannelMappings() {
     html += '<thead><tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">';
     html += '<th style="text-align: left; padding: 12px; color: var(--text-secondary); font-weight: 500;">Source Channel</th>';
     html += '<th style="text-align: center; padding: 12px; color: var(--text-secondary);"></th>';
-    html += '<th style="text-align: left; padding: 12px; color: var(--text-secondary); font-weight: 500;">Webhook Destination</th>';
+    html += '<th style="text-align: left; padding: 12px; color: var(--text-secondary); font-weight: 500;">Destination</th>';
+    html += '<th style="text-align: center; padding: 12px; color: var(--text-secondary); font-weight: 500;">Type</th>';
     html += '<th style="text-align: center; padding: 12px; color: var(--text-secondary); font-weight: 500;">Actions</th>';
     html += '</tr></thead><tbody>';
     
@@ -1518,16 +1587,32 @@ function renderChannelMappings() {
         const srcDisplay = m.source_channel_name 
             ? `<strong>${escapeHtml(m.source_channel_name)}</strong><br><small style="color: var(--text-muted);">${escapeHtml(m.source_channel_id)}</small>` 
             : escapeHtml(m.source_channel_id);
-        const webhookDisplay = m.webhook_name 
-            ? `<strong>${escapeHtml(m.webhook_name)}</strong><br><small style="color: var(--text-muted);">${escapeHtml(m.webhook_url ? m.webhook_url.substring(0, 45) + '...' : '')}</small>` 
-            : escapeHtml(m.webhook_url ? m.webhook_url.substring(0, 50) + '...' : '');
+        
+        const destType = m.destination_type || 'webhook';
+        let destDisplay = '';
+        let typeBadge = '';
+        
+        if (destType === 'channel') {
+            destDisplay = m.destination_channel_name 
+                ? `<strong>${escapeHtml(m.destination_channel_name)}</strong><br><small style="color: var(--text-muted);">${escapeHtml(m.destination_channel_id)}</small>` 
+                : escapeHtml(m.destination_channel_id);
+            typeBadge = '<span style="background: rgba(99,102,241,0.2); color: #818cf8; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem;">Channel</span>';
+        } else {
+            destDisplay = m.webhook_name 
+                ? `<strong>${escapeHtml(m.webhook_name)}</strong><br><small style="color: var(--text-muted);">${escapeHtml(m.webhook_url ? m.webhook_url.substring(0, 45) + '...' : '')}</small>` 
+                : escapeHtml(m.webhook_url ? m.webhook_url.substring(0, 50) + '...' : '');
+            typeBadge = '<span style="background: rgba(15,240,179,0.2); color: var(--mint); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem;">Webhook</span>';
+        }
         
         html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">`;
         html += `<td style="padding: 12px; color: var(--text-primary);">${srcDisplay}</td>`;
         html += `<td style="padding: 12px; text-align: center; color: var(--mint); font-size: 1.2rem;">→</td>`;
-        html += `<td style="padding: 12px; color: var(--text-primary);">${webhookDisplay}</td>`;
+        html += `<td style="padding: 12px; color: var(--text-primary);">${destDisplay}</td>`;
+        html += `<td style="padding: 12px; text-align: center;">${typeBadge}</td>`;
         html += `<td style="padding: 12px; text-align: center;">`;
-        html += `<button onclick="testChannelMapping(${m.id}, '${escapeHtml(m.webhook_url || '')}')" style="background: rgba(15,240,179,0.2); border: 1px solid rgba(15,240,179,0.3); color: var(--mint); padding: 6px 12px; border-radius: 8px; cursor: pointer; margin-right: 8px;">🧪 Test</button>`;
+        if (destType === 'webhook') {
+            html += `<button onclick="testChannelMapping(${m.id}, '${escapeHtml(m.webhook_url || '')}')" style="background: rgba(15,240,179,0.2); border: 1px solid rgba(15,240,179,0.3); color: var(--mint); padding: 6px 12px; border-radius: 8px; cursor: pointer; margin-right: 8px;">🧪 Test</button>`;
+        }
         html += `<button onclick="editChannelMapping(${m.id})" style="background: rgba(99,102,241,0.2); border: 1px solid rgba(99,102,241,0.3); color: #818cf8; padding: 6px 12px; border-radius: 8px; cursor: pointer; margin-right: 8px;">✏️ Edit</button>`;
         html += `<button onclick="deleteChannelMapping(${m.id})" style="background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; padding: 6px 12px; border-radius: 8px; cursor: pointer;">🗑️ Delete</button>`;
         html += `</td></tr>`;
@@ -1540,15 +1625,24 @@ function renderChannelMappings() {
 async function addChannelMapping() {
     const sourceId = document.getElementById('newMappingSourceId').value.trim();
     const sourceName = document.getElementById('newMappingSourceName').value.trim();
+    const destType = document.getElementById('newMappingDestType').value;
     const webhookUrl = document.getElementById('newMappingWebhookUrl').value.trim();
     const webhookName = document.getElementById('newMappingWebhookName').value.trim();
+    const destChannelId = document.getElementById('newMappingDestChannelId').value.trim();
+    const destChannelName = document.getElementById('newMappingDestChannelName').value.trim();
     
     if (!sourceId) {
         showNotification('Please enter a source channel ID', 'error');
         return;
     }
-    if (!webhookUrl) {
+    
+    if (destType === 'webhook' && !webhookUrl) {
         showNotification('Please enter a webhook URL', 'error');
+        return;
+    }
+    
+    if (destType === 'channel' && !destChannelId) {
+        showNotification('Please enter a destination channel ID', 'error');
         return;
     }
     
@@ -1559,8 +1653,12 @@ async function addChannelMapping() {
             body: JSON.stringify({
                 source_channel_id: sourceId,
                 source_channel_name: sourceName,
+                destination_type: destType,
                 webhook_url: webhookUrl,
-                webhook_name: webhookName
+                webhook_name: webhookName,
+                destination_channel_id: destChannelId,
+                destination_channel_name: destChannelName,
+                format_as_bto_stc: true
             })
         });
         
@@ -1572,6 +1670,10 @@ async function addChannelMapping() {
             document.getElementById('newMappingSourceName').value = '';
             document.getElementById('newMappingWebhookUrl').value = '';
             document.getElementById('newMappingWebhookName').value = '';
+            document.getElementById('newMappingDestChannelId').value = '';
+            document.getElementById('newMappingDestChannelName').value = '';
+            document.getElementById('newMappingDestType').value = 'webhook';
+            toggleDestinationFields('add');
             toggleMappingForm();
             loadChannelMappings();
         } else {
@@ -1622,9 +1724,13 @@ function editChannelMapping(mappingId) {
     document.getElementById('editMappingId').value = mapping.id;
     document.getElementById('editMappingSourceId').value = mapping.source_channel_id || '';
     document.getElementById('editMappingSourceName').value = mapping.source_channel_name || '';
+    document.getElementById('editMappingDestType').value = mapping.destination_type || 'webhook';
     document.getElementById('editMappingWebhookUrl').value = mapping.webhook_url || '';
     document.getElementById('editMappingWebhookName').value = mapping.webhook_name || '';
+    document.getElementById('editMappingDestChannelId').value = mapping.destination_channel_id || '';
+    document.getElementById('editMappingDestChannelName').value = mapping.destination_channel_name || '';
     
+    toggleDestinationFields('edit');
     document.getElementById('editMappingModal').classList.add('active');
 }
 
@@ -1636,16 +1742,24 @@ async function saveChannelMappingEdit() {
     const mappingId = document.getElementById('editMappingId').value;
     const sourceId = document.getElementById('editMappingSourceId').value.trim();
     const sourceName = document.getElementById('editMappingSourceName').value.trim();
+    const destType = document.getElementById('editMappingDestType').value;
     const webhookUrl = document.getElementById('editMappingWebhookUrl').value.trim();
     const webhookName = document.getElementById('editMappingWebhookName').value.trim();
+    const destChannelId = document.getElementById('editMappingDestChannelId').value.trim();
+    const destChannelName = document.getElementById('editMappingDestChannelName').value.trim();
     
     if (!sourceId) {
         showNotification('Source Channel ID is required', 'error');
         return;
     }
     
-    if (!webhookUrl) {
+    if (destType === 'webhook' && !webhookUrl) {
         showNotification('Webhook URL is required', 'error');
+        return;
+    }
+    
+    if (destType === 'channel' && !destChannelId) {
+        showNotification('Destination Channel ID is required', 'error');
         return;
     }
     
@@ -1656,8 +1770,11 @@ async function saveChannelMappingEdit() {
             body: JSON.stringify({
                 source_channel_id: sourceId,
                 source_channel_name: sourceName,
+                destination_type: destType,
                 webhook_url: webhookUrl,
-                webhook_name: webhookName
+                webhook_name: webhookName,
+                destination_channel_id: destChannelId,
+                destination_channel_name: destChannelName
             })
         });
         

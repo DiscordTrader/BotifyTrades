@@ -7235,22 +7235,30 @@ def register_routes(app):
         try:
             data = request.json
             source_channel_id = data.get('source_channel_id', '').strip()
-            webhook_url = data.get('webhook_url', '').strip()
             source_channel_name = data.get('source_channel_name', '').strip()
-            webhook_name = data.get('webhook_name', '').strip()
             
-            # New dual-action flags
+            destination_type = data.get('destination_type', 'webhook').strip()
+            webhook_url = data.get('webhook_url', '').strip()
+            webhook_name = data.get('webhook_name', '').strip()
+            destination_channel_id = data.get('destination_channel_id', '').strip()
+            destination_channel_name = data.get('destination_channel_name', '').strip()
+            
             forward_enabled = data.get('forward_enabled', True)
             execute_on_source = data.get('execute_on_source', False)
             format_as_bto_stc = data.get('format_as_bto_stc', True)
             
-            if not source_channel_id or not webhook_url:
-                return jsonify({'success': False, 'error': 'Source channel ID and webhook URL are required'}), 400
+            if not source_channel_id:
+                return jsonify({'success': False, 'error': 'Source channel ID is required'}), 400
+            
+            if destination_type == 'webhook' and not webhook_url:
+                return jsonify({'success': False, 'error': 'Webhook URL is required for webhook destination'}), 400
+            
+            if destination_type == 'channel' and not destination_channel_id:
+                return jsonify({'success': False, 'error': 'Destination channel ID is required for channel destination'}), 400
             
             existing_channel = db.get_channel_by_discord_id(source_channel_id)
             if not existing_channel:
                 channel_display_name = source_channel_name or f"Mapping-{source_channel_id[:8]}"
-                # If execute_on_source is enabled, set up channel for execution too
                 db.add_channel(
                     discord_channel_id=source_channel_id,
                     name=channel_display_name,
@@ -7261,11 +7269,16 @@ def register_routes(app):
                 print(f"[MAPPING] Auto-added channel {source_channel_id} (execute={execute_on_source}, forward={forward_enabled})")
             
             result = db.add_channel_mapping(
-                source_channel_id, webhook_url,
-                source_channel_name, webhook_name,
+                source_channel_id=source_channel_id,
+                webhook_url=webhook_url,
+                source_channel_name=source_channel_name,
+                webhook_name=webhook_name,
                 forward_enabled=forward_enabled,
                 execute_on_source=execute_on_source,
-                format_as_bto_stc=format_as_bto_stc
+                format_as_bto_stc=format_as_bto_stc,
+                destination_type=destination_type,
+                destination_channel_id=destination_channel_id,
+                destination_channel_name=destination_channel_name
             )
             return jsonify(result)
         except Exception as e:
@@ -7287,7 +7300,10 @@ def register_routes(app):
                 is_active=data.get('is_active'),
                 forward_enabled=data.get('forward_enabled'),
                 execute_on_source=data.get('execute_on_source'),
-                format_as_bto_stc=data.get('format_as_bto_stc')
+                format_as_bto_stc=data.get('format_as_bto_stc'),
+                destination_type=data.get('destination_type'),
+                destination_channel_id=data.get('destination_channel_id'),
+                destination_channel_name=data.get('destination_channel_name')
             )
             return jsonify(result)
         except Exception as e:
