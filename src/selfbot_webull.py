@@ -6166,9 +6166,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 if is_bto_stc_signal or is_bullwinkle:
                     print(f"[DEBUG] BTO/STC or Bullwinkle signal detected - will process for trade execution")
+                    print(f"[DEBUG] should_forward={should_forward}, webhook_url_valid={target_execution_channel_id.startswith('https://') if target_execution_channel_id else False}")
                     
                     # DUAL-ACTION for BTO/STC: Forward FIRST (if enabled), then execute (if enabled)
                     if should_forward and target_execution_channel_id and target_execution_channel_id.startswith('https://'):
+                        print(f"[DEBUG] Entering webhook forward block...")
                         # Prepare message for forwarding
                         if is_bullwinkle:
                             # Strip emojis and format Bullwinkle signals
