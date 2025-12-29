@@ -6201,8 +6201,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # If execute IS enabled, fall through to trade execution below
                     pass
                 else:
-                    print(f"[DEBUG] Entering webhook forwarding block, target_execution_channel_id={target_execution_channel_id}")
-                    print(f"[DEBUG] startswith https: {target_execution_channel_id.startswith('https://') if target_execution_channel_id else 'N/A'}")
+                    # Non-signal message (Trade Summary, informational, etc.)
+                    print(f"[DEBUG] Non-signal message detected (not BTO/STC or Bullwinkle)")
+                    print(f"[DEBUG] should_forward={should_forward}, target_execution_channel_id={target_execution_channel_id}")
+                    print(f"[DEBUG] Message preview: {message.content[:100]}...")
                     # Check if target is a webhook URL (for channel mappings)
                     if target_execution_channel_id and target_execution_channel_id.startswith('https://'):
                         print(f"[DEBUG] Inside webhook URL block, parsing message...")
@@ -6241,8 +6243,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     webhook_msg = format_trade_idea_for_webhook(trade_idea)
                                     print(f"[CHANNEL MAP] ✓ Parsed TRADE IDEA: {trade_idea['ticker']} @ ${trade_idea['entry']}")
                             else:
+                                # Trade Summary, informational messages, etc. - forward as-is
                                 webhook_msg = message.content.strip()
-                                print(f"[CHANNEL MAP] Forwarding raw message to webhook: {webhook_msg[:50]}")
+                                print(f"[CHANNEL MAP] ✓ Forwarding raw message to webhook (Trade Summary/Info)")
+                                print(f"[CHANNEL MAP]   Content: {webhook_msg[:100]}...")
                             
                             try:
                                 import aiohttp
