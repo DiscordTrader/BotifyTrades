@@ -5051,7 +5051,12 @@ class SelfClient(discord.Client):
             from services.signal_verification import set_broker_clients
             webull_client = getattr(self.broker, 'wb', None) if self.broker else None
             tastytrade_session = getattr(self.tastytrade_broker, 'session', None) if self.tastytrade_broker else None
-            set_broker_clients(webull_client=webull_client, tastytrade_session=tastytrade_session)
+            alpaca_broker = self.paper_broker if self.paper_broker and hasattr(self.paper_broker, 'connected') and self.paper_broker.connected else None
+            set_broker_clients(
+                webull_client=webull_client, 
+                tastytrade_session=tastytrade_session,
+                alpaca_broker=alpaca_broker
+            )
         except Exception as e:
             print(f"[VERIFY] ⚠️ Could not initialize real-time verification: {e}")
     

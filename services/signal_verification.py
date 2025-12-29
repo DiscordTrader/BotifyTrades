@@ -5,8 +5,14 @@ Detects paper trading, slippage issues, and impossible fills
 
 Data Sources (priority order):
 1. Webull API - Real-time bid/ask data (when connected)
-2. Tastytrade API - Real-time bid/ask data (when connected)  
-3. yfinance - Delayed 15-30 min fallback
+2. Tastytrade API - Real-time bid/ask data (when connected)
+3. Alpaca API - Real-time bid/ask data (when connected)
+4. yfinance - Delayed 15-30 min fallback
+
+Features:
+- Historical quote capture at signal execution time
+- Time-window tolerance for price verification (+/- 30 seconds)
+- Trust score calculation with red flag detection
 """
 
 import yfinance as yf
@@ -22,21 +28,38 @@ DATABASE_PATH = os.path.join(os.path.dirname(__file__), '..', 'bot_data.db')
 
 _webull_client = None
 _tastytrade_session = None
+_alpaca_broker = None
 
-def set_broker_clients(webull_client=None, tastytrade_session=None):
+# Time window tolerance for historical price verification (seconds)
+TIME_WINDOW_TOLERANCE = 30
+
+def set_broker_clients(webull_client=None, tastytrade_session=None, alpaca_broker=None):
     """Set broker clients for real-time data access"""
-    global _webull_client, _tastytrade_session
+    global _webull_client, _tastytrade_session, _alpaca_broker
     _webull_client = webull_client
     _tastytrade_session = tastytrade_session
+    _alpaca_broker = alpaca_broker
     sources = []
     if webull_client:
         sources.append('Webull')
     if tastytrade_session:
         sources.append('Tastytrade')
+    if alpaca_broker:
+        sources.append('Alpaca')
     if sources:
-        print(f"[VERIFY] Real-time data sources enabled: {', '.join(sources)}")
+        print(f"[VERIFY] ✓ Real-time data sources enabled: {', '.join(sources)}")
     else:
-        print("[VERIFY] Using yfinance (delayed data) - no broker connected")
+        print("[VERIFY] ⚠️ Using yfinance (delayed data) - no broker connected")
+
+
+def get_broker_status() -> Dict[str, bool]:
+    """Get status of connected broker data sources"""
+    return {
+        'webull': _webull_client is not None,
+        'tastytrade': _tastytrade_session is not None,
+        'alpaca': _alpaca_broker is not None,
+        'any_realtime': any([_webull_client, _tastytrade_session, _alpaca_broker])
+    }
 
 
 class SignalVerificationService:
@@ -150,7 +173,6 @@ class SignalVerificationService:
         
         try:
             from tastytrade.instruments import get_option_chain
-            from tastytrade.dxfeed import DXLinkStreamer
             
             try:
                 exp_date = datetime.strptime(expiry, "%Y-%m-%d")
@@ -292,12 +314,43 @@ class SignalVerificationService:
         
         return data
     
+    def _get_alpaca_stock_quote(self, ticker: str) -> Optional[Dict]:
+        """Get real-time stock quote from Alpaca"""
+        global _alpaca_broker
+        if not _alpaca_broker:
+            return None
+        
+        try:
+            quote = _alpaca_broker.get_quote(ticker)
+            if quote:
+                bid = float(quote.get('bid', 0) or 0)
+                ask = float(quote.get('ask', 0) or 0)
+                last = float(quote.get('last', 0) or quote.get('price', 0) or 0)
+                
+                if bid > 0 or ask > 0 or last > 0:
+                    self.data_source = 'alpaca_realtime'
+                    return {
+                        'bid': bid,
+                        'ask': ask,
+                        'last': last,
+                        'volume': int(quote.get('volume', 0) or 0),
+                        'timestamp': datetime.now().isoformat(),
+                        'source': 'alpaca_realtime'
+                    }
+        except Exception as e:
+            print(f"[VERIFY] Alpaca stock quote error: {e}")
+        return None
+    
     def get_stock_market_data(self, ticker: str, preferred_broker: str = 'auto') -> Optional[Dict]:
         """Fetch stock quote - uses preferred broker or auto-selects"""
-        global _webull_client
+        global _webull_client, _alpaca_broker
         
         if preferred_broker == 'yfinance':
             pass
+        elif preferred_broker == 'alpaca':
+            data = self._get_alpaca_stock_quote(ticker)
+            if data:
+                return data
         elif preferred_broker == 'webull' or (preferred_broker == 'auto' and _webull_client):
             try:
                 quote = _webull_client.get_quote(stock=ticker)
@@ -318,6 +371,10 @@ class SignalVerificationService:
                         }
             except Exception as e:
                 print(f"[VERIFY] Webull stock quote error: {e}")
+        elif preferred_broker == 'auto' and _alpaca_broker:
+            data = self._get_alpaca_stock_quote(ticker)
+            if data:
+                return data
         
         try:
             stock = yf.Ticker(ticker)
@@ -336,16 +393,84 @@ class SignalVerificationService:
             print(f"[VERIFY] yfinance stock error for {ticker}: {e}")
             return None
     
-    def verify_signal(self, signal_data: Dict, preferred_broker: str = 'auto') -> Dict:
+    def capture_quote_at_signal_time(self, signal_data: Dict, preferred_broker: str = 'auto') -> Optional[Dict]:
+        """
+        Capture and store real-time quote at the moment a signal is detected.
+        This is called when a new signal is parsed, before execution.
+        
+        Args:
+            signal_data: Dict with ticker, strike, expiry, direction
+            preferred_broker: Broker to use for quote
+            
+        Returns:
+            Market data snapshot with timestamp
+        """
+        ticker = signal_data.get('ticker', '').upper()
+        asset_type = signal_data.get('asset_type', 'option')
+        
+        try:
+            if asset_type == 'option':
+                market_data = self.get_option_market_data(
+                    ticker,
+                    float(signal_data.get('strike', 0)),
+                    signal_data.get('expiry', ''),
+                    signal_data.get('direction', 'call'),
+                    preferred_broker=preferred_broker
+                )
+            else:
+                market_data = self.get_stock_market_data(ticker, preferred_broker=preferred_broker)
+            
+            if market_data:
+                market_data['captured_at'] = datetime.now().isoformat()
+                market_data['capture_type'] = 'signal_time'
+                print(f"[VERIFY] Captured quote for {ticker}: bid=${market_data.get('bid', 0):.2f}, ask=${market_data.get('ask', 0):.2f}")
+                return market_data
+                
+        except Exception as e:
+            print(f"[VERIFY] Failed to capture quote at signal time: {e}")
+        
+        return None
+    
+    def _is_within_time_window(self, signal_time_str: str, market_timestamp_str: str) -> Tuple[bool, float]:
+        """
+        Check if market data timestamp is within acceptable time window of signal.
+        Uses TIME_WINDOW_TOLERANCE (default 30 seconds).
+        
+        Returns:
+            Tuple of (is_within_window, time_difference_seconds)
+        """
+        try:
+            if isinstance(signal_time_str, str):
+                signal_time = datetime.fromisoformat(signal_time_str.replace('Z', '+00:00'))
+            else:
+                signal_time = signal_time_str
+            
+            if isinstance(market_timestamp_str, str):
+                market_time = datetime.fromisoformat(market_timestamp_str.replace('Z', '+00:00'))
+            else:
+                market_time = market_timestamp_str
+            
+            time_diff = abs((market_time - signal_time).total_seconds())
+            is_within = time_diff <= TIME_WINDOW_TOLERANCE
+            
+            return is_within, time_diff
+            
+        except Exception as e:
+            print(f"[VERIFY] Time window check error: {e}")
+            return False, -1
+    
+    def verify_signal(self, signal_data: Dict, preferred_broker: str = 'auto', 
+                      historical_quote: Optional[Dict] = None) -> Dict:
         """
         Verify a single signal against market data
         
         Args:
             signal_data: Dict with ticker, strike, expiry, direction, signal_price, signal_time
-            preferred_broker: 'auto', 'webull', 'tastytrade', or 'yfinance'
+            preferred_broker: 'auto', 'webull', 'tastytrade', 'alpaca', or 'yfinance'
+            historical_quote: Optional pre-captured quote from signal execution time
         
         Returns:
-            Verification result with slippage, executability, etc.
+            Verification result with slippage, executability, time-window validation, etc.
         """
         ticker = signal_data.get('ticker', '').upper()
         asset_type = signal_data.get('asset_type', 'option')
@@ -367,19 +492,56 @@ class SignalVerificationService:
             'notes': [],
             'red_flags': [],
             'confidence_score': 0,
-            'data_source': 'unknown'
+            'data_source': 'unknown',
+            'time_window_valid': False,
+            'time_difference_seconds': -1,
+            'used_historical_quote': False
         }
         
-        if asset_type == 'option':
-            market_data = self.get_option_market_data(
-                ticker,
-                float(signal_data.get('strike', 0)),
-                signal_data.get('expiry', ''),
-                signal_data.get('direction', 'call'),
-                preferred_broker=preferred_broker
-            )
-        else:
-            market_data = self.get_stock_market_data(ticker, preferred_broker=preferred_broker)
+        # Use historical quote if provided (captured at signal execution time)
+        market_data = None
+        if historical_quote:
+            market_data = historical_quote
+            result['used_historical_quote'] = True
+            result['notes'].append('Using historical quote captured at signal time')
+            
+            # Validate time window
+            captured_at = historical_quote.get('captured_at') or historical_quote.get('timestamp')
+            if captured_at:
+                is_within, time_diff = self._is_within_time_window(signal_time, captured_at)
+                result['time_window_valid'] = is_within
+                result['time_difference_seconds'] = time_diff
+                if is_within:
+                    result['notes'].append(f'Quote within {TIME_WINDOW_TOLERANCE}s window ({time_diff:.1f}s)')
+                else:
+                    result['notes'].append(f'Quote outside time window ({time_diff:.1f}s > {TIME_WINDOW_TOLERANCE}s)')
+                    result['red_flags'].append('STALE_QUOTE')
+        
+        # Fetch fresh market data if no historical quote provided
+        if not market_data:
+            if asset_type == 'option':
+                market_data = self.get_option_market_data(
+                    ticker,
+                    float(signal_data.get('strike', 0)),
+                    signal_data.get('expiry', ''),
+                    signal_data.get('direction', 'call'),
+                    preferred_broker=preferred_broker
+                )
+            else:
+                market_data = self.get_stock_market_data(ticker, preferred_broker=preferred_broker)
+            
+            # For fresh quotes, always check time window and apply penalties
+            if market_data:
+                market_timestamp = market_data.get('timestamp')
+                if market_timestamp:
+                    is_within, time_diff = self._is_within_time_window(signal_time, market_timestamp)
+                    result['time_window_valid'] = is_within
+                    result['time_difference_seconds'] = time_diff
+                    
+                    # Apply stale quote penalty for fresh quotes outside time window
+                    if not is_within:
+                        result['notes'].append(f'Fresh quote outside time window ({time_diff:.1f}s > {TIME_WINDOW_TOLERANCE}s)')
+                        result['red_flags'].append('STALE_QUOTE')
         
         if not market_data:
             result['verification_status'] = 'NO_DATA'
@@ -387,6 +549,7 @@ class SignalVerificationService:
             return result
         
         result['market_data'] = market_data
+        result['data_source'] = market_data.get('source', 'unknown')
         bid = market_data.get('bid', 0)
         ask = market_data.get('ask', 0)
         last = market_data.get('last', 0)
@@ -453,7 +616,22 @@ class SignalVerificationService:
         if abs(result['slippage_pct']) > 5:
             confidence -= 10
         
-        result['confidence_score'] = max(0, confidence)
+        # Time-window validation penalties
+        if 'STALE_QUOTE' in result['red_flags']:
+            confidence -= 15
+            result['notes'].append('Stale quote penalty applied (-15)')
+        
+        # Boost confidence if using historical quote within time window
+        if result['used_historical_quote'] and result['time_window_valid']:
+            confidence += 10
+            result['notes'].append('Historical quote bonus applied (+10)')
+        
+        # Penalty for using delayed data sources
+        if result['data_source'] == 'yfinance_delayed':
+            confidence -= 5
+            result['notes'].append('Delayed data source penalty (-5)')
+        
+        result['confidence_score'] = max(0, min(100, confidence))
         
         if confidence >= 80:
             result['verification_status'] = 'VERIFIED'
@@ -464,8 +642,8 @@ class SignalVerificationService:
         
         return result
     
-    def save_verification(self, verification: Dict, signal_id: int = None, 
-                          channel_id: int = None, user_id: int = None) -> int:
+    def save_verification(self, verification: Dict, signal_id: Optional[int] = None, 
+                          channel_id: Optional[int] = None, user_id: Optional[int] = None) -> Optional[int]:
         """Save verification result to database"""
         conn = self.get_db()
         cursor = conn.cursor()
@@ -513,8 +691,8 @@ class SignalVerificationService:
         
         return verification_id
     
-    def get_verifications(self, entity_type: str = None, entity_id: str = None,
-                          status: str = None, limit: int = 100) -> List[Dict]:
+    def get_verifications(self, entity_type: Optional[str] = None, entity_id: Optional[str] = None,
+                          status: Optional[str] = None, limit: int = 100) -> List[Dict]:
         """Get verification records with filters"""
         conn = self.get_db()
         cursor = conn.cursor()
