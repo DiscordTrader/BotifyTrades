@@ -6168,8 +6168,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[DEBUG] BTO/STC or Bullwinkle signal detected - will process for trade execution")
                     print(f"[DEBUG] should_forward={should_forward}, webhook_url_valid={target_execution_channel_id.startswith('https://') if target_execution_channel_id else False}")
                     
+                    # Get webhook URL for any channel (mapped or via Trade Monitor)
+                    webhook_url = target_execution_channel_id if (target_execution_channel_id and target_execution_channel_id.startswith('https://')) else None
+                    
                     # DUAL-ACTION for BTO/STC: Forward FIRST (if enabled), then execute (if enabled)
-                    if should_forward and target_execution_channel_id and target_execution_channel_id.startswith('https://'):
+                    if should_forward and webhook_url:
                         print(f"[DEBUG] Entering webhook forward block...")
                         # Prepare message for forwarding
                         if is_bullwinkle:
@@ -6188,14 +6191,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         try:
                             import aiohttp
+                            print(f"[DEBUG] Posting to webhook: {webhook_url[:50]}...")
                             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
-                                async with session.post(target_execution_channel_id, json={"content": webhook_msg}) as resp:
+                                async with session.post(webhook_url, json={"content": webhook_msg}) as resp:
                                     if resp.status in [200, 204]:
                                         print(f"[CHANNEL MAP] ✓ Forwarded BTO/STC signal to webhook")
                                     else:
                                         print(f"[CHANNEL MAP] ⚠️ Webhook returned status {resp.status}")
                         except Exception as e:
+                            import traceback
                             print(f"[CHANNEL MAP] ❌ Webhook post failed: {e}")
+                            traceback.print_exc()
                     
                     # TRACK SIGNAL FOR PNL - even if not executing trades
                     # This allows Trade Summary/PNL tracking for forwarded signals
@@ -6289,8 +6295,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         else:
                                             print(f"[PNL TRACK] ✓ PARTIAL EXIT: {symbol} @ ${exit_price:.2f}, {actual_exit_qty}/{original_qty} contracts, Remaining: {new_remaining}, PNL: ${pnl:+.2f} ({pnl_pct:+.1f}%)")
                                         
-                                        # Post Trade Summary to webhook
-                                        if should_forward and target_execution_channel_id and target_execution_channel_id.startswith('https://'):
+                                        # Post Trade Summary to webhook (works for any channel with webhook)
+                                        if webhook_url:
                                             exit_type = "FULL EXIT" if fully_closed else f"PARTIAL EXIT ({actual_exit_qty}/{original_qty})"
                                             summary_msg = (
                                                 f"**Trade Summary - {exit_type}**\n"
@@ -6304,7 +6310,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             try:
                                                 import aiohttp
                                                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
-                                                    async with session.post(target_execution_channel_id, json={"content": summary_msg}) as resp:
+                                                    async with session.post(webhook_url, json={"content": summary_msg}) as resp:
                                                         if resp.status in [200, 204]:
                                                             print(f"[PNL TRACK] ✓ Posted Trade Summary to webhook")
                                             except Exception as e:
