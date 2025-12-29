@@ -1084,6 +1084,8 @@ def init_db():
             ticker TEXT NOT NULL,
             entry_price REAL NOT NULL,
             direction TEXT NOT NULL,
+            quantity INTEGER DEFAULT 1,
+            remaining_qty INTEGER DEFAULT 1,
             author_id TEXT,
             author_name TEXT,
             fingerprint TEXT NOT NULL,
@@ -6354,6 +6356,7 @@ def create_signal_instance(
     ticker: str,
     entry_price: float,
     direction: str = 'BTO',
+    quantity: int = 1,
     author_id: str = None,
     author_name: str = None,
     message_id: str = None,
@@ -6374,20 +6377,26 @@ def create_signal_instance(
     
     try:
         cursor.execute('''
+            DELETE FROM signal_instances 
+            WHERE channel_id = ? AND fingerprint = ? AND status IN ('CLOSED', 'EXPIRED')
+        ''', (str(channel_id), fingerprint))
+        
+        cursor.execute('''
             INSERT INTO signal_instances 
-            (channel_id, ticker, entry_price, direction, author_id, author_name, fingerprint, 
+            (channel_id, ticker, entry_price, direction, quantity, remaining_qty, author_id, author_name, fingerprint, 
              first_message_id, last_message_id, stop_loss, profit_targets, ttl_hours)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             str(channel_id), ticker.upper(), entry_price, direction.upper(),
+            quantity, quantity,
             author_id, author_name, fingerprint, message_id, message_id,
             stop_loss, targets_json, ttl_hours
         ))
         conn.commit()
-        print(f"[DEDUPE] ✓ Created signal instance: {ticker} @ {entry_price} (fingerprint: {fingerprint})")
+        print(f"[DEDUPE] ✓ Created signal instance: {ticker} @ {entry_price} x{quantity} (fingerprint: {fingerprint})")
         return cursor.lastrowid
     except sqlite3.IntegrityError:
-        print(f"[DEDUPE] Signal instance already exists for {ticker} @ {entry_price}")
+        print(f"[DEDUPE] Signal instance already OPEN for {ticker} @ {entry_price}")
         return None
     except Exception as e:
         print(f"[DEDUPE] Error creating signal instance: {e}")
@@ -6507,10 +6516,11 @@ def get_open_position_for_symbol(channel_id: str, symbol: str) -> Optional[Dict]
     cursor = conn.cursor()
     
     try:
-        # First check signal_instances table (for forwarded signals)
         cursor.execute('''
             SELECT id, ticker as symbol, entry_price, 
-                   1 as qty, direction as call_put
+                   COALESCE(remaining_qty, quantity, 1) as qty,
+                   COALESCE(quantity, 1) as original_qty,
+                   direction as call_put
             FROM signal_instances 
             WHERE ticker = ? 
             AND channel_id = ?
@@ -6525,9 +6535,8 @@ def get_open_position_for_symbol(channel_id: str, symbol: str) -> Optional[Dict]
             result['entry_price'] = result.get('entry_price', 0)
             return result
         
-        # Fallback to trades table (for executed trades)
         cursor.execute('''
-            SELECT id, symbol, strike, call_put, expiry, quantity as qty,
+            SELECT id, symbol, strike, call_put, expiry, quantity as qty, quantity as original_qty,
                    COALESCE(executed_price, intended_price) as entry_price
             FROM trades 
             WHERE symbol = ? 
@@ -6544,6 +6553,68 @@ def get_open_position_for_symbol(channel_id: str, symbol: str) -> Optional[Dict]
         return None
     except Exception as e:
         print(f"[DATABASE] Error getting open position for {channel_id}/{symbol}: {e}")
+        return None
+
+
+def partial_exit_signal_instance(
+    channel_id: str,
+    ticker: str,
+    exit_qty: int,
+    close_reason: str = 'partial_exit'
+) -> Optional[Dict]:
+    """
+    Handle partial exit from a signal instance.
+    
+    Returns dict with remaining_qty and whether position is fully closed.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT id, remaining_qty, entry_price, quantity as original_qty
+            FROM signal_instances 
+            WHERE ticker = ? AND channel_id = ? AND status = 'OPEN'
+            ORDER BY first_seen DESC 
+            LIMIT 1
+        ''', (ticker.upper(), str(channel_id)))
+        
+        row = cursor.fetchone()
+        if not row:
+            return None
+        
+        instance = dict(row)
+        remaining = instance.get('remaining_qty', 1) or 1
+        new_remaining = max(0, remaining - exit_qty)
+        
+        if new_remaining <= 0:
+            cursor.execute('''
+                UPDATE signal_instances 
+                SET status = 'CLOSED', remaining_qty = 0, 
+                    closed_at = CURRENT_TIMESTAMP, close_reason = ?
+                WHERE id = ?
+            ''', (close_reason, instance['id']))
+            fully_closed = True
+        else:
+            cursor.execute('''
+                UPDATE signal_instances 
+                SET remaining_qty = ?, last_updated = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (new_remaining, instance['id']))
+            fully_closed = False
+        
+        conn.commit()
+        
+        return {
+            'instance_id': instance['id'],
+            'entry_price': instance['entry_price'],
+            'original_qty': instance.get('original_qty', 1),
+            'exited_qty': min(exit_qty, remaining),
+            'remaining_qty': new_remaining,
+            'fully_closed': fully_closed
+        }
+    except Exception as e:
+        print(f"[DEDUPE] Error with partial exit: {e}")
         return None
 
 

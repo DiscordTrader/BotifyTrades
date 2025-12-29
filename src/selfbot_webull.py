@@ -6203,7 +6203,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     try:
                         from gui_app.database import (
                             create_signal_instance, close_signal_instance, 
-                            get_open_position_for_symbol
+                            get_open_position_for_symbol, partial_exit_signal_instance
                         )
                         
                         channel_id = str(message.channel.id)
@@ -6253,7 +6253,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             is_exit = parsed_signal.get('is_exit', False)
                             
                             if is_exit:
-                                # STC - Close position and calculate PNL
+                                # STC - Process partial or full exit and calculate PNL
                                 exit_price = parsed_signal.get('price', 0)
                                 exit_qty = parsed_signal.get('qty')
                                 
@@ -6261,48 +6261,75 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 open_pos = get_open_position_for_symbol(channel_id, symbol)
                                 if open_pos:
                                     entry_price = open_pos.get('entry_price', 0)
-                                    qty = exit_qty or open_pos.get('qty', 1)
-                                    pnl = (exit_price - entry_price) * qty * 100
+                                    remaining_qty = open_pos.get('qty', 1)
+                                    original_qty = open_pos.get('original_qty', remaining_qty)
+                                    
+                                    # Determine exit quantity
+                                    actual_exit_qty = exit_qty if exit_qty else remaining_qty
+                                    actual_exit_qty = min(actual_exit_qty, remaining_qty)  # Can't exit more than we have
+                                    
+                                    # Calculate PNL for this exit
+                                    pnl = (exit_price - entry_price) * actual_exit_qty * 100
                                     pnl_pct = ((exit_price - entry_price) / entry_price * 100) if entry_price > 0 else 0
                                     
-                                    # Close the signal instance
-                                    close_signal_instance(instance_id=open_pos['id'])
-                                    print(f"[PNL TRACK] ✓ Closed {symbol} @ ${exit_price}, PNL: ${pnl:+.2f} ({pnl_pct:+.1f}%)")
+                                    # Process partial/full exit
+                                    exit_result = partial_exit_signal_instance(
+                                        channel_id=channel_id,
+                                        ticker=symbol,
+                                        exit_qty=actual_exit_qty,
+                                        close_reason='exit_signal'
+                                    )
                                     
-                                    # Post Trade Summary to webhook
-                                    if should_forward and target_execution_channel_id and target_execution_channel_id.startswith('https://'):
-                                        summary_msg = (
-                                            f"**Trade Summary**\n"
-                                            f"Closed: {symbol} @ ${exit_price:.2f} (Entry: ${entry_price:.2f})\n"
-                                            f"Qty: {qty} | Gain: {pnl_pct:+.1f}%\n"
-                                            f"Total Profit: ${pnl:+.2f}"
-                                        )
-                                        try:
-                                            import aiohttp
-                                            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
-                                                async with session.post(target_execution_channel_id, json={"content": summary_msg}) as resp:
-                                                    if resp.status in [200, 204]:
-                                                        print(f"[PNL TRACK] ✓ Posted Trade Summary to webhook")
-                                        except Exception as e:
-                                            print(f"[PNL TRACK] ⚠️ Failed to post summary: {e}")
+                                    if exit_result:
+                                        new_remaining = exit_result.get('remaining_qty', 0)
+                                        fully_closed = exit_result.get('fully_closed', True)
+                                        
+                                        if fully_closed:
+                                            print(f"[PNL TRACK] ✓ FULL EXIT: {symbol} @ ${exit_price:.2f}, {actual_exit_qty} contracts, PNL: ${pnl:+.2f} ({pnl_pct:+.1f}%)")
+                                        else:
+                                            print(f"[PNL TRACK] ✓ PARTIAL EXIT: {symbol} @ ${exit_price:.2f}, {actual_exit_qty}/{original_qty} contracts, Remaining: {new_remaining}, PNL: ${pnl:+.2f} ({pnl_pct:+.1f}%)")
+                                        
+                                        # Post Trade Summary to webhook
+                                        if should_forward and target_execution_channel_id and target_execution_channel_id.startswith('https://'):
+                                            exit_type = "FULL EXIT" if fully_closed else f"PARTIAL EXIT ({actual_exit_qty}/{original_qty})"
+                                            summary_msg = (
+                                                f"**Trade Summary - {exit_type}**\n"
+                                                f"Closed: {symbol} @ ${exit_price:.2f} (Entry: ${entry_price:.2f})\n"
+                                                f"Qty: {actual_exit_qty} | Gain: {pnl_pct:+.1f}%\n"
+                                                f"Profit: ${pnl:+.2f}"
+                                            )
+                                            if not fully_closed:
+                                                summary_msg += f"\n*Remaining: {new_remaining} contracts*"
+                                            
+                                            try:
+                                                import aiohttp
+                                                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+                                                    async with session.post(target_execution_channel_id, json={"content": summary_msg}) as resp:
+                                                        if resp.status in [200, 204]:
+                                                            print(f"[PNL TRACK] ✓ Posted Trade Summary to webhook")
+                                            except Exception as e:
+                                                print(f"[PNL TRACK] ⚠️ Failed to post summary: {e}")
+                                    else:
+                                        print(f"[PNL TRACK] ⚠️ Failed to process exit for {symbol}")
                                 else:
                                     print(f"[PNL TRACK] ⚠️ No open position found for {symbol} in channel {channel_id}")
                             else:
-                                # BTO - Create new position
+                                # BTO - Create new position with quantity
                                 entry_price = parsed_signal.get('price', 0)
-                                qty = parsed_signal.get('qty', 1)
+                                qty = parsed_signal.get('qty', 1) or 1
                                 
-                                # Create signal instance for tracking
+                                # Create signal instance for tracking with quantity
                                 instance_id = create_signal_instance(
                                     channel_id=channel_id,
                                     ticker=symbol,
                                     entry_price=entry_price,
                                     direction='BTO',
+                                    quantity=qty,
                                     author_name=author_name,
                                     message_id=str(message.id)
                                 )
                                 if instance_id:
-                                    print(f"[PNL TRACK] ✓ Opened {symbol} @ ${entry_price} x{qty} (instance #{instance_id})")
+                                    print(f"[PNL TRACK] ✓ Opened {symbol} @ ${entry_price:.2f} x{qty} (instance #{instance_id})")
                                 else:
                                     print(f"[PNL TRACK] ⚠️ Duplicate or failed to create instance for {symbol}")
                         else:
