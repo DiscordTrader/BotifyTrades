@@ -1,4 +1,4 @@
-name: Build Admin Release
+`name: Build Admin Release
 
 on:
   repository_dispatch:
@@ -30,7 +30,7 @@ jobs:
 
       - name: Build Windows executable
         run: |
-          pyinstaller --onefile --name BotifyTrades-Admin-Windows  --add-data "gui_app/templates;gui_app/templates" --add-data "gui_app/static;gui_app/static" src/selfbot_webull.py
+          pyinstaller --onefile --name BotifyTrades-Admin-Windows --add-data ...add-data "gui_app/static;gui_app/static" src/selfbot_webull.py
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
