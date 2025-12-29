@@ -6109,6 +6109,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         channel_name = getattr(message.channel, 'name', str(message.channel.id))
         print(f"\n[Discord] 📨 Channel:{message.channel.id} ({channel_name}) Author:{message.author.name}")
         print(f"[Discord] Content: {message.content[:150]}")
+        print(f"[TRACE 1] After content log, channel_info={channel_info is not None}")
         if ALLOWED_AUTHOR_IDS and message.author.id not in ALLOWED_AUTHOR_IDS:
             print(f"[SKIP] Author {message.author.id} not in allowed list")
             return
@@ -6119,12 +6120,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 return
         
         # Check channel-specific allowed users (if configured)
+        print(f"[TRACE 2] Before allowed users check")
         if channel_info and DATABASE_MODULE_AVAILABLE:
             try:
                 from gui_app import database as db
                 channel_internal_id = channel_info.get('id')
+                print(f"[TRACE 2a] channel_internal_id={channel_internal_id}")
                 if channel_internal_id:
                     is_allowed = db.is_user_allowed(channel_internal_id, str(message.author.id))
+                    print(f"[TRACE 2b] is_allowed={is_allowed}")
                     if not is_allowed:
                         print(f"[SKIP] Author {message.author.name} (ID:{message.author.id}) not in channel's allowed user list")
                         return
@@ -6146,6 +6150,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             except Exception as e:
                 pass  # Don't fail message processing if storage fails
 
+        print(f"[TRACE 3] Before ping check")
         if message.content.strip().lower() == "ping":
             try:
                 await message.channel.send("pong")
@@ -6153,6 +6158,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 pass
             return
         
+        print(f"[TRACE 4] Before signal conversion section")
         # AUTO SIGNAL CONVERSION - monitor designated channel and auto-convert natural language
         # Check both config.ini and database for conversion channel ID
         active_conversion_channel_id = CONVERSION_CHANNEL_ID
