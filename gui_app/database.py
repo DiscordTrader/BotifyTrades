@@ -6497,43 +6497,53 @@ def get_open_signal_instances(channel_id: str = None) -> List[Dict]:
         return []
 
 
-def get_open_position_for_symbol(symbol: str, channel_id: str = None) -> Optional[Dict]:
+def get_open_position_for_symbol(channel_id: str, symbol: str) -> Optional[Dict]:
     """
-    Get the most recent open position for a symbol, optionally filtered by channel.
-    Used for Bullwinkle exit signals that need strike/expiry from open position.
+    Get the most recent open position for a symbol in a channel.
+    Used for PNL tracking - finds matching BTO for STC signals.
+    Also checks signal_instances table for tracked positions.
     """
     conn = get_connection()
     cursor = conn.cursor()
     
     try:
-        if channel_id:
-            cursor.execute('''
-                SELECT id, symbol, strike, call_put, expiry, quantity, entry_price
-                FROM trades 
-                WHERE symbol = ? 
-                AND channel_id = ?
-                AND direction = 'BTO' 
-                AND status IN ('OPEN', 'PENDING', 'open', 'pending')
-                ORDER BY created_at DESC 
-                LIMIT 1
-            ''', (symbol.upper(), str(channel_id)))
-        else:
-            cursor.execute('''
-                SELECT id, symbol, strike, call_put, expiry, quantity, entry_price
-                FROM trades 
-                WHERE symbol = ? 
-                AND direction = 'BTO' 
-                AND status IN ('OPEN', 'PENDING', 'open', 'pending')
-                ORDER BY created_at DESC 
-                LIMIT 1
-            ''', (symbol.upper(),))
+        # First check signal_instances table (for forwarded signals)
+        cursor.execute('''
+            SELECT id, ticker as symbol, entry_price, 
+                   1 as qty, direction as call_put
+            FROM signal_instances 
+            WHERE ticker = ? 
+            AND channel_id = ?
+            AND status = 'OPEN'
+            ORDER BY first_seen DESC 
+            LIMIT 1
+        ''', (symbol.upper(), str(channel_id)))
+        
+        row = cursor.fetchone()
+        if row:
+            result = dict(row)
+            result['entry_price'] = result.get('entry_price', 0)
+            return result
+        
+        # Fallback to trades table (for executed trades)
+        cursor.execute('''
+            SELECT id, symbol, strike, call_put, expiry, quantity as qty,
+                   COALESCE(executed_price, intended_price) as entry_price
+            FROM trades 
+            WHERE symbol = ? 
+            AND channel_id = ?
+            AND direction = 'BTO' 
+            AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+            ORDER BY id DESC 
+            LIMIT 1
+        ''', (symbol.upper(), str(channel_id)))
         
         row = cursor.fetchone()
         if row:
             return dict(row)
         return None
     except Exception as e:
-        print(f"[DATABASE] Error getting open position for {symbol}: {e}")
+        print(f"[DATABASE] Error getting open position for {channel_id}/{symbol}: {e}")
         return None
 
 
