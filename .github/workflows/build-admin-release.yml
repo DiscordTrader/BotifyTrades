@@ -1,12 +1,13 @@
-`name: Build Admin Release
+name: Build Admin Release
 
 on:
   repository_dispatch:
-    types: [admin_release_ready]
+    types:
+      - admin_release_ready
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (e.g., 3.2.7)'
+        description: Version number (e.g., 3.2.7)
         required: true
         type: string
 
@@ -20,17 +21,20 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller
+          pip install pyinstaller==5.13.2
+          pip install pyarmor
 
-      - name: Build Windows executable
+      - name: Obfuscate and Build Windows executable
         run: |
-          pyinstaller --onefile --name BotifyTrades-Admin-Windows --add-data ...add-data "gui_app/static;gui_app/static" src/selfbot_webull.py
+          pyarmor cfg pack:pyi_options=' --clean --noconfirm --onefile --name BotifyTrades-Admin-Windows --add-data "gui_app\templates;gui_app\templates" --add-data "gui_app\static;gui_app\static"'
+          pyarmor gen --pack src/selfbot_webull.py
+        shell: pwsh
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -38,8 +42,8 @@ jobs:
           name: BotifyTrades-Admin-Windows
           path: dist/BotifyTrades-Admin-Windows.exe
 
-  build-macos:
-    runs-on: macos-latest
+  build-macos-intel:
+    runs-on: macos-13
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -47,23 +51,56 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller
+          pip install pyinstaller==5.13.2
+          pip install pyarmor
 
-      - name: Build macOS executable
+      - name: Obfuscate and Build macOS Intel executable
+        shell: bash
         run: |
-          pyinstaller --onefile --name BotifyTrades-Admin-macOS --add-data "gui_app/templates:gui_app/templates" --add-data "gui_app/static:gui_app/static" src/selfbot_webull.py
+          pyarmor cfg pack:pyi_options=' --clean --noconfirm --onefile --name BotifyTrades-Admin-macOS-Intel --add-data "gui_app/templates:gui_app/templates" --add-data "gui_app/static:gui_app/static"'
+          pyarmor gen --pack src/selfbot_webull.py
 
-      - name: Upload macOS artifact
+      - name: Upload macOS Intel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BotifyTrades-Admin-macOS
-          path: dist/BotifyTrades-Admin-macOS
+          name: BotifyTrades-Admin-macOS-Intel
+          path: dist/BotifyTrades-Admin-macOS-Intel
+
+  build-macos-arm:
+    runs-on: macos-14
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller==5.13.2
+          pip install pyarmor
+
+      - name: Obfuscate and Build macOS ARM executable
+        shell: bash
+        run: |
+          pyarmor cfg pack:pyi_options=' --clean --noconfirm --onefile --name BotifyTrades-Admin-macOS-ARM --add-data "gui_app/templates:gui_app/templates" --add-data "gui_app/static:gui_app/static"'
+          pyarmor gen --pack src/selfbot_webull.py
+
+      - name: Upload macOS ARM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-Admin-macOS-ARM
+          path: dist/BotifyTrades-Admin-macOS-ARM
 
   build-linux:
     runs-on: ubuntu-latest
@@ -74,17 +111,20 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller
+          pip install pyinstaller==5.13.2
+          pip install pyarmor
 
-      - name: Build Linux executable
+      - name: Obfuscate and Build Linux executable
+        shell: bash
         run: |
-          pyinstaller --onefile --name BotifyTrades-Admin-Linux --add-data "gui_app/templates:gui_app/templates" --add-data "gui_app/static:gui_app/static" src/selfbot_webull.py
+          pyarmor cfg pack:pyi_options=' --clean --noconfirm --onefile --name BotifyTrades-Admin-Linux --add-data "gui_app/templates:gui_app/templates" --add-data "gui_app/static:gui_app/static"'
+          pyarmor gen --pack src/selfbot_webull.py
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
@@ -93,7 +133,7 @@ jobs:
           path: dist/BotifyTrades-Admin-Linux
 
   create-release:
-    needs: [build-windows, build-macos, build-linux]
+    needs: [build-windows, build-macos-intel, build-macos-arm, build-linux]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
@@ -104,37 +144,42 @@ jobs:
       - name: Get version
         id: version
         run: |
-          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
-            echo "version=${{ github.event.client_payload.version }}" >> $GITHUB_OUTPUT
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "version=${{ github.event.client_payload.version }}" >> "$GITHUB_OUTPUT"
           else
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ steps.version.outputs.version }}-admin
-          name: "BotifyTrades Admin v${{ steps.version.outputs.version }}"
+          name: BotifyTrades Admin v${{ steps.version.outputs.version }}
           body: |
             ## Admin Build v${{ steps.version.outputs.version }}
-            
-            **This is an ADMIN build with full features.**
-            
+
+            **This is an ADMIN build with full features (PyArmor protected).**
+
             ### Downloads
             - **Windows**: BotifyTrades-Admin-Windows.exe
-            - **macOS**: BotifyTrades-Admin-macOS
+            - **macOS Intel**: BotifyTrades-Admin-macOS-Intel
+            - **macOS Apple Silicon**: BotifyTrades-Admin-macOS-ARM
             - **Linux**: BotifyTrades-Admin-Linux
-            
+
             ### Admin Features Included
             - Channel Mappings (dual-action execute + forward)
             - Debug tools
             - Full broker management
             - All analytics features
+
+            ### Security
+            - Code obfuscated with PyArmor
           draft: false
           prerelease: false
           files: |
             artifacts/BotifyTrades-Admin-Windows/BotifyTrades-Admin-Windows.exe
-            artifacts/BotifyTrades-Admin-macOS/BotifyTrades-Admin-macOS
+            artifacts/BotifyTrades-Admin-macOS-Intel/BotifyTrades-Admin-macOS-Intel
+            artifacts/BotifyTrades-Admin-macOS-ARM/BotifyTrades-Admin-macOS-ARM
             artifacts/BotifyTrades-Admin-Linux/BotifyTrades-Admin-Linux
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
