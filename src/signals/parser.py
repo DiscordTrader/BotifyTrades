@@ -327,6 +327,14 @@ def _parse_bullwinkle_expiry(expiry_text: str) -> str:
         if month:
             return f"{month:02d}/{int(day):02d}"
     
+    # JAN 2ND, DEC 15TH, MAR 3RD format (ordinal dates)
+    ordinal_match = re.match(r'([A-Z]+)\s*(\d{1,2})(?:ST|ND|RD|TH)?$', expiry_text)
+    if ordinal_match:
+        month_str, day = ordinal_match.groups()
+        month = month_map.get(month_str)
+        if month:
+            return f"{month:02d}/{int(day):02d}"
+    
     # JAN 2027, MARCH 2026, JAN / 2027 format - use 3rd Friday of month
     month_year_match = re.match(r'([A-Z]+)\s*/?\s*(\d{4})$', expiry_text)
     if month_year_match:
