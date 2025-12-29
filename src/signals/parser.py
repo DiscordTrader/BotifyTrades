@@ -48,6 +48,13 @@ BULLWINKLE_ENTRY_PRICE_END = re.compile(
     re.IGNORECASE
 )
 
+# Pattern 5: :green_alert: SYMBOL | $STRIKE PRICE EXPIRY (no C/P, assume call)
+# Example: :green_alert: TSLA | $492.5 10.10 JAN 2ND
+BULLWINKLE_ENTRY_NO_CP = re.compile(
+    r'(?::?green_alert:?|🟢)\s*\$?([A-Z]+)\s*\|\s*\$?([\d.]+)\s+([\d.]+)\s+([A-Z]+\s*\d+(?:ST|ND|RD|TH)?|[A-Z]+\s*/?\s*\d+|\d+/\d+)',
+    re.IGNORECASE
+)
+
 # Exit patterns (multiple variants)
 # Pattern 1: :SirenRed: STC ALL $AMPX ✅ (STC keyword without price)
 BULLWINKLE_EXIT_STC_ALL = re.compile(
@@ -556,6 +563,25 @@ def parse_bullwinkle_signal(text: str) -> Optional[Dict[str, Any]]:
             '_bullwinkle': True,
         }
     
+    # Entry Pattern 5: :green_alert: SYMBOL | $STRIKE PRICE EXPIRY (no C/P, assume call)
+    # Example: :green_alert: TSLA | $492.5 10.10 JAN 2ND
+    match = BULLWINKLE_ENTRY_NO_CP.search(clean_text)
+    if match:
+        symbol, strike, price, expiry_text = match.groups()
+        expiry = _parse_bullwinkle_expiry(expiry_text)
+        return {
+            'asset': 'option',
+            'action': 'BTO',
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': 'C',  # Default to call when not specified
+            'expiry': expiry,
+            'price': float(price),
+            'qty': None,
+            '_qty_from_signal': False,
+            '_bullwinkle': True,
+        }
+    
     return None
 
 
@@ -566,13 +592,17 @@ def strip_bullwinkle_emojis(text: str) -> str:
     Removes:
     - Unicode emojis: 🟢, 🔴, ✅, etc.
     - Discord custom emotes: :green_alert:, :SirenRed:, :greenalert:, etc.
+    - Discord animated emotes: <a:name:id> or <:name:id>
     
     Returns cleaned text suitable for webhook forwarding.
     """
     import re
     
-    # Remove Discord custom emotes (:name: or :name_name:)
-    clean = re.sub(r':[a-zA-Z_]+:', '', text)
+    # Remove Discord custom animated emotes <a:name:id> and static <:name:id>
+    clean = re.sub(r'<a?:[a-zA-Z0-9_]+:\d+>', '', text)
+    
+    # Remove Discord colon-coded emotes (:name: or :name_name:)
+    clean = re.sub(r':[a-zA-Z0-9_]+:', '', clean)
     
     # Remove common Unicode emojis used in trading signals
     emoji_pattern = re.compile(

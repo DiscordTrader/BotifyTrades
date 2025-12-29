@@ -6164,20 +6164,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 is_bullwinkle = is_bullwinkle_signal(message.content)
                 is_bracket_order = is_bracket_order_signal(message.content)
                 
-                if is_bto_stc_signal:
-                    print(f"[DEBUG] BTO/STC signal detected - will process for trade execution")
+                if is_bto_stc_signal or is_bullwinkle:
+                    print(f"[DEBUG] BTO/STC or Bullwinkle signal detected - will process for trade execution")
                     
                     # DUAL-ACTION for BTO/STC: Forward FIRST (if enabled), then execute (if enabled)
                     if should_forward and target_execution_channel_id and target_execution_channel_id.startswith('https://'):
                         # Prepare message for forwarding
                         if is_bullwinkle:
-                            # Strip emojis from Bullwinkle signals
+                            # Strip emojis and format Bullwinkle signals
                             bullwinkle_parsed = parse_bullwinkle_signal(message.content)
                             if bullwinkle_parsed:
                                 webhook_msg = format_bullwinkle_for_webhook(bullwinkle_parsed)
-                                print(f"[CHANNEL MAP] ✓ Formatted Bullwinkle (no emojis): {webhook_msg}")
+                                print(f"[CHANNEL MAP] ✓ Formatted Bullwinkle: {webhook_msg}")
                             else:
+                                # Parsing failed but still strip emojis
                                 webhook_msg = strip_bullwinkle_emojis(message.content.strip())
+                                print(f"[CHANNEL MAP] ✓ Stripped emojis (parse failed): {webhook_msg}")
                         else:
                             # Forward other BTO/STC signals as-is
                             webhook_msg = message.content.strip()
