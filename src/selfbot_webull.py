@@ -6330,13 +6330,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         }
                         print(f"[BULLWINKLE] ✓ Found open position: {symbol} {bullwinkle_opt['strike']}{bullwinkle_opt['opt_type']} {bullwinkle_opt['expiry']}")
                         
-                        # Close the signal instance if exists
-                        existing_instance = check_signal_instance(
-                            str(message.channel.id), symbol, open_position.get('entry_price'), 'BTO'
-                        )
-                        if existing_instance:
-                            close_signal_instance(instance_id=existing_instance['id'], close_reason='exit_signal')
-                            print(f"[DEDUPE] ✓ Closed signal instance for {symbol}")
+                        # Close the signal instance by channel+ticker (don't require exact price match)
+                        close_signal_instance(channel_id=str(message.channel.id), ticker=symbol, close_reason='exit_signal')
+                        print(f"[DEDUPE] ✓ Closed signal instance for {symbol}")
                     else:
                         print(f"[BULLWINKLE] ⚠️ No open position found for {symbol} - cannot determine strike/expiry")
                         # Still try to process as market order STC
