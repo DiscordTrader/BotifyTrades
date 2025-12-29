@@ -1387,6 +1387,24 @@ def calculate_tomorrow_expiry():
     tomorrow = datetime.now() + timedelta(days=1)
     return tomorrow.strftime("%m/%d")
 
+def calculate_dte_expiry(dte_days: int) -> str:
+    """Calculate expiry date from DTE (Days To Expiration) notation.
+    
+    Args:
+        dte_days: Number of days until expiration (0 = today, 1 = tomorrow, etc.)
+    
+    Returns:
+        Expiry date in MM/DD format
+    """
+    from datetime import datetime, timedelta
+    expiry_date = datetime.now() + timedelta(days=dte_days)
+    return expiry_date.strftime("%m/%d")
+
+# DTE pattern: BTO $QQQ 621c 0DTE @0.74 or STC $SPY 600p 1DTE @1.25
+# Supports 0DTE, 1DTE, 2DTE, etc.
+# Groups: (action, symbol, strike, opt_type, dte_days, price)
+DTE_OPT_PATTERN = r'(BTO|STC)\s+[$]?([A-Za-z]+)\s+[$]?([0-9.]+)\s*([CPcp])\s+(\d+)\s*DTE\s*[@]?\s*[.]?([0-9.]+)'
+
 # Use database patterns if available, otherwise fallback to config.ini or defaults
 if DB_OPTION_PATTERN:
     OPT_REGEX = re.compile(DB_OPTION_PATTERN, re.IGNORECASE | re.MULTILINE)
@@ -3650,6 +3668,7 @@ SIMPLE_STC_REGEX = re.compile(SIMPLE_STC_PATTERN, re.IGNORECASE)
 SIRENRED_PRICE_STC_REGEX = re.compile(SIRENRED_PRICE_STC_PATTERN, re.IGNORECASE)
 PRICE_ONLY_STC_REGEX = re.compile(PRICE_ONLY_STC_PATTERN, re.IGNORECASE)
 JC_OPT_REGEX = re.compile(JC_OPT_PATTERN, re.IGNORECASE)
+DTE_OPT_REGEX = re.compile(DTE_OPT_PATTERN, re.IGNORECASE)
 SPX_NDX_SHORTHAND_REGEX = re.compile(SPX_NDX_SHORTHAND_PATTERN, re.IGNORECASE)
 WAXUI_ENTRY_REGEX = re.compile(WAXUI_ENTRY_PATTERN, re.IGNORECASE)
 WAXUI_TRIM_REGEX = re.compile(WAXUI_TRIM_PATTERN, re.IGNORECASE)
@@ -3672,7 +3691,33 @@ def parse_option_signal(text: str) -> Optional[dict]:
     use_jc_format = False
     
     if not m:
-        # Try JC format first: BTO $QQQ $627c 12/10 .77
+        # Try DTE format first: BTO $QQQ 621c 0DTE @0.74
+        dte_match = DTE_OPT_REGEX.search(text.strip())
+        if dte_match:
+            action, symbol, strike, opt_type, dte_days, price_str = dte_match.groups()
+            expiry = calculate_dte_expiry(int(dte_days))
+            price = float(price_str)
+            print(f"[Discord] ✓ Matched DTE format: {action} {symbol} {strike}{opt_type} {dte_days}DTE @ ${price} -> expiry {expiry}")
+            _current_trading_settings = get_trading_settings()
+            max_position_size = _current_trading_settings['max_position_size']
+            actual_cost_per_contract = price * 100
+            qty = max(1, int(max_position_size / actual_cost_per_contract)) if actual_cost_per_contract > 0 else 1
+            print(f"[AUTO-QTY] DTE format: ${price} x 100 = ${actual_cost_per_contract}/contract, buying {qty} (max ${max_position_size})")
+            return {
+                "asset": "option",
+                "action": action.upper(),
+                "qty": qty,
+                "symbol": symbol.upper(),
+                "strike": float(strike),
+                "opt_type": opt_type.upper(),
+                "expiry": expiry,
+                "price": price,
+                "is_market_order": False,
+                "_dte_format": True,
+                "_dte_days": int(dte_days)
+            }
+        
+        # Try JC format: BTO $QQQ $627c 12/10 .77
         m = JC_OPT_REGEX.search(text.strip())
         if m:
             use_jc_format = True
