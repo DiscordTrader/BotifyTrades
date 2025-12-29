@@ -31,7 +31,80 @@ jobs:
 
       - name: Build Windows executable
         run: |
-          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-Windows --add-data "gui_app/templates;gui_app/templates" --add-data "gui_app/static;gui_app/static" src/selfbot_webull.py
+          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-Windows `
+            --paths . `
+            --paths src `
+            --paths src/brokers `
+            --paths src/core `
+            --paths src/risk `
+            --paths src/signals `
+            --paths src/license `
+            --paths src/discord_client `
+            --paths src/diagnostics `
+            --paths src/webull_auth `
+            --paths src/data_providers `
+            --paths gui_app `
+            --paths upgrade `
+            --hidden-import broker_sync_service `
+            --hidden-import gui_app `
+            --hidden-import gui_app.routes `
+            --hidden-import gui_app.database `
+            --hidden-import gui_app.app `
+            --hidden-import gui_app.trade_monitor `
+            --hidden-import brokers `
+            --hidden-import brokers.alpaca_broker `
+            --hidden-import brokers.webull_broker `
+            --hidden-import brokers.tastytrade_broker `
+            --hidden-import brokers.robinhood_broker `
+            --hidden-import brokers.ibkr_broker `
+            --hidden-import brokers.questrade_broker `
+            --hidden-import brokers.upstox_broker `
+            --hidden-import brokers.zerodha_broker `
+            --hidden-import brokers.dhanq_broker `
+            --hidden-import core `
+            --hidden-import core.settings `
+            --hidden-import core.settings_service `
+            --hidden-import core.settings_integration `
+            --hidden-import core.bootstrap `
+            --hidden-import risk `
+            --hidden-import risk.position_monitor `
+            --hidden-import risk.tiered_targets `
+            --hidden-import risk.trailing_stop `
+            --hidden-import signals `
+            --hidden-import signals.parser `
+            --hidden-import signals.patterns `
+            --hidden-import signals.validator `
+            --hidden-import license `
+            --hidden-import license.client `
+            --hidden-import license.cache `
+            --hidden-import webull_auth `
+            --hidden-import webull_auth.webull_auth `
+            --hidden-import discord_client `
+            --hidden-import diagnostics `
+            --hidden-import data_providers `
+            --hidden-import ai_analyzer `
+            --hidden-import swing_analyzer `
+            --hidden-import fundamental_analyzer `
+            --hidden-import news_service `
+            --hidden-import trade_tracker `
+            --hidden-import alpha_vantage_scanner `
+            --hidden-import logging_config `
+            --hidden-import log_monitor `
+            --hidden-import license_client `
+            --hidden-import license_manager `
+            --hidden-import machine_fingerprint `
+            --hidden-import broker_interface `
+            --hidden-import broker_manager `
+            --hidden-import consent `
+            --hidden-import setup_wizard `
+            --hidden-import upgrade `
+            --hidden-import upgrade.version `
+            --add-data "gui_app/templates;gui_app/templates" `
+            --add-data "gui_app/static;gui_app/static" `
+            --add-data "broker_sync_service.py;." `
+            --add-data "src;src" `
+            --add-data "upgrade;upgrade" `
+            src/selfbot_webull.py
         shell: pwsh
 
       - name: Upload Windows artifact
@@ -59,7 +132,80 @@ jobs:
 
       - name: Build macOS Intel executable
         run: |
-          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-macOS-Intel --add-data "gui_app/templates:gui_app/templates" --add-data "gui_app/static:gui_app/static" src/selfbot_webull.py
+          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-macOS-Intel \
+            --paths . \
+            --paths src \
+            --paths src/brokers \
+            --paths src/core \
+            --paths src/risk \
+            --paths src/signals \
+            --paths src/license \
+            --paths src/discord_client \
+            --paths src/diagnostics \
+            --paths src/webull_auth \
+            --paths src/data_providers \
+            --paths gui_app \
+            --paths upgrade \
+            --hidden-import broker_sync_service \
+            --hidden-import gui_app \
+            --hidden-import gui_app.routes \
+            --hidden-import gui_app.database \
+            --hidden-import gui_app.app \
+            --hidden-import gui_app.trade_monitor \
+            --hidden-import brokers \
+            --hidden-import brokers.alpaca_broker \
+            --hidden-import brokers.webull_broker \
+            --hidden-import brokers.tastytrade_broker \
+            --hidden-import brokers.robinhood_broker \
+            --hidden-import brokers.ibkr_broker \
+            --hidden-import brokers.questrade_broker \
+            --hidden-import brokers.upstox_broker \
+            --hidden-import brokers.zerodha_broker \
+            --hidden-import brokers.dhanq_broker \
+            --hidden-import core \
+            --hidden-import core.settings \
+            --hidden-import core.settings_service \
+            --hidden-import core.settings_integration \
+            --hidden-import core.bootstrap \
+            --hidden-import risk \
+            --hidden-import risk.position_monitor \
+            --hidden-import risk.tiered_targets \
+            --hidden-import risk.trailing_stop \
+            --hidden-import signals \
+            --hidden-import signals.parser \
+            --hidden-import signals.patterns \
+            --hidden-import signals.validator \
+            --hidden-import license \
+            --hidden-import license.client \
+            --hidden-import license.cache \
+            --hidden-import webull_auth \
+            --hidden-import webull_auth.webull_auth \
+            --hidden-import discord_client \
+            --hidden-import diagnostics \
+            --hidden-import data_providers \
+            --hidden-import ai_analyzer \
+            --hidden-import swing_analyzer \
+            --hidden-import fundamental_analyzer \
+            --hidden-import news_service \
+            --hidden-import trade_tracker \
+            --hidden-import alpha_vantage_scanner \
+            --hidden-import logging_config \
+            --hidden-import log_monitor \
+            --hidden-import license_client \
+            --hidden-import license_manager \
+            --hidden-import machine_fingerprint \
+            --hidden-import broker_interface \
+            --hidden-import broker_manager \
+            --hidden-import consent \
+            --hidden-import setup_wizard \
+            --hidden-import upgrade \
+            --hidden-import upgrade.version \
+            --add-data "gui_app/templates:gui_app/templates" \
+            --add-data "gui_app/static:gui_app/static" \
+            --add-data "broker_sync_service.py:." \
+            --add-data "src:src" \
+            --add-data "upgrade:upgrade" \
+            src/selfbot_webull.py
 
       - name: Upload macOS Intel artifact
         uses: actions/upload-artifact@v4
@@ -86,7 +232,80 @@ jobs:
 
       - name: Build macOS ARM executable
         run: |
-          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-macOS-ARM --add-data "gui_app/templates:gui_app/templates" --add-data "gui_app/static:gui_app/static" src/selfbot_webull.py
+          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-macOS-ARM \
+            --paths . \
+            --paths src \
+            --paths src/brokers \
+            --paths src/core \
+            --paths src/risk \
+            --paths src/signals \
+            --paths src/license \
+            --paths src/discord_client \
+            --paths src/diagnostics \
+            --paths src/webull_auth \
+            --paths src/data_providers \
+            --paths gui_app \
+            --paths upgrade \
+            --hidden-import broker_sync_service \
+            --hidden-import gui_app \
+            --hidden-import gui_app.routes \
+            --hidden-import gui_app.database \
+            --hidden-import gui_app.app \
+            --hidden-import gui_app.trade_monitor \
+            --hidden-import brokers \
+            --hidden-import brokers.alpaca_broker \
+            --hidden-import brokers.webull_broker \
+            --hidden-import brokers.tastytrade_broker \
+            --hidden-import brokers.robinhood_broker \
+            --hidden-import brokers.ibkr_broker \
+            --hidden-import brokers.questrade_broker \
+            --hidden-import brokers.upstox_broker \
+            --hidden-import brokers.zerodha_broker \
+            --hidden-import brokers.dhanq_broker \
+            --hidden-import core \
+            --hidden-import core.settings \
+            --hidden-import core.settings_service \
+            --hidden-import core.settings_integration \
+            --hidden-import core.bootstrap \
+            --hidden-import risk \
+            --hidden-import risk.position_monitor \
+            --hidden-import risk.tiered_targets \
+            --hidden-import risk.trailing_stop \
+            --hidden-import signals \
+            --hidden-import signals.parser \
+            --hidden-import signals.patterns \
+            --hidden-import signals.validator \
+            --hidden-import license \
+            --hidden-import license.client \
+            --hidden-import license.cache \
+            --hidden-import webull_auth \
+            --hidden-import webull_auth.webull_auth \
+            --hidden-import discord_client \
+            --hidden-import diagnostics \
+            --hidden-import data_providers \
+            --hidden-import ai_analyzer \
+            --hidden-import swing_analyzer \
+            --hidden-import fundamental_analyzer \
+            --hidden-import news_service \
+            --hidden-import trade_tracker \
+            --hidden-import alpha_vantage_scanner \
+            --hidden-import logging_config \
+            --hidden-import log_monitor \
+            --hidden-import license_client \
+            --hidden-import license_manager \
+            --hidden-import machine_fingerprint \
+            --hidden-import broker_interface \
+            --hidden-import broker_manager \
+            --hidden-import consent \
+            --hidden-import setup_wizard \
+            --hidden-import upgrade \
+            --hidden-import upgrade.version \
+            --add-data "gui_app/templates:gui_app/templates" \
+            --add-data "gui_app/static:gui_app/static" \
+            --add-data "broker_sync_service.py:." \
+            --add-data "src:src" \
+            --add-data "upgrade:upgrade" \
+            src/selfbot_webull.py
 
       - name: Upload macOS ARM artifact
         uses: actions/upload-artifact@v4
@@ -113,7 +332,80 @@ jobs:
 
       - name: Build Linux executable
         run: |
-          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-Linux --add-data "gui_app/templates:gui_app/templates" --add-data "gui_app/static:gui_app/static" src/selfbot_webull.py
+          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-Linux \
+            --paths . \
+            --paths src \
+            --paths src/brokers \
+            --paths src/core \
+            --paths src/risk \
+            --paths src/signals \
+            --paths src/license \
+            --paths src/discord_client \
+            --paths src/diagnostics \
+            --paths src/webull_auth \
+            --paths src/data_providers \
+            --paths gui_app \
+            --paths upgrade \
+            --hidden-import broker_sync_service \
+            --hidden-import gui_app \
+            --hidden-import gui_app.routes \
+            --hidden-import gui_app.database \
+            --hidden-import gui_app.app \
+            --hidden-import gui_app.trade_monitor \
+            --hidden-import brokers \
+            --hidden-import brokers.alpaca_broker \
+            --hidden-import brokers.webull_broker \
+            --hidden-import brokers.tastytrade_broker \
+            --hidden-import brokers.robinhood_broker \
+            --hidden-import brokers.ibkr_broker \
+            --hidden-import brokers.questrade_broker \
+            --hidden-import brokers.upstox_broker \
+            --hidden-import brokers.zerodha_broker \
+            --hidden-import brokers.dhanq_broker \
+            --hidden-import core \
+            --hidden-import core.settings \
+            --hidden-import core.settings_service \
+            --hidden-import core.settings_integration \
+            --hidden-import core.bootstrap \
+            --hidden-import risk \
+            --hidden-import risk.position_monitor \
+            --hidden-import risk.tiered_targets \
+            --hidden-import risk.trailing_stop \
+            --hidden-import signals \
+            --hidden-import signals.parser \
+            --hidden-import signals.patterns \
+            --hidden-import signals.validator \
+            --hidden-import license \
+            --hidden-import license.client \
+            --hidden-import license.cache \
+            --hidden-import webull_auth \
+            --hidden-import webull_auth.webull_auth \
+            --hidden-import discord_client \
+            --hidden-import diagnostics \
+            --hidden-import data_providers \
+            --hidden-import ai_analyzer \
+            --hidden-import swing_analyzer \
+            --hidden-import fundamental_analyzer \
+            --hidden-import news_service \
+            --hidden-import trade_tracker \
+            --hidden-import alpha_vantage_scanner \
+            --hidden-import logging_config \
+            --hidden-import log_monitor \
+            --hidden-import license_client \
+            --hidden-import license_manager \
+            --hidden-import machine_fingerprint \
+            --hidden-import broker_interface \
+            --hidden-import broker_manager \
+            --hidden-import consent \
+            --hidden-import setup_wizard \
+            --hidden-import upgrade \
+            --hidden-import upgrade.version \
+            --add-data "gui_app/templates:gui_app/templates" \
+            --add-data "gui_app/static:gui_app/static" \
+            --add-data "broker_sync_service.py:." \
+            --add-data "src:src" \
+            --add-data "upgrade:upgrade" \
+            src/selfbot_webull.py
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
