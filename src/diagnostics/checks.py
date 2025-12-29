@@ -5,7 +5,7 @@ Individual health check implementations.
 """
 
 from typing import Dict, Any, Optional, List
-from .types import CheckResult, CheckStatus, DiagnosticCategory
+from .diagnostic_types import CheckResult, CheckStatus, DiagnosticCategory
 
 
 def check_database_connection() -> CheckResult:

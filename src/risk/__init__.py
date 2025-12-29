@@ -23,7 +23,7 @@ Usage:
     await risk_manager.start_monitoring()
 """
 
-from .types import (
+from .risk_types import (
     PositionSnapshot,
     RiskSettings,
     ChannelRiskSettings,

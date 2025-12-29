@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-from .types import CACHE_DIR, CACHE_FILE, DEFAULT_OFFLINE_HOURS
+from .license_types import CACHE_DIR, CACHE_FILE, DEFAULT_OFFLINE_HOURS
 from .crypto import verify_signed_token
 
 

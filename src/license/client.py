@@ -8,7 +8,7 @@ import sys
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
-from .types import (
+from .license_types import (
     LICENSE_SERVER_URLS,
     DEFAULT_OFFLINE_HOURS,
     CACHE_DIR,

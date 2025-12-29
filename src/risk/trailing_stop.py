@@ -4,7 +4,7 @@ Trailing Stop Evaluation
 Trailing stop activation and trigger logic.
 """
 from typing import Optional, Tuple
-from .types import (
+from .risk_types import (
     PositionSnapshot, 
     RiskSettings,
     ChannelRiskSettings,

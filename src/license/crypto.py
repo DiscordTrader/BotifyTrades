@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Tuple
 
-from .types import RSA_PUBLIC_KEY_PEM
+from .license_types import RSA_PUBLIC_KEY_PEM
 
 
 def get_machine_id() -> str:

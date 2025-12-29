@@ -4,7 +4,7 @@ Global Risk Evaluation
 Global stop loss and profit target fallback for positions without channel settings.
 """
 from typing import Optional
-from .types import (
+from .risk_types import (
     PositionSnapshot, 
     RiskSettings, 
     PositionCacheEntry,

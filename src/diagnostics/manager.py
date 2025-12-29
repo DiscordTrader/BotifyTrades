@@ -8,7 +8,7 @@ import time
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-from .types import CheckResult, CheckStatus, DiagnosticCategory, DiagnosticsSummary
+from .diagnostic_types import CheckResult, CheckStatus, DiagnosticCategory, DiagnosticsSummary
 from .checks import get_all_checks
 
 

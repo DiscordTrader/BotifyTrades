@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, Optional, Any
 from datetime import datetime
 
-from .types import PositionCacheEntry, PositionSnapshot
+from .risk_types import PositionCacheEntry, PositionSnapshot
 
 
 class PositionCache:

@@ -4,7 +4,7 @@ Tiered Profit Targets Evaluation
 Per-channel T1/T2/T3 profit target logic with partial exits.
 """
 from typing import Optional
-from .types import (
+from .risk_types import (
     PositionSnapshot, 
     ChannelRiskSettings, 
     PositionCacheEntry,

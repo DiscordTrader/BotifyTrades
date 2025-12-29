@@ -8,7 +8,7 @@ import re
 from typing import Optional, List, Dict, Any, Callable, Awaitable
 from pathlib import Path
 
-from .types import (
+from .risk_types import (
     PositionSnapshot,
     RiskSettings,
     ChannelRiskSettings,

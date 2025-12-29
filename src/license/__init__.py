@@ -16,7 +16,7 @@ Usage (backward compatible with old license_client.py):
 """
 
 # Re-export all public APIs for backward compatibility
-from .types import (
+from .license_types import (
     LICENSE_SERVER_URL,
     LICENSE_SERVER_URL_PRIMARY,
     LICENSE_SERVER_URL_FALLBACK,
