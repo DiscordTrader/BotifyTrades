@@ -30,7 +30,7 @@ jobs:
 
       - name: Build Windows executable
         run: |
-          pyinstaller --onefile --name BotifyTrades-Admin-Windows --icon=gui_app/static/favicon.ico --add-data "gui_app/templates;gui_app/templates" --add-data "gui_app/static;gui_app/static" src/selfbot_webull.py
+          pyinstaller --onefile --name BotifyTrades-Admin-Windows  --add-data "gui_app/templates;gui_app/templates" --add-data "gui_app/static;gui_app/static" src/selfbot_webull.py
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
