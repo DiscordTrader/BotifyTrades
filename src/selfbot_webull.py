@@ -6155,16 +6155,37 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     format_as_bto_stc = mapping_config.get('format_as_bto_stc', True)
                     print(f"[DUAL-ACTION] Config: execute={should_execute}, forward={should_forward}, bto_stc={format_as_bto_stc}")
                 
+                # Check for Bullwinkle format (needs emoji stripping)
+                from src.signals.parser import (
+                    is_bullwinkle_signal, parse_bullwinkle_signal, 
+                    strip_bullwinkle_emojis, format_bullwinkle_for_webhook,
+                    is_bracket_order_signal, parse_bracket_order_signal
+                )
+                is_bullwinkle = is_bullwinkle_signal(message.content)
+                is_bracket_order = is_bracket_order_signal(message.content)
+                
                 if is_bto_stc_signal:
                     print(f"[DEBUG] BTO/STC signal detected - will process for trade execution")
                     
                     # DUAL-ACTION for BTO/STC: Forward FIRST (if enabled), then execute (if enabled)
                     if should_forward and target_execution_channel_id and target_execution_channel_id.startswith('https://'):
-                        # Forward the BTO/STC signal as-is to webhook
+                        # Prepare message for forwarding
+                        if is_bullwinkle:
+                            # Strip emojis from Bullwinkle signals
+                            bullwinkle_parsed = parse_bullwinkle_signal(message.content)
+                            if bullwinkle_parsed:
+                                webhook_msg = format_bullwinkle_for_webhook(bullwinkle_parsed)
+                                print(f"[CHANNEL MAP] ✓ Formatted Bullwinkle (no emojis): {webhook_msg}")
+                            else:
+                                webhook_msg = strip_bullwinkle_emojis(message.content.strip())
+                        else:
+                            # Forward other BTO/STC signals as-is
+                            webhook_msg = message.content.strip()
+                        
                         try:
                             import aiohttp
                             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
-                                async with session.post(target_execution_channel_id, json={"content": message.content.strip()}) as resp:
+                                async with session.post(target_execution_channel_id, json={"content": webhook_msg}) as resp:
                                     if resp.status in [200, 204]:
                                         print(f"[CHANNEL MAP] ✓ Forwarded BTO/STC signal to webhook")
                                     else:
@@ -6440,6 +6461,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # Fall back to US format parser if not India signal or India parser failed
         if opt is None and india_stock_signal is None:
             opt = parse_option_signal(normalized_content)
+        
+        # Check for bracket order signal (stock with targets and stop loss)
+        bracket_signal = None
+        from src.signals.parser import is_bracket_order_signal, parse_bracket_order_signal
+        if opt is None and india_stock_signal is None and is_bracket_order_signal(normalized_content):
+            bracket_signal = parse_bracket_order_signal(normalized_content)
+            if bracket_signal:
+                # Convert to stock signal format with bracket order fields
+                india_stock_signal = bracket_signal
+                # Add bracket order fields for execution
+                if bracket_signal.get('stop_loss'):
+                    india_stock_signal['stop_loss_price'] = bracket_signal['stop_loss']
+                if bracket_signal.get('profit_targets') and len(bracket_signal['profit_targets']) > 0:
+                    # Use first target as profit target
+                    india_stock_signal['profit_target_price'] = bracket_signal['profit_targets'][0]
+                print(f"[BRACKET ORDER] ✓ Detected stock bracket order: {bracket_signal['ticker']} @ {bracket_signal['entry_price']}, SL={bracket_signal.get('stop_loss')}, Targets={bracket_signal.get('profit_targets')}")
+        
         if opt:
             # Apply tiered quantity defaults for BTO signals without qty from signal text
             if opt.get('action') == 'BTO' and opt.get('qty') is None and not opt.get('_qty_from_signal', False):
@@ -6721,6 +6759,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             if execute_enabled and is_execute_channel:
                 print(f"[ROUTE] EXECUTE enabled - adding to order queue")
+                
+                # Log bracket order info if present
+                if stk.get('stop_loss_price') or stk.get('profit_target_price'):
+                    print(f"[BRACKET ORDER] ✓ Including SL=${stk.get('stop_loss_price')} Target=${stk.get('profit_target_price')}")
                 
                 # Add EXECUTION position size percentage for dynamic qty calculation
                 exec_position_size_pct = channel_info.get('position_size_pct') if channel_info else None

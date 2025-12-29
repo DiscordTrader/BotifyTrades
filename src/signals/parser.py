@@ -113,6 +113,21 @@ TRADE_IDEA_SL_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# Bracket order format patterns (stock signals with targets and stop loss)
+# Example: BTO ENSC @ $2.02 (break)\nTargets: $2.1, $2.16, $2.22\nSL: $1.78
+BRACKET_BTO_PATTERN = re.compile(
+    r'BTO\s+\$?([A-Z]+)\s*@\s*\$?([\d.]+)(?:\s*\(([^)]+)\))?',
+    re.IGNORECASE
+)
+BRACKET_TARGETS_PATTERN = re.compile(
+    r'Targets?:\s*([\d.$,\s]+)',
+    re.IGNORECASE
+)
+BRACKET_SL_PATTERN = re.compile(
+    r'SL:\s*\$?([\d.]+)',
+    re.IGNORECASE
+)
+
 
 def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
     """
@@ -184,6 +199,73 @@ def is_trade_idea_signal(text: str) -> bool:
         TRADE_IDEA_TICKER_PATTERN.search(text) is not None or
         TRADE_IDEA_ENTRY_PATTERN.search(text) is not None
     )
+
+
+def parse_bracket_order_signal(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse bracket order format signals with targets and stop loss.
+    
+    Example:
+    BTO ENSC @ $2.02 (break)
+    Targets: $2.1, $2.16, $2.22
+    SL: $1.78
+    
+    Returns dict with parsed components or None if not a bracket order.
+    """
+    bto_match = BRACKET_BTO_PATTERN.search(text)
+    if not bto_match:
+        return None
+    
+    ticker = bto_match.group(1).upper()
+    entry_price = float(bto_match.group(2))
+    qualifier = bto_match.group(3) if bto_match.group(3) else None
+    
+    # Parse targets
+    targets = []
+    targets_match = BRACKET_TARGETS_PATTERN.search(text)
+    if targets_match:
+        targets_str = targets_match.group(1)
+        for target in re.split(r'[,\s]+', targets_str):
+            target_clean = re.sub(r'[^\d.]', '', target.strip())
+            if target_clean:
+                try:
+                    targets.append(float(target_clean))
+                except ValueError:
+                    pass
+    
+    # Parse stop loss
+    stop_loss = None
+    sl_match = BRACKET_SL_PATTERN.search(text)
+    if sl_match:
+        stop_loss = float(sl_match.group(1))
+    
+    result = {
+        'format': 'BRACKET_ORDER',
+        'ticker': ticker,
+        'symbol': ticker,
+        'entry_price': entry_price,
+        'price': entry_price,
+        'entry_qualifier': qualifier,
+        'profit_targets': targets,
+        'stop_loss': stop_loss,
+        'action': 'BTO',
+        'asset': 'stock',
+        'asset_type': 'stock',
+        'qty': 1,
+        '_qty_from_signal': False,
+        '_bracket_order': True,
+    }
+    
+    print(f"[BRACKET ORDER] ✓ Parsed: {ticker} @ {entry_price}, SL={stop_loss}, PTs={targets}")
+    return result
+
+
+def is_bracket_order_signal(text: str) -> bool:
+    """Check if text is a bracket order format signal with targets/SL."""
+    has_bto = BRACKET_BTO_PATTERN.search(text) is not None
+    has_targets = BRACKET_TARGETS_PATTERN.search(text) is not None
+    has_sl = BRACKET_SL_PATTERN.search(text) is not None
+    return has_bto and (has_targets or has_sl)
 
 
 def _parse_bullwinkle_expiry(expiry_text: str) -> str:
@@ -475,6 +557,84 @@ def parse_bullwinkle_signal(text: str) -> Optional[Dict[str, Any]]:
         }
     
     return None
+
+
+def strip_bullwinkle_emojis(text: str) -> str:
+    """
+    Strip emojis and Discord custom emotes from Bullwinkle signals.
+    
+    Removes:
+    - Unicode emojis: 🟢, 🔴, ✅, etc.
+    - Discord custom emotes: :green_alert:, :SirenRed:, :greenalert:, etc.
+    
+    Returns cleaned text suitable for webhook forwarding.
+    """
+    import re
+    
+    # Remove Discord custom emotes (:name: or :name_name:)
+    clean = re.sub(r':[a-zA-Z_]+:', '', text)
+    
+    # Remove common Unicode emojis used in trading signals
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F7E2"  # 🟢 green circle
+        "\U0001F534"  # 🔴 red circle
+        "\U00002705"  # ✅ check mark
+        "\U0001F6A8"  # 🚨 siren
+        "\U0001F4C8"  # 📈 chart
+        "\U0001F4CC"  # 📌 pin
+        "\U0001F4B0"  # 💰 money bag
+        "\U000026D4"  # ⛔ no entry
+        "\U0001F525"  # 🔥 fire
+        "\U0001F680"  # 🚀 rocket
+        "\U0001F4A1"  # 💡 light bulb
+        "\U0001F4AF"  # 💯 hundred
+        "\U00002757"  # ❗ exclamation
+        "\U00002B06"  # ⬆️ up arrow
+        "\U00002B07"  # ⬇️ down arrow
+        "]+",
+        flags=re.UNICODE
+    )
+    clean = emoji_pattern.sub('', clean)
+    
+    # Clean up extra whitespace
+    clean = re.sub(r'\s+', ' ', clean).strip()
+    
+    return clean
+
+
+def format_bullwinkle_for_webhook(parsed: dict) -> str:
+    """
+    Format a parsed Bullwinkle signal for clean webhook forwarding.
+    
+    Entry: BTO NVDA 177.5C 12/29 @ 1.32
+    Exit: STC NVDA @ 1.44
+    
+    No emojis, clean format.
+    """
+    action = parsed.get('action', 'BTO')
+    symbol = parsed.get('symbol', 'UNKNOWN')
+    price = parsed.get('price', 0)
+    
+    if parsed.get('is_exit'):
+        # Exit signal
+        return f"STC {symbol} @ {price}"
+    else:
+        # Entry signal
+        strike = parsed.get('strike', '')
+        opt_type = parsed.get('opt_type', 'C')
+        expiry = parsed.get('expiry', '')
+        qty = parsed.get('qty')
+        
+        msg = f"BTO"
+        if qty:
+            msg += f" {qty}"
+        msg += f" {symbol} {strike}{opt_type}"
+        if expiry:
+            msg += f" {expiry}"
+        msg += f" @ {price}"
+        
+        return msg
 
 
 def normalize_bullwinkle_format(text: str) -> str:
