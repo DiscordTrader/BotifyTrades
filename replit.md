@@ -20,6 +20,14 @@ The bot features a Flask-based web control panel with a dark theme, real-time da
 ### Technical Implementations
 Core technologies include `discord.py-self` and `webull`. It employs a true dual-broker architecture for live and paper trading, with platform-specific credential encryption. Order execution uses an asynchronous, queue-based system. Signal parsing follows a multi-layer approach: learned formats from a database (AI-taught), built-in regex patterns (supporting both US and India formats), and AI fallback. **Indian Signal Format Support**: The system now recognizes Indian market signals like "BUY NIFTY 24000 CE @ 145" with CE/PE option types, DD MMM expiry formats, automatic NSE lot size calculation, and weekly/monthly expiry detection for NIFTY/BANKNIFTY. Risk management includes automated profit targets, stop losses, trailing stops, intelligent price slippage protection, and auto-quantity calculation, all GUI-configurable and stored in SQLite. Pre-trade analysis uses technical indicators, and post-execution analysis leverages OpenAI GPT models. Real-time market data is integrated, and interactive Discord commands enable on-demand analysis. The Auto Signal Conversion system executes stock alerts as Alpaca BRACKET ORDERs. An error monitoring system provides automatic detection, logging, and AI assistant contextual help. A "teach once, use forever" feature allows users to teach new signal formats via a chatbot, storing reusable parsing templates.
 
+**Signal Verification Service (Industry-Grade)**: Located in `services/signal_verification.py`, this service detects paper trading and impossible fills through:
+- **Real-time broker data priority**: Webull > Tastytrade > Alpaca > yfinance (delayed fallback)
+- **Historical quote capture**: `capture_quote_at_signal_time()` stores bid/ask/volume at signal detection for accurate verification
+- **Time-window tolerance**: ±30 seconds (TIME_WINDOW_TOLERANCE constant) validates quote freshness
+- **Confidence scoring**: +10 for valid historical quotes, -15 for STALE_QUOTE red flag, -5 for delayed data sources
+- **Red flags**: IMPOSSIBLE_FILL, STALE_QUOTE, OUTSIDE_SPREAD, SUSPICIOUS_VOLUME, etc.
+- Brokers are wired at startup via `set_broker_clients()` for real-time market data access
+
 ### Feature Specifications
 The system supports a dual-mode channel system for simultaneous execution and tracking with FIFO-based P&L tracking, and Multi-Broker Execution across multiple accounts with per-channel broker selection. It handles market orders, comprehensive PNL page filtering, and per-channel position sizing. A Portfolio Simulation Engine projects portfolio growth. Per-channel risk settings allow independent operation, supporting 3-tier profit targets with partial exits and trailing stops. The Trade Monitor feature automatically detects and posts broker-executed trades as BTO/STC signals to Discord. A debug report system allows users to submit filtered error logs to the admin.
 
