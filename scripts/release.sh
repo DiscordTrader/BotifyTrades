@@ -10,10 +10,11 @@
 # 1. Sets BUILD_TYPE in the codebase (ADMIN or USER)
 # 2. Updates upgrade/version.py with the new version
 # 3. Commits and pushes to BotifyTradesv2 (private)
-# 4. Triggers the build workflow on BotifyTrades (public) via GitHub API
+# 4. For USER: Triggers build on BotifyTrades (public)
+# 5. For ADMIN: Triggers build on BotifyTradesv2 (private)
 #
 # Requirements:
-# - RELEASE_TOKEN environment variable (GitHub PAT with 'repo' scope)
+# - RELEASE_TOKEN environment variable (GitHub PAT with 'repo' and 'workflow' scopes)
 # =============================================================================
 
 set -e
@@ -21,6 +22,7 @@ set -e
 BUILD_TYPE_ARG=${1:-}
 VERSION=${2:-}
 PUBLIC_REPO="DiscordTrader/BotifyTrades"
+PRIVATE_REPO="DiscordTrader/BotifyTradesv2"
 
 # Colors for output
 RED='\033[0;31m'
@@ -55,12 +57,12 @@ if [ -z "$BUILD_TYPE_ARG" ] || [ -z "$VERSION" ]; then
     echo "Usage: ./scripts/release.sh <build_type> <version>"
     echo ""
     echo "Build Types:"
-    echo "  admin  - Full features (Channel Mappings, all admin tools)"
-    echo "  user   - Limited features (admin-only features hidden)"
+    echo "  admin  - Full features, builds for Windows/Mac/Linux (PRIVATE repo)"
+    echo "  user   - Limited features, builds for Windows/Mac/Linux (PUBLIC repo)"
     echo ""
     echo "Examples:"
-    echo "  ./scripts/release.sh admin 3.2.1    # Admin build with all features"
-    echo "  ./scripts/release.sh user 3.2.1     # User build with limited features"
+    echo "  ./scripts/release.sh admin 3.2.1    # Admin build (private)"
+    echo "  ./scripts/release.sh user 3.2.1     # User build (public)"
     echo ""
     exit 1
 fi
@@ -123,27 +125,64 @@ print_step 5 6 "Pushing to origin..."
 git push origin main
 print_success "Pushed to BotifyTradesv2 (private)"
 
-# Step 6: Trigger build workflow on public repo
+# Step 6: Trigger build workflow
 print_step 6 6 "Triggering build workflow..."
 
-# SAFETY CHECK: Block ADMIN builds from going to public repo
 if [ "$BUILD_TYPE_UPPER" == "ADMIN" ]; then
-    print_warning "ADMIN build detected - NOT pushing to public repository"
+    # ADMIN BUILD: Trigger workflow on PRIVATE repo
     echo ""
-    echo -e "${RED}============================================${NC}"
-    echo -e "${RED}  ADMIN BUILD - PUBLIC RELEASE BLOCKED${NC}"
-    echo -e "${RED}============================================${NC}"
+    echo -e "${CYAN}============================================${NC}"
+    echo -e "${CYAN}  ADMIN BUILD - Building on PRIVATE repo${NC}"
+    echo -e "${CYAN}============================================${NC}"
     echo ""
-    echo "ADMIN builds contain sensitive features and should NEVER"
-    echo "be distributed publicly. This build has been committed to"
-    echo "the private repo only."
+    
+    if [ -z "$RELEASE_TOKEN" ]; then
+        print_warning "RELEASE_TOKEN not set - skipping automatic build trigger"
+        echo ""
+        echo "To trigger the Admin build manually:"
+        echo "  1. Go to: https://github.com/$PRIVATE_REPO/actions"
+        echo "  2. Select 'Build Admin Release' workflow"
+        echo "  3. Click 'Run workflow'"
+        echo "  4. Enter version: $VERSION"
+        echo ""
+    else
+        # Trigger repository_dispatch event on PRIVATE repo
+        RESPONSE=$(curl -s -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $RELEASE_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$PRIVATE_REPO/dispatches" \
+            -d "{\"event_type\":\"admin_release_ready\",\"client_payload\":{\"version\":\"$VERSION\",\"build_type\":\"ADMIN\"}}" \
+            -w "%{http_code}" \
+            -o /dev/null)
+        
+        if [ "$RESPONSE" == "204" ]; then
+            print_success "Admin build workflow triggered on $PRIVATE_REPO"
+        else
+            print_warning "Failed to trigger workflow (HTTP $RESPONSE)"
+            echo "You may need to trigger manually at:"
+            echo "  https://github.com/$PRIVATE_REPO/actions"
+        fi
+    fi
+    
     echo ""
-    echo "To create a public release, use:"
-    echo -e "  ${GREEN}./scripts/release.sh user $VERSION${NC}"
+    echo "============================================"
+    echo -e "  ${GREEN}✓ Admin Release v$VERSION Complete!${NC}"
+    echo "============================================"
+    echo ""
+    echo -e "${YELLOW}ADMIN builds are kept private and include:${NC}"
+    echo "  • Channel Mappings (dual-action)"
+    echo "  • Debug tools"
+    echo "  • All admin features"
+    echo ""
+    echo "Next steps:"
+    echo "  • Check build status: https://github.com/$PRIVATE_REPO/actions"
+    echo "  • View release: https://github.com/$PRIVATE_REPO/releases"
     echo ""
     exit 0
 fi
 
+# USER BUILD: Trigger workflow on PUBLIC repo
 if [ -z "$RELEASE_TOKEN" ]; then
     print_warning "RELEASE_TOKEN not set - skipping automatic build trigger"
     echo ""
