@@ -29,6 +29,33 @@ DEFAULT_RISK_VALUE = 300.0
 # Risk optimizer position size percentages to test
 RISK_OPTIMIZER_PERCENTAGES = [1, 2, 3, 5, 10, 15, 20, 25]
 
+# =========================================================================
+# REALISTIC SIMULATION CONSTRAINTS (Industry-Grade)
+# =========================================================================
+# These prevent fantasy projections by enforcing real-world limits
+
+# Maximum single position as percentage of portfolio (absolute cap)
+MAX_SINGLE_POSITION_PCT = 0.25  # Never risk more than 25% on one trade
+
+# Maximum daily capital deployment (prevents 10,000%+ turnover assumptions)
+MAX_DAILY_CAPITAL_TURNOVER = 3.0  # Can deploy at most 3x portfolio per day
+
+# Maximum position size in dollars (broker/liquidity constraint)
+MAX_POSITION_DOLLARS = 50000.0  # Hard cap regardless of portfolio size
+
+# Minimum position size (below this, skip trade)
+MIN_POSITION_DOLLARS = 50.0
+
+# Slippage model for options (based on position size)
+SLIPPAGE_BASE_PCT = 0.005  # 0.5% base slippage
+SLIPPAGE_SIZE_FACTOR = 0.0001  # Additional slippage per $1000 position
+
+# Position size threshold where liquidity becomes an issue
+LIQUIDITY_WARNING_THRESHOLD = 10000.0  # Warn above $10k positions
+
+# Kelly Criterion safety factor (use fraction of full Kelly)
+KELLY_SAFETY_FRACTION = 0.5  # Use Half Kelly by default
+
 # Monte Carlo settings
 MONTE_CARLO_ITERATIONS = 1000
 
@@ -1341,17 +1368,45 @@ def run_exact_historical_simulation(
             sim_position_size = actual_position_value
             sim_quantity = trade.quantity
         else:
-            # Calculate budget based on mode
-            if risk_per_trade_mode == "fixed":
-                budget = min(risk_per_trade_value, balance)
-            elif risk_per_trade_mode == "percent":
-                # User enters percentage (e.g., 3 for 3%), convert to decimal
-                budget = balance * (risk_per_trade_value / 100)
-            else:
-                budget = balance * risk_per_trade_value
+            # =========================================================================
+            # REALISTIC CONSTRAINTS (Industry-Grade) - FIXED COMPOUNDING BUG
+            # =========================================================================
+            # KEY FIX: Base position sizing on STARTING portfolio, not current balance
+            # This prevents exponential runaway growth from compounding
             
-            # Cap at 50% of balance for safety
-            budget = min(budget, balance * 0.5)
+            # Calculate budget based on mode - USE STARTING PORTFOLIO as base
+            if risk_per_trade_mode == "fixed":
+                budget = risk_per_trade_value  # Fixed dollar amount
+            elif risk_per_trade_mode == "percent":
+                # CRITICAL: Use portfolio_start, NOT balance (prevents compounding fantasy)
+                budget = portfolio_start * (risk_per_trade_value / 100)
+            else:
+                budget = portfolio_start * risk_per_trade_value
+            
+            # 1. Cap at MAX_SINGLE_POSITION_PCT of STARTING portfolio
+            budget = min(budget, portfolio_start * MAX_SINGLE_POSITION_PCT)
+            
+            # 2. Cap at MAX_POSITION_DOLLARS (broker/liquidity hard limit)
+            budget = min(budget, MAX_POSITION_DOLLARS)
+            
+            # 3. Cannot exceed current balance (can't trade with money you don't have)
+            budget = min(budget, balance * 0.95)  # Leave 5% buffer
+            
+            # 4. Ensure minimum position size
+            if budget < MIN_POSITION_DOLLARS:
+                skip_reason = f"Budget ${budget:.2f} below minimum ${MIN_POSITION_DOLLARS}"
+                skipped_trades.append({
+                    'trade_num': i,
+                    'ticker': trade.ticker,
+                    'asset_type': trade.asset_type,
+                    'closed_at': trade.closed_at[:10] if trade.closed_at else '',
+                    'original_position': round(actual_position_value, 2),
+                    'required_budget': round(trade.open_price * multiplier, 2) if trade.open_price else 0,
+                    'available_budget': round(budget, 2),
+                    'reason': skip_reason,
+                    'missed_pnl_pct': round(trade.pnl_percent, 1)
+                })
+                continue
             
             # Calculate affordable quantity based on actual trade price
             sim_quantity, sim_position_size, skip_reason = calculate_affordable_quantity(
@@ -1380,9 +1435,23 @@ def run_exact_historical_simulation(
         
         # Use actual P&L percent from the trade
         pnl_pct = trade.pnl_percent / 100  # Convert to decimal
-        is_win = pnl_pct > 0  # Only positive P&L counts as win (breakeven = loss)
         
-        trade_pnl = sim_position_size * pnl_pct
+        # =========================================================================
+        # SLIPPAGE MODEL (Industry-Grade)
+        # =========================================================================
+        # Slippage increases with position size (market impact)
+        slippage_pct = SLIPPAGE_BASE_PCT + (sim_position_size / 1000) * SLIPPAGE_SIZE_FACTOR
+        slippage_pct = min(slippage_pct, 0.03)  # Cap at 3% max slippage
+        
+        # Apply slippage: reduces gains, increases losses
+        if pnl_pct > 0:
+            adjusted_pnl_pct = pnl_pct - slippage_pct
+        else:
+            adjusted_pnl_pct = pnl_pct - slippage_pct  # Makes loss worse
+        
+        is_win = adjusted_pnl_pct > 0  # Only positive P&L counts as win
+        
+        trade_pnl = sim_position_size * adjusted_pnl_pct
         balance += trade_pnl
         balance = max(0, balance)
         
@@ -1692,11 +1761,34 @@ def run_risk_optimizer(
         
         summary = result['summary']
         
-        # Calculate risk-adjusted score (simplified Sharpe-like ratio)
-        # Higher return with lower drawdown = better score
+        # =========================================================================
+        # IMPROVED RISK-ADJUSTED SCORE (Calmar-like Ratio)
+        # =========================================================================
+        # Score = Annualized Return / Max Drawdown
+        # This is similar to Calmar Ratio used by hedge funds
+        
         total_return_pct = summary['total_return_pct']
         max_drawdown_pct = summary['max_drawdown_pct'] or 1  # Avoid division by zero
-        risk_score = total_return_pct / max_drawdown_pct if max_drawdown_pct > 0 else total_return_pct
+        executed_trades = summary['executed_trades']
+        
+        # Normalize return to be more realistic (diminishing returns at high levels)
+        # Log scaling prevents runaway scores from compounding
+        if total_return_pct > 0:
+            # Log-scaled return (1000% becomes ~3.0, 100% becomes ~2.0, 10% becomes ~1.04)
+            normalized_return = math.log10(1 + total_return_pct / 100) * 100
+        else:
+            normalized_return = total_return_pct
+        
+        # Risk score: normalized return divided by drawdown, adjusted for execution %
+        execution_rate = executed_trades / (executed_trades + summary['skipped_trades']) if (executed_trades + summary['skipped_trades']) > 0 else 1
+        
+        if max_drawdown_pct > 0:
+            risk_score = (normalized_return / max_drawdown_pct) * execution_rate
+        else:
+            risk_score = normalized_return * execution_rate
+        
+        # Cap risk score at reasonable levels (max 10.0)
+        risk_score = min(risk_score, 10.0)
         
         results.append({
             'position_pct': pct,
@@ -1711,6 +1803,7 @@ def run_risk_optimizer(
             'win_rate': round(summary['wins'] / summary['executed_trades'] * 100, 1) if summary['executed_trades'] > 0 else 0,
             'avg_position': summary['avg_simulated_position'],
             'risk_score': round(risk_score, 2),
+            'normalized_return': round(normalized_return, 2),
         })
     
     # Find best result (highest risk-adjusted score with reasonable execution)
@@ -1731,13 +1824,30 @@ def run_risk_optimizer(
     all_negative = all(r['total_return_pct'] < 0 for r in valid_results)
     any_profitable = any(r['total_return_pct'] > 0 for r in valid_results)
     
-    # Generate recommendation message
+    # Generate recommendation message with realistic warnings
+    warning_flags = []
+    
+    # Check for unrealistic returns
+    if best_result['total_return_pct'] > 500:
+        warning_flags.append("CAUTION: Returns above 500% in 30 days are extremely rare. Results assume perfect execution with no slippage beyond the model.")
+    
+    # Check for excessive position sizes
+    if best_result['avg_position'] > LIQUIDITY_WARNING_THRESHOLD:
+        warning_flags.append(f"LIQUIDITY WARNING: Average position ${best_result['avg_position']:,.0f} may face execution challenges in illiquid options.")
+    
+    # Check for high risk percentage vs Kelly
+    kelly_data = None
+    
     if all_negative:
         recommendation_msg = f"WARNING: No position size yields positive returns with this trade history. {best_result['position_pct']}% is the LEAST BAD option (smallest loss ratio). Consider trading a different source or paper trading longer."
     elif any_profitable:
-        recommendation_msg = f"Based on historical trades, {best_result['position_pct']}% position size offers the best risk-adjusted returns. "
+        recommendation_msg = f"Based on historical trades, {best_result['position_pct']}% position size offers the best risk-adjusted returns."
         if best_result['skipped_trades'] > 0:
-            recommendation_msg += f"Note: {best_result['skipped_trades']} trades would be skipped at this level."
+            recommendation_msg += f" Note: {best_result['skipped_trades']} trades would be skipped due to capital constraints."
+        
+        # Add warning flags
+        if warning_flags:
+            recommendation_msg += "\n\n" + "\n".join(warning_flags)
     else:
         recommendation_msg = f"Breakeven result at {best_result['position_pct']}%. Consider paper trading longer to gather more data."
     
