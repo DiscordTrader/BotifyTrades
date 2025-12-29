@@ -6290,16 +6290,93 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # Pre-process special formats (Bullwinkle scalps, etc.)
         from src.signals.parser import (
             normalize_bullwinkle_format, is_india_signal, parse_india_option_signal, 
-            parse_india_stock_signal, parse_trade_idea, is_trade_idea_signal
+            parse_india_stock_signal, parse_trade_idea, is_trade_idea_signal,
+            is_bullwinkle_signal, parse_bullwinkle_signal
         )
         from gui_app.database import (
-            check_signal_instance, create_signal_instance, update_signal_instance, close_signal_instance
+            check_signal_instance, create_signal_instance, update_signal_instance, close_signal_instance,
+            get_open_position_for_symbol
         )
-        
-        normalized_content = normalize_bullwinkle_format(message.content)
         
         # Initialize variables for signal tracking
         india_stock_signal = None
+        bullwinkle_opt = None
+        
+        # Check for Bullwinkle format first (with deduplication)
+        if is_bullwinkle_signal(message.content):
+            bullwinkle_signal = parse_bullwinkle_signal(message.content)
+            if bullwinkle_signal:
+                symbol = bullwinkle_signal['symbol']
+                author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                
+                if bullwinkle_signal.get('is_exit'):
+                    # Exit signal - look up open position to get strike/expiry
+                    print(f"[BULLWINKLE] ✓ Exit signal detected for {symbol}")
+                    
+                    # Find matching open position
+                    open_position = get_open_position_for_symbol(symbol, str(message.channel.id))
+                    if open_position:
+                        # Create STC signal with position details
+                        bullwinkle_opt = {
+                            'asset': 'option',
+                            'action': 'STC',
+                            'symbol': symbol,
+                            'strike': open_position.get('strike'),
+                            'opt_type': open_position.get('call_put') or open_position.get('opt_type'),
+                            'expiry': open_position.get('expiry'),
+                            'price': bullwinkle_signal.get('price'),
+                            'qty': bullwinkle_signal.get('qty') or open_position.get('quantity') or 1,
+                            '_bullwinkle': True,
+                        }
+                        print(f"[BULLWINKLE] ✓ Found open position: {symbol} {bullwinkle_opt['strike']}{bullwinkle_opt['opt_type']} {bullwinkle_opt['expiry']}")
+                        
+                        # Close the signal instance if exists
+                        existing_instance = check_signal_instance(
+                            str(message.channel.id), symbol, open_position.get('entry_price'), 'BTO'
+                        )
+                        if existing_instance:
+                            close_signal_instance(instance_id=existing_instance['id'], close_reason='exit_signal')
+                            print(f"[DEDUPE] ✓ Closed signal instance for {symbol}")
+                    else:
+                        print(f"[BULLWINKLE] ⚠️ No open position found for {symbol} - cannot determine strike/expiry")
+                        # Still try to process as market order STC
+                        bullwinkle_opt = bullwinkle_signal
+                else:
+                    # Entry signal - check for deduplication
+                    entry_price = bullwinkle_signal.get('price')
+                    strike = bullwinkle_signal.get('strike')
+                    
+                    existing_instance = check_signal_instance(
+                        str(message.channel.id), symbol, entry_price, 'BTO'
+                    )
+                    
+                    if existing_instance:
+                        # Duplicate - skip execution
+                        print(f"[DEDUPE] ⚠️ Duplicate Bullwinkle signal detected for {symbol} @ {entry_price} (instance #{existing_instance['id']})")
+                        return
+                    
+                    # New signal - create instance and proceed
+                    instance_id = create_signal_instance(
+                        channel_id=str(message.channel.id),
+                        ticker=symbol,
+                        entry_price=entry_price,
+                        direction='BTO',
+                        author_id=str(message.author.id),
+                        author_name=author_name,
+                        message_id=str(message.id),
+                        stop_loss=None,
+                        profit_targets=[],
+                        ttl_hours=24
+                    )
+                    
+                    if instance_id:
+                        print(f"[DEDUPE] ✓ New Bullwinkle signal instance: {symbol} {strike} @ {entry_price} (ID: {instance_id})")
+                        bullwinkle_opt = bullwinkle_signal
+                    else:
+                        print(f"[DEDUPE] ⚠️ Failed to create instance for {symbol} - may be duplicate")
+                        return
+        
+        normalized_content = normalize_bullwinkle_format(message.content)
         
         # Check for TRADE IDEA format first (with deduplication)
         if is_trade_idea_signal(message.content):
@@ -6355,9 +6432,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # Failed to create (duplicate or error), skip
                     return
         
-        # Parse trading signals - check for India format first
-        opt = None
-        if is_india_signal(normalized_content):
+        # Parse trading signals - check Bullwinkle first, then India, then US format
+        opt = bullwinkle_opt  # Use Bullwinkle signal if already parsed
+        
+        if opt is None and is_india_signal(normalized_content):
             print(f"[SIGNAL] Detected India format signal, using India parser")
             opt = parse_india_option_signal(normalized_content)
             if not opt:

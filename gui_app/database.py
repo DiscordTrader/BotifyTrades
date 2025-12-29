@@ -6497,6 +6497,46 @@ def get_open_signal_instances(channel_id: str = None) -> List[Dict]:
         return []
 
 
+def get_open_position_for_symbol(symbol: str, channel_id: str = None) -> Optional[Dict]:
+    """
+    Get the most recent open position for a symbol, optionally filtered by channel.
+    Used for Bullwinkle exit signals that need strike/expiry from open position.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        if channel_id:
+            cursor.execute('''
+                SELECT id, symbol, strike, call_put, expiry, quantity, entry_price
+                FROM trades 
+                WHERE symbol = ? 
+                AND channel_id = ?
+                AND direction = 'BTO' 
+                AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                ORDER BY created_at DESC 
+                LIMIT 1
+            ''', (symbol.upper(), str(channel_id)))
+        else:
+            cursor.execute('''
+                SELECT id, symbol, strike, call_put, expiry, quantity, entry_price
+                FROM trades 
+                WHERE symbol = ? 
+                AND direction = 'BTO' 
+                AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                ORDER BY created_at DESC 
+                LIMIT 1
+            ''', (symbol.upper(),))
+        
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+    except Exception as e:
+        print(f"[DATABASE] Error getting open position for {symbol}: {e}")
+        return None
+
+
 # Initialize tables
 init_channel_messages_table()
 init_signal_formats_table()
