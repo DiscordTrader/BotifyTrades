@@ -21,7 +21,7 @@ from .patterns import (
 # Bullwinkle format patterns - comprehensive support
 # Entry emoji indicators: :green_alert: or 🟢
 BULLWINKLE_ENTRY_INDICATORS = [':green_alert:', '🟢', ':greenalert:']
-BULLWINKLE_EXIT_INDICATORS = [':SirenRed:', ':sirenred:', '🔴', ':red_circle:']
+BULLWINKLE_EXIT_INDICATORS = [':SirenRed:', ':sirenred:', '🔴', ':red_circle:', ':red_alert:', ':redalert:']
 
 # Entry patterns (multiple variants)
 # Pattern 1: :green_alert: BTO 3 AMPX | $11 C .95 2/20 (with BTO keyword and qty prefix)

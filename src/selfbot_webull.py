@@ -6197,6 +6197,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     
                     # TRACK SIGNAL FOR PNL - even if not executing trades
                     # This allows Trade Summary/PNL tracking for forwarded signals
+                    print(f"[PNL TRACK] Starting signal tracking...")
                     try:
                         from gui_app.database import (
                             create_signal_instance, close_signal_instance, 
@@ -6205,11 +6206,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         channel_id = str(message.channel.id)
                         author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                        print(f"[PNL TRACK] Channel: {channel_id}, Author: {author_name}")
                         
                         # Parse the signal to get details
                         parsed_signal = None
                         if is_bullwinkle:
                             parsed_signal = parse_bullwinkle_signal(message.content)
+                            print(f"[PNL TRACK] Bullwinkle parsed: {parsed_signal}")
                         else:
                             # Try standard BTO/STC parsing
                             content_upper = message.content.strip().upper()
