@@ -27,17 +27,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller==5.13.2
-          pip install pyarmor
-
-      - name: Obfuscate code
-        run: |
-          pyarmor gen -O obfuscated -r src/
-        shell: pwsh
+          pip install pyinstaller
 
       - name: Build Windows executable
         run: |
-          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-Windows --paths obfuscated --add-data "gui_app/templates;gui_app/templates" --add-data "gui_app/static;gui_app/static" obfuscated/selfbot_webull.py
+          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-Windows --add-data "gui_app/templates;gui_app/templates" --add-data "gui_app/static;gui_app/static" src/selfbot_webull.py
         shell: pwsh
 
       - name: Upload Windows artifact
@@ -61,16 +55,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller==5.13.2
-          pip install pyarmor
-
-      - name: Obfuscate code
-        run: |
-          pyarmor gen -O obfuscated -r src/
+          pip install pyinstaller
 
       - name: Build macOS Intel executable
         run: |
-          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-macOS-Intel --paths obfuscated --add-data "gui_app/templates:gui_app/templates" --add-data "gui_app/static:gui_app/static" obfuscated/selfbot_webull.py
+          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-macOS-Intel --add-data "gui_app/templates:gui_app/templates" --add-data "gui_app/static:gui_app/static" src/selfbot_webull.py
 
       - name: Upload macOS Intel artifact
         uses: actions/upload-artifact@v4
@@ -93,16 +82,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller==5.13.2
-          pip install pyarmor
-
-      - name: Obfuscate code
-        run: |
-          pyarmor gen -O obfuscated -r src/
+          pip install pyinstaller
 
       - name: Build macOS ARM executable
         run: |
-          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-macOS-ARM --paths obfuscated --add-data "gui_app/templates:gui_app/templates" --add-data "gui_app/static:gui_app/static" obfuscated/selfbot_webull.py
+          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-macOS-ARM --add-data "gui_app/templates:gui_app/templates" --add-data "gui_app/static:gui_app/static" src/selfbot_webull.py
 
       - name: Upload macOS ARM artifact
         uses: actions/upload-artifact@v4
@@ -125,16 +109,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller==5.13.2
-          pip install pyarmor
-
-      - name: Obfuscate code
-        run: |
-          pyarmor gen -O obfuscated -r src/
+          pip install pyinstaller
 
       - name: Build Linux executable
         run: |
-          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-Linux --paths obfuscated --add-data "gui_app/templates:gui_app/templates" --add-data "gui_app/static:gui_app/static" obfuscated/selfbot_webull.py
+          pyinstaller --clean --noconfirm --onefile --name BotifyTrades-Admin-Linux --add-data "gui_app/templates:gui_app/templates" --add-data "gui_app/static:gui_app/static" src/selfbot_webull.py
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
@@ -168,7 +147,7 @@ jobs:
           body: |
             ## Admin Build v${{ steps.version.outputs.version }}
 
-            **This is an ADMIN build with full features (PyArmor protected).**
+            **This is an ADMIN build with full features.**
 
             ### Downloads
             - **Windows**: BotifyTrades-Admin-Windows.exe
@@ -181,9 +160,6 @@ jobs:
             - Debug tools
             - Full broker management
             - All analytics features
-
-            ### Security
-            - Code obfuscated with PyArmor
           draft: false
           prerelease: false
           files: |
