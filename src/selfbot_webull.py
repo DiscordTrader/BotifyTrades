@@ -6195,7 +6195,103 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         except Exception as e:
                             print(f"[CHANNEL MAP] ❌ Webhook post failed: {e}")
                     
-                    # If execute is NOT enabled, we're done (already forwarded if needed)
+                    # TRACK SIGNAL FOR PNL - even if not executing trades
+                    # This allows Trade Summary/PNL tracking for forwarded signals
+                    try:
+                        from gui_app.database import (
+                            create_signal_instance, close_signal_instance, 
+                            get_open_position_for_symbol, check_signal_instance
+                        )
+                        
+                        channel_id = str(message.channel.id)
+                        author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                        
+                        # Parse the signal to get details
+                        parsed_signal = None
+                        if is_bullwinkle:
+                            parsed_signal = parse_bullwinkle_signal(message.content)
+                        else:
+                            # Try standard BTO/STC parsing
+                            content_upper = message.content.strip().upper()
+                            import re
+                            # BTO pattern: BTO [QTY] SYMBOL STRIKE C/P EXPIRY @ PRICE
+                            bto_match = re.search(r'BTO\s+(?:(\d+)\s+)?(?:\$)?([A-Z]+)\s+(?:\$)?([\d.]+)\s*([CP])\s*(\d{1,2}/\d{1,2})\s*@?\s*\$?([\d.]+)', content_upper)
+                            # STC pattern: STC [QTY] SYMBOL @ PRICE or STC SYMBOL STRIKE C/P EXPIRY @ PRICE
+                            stc_match = re.search(r'STC\s+(?:(\d+)\s+)?(?:ALL\s+)?(?:\$)?([A-Z]+)(?:\s+(?:\$)?([\d.]+)\s*([CP])\s*(\d{1,2}/\d{1,2}))?\s*@?\s*\$?([\d.]+)', content_upper)
+                            
+                            if bto_match:
+                                qty, symbol, strike, opt_type, expiry, price = bto_match.groups()
+                                parsed_signal = {
+                                    'symbol': symbol,
+                                    'strike': float(strike),
+                                    'opt_type': opt_type,
+                                    'expiry': expiry,
+                                    'price': float(price),
+                                    'qty': int(qty) if qty else 1,
+                                    'is_exit': False
+                                }
+                            elif stc_match:
+                                qty, symbol, strike, opt_type, expiry, price = stc_match.groups()
+                                parsed_signal = {
+                                    'symbol': symbol,
+                                    'strike': float(strike) if strike else None,
+                                    'opt_type': opt_type,
+                                    'expiry': expiry,
+                                    'price': float(price) if price else 0,
+                                    'qty': int(qty) if qty else None,
+                                    'is_exit': True
+                                }
+                        
+                        if parsed_signal:
+                            symbol = parsed_signal['symbol']
+                            is_exit = parsed_signal.get('is_exit', False)
+                            
+                            if is_exit:
+                                # STC - Close position and calculate PNL
+                                exit_price = parsed_signal.get('price', 0)
+                                exit_qty = parsed_signal.get('qty')
+                                
+                                # Find open position for this symbol in this channel
+                                open_pos = get_open_position_for_symbol(channel_id, symbol)
+                                if open_pos:
+                                    close_signal_instance(
+                                        instance_id=open_pos['id'],
+                                        exit_price=exit_price,
+                                        exit_qty=exit_qty or open_pos.get('qty', 1)
+                                    )
+                                    pnl = (exit_price - open_pos.get('entry_price', 0)) * (exit_qty or open_pos.get('qty', 1)) * 100
+                                    print(f"[PNL TRACK] ✓ Closed {symbol} @ ${exit_price}, PNL: ${pnl:+.2f}")
+                                else:
+                                    print(f"[PNL TRACK] ⚠️ No open position found for {symbol} in channel {channel_id}")
+                            else:
+                                # BTO - Create new position
+                                entry_price = parsed_signal.get('price', 0)
+                                qty = parsed_signal.get('qty', 1)
+                                strike = parsed_signal.get('strike')
+                                opt_type = parsed_signal.get('opt_type', 'C')
+                                expiry = parsed_signal.get('expiry', '')
+                                
+                                # Check for duplicate
+                                fingerprint = f"{channel_id}_{symbol}_{entry_price:.2f}"
+                                if not check_signal_instance(fingerprint):
+                                    create_signal_instance(
+                                        channel_id=channel_id,
+                                        symbol=symbol,
+                                        entry_price=entry_price,
+                                        qty=qty,
+                                        strike=strike,
+                                        opt_type=opt_type,
+                                        expiry=expiry,
+                                        author=author_name,
+                                        fingerprint=fingerprint
+                                    )
+                                    print(f"[PNL TRACK] ✓ Opened {symbol} {strike}{opt_type} {expiry} @ ${entry_price} x{qty}")
+                                else:
+                                    print(f"[PNL TRACK] ⚠️ Duplicate signal ignored: {fingerprint}")
+                    except Exception as e:
+                        print(f"[PNL TRACK] ❌ Error tracking signal: {e}")
+                    
+                    # If execute is NOT enabled, we're done (already forwarded and tracked)
                     if not should_execute:
                         return
                     # If execute IS enabled, fall through to trade execution below
