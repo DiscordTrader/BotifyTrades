@@ -12108,6 +12108,8 @@ def register_routes(app):
         try:
             days = request.args.get('days', 30, type=int)
             
+            db.ensure_signal_verification_tables()
+            
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
             from services.signal_verification import get_verification_report
             
@@ -12126,6 +12128,8 @@ def register_routes(app):
         """Analyze trade history and compare reported vs executable performance"""
         try:
             days = request.args.get('days', 30, type=int)
+            
+            db.ensure_signal_verification_tables()
             
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
             from services.signal_verification import SignalVerificationService
