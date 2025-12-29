@@ -18,18 +18,82 @@ from .patterns import (
 )
 
 
-# Bullwinkle format patterns
-# Entry: :green_alert: NVDA | $177.5 C 1.32
-BULLWINKLE_ENTRY_PATTERN = re.compile(
-    r':?green_alert:?\s*([A-Z]+)\s*\|\s*\$?([\d.]+)\s*([CP])\s*([\d.]+)',
+# Bullwinkle format patterns - comprehensive support
+# Entry emoji indicators: :green_alert: or 🟢
+BULLWINKLE_ENTRY_INDICATORS = [':green_alert:', '🟢', ':greenalert:']
+BULLWINKLE_EXIT_INDICATORS = [':SirenRed:', ':sirenred:', '🔴', ':red_circle:']
+
+# Entry patterns (multiple variants)
+# Pattern 1: :green_alert: BTO 3 AMPX | $11 C .95 2/20 (with BTO keyword and qty prefix)
+BULLWINKLE_ENTRY_BTO_QTY = re.compile(
+    r'(?::?green_alert:?|🟢)\s*BTO\s+(\d+)\s+\$?([A-Z]+)\s*\|\s*\$?([\d.]+)\s*([CP])\s*([\d.]+)(?:\s+(.+?))?$',
     re.IGNORECASE
 )
 
-# Exit: :SirenRed: NVDA | 1.44 OUT ALL ✅  or  :SirenRed: TSLA | 5.00 OUT ✅
-BULLWINKLE_EXIT_PATTERN = re.compile(
-    r':?SirenRed:?\s*([A-Z]+)\s*\|\s*([\d.]+)\s*OUT',
+# Pattern 2: 🟢BTO $RKT | 21.2 C JAN/16 .56 5 cons (with BTO, expiry, qty at end)
+BULLWINKLE_ENTRY_BTO_QTY_END = re.compile(
+    r'(?::?green_alert:?|🟢)\s*BTO\s+\$?([A-Z]+)\s*\|\s*\$?([\d.]+)\s*([CP])\s+([A-Z]+\s*/?\s*\d+|\d+/\d+|NEXT\s*WEEK)\s+([\d.]+)\s+(\d+)\s*(?:cons?|contracts?)?',
     re.IGNORECASE
 )
+
+# Pattern 3: :green_alert: SYMBOL | $STRIKE C/P PRICE EXPIRY (standard scalp - price before expiry text)
+BULLWINKLE_ENTRY_STANDARD = re.compile(
+    r'(?::?green_alert:?|🟢)\s*\$?([A-Z]+)\s*\|\s*\$?([\d.]+)\s*([CP])\s+([\d.]+)(?:\s+(.+?))?$',
+    re.IGNORECASE
+)
+
+# Pattern 4: :green_alert: SYMBOL | STRIKE C EXPIRY PRICE (price at end after expiry)
+BULLWINKLE_ENTRY_PRICE_END = re.compile(
+    r'(?::?green_alert:?|🟢)\s*\$?([A-Z]+)\s*\|\s*\$?([\d.]+)\s*([CP])\s+([A-Z]+\s*/?\s*\d+|\d+/\d+|NEXT\s*WEEK|[A-Z]+\s*/?\s*\d{4}|[A-Z]+\s+\d{4}|[A-Z]+)\s+([\d.]+)$',
+    re.IGNORECASE
+)
+
+# Exit patterns (multiple variants)
+# Pattern 1: :SirenRed: STC ALL $AMPX ✅ (STC keyword without price)
+BULLWINKLE_EXIT_STC_ALL = re.compile(
+    r'(?::?SirenRed:?|🔴)\s*STC\s+(?:ALL|\d+)\s+\$?([A-Z]+)',
+    re.IGNORECASE
+)
+
+# Pattern 2: :SirenRed: STC 4 RKT @ .75 SL .70 (STC with qty and price)
+BULLWINKLE_EXIT_STC_QTY_PRICE = re.compile(
+    r'(?::?SirenRed:?|🔴)\s*STC\s+(\d+)\s+\$?([A-Z]+)\s*@?\s*([\d.]+)',
+    re.IGNORECASE
+)
+
+# Pattern 3: :SirenRed: STC $SYMBOL | .70 OUT ALL ✅ (STC with pipe and OUT)
+BULLWINKLE_EXIT_STC_PIPE = re.compile(
+    r'(?::?SirenRed:?|🔴)\s*STC\s+\$?([A-Z]+)\s*\|\s*([\d.]+)\s*OUT',
+    re.IGNORECASE
+)
+
+# Pattern 4: :SirenRed: SYMBOL | PRICE OUT ... (original pattern)
+BULLWINKLE_EXIT_PIPE_PRICE = re.compile(
+    r'(?::?SirenRed:?|🔴)\s*\$?([A-Z]+)\s*\|\s*([\d.]+)\s*OUT',
+    re.IGNORECASE
+)
+
+# Pattern 5: :SirenRed: SYMBOL | OUT @ PRICE ... (OUT @ format)
+BULLWINKLE_EXIT_OUT_AT = re.compile(
+    r'(?::?SirenRed:?|🔴)\s*\$?([A-Z]+)\s*\|\s*OUT\s*@?\s*([\d.]+)',
+    re.IGNORECASE
+)
+
+# Pattern 6: :SirenRed: PLTR 1.40OUT ALL (no space before OUT)
+BULLWINKLE_EXIT_NO_SPACE = re.compile(
+    r'(?::?SirenRed:?|🔴)\s*\$?([A-Z]+)\s+([\d.]+)OUT',
+    re.IGNORECASE
+)
+
+# Pattern 7: :SirenRed: STC $SYMBOL OUT ALL BUT 1 $PRICE (complex format)
+BULLWINKLE_EXIT_COMPLEX = re.compile(
+    r'(?::?SirenRed:?|🔴)\s*STC\s+\$?([A-Z]+)\s+OUT\s+.*?\$?([\d.]+)',
+    re.IGNORECASE
+)
+
+# Legacy patterns for backward compatibility
+BULLWINKLE_ENTRY_PATTERN = BULLWINKLE_ENTRY_STANDARD
+BULLWINKLE_EXIT_PATTERN = BULLWINKLE_EXIT_PIPE_PRICE
 
 # TRADE IDEA format patterns (C1apped style)
 TRADE_IDEA_TICKER_PATTERN = re.compile(
@@ -120,6 +184,297 @@ def is_trade_idea_signal(text: str) -> bool:
         TRADE_IDEA_TICKER_PATTERN.search(text) is not None or
         TRADE_IDEA_ENTRY_PATTERN.search(text) is not None
     )
+
+
+def _parse_bullwinkle_expiry(expiry_text: str) -> str:
+    """
+    Parse Bullwinkle expiry text into MM/DD format.
+    
+    Supports:
+    - "2/20", "12/12" (direct MM/DD)
+    - "JAN/16", "JAN / 23" (month/day)
+    - "NEXT WEEK" (next Friday)
+    - "JAN 2027", "JAN / 2027", "MARCH 2026" (month year - use 3rd Friday)
+    - "JAN", "MARCH" (just month - assume current year, 3rd Friday)
+    """
+    from datetime import datetime, timedelta
+    import calendar
+    
+    if not expiry_text:
+        # Default to today for 0DTE scalps
+        return datetime.now().strftime("%m/%d")
+    
+    expiry_text = expiry_text.strip().upper()
+    
+    # Direct MM/DD format
+    if re.match(r'^\d{1,2}/\d{1,2}$', expiry_text):
+        parts = expiry_text.split('/')
+        return f"{int(parts[0]):02d}/{int(parts[1]):02d}"
+    
+    # NEXT WEEK - find next Friday
+    if 'NEXT' in expiry_text and 'WEEK' in expiry_text:
+        today = datetime.now()
+        days_until_friday = (4 - today.weekday()) % 7
+        if days_until_friday == 0:
+            days_until_friday = 7  # Next Friday, not today
+        next_friday = today + timedelta(days=days_until_friday)
+        return next_friday.strftime("%m/%d")
+    
+    # Month name mapping
+    month_map = {
+        'JAN': 1, 'JANUARY': 1, 'FEB': 2, 'FEBRUARY': 2,
+        'MAR': 3, 'MARCH': 3, 'APR': 4, 'APRIL': 4,
+        'MAY': 5, 'JUN': 6, 'JUNE': 6, 'JUL': 7, 'JULY': 7,
+        'AUG': 8, 'AUGUST': 8, 'SEP': 9, 'SEPTEMBER': 9,
+        'OCT': 10, 'OCTOBER': 10, 'NOV': 11, 'NOVEMBER': 11,
+        'DEC': 12, 'DECEMBER': 12
+    }
+    
+    # JAN/16, JAN / 23 format
+    month_day_match = re.match(r'([A-Z]+)\s*/?\s*(\d{1,2})$', expiry_text)
+    if month_day_match:
+        month_str, day = month_day_match.groups()
+        month = month_map.get(month_str)
+        if month:
+            return f"{month:02d}/{int(day):02d}"
+    
+    # JAN 2027, MARCH 2026, JAN / 2027 format - use 3rd Friday of month
+    month_year_match = re.match(r'([A-Z]+)\s*/?\s*(\d{4})$', expiry_text)
+    if month_year_match:
+        month_str, year = month_year_match.groups()
+        month = month_map.get(month_str)
+        if month:
+            # Find 3rd Friday of that month
+            year_int = int(year)
+            first_day = datetime(year_int, month, 1)
+            first_friday = first_day + timedelta(days=(4 - first_day.weekday()) % 7)
+            third_friday = first_friday + timedelta(weeks=2)
+            return third_friday.strftime("%m/%d")
+    
+    # Just month name (JAN, MARCH) - assume current/next occurrence, 3rd Friday
+    for month_name, month_num in month_map.items():
+        if month_name in expiry_text:
+            today = datetime.now()
+            year = today.year
+            # If month already passed, use next year
+            if month_num < today.month:
+                year += 1
+            first_day = datetime(year, month_num, 1)
+            first_friday = first_day + timedelta(days=(4 - first_day.weekday()) % 7)
+            third_friday = first_friday + timedelta(weeks=2)
+            return third_friday.strftime("%m/%d")
+    
+    # Fallback to today
+    return datetime.now().strftime("%m/%d")
+
+
+def is_bullwinkle_signal(text: str) -> bool:
+    """Check if text is a Bullwinkle format signal."""
+    text_lower = text.lower()
+    for indicator in BULLWINKLE_ENTRY_INDICATORS:
+        if indicator.lower() in text_lower:
+            return True
+    for indicator in BULLWINKLE_EXIT_INDICATORS:
+        if indicator.lower() in text_lower:
+            return True
+    return False
+
+
+def parse_bullwinkle_signal(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse Bullwinkle format signals into structured dict.
+    
+    Supports multiple entry/exit formats including:
+    - :green_alert: BTO 3 AMPX | $11 C .95 2/20
+    - 🟢BTO $RKT | 21.2 C JAN/16 .56 5 cons
+    - :green_alert: NVDA | $177.5 C 1.32
+    - :green_alert: PLTR | 200 C NEXT WEEK .80
+    - :SirenRed: STC ALL $AMPX ✅
+    - :SirenRed: NVDA | 1.44 OUT ALL ✅
+    
+    Returns structured dict with symbol, strike, opt_type, expiry, price, qty, action.
+    """
+    if not is_bullwinkle_signal(text):
+        return None
+    
+    # Clean text - remove @everyone and checkmark
+    clean_text = re.sub(r'@everyone|✅|✔|@here', '', text).strip()
+    
+    # Try exit patterns first (more specific)
+    
+    # Exit Pattern 1: :SirenRed: STC ALL $AMPX
+    match = BULLWINKLE_EXIT_STC_ALL.search(clean_text)
+    if match:
+        symbol = match.group(1).upper()
+        return {
+            'action': 'STC',
+            'symbol': symbol,
+            'price': None,  # Will need position lookup
+            'qty': None,  # ALL = close full position
+            'is_exit': True,
+            '_bullwinkle': True,
+            '_needs_position_lookup': True,
+        }
+    
+    # Exit Pattern 2: :SirenRed: STC 4 RKT @ .75
+    match = BULLWINKLE_EXIT_STC_QTY_PRICE.search(clean_text)
+    if match:
+        qty, symbol, price = match.groups()
+        return {
+            'action': 'STC',
+            'symbol': symbol.upper(),
+            'price': float(price) if price else None,
+            'qty': int(qty),
+            'is_exit': True,
+            '_bullwinkle': True,
+            '_needs_position_lookup': True,
+        }
+    
+    # Exit Pattern 3: :SirenRed: STC $SYMBOL | .70 OUT
+    match = BULLWINKLE_EXIT_STC_PIPE.search(clean_text)
+    if match:
+        symbol, price = match.groups()
+        return {
+            'action': 'STC',
+            'symbol': symbol.upper(),
+            'price': float(price) if price else None,
+            'qty': None,
+            'is_exit': True,
+            '_bullwinkle': True,
+            '_needs_position_lookup': True,
+        }
+    
+    # Exit Pattern 4: :SirenRed: SYMBOL | PRICE OUT
+    match = BULLWINKLE_EXIT_PIPE_PRICE.search(clean_text)
+    if match:
+        symbol, price = match.groups()
+        return {
+            'action': 'STC',
+            'symbol': symbol.upper(),
+            'price': float(price) if price else None,
+            'qty': None,
+            'is_exit': True,
+            '_bullwinkle': True,
+            '_needs_position_lookup': True,
+        }
+    
+    # Exit Pattern 5: :SirenRed: SYMBOL | OUT @ PRICE
+    match = BULLWINKLE_EXIT_OUT_AT.search(clean_text)
+    if match:
+        symbol, price = match.groups()
+        return {
+            'action': 'STC',
+            'symbol': symbol.upper(),
+            'price': float(price) if price else None,
+            'qty': None,
+            'is_exit': True,
+            '_bullwinkle': True,
+            '_needs_position_lookup': True,
+        }
+    
+    # Exit Pattern 6: :SirenRed: PLTR 1.40OUT
+    match = BULLWINKLE_EXIT_NO_SPACE.search(clean_text)
+    if match:
+        symbol, price = match.groups()
+        return {
+            'action': 'STC',
+            'symbol': symbol.upper(),
+            'price': float(price) if price else None,
+            'qty': None,
+            'is_exit': True,
+            '_bullwinkle': True,
+            '_needs_position_lookup': True,
+        }
+    
+    # Exit Pattern 7: :SirenRed: STC $SYMBOL OUT ALL BUT 1 $PRICE
+    match = BULLWINKLE_EXIT_COMPLEX.search(clean_text)
+    if match:
+        symbol, price = match.groups()
+        return {
+            'action': 'STC',
+            'symbol': symbol.upper(),
+            'price': float(price) if price else None,
+            'qty': None,
+            'is_exit': True,
+            '_bullwinkle': True,
+            '_needs_position_lookup': True,
+        }
+    
+    # Now try entry patterns
+    
+    # Entry Pattern 1: :green_alert: BTO 3 AMPX | $11 C .95 2/20
+    match = BULLWINKLE_ENTRY_BTO_QTY.search(clean_text)
+    if match:
+        qty, symbol, strike, opt_type, price, expiry_text = match.groups()
+        expiry = _parse_bullwinkle_expiry(expiry_text)
+        return {
+            'asset': 'option',
+            'action': 'BTO',
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': opt_type.upper(),
+            'expiry': expiry,
+            'price': float(price),
+            'qty': int(qty),
+            '_qty_from_signal': True,
+            '_bullwinkle': True,
+        }
+    
+    # Entry Pattern 2: 🟢BTO $RKT | 21.2 C JAN/16 .56 5 cons
+    match = BULLWINKLE_ENTRY_BTO_QTY_END.search(clean_text)
+    if match:
+        symbol, strike, opt_type, expiry_text, price, qty = match.groups()
+        expiry = _parse_bullwinkle_expiry(expiry_text)
+        return {
+            'asset': 'option',
+            'action': 'BTO',
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': opt_type.upper(),
+            'expiry': expiry,
+            'price': float(price),
+            'qty': int(qty),
+            '_qty_from_signal': True,
+            '_bullwinkle': True,
+        }
+    
+    # Entry Pattern 4 (before 3): :green_alert: SYMBOL | STRIKE C EXPIRY PRICE (price at end)
+    match = BULLWINKLE_ENTRY_PRICE_END.search(clean_text)
+    if match:
+        symbol, strike, opt_type, expiry_text, price = match.groups()
+        expiry = _parse_bullwinkle_expiry(expiry_text)
+        return {
+            'asset': 'option',
+            'action': 'BTO',
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': opt_type.upper(),
+            'expiry': expiry,
+            'price': float(price),
+            'qty': None,  # Will use defaults
+            '_qty_from_signal': False,
+            '_bullwinkle': True,
+        }
+    
+    # Entry Pattern 3: :green_alert: SYMBOL | $STRIKE C PRICE (standard - price after C/P)
+    match = BULLWINKLE_ENTRY_STANDARD.search(clean_text)
+    if match:
+        symbol, strike, opt_type, price, expiry_text = match.groups()
+        expiry = _parse_bullwinkle_expiry(expiry_text)
+        return {
+            'asset': 'option',
+            'action': 'BTO',
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': opt_type.upper(),
+            'expiry': expiry,
+            'price': float(price),
+            'qty': None,  # Will use defaults
+            '_qty_from_signal': False,
+            '_bullwinkle': True,
+        }
+    
+    return None
 
 
 def normalize_bullwinkle_format(text: str) -> str:
