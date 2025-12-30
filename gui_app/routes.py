@@ -7787,6 +7787,10 @@ def register_routes(app):
                 portfolio_start=float(data.get('portfolio_start', 3000)),
                 risk_per_trade_mode=data.get('risk_per_trade_mode', 'fixed'),
                 risk_per_trade_value=float(data.get('risk_per_trade_value', 300)),
+                daily_alloc_pct=float(data.get('daily_alloc_pct', 0.60)),
+                daily_recycle_turns=int(data.get('daily_recycle_turns', 2)),
+                max_trades_per_day=int(data.get('max_trades_per_day')) if data.get('max_trades_per_day') else None,
+                include_slippage=data.get('include_slippage', True),
             )
             
             return jsonify(result)

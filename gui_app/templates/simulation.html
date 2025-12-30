@@ -114,12 +114,16 @@
             
             <div class="form-group" style="margin-bottom: 16px;">
                 <label class="form-label">Risk Per Trade</label>
-                <div style="display: grid; grid-template-columns: 1fr 120px; gap: 8px;">
+                <div style="display: grid; grid-template-columns: 1fr 150px; gap: 8px;">
                     <input type="number" id="risk-value" class="form-input" value="300" min="1" step="10">
                     <select id="risk-mode" class="form-select" onchange="updateRiskPlaceholder()" style="background-color: #2C2C2E; color: #FFFFFF;">
                         <option value="fixed" style="background-color: #2C2C2E; color: #FFFFFF;">$ Fixed</option>
-                        <option value="percent" style="background-color: #2C2C2E; color: #FFFFFF;">% of Starting Portfolio</option>
+                        <option value="percent_start" style="background-color: #2C2C2E; color: #FFFFFF;">% of START (flat)</option>
+                        <option value="percent_current" style="background-color: #2C2C2E; color: #FFFFFF;">% of CURRENT (compound)</option>
                     </select>
+                </div>
+                <div id="risk-mode-help" style="font-size: 0.6875rem; color: var(--text-muted); margin-top: 4px;">
+                    Fixed: Same $ amount per trade. % of START: Flat bet. % of CURRENT: Compounding.
                 </div>
             </div>
             
@@ -130,6 +134,47 @@
                     <span style="color: var(--text-muted); font-weight: 400; font-size: 0.75rem;">(reinvest profits daily)</span>
                 </label>
             </div>
+            
+            <details style="margin-bottom: 16px;">
+                <summary style="cursor: pointer; font-size: 0.9375rem; font-weight: 600; color: var(--text-secondary); padding: 8px 0;">
+                    📅 Daily Realism Settings
+                </summary>
+                <div style="padding-top: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 8px; padding: 12px; margin-top: 8px;">
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 12px;">
+                        Models real-world constraints: how many trades a small account can execute per day.
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label class="form-label" style="font-size: 0.8125rem;">Daily Capital Allocation %</label>
+                        <select id="daily-alloc-pct" class="form-select" style="background-color: #2C2C2E; color: #FFFFFF;">
+                            <option value="0.40">40% (Conservative)</option>
+                            <option value="0.60" selected>60% (Default)</option>
+                            <option value="0.80">80% (Aggressive)</option>
+                            <option value="1.00">100% (No Limit)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label class="form-label" style="font-size: 0.8125rem;">Daily Recycle Turns</label>
+                        <select id="daily-recycle-turns" class="form-select" style="background-color: #2C2C2E; color: #FFFFFF;">
+                            <option value="1">1x (Very Conservative)</option>
+                            <option value="2" selected>2x (Default - Moderate)</option>
+                            <option value="3">3x (Aggressive)</option>
+                        </select>
+                        <div style="font-size: 0.6875rem; color: var(--text-muted); margin-top: 4px;">
+                            How many times capital can be reused in a day (models settlement).
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label class="form-label" style="font-size: 0.8125rem;">Max Trades Per Day <span style="color: var(--text-muted); font-weight: 400;">(optional)</span></label>
+                        <input type="number" id="max-trades-per-day" class="form-input" placeholder="Auto (25)" min="1" max="50">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.8125rem;">
+                            <input type="checkbox" id="include-slippage" checked style="width: 16px; height: 16px; cursor: pointer;">
+                            <span>Include Slippage/Fees</span>
+                        </label>
+                    </div>
+                </div>
+            </details>
             
             <div class="form-divider" style="border-top: 1px solid var(--border-color); margin: 20px 0;"></div>
             
@@ -645,7 +690,15 @@ async function runHistoricalSimulation() {
             portfolio_start: parseFloat(document.getElementById('portfolio-start').value) || 3000,
             risk_per_trade_mode: document.getElementById('risk-mode').value,
             risk_per_trade_value: parseFloat(document.getElementById('risk-value').value) || 300,
+            daily_alloc_pct: parseFloat(document.getElementById('daily-alloc-pct').value) || 0.60,
+            daily_recycle_turns: parseInt(document.getElementById('daily-recycle-turns').value) || 2,
+            include_slippage: document.getElementById('include-slippage').checked,
         };
+        
+        const maxTradesPerDay = document.getElementById('max-trades-per-day').value;
+        if (maxTradesPerDay) {
+            payload.max_trades_per_day = parseInt(maxTradesPerDay);
+        }
         
         const response = await fetch('/api/simulate/historical', {
             method: 'POST',
@@ -1983,9 +2036,9 @@ function renderExactTradesParams(data) {
 
 function applyPreset(preset) {
     const presets = {
-        conservative: { portfolio: 3000, days: 30, riskMode: 'percent', riskValue: 0.03, compound: true },
-        moderate: { portfolio: 5000, days: 30, riskMode: 'percent', riskValue: 0.05, compound: true },
-        aggressive: { portfolio: 10000, days: 30, riskMode: 'percent', riskValue: 0.10, compound: true },
+        conservative: { portfolio: 3000, days: 30, riskMode: 'percent_start', riskValue: 3, compound: true },
+        moderate: { portfolio: 5000, days: 30, riskMode: 'percent_start', riskValue: 5, compound: true },
+        aggressive: { portfolio: 10000, days: 30, riskMode: 'percent_start', riskValue: 10, compound: true },
         fixed300: { portfolio: 3000, days: 30, riskMode: 'fixed', riskValue: 300, compound: true }
     };
     
@@ -2005,28 +2058,25 @@ function applyPreset(preset) {
 function updateRiskPlaceholder() {
     const mode = document.getElementById('risk-mode').value;
     const input = document.getElementById('risk-value');
-    const warning = document.getElementById('actual-mode-warning');
+    const helpText = document.getElementById('risk-mode-help');
     
-    if (mode === 'actual') {
-        input.disabled = true;
-        input.placeholder = 'Uses actual trade sizes';
-        input.style.opacity = '0.5';
-        warning.style.display = 'block';
-    } else if (mode === 'percent') {
+    if (mode === 'percent_start' || mode === 'percent_current') {
         input.disabled = false;
         input.style.opacity = '1';
         input.step = '1';
-        input.placeholder = '3 for 3%';
-        warning.style.display = 'none';
+        input.placeholder = '10 for 10%';
         if (parseFloat(input.value) > 100) {
-            input.value = 3;
+            input.value = 10;
         }
+        helpText.textContent = mode === 'percent_start' 
+            ? 'Flat bet: Uses starting portfolio. Position size stays constant.' 
+            : 'Compounding: Uses current balance. Position size grows/shrinks with balance.';
     } else {
         input.disabled = false;
         input.style.opacity = '1';
         input.step = '10';
         input.placeholder = '300';
-        warning.style.display = 'none';
+        helpText.textContent = 'Fixed: Same dollar amount per trade regardless of balance.';
     }
 }
 

@@ -59,6 +59,21 @@ KELLY_SAFETY_FRACTION = 0.5  # Use Half Kelly by default
 # Monte Carlo settings
 MONTE_CARLO_ITERATIONS = 1000
 
+# =========================================================================
+# DAILY REALISM CONSTRAINTS (Small Account Simulation)
+# =========================================================================
+# These model the reality that small accounts can't take unlimited trades/day
+
+# Daily capital allocation - how much of portfolio can be deployed per day
+DAILY_ALLOC_PCT = 0.60  # 60% of account available to deploy
+
+# Daily recycle turns - how many times can capital be reused in a day
+# (models settlement, overlapping trades, capital efficiency)
+DAILY_RECYCLE_TURNS_DEFAULT = 2  # Capital can cycle ~2x per day on average
+
+# Hard cap on trades per day (safety limit)
+MAX_TRADES_PER_DAY_HARD = 25
+
 
 def get_asset_multiplier(asset_type: str) -> int:
     """Get the contract multiplier for an asset type."""
@@ -1537,26 +1552,47 @@ def run_exact_historical_simulation(
     entity_type: Literal["user", "channel"],
     entity_id: str,
     portfolio_start: float = DEFAULT_PORTFOLIO,
-    risk_per_trade_mode: Literal["fixed", "percent", "actual"] = "fixed",
+    risk_per_trade_mode: Literal["fixed", "percent", "percent_start", "percent_current"] = "fixed",
     risk_per_trade_value: float = DEFAULT_RISK_VALUE,
+    daily_alloc_pct: float = DAILY_ALLOC_PCT,
+    daily_recycle_turns: int = DAILY_RECYCLE_TURNS_DEFAULT,
+    max_trades_per_day: Optional[int] = None,
+    include_slippage: bool = True,
 ) -> Dict[str, Any]:
     """
-    Run an EXACT HISTORICAL simulation - replays ACTUAL individual trades from the database.
+    Run an EXACT HISTORICAL simulation - replays ACTUAL individual trades from the database
+    with REALISTIC constraints for small accounts.
     
     This uses the REAL trade history with each trade's actual P&L percentage,
-    not averages. Shows exactly what would have happened if you followed
-    each specific trade with your position sizing.
+    modeling what would happen if you tried to follow trades with your portfolio size.
+    
+    Industry-Grade Features:
+    - Position sizing (fixed $ / percent of start / percent of current)
+    - Daily capital constraints (models settlement, overlapping trades)
+    - Affordability filtering (skip trades you can't afford)
+    - Transparent skip reasons with full audit trail
     
     Args:
         entity_type: "user" or "channel"
         entity_id: Username or channel name
         portfolio_start: Starting portfolio value
-        risk_per_trade_mode: "fixed" (dollar amount), "percent" (of balance), or "actual" (use real trade values)
-        risk_per_trade_value: Risk amount per trade (ignored if mode is "actual")
+        risk_per_trade_mode: 
+            - "fixed": Fixed dollar amount per trade
+            - "percent" or "percent_start": Percentage of STARTING balance (flat bet)
+            - "percent_current": Percentage of CURRENT balance (compounding)
+        risk_per_trade_value: Risk amount (dollars for fixed, percentage for percent modes)
+        daily_alloc_pct: Percentage of balance available for daily deployment (default 60%)
+        daily_recycle_turns: How many times capital can be reused per day (default 2)
+        max_trades_per_day: Optional hard cap on trades per day
+        include_slippage: Whether to apply slippage model (default True)
     
     Returns:
-        Dict with actual trade-by-trade results including ticker and dates
+        Dict with trade-by-trade results, daily stats, skip reasons, and audit info
     """
+    # Backward compatibility: "percent" maps to "percent_start"
+    if risk_per_trade_mode == "percent":
+        risk_per_trade_mode = "percent_start"
+    
     # Fetch actual trade history
     if entity_type == "user":
         trades = fetch_user_trade_history(entity_id)
@@ -1582,7 +1618,7 @@ def run_exact_historical_simulation(
     avg_position_size = sum(actual_position_values) / len(actual_position_values) if actual_position_values else 0
     median_position_size = sorted(actual_position_values)[len(actual_position_values) // 2] if actual_position_values else 0
     
-    # Simulate each actual trade
+    # Simulate each actual trade with DAILY REALISM constraints
     balance = portfolio_start
     trade_breakdown = []
     equity_curve = [portfolio_start]  # Start with initial balance
@@ -1596,76 +1632,124 @@ def run_exact_historical_simulation(
     max_drawdown = 0
     max_drawdown_pct = 0
     
-    # Track skipped trades
+    # Track skipped trades with categorized reasons
     skipped_trades = []
+    skipped_by_reason = {
+        'unsupported_type': 0,
+        'cannot_afford': 0,
+        'below_minimum': 0,
+        'daily_capacity': 0,
+        'daily_trade_limit': 0,
+        'missing_data': 0
+    }
     executed_trades_count = 0
+    
+    # =========================================================================
+    # DAILY REALISM TRACKING
+    # =========================================================================
+    daily_stats = {}  # {date: {'executed': int, 'skipped': int, 'spent': float}}
+    current_date = None
+    daily_spent = 0
+    daily_executed = 0
+    daily_trade_limit = max_trades_per_day or MAX_TRADES_PER_DAY_HARD
     
     for i, trade in enumerate(trades, 1):
         trade_start_balance = balance
+        
+        # Extract trade date for daily tracking
+        trade_date = trade.closed_at[:10] if trade.closed_at else None
+        
+        # Reset daily counters when date changes
+        if trade_date != current_date:
+            if current_date is not None:
+                daily_stats[current_date] = {
+                    'executed': daily_executed,
+                    'spent': daily_spent,
+                    'daily_capacity': balance * daily_alloc_pct * daily_recycle_turns
+                }
+            current_date = trade_date
+            daily_spent = 0
+            daily_executed = 0
+        
+        # Calculate daily spend capacity based on current balance
+        daily_spend_capacity = balance * daily_alloc_pct * daily_recycle_turns
         
         # Calculate actual position value for this trade (what the original trader used)
         multiplier = get_asset_multiplier(trade.asset_type)
         actual_position_value = trade.open_price * trade.quantity * multiplier if trade.open_price else 0
         
-        # Calculate simulated position size based on mode
+        # =========================================================================
+        # STEP 1: VALIDATE TRADE TYPE (Long options + stocks only)
+        # =========================================================================
         skip_reason = None
         sim_quantity = 0
-        budget = 0  # Initialize budget
+        budget = 0
+        sim_position_size = 0
         
-        if risk_per_trade_mode == "actual":
-            # Use actual trade value from database - replicate real position sizes
-            sim_position_size = actual_position_value
-            sim_quantity = trade.quantity
+        # Validate asset type
+        asset_type = (trade.asset_type or '').lower()
+        if asset_type == 'option':
+            # For options, we assume all are long BTO (debit) trades
+            if not trade.open_price or trade.open_price <= 0:
+                skip_reason = "Missing or invalid option premium"
+                skipped_by_reason['missing_data'] += 1
+            elif not trade.quantity or trade.quantity <= 0:
+                skip_reason = "Missing or invalid quantity"
+                skipped_by_reason['missing_data'] += 1
+        elif asset_type == 'stock':
+            if not trade.open_price or trade.open_price <= 0:
+                skip_reason = "Missing or invalid stock price"
+                skipped_by_reason['missing_data'] += 1
+            elif not trade.quantity or trade.quantity <= 0:
+                skip_reason = "Missing or invalid quantity"
+                skipped_by_reason['missing_data'] += 1
         else:
-            # =========================================================================
-            # REALISTIC CONSTRAINTS (Industry-Grade) - FIXED COMPOUNDING BUG
-            # =========================================================================
-            # KEY FIX: Base position sizing on STARTING portfolio, not current balance
-            # This prevents exponential runaway growth from compounding
-            
-            # Calculate budget based on mode - USE STARTING PORTFOLIO as base
-            if risk_per_trade_mode == "fixed":
-                budget = risk_per_trade_value  # Fixed dollar amount
-            elif risk_per_trade_mode == "percent":
-                # CRITICAL: Use portfolio_start, NOT balance (prevents compounding fantasy)
-                budget = portfolio_start * (risk_per_trade_value / 100)
-            else:
-                budget = portfolio_start * risk_per_trade_value
-            
-            # 1. Cap at MAX_SINGLE_POSITION_PCT of STARTING portfolio
-            budget = min(budget, portfolio_start * MAX_SINGLE_POSITION_PCT)
-            
-            # 2. Cap at MAX_POSITION_DOLLARS (broker/liquidity hard limit)
-            budget = min(budget, MAX_POSITION_DOLLARS)
-            
-            # 3. Cannot exceed current balance (can't trade with money you don't have)
-            budget = min(budget, balance * 0.95)  # Leave 5% buffer
-            
-            # 4. Ensure minimum position size
-            if budget < MIN_POSITION_DOLLARS:
-                skip_reason = f"Budget ${budget:.2f} below minimum ${MIN_POSITION_DOLLARS}"
-                skipped_trades.append({
-                    'trade_num': i,
-                    'ticker': trade.ticker,
-                    'asset_type': trade.asset_type,
-                    'closed_at': trade.closed_at[:10] if trade.closed_at else '',
-                    'original_position': round(actual_position_value, 2),
-                    'required_budget': round(trade.open_price * multiplier, 2) if trade.open_price else 0,
-                    'available_budget': round(budget, 2),
-                    'reason': skip_reason,
-                    'missed_pnl_pct': round(trade.pnl_percent, 1)
-                })
-                continue
-            
-            # Calculate affordable quantity based on actual trade price
-            sim_quantity, sim_position_size, skip_reason = calculate_affordable_quantity(
-                budget=budget,
-                price_per_share=trade.open_price,
-                asset_type=trade.asset_type
-            )
+            skip_reason = f"Unsupported trade type: {asset_type or 'unknown'} (only long options & stocks supported)"
+            skipped_by_reason['unsupported_type'] += 1
         
-        # Handle skipped trades
         if skip_reason:
+            skipped_trades.append({
+                'trade_num': i,
+                'ticker': trade.ticker,
+                'asset_type': trade.asset_type,
+                'closed_at': trade.closed_at[:10] if trade.closed_at else '',
+                'original_position': round(actual_position_value, 2),
+                'required_budget': 0,
+                'available_budget': 0,
+                'daily_spend_remaining': round(daily_spend_capacity - daily_spent, 2),
+                'reason': skip_reason,
+                'missed_pnl_pct': round(trade.pnl_percent, 1) if trade.pnl_percent else 0
+            })
+            continue
+        
+        # =========================================================================
+        # STEP 2: POSITION SIZING (budget calculation)
+        # =========================================================================
+        if risk_per_trade_mode == "fixed":
+            budget = risk_per_trade_value  # Fixed dollar amount
+        elif risk_per_trade_mode == "percent_start":
+            # Use STARTING portfolio (flat bet, no compounding)
+            budget = portfolio_start * (risk_per_trade_value / 100)
+        elif risk_per_trade_mode == "percent_current":
+            # Use CURRENT balance (allows compounding)
+            budget = balance * (risk_per_trade_value / 100)
+        else:
+            budget = portfolio_start * (risk_per_trade_value / 100)
+        
+        # Apply realistic caps
+        # 1. Cap at MAX_SINGLE_POSITION_PCT of CURRENT balance (not start)
+        budget = min(budget, balance * MAX_SINGLE_POSITION_PCT)
+        
+        # 2. Cap at MAX_POSITION_DOLLARS (broker/liquidity hard limit)
+        budget = min(budget, MAX_POSITION_DOLLARS)
+        
+        # 3. Cannot exceed current balance (can't trade with money you don't have)
+        budget = min(budget, balance * 0.95)  # Leave 5% buffer
+        
+        # 4. Ensure minimum position size
+        if budget < MIN_POSITION_DOLLARS:
+            skip_reason = f"Budget ${budget:.2f} below minimum ${MIN_POSITION_DOLLARS}"
+            skipped_by_reason['below_minimum'] += 1
             skipped_trades.append({
                 'trade_num': i,
                 'ticker': trade.ticker,
@@ -1674,33 +1758,101 @@ def run_exact_historical_simulation(
                 'original_position': round(actual_position_value, 2),
                 'required_budget': round(trade.open_price * multiplier, 2) if trade.open_price else 0,
                 'available_budget': round(budget, 2),
+                'daily_spend_remaining': round(daily_spend_capacity - daily_spent, 2),
                 'reason': skip_reason,
-                'missed_pnl_pct': round(trade.pnl_percent, 1)
+                'missed_pnl_pct': round(trade.pnl_percent, 1) if trade.pnl_percent else 0
             })
-            # Don't update equity curve for skipped trades - just continue
             continue
         
+        # Calculate affordable quantity based on actual trade price
+        sim_quantity, sim_position_size, skip_reason = calculate_affordable_quantity(
+            budget=budget,
+            price_per_share=trade.open_price,
+            asset_type=trade.asset_type
+        )
+        
+        if skip_reason:
+            skipped_by_reason['cannot_afford'] += 1
+            skipped_trades.append({
+                'trade_num': i,
+                'ticker': trade.ticker,
+                'asset_type': trade.asset_type,
+                'closed_at': trade.closed_at[:10] if trade.closed_at else '',
+                'original_position': round(actual_position_value, 2),
+                'required_budget': round(trade.open_price * multiplier, 2) if trade.open_price else 0,
+                'available_budget': round(budget, 2),
+                'daily_spend_remaining': round(daily_spend_capacity - daily_spent, 2),
+                'reason': skip_reason,
+                'missed_pnl_pct': round(trade.pnl_percent, 1) if trade.pnl_percent else 0
+            })
+            continue
+        
+        # =========================================================================
+        # STEP 3: DAILY REALISM CHECKS
+        # =========================================================================
+        # Check daily trade count limit
+        if daily_executed >= daily_trade_limit:
+            skip_reason = f"Max trades/day cap reached ({daily_trade_limit})"
+            skipped_by_reason['daily_trade_limit'] += 1
+            skipped_trades.append({
+                'trade_num': i,
+                'ticker': trade.ticker,
+                'asset_type': trade.asset_type,
+                'closed_at': trade.closed_at[:10] if trade.closed_at else '',
+                'original_position': round(actual_position_value, 2),
+                'required_budget': round(sim_position_size, 2),
+                'available_budget': round(budget, 2),
+                'daily_spend_remaining': round(daily_spend_capacity - daily_spent, 2),
+                'reason': skip_reason,
+                'missed_pnl_pct': round(trade.pnl_percent, 1) if trade.pnl_percent else 0
+            })
+            continue
+        
+        # Check daily capital capacity
+        if daily_spent + sim_position_size > daily_spend_capacity:
+            skip_reason = f"Daily capacity reached (spent ${daily_spent:.0f} of ${daily_spend_capacity:.0f})"
+            skipped_by_reason['daily_capacity'] += 1
+            skipped_trades.append({
+                'trade_num': i,
+                'ticker': trade.ticker,
+                'asset_type': trade.asset_type,
+                'closed_at': trade.closed_at[:10] if trade.closed_at else '',
+                'original_position': round(actual_position_value, 2),
+                'required_budget': round(sim_position_size, 2),
+                'available_budget': round(budget, 2),
+                'daily_spend_remaining': round(daily_spend_capacity - daily_spent, 2),
+                'reason': skip_reason,
+                'missed_pnl_pct': round(trade.pnl_percent, 1) if trade.pnl_percent else 0
+            })
+            continue
+        
+        # =========================================================================
+        # STEP 4: EXECUTE TRADE
+        # =========================================================================
+        # Update daily tracking
+        daily_spent += sim_position_size
+        daily_executed += 1
         executed_trades_count += 1
         
         # Use actual P&L percent from the trade
-        pnl_pct = trade.pnl_percent / 100  # Convert to decimal
+        pnl_pct = trade.pnl_percent / 100 if trade.pnl_percent else 0  # Convert to decimal
         
         # =========================================================================
-        # SLIPPAGE MODEL (Industry-Grade)
+        # STEP 5: SLIPPAGE MODEL (Dollar-Cost Approach)
         # =========================================================================
-        # Slippage increases with position size (market impact)
-        slippage_pct = SLIPPAGE_BASE_PCT + (sim_position_size / 1000) * SLIPPAGE_SIZE_FACTOR
-        slippage_pct = min(slippage_pct, 0.03)  # Cap at 3% max slippage
-        
-        # Apply slippage: reduces gains, increases losses
-        if pnl_pct > 0:
-            adjusted_pnl_pct = pnl_pct - slippage_pct
+        if include_slippage:
+            slippage_pct = SLIPPAGE_BASE_PCT + (sim_position_size / 1000) * SLIPPAGE_SIZE_FACTOR
+            slippage_pct = min(slippage_pct, 0.03)  # Cap at 3% max slippage
+            slippage_cost = sim_position_size * slippage_pct
         else:
-            adjusted_pnl_pct = pnl_pct - slippage_pct  # Makes loss worse
+            slippage_cost = 0
         
-        is_win = adjusted_pnl_pct > 0  # Only positive P&L counts as win
+        # Calculate P&L: raw P&L minus slippage cost
+        raw_pnl = sim_position_size * pnl_pct
+        trade_pnl = raw_pnl - slippage_cost
         
-        trade_pnl = sim_position_size * adjusted_pnl_pct
+        is_win = trade_pnl > 0  # Only positive P&L counts as win
+        
         balance += trade_pnl
         balance = max(0, balance)
         
@@ -1721,7 +1873,7 @@ def run_exact_historical_simulation(
             total_win_pnl += trade_pnl
         else:
             losses += 1
-            total_loss_pnl += trade_pnl
+            total_loss_pnl += abs(trade_pnl)
         
         # Format closed_at date for display
         closed_date = trade.closed_at[:10] if trade.closed_at else ''
@@ -1735,17 +1887,26 @@ def run_exact_historical_simulation(
             'sim_quantity': sim_quantity,
             'entry_price': round(trade.open_price, 4) if trade.open_price else 0,
             'actual_position_value': round(actual_position_value, 2),
-            'actual_pnl_pct': round(trade.pnl_percent, 1),
-            'actual_pnl': round(trade.pnl, 2),
+            'actual_pnl_pct': round(trade.pnl_percent, 1) if trade.pnl_percent else 0,
+            'actual_pnl': round(trade.pnl, 2) if trade.pnl else 0,
             'start_balance': round(trade_start_balance, 2),
             'position_size': round(sim_position_size, 2),
             'result': 'WIN' if is_win else 'LOSS',
             'pnl_pct': round(pnl_pct * 100, 1),
+            'slippage_cost': round(slippage_cost, 2),
             'trade_pnl': round(trade_pnl, 2),
             'end_balance': round(balance, 2),
             'cumulative_return_pct': round(((balance - portfolio_start) / portfolio_start) * 100, 1),
             'drawdown_pct': round(current_drawdown_pct, 1)
         })
+    
+    # Save last day's stats
+    if current_date is not None:
+        daily_stats[current_date] = {
+            'executed': daily_executed,
+            'spent': daily_spent,
+            'daily_capacity': balance * daily_alloc_pct * daily_recycle_turns
+        }
     
     final_balance = balance
     total_profit = final_balance - portfolio_start
@@ -1756,9 +1917,17 @@ def run_exact_historical_simulation(
     avg_win_pnl = total_win_pnl / wins if wins > 0 else 0
     avg_loss_pnl = total_loss_pnl / losses if losses > 0 else 0
     win_rate = (wins / executed_trades_count * 100) if executed_trades_count > 0 else 0
+    profit_factor = (total_win_pnl / total_loss_pnl) if total_loss_pnl > 0 else float('inf')
+    expectancy_dollars = (total_win_pnl - total_loss_pnl) / executed_trades_count if executed_trades_count > 0 else 0
     
     # Calculate average simulated position size
     avg_sim_position = sum(t['position_size'] for t in trade_breakdown) / len(trade_breakdown) if trade_breakdown else 0
+    
+    # Daily stats summary
+    trading_days = len(daily_stats)
+    daily_executed_counts = [d['executed'] for d in daily_stats.values()]
+    avg_trades_per_day = sum(daily_executed_counts) / trading_days if trading_days > 0 else 0
+    max_trades_in_a_day = max(daily_executed_counts) if daily_executed_counts else 0
     
     # Get date range
     first_trade_date = trades[0].closed_at[:10] if trades else ''
@@ -1884,10 +2053,12 @@ def run_exact_historical_simulation(
         'params_used': {
             'portfolio_start': portfolio_start,
             'risk_per_trade_mode': risk_per_trade_mode,
-            'risk_per_trade_value': risk_per_trade_value if risk_per_trade_mode in ['fixed', 'actual'] else round(risk_per_trade_value, 1),
-            'risk_per_trade_display': f"${risk_per_trade_value:,.0f}" if risk_per_trade_mode == 'fixed' else (
-                "Original trade sizes" if risk_per_trade_mode == 'actual' else f"{risk_per_trade_value}%"
-            ),
+            'risk_per_trade_value': risk_per_trade_value if risk_per_trade_mode == 'fixed' else round(risk_per_trade_value, 1),
+            'risk_per_trade_display': f"${risk_per_trade_value:,.0f}" if risk_per_trade_mode == 'fixed' else f"{risk_per_trade_value}%",
+            'daily_alloc_pct': daily_alloc_pct,
+            'daily_recycle_turns': daily_recycle_turns,
+            'max_trades_per_day': max_trades_per_day or MAX_TRADES_PER_DAY_HARD,
+            'include_slippage': include_slippage,
         },
         
         'summary': {
@@ -1896,7 +2067,7 @@ def run_exact_historical_simulation(
             'total_return_pct': round(total_return_pct, 1),
             'total_trades': total_trades,
             'executed_trades': executed_trades_count,
-            'skipped_trades': len(skipped_trades),
+            'skipped_trades_count': len(skipped_trades),
             'wins': wins,
             'losses': losses,
             'total_win_pnl': round(total_win_pnl, 2),
@@ -1908,10 +2079,22 @@ def run_exact_historical_simulation(
             'max_drawdown': round(max_drawdown, 2),
             'max_drawdown_pct': round(max_drawdown_pct, 1),
             'peak_balance': round(peak_balance, 2),
+            'win_rate': round(win_rate, 1),
+            'profit_factor': round(profit_factor, 2) if profit_factor != float('inf') else 999.99,
+            'expectancy_dollars': round(expectancy_dollars, 2),
         },
         
+        'daily_stats': {
+            'trading_days': trading_days,
+            'avg_trades_per_day': round(avg_trades_per_day, 1),
+            'max_trades_in_a_day': max_trades_in_a_day,
+            'daily_spend_capacity_formula': f"balance * {daily_alloc_pct:.0%} * {daily_recycle_turns}",
+        },
+        
+        'skipped_by_reason': skipped_by_reason,
+        
         'equity_curve': equity_curve,
-        'skipped_trades': skipped_trades,
+        'skipped_trades': skipped_trades[:50],  # Limit to 50 for response size
         'recommendations': recommendations,
         'trade_breakdown': trade_breakdown
     }

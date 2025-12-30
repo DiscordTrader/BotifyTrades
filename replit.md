@@ -29,7 +29,18 @@ Core technologies include `discord.py-self` and `webull`. It employs a true dual
 - Brokers are wired at startup via `set_broker_clients()` for real-time market data access
 
 ### Feature Specifications
-The system supports a dual-mode channel system for simultaneous execution and tracking with FIFO-based P&L tracking, and Multi-Broker Execution across multiple accounts with per-channel broker selection. It handles market orders, comprehensive PNL page filtering, and per-channel position sizing. A Portfolio Simulation Engine projects portfolio growth with realistic constraints (25% max position, slippage model, log-scaled risk scores). Per-channel risk settings allow independent operation, supporting 3-tier profit targets with partial exits and trailing stops. The Trade Monitor feature automatically detects and posts broker-executed trades as BTO/STC signals to Discord. A debug report system allows users to submit filtered error logs to the admin.
+The system supports a dual-mode channel system for simultaneous execution and tracking with FIFO-based P&L tracking, and Multi-Broker Execution across multiple accounts with per-channel broker selection. It handles market orders, comprehensive PNL page filtering, and per-channel position sizing. Per-channel risk settings allow independent operation, supporting 3-tier profit targets with partial exits and trailing stops. The Trade Monitor feature automatically detects and posts broker-executed trades as BTO/STC signals to Discord. A debug report system allows users to submit filtered error logs to the admin.
+
+**Portfolio Simulation Engine (Enhanced)**: Located in `services/simulation.py::run_exact_historical_simulation()`. Projects YOUR portfolio growth using YOUR position sizing with industry-standard realism. Key features:
+- **Position sizing modes**: `fixed` ($ per trade), `percent_start` (flat % of starting portfolio), `percent_current` (compounding % of current balance)
+- **Trade validation**: Long options + stocks only with categorized skip reasons (unsupported_type, cannot_afford, below_minimum, daily_capacity, daily_trade_limit, missing_data)
+- **Daily realism model**: `daily_alloc_pct` (default 60%), `daily_recycle_turns` (default 2x), `max_trades_per_day` (hard limit 25)
+- **Daily capacity formula**: `balance * daily_alloc_pct * daily_recycle_turns`
+- **Dollar-cost slippage model**: Position-based scaling with base + size factor
+- **Comprehensive skip tracking**: Every skipped trade recorded with reason and statistics
+- **Daily stats**: Trading days, avg trades/day, max trades in a day
+- **API endpoint**: `/api/simulate/historical`
+- **Backward compatibility**: `percent` maps to `percent_start`
 
 **Copy Trader 1:1 Performance Report**: A portfolio-INDEPENDENT analysis tool that evaluates a trader's actual performance using their original trade sizes. Located in `services/simulation.py::run_copy_1to1_report()`. Key features:
 - Uses original trade quantities from database (NOT user's portfolio)
