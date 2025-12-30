@@ -29,7 +29,16 @@ Core technologies include `discord.py-self` and `webull`. It employs a true dual
 - Brokers are wired at startup via `set_broker_clients()` for real-time market data access
 
 ### Feature Specifications
-The system supports a dual-mode channel system for simultaneous execution and tracking with FIFO-based P&L tracking, and Multi-Broker Execution across multiple accounts with per-channel broker selection. It handles market orders, comprehensive PNL page filtering, and per-channel position sizing. A Portfolio Simulation Engine projects portfolio growth. Per-channel risk settings allow independent operation, supporting 3-tier profit targets with partial exits and trailing stops. The Trade Monitor feature automatically detects and posts broker-executed trades as BTO/STC signals to Discord. A debug report system allows users to submit filtered error logs to the admin.
+The system supports a dual-mode channel system for simultaneous execution and tracking with FIFO-based P&L tracking, and Multi-Broker Execution across multiple accounts with per-channel broker selection. It handles market orders, comprehensive PNL page filtering, and per-channel position sizing. A Portfolio Simulation Engine projects portfolio growth with realistic constraints (25% max position, slippage model, log-scaled risk scores). Per-channel risk settings allow independent operation, supporting 3-tier profit targets with partial exits and trailing stops. The Trade Monitor feature automatically detects and posts broker-executed trades as BTO/STC signals to Discord. A debug report system allows users to submit filtered error logs to the admin.
+
+**Copy Trader 1:1 Performance Report**: A portfolio-INDEPENDENT analysis tool that evaluates a trader's actual performance using their original trade sizes. Located in `services/simulation.py::run_copy_1to1_report()`. Key features:
+- Uses original trade quantities from database (NOT user's portfolio)
+- Calculates capital requirements: `recommended_portfolio = peak_single_trade_outlay / risk_cap`
+- Performance metrics: return %, win rate, profit factor, expectancy, max drawdown, worst trade, max consecutive losses
+- Filters for long options only (skips stocks with "Unsupported" reason)
+- Optional slippage model: 0.5% base + size factor (capped at 3%)
+- Risk cap selector: 10% (Conservative) or 25% (Moderate)
+- API endpoint: `/api/simulate/copy1to1`
 
 **Dual-Action Channel Mappings (Admin Build)**: Channel mappings now support simultaneous execution AND signal forwarding via `execute_on_source` and `forward_enabled` flags. **Flexible Destination Types**: Mappings support two destination types: `webhook` (Discord webhook URL) or `channel` (Discord channel ID). When forwarding to a channel, the bot sends the signal directly to the destination channel using the Discord client. The `format_as_bto_stc` flag ensures signals are forwarded in BTO/STC format only. All mapping features are admin-only via `@admin_feature_required` decorator.
 
