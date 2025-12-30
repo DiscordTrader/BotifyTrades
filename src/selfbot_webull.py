@@ -6161,8 +6161,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         
         # Skip bot's own response messages SECOND (before any logging)
         # This prevents the bot from processing its own 🤖/📊/❌ messages
-        if self.user and message.author.id == self.user.id:
+        is_self_message = self.user and message.author.id == self.user.id
+        if is_self_message:
             content_preview = message.content.strip()[:50]
+            print(f"[DEBUG] Self-message detected: '{content_preview}' | ALLOW_SELF_MESSAGES={ALLOW_SELF_MESSAGES}")
             if content_preview.startswith(('🤖', '📊', '💡', '❌', '⚠️', '📰', 'pong')):
                 print(f"[Discord] ⏭️ Skipping own bot response: {content_preview}...")
                 return
@@ -6170,6 +6172,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 print(f"[Discord] ⏭️ YOUR message ignored! Enable 'Allow Self Messages' in Settings to test")
                 print(f"[Discord]    Content: {content_preview}...")
                 return
+            else:
+                print(f"[DEBUG] ✓ Self-message ALLOWED - continuing to process")
 
         # Now log only messages from monitored channels
         channel_name = getattr(message.channel, 'name', str(message.channel.id))
@@ -6185,15 +6189,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 return
         
         # Check channel-specific allowed users (if configured)
+        # Skip this check for self-messages when ALLOW_SELF_MESSAGES is enabled
         if channel_info and DATABASE_MODULE_AVAILABLE:
             try:
                 from gui_app import database as db
                 channel_internal_id = channel_info.get('id')
                 if channel_internal_id:
-                    is_allowed = db.is_user_allowed(channel_internal_id, str(message.author.id))
-                    if not is_allowed:
-                        print(f"[SKIP] Author {message.author.name} (ID:{message.author.id}) not in channel's allowed user list")
-                        return
+                    # Self-messages bypass the per-channel user filter when ALLOW_SELF_MESSAGES is True
+                    if is_self_message and ALLOW_SELF_MESSAGES:
+                        print(f"[DEBUG] Self-message bypasses per-channel user filter")
+                    else:
+                        is_allowed = db.is_user_allowed(channel_internal_id, str(message.author.id))
+                        if not is_allowed:
+                            print(f"[SKIP] Author {message.author.name} (ID:{message.author.id}) not in channel's allowed user list")
+                            return
             except Exception as e:
                 print(f"[WARN] Failed to check allowed users: {e}")
 
