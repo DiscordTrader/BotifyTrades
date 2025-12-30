@@ -46,16 +46,34 @@
                     </div>
                     
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
-                        <button onclick="runHistoricalSimulation()" class="btn" style="width: 100%; padding: 10px; font-size: 0.8125rem; font-weight: 600; background: linear-gradient(135deg, #8b5cf6, #6366f1); border: none;">
-                            📜 Replay Actual Trades
+                        <button onclick="runCopy1to1Report()" class="btn" style="width: 100%; padding: 10px; font-size: 0.8125rem; font-weight: 600; background: linear-gradient(135deg, #8b5cf6, #6366f1); border: none;">
+                            📋 Copy Trader 1:1
                         </button>
                         <button onclick="runRiskOptimizer()" class="btn" style="width: 100%; padding: 10px; font-size: 0.8125rem; font-weight: 600; background: linear-gradient(135deg, #10b981, #059669); border: none;">
                             🎯 Find Optimal Risk
                         </button>
                     </div>
                     
+                    <div id="copy1to1-options" style="display: none; margin-bottom: 10px; padding: 10px; background: rgba(139, 92, 246, 0.1); border-radius: 6px; border: 1px solid rgba(139, 92, 246, 0.3);">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px;">
+                            <div>
+                                <label style="font-size: 0.6875rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Risk Cap for Recommended Portfolio</label>
+                                <select id="copy1to1-risk-cap" class="form-select" style="padding: 6px; font-size: 0.75rem; background-color: #2C2C2E; color: #FFFFFF; border-radius: 4px;">
+                                    <option value="0.25" style="background-color: #2C2C2E;">25% (Moderate)</option>
+                                    <option value="0.10" style="background-color: #2C2C2E;">10% (Conservative)</option>
+                                </select>
+                            </div>
+                            <div style="display: flex; align-items: flex-end;">
+                                <label style="font-size: 0.6875rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                    <input type="checkbox" id="copy1to1-slippage" style="width: 14px; height: 14px;">
+                                    <span>Include Slippage/Fees</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div style="font-size: 0.6875rem; color: var(--text-muted); margin-bottom: 8px; padding: 6px; background: rgba(139, 92, 246, 0.1); border-radius: 4px;">
-                        <strong>📜 Replay Actual</strong>: Uses each trade's real P&L % with quantity-based sizing
+                        <strong>📋 Copy Trader 1:1</strong>: Performance report using original trades. Does NOT simulate your portfolio. Shows capital requirements.
                     </div>
                     <div style="font-size: 0.6875rem; color: var(--text-muted); margin-bottom: 10px; padding: 6px; background: rgba(16, 185, 129, 0.1); border-radius: 4px;">
                         <strong>🎯 Find Optimal Risk</strong>: Tests 1-25% position sizes to find best risk-adjusted returns
@@ -100,12 +118,8 @@
                     <input type="number" id="risk-value" class="form-input" value="300" min="1" step="10">
                     <select id="risk-mode" class="form-select" onchange="updateRiskPlaceholder()" style="background-color: #2C2C2E; color: #FFFFFF;">
                         <option value="fixed" style="background-color: #2C2C2E; color: #FFFFFF;">$ Fixed</option>
-                        <option value="percent" style="background-color: #2C2C2E; color: #FFFFFF;">% of Balance</option>
-                        <option value="actual" style="background-color: #2C2C2E; color: #FFFFFF;">Copy Exact Trades (ignores portfolio)</option>
+                        <option value="percent" style="background-color: #2C2C2E; color: #FFFFFF;">% of Starting Portfolio</option>
                     </select>
-                    <div id="actual-mode-warning" style="display: none; margin-top: 8px; padding: 8px 10px; background: rgba(245, 158, 11, 0.15); border-left: 3px solid #f59e0b; border-radius: 4px; font-size: 0.75rem; color: #fbbf24;">
-                        <strong>Note:</strong> This mode copies the original trader's exact position sizes regardless of your starting portfolio. Use "$ Fixed" or "% of Balance" for realistic simulations.
-                    </div>
                 </div>
             </div>
             
@@ -657,6 +671,166 @@ async function runHistoricalSimulation() {
         btns.forEach(btn => btn.disabled = false);
         btn.innerHTML = originalText;
     }
+}
+
+async function runCopy1to1Report() {
+    const entityId = document.getElementById('entity-id').value.trim();
+    if (!entityId) {
+        showToast('Please enter a ' + currentEntityType + ' name first', 'warning');
+        return;
+    }
+    
+    const optionsDiv = document.getElementById('copy1to1-options');
+    optionsDiv.style.display = optionsDiv.style.display === 'none' ? 'block' : 'block';
+    
+    const btns = document.querySelectorAll('#quick-simulate-section button');
+    btns.forEach(btn => btn.disabled = true);
+    const btn = btns[0];
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></span> Analyzing...';
+    
+    try {
+        const payload = {
+            entity_type: currentEntityType,
+            entity_id: entityId,
+            include_slippage: document.getElementById('copy1to1-slippage').checked,
+            risk_cap: parseFloat(document.getElementById('copy1to1-risk-cap').value) || 0.25,
+        };
+        
+        const response = await fetch('/api/simulate/copy1to1', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            showToast(data.error || 'Analysis failed', 'error');
+            return;
+        }
+        
+        displayCopy1to1Results(data);
+        showToast('Copy 1:1 Performance Report generated!', 'success');
+        
+    } catch (error) {
+        console.error('Copy 1:1 report error:', error);
+        showToast('Error generating report: ' + error.message, 'error');
+    } finally {
+        btns.forEach(btn => btn.disabled = false);
+        btn.innerHTML = originalText;
+    }
+}
+
+function displayCopy1to1Results(data) {
+    document.getElementById('results-placeholder').style.display = 'none';
+    document.getElementById('results-container').style.display = 'block';
+    document.getElementById('daily-breakdown-card').style.display = 'none';
+    document.getElementById('historical-breakdown-card').style.display = 'block';
+    
+    const perf = data.performance_summary;
+    const capital = data.capital_requirements;
+    const sizes = data.trade_size_stats;
+    const unsupported = data.unsupported_trades;
+    const params = data.params_used;
+    
+    const isProfit = perf.total_return_pct >= 0;
+    
+    document.getElementById('result-final-balance').textContent = '$' + capital.recommended_portfolio.toLocaleString(undefined, {minimumFractionDigits: 0});
+    document.getElementById('result-final-balance').className = 'stat-value';
+    document.getElementById('result-final-balance').closest('.stat-card').querySelector('.stat-label').textContent = 'Recommended Portfolio';
+    
+    document.getElementById('result-return').textContent = (perf.total_return_pct >= 0 ? '+' : '') + perf.total_return_pct.toFixed(1) + '%';
+    document.getElementById('result-return').className = 'stat-value ' + (isProfit ? 'success' : 'danger');
+    
+    document.getElementById('result-win-rate').textContent = perf.win_rate.toFixed(1) + '%';
+    document.getElementById('result-win-rate').className = 'stat-value ' + (perf.win_rate >= 50 ? 'success' : 'warning');
+    
+    document.getElementById('result-total-profit').textContent = '$' + perf.total_pnl_dollars.toLocaleString(undefined, {minimumFractionDigits: 2});
+    document.getElementById('result-total-profit').className = 'stat-value ' + (isProfit ? 'success' : 'danger');
+    
+    const statsHtml = `
+        <div class="card" style="padding: 20px; margin-bottom: 20px;">
+            <h4 style="margin: 0 0 16px 0; font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                <span>📋</span> Copy Trader 1:1 Performance Report
+            </h4>
+            <div style="padding: 10px 12px; background: rgba(139, 92, 246, 0.15); border-left: 3px solid #8b5cf6; border-radius: 4px; margin-bottom: 16px; font-size: 0.8125rem;">
+                <strong>Note:</strong> This report shows the trader's actual performance using their original trade sizes. It does NOT simulate your portfolio. Use "Find Optimal Risk" for portfolio simulation.
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+                <div class="mini-stat"><div class="mini-label">Total Return</div><div class="mini-value ${isProfit ? 'success' : 'danger'}">${(perf.total_return_pct >= 0 ? '+' : '')}${perf.total_return_pct.toFixed(1)}%</div></div>
+                <div class="mini-stat"><div class="mini-label">Win Rate</div><div class="mini-value">${perf.win_rate.toFixed(1)}%</div></div>
+                <div class="mini-stat"><div class="mini-label">Profit Factor</div><div class="mini-value">${perf.profit_factor.toFixed(2)}</div></div>
+                <div class="mini-stat"><div class="mini-label">Expectancy</div><div class="mini-value ${perf.expectancy_dollars >= 0 ? 'success' : 'danger'}">$${perf.expectancy_dollars.toFixed(0)}/trade</div></div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+                <div class="mini-stat"><div class="mini-label">Max Drawdown</div><div class="mini-value danger">-${perf.max_drawdown_pct.toFixed(1)}%</div></div>
+                <div class="mini-stat"><div class="mini-label">Worst Trade</div><div class="mini-value danger">$${perf.worst_trade_dollars.toLocaleString()}</div></div>
+                <div class="mini-stat"><div class="mini-label">Best Trade</div><div class="mini-value success">+$${perf.best_trade_dollars.toLocaleString()}</div></div>
+                <div class="mini-stat"><div class="mini-label">Max Losing Streak</div><div class="mini-value">${perf.max_consecutive_losses} trades</div></div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+                <div class="mini-stat"><div class="mini-label">Total Trades</div><div class="mini-value">${perf.total_trades}</div></div>
+                <div class="mini-stat"><div class="mini-label">Wins / Losses</div><div class="mini-value"><span class="success">${perf.wins}</span> / <span class="danger">${perf.losses}</span></div></div>
+                <div class="mini-stat"><div class="mini-label">Avg Win</div><div class="mini-value success">+${perf.avg_win_pct.toFixed(1)}%</div></div>
+                <div class="mini-stat"><div class="mini-label">Avg Loss</div><div class="mini-value danger">-${perf.avg_loss_pct.toFixed(1)}%</div></div>
+            </div>
+        </div>
+        
+        <div class="card" style="padding: 20px; margin-bottom: 20px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(59, 130, 246, 0.1));">
+            <h4 style="margin: 0 0 16px 0; font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                <span>💰</span> Capital Requirements to Follow This Trader
+            </h4>
+            
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 16px;">
+                <div style="padding: 16px; background: var(--bg-darker); border-radius: 8px; border-left: 4px solid #10b981;">
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">Recommended Portfolio (${capital.recommended_risk_cap} max position)</div>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: #10b981;">$${capital.recommended_portfolio.toLocaleString(undefined, {minimumFractionDigits: 0})}</div>
+                </div>
+                <div style="padding: 16px; background: var(--bg-darker); border-radius: 8px; border-left: 4px solid #f59e0b;">
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">Conservative Portfolio (10% max position)</div>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: #f59e0b;">$${capital.conservative_portfolio_10pct.toLocaleString(undefined, {minimumFractionDigits: 0})}</div>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+                <div class="mini-stat"><div class="mini-label">Peak Trade Outlay</div><div class="mini-value">$${capital.peak_single_trade_outlay.toLocaleString()}</div></div>
+                <div class="mini-stat"><div class="mini-label">P95 Trade Size</div><div class="mini-value">$${capital.p95_trade_outlay.toLocaleString()}</div></div>
+                <div class="mini-stat"><div class="mini-label">Median Trade Size</div><div class="mini-value">$${capital.median_trade_outlay.toLocaleString()}</div></div>
+                <div class="mini-stat"><div class="mini-label">Avg Trade Size</div><div class="mini-value">$${capital.avg_trade_outlay.toLocaleString()}</div></div>
+            </div>
+            
+            <div style="margin-top: 12px; padding: 8px 10px; background: rgba(245, 158, 11, 0.15); border-radius: 4px; font-size: 0.75rem; color: #fbbf24;">
+                ⚠️ ${capital.overlap_note}
+            </div>
+        </div>
+        
+        ${unsupported.count > 0 ? `
+        <div class="card" style="padding: 16px; margin-bottom: 20px;">
+            <h4 style="margin: 0 0 12px 0; font-size: 0.875rem; font-weight: 600; color: var(--text-secondary);">
+                ⚠️ Skipped Trades (${unsupported.count})
+            </h4>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">
+                ${unsupported.details.slice(0, 10).map(t => `<div style="padding: 4px 0; border-bottom: 1px solid var(--border-color);">${t.ticker}: ${t.reason}</div>`).join('')}
+                ${unsupported.count > 10 ? `<div style="padding: 8px 0; color: var(--info);">... and ${unsupported.count - 10} more</div>` : ''}
+            </div>
+        </div>
+        ` : ''}
+        
+        <div class="card" style="padding: 16px;">
+            <h4 style="margin: 0 0 12px 0; font-size: 0.875rem; font-weight: 600; color: var(--text-secondary);">Report Parameters</h4>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; font-size: 0.8125rem;">
+                <div><span style="color: var(--text-muted);">Slippage:</span> ${params.include_slippage ? params.slippage_model : 'Not applied'}</div>
+                <div><span style="color: var(--text-muted);">Risk Cap:</span> ${(params.risk_cap * 100).toFixed(0)}%</div>
+                <div><span style="color: var(--text-muted);">Trades Analyzed:</span> ${perf.total_trades}</div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('historical-breakdown-card').innerHTML = statsHtml;
 }
 
 async function runExactTradesSimulation() {
