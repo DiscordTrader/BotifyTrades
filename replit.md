@@ -51,6 +51,19 @@ The system supports a dual-mode channel system for simultaneous execution and tr
 - Risk cap selector: 10% (Conservative) or 25% (Moderate)
 - API endpoint: `/api/simulate/copy1to1`
 
+**Risk Optimizer (Industry-Grade)**: Located in `services/simulation.py::run_risk_optimizer()`. Finds optimal position sizing for a custom portfolio using the enhanced simulation engine. Key features:
+- **Candidate generation**: Tests 10 percent values (1-25%) AND 5 fixed-$ amounts (1-10% of portfolio)
+- **Sizing basis selector**: `percent_start` (flat bet - safer) or `percent_current` (compounding)
+- **Industry-grade scoring formula**: `(growth / drawdown) × (0.6 + 0.4 × coverage) × (1 / (1 + tail_penalty)) × stability`
+- **Guardrails**: Coverage ≥50%, Drawdown ≤60%, Balance >0 (disqualifies otherwise)
+- **Fallback mode**: When no candidate meets guardrails, selects highest coverage with warning
+- **Comprehensive comparison table**: Mode, risk value, executed/skipped trades, coverage %, profit factor, score
+- **Skip breakdown**: Affordability vs daily capacity reasons shown per candidate
+- **Rationale bullets**: Why this sizing, trade-offs, and notes with daily capacity info
+- **Daily realism params**: `daily_alloc_pct`, `daily_recycle_turns`, `max_trades_per_day`
+- **Slippage toggle**: ON by default (0.5% base + size factor)
+- **API endpoint**: `/api/simulate/optimizer`
+
 **Dual-Action Channel Mappings (Admin Build)**: Channel mappings now support simultaneous execution AND signal forwarding via `execute_on_source` and `forward_enabled` flags. **Flexible Destination Types**: Mappings support two destination types: `webhook` (Discord webhook URL) or `channel` (Discord channel ID). When forwarding to a channel, the bot sends the signal directly to the destination channel using the Discord client. The `format_as_bto_stc` flag ensures signals are forwarded in BTO/STC format only. All mapping features are admin-only via `@admin_feature_required` decorator.
 
 ### System Design Choices
