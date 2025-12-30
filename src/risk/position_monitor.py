@@ -115,7 +115,7 @@ class RiskDBAdapter:
                     cursor.execute('''
                         SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
                                c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
-                               c.risk_management_enabled
+                               c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct
                         FROM trades t
                         LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
                         WHERE t.symbol = ? AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
@@ -132,7 +132,7 @@ class RiskDBAdapter:
                 cursor.execute('''
                     SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
                            c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
-                           c.risk_management_enabled
+                           c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct
                     FROM trades t
                     LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
                     WHERE t.symbol = ? AND t.asset_type = 'stock'
@@ -156,6 +156,8 @@ class RiskDBAdapter:
                 pt3 = row[3] or 0
                 sl = row[4] or 0
                 trail = row[5] or 0
+                leave_runner_enabled = bool(row[9]) if len(row) > 9 and row[9] else False
+                leave_runner_pct = row[10] if len(row) > 10 and row[10] else 25.0
                 
                 # Risk management is enabled - return settings
                 return ChannelRiskSettings(
@@ -166,7 +168,9 @@ class RiskDBAdapter:
                     profit_target_3_pct=pt3,
                     stop_loss_pct=sl,
                     trailing_stop_pct=trail,
-                    trailing_activation_pct=row[6] or 15.0
+                    trailing_activation_pct=row[6] or 15.0,
+                    leave_runner_enabled=leave_runner_enabled,
+                    leave_runner_pct=leave_runner_pct
                 )
             
             return None

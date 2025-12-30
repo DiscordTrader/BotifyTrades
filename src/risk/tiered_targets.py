@@ -86,6 +86,23 @@ def evaluate_tiered_targets(
             )
     
     elif cache.tier2_hit and not cache.tier3_hit and t3 > 0 and pct_change >= t3:
+        # Check if leave_runner is enabled
+        if channel_settings.leave_runner_enabled and current_qty > 1:
+            runner_pct = channel_settings.leave_runner_pct / 100.0
+            runner_qty = max(1, int(current_qty * runner_pct))
+            exit_qty = current_qty - runner_qty
+            
+            if exit_qty > 0:
+                return ExitDecision(
+                    should_exit=True,
+                    reason=f"({pct_change:.2f}% >= {t3}%) - Selling {exit_qty}, leaving {runner_qty} as runner",
+                    exit_qty=exit_qty,
+                    is_partial=True,  # Mark as partial since we're leaving a runner
+                    risk_trigger='profit_target',
+                    tier_hit=3
+                )
+        
+        # No runner or only 1 contract - close all
         return ExitDecision(
             should_exit=True,
             reason=f"({pct_change:.2f}% >= {t3}%) - Closing remaining {current_qty}",

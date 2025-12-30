@@ -67,6 +67,8 @@ class ChannelRiskSettings:
     stop_loss_pct: float = 0.0
     trailing_stop_pct: float = 0.0
     trailing_activation_pct: float = 15.0
+    leave_runner_enabled: bool = False  # Keep portion after profit targets
+    leave_runner_pct: float = 25.0  # Percentage of position to leave as runner
     
     @property
     def has_tiered_targets(self) -> bool:
