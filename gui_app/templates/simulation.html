@@ -724,7 +724,7 @@ async function runCopy1to1Report() {
 
 function displayCopy1to1Results(data) {
     document.getElementById('results-placeholder').style.display = 'none';
-    document.getElementById('results-container').style.display = 'block';
+    document.getElementById('results-container').style.display = 'none';
     document.getElementById('daily-breakdown-card').style.display = 'none';
     document.getElementById('historical-breakdown-card').style.display = 'block';
     
@@ -735,19 +735,6 @@ function displayCopy1to1Results(data) {
     const params = data.params_used;
     
     const isProfit = perf.total_return_pct >= 0;
-    
-    document.getElementById('result-final-balance').textContent = '$' + capital.recommended_portfolio.toLocaleString(undefined, {minimumFractionDigits: 0});
-    document.getElementById('result-final-balance').className = 'stat-value';
-    document.getElementById('result-final-balance').closest('.stat-card').querySelector('.stat-label').textContent = 'Recommended Portfolio';
-    
-    document.getElementById('result-return').textContent = (perf.total_return_pct >= 0 ? '+' : '') + perf.total_return_pct.toFixed(1) + '%';
-    document.getElementById('result-return').className = 'stat-value ' + (isProfit ? 'success' : 'danger');
-    
-    document.getElementById('result-win-rate').textContent = perf.win_rate.toFixed(1) + '%';
-    document.getElementById('result-win-rate').className = 'stat-value ' + (perf.win_rate >= 50 ? 'success' : 'warning');
-    
-    document.getElementById('result-total-profit').textContent = '$' + perf.total_pnl_dollars.toLocaleString(undefined, {minimumFractionDigits: 2});
-    document.getElementById('result-total-profit').className = 'stat-value ' + (isProfit ? 'success' : 'danger');
     
     const statsHtml = `
         <div class="card" style="padding: 20px; margin-bottom: 20px;">
