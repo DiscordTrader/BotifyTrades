@@ -6399,6 +6399,151 @@ def get_all_broker_statuses() -> Dict[str, Dict]:
         return {}
 
 
+# ==================== BROKER STATES (Multi-Broker Dashboard) ====================
+
+def init_broker_states_table():
+    """Initialize broker_states table for caching broker balances."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS broker_states (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                broker_name TEXT NOT NULL UNIQUE,
+                country_code TEXT NOT NULL,
+                region TEXT NOT NULL,
+                is_connected INTEGER DEFAULT 0,
+                balance REAL DEFAULT 0,
+                buying_power REAL DEFAULT 0,
+                currency TEXT DEFAULT 'USD',
+                account_id TEXT,
+                account_number TEXT,
+                is_paper INTEGER DEFAULT 0,
+                last_sync_at TEXT,
+                sync_error TEXT,
+                extra_data TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error creating broker_states table: {e}")
+        return False
+
+
+def update_broker_state(broker_name: str, country_code: str, state: Dict) -> bool:
+    """Update or insert broker state (balance snapshot)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    region_map = {'US': 'USA', 'CA': 'Canada', 'IN': 'India'}
+    region = region_map.get(country_code, 'USA')
+    
+    try:
+        extra_data = json.dumps(state.get('extra', {})) if state.get('extra') else None
+        
+        cursor.execute('''
+            INSERT INTO broker_states (broker_name, country_code, region, is_connected, balance, 
+                buying_power, currency, account_id, account_number, is_paper, last_sync_at, sync_error, extra_data, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(broker_name) DO UPDATE SET
+                is_connected = excluded.is_connected,
+                balance = excluded.balance,
+                buying_power = excluded.buying_power,
+                currency = excluded.currency,
+                account_id = excluded.account_id,
+                account_number = excluded.account_number,
+                is_paper = excluded.is_paper,
+                last_sync_at = CURRENT_TIMESTAMP,
+                sync_error = excluded.sync_error,
+                extra_data = excluded.extra_data,
+                updated_at = CURRENT_TIMESTAMP
+        ''', (
+            broker_name, country_code, region,
+            1 if state.get('is_connected') else 0,
+            state.get('balance', 0),
+            state.get('buying_power', 0),
+            state.get('currency', 'USD'),
+            state.get('account_id'),
+            state.get('account_number'),
+            1 if state.get('is_paper') else 0,
+            state.get('sync_error'),
+            extra_data
+        ))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error updating broker state for {broker_name}: {e}")
+        return False
+
+
+def get_broker_state(broker_name: str) -> Optional[Dict]:
+    """Get current state for a specific broker."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT * FROM broker_states WHERE broker_name = ?', (broker_name,))
+        row = cursor.fetchone()
+        if row:
+            data = dict(row)
+            if data.get('extra_data'):
+                data['extra'] = json.loads(data['extra_data'])
+            return data
+        return None
+    except Exception as e:
+        print(f"[DATABASE] Error getting broker state: {e}")
+        return None
+
+
+def get_all_broker_states() -> List[Dict]:
+    """Get all broker states grouped by region."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT * FROM broker_states ORDER BY region, broker_name
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"[DATABASE] Error getting all broker states: {e}")
+        return []
+
+
+def get_broker_states_by_region(region: str) -> List[Dict]:
+    """Get broker states for a specific region (USA, Canada, India)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT * FROM broker_states WHERE region = ? ORDER BY broker_name
+        ''', (region,))
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"[DATABASE] Error getting broker states for region {region}: {e}")
+        return []
+
+
+def get_connected_brokers() -> List[Dict]:
+    """Get all connected brokers."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT * FROM broker_states WHERE is_connected = 1 ORDER BY region, broker_name
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"[DATABASE] Error getting connected brokers: {e}")
+        return []
+
+
 # ==================== SIGNAL DEDUPLICATION FUNCTIONS ====================
 
 def compute_signal_fingerprint(channel_id: str, ticker: str, entry_price: float, direction: str = 'BTO') -> str:

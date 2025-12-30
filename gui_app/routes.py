@@ -12187,6 +12187,157 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    # ============ MULTI-BROKER DASHBOARD API ============
+    
+    @app.route('/api/v2/broker-states', methods=['GET'])
+    @login_required
+    def api_get_all_broker_states():
+        """Get all broker states for multi-broker dashboard (no page reload)"""
+        try:
+            db.init_broker_states_table()
+            states = db.get_all_broker_states()
+            
+            grouped = {'USA': [], 'Canada': [], 'India': []}
+            for state in states:
+                region = state.get('region', 'USA')
+                if region in grouped:
+                    grouped[region].append(state)
+            
+            return jsonify({
+                'success': True,
+                'states': states,
+                'by_region': grouped,
+                'timestamp': datetime.now().isoformat()
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/v2/broker-states/<broker_name>', methods=['GET'])
+    @login_required
+    def api_get_broker_state(broker_name):
+        """Get state for a specific broker"""
+        try:
+            state = db.get_broker_state(broker_name)
+            return jsonify({'success': True, 'state': state})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/v2/broker-states/<broker_name>/refresh', methods=['POST'])
+    @login_required
+    def api_refresh_broker_state(broker_name):
+        """Refresh broker balance from live connection (auto-refresh endpoint)"""
+        try:
+            broker_config = {
+                'webull': {'country': 'US', 'currency': 'USD'},
+                'alpaca': {'country': 'US', 'currency': 'USD'},
+                'alpaca_paper': {'country': 'US', 'currency': 'USD'},
+                'tastytrade': {'country': 'US', 'currency': 'USD'},
+                'ibkr': {'country': 'US', 'currency': 'USD'},
+                'robinhood': {'country': 'US', 'currency': 'USD'},
+                'questrade': {'country': 'CA', 'currency': 'CAD'},
+                'dhanq': {'country': 'IN', 'currency': 'INR'},
+                'upstox': {'country': 'IN', 'currency': 'INR'},
+                'zerodha': {'country': 'IN', 'currency': 'INR'},
+            }
+            
+            config = broker_config.get(broker_name.lower())
+            if not config:
+                return jsonify({'success': False, 'error': f'Unknown broker: {broker_name}'})
+            
+            state = {
+                'is_connected': False,
+                'balance': 0,
+                'buying_power': 0,
+                'currency': config['currency'],
+                'is_paper': False,
+                'sync_error': None
+            }
+            
+            if _bot_instance:
+                import asyncio
+                loop = getattr(_bot_instance, 'loop', None)
+                
+                broker_attr_map = {
+                    'webull': 'broker',
+                    'alpaca': 'paper_broker',
+                    'alpaca_paper': 'paper_broker',
+                    'tastytrade': 'tastytrade_broker',
+                    'ibkr': 'ibkr_broker',
+                    'robinhood': 'robinhood_broker',
+                    'dhanq': 'dhanq_broker',
+                }
+                
+                broker_attr = broker_attr_map.get(broker_name.lower())
+                broker_instance = getattr(_bot_instance, broker_attr, None) if broker_attr else None
+                
+                if broker_instance and getattr(broker_instance, 'connected', False):
+                    state['is_connected'] = True
+                    state['is_paper'] = getattr(broker_instance, 'paper_trade', False) or 'paper' in broker_name.lower()
+                    
+                    if loop and loop.is_running():
+                        try:
+                            future = asyncio.run_coroutine_threadsafe(
+                                broker_instance.get_account_info(), loop
+                            )
+                            account_info = future.result(timeout=10)
+                            
+                            state['balance'] = account_info.get('portfolio_value', 0) or account_info.get('net_liquidation', 0) or account_info.get('available_balance', 0)
+                            state['buying_power'] = account_info.get('buying_power', 0) or account_info.get('cash', 0)
+                            state['account_id'] = account_info.get('account_id')
+                            state['account_number'] = account_info.get('account_number')
+                        except Exception as e:
+                            state['sync_error'] = str(e)
+            
+            db.init_broker_states_table()
+            db.update_broker_state(broker_name, config['country'], state)
+            
+            return jsonify({
+                'success': True,
+                'state': state,
+                'broker_name': broker_name,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/v2/broker-states/refresh-all', methods=['POST'])
+    @login_required
+    def api_refresh_all_broker_states():
+        """Refresh all connected broker balances"""
+        try:
+            results = {}
+            brokers_to_refresh = ['webull', 'alpaca_paper', 'tastytrade', 'ibkr', 'dhanq']
+            
+            for broker_name in brokers_to_refresh:
+                try:
+                    with app.test_request_context():
+                        result = api_refresh_broker_state(broker_name)
+                        results[broker_name] = result.get_json() if hasattr(result, 'get_json') else {'success': False}
+                except Exception as e:
+                    results[broker_name] = {'success': False, 'error': str(e)}
+            
+            return jsonify({
+                'success': True,
+                'results': results,
+                'timestamp': datetime.now().isoformat()
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/v2/broker-states/by-region/<region>', methods=['GET'])
+    @login_required
+    def api_get_broker_states_by_region(region):
+        """Get broker states for a specific region (USA, Canada, India)"""
+        try:
+            db.init_broker_states_table()
+            states = db.get_broker_states_by_region(region)
+            return jsonify({'success': True, 'states': states, 'region': region})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     # ============ SIGNAL VERIFICATION API ============
     
     @app.route('/verification')

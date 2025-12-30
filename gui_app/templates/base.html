@@ -875,6 +875,7 @@
     setTimeout(checkForErrors, 2000);
     </script>
 
+    <script src="{{ url_for('static', filename='js/broker-store.js') }}?v={{ range(1, 999999) | random }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}?v={{ range(1, 999999) | random }}"></script>
     {% block scripts %}{% endblock %}
 </body>

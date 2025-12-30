@@ -26,6 +26,19 @@
     </div>
 </div>
 
+<!-- Multi-Region Broker Selector -->
+<div class="table-container" style="margin-bottom: 16px;">
+    <div class="table-header">
+        <h3 class="table-title">🌍 Multi-Broker Dashboard</h3>
+        <div style="display: flex; gap: 8px;">
+            <button onclick="BrokerStore.refreshAll()" class="btn btn-small" style="background: linear-gradient(135deg, #10b981, #059669);">
+                🔄 Refresh All
+            </button>
+        </div>
+    </div>
+    <div id="multi-broker-selector" style="padding: 16px 0;"></div>
+</div>
+
 <!-- Account Balance Section -->
 <div class="table-container" style="margin-bottom: 32px;">
     <div class="table-header">
@@ -35,15 +48,25 @@
                 <label style="font-size: 0.875rem; color: var(--text-secondary);">Broker:</label>
                 <select id="broker-filter" onchange="onBrokerChange(this.value)" class="form-select" style="min-width: 140px; background-color: #2C2C2E; color: #FFFFFF;">
                     <option value="" style="background-color: #2C2C2E; color: #FFFFFF;">All Brokers</option>
-                    <option value="Webull" selected style="background-color: #2C2C2E; color: #FFFFFF;">Webull LIVE</option>
-                    <option value="WEBULL_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">Webull PAPER</option>
-                    <option value="ALPACA" style="background-color: #2C2C2E; color: #FFFFFF;">Alpaca LIVE</option>
-                    <option value="ALPACA_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">Alpaca PAPER</option>
-                    <option value="IBKR" style="background-color: #2C2C2E; color: #FFFFFF;">IBKR LIVE</option>
-                    <option value="IBKR_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">IBKR PAPER</option>
-                    <option value="TASTYTRADE_LIVE" style="background-color: #2C2C2E; color: #FFFFFF;">Tastytrade LIVE</option>
-                    <option value="TASTYTRADE_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">Tastytrade PAPER</option>
-                    <option value="ROBINHOOD" style="background-color: #1a2f1a; color: #00c853;">Robinhood (LIVE)</option>
+                    <optgroup label="🇺🇸 USA">
+                        <option value="Webull" style="background-color: #2C2C2E; color: #FFFFFF;">Webull LIVE</option>
+                        <option value="WEBULL_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">Webull PAPER</option>
+                        <option value="ALPACA" style="background-color: #2C2C2E; color: #FFFFFF;">Alpaca LIVE</option>
+                        <option value="ALPACA_PAPER" selected style="background-color: #2C2C2E; color: #FFFFFF;">Alpaca PAPER</option>
+                        <option value="IBKR" style="background-color: #2C2C2E; color: #FFFFFF;">IBKR LIVE</option>
+                        <option value="IBKR_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">IBKR PAPER</option>
+                        <option value="TASTYTRADE_LIVE" style="background-color: #2C2C2E; color: #FFFFFF;">Tastytrade LIVE</option>
+                        <option value="TASTYTRADE_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">Tastytrade PAPER</option>
+                        <option value="ROBINHOOD" style="background-color: #1a2f1a; color: #00c853;">Robinhood (LIVE)</option>
+                    </optgroup>
+                    <optgroup label="🇨🇦 Canada">
+                        <option value="QUESTRADE" style="background-color: #2C2C2E; color: #FFFFFF;">Questrade</option>
+                    </optgroup>
+                    <optgroup label="🇮🇳 India">
+                        <option value="DHANQ" style="background-color: #2C2C2E; color: #FFFFFF;">DhanQ</option>
+                        <option value="UPSTOX" style="background-color: #2C2C2E; color: #FFFFFF;">Upstox</option>
+                        <option value="ZERODHA" style="background-color: #2C2C2E; color: #FFFFFF;">Zerodha</option>
+                    </optgroup>
                 </select>
             </div>
             <div class="toggle-switch">
@@ -1661,8 +1684,94 @@ function resetBotFilters() {
     loadBotTrades();
 }
 
+// Multi-broker selector rendering
+function renderMultiBrokerSelector() {
+    const container = document.getElementById('multi-broker-selector');
+    if (!container || typeof BrokerStore === 'undefined') return;
+    
+    const states = BrokerStore.getAllStates();
+    const regions = { USA: [], Canada: [], India: [] };
+    
+    // Organize brokers by region
+    Object.entries(states).forEach(([key, broker]) => {
+        const region = broker.region || 'USA';
+        if (regions[region]) {
+            regions[region].push({ key, ...broker });
+        }
+    });
+    
+    let html = '<div style="display: flex; gap: 24px; flex-wrap: wrap;">';
+    
+    Object.entries(regions).forEach(([region, brokers]) => {
+        const flag = region === 'USA' ? '🇺🇸' : region === 'Canada' ? '🇨🇦' : '🇮🇳';
+        html += `<div style="flex: 1; min-width: 280px;">`;
+        html += `<div style="font-size: 0.875rem; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary);">${flag} ${region}</div>`;
+        html += `<div style="display: flex; flex-wrap: wrap; gap: 8px;">`;
+        
+        if (brokers.length === 0) {
+            html += `<div style="color: var(--text-muted); font-size: 0.8rem;">No brokers configured</div>`;
+        }
+        
+        brokers.forEach(broker => {
+            const isActive = currentBroker === broker.key;
+            const statusColor = broker.is_connected ? 'var(--success)' : 'var(--error)';
+            const balance = broker.balance ? `$${parseFloat(broker.balance).toLocaleString('en-US', {minimumFractionDigits: 2})}` : '--';
+            const currency = broker.currency || 'USD';
+            const isPaper = broker.is_paper;
+            
+            html += `
+                <div onclick="selectBroker('${broker.key}')" style="
+                    padding: 12px 16px; 
+                    border-radius: 8px; 
+                    cursor: pointer;
+                    background: ${isActive ? 'var(--accent)' : 'var(--bg-secondary)'};
+                    border: 1px solid ${isActive ? 'var(--accent)' : 'var(--border-color)'};
+                    transition: all 0.2s ease;
+                    min-width: 130px;
+                ">
+                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                        <span style="width: 8px; height: 8px; border-radius: 50%; background: ${statusColor};"></span>
+                        <span style="font-weight: 600; font-size: 0.85rem;">${broker.broker_name || broker.key}</span>
+                        ${isPaper ? '<span style="font-size: 0.65rem; background: var(--warning); color: black; padding: 1px 4px; border-radius: 3px;">PAPER</span>' : ''}
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">
+                        ${balance} ${currency}
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `</div></div>`;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function selectBroker(brokerKey) {
+    currentBroker = brokerKey;
+    document.getElementById('broker-filter').value = brokerKey;
+    BrokerStore.setSelected(brokerKey);
+    renderMultiBrokerSelector();
+    loadTrades();
+    loadStats();
+}
+
 // Load initial data with startup delay
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize BrokerStore and sync with selector
+    if (typeof BrokerStore !== 'undefined') {
+        const savedBroker = BrokerStore.getSelected();
+        if (savedBroker) {
+            currentBroker = savedBroker;
+            const brokerFilter = document.getElementById('broker-filter');
+            if (brokerFilter) brokerFilter.value = savedBroker;
+        }
+        BrokerStore.onUpdate(renderMultiBrokerSelector);
+        BrokerStore.init();
+        renderMultiBrokerSelector();
+    }
+    
     // Delay initial data loading to allow bot initialization (3 second startup window for testing)
     setTimeout(() => {
         console.log('Loading trades and stats...');
