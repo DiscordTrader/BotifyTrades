@@ -185,12 +185,30 @@ async function loadChannels() {
                                 </div>
                                 <div id="risk-settings-panel-${channel.id}" style="display: ${channel.risk_management_enabled ? 'block' : 'none'};">
                                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
-                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Profit Target 1 %</label><input type="number" id="risk-profit-target-1-${channel.id}" value="${channel.profit_target_1_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
-                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Profit Target 2 %</label><input type="number" id="risk-profit-target-2-${channel.id}" value="${channel.profit_target_2_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
-                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Profit Target 3 %</label><input type="number" id="risk-profit-target-3-${channel.id}" value="${channel.profit_target_3_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Profit Target 1 (P1) %</label><input type="number" id="risk-profit-target-1-${channel.id}" value="${channel.profit_target_1_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Profit Target 2 (P2) %</label><input type="number" id="risk-profit-target-2-${channel.id}" value="${channel.profit_target_2_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Profit Target 3 (P3) %</label><input type="number" id="risk-profit-target-3-${channel.id}" value="${channel.profit_target_3_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Stop Loss %</label><input type="number" id="risk-stop-loss-${channel.id}" value="${channel.stop_loss_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Stop %</label><input type="number" id="risk-trailing-stop-${channel.id}" value="${channel.trailing_stop_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
-                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Activation %</label><input type="number" id="risk-trailing-activation-${channel.id}" value="${channel.trailing_activation_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Activation %</label><input type="number" id="risk-trailing-activation-${channel.id}" value="${channel.trailing_activation_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                </div>
+                                <div style="margin-top: 16px; padding: 12px; background: rgba(0, 255, 136, 0.05); border: 1px solid rgba(0, 255, 136, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🏃</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #00ff88;">Leave Runner</label>
+                                        </div>
+                                        <label class="toggle-switch" title="Keep a portion of your position to ride further gains">
+                                            <input type="checkbox" id="risk-leave-runner-enabled-${channel.id}" ${channel.leave_runner_enabled ? 'checked' : ''}>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Keep a percentage of your position after hitting profit targets to capture additional gains.</p>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Runner Size:</label>
+                                        <input type="number" id="risk-leave-runner-pct-${channel.id}" value="${channel.leave_runner_pct || 25}" placeholder="25" step="1" min="1" max="100" style="width: 80px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                        <span style="font-size: 12px; color: #8E8E93;">% of position</span>
+                                    </div>
                                 </div>
                                 <button onclick="saveRiskManagement(${channel.id})" style="margin-top: 12px; padding: 8px 16px; background: var(--accent-gradient); border: none; border-radius: 6px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">💾 Save Risk Settings</button>
                                 </div>
@@ -894,6 +912,8 @@ async function saveRiskManagement(channelId) {
         const stopLoss = document.getElementById(`risk-stop-loss-${channelId}`).value;
         const trailingStop = document.getElementById(`risk-trailing-stop-${channelId}`).value;
         const trailingActivation = document.getElementById(`risk-trailing-activation-${channelId}`).value;
+        const leaveRunnerEnabled = document.getElementById(`risk-leave-runner-enabled-${channelId}`)?.checked ? 1 : 0;
+        const leaveRunnerPct = document.getElementById(`risk-leave-runner-pct-${channelId}`).value;
         
         const response = await fetch(`/api/channels/${channelId}`, {
             method: 'PUT',
@@ -905,7 +925,9 @@ async function saveRiskManagement(channelId) {
                 profit_target_3_pct: profitTarget3 ? parseFloat(profitTarget3) : null,
                 stop_loss_pct: stopLoss ? parseFloat(stopLoss) : null,
                 trailing_stop_pct: trailingStop ? parseFloat(trailingStop) : null,
-                trailing_activation_pct: trailingActivation ? parseFloat(trailingActivation) : null
+                trailing_activation_pct: trailingActivation ? parseFloat(trailingActivation) : null,
+                leave_runner_enabled: leaveRunnerEnabled,
+                leave_runner_pct: leaveRunnerPct ? parseFloat(leaveRunnerPct) : 25.0
             })
         });
         

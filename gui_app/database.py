@@ -413,6 +413,15 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added default_quantity column for per-channel fixed quantity default")
     
+    # Migrate: Add leave_runner columns for per-channel runner settings
+    try:
+        cursor.execute('SELECT leave_runner_enabled FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN leave_runner_enabled INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN leave_runner_pct REAL DEFAULT 25.0')
+        conn.commit()
+        print("[DATABASE] ✓ Added leave_runner columns for per-channel runner settings")
+    
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -1486,7 +1495,7 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
                broker_override, is_active, paper_trade_enabled, enabled_brokers,
                profit_target_pct, profit_target_1_pct, profit_target_2_pct, profit_target_3_pct,
                stop_loss_pct, trailing_stop_pct, trailing_activation_pct, position_size_pct,
-               created_at, updated_at, default_quantity
+               created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct
         FROM channels WHERE id = ?
     ''', (channel_id,))
     
@@ -1515,7 +1524,9 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
         'position_size_pct': row[17],
         'created_at': row[18],
         'updated_at': row[19],
-        'default_quantity': row[20]
+        'default_quantity': row[20],
+        'leave_runner_enabled': bool(row[21]) if row[21] is not None else False,
+        'leave_runner_pct': row[22] if row[22] is not None else 25.0
     }
 
 
@@ -1529,7 +1540,7 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
                broker_override, is_active, paper_trade_enabled, enabled_brokers,
                profit_target_pct, profit_target_1_pct, profit_target_2_pct, profit_target_3_pct,
                stop_loss_pct, trailing_stop_pct, trailing_activation_pct, position_size_pct,
-               created_at, updated_at, default_quantity
+               created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct
         FROM channels WHERE discord_channel_id = ?
     ''', (str(discord_channel_id),))
     
@@ -1558,7 +1569,9 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
         'position_size_pct': row[17],
         'created_at': row[18],
         'updated_at': row[19],
-        'default_quantity': row[20]
+        'default_quantity': row[20],
+        'leave_runner_enabled': bool(row[21]) if row[21] is not None else False,
+        'leave_runner_pct': row[22] if row[22] is not None else 25.0
     }
 
 
@@ -1574,7 +1587,7 @@ def update_channel(channel_id: int, **kwargs):
         if key in ['name', 'category', 'execute_enabled', 'track_enabled', 'broker_override', 'is_active', 
                    'paper_trade_enabled', 'profit_target_pct', 'profit_target_1_pct', 'profit_target_2_pct', 'profit_target_3_pct',
                    'stop_loss_pct', 'trailing_stop_pct', 'trailing_activation_pct', 'enabled_brokers', 'position_size_pct', 'tracking_position_size_pct',
-                   'default_quantity', 'risk_management_enabled']:
+                   'default_quantity', 'risk_management_enabled', 'leave_runner_enabled', 'leave_runner_pct']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))
