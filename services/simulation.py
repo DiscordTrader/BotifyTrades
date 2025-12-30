@@ -647,6 +647,255 @@ def fetch_channel_trade_history(channel_name: str, limit: int = 500) -> List[Tra
     return trades
 
 
+# =============================================================================
+# COPY 1:1 PERFORMANCE REPORT (Portfolio-Independent)
+# =============================================================================
+
+def run_copy_1to1_report(
+    entity_type: str,
+    entity_id: str,
+    include_slippage: bool = False,
+    risk_cap: float = 0.25
+) -> Dict[str, Any]:
+    """
+    Generate a TRUE trader performance report using original trade sizes.
+    
+    This is NOT a portfolio simulation - it analyzes the trader's actual performance
+    and calculates capital requirements to follow this trader safely.
+    
+    Args:
+        entity_type: 'user' or 'channel'
+        entity_id: username or channel name
+        include_slippage: Whether to apply slippage model (default False)
+        risk_cap: Risk cap for recommended portfolio (0.10 or 0.25)
+    
+    Returns:
+        Performance report with capital requirements and risk metrics
+    """
+    import numpy as np
+    
+    if entity_type == 'user':
+        trades = fetch_user_trade_history(entity_id, limit=1000)
+    else:
+        trades = fetch_channel_trade_history(entity_id, limit=1000)
+    
+    if not trades:
+        return {
+            'success': False,
+            'error': f'No trade history found for {entity_type}: {entity_id}'
+        }
+    
+    executed_trades = []
+    skipped_trades = []
+    position_costs = []
+    pnl_dollars_list = []
+    pnl_pct_list = []
+    
+    for trade in trades:
+        if not trade.asset_type or trade.asset_type.lower() != 'option':
+            skipped_trades.append({
+                'ticker': trade.ticker,
+                'reason': 'Unsupported (long calls/puts only)',
+                'asset_type': trade.asset_type or 'unknown'
+            })
+            continue
+        
+        if not trade.open_price or trade.open_price <= 0:
+            skipped_trades.append({
+                'ticker': trade.ticker,
+                'reason': 'Missing or invalid open price',
+                'asset_type': trade.asset_type
+            })
+            continue
+        
+        if not trade.quantity or trade.quantity <= 0:
+            skipped_trades.append({
+                'ticker': trade.ticker,
+                'reason': 'Missing or invalid quantity',
+                'asset_type': trade.asset_type
+            })
+            continue
+        
+        position_cost = trade.open_price * trade.quantity * 100
+        pnl_pct = trade.pnl_percent / 100 if trade.pnl_percent else 0
+        
+        if include_slippage:
+            slippage_pct = SLIPPAGE_BASE_PCT + (position_cost / 1000) * SLIPPAGE_SIZE_FACTOR
+            slippage_pct = min(slippage_pct, 0.03)
+            pnl_dollars = position_cost * pnl_pct - position_cost * slippage_pct
+        else:
+            pnl_dollars = position_cost * pnl_pct
+        
+        executed_trades.append({
+            'ticker': trade.ticker,
+            'quantity': trade.quantity,
+            'open_price': trade.open_price,
+            'close_price': trade.close_price,
+            'position_cost': position_cost,
+            'pnl_pct': pnl_pct * 100,
+            'pnl_dollars': pnl_dollars,
+            'closed_at': trade.closed_at
+        })
+        
+        position_costs.append(position_cost)
+        pnl_dollars_list.append(pnl_dollars)
+        pnl_pct_list.append(pnl_pct * 100)
+    
+    if not executed_trades:
+        return {
+            'success': False,
+            'error': 'No valid option trades found (long calls/puts only)',
+            'skipped_trades': skipped_trades
+        }
+    
+    position_costs_arr = np.array(position_costs)
+    pnl_dollars_arr = np.array(pnl_dollars_list)
+    pnl_pct_arr = np.array(pnl_pct_list)
+    
+    peak_single_trade_outlay = float(np.max(position_costs_arr))
+    p95_trade_outlay = float(np.percentile(position_costs_arr, 95))
+    median_trade_outlay = float(np.median(position_costs_arr))
+    avg_trade_outlay = float(np.mean(position_costs_arr))
+    
+    recommended_portfolio = peak_single_trade_outlay / risk_cap
+    conservative_portfolio_10pct = peak_single_trade_outlay / 0.10
+    moderate_portfolio_25pct = peak_single_trade_outlay / 0.25
+    
+    start_notional = recommended_portfolio
+    equity = start_notional
+    peak_equity = equity
+    max_drawdown = 0
+    max_drawdown_pct = 0
+    equity_curve = [equity]
+    
+    wins = 0
+    losses = 0
+    gross_wins = 0
+    gross_losses = 0
+    current_streak = 0
+    max_consecutive_losses = 0
+    worst_trade_dollars = 0
+    worst_trade_pct = 0
+    best_trade_dollars = 0
+    best_trade_pct = 0
+    
+    for t in executed_trades:
+        pnl = t['pnl_dollars']
+        pnl_pct_val = t['pnl_pct']
+        equity += pnl
+        equity_curve.append(equity)
+        
+        if equity > peak_equity:
+            peak_equity = equity
+        current_drawdown = peak_equity - equity
+        current_drawdown_pct = (current_drawdown / peak_equity * 100) if peak_equity > 0 else 0
+        if current_drawdown_pct > max_drawdown_pct:
+            max_drawdown_pct = current_drawdown_pct
+            max_drawdown = current_drawdown
+        
+        if pnl > 0:
+            wins += 1
+            gross_wins += pnl
+            current_streak = 0
+            if pnl > best_trade_dollars:
+                best_trade_dollars = pnl
+                best_trade_pct = pnl_pct_val
+        else:
+            losses += 1
+            gross_losses += abs(pnl)
+            current_streak += 1
+            if current_streak > max_consecutive_losses:
+                max_consecutive_losses = current_streak
+            if pnl < worst_trade_dollars:
+                worst_trade_dollars = pnl
+                worst_trade_pct = pnl_pct_val
+    
+    total_trades = len(executed_trades)
+    win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
+    profit_factor = (gross_wins / gross_losses) if gross_losses > 0 else float('inf')
+    
+    total_pnl = sum(pnl_dollars_list)
+    total_return_pct = (total_pnl / start_notional * 100) if start_notional > 0 else 0
+    
+    expectancy_dollars = float(np.mean(pnl_dollars_arr))
+    expectancy_pct = float(np.mean(pnl_pct_arr))
+    
+    avg_win_pct = float(np.mean([p for p in pnl_pct_list if p > 0])) if wins > 0 else 0
+    avg_loss_pct = float(np.mean([abs(p) for p in pnl_pct_list if p <= 0])) if losses > 0 else 0
+    avg_win_dollars = gross_wins / wins if wins > 0 else 0
+    avg_loss_dollars = gross_losses / losses if losses > 0 else 0
+    
+    pnl_std = float(np.std(pnl_dollars_arr)) if len(pnl_dollars_arr) > 1 else 0
+    sharpe_like = (expectancy_dollars / pnl_std * math.sqrt(252)) if pnl_std > 0 else 0
+    calmar_like = (total_return_pct / max_drawdown_pct) if max_drawdown_pct > 0 else float('inf')
+    
+    return {
+        'success': True,
+        'report_type': 'copy_1to1_performance',
+        'entity_type': entity_type,
+        'entity_id': entity_id,
+        
+        'performance_summary': {
+            'total_return_pct': round(total_return_pct, 2),
+            'total_pnl_dollars': round(total_pnl, 2),
+            'win_rate': round(win_rate, 1),
+            'profit_factor': round(profit_factor, 2) if profit_factor != float('inf') else 999.99,
+            'expectancy_dollars': round(expectancy_dollars, 2),
+            'expectancy_pct': round(expectancy_pct, 2),
+            'max_drawdown_pct': round(max_drawdown_pct, 2),
+            'max_drawdown_dollars': round(max_drawdown, 2),
+            'worst_trade_dollars': round(worst_trade_dollars, 2),
+            'worst_trade_pct': round(worst_trade_pct, 2),
+            'best_trade_dollars': round(best_trade_dollars, 2),
+            'best_trade_pct': round(best_trade_pct, 2),
+            'max_consecutive_losses': max_consecutive_losses,
+            'sharpe_like': round(sharpe_like, 2),
+            'calmar_like': round(calmar_like, 2) if calmar_like != float('inf') else 999.99,
+            'total_trades': total_trades,
+            'wins': wins,
+            'losses': losses,
+            'avg_win_pct': round(avg_win_pct, 2),
+            'avg_loss_pct': round(avg_loss_pct, 2),
+            'avg_win_dollars': round(avg_win_dollars, 2),
+            'avg_loss_dollars': round(avg_loss_dollars, 2)
+        },
+        
+        'capital_requirements': {
+            'peak_single_trade_outlay': round(peak_single_trade_outlay, 2),
+            'p95_trade_outlay': round(p95_trade_outlay, 2),
+            'median_trade_outlay': round(median_trade_outlay, 2),
+            'avg_trade_outlay': round(avg_trade_outlay, 2),
+            'recommended_portfolio': round(recommended_portfolio, 2),
+            'recommended_risk_cap': f'{int(risk_cap * 100)}%',
+            'conservative_portfolio_10pct': round(conservative_portfolio_10pct, 2),
+            'moderate_portfolio_25pct': round(moderate_portfolio_25pct, 2),
+            'overlap_note': 'If overlapping trades exist, real required capital may be higher.'
+        },
+        
+        'trade_size_stats': {
+            'avg_position_cost': round(avg_trade_outlay, 2),
+            'median_position_cost': round(median_trade_outlay, 2),
+            'p95_position_cost': round(p95_trade_outlay, 2),
+            'min_position_cost': round(float(np.min(position_costs_arr)), 2),
+            'max_position_cost': round(peak_single_trade_outlay, 2)
+        },
+        
+        'params_used': {
+            'include_slippage': include_slippage,
+            'risk_cap': risk_cap,
+            'slippage_model': f'{SLIPPAGE_BASE_PCT*100:.1f}% base + size factor' if include_slippage else 'None'
+        },
+        
+        'unsupported_trades': {
+            'count': len(skipped_trades),
+            'details': skipped_trades[:20]
+        },
+        
+        'equity_curve': [round(e, 2) for e in equity_curve],
+        'trade_breakdown': executed_trades
+    }
+
+
 def get_user_stats(author_name: str, period_days: int = 30) -> Optional[EntityStats]:
     """
     Fetch user performance statistics from the database.
