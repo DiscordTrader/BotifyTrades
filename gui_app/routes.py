@@ -7905,6 +7905,47 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/simulate/copy1to1', methods=['POST'])
+    def api_copy_1to1_report():
+        """
+        Generate Copy 1:1 Performance Report - Portfolio-Independent Analysis
+        
+        This analyzes the trader's actual performance using original trade sizes,
+        NOT a portfolio simulation. Returns capital requirements to follow this trader.
+        """
+        try:
+            data = request.get_json()
+            
+            entity_type = data.get('entity_type', 'user')
+            entity_id = data.get('entity_id', '')
+            
+            if not entity_id:
+                return jsonify({'success': False, 'error': 'entity_id is required'}), 400
+            
+            include_slippage = data.get('include_slippage', False)
+            risk_cap = float(data.get('risk_cap', 0.25))
+            
+            if risk_cap not in [0.10, 0.25]:
+                risk_cap = 0.25
+            
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from services.simulation import run_copy_1to1_report
+            
+            result = run_copy_1to1_report(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                include_slippage=include_slippage,
+                risk_cap=risk_cap
+            )
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            print(f"[API] Copy 1:1 report error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/api/simulate/recovery', methods=['POST'])
     def api_recovery_calculator():
         """Calculate recovery timeline and probability for loss recovery"""
