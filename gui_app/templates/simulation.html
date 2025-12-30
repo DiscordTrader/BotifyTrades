@@ -288,6 +288,11 @@
                 </div>
             </div>
             
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+                <div id="skip-stats-section" class="card" style="display: none;"></div>
+                <div id="daily-stats-section" class="card" style="display: none;"></div>
+            </div>
+            
             <div id="capital-requirements-section" class="card" style="display: none; margin-bottom: 24px;">
                 <h4 class="card-header" style="display: flex; align-items: center; justify-content: space-between;">
                     <span style="display: flex; align-items: center; gap: 8px;">
@@ -1583,6 +1588,24 @@ function displayHistoricalResults(data) {
         `📉 Max Drawdown: ${maxDrawdown.toFixed(1)}%\n\n` +
         `💡 Suggested Position Size: $${suggestedSize.toLocaleString()} (based on their median trade size)`;
     
+    // Display skip stats if trades were skipped
+    const skipSection = document.getElementById('skip-stats-section');
+    if (summary.skipped_trades_count > 0 && data.skipped_by_reason) {
+        displaySkipStats(data.skipped_by_reason, summary.executed_trades, summary.total_trades, data.daily_stats);
+    } else {
+        skipSection.style.display = 'none';
+        skipSection.innerHTML = '';
+    }
+    
+    // Display daily realism stats
+    const dailySection = document.getElementById('daily-stats-section');
+    if (data.daily_stats && params) {
+        displayDailyStats(data.daily_stats, params);
+    } else {
+        dailySection.style.display = 'none';
+        dailySection.innerHTML = '';
+    }
+    
     // Hide warnings for historical
     document.getElementById('warnings-section').style.display = 'none';
     
@@ -1599,6 +1622,111 @@ function displayHistoricalResults(data) {
     
     // Render params
     renderHistoricalParams(data);
+}
+
+function displaySkipStats(skipByReason, executedCount, totalCount, dailyStats) {
+    const section = document.getElementById('skip-stats-section');
+    if (!section) {
+        console.warn('Skip stats section not found');
+        return;
+    }
+    section.style.display = 'block';
+    
+    const skippedCount = totalCount - executedCount;
+    const skipPct = ((skippedCount / totalCount) * 100).toFixed(1);
+    const executePct = ((executedCount / totalCount) * 100).toFixed(1);
+    
+    const skipReasonLabels = {
+        'unsupported_type': 'Unsupported Type',
+        'cannot_afford': 'Cannot Afford',
+        'below_minimum': 'Below Minimum',
+        'daily_capacity': 'Daily Capacity',
+        'daily_trade_limit': 'Trade Limit/Day',
+        'missing_data': 'Missing Data'
+    };
+    
+    const skipReasonColors = {
+        'unsupported_type': '#9ca3af',
+        'cannot_afford': '#ef4444',
+        'below_minimum': '#f59e0b',
+        'daily_capacity': '#8b5cf6',
+        'daily_trade_limit': '#3b82f6',
+        'missing_data': '#6b7280'
+    };
+    
+    let reasonBars = '';
+    for (const [key, count] of Object.entries(skipByReason)) {
+        if (count > 0) {
+            const pct = ((count / skippedCount) * 100).toFixed(0);
+            reasonBars += `
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                    <div style="width: 120px; font-size: 0.6875rem; color: var(--text-secondary);">${skipReasonLabels[key] || key}</div>
+                    <div style="flex: 1; background: var(--bg-darker); border-radius: 4px; height: 16px; overflow: hidden;">
+                        <div style="width: ${pct}%; height: 100%; background: ${skipReasonColors[key] || '#6b7280'}; display: flex; align-items: center; justify-content: flex-end; padding-right: 4px;">
+                            <span style="font-size: 0.625rem; color: white; font-weight: 600;">${count}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+    }
+    
+    section.innerHTML = `
+        <h4 class="card-header" style="display: flex; align-items: center; gap: 8px;">
+            <span>⚠️</span> Trade Execution Summary
+        </h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+            <div style="text-align: center; padding: 12px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.3);">
+                <div style="font-size: 1.5rem; font-weight: 700; color: var(--success);">${executedCount}</div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary);">Executed (${executePct}%)</div>
+            </div>
+            <div style="text-align: center; padding: 12px; background: rgba(239, 68, 68, 0.1); border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.3);">
+                <div style="font-size: 1.5rem; font-weight: 700; color: var(--danger);">${skippedCount}</div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary);">Skipped (${skipPct}%)</div>
+            </div>
+        </div>
+        <div style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">Skip Reasons:</div>
+        ${reasonBars || '<div style="color: var(--text-muted); font-size: 0.75rem;">No trades skipped</div>'}
+    `;
+}
+
+function displayDailyStats(dailyStats, params) {
+    const section = document.getElementById('daily-stats-section');
+    if (!section) return;
+    
+    if (!dailyStats || dailyStats.trading_days === undefined) {
+        section.style.display = 'none';
+        section.innerHTML = '';
+        return;
+    }
+    
+    section.style.display = 'block';
+    
+    const allocPct = params?.daily_alloc_pct || 0.60;
+    const recycleTurns = params?.daily_recycle_turns || 2;
+    
+    section.innerHTML = `
+        <h4 class="card-header" style="display: flex; align-items: center; gap: 8px;">
+            <span>📅</span> Daily Realism Stats
+        </h4>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+            <div style="text-align: center; padding: 10px; background: var(--bg-darker); border-radius: 6px;">
+                <div style="font-size: 1.25rem; font-weight: 700; color: var(--info);">${dailyStats.trading_days || 0}</div>
+                <div style="font-size: 0.6875rem; color: var(--text-secondary);">Trading Days</div>
+            </div>
+            <div style="text-align: center; padding: 10px; background: var(--bg-darker); border-radius: 6px;">
+                <div style="font-size: 1.25rem; font-weight: 700; color: var(--info);">${dailyStats.avg_trades_per_day || 0}</div>
+                <div style="font-size: 0.6875rem; color: var(--text-secondary);">Avg Trades/Day</div>
+            </div>
+            <div style="text-align: center; padding: 10px; background: var(--bg-darker); border-radius: 6px;">
+                <div style="font-size: 1.25rem; font-weight: 700; color: var(--warning);">${dailyStats.max_trades_in_a_day || 0}</div>
+                <div style="font-size: 0.6875rem; color: var(--text-secondary);">Max Trades/Day</div>
+            </div>
+        </div>
+        <div style="margin-top: 12px; font-size: 0.6875rem; color: var(--text-muted); text-align: center;">
+            Daily Capacity: ${(allocPct * 100).toFixed(0)}% × ${recycleTurns}x recycle = ${(allocPct * recycleTurns * 100).toFixed(0)}% of balance/day
+        </div>
+    `;
 }
 
 function displayCapitalRequirements(capReqs, suggestedSettings, recommendations) {
@@ -1674,7 +1802,8 @@ function renderHistoricalChart(breakdown, startBalance) {
         growthChart.destroy();
     }
     
-    const labels = breakdown.map(d => d.ticker);
+    // Use trade numbers for x-axis to preserve sequence (tickers may duplicate)
+    const labels = breakdown.map(d => `#${d.trade_num}`);
     const balances = breakdown.map(d => d.end_balance);
     
     const finalBalance = balances[balances.length - 1];
