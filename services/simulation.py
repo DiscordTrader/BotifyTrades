@@ -2159,191 +2159,238 @@ def run_risk_optimizer(
     entity_type: Literal["user", "channel"],
     entity_id: str,
     portfolio_start: float = DEFAULT_PORTFOLIO,
+    basis: Literal["percent_start", "percent_current"] = "percent_start",
+    include_fixed: bool = True,
+    include_slippage: bool = True,
+    daily_alloc_pct: float = DAILY_ALLOC_PCT,
+    daily_recycle_turns: int = DAILY_RECYCLE_TURNS_DEFAULT,
+    max_trades_per_day: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
-    Run risk optimization by testing multiple position size percentages.
+    Run risk optimization by testing multiple position sizing candidates.
     
-    Tests positions sizes at 1%, 2%, 3%, 5%, 10%, 15%, 20%, 25% and 
-    recommends the optimal setting based on risk-adjusted returns.
-    
-    Now includes: Kelly Criterion, Expectancy, Risk of Ruin, Streak Analysis
+    Uses the improved portfolio simulation engine with:
+    - Percent-of-portfolio and fixed-$ candidates
+    - Daily realism constraints (affordability, capacity)
+    - Dollar-cost slippage model
+    - Industry-grade scoring that penalizes low coverage and high drawdown
     
     Args:
         entity_type: "user" or "channel"
         entity_id: Username or channel name
         portfolio_start: Starting portfolio value
+        basis: "percent_start" (flat bet) or "percent_current" (compounding)
+        include_fixed: Whether to test fixed-$ candidates
+        include_slippage: Whether to apply slippage model
+        daily_alloc_pct: Daily capital allocation percentage
+        daily_recycle_turns: How many times capital can recycle per day
+        max_trades_per_day: Optional hard cap on trades per day
     
     Returns:
-        Dict with comparison table, recommendation, and advanced metrics
+        Dict with comparison table, recommendation, and rationale
     """
-    # Run simulations first - this function handles its own trade fetching
+    
+    # =========================================================================
+    # CANDIDATE GENERATION
+    # =========================================================================
+    PERCENT_CANDIDATES = [1, 2, 3, 5, 7, 10, 12, 15, 20, 25]
+    
+    candidates = []
+    
+    for pct in PERCENT_CANDIDATES:
+        candidates.append({
+            'mode': basis,
+            'risk_value': pct,
+            'label': f"{pct}% of {'Start' if basis == 'percent_start' else 'Current'}"
+        })
+    
+    if include_fixed:
+        fixed_multipliers = [0.01, 0.02, 0.03, 0.05, 0.10]
+        for mult in fixed_multipliers:
+            fixed_val = round(portfolio_start * mult / 5) * 5
+            if fixed_val >= MIN_POSITION_DOLLARS:
+                candidates.append({
+                    'mode': 'fixed',
+                    'risk_value': fixed_val,
+                    'label': f"${fixed_val:,.0f} Fixed"
+                })
+    
+    # =========================================================================
+    # RUN SIMULATIONS FOR EACH CANDIDATE
+    # =========================================================================
     results = []
     
-    for pct in RISK_OPTIMIZER_PERCENTAGES:
+    for candidate in candidates:
         result = run_exact_historical_simulation(
             entity_type=entity_type,
             entity_id=entity_id,
             portfolio_start=portfolio_start,
-            risk_per_trade_mode="percent",
-            risk_per_trade_value=pct
+            risk_per_trade_mode=candidate['mode'],
+            risk_per_trade_value=candidate['risk_value'],
+            daily_alloc_pct=daily_alloc_pct,
+            daily_recycle_turns=daily_recycle_turns,
+            max_trades_per_day=max_trades_per_day,
+            include_slippage=include_slippage,
         )
         
         if not result.get('success'):
-            return result  # Return error if simulation fails
+            continue
         
         summary = result['summary']
+        daily_stats = result.get('daily_stats', {})
+        skipped_by_reason = result.get('skipped_by_reason', {})
+        trade_breakdown = result.get('trade_breakdown', [])
         
-        # =========================================================================
-        # IMPROVED RISK-ADJUSTED SCORE (Calmar-like Ratio)
-        # =========================================================================
-        # Score = Annualized Return / Max Drawdown
-        # This is similar to Calmar Ratio used by hedge funds
-        
-        total_return_pct = summary['total_return_pct']
-        max_drawdown_pct = summary['max_drawdown_pct'] or 1  # Avoid division by zero
+        total_trades = summary['total_trades']
         executed_trades = summary['executed_trades']
+        skipped_total = summary['skipped_trades_count']
         
-        # Normalize return to be more realistic (diminishing returns at high levels)
-        # Log scaling prevents runaway scores from compounding
-        if total_return_pct > 0:
-            # Log-scaled return (1000% becomes ~3.0, 100% becomes ~2.0, 10% becomes ~1.04)
-            normalized_return = math.log10(1 + total_return_pct / 100) * 100
+        final_balance = summary['final_balance']
+        total_return_pct = summary['total_return_pct']
+        max_drawdown_pct = summary['max_drawdown_pct'] or 0.1
+        profit_factor = summary.get('profit_factor', 0)
+        expectancy = summary.get('expectancy_dollars', 0)
+        
+        worst_trade_pct = 0
+        if trade_breakdown:
+            pnl_pcts = [t.get('pnl_pct', 0) for t in trade_breakdown]
+            if pnl_pcts:
+                worst_trade_pct = min(pnl_pcts)
+        
+        avg_trades_per_day = daily_stats.get('avg_trades_per_day', 0)
+        
+        skipped_afford = skipped_by_reason.get('cannot_afford', 0) + skipped_by_reason.get('below_minimum', 0)
+        skipped_capacity = skipped_by_reason.get('daily_capacity', 0) + skipped_by_reason.get('daily_trade_limit', 0)
+        
+        # =========================================================================
+        # INDUSTRY-GRADE SCORING (Hard to Game)
+        # =========================================================================
+        coverage = executed_trades / total_trades if total_trades > 0 else 0
+        
+        disqualified = False
+        disqualify_reason = None
+        
+        if coverage < 0.50:
+            disqualified = True
+            disqualify_reason = f"Coverage too low ({coverage*100:.0f}% < 50%)"
+        elif max_drawdown_pct > 60:
+            disqualified = True
+            disqualify_reason = f"Drawdown too high ({max_drawdown_pct:.1f}% > 60%)"
+        elif final_balance <= 0:
+            disqualified = True
+            disqualify_reason = "Account blown (balance <= 0)"
+        
+        if not disqualified and final_balance > 0:
+            growth = math.log(final_balance / portfolio_start) if final_balance > 0 else -10
+            dd = max_drawdown_pct / 100 + 1e-6
+            tail_penalty = max(0, abs(worst_trade_pct) - 50) / 50
+            stability = min(profit_factor, 3.0) if profit_factor > 0 else 0.1
+            
+            score = (growth / dd) * (0.6 + 0.4 * coverage) * (1 / (1 + tail_penalty)) * stability
+            score = round(score, 4)
         else:
-            normalized_return = total_return_pct
-        
-        # Risk score: normalized return divided by drawdown, adjusted for execution %
-        execution_rate = executed_trades / (executed_trades + summary['skipped_trades']) if (executed_trades + summary['skipped_trades']) > 0 else 1
-        
-        if max_drawdown_pct > 0:
-            risk_score = (normalized_return / max_drawdown_pct) * execution_rate
-        else:
-            risk_score = normalized_return * execution_rate
-        
-        # Cap risk score at reasonable levels (max 10.0)
-        risk_score = min(risk_score, 10.0)
+            score = -999
         
         results.append({
-            'position_pct': pct,
-            'final_balance': summary['final_balance'],
-            'total_profit': summary['total_profit'],
-            'total_return_pct': summary['total_return_pct'],
-            'max_drawdown_pct': summary['max_drawdown_pct'],
-            'executed_trades': summary['executed_trades'],
-            'skipped_trades': summary['skipped_trades'],
+            'mode': candidate['mode'],
+            'risk_value': candidate['risk_value'],
+            'label': candidate['label'],
+            'executed_trades': executed_trades,
+            'skipped_trades_total': skipped_total,
+            'skipped_due_to_affordability': skipped_afford,
+            'skipped_due_to_daily_capacity': skipped_capacity,
+            'avg_trades_per_day_executed': round(avg_trades_per_day, 1),
+            'final_balance': round(final_balance, 2),
+            'total_return_pct': round(total_return_pct, 1),
+            'max_drawdown_pct': round(max_drawdown_pct, 1),
+            'worst_trade_pct': round(worst_trade_pct, 1),
+            'profit_factor': round(profit_factor, 2) if profit_factor != float('inf') else 999.99,
+            'expectancy_dollars': round(expectancy, 2),
+            'coverage_pct': round(coverage * 100, 1),
+            'score': score,
+            'disqualified': disqualified,
+            'disqualify_reason': disqualify_reason,
             'wins': summary['wins'],
             'losses': summary['losses'],
-            'win_rate': round(summary['wins'] / summary['executed_trades'] * 100, 1) if summary['executed_trades'] > 0 else 0,
-            'avg_position': summary['avg_simulated_position'],
-            'risk_score': round(risk_score, 2),
-            'normalized_return': round(normalized_return, 2),
+            'win_rate': round(summary['win_rate'], 1),
         })
     
-    # Find best result (highest risk-adjusted score with reasonable execution)
-    valid_results = [r for r in results if r['executed_trades'] > 0]
-    if not valid_results:
+    if not results:
         return {
             'success': False,
-            'error': 'No trades could be executed at any position size. Portfolio too small.',
+            'error': 'No valid simulation results. Check entity exists and has trades.',
             'entity_type': entity_type,
             'entity_id': entity_id
         }
     
-    # Sort by risk score descending
-    sorted_results = sorted(valid_results, key=lambda x: x['risk_score'], reverse=True)
-    best_result = sorted_results[0]
+    # =========================================================================
+    # SELECT RECOMMENDED CANDIDATE
+    # =========================================================================
+    qualified = [r for r in results if not r['disqualified'] and r['score'] > 0]
     
-    # Check if ALL results are negative (no profitable sizing exists)
-    all_negative = all(r['total_return_pct'] < 0 for r in valid_results)
-    any_profitable = any(r['total_return_pct'] > 0 for r in valid_results)
-    
-    # Generate recommendation message with realistic warnings
-    warning_flags = []
-    
-    # Check for unrealistic returns
-    if best_result['total_return_pct'] > 500:
-        warning_flags.append("CAUTION: Returns above 500% in 30 days are extremely rare. Results assume perfect execution with no slippage beyond the model.")
-    
-    # Check for excessive position sizes
-    if best_result['avg_position'] > LIQUIDITY_WARNING_THRESHOLD:
-        warning_flags.append(f"LIQUIDITY WARNING: Average position ${best_result['avg_position']:,.0f} may face execution challenges in illiquid options.")
-    
-    # Check for high risk percentage vs Kelly
-    kelly_data = None
-    
-    if all_negative:
-        recommendation_msg = f"WARNING: No position size yields positive returns with this trade history. {best_result['position_pct']}% is the LEAST BAD option (smallest loss ratio). Consider trading a different source or paper trading longer."
-    elif any_profitable:
-        recommendation_msg = f"Based on historical trades, {best_result['position_pct']}% position size offers the best risk-adjusted returns."
-        if best_result['skipped_trades'] > 0:
-            recommendation_msg += f" Note: {best_result['skipped_trades']} trades would be skipped due to capital constraints."
-        
-        # Add warning flags
-        if warning_flags:
-            recommendation_msg += "\n\n" + "\n".join(warning_flags)
+    if qualified:
+        sorted_qualified = sorted(qualified, key=lambda x: x['score'], reverse=True)
+        recommended = sorted_qualified[0]
+        fallback_mode = False
     else:
-        recommendation_msg = f"Breakeven result at {best_result['position_pct']}%. Consider paper trading longer to gather more data."
+        sorted_by_coverage = sorted(results, key=lambda x: (x['coverage_pct'], -x['max_drawdown_pct']), reverse=True)
+        recommended = sorted_by_coverage[0]
+        fallback_mode = True
     
-    # Now fetch trade history once for advanced metrics (after simulations complete)
-    if entity_type == "user":
-        trades = fetch_user_trade_history(entity_id)
-    else:
-        trades = fetch_channel_trade_history(entity_id)
+    # =========================================================================
+    # GENERATE RATIONALE
+    # =========================================================================
+    why_bullets = []
+    tradeoffs = []
+    notes = []
     
-    # Calculate base statistics for advanced metrics
-    if trades:
-        wins_list = [t for t in trades if t.pnl >= 0]
-        losses_list = [t for t in trades if t.pnl < 0]
-        win_rate = len(wins_list) / len(trades)
-        avg_win_pct = mean([abs(t.pnl_percent) for t in wins_list]) if wins_list else 0
-        avg_loss_pct = mean([abs(t.pnl_percent) for t in losses_list]) if losses_list else 0
-        
-        # Use recommended position's avg_position for dollar expectancy
-        recommended_avg_position = best_result.get('avg_position', portfolio_start * 0.1)
-        
-        # Calculate advanced metrics
-        kelly = calculate_kelly_criterion(win_rate, avg_win_pct, avg_loss_pct)
-        expectancy = calculate_expectancy(win_rate, avg_win_pct, avg_loss_pct, recommended_avg_position)
-        streaks = analyze_streaks(trades)
-        timing = analyze_trading_times(trades)
-        
-        # Calculate risk of ruin for recommended position size
-        risk_of_ruin = calculate_risk_of_ruin(
-            win_rate=win_rate,
-            avg_win_pct=avg_win_pct,
-            avg_loss_pct=avg_loss_pct,
-            position_size_pct=best_result['position_pct']
-        )
-        
-        advanced_metrics = {
-            'kelly': kelly,
-            'expectancy': expectancy,
-            'risk_of_ruin': risk_of_ruin,
-            'streaks': streaks,
-            'timing': timing,
-            'stats': {
-                'win_rate': round(win_rate * 100, 1),
-                'avg_win_pct': round(avg_win_pct, 2),
-                'avg_loss_pct': round(avg_loss_pct, 2),
-                'total_trades': len(trades)
-            }
-        }
+    if not fallback_mode:
+        why_bullets.append(f"Highest risk-adjusted score ({recommended['score']:.2f}) among qualified candidates")
+        why_bullets.append(f"{recommended['coverage_pct']:.0f}% trade coverage - executes most signals")
+        why_bullets.append(f"Max drawdown {recommended['max_drawdown_pct']:.1f}% is within acceptable range (<=60%)")
+        if recommended['profit_factor'] >= 1.5:
+            why_bullets.append(f"Profit factor {recommended['profit_factor']:.2f} indicates solid edge")
+        if recommended['expectancy_dollars'] > 0:
+            why_bullets.append(f"Positive expectancy: +${recommended['expectancy_dollars']:.2f}/trade")
     else:
-        advanced_metrics = None
+        why_bullets.append("WARNING: No candidate met all guardrails (coverage>=50%, drawdown<=60%)")
+        why_bullets.append(f"Selected best available: {recommended['coverage_pct']:.0f}% coverage")
+        why_bullets.append("Consider increasing portfolio or reducing position sizes")
+    
+    if recommended['skipped_due_to_affordability'] > 0:
+        tradeoffs.append(f"{recommended['skipped_due_to_affordability']} trades skipped due to affordability")
+    if recommended['skipped_due_to_daily_capacity'] > 0:
+        tradeoffs.append(f"{recommended['skipped_due_to_daily_capacity']} trades skipped due to daily capacity limits")
+    if recommended['worst_trade_pct'] < -30:
+        tradeoffs.append(f"Worst single trade was {recommended['worst_trade_pct']:.1f}% - consider tighter stops")
+    
+    notes.append(f"Based on {results[0]['executed_trades'] + results[0]['skipped_trades_total']} historical trades")
+    notes.append(f"Daily capacity: {daily_alloc_pct*100:.0f}% × {daily_recycle_turns}x recycle")
+    notes.append("Slippage model: " + ("ON (0.5% base + size factor)" if include_slippage else "OFF"))
+    notes.append("Results assume consistent market conditions - past performance ≠ future results")
     
     return {
         'success': True,
         'entity_type': entity_type,
         'entity_id': entity_id,
         'portfolio_start': portfolio_start,
+        'basis': basis,
         'comparison': results,
-        'recommended': best_result,
-        'recommendation_message': recommendation_msg,
-        'all_negative': all_negative,
-        'any_profitable': any_profitable,
-        'total_trades_in_history': results[0]['executed_trades'] + results[0]['skipped_trades'] if results else 0,
-        
-        # Advanced risk metrics
-        'advanced_metrics': advanced_metrics
+        'recommended': recommended,
+        'fallback_mode': fallback_mode,
+        'rationale': {
+            'why_this_one': why_bullets,
+            'tradeoffs': tradeoffs,
+            'notes': notes
+        },
+        'params_used': {
+            'basis': basis,
+            'include_fixed': include_fixed,
+            'include_slippage': include_slippage,
+            'daily_alloc_pct': daily_alloc_pct,
+            'daily_recycle_turns': daily_recycle_turns,
+            'max_trades_per_day': max_trades_per_day or MAX_TRADES_PER_DAY_HARD,
+        }
     }
 
 

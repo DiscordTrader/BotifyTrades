@@ -7882,7 +7882,26 @@ def register_routes(app):
     
     @app.route('/api/simulate/optimizer', methods=['POST'])
     def api_risk_optimizer():
-        """Run risk optimization to find optimal position size percentage"""
+        """
+        Run risk optimization to find optimal position sizing.
+        
+        Uses the improved portfolio simulation engine with:
+        - Percent-of-portfolio and fixed-$ candidates
+        - Daily realism constraints (affordability, capacity)
+        - Industry-grade scoring formula
+        
+        Payload:
+        {
+            entity_type, entity_id,
+            portfolio_start,
+            basis: "percent_start"|"percent_current" (default percent_start),
+            include_fixed: true/false (default true),
+            include_slippage: true/false (default true),
+            daily_alloc_pct: 0.60,
+            daily_recycle_turns: 2,
+            max_trades_per_day: null
+        }
+        """
         try:
             data = request.get_json()
             
@@ -7895,10 +7914,26 @@ def register_routes(app):
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
             from services.simulation import run_risk_optimizer
             
+            portfolio_start = float(data.get('portfolio_start', 3000))
+            basis = data.get('basis', 'percent_start')
+            include_fixed = data.get('include_fixed', True)
+            include_slippage = data.get('include_slippage', True)
+            daily_alloc_pct = float(data.get('daily_alloc_pct', 0.60))
+            daily_recycle_turns = int(data.get('daily_recycle_turns', 2))
+            max_trades_per_day = data.get('max_trades_per_day')
+            if max_trades_per_day:
+                max_trades_per_day = int(max_trades_per_day)
+            
             result = run_risk_optimizer(
                 entity_type=entity_type,
                 entity_id=entity_id,
-                portfolio_start=float(data.get('portfolio_start', 3000)),
+                portfolio_start=portfolio_start,
+                basis=basis,
+                include_fixed=include_fixed,
+                include_slippage=include_slippage,
+                daily_alloc_pct=daily_alloc_pct,
+                daily_recycle_turns=daily_recycle_turns,
+                max_trades_per_day=max_trades_per_day,
             )
             
             return jsonify(result)

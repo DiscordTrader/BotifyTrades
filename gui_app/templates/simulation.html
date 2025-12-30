@@ -72,11 +72,56 @@
                         </div>
                     </div>
                     
+                    <div id="optimizer-options" style="display: none; margin-bottom: 10px; padding: 10px; background: rgba(16, 185, 129, 0.1); border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.3);">
+                        <div style="font-size: 0.6875rem; font-weight: 600; color: var(--success); margin-bottom: 8px;">🎯 Optimizer Settings</div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                            <div>
+                                <label style="font-size: 0.625rem; color: var(--text-muted); display: block; margin-bottom: 3px;">Sizing Basis</label>
+                                <select id="optimizer-basis" class="form-select" style="padding: 5px; font-size: 0.6875rem; background-color: #2C2C2E; color: #FFFFFF; border-radius: 4px;">
+                                    <option value="percent_start" style="background-color: #2C2C2E;">% of START (flat - safer)</option>
+                                    <option value="percent_current" style="background-color: #2C2C2E;">% of CURRENT (compound)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-size: 0.625rem; color: var(--text-muted); display: block; margin-bottom: 3px;">Daily Recycle Turns</label>
+                                <select id="optimizer-recycle" class="form-select" style="padding: 5px; font-size: 0.6875rem; background-color: #2C2C2E; color: #FFFFFF; border-radius: 4px;">
+                                    <option value="1" style="background-color: #2C2C2E;">1x (Conservative)</option>
+                                    <option value="2" selected style="background-color: #2C2C2E;">2x (Default)</option>
+                                    <option value="3" style="background-color: #2C2C2E;">3x (Aggressive)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                            <div>
+                                <label style="font-size: 0.625rem; color: var(--text-muted); display: block; margin-bottom: 3px;">Daily Allocation %</label>
+                                <select id="optimizer-alloc" class="form-select" style="padding: 5px; font-size: 0.6875rem; background-color: #2C2C2E; color: #FFFFFF; border-radius: 4px;">
+                                    <option value="0.40" style="background-color: #2C2C2E;">40% (Safe)</option>
+                                    <option value="0.60" selected style="background-color: #2C2C2E;">60% (Default)</option>
+                                    <option value="0.80" style="background-color: #2C2C2E;">80% (Aggressive)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-size: 0.625rem; color: var(--text-muted); display: block; margin-bottom: 3px;">Max Trades/Day</label>
+                                <input type="number" id="optimizer-max-trades" class="form-input" placeholder="Auto (25)" min="1" max="50" style="padding: 5px; font-size: 0.6875rem;">
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                            <label style="font-size: 0.625rem; color: var(--text-muted); display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                <input type="checkbox" id="optimizer-include-fixed" checked style="width: 12px; height: 12px;">
+                                <span>Include Fixed-$ Candidates</span>
+                            </label>
+                            <label style="font-size: 0.625rem; color: var(--text-muted); display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                <input type="checkbox" id="optimizer-include-slippage" checked style="width: 12px; height: 12px;">
+                                <span>Include Slippage/Fees</span>
+                            </label>
+                        </div>
+                    </div>
+                    
                     <div style="font-size: 0.6875rem; color: var(--text-muted); margin-bottom: 8px; padding: 6px; background: rgba(139, 92, 246, 0.1); border-radius: 4px;">
                         <strong>📋 Copy Trader 1:1</strong>: Performance report using original trades. Does NOT simulate your portfolio. Shows capital requirements.
                     </div>
                     <div style="font-size: 0.6875rem; color: var(--text-muted); margin-bottom: 10px; padding: 6px; background: rgba(16, 185, 129, 0.1); border-radius: 4px;">
-                        <strong>🎯 Find Optimal Risk</strong>: Tests 1-25% position sizes to find best risk-adjusted returns
+                        <strong>🎯 Find Optimal Risk</strong>: Tests 1-25% + fixed-$ sizes with daily realism. <a href="#" onclick="document.getElementById('optimizer-options').style.display = document.getElementById('optimizer-options').style.display === 'none' ? 'block' : 'none'; return false;" style="color: var(--mint);">Settings</a>
                     </div>
                     
                     <button onclick="runRecoveryCalculator()" class="btn" style="width: 100%; padding: 10px; font-size: 0.8125rem; font-weight: 600; background: linear-gradient(135deg, #f59e0b, #d97706); border: none; margin-bottom: 8px;">
@@ -1124,12 +1169,27 @@ async function runRiskOptimizer() {
     btns.forEach(btn => btn.disabled = true);
     
     try {
-        showToast('Running risk optimizer (testing 8 position sizes)...', 'info');
+        const basis = document.getElementById('optimizer-basis')?.value || 'percent_start';
+        const includeFixed = document.getElementById('optimizer-include-fixed')?.checked ?? true;
+        const includeSlippage = document.getElementById('optimizer-include-slippage')?.checked ?? true;
+        const dailyAllocPct = parseFloat(document.getElementById('optimizer-alloc')?.value || 0.60);
+        const dailyRecycleTurns = parseInt(document.getElementById('optimizer-recycle')?.value || 2);
+        const maxTradesInput = document.getElementById('optimizer-max-trades')?.value;
+        const maxTradesPerDay = maxTradesInput ? parseInt(maxTradesInput) : null;
+        
+        const candidateCount = 10 + (includeFixed ? 5 : 0);
+        showToast(`Running risk optimizer (testing ~${candidateCount} sizing candidates)...`, 'info');
         
         const payload = {
             entity_type: currentEntityType,
             entity_id: entityId,
             portfolio_start: parseFloat(document.getElementById('portfolio-start').value) || 3000,
+            basis: basis,
+            include_fixed: includeFixed,
+            include_slippage: includeSlippage,
+            daily_alloc_pct: dailyAllocPct,
+            daily_recycle_turns: dailyRecycleTurns,
+            max_trades_per_day: maxTradesPerDay
         };
         
         const response = await fetch('/api/simulate/optimizer', {
@@ -1164,97 +1224,100 @@ function displayOptimizerResults(data) {
     
     const recommended = data.recommended;
     const portfolio = data.portfolio_start;
-    const allNegative = data.all_negative || false;
-    const isProfit = recommended.total_profit >= 0;
+    const fallbackMode = data.fallback_mode || false;
+    const rationale = data.rationale || {};
+    const isProfit = recommended.total_return_pct >= 0;
     
-    // Update summary stats with recommended values - use appropriate colors
+    // Update summary stats with recommended values
     document.getElementById('result-final-balance').textContent = '$' + recommended.final_balance.toLocaleString(undefined, {minimumFractionDigits: 2});
     document.getElementById('result-final-balance').className = 'stat-value ' + (isProfit ? 'success' : 'danger');
     
+    const totalProfit = recommended.final_balance - portfolio;
     const profitEl = document.getElementById('result-total-profit');
-    profitEl.textContent = (isProfit ? '+$' : '-$') + Math.abs(recommended.total_profit).toLocaleString(undefined, {minimumFractionDigits: 2});
-    profitEl.className = 'stat-value ' + (isProfit ? 'success' : 'danger');
+    profitEl.textContent = (totalProfit >= 0 ? '+$' : '-$') + Math.abs(totalProfit).toLocaleString(undefined, {minimumFractionDigits: 2});
+    profitEl.className = 'stat-value ' + (totalProfit >= 0 ? 'success' : 'danger');
     
     document.getElementById('result-total-return').textContent = (recommended.total_return_pct >= 0 ? '+' : '') + recommended.total_return_pct.toFixed(1) + '%';
     document.getElementById('result-total-return').className = 'stat-value ' + (recommended.total_return_pct >= 0 ? 'success' : 'danger');
     
-    // Show "Least Bad %" instead of "Optimal %" when all negative
-    document.querySelector('[for-stat="expected-trade"]').textContent = allNegative ? 'Least Bad %' : 'Optimal %';
-    document.getElementById('result-expected-trade').textContent = recommended.position_pct + '%';
-    document.getElementById('result-expected-trade').className = 'stat-value ' + (allNegative ? 'warning' : 'info');
+    // Show recommended sizing
+    document.querySelector('[for-stat="expected-trade"]').textContent = fallbackMode ? 'Best Available' : 'Recommended';
+    document.getElementById('result-expected-trade').textContent = recommended.label;
+    document.getElementById('result-expected-trade').className = 'stat-value ' + (fallbackMode ? 'warning' : 'info');
     
-    document.querySelector('[for-stat="avg-daily"]').textContent = 'Max Drawdown';
-    document.getElementById('result-avg-daily').textContent = recommended.max_drawdown_pct.toFixed(1) + '%';
-    document.getElementById('result-avg-daily').className = 'stat-value warning';
+    document.querySelector('[for-stat="avg-daily"]').textContent = 'Coverage';
+    document.getElementById('result-avg-daily').textContent = recommended.coverage_pct + '%';
+    document.getElementById('result-avg-daily').className = 'stat-value ' + (recommended.coverage_pct >= 50 ? 'success' : 'warning');
     
-    document.querySelector('[for-stat="weekly"]').textContent = 'Skipped';
-    document.getElementById('result-weekly').textContent = recommended.skipped_trades + ' trades';
-    document.getElementById('result-weekly').className = 'stat-value ' + (recommended.skipped_trades > 0 ? 'warning' : 'info');
+    document.querySelector('[for-stat="weekly"]').textContent = 'Drawdown';
+    document.getElementById('result-weekly').textContent = recommended.max_drawdown_pct + '%';
+    document.getElementById('result-weekly').className = 'stat-value warning';
     
-    document.querySelector('[for-stat="monthly"]').textContent = 'Win Rate';
-    document.getElementById('result-monthly').textContent = recommended.win_rate + '%';
-    document.getElementById('result-monthly').className = 'stat-value ' + (recommended.win_rate >= 50 ? 'success' : 'warning');
+    document.querySelector('[for-stat="monthly"]').textContent = 'Profit Factor';
+    document.getElementById('result-monthly').textContent = recommended.profit_factor >= 999 ? '∞' : recommended.profit_factor.toFixed(2);
+    document.getElementById('result-monthly').className = 'stat-value ' + (recommended.profit_factor >= 1 ? 'success' : 'danger');
     
-    document.getElementById('result-edge').textContent = 'Risk Score: ' + recommended.risk_score;
-    document.getElementById('result-edge').className = 'stat-value ' + (recommended.risk_score > 0 ? 'success' : 'warning');
+    document.getElementById('result-edge').textContent = 'Score: ' + (recommended.score > 0 ? recommended.score.toFixed(2) : 'N/A');
+    document.getElementById('result-edge').className = 'stat-value ' + (recommended.score > 0 ? 'success' : 'warning');
     
-    // Strategy text - show warning header when all negative
-    const headerText = allNegative ? '⚠️ NO PROFITABLE SIZING FOUND' : 'RISK OPTIMIZATION RESULTS';
-    document.getElementById('strategy-text').textContent = 
-        `${headerText}\n\n` +
-        `${data.recommendation_message}\n\n` +
-        `With $${portfolio.toLocaleString()} portfolio at ${recommended.position_pct}% per trade:\n` +
-        `• Average position: $${recommended.avg_position.toLocaleString()}\n` +
-        `• Expected return: ${recommended.total_return_pct.toFixed(1)}%\n` +
-        `• Max drawdown: ${recommended.max_drawdown_pct.toFixed(1)}%\n` +
-        `• Risk-adjusted score: ${recommended.risk_score}`;
+    // Strategy text with rationale bullets
+    let strategyText = fallbackMode ? '⚠️ WARNING: NO CANDIDATE MET ALL GUARDRAILS\n\n' : '🎯 RISK OPTIMIZATION COMPLETE\n\n';
+    strategyText += `Recommended: ${recommended.label}\n\n`;
     
-    // Render comparison table - highlight row appropriately
+    if (rationale.why_this_one && rationale.why_this_one.length > 0) {
+        strategyText += 'Why this sizing:\n' + rationale.why_this_one.map(b => '• ' + b).join('\n') + '\n\n';
+    }
+    if (rationale.tradeoffs && rationale.tradeoffs.length > 0) {
+        strategyText += 'Trade-offs:\n' + rationale.tradeoffs.map(b => '• ' + b).join('\n') + '\n\n';
+    }
+    if (rationale.notes && rationale.notes.length > 0) {
+        strategyText += 'Notes:\n' + rationale.notes.map(b => '• ' + b).join('\n');
+    }
+    document.getElementById('strategy-text').textContent = strategyText;
+    
+    // Render comparison table with new columns
     const tbody = document.getElementById('historical-breakdown-body');
     tbody.innerHTML = data.comparison.map(r => {
-        const isSelected = r.position_pct === recommended.position_pct;
-        const bgColor = isSelected ? (allNegative ? 'rgba(251, 191, 36, 0.15)' : 'rgba(16, 185, 129, 0.1)') : '';
+        const isSelected = r.label === recommended.label;
+        const bgColor = isSelected ? (fallbackMode ? 'rgba(251, 191, 36, 0.15)' : 'rgba(16, 185, 129, 0.15)') : (r.disqualified ? 'rgba(239, 68, 68, 0.05)' : '');
         const returnColor = r.total_return_pct >= 0 ? 'var(--success)' : 'var(--danger)';
         const returnSign = r.total_return_pct >= 0 ? '+' : '';
+        const dqBadge = r.disqualified ? `<span style="font-size: 0.625rem; color: var(--danger);" title="${r.disqualify_reason}">⛔</span>` : '';
+        const recBadge = isSelected ? `<span style="font-size: 0.625rem; color: ${fallbackMode ? 'var(--warning)' : 'var(--success)'};">✓</span>` : '';
         
         return `
-        <tr style="background: ${bgColor};">
-            <td style="font-weight: 600;">${r.position_pct}%</td>
+        <tr style="background: ${bgColor}; ${r.disqualified ? 'opacity: 0.6;' : ''}">
+            <td style="font-weight: 600;">${r.label} ${recBadge}${dqBadge}</td>
             <td style="font-weight: 600; color: ${r.final_balance >= portfolio ? 'var(--success)' : 'var(--danger)'};">$${r.final_balance.toLocaleString()}</td>
-            <td style="text-align: right; color: ${returnColor};">${returnSign}${r.total_return_pct.toFixed(1)}%</td>
-            <td style="text-align: right; color: var(--warning);">${r.max_drawdown_pct.toFixed(1)}%</td>
+            <td style="text-align: right; color: ${returnColor};">${returnSign}${r.total_return_pct}%</td>
+            <td style="text-align: right; color: var(--warning);">${r.max_drawdown_pct}%</td>
             <td style="text-align: center;">${r.executed_trades}</td>
-            <td style="text-align: center; color: ${r.skipped_trades > 0 ? 'var(--warning)' : 'var(--text-muted)'};">${r.skipped_trades}</td>
-            <td style="text-align: right;">${r.win_rate}%</td>
-            <td style="text-align: right; font-weight: 600; color: ${isSelected ? (allNegative ? 'var(--warning)' : 'var(--mint)') : 'var(--text-primary)'};">${r.risk_score}</td>
-            <td style="text-align: right;">$${r.avg_position.toLocaleString()}</td>
+            <td style="text-align: center; color: ${r.skipped_trades_total > 0 ? 'var(--warning)' : 'var(--text-muted)'};">${r.skipped_trades_total}</td>
+            <td style="text-align: right;" title="Afford: ${r.skipped_due_to_affordability}, Capacity: ${r.skipped_due_to_daily_capacity}">${r.coverage_pct}%</td>
+            <td style="text-align: right;">${r.profit_factor >= 999 ? '∞' : r.profit_factor}</td>
+            <td style="text-align: right; font-weight: 600; color: ${isSelected ? (fallbackMode ? 'var(--warning)' : 'var(--mint)') : 'var(--text-primary)'};">${r.score > 0 ? r.score.toFixed(2) : '-'}</td>
         </tr>
     `}).join('');
     
     // Update heading for optimizer view
     const titleEl = document.getElementById('historical-breakdown-title');
-    titleEl.innerHTML = `<span>📊</span> Position Size Comparison`;
+    titleEl.innerHTML = `<span>📊</span> Sizing Candidates Comparison`;
     
-    // Update table headers with user-friendly names and tooltips
+    // Update table headers
     document.querySelector('#historical-breakdown thead tr').innerHTML = `
-        <th title="Percentage of portfolio risked per trade">Risk %</th>
+        <th title="Position sizing method">Sizing</th>
         <th title="Portfolio value after all trades">Ending $</th>
-        <th style="text-align: right;" title="Total profit/loss as percentage">Total %</th>
-        <th style="text-align: right;" title="Worst peak-to-trough decline during trading">Max Loss %</th>
-        <th style="text-align: center;" title="Number of trades your budget could afford"># Trades</th>
-        <th style="text-align: center;" title="Trades skipped (budget too small to buy 1 contract)">Skipped</th>
-        <th style="text-align: right;" title="Percentage of executed trades that were profitable">Win %</th>
-        <th style="text-align: right;" title="Return divided by Max Loss - higher is better (positive = good)">Score</th>
-        <th style="text-align: right;" title="Average dollar amount per position">Avg $</th>
+        <th style="text-align: right;" title="Total profit/loss as percentage">Return %</th>
+        <th style="text-align: right;" title="Worst peak-to-trough decline">Drawdown</th>
+        <th style="text-align: center;" title="Number of trades executed">Executed</th>
+        <th style="text-align: center;" title="Trades skipped (affordability + daily limits)">Skipped</th>
+        <th style="text-align: right;" title="Executed / Total trades">Coverage</th>
+        <th style="text-align: right;" title="Gross profit / Gross loss (>1 = profitable)">Pft Factor</th>
+        <th style="text-align: right;" title="Risk-adjusted score (growth/drawdown × coverage × stability)">Score</th>
     `;
     
-    // Display Advanced Risk Metrics if available
-    if (data.advanced_metrics) {
-        displayAdvancedMetrics(data.advanced_metrics, allNegative);
-    } else {
-        document.getElementById('advanced-metrics-card').style.display = 'none';
-    }
-    
+    // Hide advanced metrics for optimizer (use rationale instead)
+    document.getElementById('advanced-metrics-card').style.display = 'none';
     document.getElementById('warnings-section').style.display = 'none';
     document.getElementById('capital-requirements-section').style.display = 'none';
 }
