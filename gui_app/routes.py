@@ -736,6 +736,9 @@ def register_routes(app):
         # Allow license server API (public endpoints for EXE clients)
         if request.path.startswith('/api/v1/license/'):
             return None
+        # Allow build info API (for UI to check admin features)
+        if request.path == '/api/system/build-info':
+            return None
         # Allow user dashboard routes (handled by user_login_required decorator)
         if request.path.startswith('/user/') or request.path.startswith('/api/user/'):
             return None
