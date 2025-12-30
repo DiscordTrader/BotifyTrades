@@ -6140,6 +6140,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             self._processed_messages.add(message.id)
         
         print(f"[Discord] Processing message ID: {message.id}")
+        print(f"[DEBUG] Author: {message.author.name} (ID: {message.author.id}), Channel: {message.channel.id}")
         
         # Limit cache size to prevent memory growth
         if len(self._processed_messages) > self._max_processed_cache:
@@ -6155,12 +6156,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # Handle webhook messages - skip ALL webhook messages to prevent Trade Monitor loops
         # Discord webhook messages have webhook_id attribute
         # Trade Monitor posts to webhooks, so we must not re-execute those signals
+        print(f"[DEBUG] Checking webhook: has_attr={hasattr(message, 'webhook_id')}, webhook_id={getattr(message, 'webhook_id', None)}")
         if hasattr(message, 'webhook_id') and message.webhook_id:
             print(f"[SKIP] Webhook message from {message.author.name} - preventing re-execution loop")
             return
         
         # Skip bot's own response messages SECOND (before any logging)
         # This prevents the bot from processing its own 🤖/📊/❌ messages
+        print(f"[DEBUG] Checking self-message: self.user={self.user.id if self.user else None}, author={message.author.id}")
         is_self_message = self.user and message.author.id == self.user.id
         if is_self_message:
             content_preview = message.content.strip()[:50]
