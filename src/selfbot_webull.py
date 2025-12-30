@@ -6153,13 +6153,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if self.sentiment_analyzer and not message.author.bot:
             self.sentiment_analyzer.add_message(message.content)
         
-        # Handle webhook messages - skip ALL webhook messages to prevent Trade Monitor loops
-        # Discord webhook messages have webhook_id attribute
-        # Trade Monitor posts to webhooks, so we must not re-execute those signals
+        # Handle webhook messages - conditionally allow based on ALLOW_SELF_MESSAGES setting
+        # When ALLOW_SELF_MESSAGES is True, webhook messages from monitored channels are processed
+        # This enables testing via webhooks and automation while still preventing Trade Monitor loops
         print(f"[DEBUG] Checking webhook: has_attr={hasattr(message, 'webhook_id')}, webhook_id={getattr(message, 'webhook_id', None)}")
-        if hasattr(message, 'webhook_id') and message.webhook_id:
-            print(f"[SKIP] Webhook message from {message.author.name} - preventing re-execution loop")
-            return
+        is_webhook_message = hasattr(message, 'webhook_id') and message.webhook_id
+        if is_webhook_message:
+            if ALLOW_SELF_MESSAGES:
+                print(f"[DEBUG] ✓ Webhook message ALLOWED - ALLOW_SELF_MESSAGES is True")
+            else:
+                print(f"[SKIP] Webhook message from {message.author.name} - ALLOW_SELF_MESSAGES is False")
+                return
         
         # Skip bot's own response messages SECOND (before any logging)
         # This prevents the bot from processing its own 🤖/📊/❌ messages
@@ -6192,15 +6196,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 return
         
         # Check channel-specific allowed users (if configured)
-        # Skip this check for self-messages when ALLOW_SELF_MESSAGES is enabled
+        # Skip this check for self-messages and webhook messages when ALLOW_SELF_MESSAGES is enabled
         if channel_info and DATABASE_MODULE_AVAILABLE:
             try:
                 from gui_app import database as db
                 channel_internal_id = channel_info.get('id')
                 if channel_internal_id:
-                    # Self-messages bypass the per-channel user filter when ALLOW_SELF_MESSAGES is True
+                    # Self-messages and webhook messages bypass the per-channel user filter when ALLOW_SELF_MESSAGES is True
                     if is_self_message and ALLOW_SELF_MESSAGES:
                         print(f"[DEBUG] Self-message bypasses per-channel user filter")
+                    elif is_webhook_message and ALLOW_SELF_MESSAGES:
+                        print(f"[DEBUG] Webhook message bypasses per-channel user filter")
                     else:
                         is_allowed = db.is_user_allowed(channel_internal_id, str(message.author.id))
                         if not is_allowed:
