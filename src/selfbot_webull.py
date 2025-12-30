@@ -1413,6 +1413,16 @@ def calculate_dte_expiry(dte_days: int) -> str:
 # Groups: (action, symbol, strike, opt_type, dte_days, price)
 DTE_OPT_PATTERN = r'(BTO|STC)\s+[$]?([A-Za-z]+)\s+[$]?([0-9.]+)\s*([CPcp])\s+(\d+)\s*DTE\s*[@]?\s*[.]?([0-9.]+)'
 
+# Bishop-style patterns (multi-line entry format)
+# Entry format: "I'm Entering" followed by "Option: SPX 6900 P 12/30" and "Entry: 1.00"
+# Option line groups: (symbol, strike, opt_type, month, day)
+BISHOP_OPTION_PATTERN = r'Option:\s*([A-Za-z]+)\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+(\d{1,2})/(\d{1,2})'
+# Entry price groups: (price)
+BISHOP_ENTRY_PATTERN = r'Entry:\s*(\d+\.?\d*)'
+# Trim/STC format: "Trimming SPX 6900 P 12/30 @$1.30"
+# Groups: (symbol, strike, opt_type, month, day, price)
+BISHOP_TRIM_PATTERN = r'[Tt]rimming\s+([A-Za-z]+)\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+(\d{1,2})/(\d{1,2})\s*@\s*\$?(\d+\.?\d*)'
+
 # Use database patterns if available, otherwise fallback to config.ini or defaults
 if DB_OPTION_PATTERN:
     OPT_REGEX = re.compile(DB_OPTION_PATTERN, re.IGNORECASE | re.MULTILINE)
@@ -3685,6 +3695,9 @@ BEAR_CONTRACT_REGEX = re.compile(BEAR_CONTRACT_PATTERN, re.IGNORECASE | re.MULTI
 BEAR_ENTRY_REGEX = re.compile(BEAR_ENTRY_PATTERN, re.IGNORECASE)
 BEAR_TRIM_REGEX = re.compile(BEAR_TRIM_PATTERN, re.IGNORECASE)
 BEAR_LOTTO_REGEX = re.compile(BEAR_LOTTO_PATTERN, re.IGNORECASE)
+BISHOP_OPTION_REGEX = re.compile(BISHOP_OPTION_PATTERN, re.IGNORECASE | re.MULTILINE)
+BISHOP_ENTRY_REGEX = re.compile(BISHOP_ENTRY_PATTERN, re.IGNORECASE)
+BISHOP_TRIM_REGEX = re.compile(BISHOP_TRIM_PATTERN, re.IGNORECASE)
 
 def parse_option_signal(text: str) -> Optional[dict]:
     learned_result = try_parse_with_learned_formats(text)
@@ -4004,8 +4017,58 @@ def parse_option_signal(text: str) -> Optional[dict]:
                                                                                 "_exit_type": "HALF"
                                                                             }
                                                                         else:
-                                                                            # Silently return None - let the caller try other formats (stock, TRADE IDEA)
-                                                                            return None
+                                                                            # Try Bishop trim format: Trimming SPX 6900 P 12/30 @$1.30
+                                                                            bishop_trim_m = BISHOP_TRIM_REGEX.search(text.strip())
+                                                                            if bishop_trim_m:
+                                                                                symbol, strike, opt_type, month, day, price_str = bishop_trim_m.groups()
+                                                                                expiry = f"{month}/{day}"
+                                                                                price = float(price_str)
+                                                                                print(f"[Discord] ✓ Matched Bishop TRIM format: STC {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
+                                                                                return {
+                                                                                    "asset": "option",
+                                                                                    "action": "STC",
+                                                                                    "qty": 1,
+                                                                                    "symbol": symbol.upper(),
+                                                                                    "strike": float(strike),
+                                                                                    "opt_type": opt_type.upper(),
+                                                                                    "expiry": expiry,
+                                                                                    "price": price,
+                                                                                    "is_market_order": False,
+                                                                                    "_bishop_trim": True,
+                                                                                    "_exit_type": "PARTIAL"
+                                                                                }
+                                                                            else:
+                                                                                # Try Bishop entry format: "I'm Entering" + "Option: SPX 6900 P 12/30" + "Entry: 1.00"
+                                                                                if "i'm entering" in text.lower() or "im entering" in text.lower():
+                                                                                    bishop_option_m = BISHOP_OPTION_REGEX.search(text.strip())
+                                                                                    if bishop_option_m:
+                                                                                        symbol, strike, opt_type, month, day = bishop_option_m.groups()
+                                                                                        expiry = f"{month}/{day}"
+                                                                                        # Check for Entry price
+                                                                                        bishop_entry_m = BISHOP_ENTRY_REGEX.search(text.strip())
+                                                                                        if bishop_entry_m:
+                                                                                            price_str = bishop_entry_m.group(1)
+                                                                                            price = float(price_str) if price_str else None
+                                                                                            print(f"[Discord] ✓ Matched Bishop Entry format: BTO {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
+                                                                                            _current_trading_settings = get_trading_settings()
+                                                                                            max_position_size = _current_trading_settings['max_position_size']
+                                                                                            actual_cost_per_contract = price * 100 if price else 100
+                                                                                            qty = max(1, int(max_position_size / actual_cost_per_contract)) if actual_cost_per_contract > 0 else 1
+                                                                                            print(f"[AUTO-QTY] Bishop: ${price} x 100 = ${actual_cost_per_contract}/contract, buying {qty} (max ${max_position_size})")
+                                                                                            return {
+                                                                                                "asset": "option",
+                                                                                                "action": "BTO",
+                                                                                                "qty": qty,
+                                                                                                "symbol": symbol.upper(),
+                                                                                                "strike": float(strike),
+                                                                                                "opt_type": opt_type.upper(),
+                                                                                                "expiry": expiry,
+                                                                                                "price": price,
+                                                                                                "is_market_order": price is None,
+                                                                                                "_bishop_format": True
+                                                                                            }
+                                                                                # Silently return None - let the caller try other formats (stock, TRADE IDEA)
+                                                                                return None
     
     if use_steel_stc:
         # Handle various STC formats with different group structures
@@ -6317,7 +6380,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # DUAL-ACTION for BTO/STC: Forward FIRST (if enabled), then execute (if enabled)
                     if should_forward and (is_webhook_dest or is_channel_dest):
                         print(f"[DEBUG] Entering forward block (type={destination_type})...")
-                        # Prepare message for forwarding - always format as BTO/STC
+                        # Prepare message for forwarding - convert to BTO/STC format when enabled
                         if is_bullwinkle:
                             bullwinkle_parsed = parse_bullwinkle_signal(message.content)
                             if bullwinkle_parsed:
@@ -6326,6 +6389,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             else:
                                 forward_msg = strip_bullwinkle_emojis(message.content.strip())
                                 print(f"[CHANNEL MAP] ✓ Stripped emojis (parse failed): {forward_msg}")
+                        elif format_as_bto_stc:
+                            # Convert any signal format to BTO/STC format for forwarding
+                            parsed_opt = parse_option_signal(message.content)
+                            if parsed_opt:
+                                action = parsed_opt.get('action', 'BTO')
+                                qty = parsed_opt.get('qty', 1)
+                                symbol = parsed_opt.get('symbol', '')
+                                strike = parsed_opt.get('strike', '')
+                                opt_type = parsed_opt.get('opt_type', 'C')
+                                expiry = parsed_opt.get('expiry', '')
+                                price = parsed_opt.get('price')
+                                price_str = f"@ {price}" if price else "@ m"
+                                forward_msg = f"{action} {qty} ${symbol} {strike}{opt_type} {expiry} {price_str}"
+                                print(f"[CHANNEL MAP] ✓ Converted to BTO/STC format: {forward_msg}")
+                            else:
+                                # Couldn't parse, forward as-is
+                                forward_msg = message.content.strip()
+                                print(f"[CHANNEL MAP] ⚠️ Could not parse signal, forwarding raw: {forward_msg[:50]}...")
                         else:
                             forward_msg = message.content.strip()
                         
