@@ -111,6 +111,14 @@ except ImportError as e:
     print(f"[WARNING] Could not import IBKRBroker: {e}")
     IBKR_AVAILABLE = False
 
+# Import DhanQ broker (India - DhanHQ v2 API)
+try:
+    from brokers.dhanq_broker import DhanQBroker
+    DHANQ_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARNING] Could not import DhanQBroker: {e}")
+    DHANQ_AVAILABLE = False
+
 # Import BrokerSyncService for real-time trade synchronization
 from broker_sync_service import BrokerSyncService
 
@@ -4974,6 +4982,62 @@ class SelfClient(discord.Client):
             traceback.print_exc()
             self.ibkr_broker = None
 
+        # Initialize DhanQ broker (India - DhanHQ v2 API - Always LIVE)
+        self.dhanq_broker = None
+        try:
+            if DHANQ_AVAILABLE:
+                _original_print("[DHANQ] Starting broker initialization...", flush=True)
+                _original_print("[DHANQ] ⚠️ WARNING: DhanQ has NO paper trading mode - ALL trades are LIVE", flush=True)
+                
+                from gui_app.database import get_broker_credentials
+                dhanq_creds = get_broker_credentials('dhanq')
+                
+                if dhanq_creds and dhanq_creds.get('credentials'):
+                    creds = dhanq_creds.get('credentials', {})
+                    dhanq_client_id = creds.get('client_id', '')
+                    dhanq_access_token = creds.get('access_token', '')
+                    
+                    if dhanq_client_id and dhanq_access_token:
+                        _original_print(f"[DHANQ] ✓ Loaded credentials from DATABASE", flush=True)
+                        _original_print(f"[DHANQ]   Client ID: {dhanq_client_id[:8]}...", flush=True)
+                        _original_print(f"[DHANQ] Creating DhanQBroker instance...", flush=True)
+                        
+                        self.dhanq_broker = DhanQBroker({
+                            'client_id': dhanq_client_id,
+                            'access_token': dhanq_access_token
+                        })
+                        
+                        connected = await self.dhanq_broker.connect()
+                        if connected:
+                            _original_print(f"[DHANQ] ✓ Connected successfully (LIVE trading)", flush=True)
+                            try:
+                                from gui_app.database import update_broker_connection_status
+                                account_info = await self.dhanq_broker.get_account_info()
+                                update_broker_connection_status('dhanq', True, f"Connected - Client: {dhanq_client_id}")
+                                available = account_info.get('available_balance', 0)
+                                if available:
+                                    _original_print(f"[DHANQ]   Available: ₹{available:,.2f}", flush=True)
+                                _original_print(f"[DHANQ] ✓ Broker status updated in GUI", flush=True)
+                            except Exception as status_err:
+                                _original_print(f"[DHANQ] ⚠️ Failed to update broker status: {status_err}", flush=True)
+                        else:
+                            _original_print("[DHANQ] ⚠️ Connection failed - token may be expired", flush=True)
+                            _original_print("[DHANQ]   Go to Settings → Brokers → DhanQ to update access token", flush=True)
+                            from gui_app.database import update_broker_connection_status
+                            update_broker_connection_status('dhanq', False, 'Connection failed - token may be expired')
+                            self.dhanq_broker = None
+                    else:
+                        _original_print("[DHANQ] ⚠️ Incomplete credentials - missing client_id or access_token", flush=True)
+                else:
+                    _original_print("[DHANQ] No credentials configured - broker disabled", flush=True)
+            else:
+                _original_print("[DHANQ] DhanQBroker not available (dhanhq not installed)", flush=True)
+        except Exception as e:
+            _original_print(f"[DHANQ] ⚠️ Initialization failed: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            self.dhanq_broker = None
+
         # CRITICAL: Set broker_ready if ANY broker is available (not just Webull)
         # This fixes user builds where only Alpaca/Tastytrade are configured
         if not self.broker_ready.is_set():
@@ -4982,7 +5046,8 @@ class SelfClient(discord.Client):
                 self.paper_broker or
                 self.tastytrade_broker or
                 self.robinhood_broker or
-                self.ibkr_broker
+                self.ibkr_broker or
+                self.dhanq_broker
             )
             if any_broker_available:
                 self.broker_ready.set()
@@ -5006,14 +5071,15 @@ class SelfClient(discord.Client):
                 
                 # Create simple broker manager for sync service
                 class BrokerManager:
-                    def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None):
+                    def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None, dhanq_broker=None):
                         self.webull_broker = webull_broker
                         self.alpaca_paper_broker = alpaca_paper_broker
                         self.tastytrade_broker = tastytrade_broker
                         self.robinhood_broker = robinhood_broker
                         self.ibkr_broker = ibkr_broker
+                        self.dhanq_broker = dhanq_broker
                 
-                broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker)
+                broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker)
                 
                 self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=30)
                 await self.sync_service.start()

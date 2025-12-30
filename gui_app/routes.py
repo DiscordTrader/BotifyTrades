@@ -12106,6 +12106,72 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'success': False, 'message': str(e)})
     
+    @app.route('/api/brokers/<broker_name>/reconnect', methods=['POST'])
+    @login_required
+    def api_reconnect_broker(broker_name):
+        """Reconnect broker with fresh credentials from database (cache invalidation)"""
+        try:
+            if broker_name == 'dhanq':
+                stored = db.get_broker_credentials('dhanq')
+                if not stored or not stored.get('credentials'):
+                    return jsonify({
+                        'success': False,
+                        'message': 'No DhanQ credentials found. Please save credentials first.'
+                    })
+                
+                creds = stored.get('credentials', {})
+                client_id = creds.get('client_id', '')
+                access_token = creds.get('access_token', '')
+                
+                if not client_id or not access_token:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Incomplete credentials. Both client_id and access_token are required.'
+                    })
+                
+                from src.brokers.dhanq_broker import DhanQBroker
+                result = DhanQBroker.test_connection(client_id, access_token)
+                
+                if result.get('success'):
+                    db.update_broker_connection_status('dhanq', True, f"Connected - Client: {client_id}")
+                    
+                    if _bot_instance:
+                        import asyncio
+                        try:
+                            new_broker = DhanQBroker({
+                                'client_id': client_id,
+                                'access_token': access_token
+                            })
+                            loop = getattr(_bot_instance, 'loop', None)
+                            if loop and loop.is_running():
+                                future = asyncio.run_coroutine_threadsafe(new_broker.connect(), loop)
+                                connected = future.result(timeout=10)
+                                if connected:
+                                    _bot_instance.dhanq_broker = new_broker
+                                    print("[DHANQ] ✓ Broker instance replaced with new credentials")
+                        except Exception as e:
+                            print(f"[DHANQ] ⚠️ Could not replace broker instance: {e}")
+                    
+                    return jsonify({
+                        'success': True,
+                        'message': 'DhanQ reconnected successfully with new credentials',
+                        'account': result.get('account', {})
+                    })
+                else:
+                    db.update_broker_connection_status('dhanq', False, result.get('message', 'Connection failed'))
+                    return jsonify(result)
+            
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': f'Reconnect not implemented for broker: {broker_name}. Use the Settings page.'
+                })
+                
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'message': str(e)})
+    
     @app.route('/api/brokers/by-country/<country_code>', methods=['GET'])
     @login_required
     def api_get_brokers_by_country(country_code):
