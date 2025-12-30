@@ -822,9 +822,152 @@ function displayCopy1to1Results(data) {
                 <div><span style="color: var(--text-muted);">Trades Analyzed:</span> ${perf.total_trades}</div>
             </div>
         </div>
+        
+        <div class="card" style="padding: 20px; margin-top: 20px;">
+            <h4 style="margin: 0 0 16px 0; font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                <span>📈</span> Equity Curve (Based on Recommended Portfolio)
+            </h4>
+            <div style="height: 250px; position: relative;">
+                <canvas id="copy1to1-equity-chart"></canvas>
+            </div>
+        </div>
+        
+        <div class="card" style="padding: 20px; margin-top: 20px;">
+            <h4 style="margin: 0 0 16px 0; font-size: 1rem; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
+                <span style="display: flex; align-items: center; gap: 8px;">
+                    <span>📋</span> Trade History (Original Sizes)
+                </span>
+                <button onclick="toggleCopy1to1Trades()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;">
+                    Toggle Table
+                </button>
+            </h4>
+            <div id="copy1to1-trades-table" style="display: none; max-height: 400px; overflow-y: auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px;">#</th>
+                            <th>Ticker</th>
+                            <th style="text-align: right;">Qty</th>
+                            <th style="text-align: right;">Entry</th>
+                            <th style="text-align: right;">Exit</th>
+                            <th style="text-align: right;">Position $</th>
+                            <th style="text-align: right;">P&L %</th>
+                            <th style="text-align: right;">P&L $</th>
+                        </tr>
+                    </thead>
+                    <tbody id="copy1to1-trades-body">
+                    </tbody>
+                </table>
+            </div>
+        </div>
     `;
     
     document.getElementById('historical-breakdown-card').innerHTML = statsHtml;
+    
+    // Render equity curve chart
+    if (data.equity_curve && data.equity_curve.length > 0) {
+        renderCopy1to1EquityChart(data.equity_curve);
+    }
+    
+    // Populate trades table
+    if (data.trade_breakdown && data.trade_breakdown.length > 0) {
+        populateCopy1to1TradesTable(data.trade_breakdown);
+    }
+}
+
+function toggleCopy1to1Trades() {
+    const table = document.getElementById('copy1to1-trades-table');
+    table.style.display = table.style.display === 'none' ? 'block' : 'none';
+}
+
+function renderCopy1to1EquityChart(equityCurve) {
+    const ctx = document.getElementById('copy1to1-equity-chart');
+    if (!ctx) return;
+    
+    // Destroy existing chart if it exists
+    if (window.copy1to1Chart) {
+        window.copy1to1Chart.destroy();
+    }
+    
+    const labels = equityCurve.map((_, i) => i === 0 ? 'Start' : `Trade ${i}`);
+    const startValue = equityCurve[0];
+    const endValue = equityCurve[equityCurve.length - 1];
+    const isProfit = endValue >= startValue;
+    
+    window.copy1to1Chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Portfolio Value',
+                data: equityCurve,
+                borderColor: isProfit ? '#10b981' : '#ef4444',
+                backgroundColor: isProfit ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                fill: true,
+                tension: 0.2,
+                pointRadius: equityCurve.length > 50 ? 0 : 2,
+                pointHoverRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return '$' + context.raw.toLocaleString(undefined, {minimumFractionDigits: 2});
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    grid: { display: false },
+                    ticks: { 
+                        color: 'rgba(255,255,255,0.5)',
+                        maxTicksLimit: 10
+                    }
+                },
+                y: {
+                    display: true,
+                    grid: { color: 'rgba(255,255,255,0.1)' },
+                    ticks: {
+                        color: 'rgba(255,255,255,0.5)',
+                        callback: function(value) {
+                            return '$' + (value / 1000).toFixed(0) + 'k';
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function populateCopy1to1TradesTable(trades) {
+    const tbody = document.getElementById('copy1to1-trades-body');
+    if (!tbody) return;
+    
+    let html = '';
+    trades.forEach((trade, index) => {
+        const isWin = trade.pnl_dollars >= 0;
+        html += `
+            <tr>
+                <td>${index + 1}</td>
+                <td><strong>${trade.ticker}</strong></td>
+                <td style="text-align: right;">${trade.quantity}</td>
+                <td style="text-align: right;">$${trade.open_price.toFixed(2)}</td>
+                <td style="text-align: right;">$${trade.close_price ? trade.close_price.toFixed(2) : '-'}</td>
+                <td style="text-align: right;">$${trade.position_cost.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
+                <td style="text-align: right; color: ${isWin ? '#10b981' : '#ef4444'};">${isWin ? '+' : ''}${trade.pnl_pct.toFixed(1)}%</td>
+                <td style="text-align: right; color: ${isWin ? '#10b981' : '#ef4444'};">${isWin ? '+' : ''}$${trade.pnl_dollars.toFixed(0)}</td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
 }
 
 async function runExactTradesSimulation() {
