@@ -726,7 +726,7 @@
 {% block scripts %}
 <script>
 let currentTab = 'live';
-let currentBroker = 'Webull';  // Default to Webull LIVE
+let currentBroker = null;  // Will be set from dropdown or BrokerStore on page load
 let isPrivacyMode = false;
 let isClosingPosition = false;
 
@@ -1761,16 +1761,22 @@ function selectBroker(brokerKey) {
 // Load initial data with startup delay
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize BrokerStore and sync with selector
+    const brokerFilter = document.getElementById('broker-filter');
+    
     if (typeof BrokerStore !== 'undefined') {
         const savedBroker = BrokerStore.getSelected();
         if (savedBroker) {
             currentBroker = savedBroker;
-            const brokerFilter = document.getElementById('broker-filter');
             if (brokerFilter) brokerFilter.value = savedBroker;
         }
         BrokerStore.onUpdate(renderMultiBrokerSelector);
         BrokerStore.init();
         renderMultiBrokerSelector();
+    }
+    
+    // Fallback: If no broker selected from store, use dropdown's selected value
+    if (!currentBroker && brokerFilter && brokerFilter.value) {
+        currentBroker = brokerFilter.value;
     }
     
     // Delay initial data loading to allow bot initialization (3 second startup window for testing)

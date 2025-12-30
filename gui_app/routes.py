@@ -2855,12 +2855,11 @@ def register_routes(app):
     
     async def _get_paper_account_data():
         """Helper to get paper account balance, positions, and orders (Alpaca)"""
-        # Skip during startup to prevent initialization hang
-        elapsed = time.time() - _startup_time
-        if elapsed < _startup_delay_seconds:
-            return None
-        
         try:
+            if not _bot_instance:
+                print("[API] Paper account - bot instance not set")
+                return None
+            
             if not hasattr(_bot_instance, 'paper_broker') or _bot_instance.paper_broker is None:
                 print("[API] Paper broker not initialized")
                 return None
@@ -2869,6 +2868,8 @@ def register_routes(app):
             if not hasattr(paper_broker, 'trading_client') or not paper_broker.trading_client:
                 print("[API] Alpaca trading client not available")
                 return None
+            
+            print(f"[API] ✓ Fetching paper account from Alpaca...")
             
             def _blocking_call():
                 try:
