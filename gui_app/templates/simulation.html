@@ -937,8 +937,15 @@ function renderCopy1to1EquityChart(equityCurve) {
                     ticks: {
                         color: 'rgba(255,255,255,0.5)',
                         callback: function(value) {
-                            return '$' + (value / 1000).toFixed(0) + 'k';
-                        }
+                            if (value >= 1000000) {
+                                return '$' + (value / 1000000).toFixed(2) + 'M';
+                            } else if (value >= 10000) {
+                                return '$' + value.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0});
+                            } else {
+                                return '$' + value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                            }
+                        },
+                        maxTicksLimit: 8
                     }
                 }
             }
