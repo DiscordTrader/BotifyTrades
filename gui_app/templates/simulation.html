@@ -724,9 +724,16 @@ async function runCopy1to1Report() {
 
 function displayCopy1to1Results(data) {
     document.getElementById('results-placeholder').style.display = 'none';
-    document.getElementById('results-container').style.display = 'none';
+    document.getElementById('results-container').style.display = 'block';
     document.getElementById('daily-breakdown-card').style.display = 'none';
     document.getElementById('historical-breakdown-card').style.display = 'block';
+    
+    document.querySelectorAll('#results-container > .stats-grid').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('#results-container > .card-grid').forEach(el => el.style.display = 'none');
+    const capsSection = document.getElementById('capital-requirements-section');
+    if (capsSection) capsSection.style.display = 'none';
+    const advMetrics = document.getElementById('advanced-metrics-card');
+    if (advMetrics) advMetrics.style.display = 'none';
     
     const perf = data.performance_summary;
     const capital = data.capital_requirements;
