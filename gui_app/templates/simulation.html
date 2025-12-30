@@ -199,8 +199,20 @@
             </details>
             
             <button onclick="runSimulation()" id="run-btn" class="btn btn-primary" style="width: 100%; padding: 14px; font-size: 1rem; font-weight: 600; margin-top: 8px;">
-                🚀 Run Simulation
+                🚀 Run Statistical Projection
             </button>
+            
+            <div style="position: relative; text-align: center; margin: 12px 0;">
+                <span style="background: var(--card-bg); padding: 0 8px; color: var(--text-muted); font-size: 0.75rem;">— OR —</span>
+                <div style="position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--border-color); z-index: -1;"></div>
+            </div>
+            
+            <button onclick="runHistoricalSimulation()" id="run-historical-btn" class="btn" style="width: 100%; padding: 14px; font-size: 1rem; font-weight: 600; background: linear-gradient(135deg, #8b5cf6, #6366f1); border: none;">
+                🎞️ Run ACTUAL Trade Replay
+            </button>
+            <div style="font-size: 0.6875rem; color: var(--text-muted); margin-top: 6px; text-align: center;">
+                Replays real trades with daily limits, skip tracking & slippage
+            </div>
         </div>
         
         <div class="card" style="padding: 16px; margin-top: 16px;">
@@ -217,10 +229,17 @@
     <div class="simulation-results">
         <div id="results-placeholder" class="card" style="padding: 60px 40px; text-align: center;">
             <div style="font-size: 4rem; margin-bottom: 16px; opacity: 0.3;">📊</div>
-            <h3 style="margin: 0 0 8px 0; font-size: 1.25rem; color: var(--text-secondary);">No Simulation Yet</h3>
-            <p style="color: var(--text-muted); margin: 0; font-size: 0.9375rem;">
-                Configure parameters and click "Run Simulation" to see projected results
-            </p>
+            <h3 style="margin: 0 0 8px 0; font-size: 1.25rem; color: var(--text-secondary);">Choose Your Simulation Mode</h3>
+            <div style="color: var(--text-muted); margin: 0; font-size: 0.875rem; text-align: left; max-width: 500px; margin: 0 auto;">
+                <div style="margin-bottom: 12px; padding: 10px; background: rgba(59, 130, 246, 0.1); border-radius: 6px; border-left: 3px solid #3b82f6;">
+                    <strong style="color: #3b82f6;">🚀 Statistical Projection</strong><br>
+                    <span style="font-size: 0.8125rem;">Uses win rate & averages to project theoretical returns over X days. Same profit per day (idealized).</span>
+                </div>
+                <div style="padding: 10px; background: rgba(139, 92, 246, 0.1); border-radius: 6px; border-left: 3px solid #8b5cf6;">
+                    <strong style="color: #8b5cf6;">🎞️ ACTUAL Trade Replay</strong> <span style="background: #8b5cf6; color: white; font-size: 0.625rem; padding: 2px 6px; border-radius: 4px; margin-left: 4px;">REALISTIC</span><br>
+                    <span style="font-size: 0.8125rem;">Replays each real trade with YOUR position size, daily capital limits, affordability checks, and slippage. Shows what you could realistically achieve.</span>
+                </div>
+            </div>
         </div>
         
         <div id="results-container" style="display: none;">
