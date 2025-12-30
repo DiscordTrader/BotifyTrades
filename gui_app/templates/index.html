@@ -1419,12 +1419,13 @@ async function loadStats() {
         // Fetch account balance based on selected broker
         try {
             let balanceUrl = '/api/webull/balance';
-            if (currentBroker && currentBroker.startsWith('ALPACA')) {
+            const brokerUpper = currentBroker ? currentBroker.toUpperCase() : '';
+            if (brokerUpper.startsWith('ALPACA')) {
                 balanceUrl = '/api/alpaca/balance';
-            } else if (currentBroker && currentBroker.startsWith('IBKR')) {
+            } else if (brokerUpper.startsWith('IBKR')) {
                 balanceUrl = '/api/ibkr/balance';
-            } else if (currentBroker && currentBroker.startsWith('TASTYTRADE')) {
-                const isPaper = currentBroker === 'TASTYTRADE_PAPER';
+            } else if (brokerUpper.startsWith('TASTYTRADE')) {
+                const isPaper = brokerUpper === 'TASTYTRADE_PAPER';
                 balanceUrl = `/api/tastytrade/balance?paper=${isPaper}`;
             }
             
