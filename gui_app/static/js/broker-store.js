@@ -49,6 +49,14 @@ const BrokerStore = (function() {
                 state.brokers = data.states || [];
                 state.byRegion = data.by_region || { USA: [], Canada: [], India: [] };
                 state.lastRefresh = new Date();
+                
+                // Auto-refresh if no broker states found (first load)
+                if (state.brokers.length === 0) {
+                    console.log('[BrokerStore] No states found, triggering refresh-all...');
+                    await refreshAll();
+                    return;
+                }
+                
                 notifyListeners('data_loaded');
             }
         } catch (error) {

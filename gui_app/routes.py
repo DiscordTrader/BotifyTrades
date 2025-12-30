@@ -12197,6 +12197,11 @@ def register_routes(app):
             db.init_broker_states_table()
             states = db.get_all_broker_states()
             
+            # Auto-populate from live brokers if database is empty
+            if len(states) == 0 and _bot_instance:
+                _populate_broker_states_from_bot()
+                states = db.get_all_broker_states()
+            
             grouped = {'USA': [], 'Canada': [], 'India': []}
             for state in states:
                 region = state.get('region', 'USA')
@@ -12211,6 +12216,60 @@ def register_routes(app):
             })
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
+    
+    def _populate_broker_states_from_bot():
+        """Populate broker states from connected bot brokers"""
+        import asyncio
+        
+        if not _bot_instance:
+            print("[BROKER STATES] No bot instance available")
+            return
+        
+        broker_mappings = [
+            ('webull', 'broker', 'US', 'USD'),
+            ('alpaca_paper', 'paper_broker', 'US', 'USD'),
+            ('tastytrade', 'tastytrade_broker', 'US', 'USD'),
+            ('ibkr', 'ibkr_broker', 'US', 'USD'),
+            ('robinhood', 'robinhood_broker', 'US', 'USD'),
+            ('dhanq', 'dhanq_broker', 'IN', 'INR'),
+        ]
+        
+        loop = getattr(_bot_instance, 'loop', None)
+        print(f"[BROKER STATES] Populating states, loop running: {loop and loop.is_running()}")
+        
+        for broker_name, attr_name, country, currency in broker_mappings:
+            try:
+                broker_instance = getattr(_bot_instance, attr_name, None)
+                is_connected = broker_instance and getattr(broker_instance, 'connected', False)
+                is_paper = getattr(broker_instance, 'paper_trade', False) if broker_instance else False
+                is_paper = is_paper or 'paper' in broker_name.lower()
+                
+                state = {
+                    'is_connected': is_connected,
+                    'balance': 0,
+                    'buying_power': 0,
+                    'currency': currency,
+                    'is_paper': is_paper,
+                    'sync_error': None
+                }
+                
+                if is_connected and loop and loop.is_running():
+                    try:
+                        future = asyncio.run_coroutine_threadsafe(
+                            broker_instance.get_account_info(), loop
+                        )
+                        account_info = future.result(timeout=10)
+                        print(f"[BROKER STATES] {broker_name} account_info: {account_info}")
+                        state['balance'] = account_info.get('portfolio_value', 0) or account_info.get('net_liquidation', 0) or account_info.get('available_balance', 0)
+                        state['buying_power'] = account_info.get('buying_power', 0) or account_info.get('cash', 0)
+                        print(f"[BROKER STATES] {broker_name}: balance=${state['balance']:,.2f}, buying_power=${state['buying_power']:,.2f}")
+                    except Exception as e:
+                        state['sync_error'] = str(e)
+                        print(f"[BROKER STATES] {broker_name} error: {e}")
+                
+                db.update_broker_state(broker_name, country, state)
+            except Exception as e:
+                print(f"[BROKER STATES] Error populating {broker_name}: {e}")
     
     @app.route('/api/v2/broker-states/<broker_name>', methods=['GET'])
     @login_required
