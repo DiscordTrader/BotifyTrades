@@ -1320,6 +1320,80 @@ function displayOptimizerResults(data) {
     document.getElementById('advanced-metrics-card').style.display = 'none';
     document.getElementById('warnings-section').style.display = 'none';
     document.getElementById('capital-requirements-section').style.display = 'none';
+    
+    // Render bar chart comparing candidates
+    renderOptimizerChart(data.comparison, recommended, portfolio);
+}
+
+function renderOptimizerChart(comparison, recommended, portfolio) {
+    const ctx = document.getElementById('growth-chart').getContext('2d');
+    
+    if (growthChart) {
+        growthChart.destroy();
+    }
+    
+    const labels = comparison.map(r => r.label.replace(' of Start', '').replace(' of Current', ''));
+    const returnPcts = comparison.map(r => r.total_return_pct);
+    const colors = comparison.map(r => {
+        if (r.label === recommended.label) return 'rgba(16, 185, 129, 0.9)';
+        if (r.disqualified) return 'rgba(239, 68, 68, 0.5)';
+        if (r.total_return_pct >= 0) return 'rgba(59, 130, 246, 0.7)';
+        return 'rgba(239, 68, 68, 0.7)';
+    });
+    
+    growthChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Return %',
+                data: returnPcts,
+                backgroundColor: colors,
+                borderColor: colors.map(c => c.replace('0.7', '1').replace('0.5', '0.8').replace('0.9', '1')),
+                borderWidth: 1,
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const r = comparison[context.dataIndex];
+                            return [
+                                `Return: ${r.total_return_pct >= 0 ? '+' : ''}${r.total_return_pct}%`,
+                                `Final: $${r.final_balance.toLocaleString()}`,
+                                `Coverage: ${r.coverage_pct}%`,
+                                `Score: ${r.score > 0 ? r.score.toFixed(2) : 'N/A'}`
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                    ticks: { 
+                        color: 'rgba(255, 255, 255, 0.7)',
+                        callback: function(value) { return value + '%'; }
+                    },
+                    title: { display: true, text: 'Return %', color: 'rgba(255, 255, 255, 0.7)' }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { 
+                        color: 'rgba(255, 255, 255, 0.7)',
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                }
+            }
+        }
+    });
 }
 
 function displayAdvancedMetrics(metrics, allNegative) {
