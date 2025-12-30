@@ -2818,5 +2818,20 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "created_at": "2025-12-30T17:21:08.520446"
+  },
+  "ALPACA_PAPER_QQQ_620.0_2025-12-30_C": {
+    "entry_price": 0.97,
+    "highest_price": 1.04,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "QQQ251230C00620000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "created_at": "2025-12-30T19:17:18.505273"
   }
 }
