@@ -6459,12 +6459,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 from src.signals.parser import (
                     is_bullwinkle_signal, parse_bullwinkle_signal, 
                     strip_bullwinkle_emojis, format_bullwinkle_for_webhook,
-                    is_bracket_order_signal, parse_bracket_order_signal
+                    is_bracket_order_signal, parse_bracket_order_signal,
+                    is_jacob_signal, parse_jacob_signal, format_jacob_for_webhook
                 )
                 is_bullwinkle = is_bullwinkle_signal(combined_content)
                 is_bracket_order = is_bracket_order_signal(combined_content)
+                is_jacob = is_jacob_signal(combined_content)
                 
-                if is_bto_stc_signal or is_bullwinkle:
+                if is_bto_stc_signal or is_bullwinkle or is_jacob:
                     print(f"[DEBUG] BTO/STC or Bullwinkle signal detected - will process for trade execution")
                     
                     is_webhook_dest = destination_type == 'webhook' and target_execution_channel_id and target_execution_channel_id.startswith('https://')
@@ -6486,6 +6488,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             else:
                                 forward_msg = strip_bullwinkle_emojis(combined_content.strip())
                                 print(f"[CHANNEL MAP] ✓ Stripped emojis (parse failed): {forward_msg}")
+                        elif is_jacob:
+                            print(f"[DEBUG] Taking JACOB path", flush=True)
+                            jacob_parsed = parse_jacob_signal(combined_content)
+                            if jacob_parsed:
+                                forward_msg = format_jacob_for_webhook(jacob_parsed)
+                                print(f"[CHANNEL MAP] ✓ Formatted Jacob: {forward_msg}")
+                            else:
+                                forward_msg = message.content.strip()
+                                print(f"[CHANNEL MAP] ⚠️ Jacob parse failed, forwarding raw")
                         elif format_as_bto_stc:
                             print(f"[DEBUG] Taking FORMAT_AS_BTO_STC path", flush=True)
                             # Convert any signal format to BTO/STC format for forwarding
@@ -6566,10 +6577,26 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         # Parse the signal to get details - use unified parse_option_signal for ALL formats
                         parsed_signal = None
-                        print(f"[PNL TRACK] Parsing signal for tracking, is_bullwinkle={is_bullwinkle}")
+                        print(f"[PNL TRACK] Parsing signal for tracking, is_bullwinkle={is_bullwinkle}, is_jacob={is_jacob}")
                         if is_bullwinkle:
                             parsed_signal = parse_bullwinkle_signal(combined_content)
                             print(f"[PNL TRACK] Bullwinkle parsed: {parsed_signal}")
+                        elif is_jacob:
+                            jacob_parsed = parse_jacob_signal(combined_content)
+                            if jacob_parsed:
+                                parsed_signal = {
+                                    'symbol': jacob_parsed.get('symbol', ''),
+                                    'strike': 0,
+                                    'opt_type': None,
+                                    'expiry': '',
+                                    'price': jacob_parsed.get('entry_price', 0),
+                                    'qty': jacob_parsed.get('qty', 1),
+                                    'is_exit': False,
+                                    'asset_type': 'stock',
+                                    'stop_loss': jacob_parsed.get('stop_loss'),
+                                    'profit_targets': jacob_parsed.get('profit_targets', [])
+                                }
+                                print(f"[PNL TRACK] Jacob parsed: {parsed_signal}")
                         else:
                             # Use the unified parser which handles ALL formats (BTO/STC, Bishop, EvaPanda, DTE, etc.)
                             parsed_opt = parse_option_signal(combined_content)
@@ -6954,7 +6981,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         
         # Check for bracket order signal (stock with targets and stop loss)
         bracket_signal = None
-        from src.signals.parser import is_bracket_order_signal, parse_bracket_order_signal
+        from src.signals.parser import is_bracket_order_signal, parse_bracket_order_signal, is_jacob_signal, parse_jacob_signal
         if opt is None and india_stock_signal is None and is_bracket_order_signal(normalized_content):
             bracket_signal = parse_bracket_order_signal(normalized_content)
             if bracket_signal:
@@ -6967,6 +6994,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # Use first target as profit target
                     india_stock_signal['profit_target_price'] = bracket_signal['profit_targets'][0]
                 print(f"[BRACKET ORDER] ✓ Detected stock bracket order: {bracket_signal['ticker']} @ {bracket_signal['entry_price']}, SL={bracket_signal.get('stop_loss')}, Targets={bracket_signal.get('profit_targets')}")
+        
+        # Check for Jacob format signal (ENTERED LONG/SHORT with bracket order data)
+        if opt is None and india_stock_signal is None and is_jacob_signal(normalized_content):
+            jacob_signal = parse_jacob_signal(normalized_content)
+            if jacob_signal:
+                # Convert to stock signal format with bracket order fields
+                india_stock_signal = jacob_signal
+                # Add bracket order fields for execution
+                if jacob_signal.get('stop_loss'):
+                    india_stock_signal['stop_loss_price'] = jacob_signal['stop_loss']
+                if jacob_signal.get('profit_targets') and len(jacob_signal['profit_targets']) > 0:
+                    # Use first target as profit target
+                    india_stock_signal['profit_target_price'] = jacob_signal['profit_targets'][0]
+                print(f"[JACOB] ✓ Detected stock bracket order: {jacob_signal['ticker']} @ {jacob_signal['entry_price']}, SL={jacob_signal.get('stop_loss')}, Targets={jacob_signal.get('profit_targets')}")
         
         if opt:
             # Apply tiered quantity defaults for BTO signals without qty from signal text

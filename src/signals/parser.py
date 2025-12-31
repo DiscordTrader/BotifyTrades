@@ -135,6 +135,25 @@ BRACKET_SL_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# Jacob format patterns (ENTERED LONG/SHORT stock signals with bracket order data)
+# Example: ENTERED LONG: $SIDU, ENTRY: $4.00 AREA, S.L: $3.68, 1st Target: $4.32-4.37
+JACOB_ENTERED_PATTERN = re.compile(
+    r'ENTERED\s+(LONG|SHORT):\s*\$?([A-Z]{1,5})',
+    re.IGNORECASE
+)
+JACOB_ENTRY_PATTERN = re.compile(
+    r'ENTRY:\s*\$?([\d.]+)',
+    re.IGNORECASE
+)
+JACOB_SL_PATTERN = re.compile(
+    r'S\.?L\.?:\s*\$?([\d.]+)',
+    re.IGNORECASE
+)
+JACOB_TARGET_PATTERN = re.compile(
+    r'(?:1st\s+)?Target:\s*\$?([\d.]+)',
+    re.IGNORECASE
+)
+
 
 def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
     """
@@ -206,6 +225,81 @@ def is_trade_idea_signal(text: str) -> bool:
         TRADE_IDEA_TICKER_PATTERN.search(text) is not None or
         TRADE_IDEA_ENTRY_PATTERN.search(text) is not None
     )
+
+
+def is_jacob_signal(text: str) -> bool:
+    """Check if text is a Jacob format signal (ENTERED LONG/SHORT)."""
+    return JACOB_ENTERED_PATTERN.search(text) is not None and JACOB_ENTRY_PATTERN.search(text) is not None
+
+
+def parse_jacob_signal(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse Jacob format stock signals with bracket order data.
+    
+    Example:
+    ENTERED LONG: $SIDU
+    ENTRY: $4.00 AREA
+    S.L: $3.68
+    1st Target: $4.32-4.37
+    
+    Returns dict with parsed components or None if not a Jacob format signal.
+    """
+    entered_match = JACOB_ENTERED_PATTERN.search(text)
+    if not entered_match:
+        return None
+    
+    direction = entered_match.group(1).upper()  # LONG or SHORT
+    ticker = entered_match.group(2).upper()
+    
+    # Extract entry price
+    entry_match = JACOB_ENTRY_PATTERN.search(text)
+    if not entry_match:
+        return None
+    entry_price = float(entry_match.group(1))
+    
+    # Extract stop loss
+    stop_loss = None
+    sl_match = JACOB_SL_PATTERN.search(text)
+    if sl_match:
+        stop_loss = float(sl_match.group(1))
+    
+    # Extract target
+    targets = []
+    target_match = JACOB_TARGET_PATTERN.search(text)
+    if target_match:
+        targets.append(float(target_match.group(1)))
+    
+    # Determine action based on direction
+    action = 'BTO' if direction == 'LONG' else 'STO'  # STO for short selling
+    
+    result = {
+        'format': 'JACOB',
+        'ticker': ticker,
+        'symbol': ticker,
+        'entry_price': entry_price,
+        'price': entry_price,
+        'stop_loss': stop_loss,
+        'profit_targets': targets,
+        'action': action,
+        'direction': direction,
+        'asset': 'stock',
+        'asset_type': 'stock',
+        'qty': 1,
+        '_qty_from_signal': False,
+        '_jacob_signal': True,
+        '_bracket_order': True,
+    }
+    
+    print(f"[JACOB] ✓ Parsed: {action} {ticker} @ {entry_price}, SL={stop_loss}, PTs={targets}")
+    return result
+
+
+def format_jacob_for_webhook(parsed: Dict[str, Any]) -> str:
+    """Format a parsed Jacob signal as BTO/STC for webhook forwarding."""
+    action = parsed.get('action', 'BTO')
+    symbol = parsed.get('symbol', '')
+    price = parsed.get('entry_price', parsed.get('price', 0))
+    return f"{action} ${symbol} @ {price:.2f}"
 
 
 def parse_bracket_order_signal(text: str) -> Optional[Dict[str, Any]]:
