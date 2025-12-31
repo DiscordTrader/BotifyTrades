@@ -7517,33 +7517,46 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     effective_bp = options_buying_power if options_buying_power else buying_power
                                     affordable_qty = max(0, int(effective_bp / actual_cost))
                                     
-                                    # FIXED LOGIC: If position size budget can't afford 1 contract but 
-                                    # buying power CAN afford it, execute at least 1 contract
-                                    if pct_qty == 0 and affordable_qty >= 1:
-                                        # Budget too small for even 1 contract, but we CAN afford it
-                                        new_qty = min(original_qty, affordable_qty)
-                                        _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ {position_size_pct}% budget (${position_dollars:.0f}) < 1 contract (${actual_cost:.0f}), using buying power instead")
-                                    else:
-                                        # Take the minimum of: original signal, percentage limit, and affordable
-                                        new_qty = min(original_qty, pct_qty, affordable_qty)
+                                    # Check if percentage came from signal text itself (should calculate, not just cap)
+                                    calculate_qty = signal.get('_calculate_qty', False)
+                                    pct_from_signal = '_position_size_pct' in signal and not signal.get('_pct_from_channel', False)
                                     
-                                    # If we truly can't afford any contracts, skip this trade
-                                    if new_qty == 0:
-                                        _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 contract (cost: ${actual_cost:.0f}, budget: ${position_dollars:.0f}, buying power: ${effective_bp:.0f})")
-                                        return {'success': False, 'error': f'Insufficient funds for 1 contract (need ${actual_cost:.0f}, have ${effective_bp:.0f})'}
-                                    
-                                    if new_qty < original_qty:
+                                    if calculate_qty or pct_from_signal:
+                                        # Calculate qty from position sizing percentage
+                                        new_qty = min(pct_qty, affordable_qty)
+                                        if new_qty == 0:
+                                            _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 contract (cost: ${actual_cost:.0f}, budget: ${position_dollars:.0f}, buying power: ${effective_bp:.0f})")
+                                            return {'success': False, 'error': f'Insufficient funds for 1 contract (need ${actual_cost:.0f}, have ${effective_bp:.0f})'}
                                         signal['qty'] = new_qty
-                                        # Determine the limiting factor
-                                        if affordable_qty < pct_qty and affordable_qty < original_qty:
-                                            reason = f"insufficient buying power (${effective_bp:.0f} available, ${original_qty * actual_cost:.0f} needed)"
-                                            _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ Reduced qty: {original_qty} -> {new_qty} contracts - {reason}")
-                                        else:
-                                            reason = f"{position_size_pct}% position limit (${position_dollars:.0f} budget)"
-                                            _original_print(f"[{broker_name}] [POSITION SIZE] Reduced qty: {original_qty} -> {new_qty} contracts - {reason}")
+                                        _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Calculated qty: {new_qty} contracts ({position_size_pct}% = ${position_dollars:.0f} budget, ${actual_cost:.0f}/contract)")
                                     else:
-                                        cost_info = f"${original_qty * actual_cost:.0f}"
-                                        _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Using full signal qty: {original_qty} contracts (cost: {cost_info}, buying power: ${effective_bp:.0f})")
+                                        # FIXED LOGIC: If position size budget can't afford 1 contract but 
+                                        # buying power CAN afford it, execute at least 1 contract
+                                        if pct_qty == 0 and affordable_qty >= 1:
+                                            # Budget too small for even 1 contract, but we CAN afford it
+                                            new_qty = min(original_qty, affordable_qty)
+                                            _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ {position_size_pct}% budget (${position_dollars:.0f}) < 1 contract (${actual_cost:.0f}), using buying power instead")
+                                        else:
+                                            # Take the minimum of: original signal, percentage limit, and affordable
+                                            new_qty = min(original_qty, pct_qty, affordable_qty)
+                                        
+                                        # If we truly can't afford any contracts, skip this trade
+                                        if new_qty == 0:
+                                            _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 contract (cost: ${actual_cost:.0f}, budget: ${position_dollars:.0f}, buying power: ${effective_bp:.0f})")
+                                            return {'success': False, 'error': f'Insufficient funds for 1 contract (need ${actual_cost:.0f}, have ${effective_bp:.0f})'}
+                                        
+                                        if new_qty < original_qty:
+                                            signal['qty'] = new_qty
+                                            # Determine the limiting factor
+                                            if affordable_qty < pct_qty and affordable_qty < original_qty:
+                                                reason = f"insufficient buying power (${effective_bp:.0f} available, ${original_qty * actual_cost:.0f} needed)"
+                                                _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ Reduced qty: {original_qty} -> {new_qty} contracts - {reason}")
+                                            else:
+                                                reason = f"{position_size_pct}% position limit (${position_dollars:.0f} budget)"
+                                                _original_print(f"[{broker_name}] [POSITION SIZE] Reduced qty: {original_qty} -> {new_qty} contracts - {reason}")
+                                        else:
+                                            cost_info = f"${original_qty * actual_cost:.0f}"
+                                            _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Using full signal qty: {original_qty} contracts (cost: {cost_info}, buying power: ${effective_bp:.0f})")
                             else:
                                 # Stocks
                                 price = signal.get('price') or 1.0
