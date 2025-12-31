@@ -229,6 +229,7 @@ class TradeMonitor:
         
     async def _poll_loop(self):
         """Main polling loop - quiet mode"""
+        print("[TRADE MONITOR] Poll loop started", flush=True)
         while self.running:
             try:
                 settings = db.get_trade_monitor_settings()

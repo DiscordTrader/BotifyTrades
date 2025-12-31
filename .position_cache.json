@@ -3086,5 +3086,21 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "created_at": "2025-12-31T17:48:59.609177"
+  },
+  "Webull_SLS_stock": {
+    "entry_price": 3.745,
+    "highest_price": 3.75,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "Webull",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2025-12-31T18:01:27.030559"
   }
 }
