@@ -4747,6 +4747,34 @@ class SelfClient(discord.Client):
                 print(f"[PNL_TRACKER] ✓ Created lot for {signal['symbol']} BTO {signal['qty']} @ {price_str}")
             elif signal['action'] == 'STC' and result:
                 print(f"[PNL_TRACKER] ✓ Closed {len(result)} lot(s) for {signal['symbol']} STC {signal['qty']} @ {price_str}")
+                
+                # Calculate PNL and store for Trade Summary posting
+                total_pnl = 0
+                total_qty = 0
+                entry_prices = []
+                for closed_lot in result:
+                    qty_closed = closed_lot.get('qty_closed', 0)
+                    entry_price = closed_lot.get('entry_price', 0)
+                    exit_price = signal.get('price', 0)
+                    lot_pnl = (exit_price - entry_price) * qty_closed * 100  # Options = 100 multiplier
+                    total_pnl += lot_pnl
+                    total_qty += qty_closed
+                    entry_prices.append(entry_price)
+                
+                avg_entry = sum(entry_prices) / len(entry_prices) if entry_prices else 0
+                exit_price = signal.get('price', 0)
+                pnl_pct = ((exit_price - avg_entry) / avg_entry * 100) if avg_entry > 0 else 0
+                
+                # Store PNL result for Trade Summary posting (accessed by on_message)
+                signal['_pnl_result'] = {
+                    'total_pnl': total_pnl,
+                    'total_qty': total_qty,
+                    'avg_entry': avg_entry,
+                    'exit_price': exit_price,
+                    'pnl_pct': pnl_pct,
+                    'lots_closed': len(result)
+                }
+                print(f"[PNL_TRACKER] 💰 PNL: ${total_pnl:+.2f} ({pnl_pct:+.1f}%) - {total_qty} contracts @ ${avg_entry:.2f} → ${exit_price:.2f}")
             
         except Exception as e:
             print(f"[PNL_TRACKER] Error processing lot: {e}")
@@ -7012,6 +7040,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
             self._save_signal_to_db(opt, message.channel.id, message.id, author_name)
             print(f"[DATABASE] ✓ Signal saved to database with option details")
+            
+            # Post Trade Summary for STC signals with PNL data
+            if opt['action'] == 'STC' and opt.get('_pnl_result'):
+                pnl = opt['_pnl_result']
+                pnl_emoji = "🟢" if pnl['total_pnl'] >= 0 else "🔴"
+                summary_msg = (
+                    f"**Trade Summary - {opt['symbol']}**\n"
+                    f"{pnl_emoji} P/L: **${pnl['total_pnl']:+,.2f}** ({pnl['pnl_pct']:+.1f}%)\n"
+                    f"📊 {pnl['total_qty']} contracts @ ${pnl['avg_entry']:.2f} → ${pnl['exit_price']:.2f}"
+                )
+                try:
+                    await message.channel.send(summary_msg)
+                    print(f"[PNL_TRACKER] ✓ Posted Trade Summary to channel {message.channel.id}")
+                except Exception as e:
+                    print(f"[PNL_TRACKER] ❌ Failed to post Trade Summary: {e}")
             
             # Dual-mode routing: require BOTH execute_enabled AND category='EXECUTE' for safety
             # This prevents accidental execution if flags get out of sync with category
