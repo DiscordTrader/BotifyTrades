@@ -4356,20 +4356,34 @@ def get_webhook_for_source(source_channel_id: str) -> Dict[str, str]:
 
 
 def get_all_active_webhook_mappings() -> List[Dict[str, str]]:
-    """Get all active webhook URLs from channel_mappings for Trade Monitor broadcasting"""
+    """Get all active webhook URLs from channel_mappings for Trade Monitor broadcasting.
+    
+    Also fetches bot_name from webhook_channels table if available.
+    """
     conn = get_connection()
     cursor = conn.cursor()
     
     try:
         init_channel_mappings_table()
         cursor.execute('''
-            SELECT DISTINCT webhook_url, webhook_name
-            FROM channel_mappings
-            WHERE is_active = 1 AND webhook_url IS NOT NULL AND webhook_url != ''
+            SELECT DISTINCT cm.webhook_url, cm.webhook_name,
+                   wc.name as bot_name
+            FROM channel_mappings cm
+            LEFT JOIN webhook_channels wc ON cm.webhook_url = wc.webhook_url
+            WHERE cm.is_active = 1 AND cm.webhook_url IS NOT NULL AND cm.webhook_url != ''
         ''')
         
         rows = cursor.fetchall()
-        return [{'webhook_url': row['webhook_url'], 'webhook_name': row['webhook_name'] or 'Unnamed'} for row in rows]
+        result = []
+        for row in rows:
+            webhook_name = row['webhook_name'] or 'Unnamed'
+            bot_name = row['bot_name'] or webhook_name or 'BotifyTrades'
+            result.append({
+                'webhook_url': row['webhook_url'],
+                'webhook_name': webhook_name,
+                'bot_name': bot_name
+            })
+        return result
     except Exception as e:
         print(f"[DATABASE] Error getting active webhook mappings: {e}")
         return []

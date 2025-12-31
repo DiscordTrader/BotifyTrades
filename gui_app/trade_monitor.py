@@ -176,6 +176,20 @@ class TradeMonitor:
         except Exception as e:
             print(f"[TRADE MONITOR] Webhook error: {e}", flush=True)
             return False
+    
+    async def _async_post_webhook_with_name(self, webhook_url: str, content: str, bot_name: str = 'BotifyTrades') -> bool:
+        """Non-blocking async POST to Discord webhook with custom bot name"""
+        try:
+            session = await self._get_http_session()
+            payload = {
+                "content": content,
+                "username": bot_name
+            }
+            async with session.post(webhook_url, json=payload) as resp:
+                return resp.status in [200, 204]
+        except Exception as e:
+            print(f"[TRADE MONITOR] Webhook error: {e}", flush=True)
+            return False
         
     def set_broker(self, broker):
         """Set the broker instance to monitor"""
@@ -510,13 +524,14 @@ class TradeMonitor:
         for wh in webhooks:
             webhook_url = wh.get('webhook_url')
             webhook_name = wh.get('webhook_name', 'Unnamed')
+            bot_name = wh.get('bot_name', webhook_name) or 'BotifyTrades'
             if not webhook_url:
                 continue
                 
             if asset_type == 'option':
                 if is_buy:
                     signal_msg = self._format_signal(order, signal_type)
-                    success = await self._async_post_webhook(webhook_url, signal_msg)
+                    success = await self._async_post_webhook_with_name(webhook_url, signal_msg, bot_name)
                     if success:
                         posted_count += 1
                         webhook_service.open_webhook_position(
@@ -538,18 +553,19 @@ class TradeMonitor:
                             expiry=expiry or '',
                             call_put=direction or 'C',
                             qty=quantity,
-                            close_price=filled_price
+                            close_price=filled_price,
+                            bot_name=bot_name
                         )
                         if success:
                             posted_count += 1
                     except Exception:
                         signal_msg = self._format_signal(order, signal_type)
-                        success = await self._async_post_webhook(webhook_url, signal_msg)
+                        success = await self._async_post_webhook_with_name(webhook_url, signal_msg, bot_name)
                         if success:
                             posted_count += 1
             else:
                 signal_msg = self._format_signal(order, signal_type)
-                success = await self._async_post_webhook(webhook_url, signal_msg)
+                success = await self._async_post_webhook_with_name(webhook_url, signal_msg, bot_name)
                 if success:
                     posted_count += 1
         
