@@ -6461,21 +6461,27 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             parsed_opt = parse_option_signal(combined_content)
                             print(f"[DEBUG] parse_option_signal returned: {type(parsed_opt)}, truthy={bool(parsed_opt)}", flush=True)
                             if parsed_opt:
-                                action = parsed_opt.get('action', 'BTO')
-                                qty = parsed_opt.get('qty', 1)
-                                qty_specified = parsed_opt.get('qty_specified', True)
-                                symbol = parsed_opt.get('symbol', '')
-                                strike = parsed_opt.get('strike', '')
-                                opt_type = parsed_opt.get('opt_type', 'C')
-                                expiry = parsed_opt.get('expiry', '')
-                                price = parsed_opt.get('price')
-                                price_str = f"@ {price}" if price else "@ m"
-                                # Only include qty in forward if source signal had it
-                                if qty_specified:
-                                    forward_msg = f"{action} {qty} ${symbol} {strike}{opt_type} {expiry} {price_str}"
-                                else:
-                                    forward_msg = f"{action} ${symbol} {strike}{opt_type} {expiry} {price_str}"
-                                print(f"[CHANNEL MAP] ✓ Converted to BTO/STC format: {forward_msg}", flush=True)
+                                try:
+                                    action = parsed_opt.get('action', 'BTO')
+                                    qty = parsed_opt.get('qty', 1)
+                                    qty_specified = parsed_opt.get('qty_specified', True)
+                                    symbol = parsed_opt.get('symbol', '')
+                                    strike = parsed_opt.get('strike', '')
+                                    opt_type = parsed_opt.get('opt_type', 'C')
+                                    expiry = parsed_opt.get('expiry', '')
+                                    price = parsed_opt.get('price')
+                                    price_str = f"@ {price}" if price else "@ m"
+                                    # Only include qty in forward if source signal had it
+                                    if qty_specified:
+                                        forward_msg = f"{action} {qty} ${symbol} {strike}{opt_type} {expiry} {price_str}"
+                                    else:
+                                        forward_msg = f"{action} ${symbol} {strike}{opt_type} {expiry} {price_str}"
+                                    print(f"[CHANNEL MAP] ✓ Converted to BTO/STC format: {forward_msg}", flush=True)
+                                except Exception as conv_err:
+                                    print(f"[CHANNEL MAP] ❌ Conversion error: {conv_err}", flush=True)
+                                    import traceback
+                                    traceback.print_exc()
+                                    forward_msg = message.content.strip()
                             else:
                                 # Couldn't parse, forward as-is
                                 forward_msg = message.content.strip()
