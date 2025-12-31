@@ -1424,6 +1424,13 @@ BISHOP_ENTRY_PATTERN = r'\*{0,2}Entry:\*{0,2}\s*(\d+\.?\d*)'
 # Groups: (symbol, strike, opt_type, month, day, price)
 BISHOP_TRIM_PATTERN = r'[Tt]rimming\s+(?:\?\w\s+)?([A-Za-z]+)\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+(\d{1,2})/(\d{1,2})\s*@\s*\$?(\d+\.?\d*)'
 
+# EvaPanda-style patterns (embed-based with Open/Close titles)
+# Embed Title: "Open" = BTO entry, "Close" = STC exit, "Update:" = skip
+# Format: BTO FSLR 01/16/26 300C @ 3.25 (Swing) or STC FSLR 01/16/26 300C @ 4.10
+# Note: Expiry format is MM/DD/YY (full year)
+# Groups: (action, symbol, month, day, year, strike, opt_type, price)
+EVAPANDA_PATTERN = r'(BTO|STC)\s+([A-Za-z]+)\s+(\d{1,2})/(\d{1,2})/(\d{2,4})\s+(\d+(?:\.\d+)?)\s*([CPcp])\s*@\s*(\d+\.?\d*)'
+
 # Use database patterns if available, otherwise fallback to config.ini or defaults
 if DB_OPTION_PATTERN:
     OPT_REGEX = re.compile(DB_OPTION_PATTERN, re.IGNORECASE | re.MULTILINE)
@@ -3699,6 +3706,7 @@ BEAR_LOTTO_REGEX = re.compile(BEAR_LOTTO_PATTERN, re.IGNORECASE)
 BISHOP_OPTION_REGEX = re.compile(BISHOP_OPTION_PATTERN, re.IGNORECASE | re.MULTILINE)
 BISHOP_ENTRY_REGEX = re.compile(BISHOP_ENTRY_PATTERN, re.IGNORECASE)
 BISHOP_TRIM_REGEX = re.compile(BISHOP_TRIM_PATTERN, re.IGNORECASE)
+EVAPANDA_REGEX = re.compile(EVAPANDA_PATTERN, re.IGNORECASE)
 
 def parse_option_signal(text: str) -> Optional[dict]:
     learned_result = try_parse_with_learned_formats(text)
@@ -4068,6 +4076,33 @@ def parse_option_signal(text: str) -> Optional[dict]:
                                                                                                 "is_market_order": price is None,
                                                                                                 "_bishop_format": True
                                                                                             }
+                                                                                
+                                                                                # Try EvaPanda format: BTO FSLR 01/16/26 300C @ 3.25
+                                                                                # Uses embed title "Open" or "Close" to indicate entry/exit
+                                                                                evapanda_m = EVAPANDA_REGEX.search(text.strip())
+                                                                                if evapanda_m:
+                                                                                    action, symbol, month, day, year, strike, opt_type, price_str = evapanda_m.groups()
+                                                                                    expiry = f"{month}/{day}"  # Convert to MM/DD format
+                                                                                    price = float(price_str) if price_str else None
+                                                                                    print(f"[Discord] ✓ Matched EvaPanda format: {action} {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
+                                                                                    _current_trading_settings = get_trading_settings()
+                                                                                    max_position_size = _current_trading_settings['max_position_size']
+                                                                                    actual_cost_per_contract = price * 100 if price else 100
+                                                                                    qty = max(1, int(max_position_size / actual_cost_per_contract)) if actual_cost_per_contract > 0 else 1
+                                                                                    print(f"[AUTO-QTY] EvaPanda: ${price} x 100 = ${actual_cost_per_contract}/contract, qty={qty} (max ${max_position_size})")
+                                                                                    return {
+                                                                                        "asset": "option",
+                                                                                        "action": action.upper(),
+                                                                                        "qty": qty,
+                                                                                        "symbol": symbol.upper(),
+                                                                                        "strike": float(strike),
+                                                                                        "opt_type": opt_type.upper(),
+                                                                                        "expiry": expiry,
+                                                                                        "price": price,
+                                                                                        "is_market_order": price is None,
+                                                                                        "_evapanda_format": True
+                                                                                    }
+                                                                                
                                                                                 # Silently return None - let the caller try other formats (stock, TRADE IDEA)
                                                                                 return None
     
