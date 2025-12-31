@@ -7010,9 +7010,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'profit_target_1_pct': channel_info.get('profit_target_1_pct'),
                         'profit_target_2_pct': channel_info.get('profit_target_2_pct'),
                         'profit_target_3_pct': channel_info.get('profit_target_3_pct'),
+                        'profit_target_4_pct': channel_info.get('profit_target_4_pct'),
+                        'profit_target_qty_1': channel_info.get('profit_target_qty_1'),
+                        'profit_target_qty_2': channel_info.get('profit_target_qty_2'),
+                        'profit_target_qty_3': channel_info.get('profit_target_qty_3'),
+                        'profit_target_qty_4': channel_info.get('profit_target_qty_4'),
                         'stop_loss_pct': channel_info.get('stop_loss_pct'),
                         'trailing_stop_pct': channel_info.get('trailing_stop_pct'),
-                        'trailing_activation_pct': channel_info.get('trailing_activation_pct')
+                        'trailing_activation_pct': channel_info.get('trailing_activation_pct'),
+                        'leave_runner_enabled': channel_info.get('leave_runner_enabled'),
+                        'leave_runner_pct': channel_info.get('leave_runner_pct'),
+                        'trim_order_mode': channel_info.get('trim_order_mode', 'market'),
+                        'trim_limit_offset': channel_info.get('trim_limit_offset', 0.01)
                     }
                     
                     # Add channel_record_id and channel_id for database saving after execution
@@ -7204,9 +7213,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'profit_target_1_pct': channel_info.get('profit_target_1_pct'),
                         'profit_target_2_pct': channel_info.get('profit_target_2_pct'),
                         'profit_target_3_pct': channel_info.get('profit_target_3_pct'),
+                        'profit_target_4_pct': channel_info.get('profit_target_4_pct'),
+                        'profit_target_qty_1': channel_info.get('profit_target_qty_1'),
+                        'profit_target_qty_2': channel_info.get('profit_target_qty_2'),
+                        'profit_target_qty_3': channel_info.get('profit_target_qty_3'),
+                        'profit_target_qty_4': channel_info.get('profit_target_qty_4'),
                         'stop_loss_pct': channel_info.get('stop_loss_pct'),
                         'trailing_stop_pct': channel_info.get('trailing_stop_pct'),
-                        'trailing_activation_pct': channel_info.get('trailing_activation_pct')
+                        'trailing_activation_pct': channel_info.get('trailing_activation_pct'),
+                        'leave_runner_enabled': channel_info.get('leave_runner_enabled'),
+                        'leave_runner_pct': channel_info.get('leave_runner_pct'),
+                        'trim_order_mode': channel_info.get('trim_order_mode', 'market'),
+                        'trim_limit_offset': channel_info.get('trim_limit_offset', 0.01)
                     }
                     
                     # Add channel_record_id and channel_id for database saving after execution

@@ -1,9 +1,9 @@
 """
 Tiered Profit Targets Evaluation
 ================================
-Per-channel T1/T2/T3 profit target logic with partial exits.
+Per-channel T1/T2/T3/T4 profit target logic with partial exits and custom quantities.
 """
-from typing import Optional
+from typing import Optional, Tuple
 from .risk_types import (
     PositionSnapshot, 
     ChannelRiskSettings, 
@@ -12,17 +12,88 @@ from .risk_types import (
 )
 
 
+def calculate_tier_exit_qty(
+    tier: int,
+    current_qty: int,
+    channel_settings: ChannelRiskSettings,
+    cache: PositionCacheEntry
+) -> Tuple[int, bool]:
+    """
+    Calculate exit quantity for a tier based on custom qty settings or auto-calculation.
+    
+    Args:
+        tier: Tier number (1-4)
+        current_qty: Current position quantity
+        channel_settings: Channel risk settings with custom quantities
+        cache: Position cache with tier hit flags
+        
+    Returns:
+        Tuple of (exit_qty, is_partial)
+    """
+    # Get custom quantity for this tier (if set)
+    qty_map = {
+        1: channel_settings.profit_target_qty_1,
+        2: channel_settings.profit_target_qty_2,
+        3: channel_settings.profit_target_qty_3,
+        4: channel_settings.profit_target_qty_4,
+    }
+    custom_qty = qty_map.get(tier)
+    
+    # If custom qty is set and valid, use it
+    if custom_qty is not None and custom_qty > 0:
+        exit_qty = min(custom_qty, current_qty)
+        is_partial = exit_qty < current_qty
+        return exit_qty, is_partial
+    
+    # Auto-calculate: Use equal splits based on active tiers
+    # Count how many tiers are configured
+    active_tiers = []
+    if channel_settings.profit_target_1_pct > 0:
+        active_tiers.append(1)
+    if channel_settings.profit_target_2_pct > 0:
+        active_tiers.append(2)
+    if channel_settings.profit_target_3_pct > 0:
+        active_tiers.append(3)
+    if channel_settings.profit_target_4_pct > 0:
+        active_tiers.append(4)
+    
+    # Small positions: close all at first target
+    if current_qty <= 2:
+        return current_qty, False
+    
+    # For larger positions, calculate based on remaining tiers
+    remaining_tiers = [t for t in active_tiers if t >= tier and not getattr(cache, f'tier{t}_hit', False)]
+    if not remaining_tiers:
+        return current_qty, False
+    
+    # Equal split for remaining tiers
+    per_tier_qty = max(1, current_qty // len(remaining_tiers))
+    
+    # Last tier or leave runner adjustment
+    if tier == max(active_tiers):
+        if channel_settings.leave_runner_enabled and current_qty > 1:
+            runner_pct = channel_settings.leave_runner_pct / 100.0
+            runner_qty = max(1, int(current_qty * runner_pct))
+            exit_qty = current_qty - runner_qty
+            return max(0, exit_qty), exit_qty < current_qty
+        return current_qty, False
+    
+    return per_tier_qty, per_tier_qty < current_qty
+
+
 def evaluate_tiered_targets(
     position: PositionSnapshot,
     cache: PositionCacheEntry,
     channel_settings: ChannelRiskSettings
 ) -> ExitDecision:
     """
-    Evaluate tiered profit targets for a position.
+    Evaluate tiered profit targets for a position (supports up to 4 tiers).
     
     Rules:
     - For small positions (1-2 contracts): Close all at first target hit
-    - For larger positions: Scale out 1/3 at T1, 1/2 at T2, all at T3
+    - For larger positions: Use custom quantities per tier or equal splits
+    - Leave runner: Keep configured % after last tier hit
+    - Trim order mode: 'market' or 'limit' (limit uses offset for better fills)
     
     Args:
         position: Current position snapshot
@@ -42,75 +113,84 @@ def evaluate_tiered_targets(
     t1 = channel_settings.profit_target_1_pct
     t2 = channel_settings.profit_target_2_pct
     t3 = channel_settings.profit_target_3_pct
+    t4 = channel_settings.profit_target_4_pct
     
+    # Tier 1 check
     if not cache.tier1_hit and t1 > 0 and pct_change >= t1:
-        if current_qty <= 2:
+        exit_qty, is_partial = calculate_tier_exit_qty(1, current_qty, channel_settings, cache)
+        if exit_qty > 0:
+            qty_info = f"{exit_qty}" if channel_settings.profit_target_qty_1 else f"{exit_qty} of {current_qty}"
             return ExitDecision(
                 should_exit=True,
-                reason=f"({pct_change:.2f}% >= {t1}%) - Closing all {current_qty} (small position)",
-                exit_qty=current_qty,
-                is_partial=False,
-                risk_trigger='profit_target',
-                tier_hit=1
-            )
-        else:
-            exit_qty = max(1, current_qty // 3)
-            return ExitDecision(
-                should_exit=True,
-                reason=f"({pct_change:.2f}% >= {t1}%) - Selling {exit_qty} of {current_qty}",
+                reason=f"({pct_change:.2f}% >= {t1}%) - Selling {qty_info}",
                 exit_qty=exit_qty,
-                is_partial=True,
+                is_partial=is_partial,
                 risk_trigger='profit_target',
                 tier_hit=1
             )
     
+    # Tier 2 check
     elif cache.tier1_hit and not cache.tier2_hit and t2 > 0 and pct_change >= t2:
-        if current_qty <= 1:
+        exit_qty, is_partial = calculate_tier_exit_qty(2, current_qty, channel_settings, cache)
+        if exit_qty > 0:
+            qty_info = f"{exit_qty}" if channel_settings.profit_target_qty_2 else f"{exit_qty} of {current_qty}"
             return ExitDecision(
                 should_exit=True,
-                reason=f"({pct_change:.2f}% >= {t2}%) - Closing remaining {current_qty}",
-                exit_qty=current_qty,
-                is_partial=False,
-                risk_trigger='profit_target',
-                tier_hit=2
-            )
-        else:
-            exit_qty = max(1, current_qty // 2)
-            return ExitDecision(
-                should_exit=True,
-                reason=f"({pct_change:.2f}% >= {t2}%) - Selling {exit_qty} of {current_qty}",
+                reason=f"({pct_change:.2f}% >= {t2}%) - Selling {qty_info}",
                 exit_qty=exit_qty,
-                is_partial=True,
+                is_partial=is_partial,
                 risk_trigger='profit_target',
                 tier_hit=2
             )
     
+    # Tier 3 check
     elif cache.tier2_hit and not cache.tier3_hit and t3 > 0 and pct_change >= t3:
-        # Check if leave_runner is enabled
-        if channel_settings.leave_runner_enabled and current_qty > 1:
-            runner_pct = channel_settings.leave_runner_pct / 100.0
-            runner_qty = max(1, int(current_qty * runner_pct))
-            exit_qty = current_qty - runner_qty
-            
+        # If T4 is configured, T3 is not the final tier
+        if t4 > 0:
+            exit_qty, is_partial = calculate_tier_exit_qty(3, current_qty, channel_settings, cache)
             if exit_qty > 0:
+                qty_info = f"{exit_qty}" if channel_settings.profit_target_qty_3 else f"{exit_qty} of {current_qty}"
                 return ExitDecision(
                     should_exit=True,
-                    reason=f"({pct_change:.2f}% >= {t3}%) - Selling {exit_qty}, leaving {runner_qty} as runner",
+                    reason=f"({pct_change:.2f}% >= {t3}%) - Selling {qty_info}",
                     exit_qty=exit_qty,
-                    is_partial=True,  # Mark as partial since we're leaving a runner
+                    is_partial=is_partial,
                     risk_trigger='profit_target',
                     tier_hit=3
                 )
-        
-        # No runner or only 1 contract - close all
-        return ExitDecision(
-            should_exit=True,
-            reason=f"({pct_change:.2f}% >= {t3}%) - Closing remaining {current_qty}",
-            exit_qty=current_qty,
-            is_partial=False,
-            risk_trigger='profit_target',
-            tier_hit=3
-        )
+        else:
+            # T3 is the final tier - apply leave runner logic
+            exit_qty, is_partial = calculate_tier_exit_qty(3, current_qty, channel_settings, cache)
+            if exit_qty > 0:
+                runner_info = ""
+                if is_partial and channel_settings.leave_runner_enabled:
+                    runner_qty = current_qty - exit_qty
+                    runner_info = f", leaving {runner_qty} as runner"
+                return ExitDecision(
+                    should_exit=True,
+                    reason=f"({pct_change:.2f}% >= {t3}%) - Selling {exit_qty}{runner_info}",
+                    exit_qty=exit_qty,
+                    is_partial=is_partial,
+                    risk_trigger='profit_target',
+                    tier_hit=3
+                )
+    
+    # Tier 4 check (new)
+    elif cache.tier3_hit and not cache.tier4_hit and t4 > 0 and pct_change >= t4:
+        exit_qty, is_partial = calculate_tier_exit_qty(4, current_qty, channel_settings, cache)
+        if exit_qty > 0:
+            runner_info = ""
+            if is_partial and channel_settings.leave_runner_enabled:
+                runner_qty = current_qty - exit_qty
+                runner_info = f", leaving {runner_qty} as runner"
+            return ExitDecision(
+                should_exit=True,
+                reason=f"({pct_change:.2f}% >= {t4}%) - Selling {exit_qty}{runner_info}",
+                exit_qty=exit_qty,
+                is_partial=is_partial,
+                risk_trigger='profit_target',
+                tier_hit=4
+            )
     
     return ExitDecision.no_exit()
 
@@ -120,6 +200,43 @@ def format_tier_reason(decision: ExitDecision, channel_name: str) -> str:
     if decision.tier_hit:
         return f"TIER {decision.tier_hit} TARGET [{channel_name}] {decision.reason}"
     return f"PROFIT TARGET [{channel_name}] {decision.reason}"
+
+
+def get_trim_order_price(
+    current_price: float,
+    channel_settings: ChannelRiskSettings,
+    is_sell: bool = True
+) -> Optional[float]:
+    """
+    Calculate limit order price for trim based on channel settings.
+    
+    Args:
+        current_price: Current market price
+        channel_settings: Channel risk settings with trim mode
+        is_sell: True for sell orders (default), False for buy orders
+        
+    Returns:
+        Limit price if mode is 'limit', None if mode is 'market'
+    """
+    if channel_settings.trim_order_mode != 'limit':
+        return None
+    
+    offset = channel_settings.trim_limit_offset
+    if is_sell:
+        # For sells, set limit slightly below current to ensure fill
+        # Adjust to psychological levels (.04 or .09)
+        base_price = current_price - offset
+        cents = int((base_price * 100) % 10)
+        if cents >= 5:
+            # Round to .09
+            limit_price = (int(base_price * 10) / 10) + 0.09
+        else:
+            # Round to .04
+            limit_price = (int(base_price * 10) / 10) + 0.04
+        return round(limit_price, 2)
+    else:
+        # For buys, set limit slightly above current
+        return round(current_price + offset, 2)
 
 
 def evaluate_channel_stop_loss(

@@ -115,7 +115,9 @@ class RiskDBAdapter:
                     cursor.execute('''
                         SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
                                c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
-                               c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct
+                               c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
+                               c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
+                               c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset
                         FROM trades t
                         LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
                         WHERE t.symbol = ? AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
@@ -132,7 +134,9 @@ class RiskDBAdapter:
                 cursor.execute('''
                     SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
                            c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
-                           c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct
+                           c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
+                           c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
+                           c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset
                     FROM trades t
                     LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
                     WHERE t.symbol = ? AND t.asset_type = 'stock'
@@ -154,10 +158,21 @@ class RiskDBAdapter:
                 pt1 = row[1] or 0
                 pt2 = row[2] or 0
                 pt3 = row[3] or 0
+                pt4 = row[11] or 0  # New T4
                 sl = row[4] or 0
                 trail = row[5] or 0
                 leave_runner_enabled = bool(row[9]) if len(row) > 9 and row[9] else False
                 leave_runner_pct = row[10] if len(row) > 10 and row[10] else 25.0
+                
+                # Extract custom quantities (None means auto-calculate)
+                qty1 = row[12] if len(row) > 12 else None
+                qty2 = row[13] if len(row) > 13 else None
+                qty3 = row[14] if len(row) > 14 else None
+                qty4 = row[15] if len(row) > 15 else None
+                
+                # Extract trim order settings
+                trim_mode = row[16] if len(row) > 16 and row[16] else 'market'
+                trim_offset = row[17] if len(row) > 17 and row[17] is not None else 0.01
                 
                 # Risk management is enabled - return settings
                 return ChannelRiskSettings(
@@ -166,11 +181,18 @@ class RiskDBAdapter:
                     profit_target_1_pct=pt1,
                     profit_target_2_pct=pt2,
                     profit_target_3_pct=pt3,
+                    profit_target_4_pct=pt4,
+                    profit_target_qty_1=qty1,
+                    profit_target_qty_2=qty2,
+                    profit_target_qty_3=qty3,
+                    profit_target_qty_4=qty4,
                     stop_loss_pct=sl,
                     trailing_stop_pct=trail,
                     trailing_activation_pct=row[6] or 15.0,
                     leave_runner_enabled=leave_runner_enabled,
-                    leave_runner_pct=leave_runner_pct
+                    leave_runner_pct=leave_runner_pct,
+                    trim_order_mode=trim_mode,
+                    trim_limit_offset=trim_offset
                 )
             
             return None

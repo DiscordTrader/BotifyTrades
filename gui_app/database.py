@@ -422,6 +422,27 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added leave_runner columns for per-channel runner settings")
     
+    # Migrate: Add P4 profit target and per-tier quantity columns for enhanced risk management
+    try:
+        cursor.execute('SELECT profit_target_4_pct FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN profit_target_4_pct REAL DEFAULT NULL')
+        cursor.execute('ALTER TABLE channels ADD COLUMN profit_target_qty_1 INTEGER DEFAULT NULL')
+        cursor.execute('ALTER TABLE channels ADD COLUMN profit_target_qty_2 INTEGER DEFAULT NULL')
+        cursor.execute('ALTER TABLE channels ADD COLUMN profit_target_qty_3 INTEGER DEFAULT NULL')
+        cursor.execute('ALTER TABLE channels ADD COLUMN profit_target_qty_4 INTEGER DEFAULT NULL')
+        conn.commit()
+        print("[DATABASE] ✓ Added P4 and per-tier quantity columns for enhanced risk management")
+    
+    # Migrate: Add trim order mode columns for limit vs market order trims
+    try:
+        cursor.execute('SELECT trim_order_mode FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE channels ADD COLUMN trim_order_mode TEXT DEFAULT 'market'")
+        cursor.execute('ALTER TABLE channels ADD COLUMN trim_limit_offset REAL DEFAULT 0.01')
+        conn.commit()
+        print("[DATABASE] ✓ Added trim order mode columns (market/limit) for per-channel trim settings")
+    
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -1495,7 +1516,9 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
                broker_override, is_active, paper_trade_enabled, enabled_brokers,
                profit_target_pct, profit_target_1_pct, profit_target_2_pct, profit_target_3_pct,
                stop_loss_pct, trailing_stop_pct, trailing_activation_pct, position_size_pct,
-               created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct
+               created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct,
+               profit_target_4_pct, profit_target_qty_1, profit_target_qty_2, profit_target_qty_3,
+               profit_target_qty_4, trim_order_mode, trim_limit_offset
         FROM channels WHERE id = ?
     ''', (channel_id,))
     
@@ -1526,7 +1549,14 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
         'updated_at': row[19],
         'default_quantity': row[20],
         'leave_runner_enabled': bool(row[21]) if row[21] is not None else False,
-        'leave_runner_pct': row[22] if row[22] is not None else 25.0
+        'leave_runner_pct': row[22] if row[22] is not None else 25.0,
+        'profit_target_4_pct': row[23],
+        'profit_target_qty_1': row[24],
+        'profit_target_qty_2': row[25],
+        'profit_target_qty_3': row[26],
+        'profit_target_qty_4': row[27],
+        'trim_order_mode': row[28] if row[28] else 'market',
+        'trim_limit_offset': row[29] if row[29] is not None else 0.01
     }
 
 
@@ -1540,7 +1570,9 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
                broker_override, is_active, paper_trade_enabled, enabled_brokers,
                profit_target_pct, profit_target_1_pct, profit_target_2_pct, profit_target_3_pct,
                stop_loss_pct, trailing_stop_pct, trailing_activation_pct, position_size_pct,
-               created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct
+               created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct,
+               profit_target_4_pct, profit_target_qty_1, profit_target_qty_2, profit_target_qty_3,
+               profit_target_qty_4, trim_order_mode, trim_limit_offset
         FROM channels WHERE discord_channel_id = ?
     ''', (str(discord_channel_id),))
     
@@ -1571,7 +1603,14 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
         'updated_at': row[19],
         'default_quantity': row[20],
         'leave_runner_enabled': bool(row[21]) if row[21] is not None else False,
-        'leave_runner_pct': row[22] if row[22] is not None else 25.0
+        'leave_runner_pct': row[22] if row[22] is not None else 25.0,
+        'profit_target_4_pct': row[23],
+        'profit_target_qty_1': row[24],
+        'profit_target_qty_2': row[25],
+        'profit_target_qty_3': row[26],
+        'profit_target_qty_4': row[27],
+        'trim_order_mode': row[28] if row[28] else 'market',
+        'trim_limit_offset': row[29] if row[29] is not None else 0.01
     }
 
 
@@ -1586,8 +1625,10 @@ def update_channel(channel_id: int, **kwargs):
     for key, value in kwargs.items():
         if key in ['name', 'category', 'execute_enabled', 'track_enabled', 'broker_override', 'is_active', 
                    'paper_trade_enabled', 'profit_target_pct', 'profit_target_1_pct', 'profit_target_2_pct', 'profit_target_3_pct',
+                   'profit_target_4_pct', 'profit_target_qty_1', 'profit_target_qty_2', 'profit_target_qty_3', 'profit_target_qty_4',
                    'stop_loss_pct', 'trailing_stop_pct', 'trailing_activation_pct', 'enabled_brokers', 'position_size_pct', 'tracking_position_size_pct',
-                   'default_quantity', 'risk_management_enabled', 'leave_runner_enabled', 'leave_runner_pct']:
+                   'default_quantity', 'risk_management_enabled', 'leave_runner_enabled', 'leave_runner_pct',
+                   'trim_order_mode', 'trim_limit_offset']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))

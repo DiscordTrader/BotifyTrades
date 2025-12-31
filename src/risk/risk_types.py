@@ -64,16 +64,24 @@ class ChannelRiskSettings:
     profit_target_1_pct: float = 0.0  # Tier 1 target
     profit_target_2_pct: float = 0.0  # Tier 2 target
     profit_target_3_pct: float = 0.0  # Tier 3 target
+    profit_target_4_pct: float = 0.0  # Tier 4 target (new)
+    profit_target_qty_1: Optional[int] = None  # Custom qty for T1 (None = auto-calculate)
+    profit_target_qty_2: Optional[int] = None  # Custom qty for T2
+    profit_target_qty_3: Optional[int] = None  # Custom qty for T3
+    profit_target_qty_4: Optional[int] = None  # Custom qty for T4
     stop_loss_pct: float = 0.0
     trailing_stop_pct: float = 0.0
     trailing_activation_pct: float = 15.0
     leave_runner_enabled: bool = False  # Keep portion after profit targets
     leave_runner_pct: float = 25.0  # Percentage of position to leave as runner
+    trim_order_mode: str = 'market'  # 'market' or 'limit' for trim orders
+    trim_limit_offset: float = 0.01  # Offset for limit orders (e.g., 0.01 = $0.01)
     
     @property
     def has_tiered_targets(self) -> bool:
         """Check if tiered profit targets are configured."""
-        return self.profit_target_1_pct > 0 or self.profit_target_2_pct > 0 or self.profit_target_3_pct > 0
+        return (self.profit_target_1_pct > 0 or self.profit_target_2_pct > 0 or 
+                self.profit_target_3_pct > 0 or self.profit_target_4_pct > 0)
     
     @property
     def has_any_settings(self) -> bool:
@@ -152,6 +160,7 @@ class PositionCacheEntry:
     tier1_hit: bool = False
     tier2_hit: bool = False
     tier3_hit: bool = False
+    tier4_hit: bool = False
     
     created_at: datetime = field(default_factory=datetime.now)
     
@@ -170,6 +179,7 @@ class PositionCacheEntry:
             'tier1_hit': self.tier1_hit,
             'tier2_hit': self.tier2_hit,
             'tier3_hit': self.tier3_hit,
+            'tier4_hit': self.tier4_hit,
             'created_at': self.created_at.isoformat()
         }
     

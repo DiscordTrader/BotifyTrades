@@ -31,12 +31,15 @@ Core technologies include `discord.py-self` and `webull`. It employs a true dual
 ### Feature Specifications
 The system supports a dual-mode channel system for simultaneous execution and tracking with FIFO-based P&L tracking, and Multi-Broker Execution across multiple accounts with per-channel broker selection. It handles market orders, comprehensive PNL page filtering, and per-channel position sizing. Per-channel risk settings allow independent operation, supporting 3-tier profit targets with partial exits, trailing stops, and **Leave Runner functionality** (keep a configurable % of position after hitting profit targets to capture additional gains). The Trade Monitor feature automatically detects and posts broker-executed trades as BTO/STC signals to Discord. A debug report system allows users to submit filtered error logs to the admin.
 
-**Per-Channel Risk Management Fields**: Each channel can independently configure:
-- Profit Target 1/2/3 (P1/P2/P3) - up to 500%
+**Per-Channel Risk Management Fields (Enhanced 4-Tier System)**: Each channel can independently configure:
+- Profit Targets 1/2/3/4 (P1/P2/P3/P4) - up to 500% each with suggested defaults of 10%, 20%, 30%, 40%
+- **Custom Trim Quantities**: Specify exact contracts to trim at each tier (e.g., 2, 2, 3, 2). Leave empty for auto-calculation with equal split.
+- **Trim Order Mode**: Choose between Market (immediate fill) or Limit orders (psychological pricing at .04/.09 levels)
+- **Limit Order Offset**: Configurable offset for limit orders (default $0.01)
 - Stop Loss % - maximum 100%
 - Trailing Stop % with Activation %
 - Leave Runner - toggle enabled/disabled with configurable percentage (default 25%)
-- All settings stored in SQLite `channels` table with `leave_runner_enabled` and `leave_runner_pct` columns
+- All settings stored in SQLite `channels` table with columns: `profit_target_4_pct`, `profit_target_qty_1-4`, `trim_order_mode`, `trim_limit_offset`
 
 **Portfolio Simulation Engine (Enhanced)**: Located in `services/simulation.py::run_exact_historical_simulation()`. Projects YOUR portfolio growth using YOUR position sizing with industry-standard realism. Key features:
 - **Position sizing modes**: `fixed` ($ per trade), `percent_start` (flat % of starting portfolio), `percent_current` (compounding % of current balance)

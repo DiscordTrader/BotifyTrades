@@ -141,6 +141,8 @@ class PositionCache:
                 entry.tier2_hit = True
             elif tier == 3:
                 entry.tier3_hit = True
+            elif tier == 4:
+                entry.tier4_hit = True
     
     def set_all_tiers_hit(self, position_key: str) -> None:
         """Mark all tiers as hit (for small positions closing at T1)."""
@@ -149,6 +151,7 @@ class PositionCache:
             entry.tier1_hit = True
             entry.tier2_hit = True
             entry.tier3_hit = True
+            entry.tier4_hit = True
     
     def activate_trailing_stop(self, position_key: str) -> None:
         """Activate trailing stop for a position."""

@@ -184,13 +184,44 @@ async function loadChannels() {
                                     </label>
                                 </div>
                                 <div id="risk-settings-panel-${channel.id}" style="display: ${channel.risk_management_enabled ? 'block' : 'none'};">
-                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
-                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Profit Target 1 (P1) %</label><input type="number" id="risk-profit-target-1-${channel.id}" value="${channel.profit_target_1_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
-                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Profit Target 2 (P2) %</label><input type="number" id="risk-profit-target-2-${channel.id}" value="${channel.profit_target_2_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
-                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Profit Target 3 (P3) %</label><input type="number" id="risk-profit-target-3-${channel.id}" value="${channel.profit_target_3_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px;">
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">P1 Target %</label><input type="number" id="risk-profit-target-1-${channel.id}" value="${channel.profit_target_1_pct || ''}" placeholder="e.g. 10" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">P2 Target %</label><input type="number" id="risk-profit-target-2-${channel.id}" value="${channel.profit_target_2_pct || ''}" placeholder="e.g. 20" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">P3 Target %</label><input type="number" id="risk-profit-target-3-${channel.id}" value="${channel.profit_target_3_pct || ''}" placeholder="e.g. 30" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">P4 Target %</label><input type="number" id="risk-profit-target-4-${channel.id}" value="${channel.profit_target_4_pct || ''}" placeholder="e.g. 40" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 8px;">
+                                    <label style="display: block; font-size: 12px; font-weight: 600; color: #818cf8; margin-bottom: 8px;">Custom Trim Quantities (optional)</label>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Specify exact contracts to trim at each target. Leave empty for auto-calculation.</p>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px;">
+                                        <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P1 Qty</label><input type="number" id="risk-qty-1-${channel.id}" value="${channel.profit_target_qty_1 || ''}" placeholder="Auto" step="1" min="0" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                        <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P2 Qty</label><input type="number" id="risk-qty-2-${channel.id}" value="${channel.profit_target_qty_2 || ''}" placeholder="Auto" step="1" min="0" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                        <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P3 Qty</label><input type="number" id="risk-qty-3-${channel.id}" value="${channel.profit_target_qty_3 || ''}" placeholder="Auto" step="1" min="0" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                        <div><label style="display: block; font-size: 10px; color: #8E8E93; margin-bottom: 4px;">P4 Qty</label><input type="number" id="risk-qty-4-${channel.id}" value="${channel.profit_target_qty_4 || ''}" placeholder="Auto" step="1" min="0" style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                    </div>
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 12px;">
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Stop Loss %</label><input type="number" id="risk-stop-loss-${channel.id}" value="${channel.stop_loss_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Stop %</label><input type="number" id="risk-trailing-stop-${channel.id}" value="${channel.trailing_stop_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Activation %</label><input type="number" id="risk-trailing-activation-${channel.id}" value="${channel.trailing_activation_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 165, 0, 0.05); border: 1px solid rgba(255, 165, 0, 0.2); border-radius: 8px;">
+                                    <label style="display: block; font-size: 12px; font-weight: 600; color: #ffb700; margin-bottom: 8px;">Trim Order Type</label>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Market orders fill immediately. Limit orders use psychological pricing (.04/.09).</p>
+                                    <div style="display: flex; gap: 16px; align-items: center;">
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="trim-order-mode-${channel.id}" value="market" ${(channel.trim_order_mode || 'market') === 'market' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('limit-offset-container-${channel.id}').style.display='none'">
+                                            <span style="font-size: 12px; color: white;">Market</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="trim-order-mode-${channel.id}" value="limit" ${channel.trim_order_mode === 'limit' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('limit-offset-container-${channel.id}').style.display='flex'">
+                                            <span style="font-size: 12px; color: white;">Limit</span>
+                                        </label>
+                                        <div style="display: ${channel.trim_order_mode === 'limit' ? 'flex' : 'none'}; align-items: center; gap: 8px;" id="limit-offset-container-${channel.id}">
+                                            <label style="font-size: 11px; color: #8E8E93;">Offset $:</label>
+                                            <input type="number" id="risk-trim-offset-${channel.id}" value="${channel.trim_limit_offset || 0.01}" step="0.01" min="0" max="1" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
+                                        </div>
+                                    </div>
                                 </div>
                                 <div style="margin-top: 16px; padding: 12px; background: rgba(0, 255, 136, 0.05); border: 1px solid rgba(0, 255, 136, 0.2); border-radius: 8px;">
                                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
@@ -909,11 +940,18 @@ async function saveRiskManagement(channelId) {
         const profitTarget1 = document.getElementById(`risk-profit-target-1-${channelId}`).value;
         const profitTarget2 = document.getElementById(`risk-profit-target-2-${channelId}`).value;
         const profitTarget3 = document.getElementById(`risk-profit-target-3-${channelId}`).value;
+        const profitTarget4 = document.getElementById(`risk-profit-target-4-${channelId}`).value;
+        const qty1 = document.getElementById(`risk-qty-1-${channelId}`).value;
+        const qty2 = document.getElementById(`risk-qty-2-${channelId}`).value;
+        const qty3 = document.getElementById(`risk-qty-3-${channelId}`).value;
+        const qty4 = document.getElementById(`risk-qty-4-${channelId}`).value;
         const stopLoss = document.getElementById(`risk-stop-loss-${channelId}`).value;
         const trailingStop = document.getElementById(`risk-trailing-stop-${channelId}`).value;
         const trailingActivation = document.getElementById(`risk-trailing-activation-${channelId}`).value;
         const leaveRunnerEnabled = document.getElementById(`risk-leave-runner-enabled-${channelId}`)?.checked ? 1 : 0;
         const leaveRunnerPct = document.getElementById(`risk-leave-runner-pct-${channelId}`).value;
+        const trimOrderMode = document.querySelector(`input[name="trim-order-mode-${channelId}"]:checked`)?.value || 'market';
+        const trimLimitOffset = document.getElementById(`risk-trim-offset-${channelId}`).value;
         
         const response = await fetch(`/api/channels/${channelId}`, {
             method: 'PUT',
@@ -923,11 +961,18 @@ async function saveRiskManagement(channelId) {
                 profit_target_1_pct: profitTarget1 ? parseFloat(profitTarget1) : null,
                 profit_target_2_pct: profitTarget2 ? parseFloat(profitTarget2) : null,
                 profit_target_3_pct: profitTarget3 ? parseFloat(profitTarget3) : null,
+                profit_target_4_pct: profitTarget4 ? parseFloat(profitTarget4) : null,
+                profit_target_qty_1: qty1 ? parseInt(qty1) : null,
+                profit_target_qty_2: qty2 ? parseInt(qty2) : null,
+                profit_target_qty_3: qty3 ? parseInt(qty3) : null,
+                profit_target_qty_4: qty4 ? parseInt(qty4) : null,
                 stop_loss_pct: stopLoss ? parseFloat(stopLoss) : null,
                 trailing_stop_pct: trailingStop ? parseFloat(trailingStop) : null,
                 trailing_activation_pct: trailingActivation ? parseFloat(trailingActivation) : null,
                 leave_runner_enabled: leaveRunnerEnabled,
-                leave_runner_pct: leaveRunnerPct ? parseFloat(leaveRunnerPct) : 25.0
+                leave_runner_pct: leaveRunnerPct ? parseFloat(leaveRunnerPct) : 25.0,
+                trim_order_mode: trimOrderMode,
+                trim_limit_offset: trimLimitOffset ? parseFloat(trimLimitOffset) : 0.01
             })
         });
         
