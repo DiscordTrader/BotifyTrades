@@ -746,11 +746,12 @@ async function runHistoricalSimulation() {
         return;
     }
     
-    const btns = document.querySelectorAll('#quick-simulate-section button');
-    btns.forEach(btn => btn.disabled = true);
-    const btn = btns[0];
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<span class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></span> Loading...';
+    const btn = document.getElementById('run-historical-btn');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></span> Loading...';
+    }
     
     try {
         const payload = {
@@ -790,8 +791,10 @@ async function runHistoricalSimulation() {
         console.error('Historical simulation error:', error);
         showToast('Error running simulation: ' + error.message, 'error');
     } finally {
-        btns.forEach(btn => btn.disabled = false);
-        btn.innerHTML = originalText;
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
     }
 }
 
@@ -803,13 +806,17 @@ async function runCopy1to1Report() {
     }
     
     const optionsDiv = document.getElementById('copy1to1-options');
-    optionsDiv.style.display = optionsDiv.style.display === 'none' ? 'block' : 'block';
+    if (optionsDiv) {
+        optionsDiv.style.display = 'block';
+    }
     
     const btns = document.querySelectorAll('#quick-simulate-section button');
     btns.forEach(btn => btn.disabled = true);
-    const btn = btns[0];
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<span class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></span> Analyzing...';
+    const btn = btns.length > 0 ? btns[0] : null;
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.innerHTML = '<span class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></span> Analyzing...';
+    }
     
     try {
         const payload = {
@@ -840,15 +847,22 @@ async function runCopy1to1Report() {
         showToast('Error generating report: ' + error.message, 'error');
     } finally {
         btns.forEach(btn => btn.disabled = false);
-        btn.innerHTML = originalText;
+        if (btn) {
+            btn.innerHTML = originalText;
+        }
     }
 }
 
 function displayCopy1to1Results(data) {
-    document.getElementById('results-placeholder').style.display = 'none';
-    document.getElementById('results-container').style.display = 'block';
-    document.getElementById('daily-breakdown-card').style.display = 'none';
-    document.getElementById('historical-breakdown-card').style.display = 'block';
+    const resultsPlaceholder = document.getElementById('results-placeholder');
+    const resultsContainer = document.getElementById('results-container');
+    const dailyBreakdownCard = document.getElementById('daily-breakdown-card');
+    const historicalBreakdownCard = document.getElementById('historical-breakdown-card');
+    
+    if (resultsPlaceholder) resultsPlaceholder.style.display = 'none';
+    if (resultsContainer) resultsContainer.style.display = 'block';
+    if (dailyBreakdownCard) dailyBreakdownCard.style.display = 'none';
+    if (historicalBreakdownCard) historicalBreakdownCard.style.display = 'block';
     
     document.querySelectorAll('#results-container > .stats-grid').forEach(el => el.style.display = 'none');
     document.querySelectorAll('#results-container > .card-grid').forEach(el => el.style.display = 'none');
@@ -1217,10 +1231,15 @@ async function runRiskOptimizer() {
 }
 
 function displayOptimizerResults(data) {
-    document.getElementById('results-placeholder').style.display = 'none';
-    document.getElementById('results-container').style.display = 'block';
-    document.getElementById('daily-breakdown-card').style.display = 'none';
-    document.getElementById('historical-breakdown-card').style.display = 'block';
+    const resultsPlaceholder = document.getElementById('results-placeholder');
+    const resultsContainer = document.getElementById('results-container');
+    const dailyBreakdownCard = document.getElementById('daily-breakdown-card');
+    const historicalBreakdownCard = document.getElementById('historical-breakdown-card');
+    
+    if (resultsPlaceholder) resultsPlaceholder.style.display = 'none';
+    if (resultsContainer) resultsContainer.style.display = 'block';
+    if (dailyBreakdownCard) dailyBreakdownCard.style.display = 'none';
+    if (historicalBreakdownCard) historicalBreakdownCard.style.display = 'block';
     
     const recommended = data.recommended;
     const portfolio = data.portfolio_start;
@@ -1229,36 +1248,63 @@ function displayOptimizerResults(data) {
     const isProfit = recommended.total_return_pct >= 0;
     
     // Update summary stats with recommended values
-    document.getElementById('result-final-balance').textContent = '$' + recommended.final_balance.toLocaleString(undefined, {minimumFractionDigits: 2});
-    document.getElementById('result-final-balance').className = 'stat-value ' + (isProfit ? 'success' : 'danger');
+    const finalBalanceEl = document.getElementById('result-final-balance');
+    if (finalBalanceEl) {
+        finalBalanceEl.textContent = '$' + recommended.final_balance.toLocaleString(undefined, {minimumFractionDigits: 2});
+        finalBalanceEl.className = 'stat-value ' + (isProfit ? 'success' : 'danger');
+    }
     
     const totalProfit = recommended.final_balance - portfolio;
     const profitEl = document.getElementById('result-total-profit');
-    profitEl.textContent = (totalProfit >= 0 ? '+$' : '-$') + Math.abs(totalProfit).toLocaleString(undefined, {minimumFractionDigits: 2});
-    profitEl.className = 'stat-value ' + (totalProfit >= 0 ? 'success' : 'danger');
+    if (profitEl) {
+        profitEl.textContent = (totalProfit >= 0 ? '+$' : '-$') + Math.abs(totalProfit).toLocaleString(undefined, {minimumFractionDigits: 2});
+        profitEl.className = 'stat-value ' + (totalProfit >= 0 ? 'success' : 'danger');
+    }
     
-    document.getElementById('result-total-return').textContent = (recommended.total_return_pct >= 0 ? '+' : '') + recommended.total_return_pct.toFixed(1) + '%';
-    document.getElementById('result-total-return').className = 'stat-value ' + (recommended.total_return_pct >= 0 ? 'success' : 'danger');
+    const totalReturnEl = document.getElementById('result-total-return');
+    if (totalReturnEl) {
+        totalReturnEl.textContent = (recommended.total_return_pct >= 0 ? '+' : '') + recommended.total_return_pct.toFixed(1) + '%';
+        totalReturnEl.className = 'stat-value ' + (recommended.total_return_pct >= 0 ? 'success' : 'danger');
+    }
     
     // Show recommended sizing
-    document.querySelector('[for-stat="expected-trade"]').textContent = fallbackMode ? 'Best Available' : 'Recommended';
-    document.getElementById('result-expected-trade').textContent = recommended.label;
-    document.getElementById('result-expected-trade').className = 'stat-value ' + (fallbackMode ? 'warning' : 'info');
+    const expectedTradeLabel = document.querySelector('[for-stat="expected-trade"]');
+    const expectedTradeEl = document.getElementById('result-expected-trade');
+    if (expectedTradeLabel) expectedTradeLabel.textContent = fallbackMode ? 'Best Available' : 'Recommended';
+    if (expectedTradeEl) {
+        expectedTradeEl.textContent = recommended.label;
+        expectedTradeEl.className = 'stat-value ' + (fallbackMode ? 'warning' : 'info');
+    }
     
-    document.querySelector('[for-stat="avg-daily"]').textContent = 'Coverage';
-    document.getElementById('result-avg-daily').textContent = recommended.coverage_pct + '%';
-    document.getElementById('result-avg-daily').className = 'stat-value ' + (recommended.coverage_pct >= 50 ? 'success' : 'warning');
+    const avgDailyLabel = document.querySelector('[for-stat="avg-daily"]');
+    const avgDailyEl = document.getElementById('result-avg-daily');
+    if (avgDailyLabel) avgDailyLabel.textContent = 'Coverage';
+    if (avgDailyEl) {
+        avgDailyEl.textContent = recommended.coverage_pct + '%';
+        avgDailyEl.className = 'stat-value ' + (recommended.coverage_pct >= 50 ? 'success' : 'warning');
+    }
     
-    document.querySelector('[for-stat="weekly"]').textContent = 'Drawdown';
-    document.getElementById('result-weekly').textContent = recommended.max_drawdown_pct + '%';
-    document.getElementById('result-weekly').className = 'stat-value warning';
+    const weeklyLabel = document.querySelector('[for-stat="weekly"]');
+    const weeklyEl = document.getElementById('result-weekly');
+    if (weeklyLabel) weeklyLabel.textContent = 'Drawdown';
+    if (weeklyEl) {
+        weeklyEl.textContent = recommended.max_drawdown_pct + '%';
+        weeklyEl.className = 'stat-value warning';
+    }
     
-    document.querySelector('[for-stat="monthly"]').textContent = 'Profit Factor';
-    document.getElementById('result-monthly').textContent = recommended.profit_factor >= 999 ? '∞' : recommended.profit_factor.toFixed(2);
-    document.getElementById('result-monthly').className = 'stat-value ' + (recommended.profit_factor >= 1 ? 'success' : 'danger');
+    const monthlyLabel = document.querySelector('[for-stat="monthly"]');
+    const monthlyEl = document.getElementById('result-monthly');
+    if (monthlyLabel) monthlyLabel.textContent = 'Profit Factor';
+    if (monthlyEl) {
+        monthlyEl.textContent = recommended.profit_factor >= 999 ? '∞' : recommended.profit_factor.toFixed(2);
+        monthlyEl.className = 'stat-value ' + (recommended.profit_factor >= 1 ? 'success' : 'danger');
+    }
     
-    document.getElementById('result-edge').textContent = 'Score: ' + (recommended.score > 0 ? recommended.score.toFixed(2) : 'N/A');
-    document.getElementById('result-edge').className = 'stat-value ' + (recommended.score > 0 ? 'success' : 'warning');
+    const edgeEl = document.getElementById('result-edge');
+    if (edgeEl) {
+        edgeEl.textContent = 'Score: ' + (recommended.score > 0 ? recommended.score.toFixed(2) : 'N/A');
+        edgeEl.className = 'stat-value ' + (recommended.score > 0 ? 'success' : 'warning');
+    }
     
     // Strategy text with rationale bullets
     let strategyText = fallbackMode ? '⚠️ WARNING: NO CANDIDATE MET ALL GUARDRAILS\n\n' : '🎯 RISK OPTIMIZATION COMPLETE\n\n';
@@ -1273,10 +1319,12 @@ function displayOptimizerResults(data) {
     if (rationale.notes && rationale.notes.length > 0) {
         strategyText += 'Notes:\n' + rationale.notes.map(b => '• ' + b).join('\n');
     }
-    document.getElementById('strategy-text').textContent = strategyText;
+    const strategyTextEl = document.getElementById('strategy-text');
+    if (strategyTextEl) strategyTextEl.textContent = strategyText;
     
     // Render comparison table with new columns
     const tbody = document.getElementById('historical-breakdown-body');
+    if (!tbody) return;
     tbody.innerHTML = data.comparison.map(r => {
         const isSelected = r.label === recommended.label;
         const bgColor = isSelected ? (fallbackMode ? 'rgba(251, 191, 36, 0.15)' : 'rgba(16, 185, 129, 0.15)') : (r.disqualified ? 'rgba(239, 68, 68, 0.05)' : '');
@@ -1301,10 +1349,11 @@ function displayOptimizerResults(data) {
     
     // Update heading for optimizer view
     const titleEl = document.getElementById('historical-breakdown-title');
-    titleEl.innerHTML = `<span>📊</span> Sizing Candidates Comparison`;
+    if (titleEl) titleEl.innerHTML = `<span>📊</span> Sizing Candidates Comparison`;
     
     // Update table headers
-    document.querySelector('#historical-breakdown thead tr').innerHTML = `
+    const theadRow = document.querySelector('#historical-breakdown thead tr');
+    if (theadRow) theadRow.innerHTML = `
         <th title="Position sizing method">Sizing</th>
         <th title="Portfolio value after all trades">Ending $</th>
         <th style="text-align: right;" title="Total profit/loss as percentage">Return %</th>
@@ -1317,9 +1366,12 @@ function displayOptimizerResults(data) {
     `;
     
     // Hide advanced metrics for optimizer (use rationale instead)
-    document.getElementById('advanced-metrics-card').style.display = 'none';
-    document.getElementById('warnings-section').style.display = 'none';
-    document.getElementById('capital-requirements-section').style.display = 'none';
+    const advMetricsCard = document.getElementById('advanced-metrics-card');
+    const warningsSection = document.getElementById('warnings-section');
+    const capitalReqSection = document.getElementById('capital-requirements-section');
+    if (advMetricsCard) advMetricsCard.style.display = 'none';
+    if (warningsSection) warningsSection.style.display = 'none';
+    if (capitalReqSection) capitalReqSection.style.display = 'none';
     
     // Render bar chart comparing candidates
     renderOptimizerChart(data.comparison, recommended, portfolio);
