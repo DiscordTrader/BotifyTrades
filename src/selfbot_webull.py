@@ -6445,7 +6445,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     
                     # DUAL-ACTION for BTO/STC: Forward FIRST (if enabled), then execute (if enabled)
                     if should_forward and (is_webhook_dest or is_channel_dest):
-                        print(f"[DEBUG] Entering forward block (type={destination_type})...")
+                        import sys
+                        print(f"[DEBUG] Entering forward block (type={destination_type})...", flush=True)
                         # Prepare message for forwarding - convert to BTO/STC format when enabled
                         if is_bullwinkle:
                             bullwinkle_parsed = parse_bullwinkle_signal(combined_content)
@@ -6473,7 +6474,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     forward_msg = f"{action} {qty} ${symbol} {strike}{opt_type} {expiry} {price_str}"
                                 else:
                                     forward_msg = f"{action} ${symbol} {strike}{opt_type} {expiry} {price_str}"
-                                print(f"[CHANNEL MAP] ✓ Converted to BTO/STC format: {forward_msg}")
+                                print(f"[CHANNEL MAP] ✓ Converted to BTO/STC format: {forward_msg}", flush=True)
                             else:
                                 # Couldn't parse, forward as-is
                                 forward_msg = message.content.strip()
@@ -6515,7 +6516,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     
                     # TRACK SIGNAL FOR PNL - even if not executing trades
                     # This allows Trade Summary/PNL tracking for forwarded signals
-                    print(f"[PNL TRACK] Starting signal tracking...")
+                    print(f"[PNL TRACK] Starting signal tracking...", flush=True)
                     try:
                         from gui_app.database import (
                             create_signal_instance, close_signal_instance, 
