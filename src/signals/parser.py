@@ -146,7 +146,7 @@ JACOB_ENTRY_PATTERN = re.compile(
     re.IGNORECASE
 )
 JACOB_SL_PATTERN = re.compile(
-    r'S\.?L\.?:\s*\$?([\d.]+)',
+    r'S\.?L\.?:[\s\u200e\u200f\u202a-\u202e]*\$?([\d.]+)',
     re.IGNORECASE
 )
 JACOB_TARGET_PATTERN = re.compile(
@@ -398,6 +398,14 @@ def parse_bracket_order_signal(text: str) -> Optional[Dict[str, Any]]:
         '_qty_from_signal': False,
         '_bracket_order': True,
     }
+    
+    # Check if qualifier contains a position size percentage (e.g., "12.5%")
+    if qualifier:
+        pct_match = re.search(r'([\d.]+)%', qualifier)
+        if pct_match:
+            result['_position_size_pct'] = float(pct_match.group(1))
+            print(f"[BRACKET ORDER] ✓ Parsed: {ticker} @ {entry_price}, {result['_position_size_pct']}% position, SL={stop_loss}, PTs={targets}")
+            return result
     
     print(f"[BRACKET ORDER] ✓ Parsed: {ticker} @ {entry_price}, SL={stop_loss}, PTs={targets}")
     return result
