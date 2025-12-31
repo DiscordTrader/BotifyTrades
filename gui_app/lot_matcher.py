@@ -13,10 +13,10 @@ class LotMatcher:
     def __init__(self):
         pass
     
-    def process_signal(self, signal: Dict) -> Optional[List[int]]:
+    def process_signal(self, signal: Dict) -> Optional[List]:
         """
         Process a BTO or STC signal and update lots
-        Returns list of closure IDs if STC, lot ID if BTO, None on error
+        Returns list of closed lot details if STC, [lot_id] if BTO, None on error
         """
         if signal['action'] == 'BTO':
             return [self._create_lot(signal)]
@@ -60,8 +60,10 @@ class LotMatcher:
         print(f"[LOT_MATCHER] ✓ Created lot {lot_id} for {signal['symbol']} BTO {signal['qty']} @ ${signal['price']}")
         return lot_id
     
-    def _close_lots(self, signal: Dict) -> List[int]:
-        """Close lots using FIFO matching from STC signal"""
+    def _close_lots(self, signal: Dict) -> List[Dict]:
+        """Close lots using FIFO matching from STC signal
+        Returns list of dicts with: closure_id, lot_id, qty_closed, entry_price, exit_price
+        """
         # Get channel_id (use db_channel_id if available, otherwise lookup)
         channel_id = signal.get('db_channel_id')
         
@@ -99,7 +101,7 @@ class LotMatcher:
         else:
             remaining_qty = signal['qty']
         
-        closure_ids = []
+        closed_lots = []
         closed_at = signal.get('received_at', datetime.now())
         
         # Match lots FIFO
@@ -119,14 +121,20 @@ class LotMatcher:
             )
             
             if closure_id:
-                closure_ids.append(closure_id)
+                closed_lots.append({
+                    'closure_id': closure_id,
+                    'lot_id': lot['id'],
+                    'qty_closed': close_qty,
+                    'entry_price': lot.get('open_price', 0),
+                    'exit_price': signal['price']
+                })
                 remaining_qty -= close_qty
                 print(f"[LOT_MATCHER] ✓ Closed {close_qty} of lot {lot['id']} @ ${signal['price']}")
         
         if remaining_qty > 0:
             print(f"[LOT_MATCHER] ⚠ Orphaned STC: {remaining_qty} shares of {signal['symbol']} have no matching BTO")
         
-        return closure_ids
+        return closed_lots
 
 
 # Global instance
