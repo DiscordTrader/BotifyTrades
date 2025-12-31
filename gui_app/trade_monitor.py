@@ -346,15 +346,11 @@ class TradeMonitor:
             if new_orders:
                 print(f"[TRADE MONITOR] Found {len(new_orders)} new order(s) to post", flush=True)
             
-            all_webhooks = db.get_all_active_webhook_mappings()
-            
             for order in new_orders:
-                if all_webhooks:
-                    await self._post_order_to_all_webhooks(order, broker_name, all_webhooks)
-                elif target_channel:
+                if target_channel:
                     await self._post_order_to_discord(order, broker_name, target_channel)
                 else:
-                    print(f"[TRADE MONITOR] ⚠️  No webhooks configured - trade not posted", flush=True)
+                    print(f"[TRADE MONITOR] ⚠️  No target webhook channel configured in Trade Monitor settings", flush=True)
                 
         except Exception as e:
             print(f"[TRADE MONITOR] Error checking orders: {e}", flush=True)
