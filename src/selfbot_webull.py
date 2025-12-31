@@ -4348,7 +4348,9 @@ def parse_stock_signal(text: str) -> Optional[dict]:
     m = STK_REGEX.search(text.strip())
     if not m:
         return None
-    direction, qty_str, symbol, price_str = m.groups()
+    groups = m.groups()
+    direction, qty_str, symbol, price_str = groups[:4]
+    pct_str = groups[4] if len(groups) > 4 else None
     
     # Check for market order: "@ m" or "@m" means execute at market price
     is_market_order = price_str.lower() == 'm'
@@ -4378,7 +4380,7 @@ def parse_stock_signal(text: str) -> Optional[dict]:
         qty = int(qty_str)
         qty_from_signal = True
     
-    return {
+    result = {
         "asset": "stock",
         "action": direction.upper(),
         "qty": qty,
@@ -4387,6 +4389,13 @@ def parse_stock_signal(text: str) -> Optional[dict]:
         "is_market_order": is_market_order,
         "_qty_from_signal": qty_from_signal  # Flag for tiered default system
     }
+    
+    # Add position size percentage if parsed from signal (e.g., "BTO $SIDU @ 4.00 (12.5%)")
+    if pct_str:
+        result['_position_size_pct'] = float(pct_str)
+        print(f"[POSITION SIZE] ✓ Parsed {pct_str}% from signal - will size based on account percentage")
+    
+    return result
 
 
 # ------------------------------ TRADE IDEA PARSER ---------------------------------
