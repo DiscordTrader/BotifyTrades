@@ -7686,13 +7686,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 else:
                     resp = {'broker': broker_name, 'result': result, 'executed_qty': signal['qty']}
             else:
-                # Handle legacy WebullBroker (uses qty, not quantity)
-                result = await broker_instance.place_stock_order(
-                    action=signal['action'],
-                    qty=signal['qty'],
-                    symbol=signal['symbol'],
-                    limit_price=signal.get('price')  # None for market orders
-                )
+                # Handle different broker parameter names for stocks
+                # AlpacaBroker uses: symbol, action, quantity, price
+                # WebullBroker uses: action, qty, symbol, limit_price
+                if broker_name == 'ALPACA_PAPER' or 'ALPACA' in broker_name.upper():
+                    result = await broker_instance.place_stock_order(
+                        symbol=signal['symbol'],
+                        action=signal['action'],
+                        quantity=signal['qty'],
+                        price=signal.get('price')  # None for market orders
+                    )
+                else:
+                    # Webull and other legacy brokers (uses qty, not quantity)
+                    result = await broker_instance.place_stock_order(
+                        action=signal['action'],
+                        qty=signal['qty'],
+                        symbol=signal['symbol'],
+                        limit_price=signal.get('price')  # None for market orders
+                    )
                 # Convert OrderResult to dict format for consistency
                 if hasattr(result, 'success'):
                     resp = {
