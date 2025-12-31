@@ -6527,12 +6527,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         # Parse the signal to get details - use unified parse_option_signal for ALL formats
                         parsed_signal = None
+                        print(f"[PNL TRACK] Parsing signal for tracking, is_bullwinkle={is_bullwinkle}")
                         if is_bullwinkle:
                             parsed_signal = parse_bullwinkle_signal(combined_content)
                             print(f"[PNL TRACK] Bullwinkle parsed: {parsed_signal}")
                         else:
                             # Use the unified parser which handles ALL formats (BTO/STC, Bishop, EvaPanda, DTE, etc.)
                             parsed_opt = parse_option_signal(combined_content)
+                            print(f"[PNL TRACK] parse_option_signal returned: {parsed_opt}")
                             if parsed_opt:
                                 action = parsed_opt.get('action', 'BTO').upper()
                                 is_exit = action == 'STC'
@@ -6545,7 +6547,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     'qty': parsed_opt.get('qty', 1),
                                     'is_exit': is_exit
                                 }
-                                print(f"[PNL TRACK] {'STC' if is_exit else 'BTO'} parsed via unified parser: {parsed_signal}")
+                                print(f"[PNL TRACK] {'STC' if is_exit else 'BTO'} parsed: {parsed_signal}")
                         
                         if parsed_signal:
                             symbol = parsed_signal['symbol']
