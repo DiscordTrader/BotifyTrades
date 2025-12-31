@@ -6249,6 +6249,27 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         channel_name = getattr(message.channel, 'name', str(message.channel.id))
         print(f"\n[Discord] 📨 Channel:{message.channel.id} ({channel_name}) Author:{message.author.name}")
         print(f"[Discord] Content: {message.content[:150]}")
+        
+        # EMBED EXTRACTION: Extract text from Discord embeds (for signals like Bishop format)
+        # Many trading signals are posted in embeds rather than plain message content
+        embed_content_parts = []
+        if hasattr(message, 'embeds') and message.embeds:
+            for embed in message.embeds:
+                if embed.title:
+                    embed_content_parts.append(embed.title)
+                if embed.description:
+                    embed_content_parts.append(embed.description)
+                for field in embed.fields:
+                    if field.name and field.value:
+                        embed_content_parts.append(f"{field.name}: {field.value}")
+            if embed_content_parts:
+                print(f"[Discord] Embed content: {' | '.join(embed_content_parts)[:200]}")
+        
+        # Create combined content for signal parsing (message.content + embed text)
+        # This allows parsers to match patterns in embed title/description/fields
+        combined_content = message.content
+        if embed_content_parts:
+            combined_content = message.content + "\n" + "\n".join(embed_content_parts)
         if ALLOWED_AUTHOR_IDS and message.author.id not in ALLOWED_AUTHOR_IDS:
             print(f"[SKIP] Author {message.author.id} not in allowed list")
             return
@@ -6347,7 +6368,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             # Don't process commands, only natural language text
             if not message.content.strip().startswith('!'):
                 # Check if this is a BTO/STC signal - if so, skip webhook forwarding and let it go to trade execution
-                content_upper = message.content.strip().upper()
+                content_upper = combined_content.strip().upper()
                 is_bto_stc_signal = content_upper.startswith('BTO ') or content_upper.startswith('STC ') or ' BTO ' in content_upper or ' STC ' in content_upper
                 
                 # DUAL-ACTION ROUTING: Check if we should execute on broker AND/OR forward to webhook
@@ -6367,8 +6388,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     strip_bullwinkle_emojis, format_bullwinkle_for_webhook,
                     is_bracket_order_signal, parse_bracket_order_signal
                 )
-                is_bullwinkle = is_bullwinkle_signal(message.content)
-                is_bracket_order = is_bracket_order_signal(message.content)
+                is_bullwinkle = is_bullwinkle_signal(combined_content)
+                is_bracket_order = is_bracket_order_signal(combined_content)
                 
                 if is_bto_stc_signal or is_bullwinkle:
                     print(f"[DEBUG] BTO/STC or Bullwinkle signal detected - will process for trade execution")
@@ -6382,16 +6403,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         print(f"[DEBUG] Entering forward block (type={destination_type})...")
                         # Prepare message for forwarding - convert to BTO/STC format when enabled
                         if is_bullwinkle:
-                            bullwinkle_parsed = parse_bullwinkle_signal(message.content)
+                            bullwinkle_parsed = parse_bullwinkle_signal(combined_content)
                             if bullwinkle_parsed:
                                 forward_msg = format_bullwinkle_for_webhook(bullwinkle_parsed)
                                 print(f"[CHANNEL MAP] ✓ Formatted Bullwinkle: {forward_msg}")
                             else:
-                                forward_msg = strip_bullwinkle_emojis(message.content.strip())
+                                forward_msg = strip_bullwinkle_emojis(combined_content.strip())
                                 print(f"[CHANNEL MAP] ✓ Stripped emojis (parse failed): {forward_msg}")
                         elif format_as_bto_stc:
                             # Convert any signal format to BTO/STC format for forwarding
-                            parsed_opt = parse_option_signal(message.content)
+                            parsed_opt = parse_option_signal(combined_content)
                             if parsed_opt:
                                 action = parsed_opt.get('action', 'BTO')
                                 qty = parsed_opt.get('qty', 1)
@@ -6457,11 +6478,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         # Parse the signal to get details
                         parsed_signal = None
                         if is_bullwinkle:
-                            parsed_signal = parse_bullwinkle_signal(message.content)
+                            parsed_signal = parse_bullwinkle_signal(combined_content)
                             print(f"[PNL TRACK] Bullwinkle parsed: {parsed_signal}")
                         else:
                             # Try standard BTO/STC parsing
-                            content_upper = message.content.strip().upper()
+                            content_upper = combined_content.strip().upper()
                             import re
                             # BTO pattern: BTO [QTY] SYMBOL STRIKE C/P EXPIRY @ PRICE
                             bto_match = re.search(r'BTO\s+(?:(\d+)\s+)?(?:\$)?([A-Z]+)\s+(?:\$)?([\d.]+)\s*([CPcp])\s*(\d{1,2}/\d{1,2})\s*@?\s*\$?([\d.]+)', content_upper)
@@ -6719,8 +6740,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         bullwinkle_opt = None
         
         # Check for Bullwinkle format first (with deduplication)
-        if is_bullwinkle_signal(message.content):
-            bullwinkle_signal = parse_bullwinkle_signal(message.content)
+        if is_bullwinkle_signal(combined_content):
+            bullwinkle_signal = parse_bullwinkle_signal(combined_content)
             if bullwinkle_signal:
                 symbol = bullwinkle_signal['symbol']
                 author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
@@ -6788,11 +6809,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         print(f"[DEDUPE] ⚠️ Failed to create instance for {symbol} - may be duplicate")
                         return
         
-        normalized_content = normalize_bullwinkle_format(message.content)
+        normalized_content = normalize_bullwinkle_format(combined_content)
         
         # Check for TRADE IDEA format first (with deduplication)
-        if is_trade_idea_signal(message.content):
-            trade_idea = parse_trade_idea(message.content)
+        if is_trade_idea_signal(combined_content):
+            trade_idea = parse_trade_idea(combined_content)
             if trade_idea:
                 ticker = trade_idea['ticker']
                 entry_price = trade_idea['entry_price']
