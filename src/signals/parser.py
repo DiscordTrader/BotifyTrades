@@ -312,19 +312,36 @@ def parse_jacob_signal(text: str) -> Optional[Dict[str, Any]]:
 def format_jacob_for_webhook(parsed: Dict[str, Any]) -> str:
     """Format a parsed Jacob signal as BTO/STC for webhook forwarding.
     
-    Outputs format: BTO $SYMBOL @ price
+    Outputs format: BTO $SYMBOL @ price (percentage%)
+    SL: $X
+    Targets: $Y, $Z
+    
     If position size percentage is specified, includes it in the message.
+    Stop loss and targets are included on separate lines for bracket order execution.
     """
     action = parsed.get('action', 'BTO')
     symbol = parsed.get('symbol', '')
     price = parsed.get('entry_price', parsed.get('price', 0))
     position_pct = parsed.get('_position_size_pct')
+    stop_loss = parsed.get('stop_loss')
+    profit_targets = parsed.get('profit_targets', [])
     
-    # Format: BTO $SYMBOL @ price (with optional position size percentage)
+    # Build main line: BTO $SYMBOL @ price (with optional position size percentage)
     if position_pct:
-        return f"{action} ${symbol} @ {price:.2f} ({position_pct}%)"
+        result = f"{action} ${symbol} @ {price:.2f} ({position_pct}%)"
     else:
-        return f"{action} ${symbol} @ {price:.2f}"
+        result = f"{action} ${symbol} @ {price:.2f}"
+    
+    # Add stop loss on new line if present
+    if stop_loss:
+        result += f"\nSL: ${stop_loss:.2f}"
+    
+    # Add targets on new line if present
+    if profit_targets and len(profit_targets) > 0:
+        targets_str = ', '.join([f"${t:.2f}" for t in profit_targets])
+        result += f"\nTargets: {targets_str}"
+    
+    return result
 
 
 def parse_bracket_order_signal(text: str) -> Optional[Dict[str, Any]]:
