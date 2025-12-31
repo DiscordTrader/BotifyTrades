@@ -232,11 +232,14 @@ def is_jacob_signal(text: str) -> bool:
     return JACOB_ENTERED_PATTERN.search(text) is not None and JACOB_ENTRY_PATTERN.search(text) is not None
 
 
+JACOB_POSITION_SIZE_PATTERN = re.compile(r'([\d.]+)\s*%\s*(?:OF\s*)?ACCOUNT', re.IGNORECASE)
+
 def parse_jacob_signal(text: str) -> Optional[Dict[str, Any]]:
     """
     Parse Jacob format stock signals with bracket order data.
     
     Example:
+    12.5% OF ACCOUNT
     ENTERED LONG: $SIDU
     ENTRY: $4.00 AREA
     S.L: $3.68
@@ -256,6 +259,12 @@ def parse_jacob_signal(text: str) -> Optional[Dict[str, Any]]:
     if not entry_match:
         return None
     entry_price = float(entry_match.group(1))
+    
+    # Extract position size percentage (e.g., "12.5% OF ACCOUNT")
+    position_size_pct = None
+    pct_match = JACOB_POSITION_SIZE_PATTERN.search(text)
+    if pct_match:
+        position_size_pct = float(pct_match.group(1))
     
     # Extract stop loss
     stop_loss = None
@@ -284,28 +293,38 @@ def parse_jacob_signal(text: str) -> Optional[Dict[str, Any]]:
         'direction': direction,
         'asset': 'stock',
         'asset_type': 'stock',
-        'qty': 1,
         '_qty_from_signal': False,
         '_jacob_signal': True,
         '_bracket_order': True,
+        '_calculate_qty': True,  # Signal that qty should be calculated from position sizing
     }
     
-    print(f"[JACOB] ✓ Parsed: {action} {ticker} @ {entry_price}, SL={stop_loss}, PTs={targets}")
+    # Add position size percentage if found
+    if position_size_pct:
+        result['_position_size_pct'] = position_size_pct
+        print(f"[JACOB] ✓ Parsed: {action} {ticker} @ {entry_price}, {position_size_pct}% position, SL={stop_loss}, PTs={targets}")
+    else:
+        print(f"[JACOB] ✓ Parsed: {action} {ticker} @ {entry_price}, SL={stop_loss}, PTs={targets}")
+    
     return result
 
 
 def format_jacob_for_webhook(parsed: Dict[str, Any]) -> str:
     """Format a parsed Jacob signal as BTO/STC for webhook forwarding.
     
-    Outputs format: BTO 5 SYMBOL @ price
-    This format is recognized by the stock BTO pattern for execution.
+    Outputs format: BTO $SYMBOL @ price
+    If position size percentage is specified, includes it in the message.
     """
     action = parsed.get('action', 'BTO')
     symbol = parsed.get('symbol', '')
     price = parsed.get('entry_price', parsed.get('price', 0))
-    qty = parsed.get('qty', 5)  # Default to 5 shares if not specified
-    # Format: BTO [qty] SYMBOL @ price (no $ prefix on symbol for stock parser compatibility)
-    return f"{action} {qty} {symbol} @ {price:.2f}"
+    position_pct = parsed.get('_position_size_pct')
+    
+    # Format: BTO $SYMBOL @ price (with optional position size percentage)
+    if position_pct:
+        return f"{action} ${symbol} @ {price:.2f} ({position_pct}%)"
+    else:
+        return f"{action} ${symbol} @ {price:.2f}"
 
 
 def parse_bracket_order_signal(text: str) -> Optional[Dict[str, Any]]:
