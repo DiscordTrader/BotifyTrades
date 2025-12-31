@@ -46,30 +46,48 @@ def is_market_open() -> bool:
     return market_open <= current_time <= market_close
 
 
-def is_recent_fill(filled_time_str: str, max_seconds: int = 10) -> bool:
-    """Check if the order was filled within the last N seconds (real-time detection)"""
+def is_recent_fill(filled_time_str: str, max_seconds: int = 120) -> bool:
+    """Check if the order was filled within the last N seconds (real-time detection)
+    
+    Properly handles timezone-aware timestamps including:
+    - UTC timestamps ending with 'Z' (ISO8601)
+    - EST/EDT/ET suffixed timestamps
+    - Naive timestamps (assumed to be ET)
+    
+    Default window increased to 120 seconds to avoid missing fills between polls.
+    """
     if not filled_time_str:
         return False
     
     try:
         from zoneinfo import ZoneInfo
         et_tz = ZoneInfo('America/New_York')
+        utc_tz = ZoneInfo('UTC')
     except ImportError:
         import pytz
         et_tz = pytz.timezone('America/New_York')
+        utc_tz = pytz.UTC
     
     now_et = datetime.now(et_tz)
     
     parsed_time = None
-    formats = [
-        '%m/%d/%Y %H:%M:%S EST',
-        '%m/%d/%Y %H:%M:%S',
-        '%Y-%m-%d %H:%M:%S',
-        '%Y-%m-%dT%H:%M:%S',
-        '%Y-%m-%dT%H:%M:%S.%fZ',
-    ]
+    is_utc = False
     
-    clean_time_str = filled_time_str.replace(' EST', '').replace(' EDT', '').replace(' ET', '')
+    # Check if this is a UTC timestamp (ends with Z)
+    if filled_time_str.endswith('Z'):
+        is_utc = True
+        clean_time_str = filled_time_str[:-1]  # Remove trailing Z
+    else:
+        # Check for ET timezone suffixes
+        clean_time_str = filled_time_str.replace(' EST', '').replace(' EDT', '').replace(' ET', '')
+    
+    # Formats to try (without timezone suffix)
+    formats = [
+        '%Y-%m-%dT%H:%M:%S.%f',  # ISO8601 with microseconds
+        '%Y-%m-%dT%H:%M:%S',     # ISO8601 without microseconds
+        '%Y-%m-%d %H:%M:%S',     # Standard datetime
+        '%m/%d/%Y %H:%M:%S',     # US format
+    ]
     
     for fmt in formats:
         try:
@@ -79,22 +97,34 @@ def is_recent_fill(filled_time_str: str, max_seconds: int = 10) -> bool:
             continue
     
     if not parsed_time:
+        # Log unparseable timestamp for debugging
+        print(f"[TRADE MONITOR] Could not parse timestamp: {filled_time_str}", flush=True)
         return False
     
+    # Apply correct timezone
     try:
-        parsed_time = parsed_time.replace(tzinfo=et_tz)
-    except:
-        pass
-    
-    if parsed_time.date() != now_et.date():
+        if is_utc:
+            # Timestamp was UTC - attach UTC timezone then convert to ET
+            parsed_time = parsed_time.replace(tzinfo=utc_tz)
+            parsed_time_et = parsed_time.astimezone(et_tz)
+        else:
+            # Timestamp was ET or naive (assume ET)
+            parsed_time_et = parsed_time.replace(tzinfo=et_tz)
+    except Exception as e:
+        print(f"[TRADE MONITOR] Timezone conversion error: {e}", flush=True)
         return False
     
+    # Check if same day
+    if parsed_time_et.date() != now_et.date():
+        return False
+    
+    # Calculate seconds difference
     try:
-        now_naive = now_et.replace(tzinfo=None)
-        parsed_naive = parsed_time.replace(tzinfo=None)
-        seconds_ago = (now_naive - parsed_naive).total_seconds()
-        return 0 <= seconds_ago <= max_seconds
-    except:
+        seconds_ago = (now_et - parsed_time_et).total_seconds()
+        # Allow small negative values (-5s) for clock skew
+        return -5 <= seconds_ago <= max_seconds
+    except Exception as e:
+        print(f"[TRADE MONITOR] Time comparison error: {e}", flush=True)
         return False
 
 
@@ -170,7 +200,7 @@ class TradeMonitor:
         broker_name = getattr(self.broker, 'name', type(self.broker).__name__)
         self.running = True
         self._task = asyncio.create_task(self._poll_loop())
-        print(f"[TRADE MONITOR] Started - monitoring {broker_name}", flush=True)
+        print(f"[TRADE MONITOR] ✓ Started - monitoring {broker_name}", flush=True)
         
     async def stop(self):
         """Stop the trade monitor"""
@@ -199,6 +229,7 @@ class TradeMonitor:
                 self._poll_count += 1
                 
                 now = datetime.now()
+                # Log status every 5 minutes (300 seconds)
                 if self._last_status_log is None or (now - self._last_status_log).seconds >= 300:
                     market_status = "OPEN" if is_market_open() else "CLOSED"
                     print(f"[TRADE MONITOR] Active (market={market_status}, poll={poll_interval}s, count={self._poll_count})", flush=True)
