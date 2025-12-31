@@ -369,8 +369,9 @@ class TradeMonitor:
         test_prefix = "[TEST] " if order_status == 'PENDING' else ""
         cancel_prefix = "[CANCELED] " if is_canceled else ""
         
-        if asset_type == 'option':
-            strike = order.get('strike', 0)
+        strike = order.get('strike', 0)
+        
+        if asset_type == 'option' and strike and strike > 0:
             expiry = order.get('expiry', '')
             direction = order.get('direction', 'C').upper()
             
