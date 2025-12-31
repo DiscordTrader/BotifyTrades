@@ -6448,7 +6448,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         import sys
                         print(f"[DEBUG] Entering forward block (type={destination_type})...", flush=True)
                         # Prepare message for forwarding - convert to BTO/STC format when enabled
+                        print(f"[DEBUG] is_bullwinkle={is_bullwinkle}, format_as_bto_stc={format_as_bto_stc}", flush=True)
                         if is_bullwinkle:
+                            print(f"[DEBUG] Taking BULLWINKLE path", flush=True)
                             bullwinkle_parsed = parse_bullwinkle_signal(combined_content)
                             if bullwinkle_parsed:
                                 forward_msg = format_bullwinkle_for_webhook(bullwinkle_parsed)
@@ -6457,6 +6459,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 forward_msg = strip_bullwinkle_emojis(combined_content.strip())
                                 print(f"[CHANNEL MAP] ✓ Stripped emojis (parse failed): {forward_msg}")
                         elif format_as_bto_stc:
+                            print(f"[DEBUG] Taking FORMAT_AS_BTO_STC path", flush=True)
                             # Convert any signal format to BTO/STC format for forwarding
                             parsed_opt = parse_option_signal(combined_content)
                             print(f"[DEBUG] parse_option_signal returned: {type(parsed_opt)}, truthy={bool(parsed_opt)}", flush=True)
