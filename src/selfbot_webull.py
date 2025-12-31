@@ -6459,6 +6459,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elif format_as_bto_stc:
                             # Convert any signal format to BTO/STC format for forwarding
                             parsed_opt = parse_option_signal(combined_content)
+                            print(f"[DEBUG] parse_option_signal returned: {type(parsed_opt)}, truthy={bool(parsed_opt)}", flush=True)
                             if parsed_opt:
                                 action = parsed_opt.get('action', 'BTO')
                                 qty = parsed_opt.get('qty', 1)
