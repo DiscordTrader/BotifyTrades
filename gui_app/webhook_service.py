@@ -310,8 +310,10 @@ def open_webhook_position(
     normalized_cp = call_put.upper()[0] if call_put else 'C'
     
     try:
-        cursor.execute('SELECT id, remaining_qty FROM webhook_positions WHERE symbol = ? AND strike = ? AND expiry = ? AND call_put = ? AND status = "OPEN"',
-                      (symbol.upper(), strike, normalized_expiry, normalized_cp))
+        cursor.execute('''
+            SELECT id, remaining_qty FROM webhook_positions 
+            WHERE symbol = ? AND strike = ? AND expiry = ? AND call_put = ? AND webhook_url = ? AND status = "OPEN"
+        ''', (symbol.upper(), strike, normalized_expiry, normalized_cp, webhook_url or ''))
         existing = cursor.fetchone()
         
         if existing:
@@ -324,7 +326,7 @@ def open_webhook_position(
         cursor.execute('''
             INSERT INTO webhook_positions (symbol, strike, expiry, call_put, original_qty, remaining_qty, entry_price, trade_type, webhook_url)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (symbol.upper(), strike, normalized_expiry, normalized_cp, qty, qty, entry_price, trade_type, webhook_url))
+        ''', (symbol.upper(), strike, normalized_expiry, normalized_cp, qty, qty, entry_price, trade_type, webhook_url or ''))
         conn.commit()
         return cursor.lastrowid
     except Exception as e:
@@ -340,7 +342,8 @@ def close_webhook_position(
     expiry: str,
     call_put: str,
     close_qty: int,
-    close_price: float
+    close_price: float,
+    webhook_url: str = None
 ) -> Optional[Dict[str, Any]]:
     """Close (fully or partially) a webhook position and calculate P&L."""
     init_webhook_tables()
@@ -351,12 +354,20 @@ def close_webhook_position(
     normalized_cp = call_put.upper()[0] if call_put else 'C'
     
     try:
-        cursor.execute('''
-            SELECT * FROM webhook_positions 
-            WHERE symbol = ? AND strike = ? AND expiry = ? AND call_put = ? AND status = "OPEN"
-            ORDER BY opened_at ASC
-        ''', (symbol.upper(), strike, normalized_expiry, normalized_cp))
-        position = cursor.fetchone()
+        if webhook_url:
+            cursor.execute('''
+                SELECT * FROM webhook_positions 
+                WHERE symbol = ? AND strike = ? AND expiry = ? AND call_put = ? AND webhook_url = ? AND status = "OPEN"
+                ORDER BY opened_at ASC
+            ''', (symbol.upper(), strike, normalized_expiry, normalized_cp, webhook_url))
+            position = cursor.fetchone()
+        else:
+            cursor.execute('''
+                SELECT * FROM webhook_positions 
+                WHERE symbol = ? AND strike = ? AND expiry = ? AND call_put = ? AND status = "OPEN"
+                ORDER BY opened_at ASC
+            ''', (symbol.upper(), strike, normalized_expiry, normalized_cp))
+            position = cursor.fetchone()
         
         if not position:
             cursor.execute('''
@@ -602,7 +613,7 @@ def post_stc_signal(
     if not webhook_url:
         return False, "No webhook URL configured", None
     
-    result = close_webhook_position(symbol, strike, expiry, call_put, qty, close_price)
+    result = close_webhook_position(symbol, strike, expiry, call_put, qty, close_price, webhook_url=webhook_url)
     
     if not result:
         return False, f"No open position found for {symbol} {strike}{call_put} {expiry}", None
