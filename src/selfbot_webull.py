@@ -1414,14 +1414,15 @@ def calculate_dte_expiry(dte_days: int) -> str:
 DTE_OPT_PATTERN = r'(BTO|STC)\s+[$]?([A-Za-z]+)\s+[$]?([0-9.]+)\s*([CPcp])\s+(\d+)\s*DTE\s*[@]?\s*[.]?([0-9.]+)'
 
 # Bishop-style patterns (multi-line entry format)
-# Entry format: "I'm Entering" followed by "Option: SPX 6900 P 12/30" and "Entry: 1.00"
+# Entry format: "I'm Entering" followed by "**Option:** SPX 6900 P 12/30" and "**Entry:** 1.00"
+# Note: Discord embeds use markdown bold (**) around labels
 # Option line groups: (symbol, strike, opt_type, month, day)
-BISHOP_OPTION_PATTERN = r'Option:\s*([A-Za-z]+)\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+(\d{1,2})/(\d{1,2})'
+BISHOP_OPTION_PATTERN = r'\*{0,2}Option:\*{0,2}\s*([A-Za-z]+)\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+(\d{1,2})/(\d{1,2})'
 # Entry price groups: (price)
-BISHOP_ENTRY_PATTERN = r'Entry:\s*(\d+\.?\d*)'
+BISHOP_ENTRY_PATTERN = r'\*{0,2}Entry:\*{0,2}\s*(\d+\.?\d*)'
 # Trim/STC format: "Trimming SPX 6900 P 12/30 @$1.30"
 # Groups: (symbol, strike, opt_type, month, day, price)
-BISHOP_TRIM_PATTERN = r'[Tt]rimming\s+([A-Za-z]+)\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+(\d{1,2})/(\d{1,2})\s*@\s*\$?(\d+\.?\d*)'
+BISHOP_TRIM_PATTERN = r'[Tt]rimming\s+(?:\?\w\s+)?([A-Za-z]+)\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+(\d{1,2})/(\d{1,2})\s*@\s*\$?(\d+\.?\d*)'
 
 # Use database patterns if available, otherwise fallback to config.ini or defaults
 if DB_OPTION_PATTERN:
