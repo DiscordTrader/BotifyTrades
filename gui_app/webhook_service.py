@@ -374,8 +374,15 @@ def close_webhook_position(
         remaining = position['remaining_qty']
         actual_close_qty = min(close_qty, remaining)
         
-        pnl_per_contract = (close_price - entry_price) * 100
-        total_pnl = pnl_per_contract * actual_close_qty
+        is_stock = position['strike'] == 0 or position['strike'] is None
+        
+        if is_stock:
+            pnl_per_share = close_price - entry_price
+            total_pnl = pnl_per_share * actual_close_qty
+        else:
+            pnl_per_contract = (close_price - entry_price) * 100
+            total_pnl = pnl_per_contract * actual_close_qty
+        
         pnl_percent = ((close_price - entry_price) / entry_price) * 100 if entry_price > 0 else 0
         
         cursor.execute('''
