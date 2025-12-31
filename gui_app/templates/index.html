@@ -963,10 +963,10 @@ function renderPositionCards(trades) {
         const sourceDisplay = trade.source_display || { name: 'Unknown', color: 'dark', icon: '#', full_name: 'Unknown source' };
         const channelName = sourceDisplay.name || trade.channel_name || 'Global';
         
-        const tier1 = parseFloat(trade.profit_target_1_pct) || 10;
-        const tier2 = parseFloat(trade.profit_target_2_pct) || 20;
-        const tier3 = parseFloat(trade.profit_target_3_pct) || 30;
-        const tier4 = parseFloat(trade.profit_target_4_pct) || 40;
+        const tier1 = parseFloat(trade.profit_target_1_pct) || 20;
+        const tier2 = parseFloat(trade.profit_target_2_pct) || 50;
+        const tier3 = parseFloat(trade.profit_target_3_pct) || 100;
+        const tier4 = parseFloat(trade.profit_target_4_pct) || 0;
         const stopLoss = parseFloat(trade.stop_loss_pct) || 10;
         
         const tier1Price = entryPrice * (1 + tier1/100);
@@ -1042,11 +1042,11 @@ function renderPositionCards(trades) {
                                 <div class="tier-value">+${tier3}%</div>
                                 <div class="tier-price">$${tier3Price.toFixed(2)}</div>
                             </div>
-                            <div class="tier-item ${pnlPercent >= tier4 ? 'hit' : ''}">
+                            ${tier4 > 0 ? `<div class="tier-item ${pnlPercent >= tier4 ? 'hit' : ''}">
                                 <div class="tier-label">T4</div>
                                 <div class="tier-value">+${tier4}%</div>
                                 <div class="tier-price">$${tier4Price.toFixed(2)}</div>
-                            </div>
+                            </div>` : ''}
                         </div>
                         
                         <div class="stop-loss-row">
