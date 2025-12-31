@@ -295,11 +295,17 @@ def parse_jacob_signal(text: str) -> Optional[Dict[str, Any]]:
 
 
 def format_jacob_for_webhook(parsed: Dict[str, Any]) -> str:
-    """Format a parsed Jacob signal as BTO/STC for webhook forwarding."""
+    """Format a parsed Jacob signal as BTO/STC for webhook forwarding.
+    
+    Outputs format: BTO 5 SYMBOL @ price
+    This format is recognized by the stock BTO pattern for execution.
+    """
     action = parsed.get('action', 'BTO')
     symbol = parsed.get('symbol', '')
     price = parsed.get('entry_price', parsed.get('price', 0))
-    return f"{action} ${symbol} @ {price:.2f}"
+    qty = parsed.get('qty', 5)  # Default to 5 shares if not specified
+    # Format: BTO [qty] SYMBOL @ price (no $ prefix on symbol for stock parser compatibility)
+    return f"{action} {qty} {symbol} @ {price:.2f}"
 
 
 def parse_bracket_order_signal(text: str) -> Optional[Dict[str, Any]]:
