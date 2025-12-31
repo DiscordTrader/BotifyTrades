@@ -6405,7 +6405,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             if not message.content.strip().startswith('!'):
                 # Check if this is a BTO/STC signal - if so, skip webhook forwarding and let it go to trade execution
                 content_upper = combined_content.strip().upper()
+                # Check for standard BTO/STC signals
                 is_bto_stc_signal = content_upper.startswith('BTO ') or content_upper.startswith('STC ') or ' BTO ' in content_upper or ' STC ' in content_upper
+                # Also check for Bishop format: "I'm Entering" + "Option:" or "Trimming"
+                is_bishop_signal = ("I'M ENTERING" in content_upper and "OPTION:" in content_upper) or "TRIMMING " in content_upper
+                # Combine all signal checks
+                is_bto_stc_signal = is_bto_stc_signal or is_bishop_signal
                 
                 # DUAL-ACTION ROUTING: Check if we should execute on broker AND/OR forward to webhook
                 should_execute = False
