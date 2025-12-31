@@ -6525,44 +6525,27 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         channel_id = str(message.channel.id)
                         author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
                         
-                        # Parse the signal to get details
+                        # Parse the signal to get details - use unified parse_option_signal for ALL formats
                         parsed_signal = None
                         if is_bullwinkle:
                             parsed_signal = parse_bullwinkle_signal(combined_content)
                             print(f"[PNL TRACK] Bullwinkle parsed: {parsed_signal}")
                         else:
-                            # Try standard BTO/STC parsing
-                            content_upper = combined_content.strip().upper()
-                            import re
-                            # BTO pattern: BTO [QTY] SYMBOL STRIKE C/P EXPIRY @ PRICE
-                            bto_match = re.search(r'BTO\s+(?:(\d+)\s+)?(?:\$)?([A-Z]+)\s+(?:\$)?([\d.]+)\s*([CPcp])\s*(\d{1,2}/\d{1,2})\s*@?\s*\$?([\d.]+)', content_upper)
-                            # STC pattern: STC [QTY] SYMBOL STRIKE C/P EXPIRY @ PRICE
-                            stc_match = re.search(r'STC\s+(?:(\d+)\s+)?(?:ALL\s+)?(?:\$)?([A-Z]+)\s+(?:\$)?([\d.]+)\s*([CPcp])\s*(\d{1,2}/\d{1,2})\s*@?\s*\$?([\d.]+)', content_upper)
-                            
-                            if bto_match:
-                                qty, symbol, strike, opt_type, expiry, price = bto_match.groups()
+                            # Use the unified parser which handles ALL formats (BTO/STC, Bishop, EvaPanda, DTE, etc.)
+                            parsed_opt = parse_option_signal(combined_content)
+                            if parsed_opt:
+                                action = parsed_opt.get('action', 'BTO').upper()
+                                is_exit = action == 'STC'
                                 parsed_signal = {
-                                    'symbol': symbol,
-                                    'strike': float(strike),
-                                    'opt_type': opt_type.upper(),
-                                    'expiry': expiry,
-                                    'price': float(price),
-                                    'qty': int(qty) if qty else 1,
-                                    'is_exit': False
+                                    'symbol': parsed_opt.get('symbol', ''),
+                                    'strike': parsed_opt.get('strike'),
+                                    'opt_type': parsed_opt.get('opt_type', 'C'),
+                                    'expiry': parsed_opt.get('expiry', ''),
+                                    'price': parsed_opt.get('price', 0),
+                                    'qty': parsed_opt.get('qty', 1),
+                                    'is_exit': is_exit
                                 }
-                                print(f"[PNL TRACK] BTO parsed: {parsed_signal}")
-                            elif stc_match:
-                                qty, symbol, strike, opt_type, expiry, price = stc_match.groups()
-                                parsed_signal = {
-                                    'symbol': symbol,
-                                    'strike': float(strike) if strike else None,
-                                    'opt_type': opt_type.upper() if opt_type else None,
-                                    'expiry': expiry,
-                                    'price': float(price) if price else 0,
-                                    'qty': int(qty) if qty else None,
-                                    'is_exit': True
-                                }
-                                print(f"[PNL TRACK] STC parsed: {parsed_signal}")
+                                print(f"[PNL TRACK] {'STC' if is_exit else 'BTO'} parsed via unified parser: {parsed_signal}")
                         
                         if parsed_signal:
                             symbol = parsed_signal['symbol']
