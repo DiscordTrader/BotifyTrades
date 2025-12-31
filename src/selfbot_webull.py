@@ -7555,9 +7555,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     affordable_qty = max(0, int(buying_power / price))
                                     
                                     # Check if signal requests qty calculation (TRADE IDEA format has no explicit qty)
+                                    # Also calculate if position_size_pct came from signal text itself (not channel config)
                                     calculate_qty = signal.get('_calculate_qty', False)
+                                    pct_from_signal = '_position_size_pct' in signal and not signal.get('_pct_from_channel', False)
                                     
-                                    if calculate_qty:
+                                    if calculate_qty or pct_from_signal:
                                         # TRADE IDEA: Calculate qty from position sizing, don't cap at signal default
                                         new_qty = min(pct_qty, affordable_qty)
                                         if new_qty == 0:
