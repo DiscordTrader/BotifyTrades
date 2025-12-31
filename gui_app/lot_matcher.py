@@ -125,7 +125,7 @@ class LotMatcher:
                     'closure_id': closure_id,
                     'lot_id': lot['id'],
                     'qty_closed': close_qty,
-                    'entry_price': lot.get('open_price', 0),
+                    'entry_price': lot['open_price'] if lot['open_price'] else 0,
                     'exit_price': signal['price']
                 })
                 remaining_qty -= close_qty
