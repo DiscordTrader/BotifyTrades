@@ -7119,11 +7119,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             if execute_enabled and is_execute_channel:
                 
                 # Add EXECUTION position size percentage for dynamic qty calculation
+                # Priority: Signal percentage (from Jacob/etc with _calculate_qty) > Channel percentage
                 exec_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
                 print(f"[DEBUG] Channel position_size_pct from DB: {exec_position_size_pct} (type: {type(exec_position_size_pct).__name__})")
-                if exec_position_size_pct:
+                
+                # Check if signal already has percentage from parsing (e.g., Jacob "12.5% OF ACCOUNT")
+                signal_has_pct = opt.get('_position_size_pct') is not None and opt.get('_calculate_qty', False)
+                
+                if signal_has_pct:
+                    # Signal's percentage takes precedence - don't overwrite
+                    print(f"[POSITION SIZE] ✓ Using signal's {opt['_position_size_pct']}% (overrides channel's {exec_position_size_pct}%)")
+                elif exec_position_size_pct:
                     opt['_position_size_pct'] = float(exec_position_size_pct)
-                    print(f"[POSITION SIZE] ✓ Execution configured for {exec_position_size_pct}% of portfolio")
+                    opt['_pct_from_channel'] = True  # Mark as channel-sourced for cap mode
+                    print(f"[POSITION SIZE] ✓ Execution configured for {exec_position_size_pct}% of portfolio (channel setting)")
                 else:
                     print(f"[POSITION SIZE] ⚠️ No position_size_pct configured - using signal quantity as-is")
                 
@@ -7156,11 +7165,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[ROUTE] TRACK channel with PAPER TRADING enabled - executing in PAPER mode")
                     
                     # Add TRACKING position size percentage for paper trading
+                    # Priority: Signal percentage (from Jacob/etc with _calculate_qty) > Channel percentage
                     track_position_size_pct = channel_info.get('tracking_position_size_pct') if channel_info else None
                     print(f"[DEBUG] Channel tracking_position_size_pct from DB: {track_position_size_pct} (type: {type(track_position_size_pct).__name__})", flush=True)
-                    if track_position_size_pct:
+                    
+                    # Check if signal already has percentage from parsing
+                    signal_has_pct = opt.get('_position_size_pct') is not None and opt.get('_calculate_qty', False)
+                    
+                    if signal_has_pct:
+                        print(f"[POSITION SIZE] ✓ Using signal's {opt['_position_size_pct']}% (overrides channel's {track_position_size_pct}%)", flush=True)
+                    elif track_position_size_pct:
                         opt['_position_size_pct'] = float(track_position_size_pct)
-                        print(f"[POSITION SIZE] ✓ Tracking configured for {track_position_size_pct}% of portfolio", flush=True)
+                        opt['_pct_from_channel'] = True
+                        print(f"[POSITION SIZE] ✓ Tracking configured for {track_position_size_pct}% of portfolio (channel setting)", flush=True)
                     else:
                         print(f"[POSITION SIZE] ⚠️ No tracking_position_size_pct configured - using signal quantity as-is", flush=True)
                     
@@ -7329,10 +7346,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[BRACKET ORDER] ✓ Including SL=${stk.get('stop_loss_price')} Target=${stk.get('profit_target_price')}")
                 
                 # Add EXECUTION position size percentage for dynamic qty calculation
+                # Priority: Signal percentage (from Jacob/etc with _calculate_qty) > Channel percentage
                 exec_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
-                if exec_position_size_pct:
+                
+                # Check if signal already has percentage from parsing (e.g., Jacob "12.5% OF ACCOUNT")
+                signal_has_pct = stk.get('_position_size_pct') is not None and stk.get('_calculate_qty', False)
+                
+                if signal_has_pct:
+                    # Signal's percentage takes precedence - don't overwrite
+                    print(f"[POSITION SIZE] ✓ Using signal's {stk['_position_size_pct']}% (overrides channel's {exec_position_size_pct}%)")
+                elif exec_position_size_pct:
                     stk['_position_size_pct'] = float(exec_position_size_pct)
-                    print(f"[POSITION SIZE] Execution configured for {exec_position_size_pct}% of portfolio")
+                    stk['_pct_from_channel'] = True  # Mark as channel-sourced for cap mode
+                    print(f"[POSITION SIZE] Execution configured for {exec_position_size_pct}% of portfolio (channel setting)")
                 
                 # Check for multi-broker configuration
                 enabled_brokers_json = channel_info.get('enabled_brokers') if channel_info else None
@@ -7362,10 +7388,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[ROUTE] TRACK channel with PAPER TRADING enabled - executing in PAPER mode")
                     
                     # Add TRACKING position size percentage for paper trading
+                    # Priority: Signal percentage (from Jacob/etc with _calculate_qty) > Channel percentage
                     track_position_size_pct = channel_info.get('tracking_position_size_pct') if channel_info else None
-                    if track_position_size_pct:
+                    
+                    # Check if signal already has percentage from parsing
+                    signal_has_pct = stk.get('_position_size_pct') is not None and stk.get('_calculate_qty', False)
+                    
+                    if signal_has_pct:
+                        print(f"[POSITION SIZE] ✓ Using signal's {stk['_position_size_pct']}% (overrides channel's {track_position_size_pct}%)")
+                    elif track_position_size_pct:
                         stk['_position_size_pct'] = float(track_position_size_pct)
-                        print(f"[POSITION SIZE] Tracking configured for {track_position_size_pct}% of portfolio")
+                        stk['_pct_from_channel'] = True
+                        print(f"[POSITION SIZE] Tracking configured for {track_position_size_pct}% of portfolio (channel setting)")
                     
                     # Add paper trading flag and channel config to signal
                     stk['_paper_trade_mode'] = True
