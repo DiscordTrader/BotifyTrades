@@ -6674,10 +6674,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     opt_type = zscalps_parsed.get('opt_type', 'C')
                                     expiry = zscalps_parsed.get('expiry', '')
                                     price_str = f"@ {price}" if price else "@ m"
-                                    forward_msg = f"BTO ${symbol} {strike}{opt_type} {expiry} {price_str}"
+                                    forward_msg = f"BTO {symbol} {strike}{opt_type} {expiry} {price_str}"
                                 else:
                                     price_str = f"@ {price}" if price else ""
-                                    forward_msg = f"STC ${symbol} {price_str}"
+                                    forward_msg = f"STC {symbol} {price_str}"
                                 print(f"[CHANNEL MAP] ✓ Formatted Z-scalps: {forward_msg}")
                             else:
                                 forward_msg = combined_content.strip()
@@ -6718,9 +6718,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     price_str = f"@ {price}" if price else "@ m"
                                     # Only include qty in forward if source signal had it
                                     if qty_specified:
-                                        forward_msg = f"{action} {qty} ${symbol} {strike}{opt_type} {expiry} {price_str}"
+                                        forward_msg = f"{action} {qty} {symbol} {strike}{opt_type} {expiry} {price_str}"
                                     else:
-                                        forward_msg = f"{action} ${symbol} {strike}{opt_type} {expiry} {price_str}"
+                                        forward_msg = f"{action} {symbol} {strike}{opt_type} {expiry} {price_str}"
                                     print(f"[CHANNEL MAP] ✓ Converted to BTO/STC format: {forward_msg}", flush=True)
                                 except Exception as conv_err:
                                     print(f"[CHANNEL MAP] ❌ Conversion error: {conv_err}", flush=True)
