@@ -5341,11 +5341,17 @@ def register_routes(app):
             from gui_app.database import get_telegram_settings
             settings = get_telegram_settings()
             
-            # Mask sensitive fields
-            if settings.get('api_hash'):
-                settings['api_hash_masked'] = '••••••••' + settings['api_hash'][-4:] if len(settings['api_hash']) > 4 else '••••'
+            # Mask sensitive fields - never expose actual api_hash
+            has_api_hash = bool(settings.get('api_hash'))
+            if has_api_hash:
+                api_hash_masked = '••••••••' + settings['api_hash'][-4:] if len(settings['api_hash']) > 4 else '••••'
             else:
-                settings['api_hash_masked'] = ''
+                api_hash_masked = ''
+            
+            # Remove actual api_hash from response - security fix
+            settings.pop('api_hash', None)
+            settings['api_hash_masked'] = api_hash_masked
+            settings['has_api_hash'] = has_api_hash
             
             return jsonify({'success': True, **settings})
         except Exception as e:
