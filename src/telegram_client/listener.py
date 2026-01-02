@@ -9,7 +9,7 @@ signal parsers used for Discord.
 import asyncio
 import os
 import queue
-from typing import Optional, Dict, Any, Callable, List, Set, Union
+from typing import Optional, Dict, Any, Callable, List, Set, Union, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -95,8 +95,9 @@ class TelegramListener:
         self.running = False
         self.connected = False
         
-        self._monitored_chats: Set[int] = set()
-        self._chat_configs: Dict[int, Dict[str, Any]] = {}
+        self._monitored_chats: Set[Union[int, str]] = set()  # Can be int ID or @username
+        self._chat_configs: Dict[Union[int, str], Dict[str, Any]] = {}
+        self._username_to_id: Dict[str, int] = {}  # Cache @username -> numeric ID
         self._signal_callback: Optional[Callable] = None
         self._message_callback: Optional[Callable] = None
         
@@ -127,18 +128,39 @@ class TelegramListener:
         self._parsers[name] = parser
         print(f"[TELEGRAM] Registered parser: {name}")
     
-    def add_monitored_chat(self, chat_id: int, config: Optional[Dict[str, Any]] = None) -> None:
-        """Add a chat to monitor for signals."""
+    def add_monitored_chat(self, chat_id: Union[int, str], config: Optional[Dict[str, Any]] = None) -> None:
+        """Add a chat to monitor for signals. Accepts int ID or @username string."""
         self._monitored_chats.add(chat_id)
         if config:
             self._chat_configs[chat_id] = config
         print(f"[TELEGRAM] Monitoring chat: {chat_id}")
     
-    def remove_monitored_chat(self, chat_id: int) -> None:
+    def remove_monitored_chat(self, chat_id: Union[int, str]) -> None:
         """Remove a chat from monitoring."""
         self._monitored_chats.discard(chat_id)
         self._chat_configs.pop(chat_id, None)
         print(f"[TELEGRAM] Removed chat from monitoring: {chat_id}")
+    
+    def _is_chat_monitored(self, chat_id: int, username: Optional[str] = None) -> Tuple[bool, Union[int, str, None]]:
+        """Check if a chat is being monitored. Returns (is_monitored, config_key)."""
+        # Check by numeric ID first
+        if chat_id in self._monitored_chats:
+            return True, chat_id
+        
+        # Check by @username
+        if username:
+            username_key = f"@{username}" if not username.startswith('@') else username
+            if username_key in self._monitored_chats:
+                # Cache the mapping for future lookups
+                self._username_to_id[username_key] = chat_id
+                return True, username_key
+        
+        # Check cached username-to-id mappings
+        for uname, cached_id in self._username_to_id.items():
+            if cached_id == chat_id and uname in self._monitored_chats:
+                return True, uname
+        
+        return False, None
     
     def load_channels_from_db(self) -> int:
         """Load Telegram channels from database."""
@@ -149,13 +171,29 @@ class TelegramListener:
             count = 0
             for channel in channels:
                 chat_id_str = channel.get('telegram_chat_id')
+                username = channel.get('telegram_username')
+                
                 if chat_id_str:
-                    try:
-                        chat_id = int(chat_id_str)
-                        self.add_monitored_chat(chat_id, config=channel)
+                    # Check if it's a @username or numeric ID
+                    if chat_id_str.startswith('@'):
+                        # It's a username, use it directly
+                        self.add_monitored_chat(chat_id_str, config=channel)
                         count += 1
-                    except (ValueError, TypeError):
-                        print(f"[TELEGRAM] Invalid chat ID: {chat_id_str}")
+                    else:
+                        try:
+                            chat_id = int(chat_id_str)
+                            self.add_monitored_chat(chat_id, config=channel)
+                            count += 1
+                        except (ValueError, TypeError):
+                            # Maybe it's a username without @, add it
+                            if chat_id_str:
+                                self.add_monitored_chat(f"@{chat_id_str}", config=channel)
+                                count += 1
+                elif username:
+                    # Use username if chat_id not provided
+                    username_key = f"@{username}" if not username.startswith('@') else username
+                    self.add_monitored_chat(username_key, config=channel)
+                    count += 1
             
             print(f"[TELEGRAM] Loaded {count} channels from database")
             return count
@@ -248,11 +286,14 @@ class TelegramListener:
             sender = await event.get_sender()
             
             chat_id = event.chat_id
+            chat_username = getattr(chat, 'username', None)
             
-            if self._monitored_chats and chat_id not in self._monitored_chats:
+            # Check if this chat is monitored (by ID or @username)
+            is_monitored, config_key = self._is_chat_monitored(chat_id, chat_username)
+            if self._monitored_chats and not is_monitored:
                 return
             
-            chat_name = getattr(chat, 'title', None) or getattr(chat, 'username', None) or str(chat_id)
+            chat_name = getattr(chat, 'title', None) or chat_username or str(chat_id)
             chat_type = self._get_chat_type(chat)
             
             author_id = sender.id if sender else 0
@@ -278,7 +319,7 @@ class TelegramListener:
                 except Exception as e:
                     print(f"[TELEGRAM] Message callback error: {e}")
             
-            await self._process_signal(normalized_msg)
+            await self._process_signal(normalized_msg, config_key)
             
         except Exception as e:
             print(f"[TELEGRAM] Error handling message: {e}")
@@ -311,12 +352,15 @@ class TelegramListener:
         else:
             return 'Unknown'
     
-    async def _process_signal(self, msg: TelegramMessage) -> None:
+    async def _process_signal(self, msg: TelegramMessage, config_key: Union[int, str, None] = None) -> None:
         """Process message through signal parsers."""
         if not msg.content.strip():
             return
         
-        chat_config = self._chat_configs.get(msg.chat_id, {})
+        # Try config_key first (could be @username), then fall back to numeric ID
+        chat_config = self._chat_configs.get(config_key, {}) if config_key else {}
+        if not chat_config:
+            chat_config = self._chat_configs.get(msg.chat_id, {})
         
         execute_enabled = chat_config.get('execute_enabled', 0)
         track_enabled = chat_config.get('track_enabled', 0)
