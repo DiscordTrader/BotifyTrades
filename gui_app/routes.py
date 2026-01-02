@@ -7218,11 +7218,13 @@ def register_routes(app):
             - period: 'today', '7d', '30d', 'year', 'all', or 'custom'
             - start_date: For custom period (YYYY-MM-DD)
             - end_date: For custom period (YYYY-MM-DD)
+            - market: 'US' or 'INDIA' for market-specific filtering
         """
         channel_id = request.args.get('channel_id', type=int)
         time_period = request.args.get('period', 'all')
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
+        market = request.args.get('market', 'US').strip().upper()
         
         try:
             conn = db.get_connection()
@@ -7237,6 +7239,11 @@ def register_routes(app):
             if date_start and date_end:
                 date_filter = "AND lc.closed_at >= ? AND lc.closed_at <= ?"
                 date_params = [date_start, date_end]
+            
+            # Build market filter by joining with signals table
+            market_filter = ""
+            if market and market in ('US', 'INDIA'):
+                market_filter = "AND COALESCE(s.market, 'US') = ?"
             
             # Query to get user performance with gross profit/loss for TQS calculation
             # Using weighted average % based on position cost basis for accurate returns
@@ -7258,8 +7265,13 @@ def register_routes(app):
                     MAX(lc.pnl) as best_trade,
                     MIN(lc.pnl) as worst_trade,
                     
-                    -- Cost basis: multiply by 100 only for options, not stocks
-                    SUM(sl.open_price * lc.closed_qty * CASE WHEN sl.asset_type = 'option' THEN 100 ELSE 1 END) as total_cost_basis,
+                    -- Cost basis: US options multiply by 100, India F&O uses 1× (lot sizing in qty)
+                    SUM(sl.open_price * lc.closed_qty * 
+                        CASE 
+                            WHEN sl.asset_type = 'option' AND COALESCE(s.market, 'US') = 'US' THEN 100 
+                            ELSE 1 
+                        END
+                    ) as total_cost_basis,
                     
                     AVG(lc.holding_days) as avg_holding_days,
                     
@@ -7269,10 +7281,13 @@ def register_routes(app):
                     
                 FROM signal_lots sl
                 LEFT JOIN lot_closures lc ON sl.id = lc.lot_id
-                WHERE sl.author_name IS NOT NULL {date_filter}
+                LEFT JOIN signals s ON sl.signal_id = s.id
+                WHERE sl.author_name IS NOT NULL {date_filter} {market_filter}
             '''
             
             params = date_params.copy()
+            if market and market in ('US', 'INDIA'):
+                params.append(market)
             if channel_id:
                 query += ' AND sl.channel_id = ?'
                 params.append(channel_id)
@@ -7386,13 +7401,25 @@ def register_routes(app):
         - Best/worst trades
         - Top performers (users) per channel
         - Recent activity
+        
+        Query params:
+            - market: 'US' or 'INDIA' for market-specific filtering
         """
         try:
+            market = request.args.get('market', 'US').strip().upper()
+            
             conn = db.get_connection()
             cursor = conn.cursor()
             
+            # Build market filter
+            market_filter = ""
+            params = []
+            if market and market in ('US', 'INDIA'):
+                market_filter = "AND COALESCE(s.market, 'US') = ?"
+                params.append(market)
+            
             # Get channel performance
-            query = '''
+            query = f'''
                 SELECT 
                     c.id as channel_id,
                     c.name as channel_name,
@@ -7422,12 +7449,13 @@ def register_routes(app):
                 FROM channels c
                 LEFT JOIN signal_lots sl ON c.id = sl.channel_id
                 LEFT JOIN lot_closures lc ON sl.id = lc.lot_id
-                WHERE c.is_active = 1
+                LEFT JOIN signals s ON sl.signal_id = s.id
+                WHERE c.is_active = 1 {market_filter}
                 GROUP BY c.id, c.name, c.discord_channel_id
                 HAVING COUNT(lc.id) > 0
             '''
             
-            cursor.execute(query)
+            cursor.execute(query, params)
             rows = cursor.fetchall()
             
             channels = []

@@ -2860,8 +2860,13 @@ def get_channel_leaderboard(time_period='all', start_date=None, end_date=None, m
                 ELSE 0 
             END as avg_pnl,
             
-            -- Cost basis: multiply by 100 only for options, not stocks
-            COALESCE(SUM(sl.open_price * lc.closed_qty * CASE WHEN sl.asset_type = 'option' THEN 100 ELSE 1 END), 0) as total_cost_basis,
+            -- Cost basis: US options multiply by 100, India F&O uses 1× (lot sizing in qty)
+            COALESCE(SUM(sl.open_price * lc.closed_qty * 
+                CASE 
+                    WHEN sl.asset_type = 'option' AND COALESCE(s.market, 'US') = 'US' THEN 100 
+                    ELSE 1 
+                END
+            ), 0) as total_cost_basis,
             
             -- Gross profit/loss for TQS calculation
             COALESCE(SUM(CASE WHEN lc.pnl > 0 THEN lc.pnl ELSE 0 END), 0) as gross_profit,
