@@ -1510,6 +1510,12 @@ def register_routes(app):
         """Channel management page"""
         return render_template('channels.html')
     
+    @app.route('/telegram')
+    @login_required
+    def telegram():
+        """Telegram integration settings and channel management page"""
+        return render_template('telegram.html')
+    
     @app.route('/architecture')
     def architecture():
         """System architecture presentation page (PUBLIC - no auth required)"""
@@ -5324,6 +5330,122 @@ def register_routes(app):
             import traceback
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
+    
+    # ============ TELEGRAM SETTINGS API ============
+    
+    @app.route('/api/settings/telegram', methods=['GET'])
+    @login_required
+    def api_get_telegram_settings():
+        """Get Telegram integration settings"""
+        try:
+            from gui_app.database import get_telegram_settings
+            settings = get_telegram_settings()
+            
+            # Mask sensitive fields
+            if settings.get('api_hash'):
+                settings['api_hash_masked'] = '••••••••' + settings['api_hash'][-4:] if len(settings['api_hash']) > 4 else '••••'
+            else:
+                settings['api_hash_masked'] = ''
+            
+            return jsonify({'success': True, **settings})
+        except Exception as e:
+            print(f"[API] Error fetching Telegram settings: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/settings/telegram', methods=['POST'])
+    @login_required
+    def api_update_telegram_settings():
+        """Update Telegram integration settings"""
+        try:
+            from gui_app.database import update_telegram_settings
+            
+            data = request.json
+            
+            success = update_telegram_settings(
+                enabled=data.get('enabled'),
+                api_id=data.get('api_id'),
+                api_hash=data.get('api_hash') if data.get('api_hash') and not data.get('api_hash').startswith('••') else None,
+                phone_number=data.get('phone_number'),
+                session_string=data.get('session_string'),
+                session_status=data.get('session_status')
+            )
+            
+            if success:
+                return jsonify({'success': True, 'message': 'Telegram settings updated'})
+            else:
+                return jsonify({'success': False, 'error': 'Failed to update settings'}), 500
+        except Exception as e:
+            print(f"[API] Error updating Telegram settings: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/telegram/channels', methods=['GET'])
+    @login_required
+    def api_get_telegram_channels():
+        """Get all Telegram channels"""
+        try:
+            from gui_app.database import get_telegram_channels
+            channels = get_telegram_channels()
+            return jsonify({'success': True, 'channels': channels})
+        except Exception as e:
+            print(f"[API] Error fetching Telegram channels: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/telegram/channels', methods=['POST'])
+    @login_required
+    def api_add_telegram_channel():
+        """Add a new Telegram channel"""
+        try:
+            from gui_app.database import add_telegram_channel
+            
+            data = request.json
+            telegram_chat_id = data.get('telegram_chat_id')
+            name = data.get('name')
+            chat_type = data.get('chat_type', 'group')
+            username = data.get('username')
+            
+            if not telegram_chat_id or not name:
+                return jsonify({'success': False, 'error': 'Chat ID and name are required'}), 400
+            
+            channel_id = add_telegram_channel(telegram_chat_id, name, chat_type, username)
+            
+            if channel_id:
+                return jsonify({'success': True, 'channel_id': channel_id, 'message': 'Telegram channel added'})
+            else:
+                return jsonify({'success': False, 'error': 'Failed to add channel'}), 500
+        except Exception as e:
+            print(f"[API] Error adding Telegram channel: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/telegram/channels/<int:channel_id>', methods=['PUT'])
+    @login_required
+    def api_update_telegram_channel(channel_id):
+        """Update a Telegram channel (uses same update_channel as Discord)"""
+        try:
+            data = request.json
+            success = db.update_channel(channel_id, **data)
+            
+            if success:
+                return jsonify({'success': True, 'message': 'Telegram channel updated'})
+            else:
+                return jsonify({'success': False, 'error': 'Failed to update channel'}), 500
+        except Exception as e:
+            print(f"[API] Error updating Telegram channel: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/telegram/channels/<int:channel_id>', methods=['DELETE'])
+    @login_required
+    def api_delete_telegram_channel(channel_id):
+        """Delete a Telegram channel"""
+        try:
+            success = db.delete_channel(channel_id)
+            
+            if success:
+                return jsonify({'success': True, 'message': 'Telegram channel deleted'})
+            else:
+                return jsonify({'success': False, 'error': 'Failed to delete channel'}), 500
+        except Exception as e:
+            print(f"[API] Error deleting Telegram channel: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
     
     # API Keys Settings (OpenAI, Alpha Vantage, Finnhub)
     @app.route('/api/settings/api_keys', methods=['GET'])

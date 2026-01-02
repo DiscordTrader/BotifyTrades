@@ -452,6 +452,17 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added exit_strategy_mode column for per-channel exit strategy")
     
+    # Migrate: Add platform support for multi-platform channels (Discord + Telegram)
+    try:
+        cursor.execute('SELECT platform FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE channels ADD COLUMN platform TEXT DEFAULT 'discord'")
+        cursor.execute('ALTER TABLE channels ADD COLUMN telegram_chat_id TEXT DEFAULT NULL')
+        cursor.execute('ALTER TABLE channels ADD COLUMN telegram_chat_type TEXT DEFAULT NULL')
+        cursor.execute('ALTER TABLE channels ADD COLUMN telegram_username TEXT DEFAULT NULL')
+        conn.commit()
+        print("[DATABASE] ✓ Added platform columns for multi-platform support (Discord + Telegram)")
+    
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -474,6 +485,27 @@ def init_db():
             value TEXT,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
+    ''')
+    
+    # Telegram settings table for API credentials
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS telegram_settings (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            enabled INTEGER DEFAULT 0,
+            api_id TEXT,
+            api_hash TEXT,
+            phone_number TEXT,
+            session_string TEXT,
+            session_status TEXT DEFAULT 'disconnected',
+            last_connected_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Initialize Telegram settings row if not exists
+    cursor.execute('''
+        INSERT OR IGNORE INTO telegram_settings (id, enabled) VALUES (1, 0)
     ''')
     
     # Migrate: Add Alpaca settings columns if settings table exists but columns missing
@@ -3664,6 +3696,161 @@ def update_ai_settings(enabled: bool, model: str, sentiment_enabled: bool) -> bo
     except Exception as e:
         print(f"[DATABASE] Error updating AI settings: {e}")
         return False
+
+
+# ============ TELEGRAM SETTINGS ============
+
+def get_telegram_settings() -> Dict[str, Any]:
+    """Get Telegram integration settings"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT enabled, api_id, api_hash, phone_number, session_string, 
+                   session_status, last_connected_at, updated_at
+            FROM telegram_settings
+            WHERE id = 1
+        ''')
+        
+        row = cursor.fetchone()
+        if row:
+            return {
+                'enabled': bool(row['enabled']),
+                'api_id': row['api_id'] or '',
+                'api_hash': row['api_hash'] or '',
+                'phone_number': row['phone_number'] or '',
+                'session_string': row['session_string'] or '',
+                'session_status': row['session_status'] or 'disconnected',
+                'last_connected_at': row['last_connected_at'],
+                'updated_at': row['updated_at']
+            }
+    except Exception as e:
+        print(f"[DATABASE] Error getting Telegram settings: {e}")
+    
+    return {
+        'enabled': False,
+        'api_id': '',
+        'api_hash': '',
+        'phone_number': '',
+        'session_string': '',
+        'session_status': 'disconnected',
+        'last_connected_at': None,
+        'updated_at': None
+    }
+
+
+def update_telegram_settings(enabled: bool = None, api_id: str = None, api_hash: str = None,
+                              phone_number: str = None, session_string: str = None,
+                              session_status: str = None) -> bool:
+    """Update Telegram integration settings"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        updates = []
+        values = []
+        
+        if enabled is not None:
+            updates.append('enabled = ?')
+            values.append(1 if enabled else 0)
+        if api_id is not None:
+            updates.append('api_id = ?')
+            values.append(api_id)
+        if api_hash is not None:
+            updates.append('api_hash = ?')
+            values.append(api_hash)
+        if phone_number is not None:
+            updates.append('phone_number = ?')
+            values.append(phone_number)
+        if session_string is not None:
+            updates.append('session_string = ?')
+            values.append(session_string)
+        if session_status is not None:
+            updates.append('session_status = ?')
+            values.append(session_status)
+            if session_status == 'connected':
+                updates.append('last_connected_at = CURRENT_TIMESTAMP')
+        
+        updates.append('updated_at = CURRENT_TIMESTAMP')
+        
+        cursor.execute(f'''
+            UPDATE telegram_settings
+            SET {', '.join(updates)}
+            WHERE id = 1
+        ''', values)
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error updating Telegram settings: {e}")
+        return False
+
+
+def get_telegram_channels() -> List[Dict[str, Any]]:
+    """Get all Telegram channels (platform = 'telegram')"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT id, name, telegram_chat_id, telegram_chat_type, telegram_username,
+               execute_enabled, track_enabled, broker_override, enabled_brokers,
+               risk_management_enabled, position_size_pct, profit_target_1_pct,
+               profit_target_2_pct, profit_target_3_pct, stop_loss_pct,
+               trailing_stop_pct, trailing_activation_pct, exit_strategy_mode,
+               is_active, created_at
+        FROM channels
+        WHERE platform = 'telegram'
+        ORDER BY name
+    ''')
+    
+    channels = []
+    for row in cursor.fetchall():
+        channels.append({
+            'id': row['id'],
+            'name': row['name'],
+            'telegram_chat_id': row['telegram_chat_id'],
+            'telegram_chat_type': row['telegram_chat_type'],
+            'telegram_username': row['telegram_username'],
+            'execute_enabled': bool(row['execute_enabled']),
+            'track_enabled': bool(row['track_enabled']),
+            'broker_override': row['broker_override'],
+            'enabled_brokers': json.loads(row['enabled_brokers']) if row['enabled_brokers'] else [],
+            'risk_management_enabled': bool(row['risk_management_enabled']),
+            'position_size_pct': row['position_size_pct'],
+            'profit_target_1_pct': row['profit_target_1_pct'],
+            'profit_target_2_pct': row['profit_target_2_pct'],
+            'profit_target_3_pct': row['profit_target_3_pct'],
+            'stop_loss_pct': row['stop_loss_pct'],
+            'trailing_stop_pct': row['trailing_stop_pct'],
+            'trailing_activation_pct': row['trailing_activation_pct'],
+            'exit_strategy_mode': row['exit_strategy_mode'] or 'signal',
+            'is_active': bool(row['is_active']),
+            'created_at': row['created_at']
+        })
+    
+    return channels
+
+
+def add_telegram_channel(telegram_chat_id: str, name: str, chat_type: str = 'group',
+                          username: str = None) -> Optional[int]:
+    """Add a new Telegram channel"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO channels (discord_channel_id, name, category, platform, 
+                                  telegram_chat_id, telegram_chat_type, telegram_username,
+                                  track_enabled)
+            VALUES (?, ?, 'TRACK', 'telegram', ?, ?, ?, 1)
+        ''', (f'tg_{telegram_chat_id}', name, telegram_chat_id, chat_type, username))
+        
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"[DATABASE] Error adding Telegram channel: {e}")
+        return None
 
 
 # ============ TRADING SETTINGS ============
