@@ -6377,17 +6377,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 print(f"[WARN] Failed to check allowed users: {e}")
 
         # Store message for format discovery (after all eligibility checks pass)
+        # For mapped source channels, store full combined_content (includes embeds)
         if channel_info and DATABASE_MODULE_AVAILABLE:
             try:
                 from gui_app import database as db
+                # Use combined_content for storage to capture embed data
+                storage_content = combined_content if embed_content_parts else message.content
                 db.save_channel_message(
                     channel_id=str(message.channel.id),
-                    message_content=message.content,
+                    message_content=storage_content,
                     channel_name=channel_name,
                     author_id=str(message.author.id),
                     author_name=message.author.name,
                     message_id=str(message.id)
                 )
+                # Enhanced logging for analysis channels (Bishop, etc.)
+                if str(message.channel.id) in ['1239624229583061052']:
+                    print(f"[BISHOP-LOG] Full content: {storage_content[:500]}")
             except Exception as e:
                 pass  # Don't fail message processing if storage fails
 
