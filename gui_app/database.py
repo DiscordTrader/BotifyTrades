@@ -3905,6 +3905,54 @@ def add_telegram_channel(telegram_chat_id: str, name: str, chat_type: str = 'gro
         return None
 
 
+def get_channel_by_telegram_id(telegram_chat_id: str) -> Optional[Dict[str, Any]]:
+    """Get channel settings by Telegram chat ID (unified lookup for both platforms)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    normalized_id = str(telegram_chat_id).lstrip('@')
+    
+    cursor.execute('''
+        SELECT id, name, discord_channel_id, telegram_chat_id, telegram_username, platform,
+               execute_enabled, track_enabled, broker_override, enabled_brokers,
+               risk_management_enabled, position_size_pct, profit_target_1_pct,
+               profit_target_2_pct, profit_target_3_pct, stop_loss_pct,
+               trailing_stop_pct, trailing_activation_pct, exit_strategy_mode,
+               default_quantity, is_active
+        FROM channels
+        WHERE telegram_chat_id = ? OR telegram_username = ? OR telegram_chat_id = ?
+        LIMIT 1
+    ''', (telegram_chat_id, normalized_id, normalized_id))
+    
+    row = cursor.fetchone()
+    if not row:
+        return None
+    
+    return {
+        'id': row['id'],
+        'name': row['name'],
+        'discord_channel_id': row['discord_channel_id'],
+        'telegram_chat_id': row['telegram_chat_id'],
+        'telegram_username': row['telegram_username'],
+        'platform': row['platform'],
+        'execute_enabled': bool(row['execute_enabled']),
+        'track_enabled': bool(row['track_enabled']),
+        'broker_override': row['broker_override'],
+        'enabled_brokers': json.loads(row['enabled_brokers']) if row['enabled_brokers'] else [],
+        'risk_management_enabled': bool(row['risk_management_enabled']),
+        'position_size_pct': row['position_size_pct'],
+        'profit_target_1_pct': row['profit_target_1_pct'],
+        'profit_target_2_pct': row['profit_target_2_pct'],
+        'profit_target_3_pct': row['profit_target_3_pct'],
+        'stop_loss_pct': row['stop_loss_pct'],
+        'trailing_stop_pct': row['trailing_stop_pct'],
+        'trailing_activation_pct': row['trailing_activation_pct'],
+        'exit_strategy_mode': row['exit_strategy_mode'] or 'signal',
+        'default_quantity': row['default_quantity'],
+        'is_active': bool(row['is_active'])
+    }
+
+
 # ============ TRADING SETTINGS ============
 
 def get_trading_settings() -> Dict[str, Any]:

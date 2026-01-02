@@ -446,6 +446,12 @@ class TelegramListener:
             signal['channel_name'] = msg.chat_name
             signal['author_name'] = msg.author_name
             signal['timestamp'] = msg.timestamp.isoformat()
+            signal['_db_channel_id'] = chat_config.get('id')
+            
+            broker_override = chat_config.get('broker_override')
+            if broker_override:
+                signal['_broker_override'] = broker_override
+                print(f"[TELEGRAM] Broker override: {broker_override}")
             
             enabled_brokers = chat_config.get('enabled_brokers')
             if enabled_brokers:
@@ -458,6 +464,32 @@ class TelegramListener:
                     print(f"[TELEGRAM] Broker selection: {signal['_enabled_brokers']}")
                 except Exception as e:
                     print(f"[TELEGRAM] Failed to parse enabled_brokers: {e}")
+            
+            default_qty = chat_config.get('default_quantity')
+            if default_qty and not signal.get('_qty_from_signal'):
+                signal['qty'] = default_qty
+                signal['_qty_source'] = 'channel_default'
+                print(f"[TELEGRAM] Using channel default quantity: {default_qty}")
+            
+            position_size_pct = chat_config.get('position_size_pct')
+            if position_size_pct:
+                signal['_position_size_pct'] = position_size_pct
+            
+            if chat_config.get('risk_management_enabled'):
+                signal['_risk_management'] = {
+                    'enabled': True,
+                    'profit_target_1_pct': chat_config.get('profit_target_1_pct'),
+                    'profit_target_2_pct': chat_config.get('profit_target_2_pct'),
+                    'profit_target_3_pct': chat_config.get('profit_target_3_pct'),
+                    'stop_loss_pct': chat_config.get('stop_loss_pct'),
+                    'trailing_stop_pct': chat_config.get('trailing_stop_pct'),
+                    'trailing_activation_pct': chat_config.get('trailing_activation_pct'),
+                }
+                print(f"[TELEGRAM] Per-channel risk management enabled")
+            
+            exit_mode = chat_config.get('exit_strategy_mode')
+            if exit_mode:
+                signal['_exit_strategy_mode'] = exit_mode
             
             if track_enabled:
                 try:
