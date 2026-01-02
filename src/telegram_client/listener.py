@@ -481,7 +481,7 @@ class TelegramListener:
     def _save_signal_for_tracking(self, signal: Dict[str, Any], msg: TelegramMessage) -> None:
         """Save signal to database for PNL tracking."""
         try:
-            from gui_app.database import add_signal, create_signal_lot, get_connection
+            from gui_app.database import add_signal, create_signal_lot, get_connection, get_open_lots, close_lot
             from datetime import datetime
             
             action = signal.get('action', 'BTO')
@@ -514,13 +514,13 @@ class TelegramListener:
             if signal_id:
                 print(f"[TELEGRAM] ✓ Signal saved for tracking (ID: {signal_id}, Market: {market})")
                 
+                conn = get_connection()
+                cursor = conn.cursor()
+                cursor.execute('SELECT id FROM channels WHERE telegram_chat_id = ?', (channel_id,))
+                channel = cursor.fetchone()
+                db_channel_id = channel['id'] if channel else None
+                
                 if action == 'BTO':
-                    conn = get_connection()
-                    cursor = conn.cursor()
-                    cursor.execute('SELECT id FROM channels WHERE telegram_chat_id = ?', (channel_id,))
-                    channel = cursor.fetchone()
-                    db_channel_id = channel['id'] if channel else None
-                    
                     if db_channel_id:
                         lot_id = create_signal_lot(
                             channel_id=db_channel_id,
@@ -538,6 +538,40 @@ class TelegramListener:
                         print(f"[TELEGRAM] ✓ Signal lot created for PNL tracking (Lot ID: {lot_id})")
                     else:
                         print(f"[TELEGRAM] ⚠️ Channel not found in DB for lot creation: {channel_id}")
+                
+                elif action == 'STC':
+                    if db_channel_id:
+                        open_lots = get_open_lots(
+                            channel_id=db_channel_id,
+                            asset_type=asset_type,
+                            symbol=symbol,
+                            strike=strike,
+                            expiry=expiry,
+                            call_put=call_put
+                        )
+                        
+                        if open_lots:
+                            lot = open_lots[0]
+                            close_qty = min(quantity, lot['remaining_qty'])
+                            closure_id = close_lot(
+                                lot_id=lot['id'],
+                                channel_id=db_channel_id,
+                                signal_id=signal_id,
+                                close_qty=close_qty,
+                                close_price=price,
+                                closed_at=datetime.now().isoformat()
+                            )
+                            
+                            open_price = lot['open_price']
+                            pnl = (price - open_price) * close_qty
+                            if asset_type == 'option' and market == 'US':
+                                pnl *= 100
+                            
+                            print(f"[TELEGRAM] ✓ Lot closed for PNL tracking (Closure ID: {closure_id}, PNL: {'+' if pnl >= 0 else ''}{pnl:.2f})")
+                        else:
+                            print(f"[TELEGRAM] ⚠️ No matching open lot found for STC: {symbol} {strike} {call_put}")
+                    else:
+                        print(f"[TELEGRAM] ⚠️ Channel not found in DB for lot closure: {channel_id}")
             else:
                 print(f"[TELEGRAM] ⚠️ Failed to save signal for tracking")
                 
