@@ -26,6 +26,8 @@ INDIA_OPT_PATTERN_3 = r'(?:^|\s)(BUY|SELL)\s+([A-Za-z]+)\s+(\d+)\s*(CE|PE)\s+(\d
 
 INDIA_OPT_PATTERN_4 = r'(?:^|\s)(BUY|SELL)\s+(?:(\d+)\s+(?:LOT|LOTS|QTY)\s+)?([A-Za-z]+)\s+(\d+)\s*(CE|PE)\s*(?:@|AT)?\s*[₹]?([\d.]+)'
 
+INDIA_OPT_PATTERN_5 = r'(?:^|\s)(BUY|SELL)\s+(\d+)\s+([A-Za-z]+)\s+(\d+)\s*(CE|PE)\s*(?:@|AT)?\s*[₹]?([\d.]+)'
+
 INDIA_STK_PATTERN = r'(?:^|\s)(BUY|SELL)\s+([A-Za-z]+)\s*(?:@|AT)?\s*[₹]?([\d.]+)'
 
 INDIA_PATTERNS = [
@@ -33,6 +35,7 @@ INDIA_PATTERNS = [
     INDIA_OPT_PATTERN_2,
     INDIA_OPT_PATTERN_3,
     INDIA_OPT_PATTERN_4,
+    INDIA_OPT_PATTERN_5,
 ]
 
 INDIA_MONTH_MAP = {

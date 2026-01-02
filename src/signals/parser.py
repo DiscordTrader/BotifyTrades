@@ -1026,6 +1026,10 @@ def parse_india_option_signal(text: str) -> Optional[Dict[str, Any]]:
                 direction, qty_str, symbol, strike, opt_type, price_str = groups[0], groups[1], groups[2], groups[3], groups[4], groups[5]
                 qty = int(qty_str) if qty_str else None
                 expiry_str = None
+            elif pattern == INDIA_PATTERNS[4]:
+                direction, qty_str, symbol, strike, opt_type, price_str = groups[0], groups[1], groups[2], groups[3], groups[4], groups[5]
+                qty = int(qty_str) if qty_str else None
+                expiry_str = None
             else:
                 continue
             
