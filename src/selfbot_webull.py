@@ -1424,6 +1424,10 @@ BISHOP_ENTRY_PATTERN = r'\*{0,2}Entry:\*{0,2}\s*(\d+\.?\d*)'
 # Groups: (symbol, strike, opt_type, month, day, price)
 BISHOP_TRIM_PATTERN = r'[Tt]rimming\s+(?:\?\w\s+)?([A-Za-z]+)\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+(\d{1,2})/(\d{1,2})\s*@\s*\$?(\d+\.?\d*)'
 
+# Bishop stopped out pattern: "Got stopped out at $1.65" or "stopped out at $1.65 for -35%"
+# Groups: (price)
+BISHOP_STOPPED_PATTERN = r'[Ss]topped\s+out\s+(?:at\s+)?\$?(\d+\.?\d*)'
+
 # EvaPanda-style patterns (embed-based with Open/Close titles)
 # Embed Title: "Open" = BTO entry, "Close" = STC exit, "Update:" = skip
 # Format: BTO FSLR 01/16/26 300C @ 3.25 (Swing) or STC FSLR 01/16/26 300C @ 4.10
@@ -3706,6 +3710,7 @@ BEAR_LOTTO_REGEX = re.compile(BEAR_LOTTO_PATTERN, re.IGNORECASE)
 BISHOP_OPTION_REGEX = re.compile(BISHOP_OPTION_PATTERN, re.IGNORECASE | re.MULTILINE)
 BISHOP_ENTRY_REGEX = re.compile(BISHOP_ENTRY_PATTERN, re.IGNORECASE)
 BISHOP_TRIM_REGEX = re.compile(BISHOP_TRIM_PATTERN, re.IGNORECASE)
+BISHOP_STOPPED_REGEX = re.compile(BISHOP_STOPPED_PATTERN, re.IGNORECASE)
 EVAPANDA_REGEX = re.compile(EVAPANDA_PATTERN, re.IGNORECASE)
 
 def parse_option_signal(text: str) -> Optional[dict]:
