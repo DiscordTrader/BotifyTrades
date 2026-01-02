@@ -9108,7 +9108,8 @@ def run_telegram_bot_thread():
             
             from src.telegram_client import TelegramListener
             from src.signals.parser import (
-                parse_india_option_signal, parse_india_stock_signal
+                parse_india_option_signal, parse_india_stock_signal,
+                parse_option_signal, parse_stock_signal
             )
             
             global _telegram_listener
