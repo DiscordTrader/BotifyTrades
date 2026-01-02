@@ -481,12 +481,13 @@ class TelegramListener:
     def _save_signal_for_tracking(self, signal: Dict[str, Any], msg: TelegramMessage) -> None:
         """Save signal to database for PNL tracking."""
         try:
-            from gui_app.database import add_signal
+            from gui_app.database import add_signal, create_signal_lot, get_connection
+            from datetime import datetime
             
             action = signal.get('action', 'BTO')
             symbol = signal.get('symbol', '')
             quantity = signal.get('quantity', 1)
-            price = signal.get('price')
+            price = signal.get('price') or 0
             asset_type = signal.get('asset_type', 'option')
             strike = signal.get('strike')
             expiry = signal.get('expiry')
@@ -512,6 +513,31 @@ class TelegramListener:
             
             if signal_id:
                 print(f"[TELEGRAM] ✓ Signal saved for tracking (ID: {signal_id}, Market: {market})")
+                
+                if action == 'BTO':
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT id FROM channels WHERE telegram_chat_id = ?', (channel_id,))
+                    channel = cursor.fetchone()
+                    db_channel_id = channel['id'] if channel else None
+                    
+                    if db_channel_id:
+                        lot_id = create_signal_lot(
+                            channel_id=db_channel_id,
+                            signal_id=signal_id,
+                            asset_type=asset_type,
+                            symbol=symbol,
+                            quantity=quantity,
+                            open_price=price,
+                            opened_at=datetime.now().isoformat(),
+                            strike=strike,
+                            expiry=expiry,
+                            call_put=call_put,
+                            author_name=author_name
+                        )
+                        print(f"[TELEGRAM] ✓ Signal lot created for PNL tracking (Lot ID: {lot_id})")
+                    else:
+                        print(f"[TELEGRAM] ⚠️ Channel not found in DB for lot creation: {channel_id}")
             else:
                 print(f"[TELEGRAM] ⚠️ Failed to save signal for tracking")
                 
