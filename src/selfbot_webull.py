@@ -5424,6 +5424,87 @@ class SelfClient(discord.Client):
         
         return (None, f"Unsupported timeframe: {timeframe}\nSupported: 1min, 5min, 15min, 30min, 1hr, 4hr, 1day")
     
+    async def handle_extract_history(self, message: discord.Message, channel_id: int, limit: int = 200):
+        """Extract and analyze message history from a channel for pattern discovery."""
+        try:
+            await message.channel.send(f"📊 Extracting last {limit} messages from channel {channel_id}...")
+            
+            target_channel = self.get_channel(channel_id)
+            if not target_channel:
+                try:
+                    target_channel = await self.fetch_channel(channel_id)
+                except Exception as e:
+                    await message.channel.send(f"❌ Cannot access channel {channel_id}: {e}")
+                    return
+            
+            messages = []
+            entries = []
+            exits = []
+            partial_exits = []
+            
+            async for msg in target_channel.history(limit=limit):
+                embed_text = ""
+                if msg.embeds:
+                    for embed in msg.embeds:
+                        parts = []
+                        if embed.title:
+                            parts.append(f"[TITLE:{embed.title}]")
+                        if embed.description:
+                            parts.append(f"[DESC:{embed.description}]")
+                        for field in embed.fields:
+                            parts.append(f"[{field.name}:{field.value}]")
+                        embed_text = " ".join(parts)
+                
+                full_content = f"{msg.content} {embed_text}".strip()
+                
+                # Classify message type
+                content_lower = full_content.lower()
+                if any(x in content_lower for x in ["i'm entering", "im entering", "option:", "entry:"]):
+                    entries.append(full_content)
+                elif any(x in content_lower for x in ["trimming", "trim", "partial", "half", "50%", "25%", "75%"]):
+                    partial_exits.append(full_content)
+                elif any(x in content_lower for x in ["out", "exit", "close", "sold", "stc"]):
+                    exits.append(full_content)
+                
+                messages.append(full_content)
+                print(f"[HISTORY] {msg.created_at.strftime('%m-%d %H:%M')}: {full_content[:200]}")
+            
+            # Build analysis report
+            report = f"📊 **Channel Analysis: {target_channel.name}**\n"
+            report += f"Analyzed: {len(messages)} messages\n\n"
+            
+            report += f"**ENTRIES FOUND ({len(entries)}):**\n"
+            for e in entries[:5]:
+                report += f"• `{e[:100]}`\n"
+            
+            report += f"\n**PARTIAL EXITS ({len(partial_exits)}):**\n"
+            for p in partial_exits[:5]:
+                report += f"• `{p[:100]}`\n"
+            
+            report += f"\n**FULL EXITS ({len(exits)}):**\n"
+            for x in exits[:5]:
+                report += f"• `{x[:100]}`\n"
+            
+            # Log full details to console
+            print("\n" + "="*80)
+            print("FULL ENTRY PATTERNS:")
+            for e in entries:
+                print(f"  {e}")
+            print("\nFULL PARTIAL EXIT PATTERNS:")
+            for p in partial_exits:
+                print(f"  {p}")
+            print("\nFULL EXIT PATTERNS:")
+            for x in exits:
+                print(f"  {x}")
+            print("="*80 + "\n")
+            
+            await message.channel.send(report[:1900])
+            
+        except Exception as e:
+            await message.channel.send(f"❌ Error extracting history: {e}")
+            import traceback
+            traceback.print_exc()
+    
     async def handle_analyze_command(self, message: discord.Message, symbol: str, timeframe: str = '1day'):
         """Handle !analyze [SYMBOL] [TIMEFRAME] command - provides AI stock analysis with market data"""
         # Prevent duplicate execution of the same command
@@ -6861,6 +6942,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     await self.handle_convert_command(message, text)
                 else:
                     await message.channel.send("❌ Usage: `!convert [TEXT]`\nExample: `!convert Added back 20% META`")
+                return
+            
+            # !extracthistory [CHANNEL_ID] [LIMIT] - Extract messages for pattern analysis
+            elif content.lower().startswith('!extracthistory'):
+                args = content[15:].strip().split()
+                channel_id = int(args[0]) if args else 1239624229583061052  # Default to Bishop
+                limit = int(args[1]) if len(args) > 1 else 200
+                await self.handle_extract_history(message, channel_id, limit)
                 return
         
         # Pre-process special formats (Bullwinkle scalps, etc.)
