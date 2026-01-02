@@ -1748,6 +1748,8 @@ def update_channel(channel_id: int, **kwargs):
         query = f"UPDATE channels SET {', '.join(fields)}, updated_at = ? WHERE id = ?"
         cursor.execute(query, values)
         conn.commit()
+        return True
+    return False
 
 
 def delete_channel(channel_id: int):
