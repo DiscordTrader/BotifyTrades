@@ -120,7 +120,9 @@ class RiskDBAdapter:
                                c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
                                c.exit_strategy_mode
                         FROM trades t
-                        LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
+                        LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
+                            OR t.channel_id = CAST(c.id AS TEXT)
+                            OR t.channel_id = c.telegram_chat_id)
                         WHERE t.symbol = ? AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
                         AND t.status = 'OPEN' AND t.direction = 'BTO'
                         ORDER BY t.id DESC LIMIT 1
@@ -140,7 +142,9 @@ class RiskDBAdapter:
                            c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
                            c.exit_strategy_mode
                     FROM trades t
-                    LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
+                    LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
+                        OR t.channel_id = CAST(c.id AS TEXT)
+                        OR t.channel_id = c.telegram_chat_id)
                     WHERE t.symbol = ? AND t.asset_type = 'stock'
                     AND t.status = 'OPEN' AND t.direction = 'BTO'
                     ORDER BY t.id DESC LIMIT 1

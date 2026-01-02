@@ -3102,5 +3102,37 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "created_at": "2025-12-31T18:01:27.030559"
+  },
+  "ALPACA_PAPER_SIDU_stock": {
+    "entry_price": 3.770033,
+    "highest_price": 4.159,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-02T14:39:24.996156"
+  },
+  "ALPACA_PAPER_QQQ_621.0_2026-01-02_C": {
+    "entry_price": 0.84,
+    "highest_price": 0.77,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "QQQ260102C00621000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-02T15:10:40.395349"
   }
 }
