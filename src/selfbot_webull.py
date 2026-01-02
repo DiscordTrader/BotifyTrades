@@ -6709,7 +6709,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 try:
                                     action = parsed_opt.get('action', 'BTO')
                                     qty = parsed_opt.get('qty')
-                                    qty_specified = parsed_opt.get('qty_specified', False)
+                                    qty_from_signal = parsed_opt.get('_qty_from_signal', False)
                                     symbol = parsed_opt.get('symbol', '')
                                     strike = parsed_opt.get('strike', '')
                                     opt_type = parsed_opt.get('opt_type', 'C')
@@ -6717,7 +6717,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     price = parsed_opt.get('price')
                                     price_str = f"@ {price}" if price else "@ m"
                                     # Only include qty in forward if source signal had it AND it's valid
-                                    if qty_specified and qty is not None:
+                                    if qty_from_signal and qty is not None:
                                         forward_msg = f"{action} {qty} {symbol} {strike}{opt_type} {expiry} {price_str}"
                                     else:
                                         forward_msg = f"{action} {symbol} {strike}{opt_type} {expiry} {price_str}"
