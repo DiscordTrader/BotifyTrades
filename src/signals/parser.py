@@ -102,6 +102,31 @@ BULLWINKLE_EXIT_COMPLEX = re.compile(
 BULLWINKLE_ENTRY_PATTERN = BULLWINKLE_ENTRY_STANDARD
 BULLWINKLE_EXIT_PATTERN = BULLWINKLE_EXIT_PIPE_PRICE
 
+# Z-Scalps format patterns (simple pipe format WITHOUT emojis)
+# Entry: TSLA | $460 C NEXT WEEK 7.15 @everyone
+ZSCALPS_ENTRY_PATTERN = re.compile(
+    r'^([A-Z]{1,5})\s*\|\s*\$?([\d.]+)\s*([CP])\s+(.+?)\s+([\d.]+)(?:\s*@everyone)?$',
+    re.IGNORECASE | re.MULTILINE
+)
+
+# Entry variant: TSLA | $460 C 7.15 (price before expiry or no expiry)
+ZSCALPS_ENTRY_PRICE_FIRST = re.compile(
+    r'^([A-Z]{1,5})\s*\|\s*\$?([\d.]+)\s*([CP])\s+([\d.]+)(?:\s+(.+?))?(?:\s*@everyone)?$',
+    re.IGNORECASE | re.MULTILINE
+)
+
+# Exit: TSLA | 7.45 OUT (or TSLA | 7.45 OUT ALL)
+ZSCALPS_EXIT_PATTERN = re.compile(
+    r'^([A-Z]{1,5})\s*\|\s*([\d.]+)\s*OUT',
+    re.IGNORECASE | re.MULTILINE
+)
+
+# Exit variant: TSLA | PRICE PENDING ORDER TO EXIT HALF
+ZSCALPS_EXIT_PENDING = re.compile(
+    r'^([A-Z]{1,5})\s*\|\s*([\d.]+)\s*PENDING\s+ORDER',
+    re.IGNORECASE | re.MULTILINE
+)
+
 # TRADE IDEA format patterns (C1apped style)
 TRADE_IDEA_TICKER_PATTERN = re.compile(
     r'(?:📌\s*)?(?:Ticker|Symbol):\s*\$?([A-Z]+)',
@@ -519,6 +544,109 @@ def is_bullwinkle_signal(text: str) -> bool:
         if indicator.lower() in text_lower:
             return True
     return False
+
+
+def is_zscalps_signal(text: str) -> bool:
+    """Check if text is a Z-scalps format signal (SYMBOL | STRIKE C/P ...)."""
+    clean_text = re.sub(r'@everyone|@here', '', text).strip()
+    # Must have pipe format but NOT Bullwinkle emojis
+    if '|' not in clean_text:
+        return False
+    if is_bullwinkle_signal(text):
+        return False
+    # Check for SYMBOL | pattern at start
+    if ZSCALPS_ENTRY_PATTERN.search(clean_text):
+        return True
+    if ZSCALPS_ENTRY_PRICE_FIRST.search(clean_text):
+        return True
+    if ZSCALPS_EXIT_PATTERN.search(clean_text):
+        return True
+    if ZSCALPS_EXIT_PENDING.search(clean_text):
+        return True
+    return False
+
+
+def parse_zscalps_signal(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse Z-scalps format signals (simple pipe format without emojis).
+    
+    Supports:
+    - TSLA | $460 C NEXT WEEK 7.15 @everyone (entry with expiry)
+    - TSLA | $460 C 7.15 (entry, price at end)
+    - TSLA | 7.45 OUT (exit)
+    - TSLA | 7.35 PENDING ORDER TO EXIT HALF (partial exit)
+    
+    Returns structured dict with symbol, strike, opt_type, expiry, price, action.
+    """
+    if not is_zscalps_signal(text):
+        return None
+    
+    clean_text = re.sub(r'@everyone|@here|✅|✔', '', text).strip()
+    
+    # Try exit patterns first
+    
+    # Exit: TSLA | 7.45 OUT
+    match = ZSCALPS_EXIT_PATTERN.search(clean_text)
+    if match:
+        symbol, price = match.groups()
+        return {
+            'action': 'STC',
+            'symbol': symbol.upper(),
+            'price': float(price) if price else None,
+            'qty': None,
+            'is_exit': True,
+            '_zscalps': True,
+            '_needs_position_lookup': True,
+        }
+    
+    # Partial exit: TSLA | 7.35 PENDING ORDER TO EXIT HALF
+    match = ZSCALPS_EXIT_PENDING.search(clean_text)
+    if match:
+        symbol, price = match.groups()
+        return {
+            'action': 'STC',
+            'symbol': symbol.upper(),
+            'price': float(price) if price else None,
+            'qty': None,  # HALF = partial
+            'is_exit': True,
+            '_zscalps': True,
+            '_partial': True,
+            '_needs_position_lookup': True,
+        }
+    
+    # Entry: TSLA | $460 C NEXT WEEK 7.15 (expiry between C/P and price)
+    match = ZSCALPS_ENTRY_PATTERN.search(clean_text)
+    if match:
+        symbol, strike, opt_type, expiry_text, price = match.groups()
+        expiry = _parse_bullwinkle_expiry(expiry_text.strip())
+        return {
+            'action': 'BTO',
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': opt_type.upper(),
+            'expiry': expiry,
+            'price': float(price),
+            'qty': 1,
+            '_zscalps': True,
+        }
+    
+    # Entry variant: TSLA | $460 C 7.15 (price right after opt_type)
+    match = ZSCALPS_ENTRY_PRICE_FIRST.search(clean_text)
+    if match:
+        symbol, strike, opt_type, price, expiry_text = match.groups()
+        expiry = _parse_bullwinkle_expiry(expiry_text.strip() if expiry_text else '')
+        return {
+            'action': 'BTO',
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': opt_type.upper(),
+            'expiry': expiry,
+            'price': float(price),
+            'qty': 1,
+            '_zscalps': True,
+        }
+    
+    return None
 
 
 def parse_bullwinkle_signal(text: str) -> Optional[Dict[str, Any]]:

@@ -6469,13 +6469,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     is_bullwinkle_signal, parse_bullwinkle_signal, 
                     strip_bullwinkle_emojis, format_bullwinkle_for_webhook,
                     is_bracket_order_signal, parse_bracket_order_signal,
-                    is_jacob_signal, parse_jacob_signal, format_jacob_for_webhook
+                    is_jacob_signal, parse_jacob_signal, format_jacob_for_webhook,
+                    is_zscalps_signal, parse_zscalps_signal
                 )
                 is_bullwinkle = is_bullwinkle_signal(combined_content)
                 is_bracket_order = is_bracket_order_signal(combined_content)
                 is_jacob = is_jacob_signal(combined_content)
+                is_zscalps = is_zscalps_signal(combined_content)
                 
-                if is_bto_stc_signal or is_bullwinkle or is_jacob:
+                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps:
                     print(f"[DEBUG] BTO/STC or Bullwinkle signal detected - will process for trade execution")
                     
                     is_webhook_dest = destination_type == 'webhook' and target_execution_channel_id and target_execution_channel_id.startswith('https://')
@@ -6487,8 +6489,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         import sys
                         print(f"[DEBUG] Entering forward block (type={destination_type})...", flush=True)
                         # Prepare message for forwarding - convert to BTO/STC format when enabled
-                        print(f"[DEBUG] is_bullwinkle={is_bullwinkle}, format_as_bto_stc={format_as_bto_stc}", flush=True)
-                        if is_bullwinkle:
+                        print(f"[DEBUG] is_bullwinkle={is_bullwinkle}, is_zscalps={is_zscalps}, format_as_bto_stc={format_as_bto_stc}", flush=True)
+                        if is_zscalps:
+                            print(f"[DEBUG] Taking ZSCALPS path", flush=True)
+                            zscalps_parsed = parse_zscalps_signal(combined_content)
+                            if zscalps_parsed:
+                                # Format as BTO/STC
+                                action = zscalps_parsed.get('action', 'BTO')
+                                symbol = zscalps_parsed.get('symbol', '')
+                                price = zscalps_parsed.get('price')
+                                if action == 'BTO':
+                                    strike = zscalps_parsed.get('strike', '')
+                                    opt_type = zscalps_parsed.get('opt_type', 'C')
+                                    expiry = zscalps_parsed.get('expiry', '')
+                                    price_str = f"@ {price}" if price else "@ m"
+                                    forward_msg = f"BTO ${symbol} {strike}{opt_type} {expiry} {price_str}"
+                                else:
+                                    price_str = f"@ {price}" if price else ""
+                                    forward_msg = f"STC ${symbol} {price_str}"
+                                print(f"[CHANNEL MAP] ✓ Formatted Z-scalps: {forward_msg}")
+                            else:
+                                forward_msg = combined_content.strip()
+                                print(f"[CHANNEL MAP] ⚠️ Z-scalps parse failed, forwarding raw")
+                        elif is_bullwinkle:
                             print(f"[DEBUG] Taking BULLWINKLE path", flush=True)
                             bullwinkle_parsed = parse_bullwinkle_signal(combined_content)
                             if bullwinkle_parsed:
