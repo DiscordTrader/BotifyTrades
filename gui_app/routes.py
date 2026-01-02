@@ -7018,12 +7018,14 @@ def register_routes(app):
             - status: Filter by position status (OPEN, PARTIAL, CLOSED)
             - start_date: Filter positions opened on or after this date (YYYY-MM-DD)
             - end_date: Filter positions opened on or before this date (YYYY-MM-DD)
+            - market: Filter by market ('US' or 'INDIA')
         """
         channel_id = request.args.get('channel_id', type=int)
         author_filter = request.args.get('author', '').strip()
         status_filter = request.args.get('status', '').strip().upper()
         start_date = request.args.get('start_date', '').strip()
         end_date = request.args.get('end_date', '').strip()
+        market = request.args.get('market', 'US').strip().upper()
         
         try:
             conn = db.get_connection()
@@ -7060,10 +7062,17 @@ def register_routes(app):
                 FROM signal_lots sl
                 LEFT JOIN lot_closures lc ON sl.id = lc.lot_id
                 LEFT JOIN channels c ON sl.channel_id = c.id
+                LEFT JOIN signals s ON sl.signal_id = s.id
                 WHERE 1=1
             '''
             
             params = []
+            
+            # Market filter (filter via signals.market column)
+            if market and market in ('US', 'INDIA'):
+                query += ' AND COALESCE(s.market, \'US\') = ?'
+                params.append(market)
+            
             if channel_id:
                 query += ' AND sl.channel_id = ?'
                 params.append(channel_id)
