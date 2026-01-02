@@ -6952,6 +6952,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 await self.handle_extract_history(message, channel_id, limit)
                 return
         
+        # Allow !extracthistory from ANY channel (for admin use)
+        if message.content.strip().lower().startswith('!extracthistory') and self.user and message.author.id == self.user.id:
+            content = message.content.strip()
+            args = content[15:].strip().split()
+            channel_id = int(args[0]) if args else 1239624229583061052  # Default to Bishop
+            limit = int(args[1]) if len(args) > 1 else 200
+            await self.handle_extract_history(message, channel_id, limit)
+            return
+        
         # Pre-process special formats (Bullwinkle scalps, etc.)
         from src.signals.parser import (
             normalize_bullwinkle_format, is_india_signal, parse_india_option_signal, 
