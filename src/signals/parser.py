@@ -104,26 +104,28 @@ BULLWINKLE_EXIT_PATTERN = BULLWINKLE_EXIT_PIPE_PRICE
 
 # Z-Scalps format patterns (simple pipe format WITHOUT emojis)
 # Entry: TSLA | $460 C NEXT WEEK 7.15 @everyone
+# Entry: SPY | $680 P 1.82 @everyone (immediate price after C/P)
 ZSCALPS_ENTRY_PATTERN = re.compile(
-    r'^([A-Z]{1,5})\s*\|\s*\$?([\d.]+)\s*([CP])\s+(.+?)\s+([\d.]+)(?:\s*@everyone)?$',
+    r'(?:^|\s)([A-Z]{1,5})\s*\|\s*\$?([\d.]+)\s*([CP])\s+(.+?)\s+([\d.]+)(?:\s|@everyone|$)',
     re.IGNORECASE | re.MULTILINE
 )
 
-# Entry variant: TSLA | $460 C 7.15 (price before expiry or no expiry)
+# Entry variant: TSLA | $460 C 7.15 (price right after C/P with optional expiry after)
+# Also handles: SPY | $680 P 1.82 @everyone
 ZSCALPS_ENTRY_PRICE_FIRST = re.compile(
-    r'^([A-Z]{1,5})\s*\|\s*\$?([\d.]+)\s*([CP])\s+([\d.]+)(?:\s+(.+?))?(?:\s*@everyone)?$',
+    r'(?:^|\s)([A-Z]{1,5})\s*\|\s*\$?([\d.]+)\s*([CP])\s+([\d.]+)(?:\s+(.+?))?(?:\s|@everyone|$)',
     re.IGNORECASE | re.MULTILINE
 )
 
-# Exit: TSLA | 7.45 OUT (or TSLA | 7.45 OUT ALL)
+# Exit: TSLA | 7.45 OUT (or TSLA | 7.45 OUT ALL, SPY | 1.91 OUT HALF)
 ZSCALPS_EXIT_PATTERN = re.compile(
-    r'^([A-Z]{1,5})\s*\|\s*([\d.]+)\s*OUT',
+    r'(?:^|\s)([A-Z]{1,5})\s*\|\s*([\d.]+)\s*OUT',
     re.IGNORECASE | re.MULTILINE
 )
 
 # Exit variant: TSLA | PRICE PENDING ORDER TO EXIT HALF
 ZSCALPS_EXIT_PENDING = re.compile(
-    r'^([A-Z]{1,5})\s*\|\s*([\d.]+)\s*PENDING\s+ORDER',
+    r'(?:^|\s)([A-Z]{1,5})\s*\|\s*([\d.]+)\s*PENDING\s+ORDER',
     re.IGNORECASE | re.MULTILINE
 )
 
