@@ -7063,6 +7063,196 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
 
+    @app.route('/api/pnl/purge/by-date', methods=['POST'])
+    def api_purge_pnl_by_date():
+        """Purge PNL data for a specific date or date range"""
+        try:
+            import sqlite3
+            data = request.json
+            start_date = data.get('start_date')  # YYYY-MM-DD
+            end_date = data.get('end_date')  # YYYY-MM-DD (optional, defaults to start_date)
+            
+            if not start_date:
+                return jsonify({'error': 'start_date is required'}), 400
+            
+            if not end_date:
+                end_date = start_date
+            
+            conn = sqlite3.connect(db.get_db_path())
+            cursor = conn.cursor()
+            
+            # Delete lot_closures for the date range
+            cursor.execute('''
+                DELETE FROM lot_closures 
+                WHERE date(closed_at) BETWEEN ? AND ?
+            ''', (start_date, end_date))
+            closures_deleted = cursor.rowcount
+            
+            # Delete signal_lots opened in the date range that are now empty
+            cursor.execute('''
+                DELETE FROM signal_lots 
+                WHERE date(opened_at) BETWEEN ? AND ?
+                AND status = 'CLOSED'
+            ''', (start_date, end_date))
+            lots_deleted = cursor.rowcount
+            
+            # Delete signals from the date range
+            cursor.execute('''
+                DELETE FROM signals 
+                WHERE date(timestamp) BETWEEN ? AND ?
+            ''', (start_date, end_date))
+            signals_deleted = cursor.rowcount
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"[API] Purged PNL data for {start_date} to {end_date}: {closures_deleted} closures, {lots_deleted} lots, {signals_deleted} signals")
+            
+            return jsonify({
+                'success': True,
+                'message': f'Purged data from {start_date} to {end_date}',
+                'deleted': {
+                    'closures': closures_deleted,
+                    'lots': lots_deleted,
+                    'signals': signals_deleted
+                }
+            })
+            
+        except Exception as e:
+            print(f"[API] Error purging PNL by date: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/pnl/purge/by-author', methods=['POST'])
+    def api_purge_pnl_by_author():
+        """Purge PNL data for a specific author/person"""
+        try:
+            import sqlite3
+            data = request.json
+            author_name = data.get('author_name')
+            
+            if not author_name:
+                return jsonify({'error': 'author_name is required'}), 400
+            
+            conn = sqlite3.connect(db.get_db_path())
+            cursor = conn.cursor()
+            
+            # Delete lot_closures for the author
+            cursor.execute('''
+                DELETE FROM lot_closures 
+                WHERE author_name = ? OR author_name LIKE ?
+            ''', (author_name, f'{author_name}#%'))
+            closures_deleted = cursor.rowcount
+            
+            # Delete signal_lots for the author
+            cursor.execute('''
+                DELETE FROM signal_lots 
+                WHERE author_name = ? OR author_name LIKE ?
+            ''', (author_name, f'{author_name}#%'))
+            lots_deleted = cursor.rowcount
+            
+            # Delete signals for the author
+            cursor.execute('''
+                DELETE FROM signals 
+                WHERE author_name = ? OR author_name LIKE ?
+            ''', (author_name, f'{author_name}#%'))
+            signals_deleted = cursor.rowcount
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"[API] Purged PNL data for author '{author_name}': {closures_deleted} closures, {lots_deleted} lots, {signals_deleted} signals")
+            
+            return jsonify({
+                'success': True,
+                'message': f'Purged all data for {author_name}',
+                'deleted': {
+                    'closures': closures_deleted,
+                    'lots': lots_deleted,
+                    'signals': signals_deleted
+                }
+            })
+            
+        except Exception as e:
+            print(f"[API] Error purging PNL by author: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/pnl/authors', methods=['GET'])
+    def api_get_pnl_authors():
+        """Get list of all authors with PNL data"""
+        try:
+            import sqlite3
+            conn = sqlite3.connect(db.get_db_path())
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT DISTINCT author_name, COUNT(*) as trade_count, SUM(pnl) as total_pnl
+                FROM lot_closures 
+                WHERE author_name IS NOT NULL AND author_name != ''
+                GROUP BY author_name
+                ORDER BY trade_count DESC
+            ''')
+            
+            authors = []
+            for row in cursor.fetchall():
+                authors.append({
+                    'author_name': row['author_name'],
+                    'trade_count': row['trade_count'],
+                    'total_pnl': round(row['total_pnl'] or 0, 2)
+                })
+            
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'authors': authors
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting PNL authors: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/pnl/dates', methods=['GET'])
+    def api_get_pnl_dates():
+        """Get list of dates with PNL data"""
+        try:
+            import sqlite3
+            conn = sqlite3.connect(db.get_db_path())
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT date(closed_at) as trade_date, COUNT(*) as trade_count, SUM(pnl) as total_pnl
+                FROM lot_closures 
+                WHERE closed_at IS NOT NULL
+                GROUP BY date(closed_at)
+                ORDER BY trade_date DESC
+                LIMIT 100
+            ''')
+            
+            dates = []
+            for row in cursor.fetchall():
+                dates.append({
+                    'date': row['trade_date'],
+                    'trade_count': row['trade_count'],
+                    'total_pnl': round(row['total_pnl'] or 0, 2)
+                })
+            
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'dates': dates
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting PNL dates: {e}")
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/api/settings/signal_conversion', methods=['GET'])
     def api_get_signal_conversion_settings():
         """Get signal conversion settings"""
