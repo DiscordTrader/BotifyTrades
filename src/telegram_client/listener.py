@@ -486,7 +486,13 @@ class TelegramListener:
             
             action = signal.get('action', 'BTO')
             symbol = signal.get('symbol', '')
-            quantity = signal.get('quantity', 1)
+            market = signal.get('market', 'US')
+            
+            if market == 'INDIA':
+                quantity = signal.get('lots') or signal.get('qty') or 1
+            else:
+                quantity = signal.get('qty') or signal.get('quantity') or 1
+            
             price = signal.get('price') or 0
             asset_type = signal.get('asset_type', 'option')
             strike = signal.get('strike')
@@ -494,7 +500,6 @@ class TelegramListener:
             call_put = signal.get('option_type') or signal.get('call_put')
             author_name = signal.get('author_name', msg.author_name)
             channel_id = signal.get('channel_id', str(msg.chat_id))
-            market = signal.get('market', 'US')
             
             signal_id = add_signal(
                 discord_channel_id=channel_id,
