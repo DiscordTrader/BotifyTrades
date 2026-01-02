@@ -5366,10 +5366,12 @@ def register_routes(app):
     @login_required
     def api_update_telegram_settings():
         """Update Telegram integration settings"""
+        print("[TELEGRAM API] POST /api/settings/telegram received")
         try:
             from gui_app.database import update_telegram_settings
             
             data = request.json
+            print(f"[TELEGRAM API] Request data: enabled={data.get('enabled')}, api_id={data.get('api_id')}, phone={data.get('phone_number')}")
             
             success = update_telegram_settings(
                 enabled=data.get('enabled'),
