@@ -287,10 +287,16 @@ class TelegramListener:
             
             chat_id = event.chat_id
             chat_username = getattr(chat, 'username', None)
+            chat_title = getattr(chat, 'title', None) or chat_username or str(chat_id)
+            content = message.text or ''
+            
+            # Debug: Log all incoming messages
+            print(f"[TELEGRAM MSG] Chat: {chat_title} (ID: {chat_id}) | Text: {content[:100]}")
             
             # Check if this chat is monitored (by ID or @username)
             is_monitored, config_key = self._is_chat_monitored(chat_id, chat_username)
             if self._monitored_chats and not is_monitored:
+                print(f"[TELEGRAM] Skipping - chat {chat_id} not in monitored list: {self._monitored_chats}")
                 return
             
             chat_name = getattr(chat, 'title', None) or chat_username or str(chat_id)
