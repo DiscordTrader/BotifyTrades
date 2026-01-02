@@ -3153,7 +3153,7 @@
   },
   "ALPACA_PAPER_HOOD_stock": {
     "entry_price": 112.313212,
-    "highest_price": 115.6499,
+    "highest_price": 115.67,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3182,5 +3182,21 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "created_at": "2026-01-02T18:09:20.799681"
+  },
+  "ALPACA_PAPER_DVLT_stock": {
+    "entry_price": 0.94,
+    "highest_price": 1.0496,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-02T18:36:32.585195"
   }
 }
