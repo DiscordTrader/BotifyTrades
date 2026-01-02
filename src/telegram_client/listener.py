@@ -9,9 +9,16 @@ signal parsers used for Discord.
 import asyncio
 import os
 import queue
+import sys
 from typing import Optional, Dict, Any, Callable, List, Set, Union, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
+
+
+def _print_flush(msg: str) -> None:
+    """Print with explicit flush to ensure output appears in logs."""
+    print(msg, flush=True)
+    sys.stdout.flush()
 
 
 try:
@@ -291,12 +298,12 @@ class TelegramListener:
             content = message.text or ''
             
             # Debug: Log all incoming messages
-            print(f"[TELEGRAM MSG] Chat: {chat_title} (ID: {chat_id}) | Text: {content[:100]}")
+            _print_flush(f"[TELEGRAM MSG] Chat: {chat_title} (ID: {chat_id}) | Text: {content[:100]}")
             
             # Check if this chat is monitored (by ID or @username)
             is_monitored, config_key = self._is_chat_monitored(chat_id, chat_username)
             if self._monitored_chats and not is_monitored:
-                print(f"[TELEGRAM] Skipping - chat {chat_id} not in monitored list: {self._monitored_chats}")
+                _print_flush(f"[TELEGRAM] Skipping - chat {chat_id} not in monitored list: {self._monitored_chats}")
                 return
             
             chat_name = getattr(chat, 'title', None) or chat_username or str(chat_id)
