@@ -3849,7 +3849,7 @@ def get_telegram_channels() -> List[Dict[str, Any]]:
                risk_management_enabled, position_size_pct, profit_target_1_pct,
                profit_target_2_pct, profit_target_3_pct, stop_loss_pct,
                trailing_stop_pct, trailing_activation_pct, exit_strategy_mode,
-               is_active, created_at
+               default_quantity, is_active, created_at
         FROM channels
         WHERE platform = 'telegram'
         ORDER BY name
@@ -3876,6 +3876,7 @@ def get_telegram_channels() -> List[Dict[str, Any]]:
             'trailing_stop_pct': row['trailing_stop_pct'],
             'trailing_activation_pct': row['trailing_activation_pct'],
             'exit_strategy_mode': row['exit_strategy_mode'] or 'signal',
+            'default_quantity': row['default_quantity'],
             'is_active': bool(row['is_active']),
             'created_at': row['created_at']
         })

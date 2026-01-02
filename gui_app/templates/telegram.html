@@ -390,6 +390,144 @@
         margin-top: 25px;
     }
 
+    .btn-settings {
+        background: rgba(124, 58, 237, 0.2);
+        color: var(--violet);
+        border: 1px solid var(--violet);
+        padding: 8px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .btn-settings:hover {
+        background: var(--violet);
+        color: white;
+    }
+
+    .settings-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 1000;
+        overflow-y: auto;
+    }
+
+    .settings-modal.active {
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 40px 20px;
+    }
+
+    .modal-content {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 20px;
+        padding: 30px;
+        max-width: 600px;
+        width: 100%;
+        margin: auto;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 25px;
+    }
+
+    .modal-header h3 {
+        color: var(--telegram-blue);
+        margin: 0;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 1.5rem;
+        cursor: pointer;
+    }
+
+    .modal-close:hover {
+        color: var(--danger);
+    }
+
+    .settings-section {
+        margin-bottom: 25px;
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 12px;
+    }
+
+    .settings-section h4 {
+        color: var(--mint);
+        margin-bottom: 15px;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .settings-row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+        margin-bottom: 15px;
+    }
+
+    .settings-row.single {
+        grid-template-columns: 1fr;
+    }
+
+    .setting-item label {
+        display: block;
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        margin-bottom: 6px;
+    }
+
+    .setting-item input, .setting-item select {
+        width: 100%;
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid var(--card-border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        color: var(--text-primary);
+        font-size: 0.9rem;
+    }
+
+    .setting-item input:focus, .setting-item select:focus {
+        outline: none;
+        border-color: var(--telegram-blue);
+    }
+
+    .risk-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-left: 10px;
+    }
+
+    .risk-badge.enabled {
+        background: rgba(16, 185, 129, 0.2);
+        color: var(--success);
+    }
+
+    .risk-badge.disabled {
+        background: rgba(239, 68, 68, 0.2);
+        color: var(--danger);
+    }
+
     @media (max-width: 768px) {
         .form-row {
             grid-template-columns: 1fr;
@@ -526,6 +664,113 @@
                     <p>No Telegram channels configured yet.<br>Add a channel to start receiving signals.</p>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<div id="channelSettingsModal" class="settings-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-cog"></i> Channel Settings</h3>
+            <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
+        </div>
+        <input type="hidden" id="settingsChannelId">
+
+        <div class="settings-section">
+            <h4><i class="fas fa-chart-line"></i> Position Sizing</h4>
+            <div class="settings-row">
+                <div class="setting-item">
+                    <label>Position Size (%)</label>
+                    <input type="number" id="settingsPositionSize" placeholder="Auto" min="0.1" max="100" step="0.1">
+                </div>
+                <div class="setting-item">
+                    <label>Default Quantity</label>
+                    <input type="number" id="settingsDefaultQty" placeholder="Use global default" min="1" step="1">
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h4><i class="fas fa-exchange-alt"></i> Broker Override</h4>
+            <div class="settings-row single">
+                <div class="setting-item">
+                    <label>Broker for this channel</label>
+                    <select id="settingsBrokerOverride">
+                        <option value="">Use Global Default</option>
+                        <option value="webull">Webull</option>
+                        <option value="alpaca">Alpaca</option>
+                        <option value="tastytrade">Tastytrade</option>
+                        <option value="ibkr">Interactive Brokers</option>
+                        <option value="robinhood">Robinhood</option>
+                        <option value="zerodha">Zerodha (India)</option>
+                        <option value="upstox">Upstox (India)</option>
+                        <option value="dhanq">DhanQ (India)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h4><i class="fas fa-door-open"></i> Exit Strategy</h4>
+            <div class="settings-row single">
+                <div class="setting-item">
+                    <label>Exit Strategy Mode</label>
+                    <select id="settingsExitMode">
+                        <option value="signal">Signal - Follow trader's exit signals</option>
+                        <option value="risk">Risk - Use automated risk management only</option>
+                        <option value="hybrid">Hybrid - Both signals and risk management</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h4>
+                <i class="fas fa-shield-alt"></i> Risk Management
+                <label class="toggle-switch" style="margin-left: auto;">
+                    <input type="checkbox" id="settingsRiskEnabled" onchange="toggleRiskInputs()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </h4>
+            <div id="riskInputs">
+                <div class="settings-row">
+                    <div class="setting-item">
+                        <label>Profit Target 1 (%)</label>
+                        <input type="number" id="settingsPT1" placeholder="e.g., 25" min="1" max="500" step="1">
+                    </div>
+                    <div class="setting-item">
+                        <label>Profit Target 2 (%)</label>
+                        <input type="number" id="settingsPT2" placeholder="e.g., 50" min="1" max="500" step="1">
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div class="setting-item">
+                        <label>Profit Target 3 (%)</label>
+                        <input type="number" id="settingsPT3" placeholder="e.g., 100" min="1" max="500" step="1">
+                    </div>
+                    <div class="setting-item">
+                        <label>Stop Loss (%)</label>
+                        <input type="number" id="settingsStopLoss" placeholder="e.g., 25" min="1" max="100" step="1">
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div class="setting-item">
+                        <label>Trailing Stop (%)</label>
+                        <input type="number" id="settingsTrailingStop" placeholder="e.g., 15" min="1" max="100" step="1">
+                    </div>
+                    <div class="setting-item">
+                        <label>Trailing Activation (%)</label>
+                        <input type="number" id="settingsTrailingActivation" placeholder="e.g., 20" min="1" max="500" step="1">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="button-row" style="justify-content: flex-end;">
+            <button class="btn-secondary" onclick="closeSettingsModal()">Cancel</button>
+            <button class="btn-primary" onclick="saveChannelSettings()">
+                <i class="fas fa-save"></i> Save Settings
+            </button>
         </div>
     </div>
 </div>
@@ -717,6 +962,9 @@
                     </div>
                 </div>
                 <div class="channel-actions">
+                    <button class="btn-settings" onclick="openChannelSettings(${channel.id})" title="Channel Settings">
+                        <i class="fas fa-cog"></i>
+                    </button>
                     <button class="btn-danger" onclick="deleteChannel(${channel.id})" title="Delete channel">
                         <i class="fas fa-trash"></i>
                     </button>
@@ -820,8 +1068,100 @@
     }
 
     function editChannel(channelId) {
-        showToast('Edit channel settings from the Channels page', 'info');
+        openChannelSettings(channelId);
     }
+
+    function openChannelSettings(channelId) {
+        const channel = telegramChannels.find(c => c.id === channelId);
+        if (!channel) {
+            showToast('Channel not found', 'error');
+            return;
+        }
+
+        document.getElementById('settingsChannelId').value = channelId;
+        document.getElementById('settingsPositionSize').value = channel.position_size_pct || '';
+        document.getElementById('settingsDefaultQty').value = channel.default_quantity || '';
+        document.getElementById('settingsBrokerOverride').value = channel.broker_override || '';
+        document.getElementById('settingsExitMode').value = channel.exit_strategy_mode || 'signal';
+        document.getElementById('settingsRiskEnabled').checked = channel.risk_management_enabled || false;
+        document.getElementById('settingsPT1').value = channel.profit_target_1_pct || '';
+        document.getElementById('settingsPT2').value = channel.profit_target_2_pct || '';
+        document.getElementById('settingsPT3').value = channel.profit_target_3_pct || '';
+        document.getElementById('settingsStopLoss').value = channel.stop_loss_pct || '';
+        document.getElementById('settingsTrailingStop').value = channel.trailing_stop_pct || '';
+        document.getElementById('settingsTrailingActivation').value = channel.trailing_activation_pct || '';
+
+        toggleRiskInputs();
+        document.getElementById('channelSettingsModal').classList.add('active');
+    }
+
+    function closeSettingsModal() {
+        document.getElementById('channelSettingsModal').classList.remove('active');
+    }
+
+    function toggleRiskInputs() {
+        const enabled = document.getElementById('settingsRiskEnabled').checked;
+        const inputs = document.getElementById('riskInputs');
+        inputs.style.opacity = enabled ? '1' : '0.5';
+        inputs.style.pointerEvents = enabled ? 'auto' : 'none';
+    }
+
+    async function saveChannelSettings() {
+        const channelId = document.getElementById('settingsChannelId').value;
+        
+        const posSize = document.getElementById('settingsPositionSize').value;
+        const defaultQty = document.getElementById('settingsDefaultQty').value;
+        const brokerOverride = document.getElementById('settingsBrokerOverride').value;
+        const exitMode = document.getElementById('settingsExitMode').value;
+        const riskEnabled = document.getElementById('settingsRiskEnabled').checked;
+        const pt1 = document.getElementById('settingsPT1').value;
+        const pt2 = document.getElementById('settingsPT2').value;
+        const pt3 = document.getElementById('settingsPT3').value;
+        const stopLoss = document.getElementById('settingsStopLoss').value;
+        const trailingStop = document.getElementById('settingsTrailingStop').value;
+        const trailingActivation = document.getElementById('settingsTrailingActivation').value;
+
+        const payload = {
+            position_size_pct: posSize ? parseFloat(posSize) : null,
+            default_quantity: defaultQty ? parseInt(defaultQty) : null,
+            broker_override: brokerOverride || null,
+            exit_strategy_mode: exitMode,
+            risk_management_enabled: riskEnabled ? 1 : 0,
+            profit_target_1_pct: pt1 ? parseFloat(pt1) : null,
+            profit_target_2_pct: pt2 ? parseFloat(pt2) : null,
+            profit_target_3_pct: pt3 ? parseFloat(pt3) : null,
+            stop_loss_pct: stopLoss ? parseFloat(stopLoss) : null,
+            trailing_stop_pct: trailingStop ? parseFloat(trailingStop) : null,
+            trailing_activation_pct: trailingActivation ? parseFloat(trailingActivation) : null
+        };
+
+        try {
+            const response = await fetch(`/api/telegram/channels/${channelId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showToast('Channel settings saved', 'success');
+                closeSettingsModal();
+                loadChannels();
+            } else {
+                showToast(data.error || 'Failed to save settings', 'error');
+            }
+        } catch (error) {
+            console.error('Error saving channel settings:', error);
+            showToast('Error saving settings', 'error');
+        }
+    }
+
+    document.getElementById('channelSettingsModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeSettingsModal();
+        }
+    });
 
     function escapeHtml(text) {
         const div = document.createElement('div');
