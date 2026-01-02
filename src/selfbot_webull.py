@@ -5319,6 +5319,9 @@ class SelfClient(discord.Client):
         self.processing_ready.set()
         print("[Init] ✓ Worker task started; processing signals.")
         
+        telegram_bridge_task = asyncio.create_task(self.telegram_signal_bridge())
+        await asyncio.sleep(0)
+        
         # Initialize trade tracker if AI analysis is enabled
         if self.trade_analyzer and TradeTracker:
             try:
@@ -8042,6 +8045,42 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             traceback.print_exc()
             await message.channel.send(f"❌ Analysis failed: {str(e)}")
     
+    async def telegram_signal_bridge(self):
+        """
+        Bridge task that polls signals from the thread-safe Telegram queue
+        and pushes them to the async order queue for processing.
+        This enables cross-thread signal passing from Telegram to the worker.
+        """
+        global _telegram_signal_queue
+        
+        if _telegram_signal_queue is None:
+            return
+        
+        _original_print("[TELEGRAM BRIDGE] ✓ Started - bridging Telegram signals to order queue", flush=True)
+        
+        while True:
+            try:
+                try:
+                    import queue as std_queue
+                    signal = _telegram_signal_queue.get(timeout=1.0)
+                    
+                    _original_print(f"[TELEGRAM BRIDGE] Received signal: {signal.get('action')} {signal.get('symbol')}", flush=True)
+                    
+                    await self.order_queue.put(signal)
+                    _original_print(f"[TELEGRAM BRIDGE] ✓ Signal forwarded to order queue", flush=True)
+                    
+                except std_queue.Empty:
+                    pass
+                
+                await asyncio.sleep(0.1)
+                
+            except asyncio.CancelledError:
+                _original_print("[TELEGRAM BRIDGE] Shutdown requested", flush=True)
+                break
+            except Exception as e:
+                _original_print(f"[TELEGRAM BRIDGE] Error: {e}", flush=True)
+                await asyncio.sleep(1.0)
+    
     async def worker(self):
         """Process orders from queue with pre-trade analysis"""
         _original_print("[WORKER] 💤 Waiting for broker_ready event...", flush=True)
@@ -9026,6 +9065,93 @@ def run_discord_bot_thread():
         _original_print("[Discord Thread] Shutting down...")
         _discord_shutdown_event.set()
 
+
+_telegram_ready_event = None
+_telegram_shutdown_event = None
+_telegram_signal_queue = None
+
+def run_telegram_bot_thread():
+    """
+    Runs Telegram listener in its own dedicated thread with isolated asyncio event loop.
+    Uses Telethon to connect as a user account to read trading signals.
+    Signals are passed via a thread-safe queue.Queue to avoid cross-loop issues.
+    """
+    global _telegram_ready_event, _telegram_shutdown_event, _telegram_signal_queue
+    
+    async def telegram_main():
+        """Async entrypoint for Telegram listener with proper lifecycle"""
+        try:
+            _original_print("[Telegram Thread] Starting Telegram listener...")
+            
+            from gui_app.database import get_telegram_settings, get_telegram_channels
+            settings = get_telegram_settings()
+            
+            if not settings.get('enabled'):
+                _original_print("[Telegram Thread] Telegram integration is disabled in settings")
+                _telegram_ready_event.set()
+                return
+            
+            api_id = settings.get('api_id')
+            api_hash = settings.get('api_hash')
+            phone_number = settings.get('phone_number')
+            session_string = settings.get('session_string')
+            
+            if not api_id or not api_hash:
+                _original_print("[Telegram Thread] Telegram API credentials not configured")
+                _telegram_ready_event.set()
+                return
+            
+            from src.telegram_client import TelegramListener
+            
+            listener = TelegramListener(
+                api_id=api_id,
+                api_hash=api_hash,
+                phone_number=phone_number,
+                session_string=session_string,
+            )
+            
+            if _telegram_signal_queue is not None:
+                listener.set_sync_signal_queue(_telegram_signal_queue)
+                _original_print("[Telegram Thread] Using thread-safe signal queue")
+            
+            if parse_option_signal:
+                listener.register_parser('option_signal', parse_option_signal)
+            if parse_stock_signal:
+                listener.register_parser('stock_signal', parse_stock_signal)
+            
+            listener.load_channels_from_db()
+            
+            connected = await listener.connect()
+            if not connected:
+                _original_print("[Telegram Thread] Could not connect to Telegram")
+                _telegram_ready_event.set()
+                return
+            
+            _original_print("[Telegram Thread] ✓ Telegram listener connected")
+            _telegram_ready_event.set()
+            
+            await listener.start_listening()
+            
+        except ImportError as e:
+            _original_print(f"[Telegram Thread] Telethon not available: {e}")
+            _telegram_ready_event.set()
+        except Exception as e:
+            _original_print(f"[Telegram Thread ERROR] Listener crashed: {e}")
+            import traceback
+            traceback.print_exc()
+            _telegram_ready_event.set()
+    
+    try:
+        asyncio.run(telegram_main())
+    except KeyboardInterrupt:
+        _original_print("\n[Telegram Thread] Stopped by user (Ctrl+C)")
+    except Exception as e:
+        _original_print(f"[Telegram Thread] Exception escaped asyncio.run(): {e}")
+    finally:
+        _original_print("[Telegram Thread] Shutting down...")
+        _telegram_shutdown_event.set()
+
+
 if __name__ == '__main__':
     import threading
     import queue
@@ -9079,6 +9205,9 @@ Environment Variables:
     _discord_ready_event = threading.Event()
     _discord_shutdown_event = threading.Event()
     _discord_error_queue = queue.Queue()
+    _telegram_ready_event = threading.Event()
+    _telegram_shutdown_event = threading.Event()
+    _telegram_signal_queue = queue.Queue()
     
     # Run startup diagnostics
     try:
@@ -9124,12 +9253,33 @@ Environment Variables:
     discord_thread.start()
     _original_print("[MAIN] ✓ Discord bot started in dedicated thread")
     
+    # Start Telegram listener in dedicated thread (if enabled)
+    telegram_thread = None
+    try:
+        from gui_app.database import get_telegram_settings
+        telegram_settings = get_telegram_settings()
+        if telegram_settings.get('enabled') and telegram_settings.get('api_id') and telegram_settings.get('api_hash'):
+            telegram_thread = threading.Thread(target=run_telegram_bot_thread, name="TelegramBot", daemon=False)
+            telegram_thread.start()
+            _original_print("[MAIN] ✓ Telegram listener started in dedicated thread")
+        else:
+            _original_print("[MAIN] Telegram integration not enabled or not configured")
+    except Exception as e:
+        _original_print(f"[MAIN] Telegram startup skipped: {e}")
+    
     # Wait for Discord to be ready (with timeout)
     _original_print("[MAIN] Waiting for Discord bot to connect...")
     if _discord_ready_event.wait(timeout=30):
         _original_print("[MAIN] ✓ Discord bot is ready and connected")
     else:
         _original_print("[MAIN] ⚠️  Discord bot did not connect within 30 seconds")
+    
+    # Wait for Telegram if it was started
+    if telegram_thread:
+        if _telegram_ready_event.wait(timeout=15):
+            _original_print("[MAIN] ✓ Telegram listener ready")
+        else:
+            _original_print("[MAIN] ⚠️  Telegram listener did not connect within 15 seconds")
     
     # Main thread monitoring loop - check for Discord errors and keep GUI alive
     discord_failed = False

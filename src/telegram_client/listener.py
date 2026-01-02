@@ -1,0 +1,463 @@
+"""
+TelegramListener - Telethon-based client for reading trading signals from Telegram.
+
+Uses a Telegram user account (not a bot) to access private groups and channels.
+Normalizes messages to a common format that can be processed by the same
+signal parsers used for Discord.
+"""
+
+import asyncio
+import os
+import queue
+from typing import Optional, Dict, Any, Callable, List, Set, Union
+from dataclasses import dataclass, field
+from datetime import datetime
+
+
+try:
+    from telethon import TelegramClient, events
+    from telethon.sessions import StringSession
+    from telethon.tl.types import Message, Channel, Chat, User
+    TELETHON_AVAILABLE = True
+except ImportError:
+    TELETHON_AVAILABLE = False
+    TelegramClient = None
+    events = None
+    StringSession = None
+
+
+@dataclass
+class TelegramMessage:
+    """
+    Normalized message format compatible with signal parsing.
+    Mirrors the structure expected by the signal parser.
+    """
+    content: str
+    chat_id: int
+    chat_name: str
+    chat_type: str
+    author_id: int
+    author_name: str
+    timestamp: datetime
+    message_id: int
+    platform: str = 'telegram'
+    raw_message: Any = None
+    embeds: List[Dict[str, Any]] = field(default_factory=list)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for signal processing."""
+        return {
+            'content': self.content,
+            'platform': self.platform,
+            'channel_id': str(self.chat_id),
+            'channel_name': self.chat_name,
+            'channel_type': self.chat_type,
+            'author_id': str(self.author_id),
+            'author_name': self.author_name,
+            'timestamp': self.timestamp.isoformat(),
+            'message_id': str(self.message_id),
+            'embeds': self.embeds,
+        }
+
+
+class TelegramListener:
+    """
+    Telegram user client that listens for trading signals.
+    
+    Uses Telethon (user account, not bot API) to:
+    - Connect to Telegram with user credentials
+    - Listen for messages in configured channels/groups
+    - Normalize messages to a format compatible with signal parsers
+    - Route parsed signals to the execution queue
+    """
+    
+    def __init__(
+        self,
+        api_id: Optional[str] = None,
+        api_hash: Optional[str] = None,
+        phone_number: Optional[str] = None,
+        session_string: Optional[str] = None,
+        order_queue: Optional[asyncio.Queue] = None,
+    ):
+        if not TELETHON_AVAILABLE:
+            raise ImportError("Telethon is not installed. Run: pip install telethon")
+        
+        self.api_id = api_id or os.getenv('TELEGRAM_API_ID')
+        self.api_hash = api_hash or os.getenv('TELEGRAM_API_HASH')
+        self.phone_number = phone_number or os.getenv('TELEGRAM_PHONE')
+        self.session_string = session_string
+        
+        self.order_queue: Optional[asyncio.Queue] = order_queue
+        self.order_queue_loop: Optional[asyncio.AbstractEventLoop] = None
+        self.sync_signal_queue: Optional[queue.Queue] = None
+        
+        self.client: Optional[TelegramClient] = None
+        self.running = False
+        self.connected = False
+        
+        self._monitored_chats: Set[int] = set()
+        self._chat_configs: Dict[int, Dict[str, Any]] = {}
+        self._signal_callback: Optional[Callable] = None
+        self._message_callback: Optional[Callable] = None
+        
+        self._db = None
+        self._parsers: Dict[str, Callable] = {}
+        
+    def set_order_queue(self, async_queue: asyncio.Queue, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+        """Set the asyncio order queue and its event loop for cross-thread signal submission."""
+        self.order_queue = async_queue
+        self.order_queue_loop = loop
+        print(f"[TELEGRAM] Async order queue connected (loop: {loop is not None})")
+    
+    def set_sync_signal_queue(self, sync_queue: queue.Queue) -> None:
+        """Set a thread-safe sync queue for signal submission (alternative to async queue)."""
+        self.sync_signal_queue = sync_queue
+        print(f"[TELEGRAM] Sync signal queue connected")
+    
+    def set_signal_callback(self, callback: Callable) -> None:
+        """Set callback for when signals are parsed."""
+        self._signal_callback = callback
+        
+    def set_message_callback(self, callback: Callable) -> None:
+        """Set callback for all messages (for logging/tracking)."""
+        self._message_callback = callback
+    
+    def register_parser(self, name: str, parser: Callable) -> None:
+        """Register a signal parser function."""
+        self._parsers[name] = parser
+        print(f"[TELEGRAM] Registered parser: {name}")
+    
+    def add_monitored_chat(self, chat_id: int, config: Optional[Dict[str, Any]] = None) -> None:
+        """Add a chat to monitor for signals."""
+        self._monitored_chats.add(chat_id)
+        if config:
+            self._chat_configs[chat_id] = config
+        print(f"[TELEGRAM] Monitoring chat: {chat_id}")
+    
+    def remove_monitored_chat(self, chat_id: int) -> None:
+        """Remove a chat from monitoring."""
+        self._monitored_chats.discard(chat_id)
+        self._chat_configs.pop(chat_id, None)
+        print(f"[TELEGRAM] Removed chat from monitoring: {chat_id}")
+    
+    def load_channels_from_db(self) -> int:
+        """Load Telegram channels from database."""
+        try:
+            from gui_app.database import get_telegram_channels
+            channels = get_telegram_channels()
+            
+            count = 0
+            for channel in channels:
+                chat_id_str = channel.get('telegram_chat_id')
+                if chat_id_str:
+                    try:
+                        chat_id = int(chat_id_str)
+                        self.add_monitored_chat(chat_id, config=channel)
+                        count += 1
+                    except (ValueError, TypeError):
+                        print(f"[TELEGRAM] Invalid chat ID: {chat_id_str}")
+            
+            print(f"[TELEGRAM] Loaded {count} channels from database")
+            return count
+        except Exception as e:
+            print(f"[TELEGRAM] Error loading channels from database: {e}")
+            return 0
+    
+    async def connect(self) -> bool:
+        """Connect to Telegram."""
+        if not self.api_id or not self.api_hash:
+            print("[TELEGRAM] API credentials not configured")
+            return False
+        
+        try:
+            if self.session_string:
+                session = StringSession(self.session_string)
+            else:
+                session = StringSession()
+            
+            self.client = TelegramClient(
+                session,
+                int(self.api_id),
+                self.api_hash,
+                system_version="4.16.30-vxBotify"
+            )
+            
+            await self.client.connect()
+            
+            if not await self.client.is_user_authorized():
+                if self.phone_number:
+                    print(f"[TELEGRAM] Requesting verification code for {self.phone_number}")
+                    await self.client.send_code_request(self.phone_number)
+                    print("[TELEGRAM] Verification code sent. Use /api/telegram/verify to complete auth.")
+                    return False
+                else:
+                    print("[TELEGRAM] Not authorized and no phone number provided")
+                    return False
+            
+            me = await self.client.get_me()
+            print(f"[TELEGRAM] Connected as: {me.first_name} (@{me.username or 'no username'})")
+            
+            self.connected = True
+            
+            if not self.session_string:
+                new_session = self.client.session.save()
+                await self._save_session_string(new_session)
+            
+            return True
+            
+        except Exception as e:
+            print(f"[TELEGRAM] Connection error: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    async def _save_session_string(self, session_string: str) -> None:
+        """Save session string to database."""
+        try:
+            from gui_app.database import update_telegram_settings
+            update_telegram_settings(session_string=session_string, session_status='connected')
+            print("[TELEGRAM] Session string saved to database")
+        except Exception as e:
+            print(f"[TELEGRAM] Could not save session string: {e}")
+    
+    async def start_listening(self) -> None:
+        """Start listening for messages in monitored chats."""
+        if not self.client or not self.connected:
+            print("[TELEGRAM] Not connected - call connect() first")
+            return
+        
+        @self.client.on(events.NewMessage())
+        async def message_handler(event: events.NewMessage.Event):
+            await self._handle_message(event)
+        
+        self.running = True
+        print(f"[TELEGRAM] Listening for signals in {len(self._monitored_chats)} chat(s)")
+        
+        await self.client.run_until_disconnected()
+    
+    async def _handle_message(self, event: events.NewMessage.Event) -> None:
+        """Handle incoming Telegram message."""
+        try:
+            message = event.message
+            chat = await event.get_chat()
+            sender = await event.get_sender()
+            
+            chat_id = event.chat_id
+            
+            if self._monitored_chats and chat_id not in self._monitored_chats:
+                return
+            
+            chat_name = getattr(chat, 'title', None) or getattr(chat, 'username', None) or str(chat_id)
+            chat_type = self._get_chat_type(chat)
+            
+            author_id = sender.id if sender else 0
+            author_name = self._get_sender_name(sender)
+            
+            content = message.text or ''
+            
+            normalized_msg = TelegramMessage(
+                content=content,
+                chat_id=chat_id,
+                chat_name=chat_name,
+                chat_type=chat_type,
+                author_id=author_id,
+                author_name=author_name,
+                timestamp=message.date,
+                message_id=message.id,
+                raw_message=message,
+            )
+            
+            if self._message_callback:
+                try:
+                    await self._message_callback(normalized_msg)
+                except Exception as e:
+                    print(f"[TELEGRAM] Message callback error: {e}")
+            
+            await self._process_signal(normalized_msg)
+            
+        except Exception as e:
+            print(f"[TELEGRAM] Error handling message: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _get_chat_type(self, chat: Any) -> str:
+        """Determine chat type from Telethon entity."""
+        if hasattr(chat, 'broadcast') and chat.broadcast:
+            return 'channel'
+        elif hasattr(chat, 'megagroup') and chat.megagroup:
+            return 'supergroup'
+        elif hasattr(chat, 'title'):
+            return 'group'
+        else:
+            return 'private'
+    
+    def _get_sender_name(self, sender: Any) -> str:
+        """Get sender display name."""
+        if not sender:
+            return 'Unknown'
+        
+        if hasattr(sender, 'first_name'):
+            name = sender.first_name or ''
+            if hasattr(sender, 'last_name') and sender.last_name:
+                name += f' {sender.last_name}'
+            return name.strip() or getattr(sender, 'username', 'Unknown') or 'Unknown'
+        elif hasattr(sender, 'title'):
+            return sender.title
+        else:
+            return 'Unknown'
+    
+    async def _process_signal(self, msg: TelegramMessage) -> None:
+        """Process message through signal parsers."""
+        if not msg.content.strip():
+            return
+        
+        chat_config = self._chat_configs.get(msg.chat_id, {})
+        
+        execute_enabled = chat_config.get('execute_enabled', 0)
+        track_enabled = chat_config.get('track_enabled', 0)
+        
+        if not execute_enabled and not track_enabled:
+            return
+        
+        signal = None
+        
+        for parser_name, parser_func in self._parsers.items():
+            try:
+                result = parser_func(msg.content)
+                if result:
+                    signal = result
+                    print(f"[TELEGRAM] Signal parsed by {parser_name}: {result.get('action', '')} {result.get('symbol', '')}")
+                    break
+            except Exception as e:
+                print(f"[TELEGRAM] Parser {parser_name} error: {e}")
+        
+        if signal:
+            signal['platform'] = 'telegram'
+            signal['channel_id'] = str(msg.chat_id)
+            signal['channel_name'] = msg.chat_name
+            signal['author_name'] = msg.author_name
+            signal['timestamp'] = msg.timestamp.isoformat()
+            
+            if execute_enabled:
+                queued = await self._submit_signal_to_queue(signal)
+                if queued:
+                    print(f"[TELEGRAM] Signal queued for execution")
+                else:
+                    print(f"[TELEGRAM] Warning: Could not queue signal (no queue configured)")
+            
+            if self._signal_callback:
+                try:
+                    await self._signal_callback(signal, msg)
+                except Exception as e:
+                    print(f"[TELEGRAM] Signal callback error: {e}")
+    
+    async def _submit_signal_to_queue(self, signal: Dict[str, Any]) -> bool:
+        """
+        Submit signal to the order queue in a thread-safe manner.
+        Handles cross-loop asyncio queue submission using run_coroutine_threadsafe.
+        """
+        try:
+            if self.sync_signal_queue is not None:
+                self.sync_signal_queue.put_nowait(signal)
+                return True
+            
+            if self.order_queue is not None and self.order_queue_loop is not None:
+                future = asyncio.run_coroutine_threadsafe(
+                    self.order_queue.put(signal),
+                    self.order_queue_loop
+                )
+                future.result(timeout=5.0)
+                return True
+            
+            if self.order_queue is not None:
+                try:
+                    self.order_queue.put_nowait(signal)
+                    return True
+                except Exception as e:
+                    print(f"[TELEGRAM] Direct queue put failed (cross-loop issue): {e}")
+                    return False
+            
+            return False
+            
+        except Exception as e:
+            print(f"[TELEGRAM] Error submitting signal to queue: {e}")
+            return False
+    
+    async def disconnect(self) -> None:
+        """Disconnect from Telegram."""
+        self.running = False
+        if self.client:
+            await self.client.disconnect()
+            print("[TELEGRAM] Disconnected")
+        self.connected = False
+    
+    def is_connected(self) -> bool:
+        """Check if connected to Telegram."""
+        return self.connected and self.client is not None
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get current listener status."""
+        return {
+            'connected': self.connected,
+            'running': self.running,
+            'monitored_chats': len(self._monitored_chats),
+            'parsers': list(self._parsers.keys()),
+            'has_queue': self.order_queue is not None,
+        }
+
+
+_telegram_listener: Optional[TelegramListener] = None
+
+
+def get_telegram_listener() -> Optional[TelegramListener]:
+    """Get the global TelegramListener instance."""
+    return _telegram_listener
+
+
+def set_telegram_listener(listener: TelegramListener) -> None:
+    """Set the global TelegramListener instance."""
+    global _telegram_listener
+    _telegram_listener = listener
+
+
+async def start_telegram_listener(
+    api_id: str,
+    api_hash: str,
+    phone_number: Optional[str] = None,
+    session_string: Optional[str] = None,
+    order_queue: Optional[asyncio.Queue] = None,
+) -> Optional[TelegramListener]:
+    """
+    Create and start the Telegram listener.
+    
+    This is the main entry point for initializing Telegram integration.
+    """
+    if not TELETHON_AVAILABLE:
+        print("[TELEGRAM] Telethon not installed - Telegram integration disabled")
+        return None
+    
+    try:
+        listener = TelegramListener(
+            api_id=api_id,
+            api_hash=api_hash,
+            phone_number=phone_number,
+            session_string=session_string,
+            order_queue=order_queue,
+        )
+        
+        listener.load_channels_from_db()
+        
+        connected = await listener.connect()
+        if not connected:
+            print("[TELEGRAM] Could not connect - check credentials")
+            return listener
+        
+        set_telegram_listener(listener)
+        
+        return listener
+        
+    except Exception as e:
+        print(f"[TELEGRAM] Failed to start listener: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
