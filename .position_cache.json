@@ -3153,7 +3153,7 @@
   },
   "ALPACA_PAPER_HOOD_stock": {
     "entry_price": 112.313212,
-    "highest_price": 115.67,
+    "highest_price": 115.99,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3185,7 +3185,7 @@
   },
   "ALPACA_PAPER_DVLT_stock": {
     "entry_price": 0.94,
-    "highest_price": 1.06,
+    "highest_price": 1.12,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
