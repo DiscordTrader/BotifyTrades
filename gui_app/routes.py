@@ -2045,16 +2045,19 @@ def register_routes(app):
             - period: 'today', '7d', '30d', 'year', 'all', or 'custom'
             - start_date: For custom period (YYYY-MM-DD)
             - end_date: For custom period (YYYY-MM-DD)
+            - market: 'US' or 'INDIA' for market-specific filtering
         """
         try:
             time_period = request.args.get('period', 'all')
             start_date = request.args.get('start_date')
             end_date = request.args.get('end_date')
+            market = request.args.get('market', 'US')  # Default to US market
             
             leaderboard = db.get_channel_leaderboard(
                 time_period=time_period,
                 start_date=start_date,
-                end_date=end_date
+                end_date=end_date,
+                market=market
             )
             
             # Calculate aggregates using totals (not averages of averages)

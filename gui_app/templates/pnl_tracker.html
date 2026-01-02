@@ -3,6 +3,16 @@
 {% block title %}PNL Tracker - BotifyTrades{% endblock %}
 
 {% block content %}
+<!-- Market Tabs -->
+<div class="market-tabs" style="margin-bottom: 24px; display: flex; gap: 8px;">
+    <button id="usMarketTab" class="market-tab active" onclick="switchMarket('US')" style="padding: 12px 32px; background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%); color: #fff; border: none; border-radius: 12px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease;">
+        <span style="font-size: 20px;">🇺🇸</span> US Market <span class="currency-badge" style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 6px; font-size: 12px;">USD</span>
+    </button>
+    <button id="indiaMarketTab" class="market-tab" onclick="switchMarket('INDIA')" style="padding: 12px 32px; background: #3A3A3C; color: #fff; border: none; border-radius: 12px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease;">
+        <span style="font-size: 20px;">🇮🇳</span> India Market <span class="currency-badge" style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 6px; font-size: 12px;">INR</span>
+    </button>
+</div>
+
 <div class="filters-bar" style="margin-bottom: 24px; display: flex; gap: 12px; align-items: center; background: #2C2C2E; padding: 16px; border-radius: 12px; flex-wrap: wrap;">
     <label style="color: #fff; font-weight: 500;">Date Range:</label>
     <select id="dateFilter" style="padding: 8px 16px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px; min-width: 140px;">
@@ -277,6 +287,46 @@
 <script>
 let positionsData = [];
 let channelsData = [];
+let currentMarket = 'US';  // 'US' or 'INDIA'
+
+// Format currency based on market
+function formatCurrency(amount, market) {
+    market = market || currentMarket;
+    if (market === 'INDIA') {
+        // Indian Rupee formatting with lakhs/crores
+        if (Math.abs(amount) >= 10000000) {
+            return '₹' + (amount / 10000000).toFixed(2) + ' Cr';
+        } else if (Math.abs(amount) >= 100000) {
+            return '₹' + (amount / 100000).toFixed(2) + ' L';
+        }
+        return '₹' + amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    return '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Switch between US and India market
+function switchMarket(market) {
+    currentMarket = market;
+    
+    // Update tab styling
+    const usTab = document.getElementById('usMarketTab');
+    const indiaTab = document.getElementById('indiaMarketTab');
+    
+    if (market === 'US') {
+        usTab.style.background = 'linear-gradient(135deg, #00d4ff 0%, #0080ff 100%)';
+        usTab.classList.add('active');
+        indiaTab.style.background = '#3A3A3C';
+        indiaTab.classList.remove('active');
+    } else {
+        indiaTab.style.background = 'linear-gradient(135deg, #ff9933 0%, #138808 100%)';  // India colors
+        indiaTab.classList.add('active');
+        usTab.style.background = '#3A3A3C';
+        usTab.classList.remove('active');
+    }
+    
+    // Reload data with new market filter
+    loadPNLData();
+}
 
 // Get date range based on filter selection
 function getDateRange() {
@@ -416,6 +466,7 @@ async function loadPNLData() {
         if (statusFilter) params.push(`status=${statusFilter}`);
         if (startDate) params.push(`start_date=${startDate}`);
         if (endDate) params.push(`end_date=${endDate}`);
+        params.push(`market=${currentMarket}`);  // Add market filter
         url += params.join('&');
         
         const response = await fetch(url);
@@ -539,8 +590,12 @@ function updateSummaryStats(positions) {
         ? closedPositions.reduce((sum, pos) => sum + pos.avg_pnl_percent, 0) / closedPositions.length
         : 0;
     
+    // Calculate win rate for India market additional stats
+    const winningTrades = closedPositions.filter(pos => pos.total_pnl > 0).length;
+    const winRate = closedPositions.length > 0 ? (winningTrades / closedPositions.length * 100) : 0;
+    
     document.getElementById('totalPositions').textContent = totalPositions;
-    document.getElementById('totalPNL').textContent = `$${totalPNL.toFixed(2)}`;
+    document.getElementById('totalPNL').textContent = formatCurrency(totalPNL);
     document.getElementById('totalPNL').className = totalPNL > 0 ? 'profit-text' : (totalPNL < 0 ? 'loss-text' : 'neutral-text');
     document.getElementById('avgReturn').textContent = `${avgReturn.toFixed(1)}%`;
     document.getElementById('avgReturn').className = avgReturn > 0 ? 'profit-text' : (avgReturn < 0 ? 'loss-text' : 'neutral-text');

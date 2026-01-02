@@ -615,6 +615,33 @@ def init_db():
         print(f"[DATABASE] ✓ Fixed {cursor.rowcount} trades with UNKNOWN/NULL broker → Webull")
         conn.commit()
     
+    # Migration: Add market column for India/US market segmentation
+    try:
+        cursor.execute('SELECT market FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding market column to trades table...")
+        cursor.execute("ALTER TABLE trades ADD COLUMN market TEXT DEFAULT 'US'")
+        conn.commit()
+        print("[DATABASE] ✓ Market segmentation column added")
+    
+    # Migration: Add currency column for multi-currency support
+    try:
+        cursor.execute('SELECT currency FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding currency column to trades table...")
+        cursor.execute("ALTER TABLE trades ADD COLUMN currency TEXT DEFAULT 'USD'")
+        conn.commit()
+        print("[DATABASE] ✓ Currency tracking column added")
+    
+    # Migration: Add lot_size column for India F&O lot tracking
+    try:
+        cursor.execute('SELECT lot_size FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding lot_size column to trades table...")
+        cursor.execute("ALTER TABLE trades ADD COLUMN lot_size INTEGER DEFAULT 1")
+        conn.commit()
+        print("[DATABASE] ✓ Lot size tracking column added")
+    
     # Signals table (all signals received, including tracked ones)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS signals (
@@ -645,6 +672,15 @@ def init_db():
         cursor.execute("ALTER TABLE signals ADD COLUMN execution_reason TEXT")
         conn.commit()
         print("[DATABASE] ✓ Signal execution status tracking columns added")
+    
+    # Migration: Add market column to signals table for India market segmentation
+    try:
+        cursor.execute('SELECT market FROM signals LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding market column to signals table...")
+        cursor.execute("ALTER TABLE signals ADD COLUMN market TEXT DEFAULT 'US'")
+        conn.commit()
+        print("[DATABASE] ✓ Market segmentation column added to signals")
     
     # Signal lots (BTO positions tracking for FIFO matching)
     cursor.execute('''
@@ -2752,7 +2788,7 @@ def update_signal_execution_status(message_id: str, status: str, reason: str = N
         return False
 
 
-def get_channel_leaderboard(time_period='all', start_date=None, end_date=None):
+def get_channel_leaderboard(time_period='all', start_date=None, end_date=None, market='US'):
     """
     Get channel performance leaderboard with TQS scoring.
     
@@ -2760,6 +2796,7 @@ def get_channel_leaderboard(time_period='all', start_date=None, end_date=None):
         time_period: 'today', '7d', '30d', 'year', 'all', or 'custom'
         start_date: For custom period (YYYY-MM-DD)
         end_date: For custom period (YYYY-MM-DD)
+        market: 'US' or 'INDIA' for market-specific filtering
     
     Returns:
         List of channels sorted by TQS score with:
@@ -2776,12 +2813,19 @@ def get_channel_leaderboard(time_period='all', start_date=None, end_date=None):
     # Get date bounds for filtering by close_date
     date_start, date_end = get_date_filter_bounds(time_period, start_date, end_date)
     
-    # Build date filter SQL
+    # Build date filter SQL with bound parameters
     date_filter = ""
-    date_params = []
+    params = []
     if date_start and date_end:
         date_filter = "AND lc.closed_at >= ? AND lc.closed_at <= ?"
-        date_params = [date_start, date_end]
+        params.extend([date_start, date_end])
+    
+    # Market filter using bound parameters (safe from SQL injection)
+    # Filter via signals table which has the market column
+    market_filter = ""
+    if market and market in ('US', 'INDIA'):
+        market_filter = "AND COALESCE(s.market, 'US') = ?"
+        params.append(market)
     
     query = f'''
         SELECT 
@@ -2832,12 +2876,12 @@ def get_channel_leaderboard(time_period='all', start_date=None, end_date=None):
         LEFT JOIN signals s ON s.channel_id = c.id
         LEFT JOIN signal_lots sl ON sl.signal_id = s.id
         LEFT JOIN lot_closures lc ON lc.lot_id = sl.id
-        WHERE c.is_active = 1 {date_filter}
+        WHERE c.is_active = 1 {date_filter} {market_filter}
         GROUP BY c.id, c.name, c.discord_channel_id
         HAVING COUNT(DISTINCT lc.id) > 0
     '''
     
-    cursor.execute(query, date_params)
+    cursor.execute(query, params)
     rows = cursor.fetchall()
     
     channels = []
