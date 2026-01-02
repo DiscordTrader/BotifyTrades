@@ -443,6 +443,15 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added trim order mode columns (market/limit) for per-channel trim settings")
     
+    # Migrate: Add exit strategy mode column for choosing between signal-based vs risk-based exits
+    # Options: 'signal' (follow trader's trims/stops), 'risk' (use risk management auto-exits), 'hybrid' (both)
+    try:
+        cursor.execute('SELECT exit_strategy_mode FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE channels ADD COLUMN exit_strategy_mode TEXT DEFAULT 'signal'")
+        conn.commit()
+        print("[DATABASE] ✓ Added exit_strategy_mode column for per-channel exit strategy")
+    
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -2495,6 +2504,64 @@ def get_open_lots(channel_id: int, asset_type: str, symbol: str, strike: float =
             AND status IN ('OPEN', 'PARTIAL')
             ORDER BY opened_at ASC
         ''', (channel_id, asset_type, symbol))
+    
+    return cursor.fetchall()
+
+
+def get_most_recent_open_lot(channel_id: int, asset_type: str = None):
+    """Get the most recently opened lot from a channel (for position matching on 'stopped out' signals).
+    
+    This is used when an exit signal (like 'stopped out') doesn't include contract details,
+    and we need to match it to the most recent open position from that channel.
+    
+    Args:
+        channel_id: The Discord channel ID
+        asset_type: Optional filter by asset type ('option' or 'stock')
+    
+    Returns:
+        The most recently opened lot that's still open, or None if no open positions
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if asset_type:
+        cursor.execute('''
+            SELECT * FROM signal_lots
+            WHERE channel_id = ? AND asset_type = ?
+            AND status IN ('OPEN', 'PARTIAL')
+            ORDER BY opened_at DESC
+            LIMIT 1
+        ''', (channel_id, asset_type))
+    else:
+        cursor.execute('''
+            SELECT * FROM signal_lots
+            WHERE channel_id = ?
+            AND status IN ('OPEN', 'PARTIAL')
+            ORDER BY opened_at DESC
+            LIMIT 1
+        ''', (channel_id,))
+    
+    return cursor.fetchone()
+
+
+def get_all_open_lots_for_channel(channel_id: int):
+    """Get all open lots for a channel (for displaying positions or bulk closing).
+    
+    Args:
+        channel_id: The Discord channel ID
+    
+    Returns:
+        List of all open/partial lots for the channel, ordered by most recent first
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT * FROM signal_lots
+        WHERE channel_id = ?
+        AND status IN ('OPEN', 'PARTIAL')
+        ORDER BY opened_at DESC
+    ''', (channel_id,))
     
     return cursor.fetchall()
 
