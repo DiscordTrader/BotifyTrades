@@ -447,6 +447,24 @@ class TelegramListener:
             signal['author_name'] = msg.author_name
             signal['timestamp'] = msg.timestamp.isoformat()
             
+            enabled_brokers = chat_config.get('enabled_brokers')
+            if enabled_brokers:
+                import json
+                try:
+                    if isinstance(enabled_brokers, str):
+                        signal['_enabled_brokers'] = json.loads(enabled_brokers)
+                    else:
+                        signal['_enabled_brokers'] = enabled_brokers
+                    print(f"[TELEGRAM] Broker selection: {signal['_enabled_brokers']}")
+                except Exception as e:
+                    print(f"[TELEGRAM] Failed to parse enabled_brokers: {e}")
+            
+            if track_enabled:
+                try:
+                    self._save_signal_for_tracking(signal, msg)
+                except Exception as e:
+                    print(f"[TELEGRAM] Error saving signal for tracking: {e}")
+            
             if execute_enabled:
                 queued = await self._submit_signal_to_queue(signal)
                 if queued:
@@ -460,6 +478,48 @@ class TelegramListener:
                 except Exception as e:
                     print(f"[TELEGRAM] Signal callback error: {e}")
     
+    def _save_signal_for_tracking(self, signal: Dict[str, Any], msg: TelegramMessage) -> None:
+        """Save signal to database for PNL tracking."""
+        try:
+            from gui_app.database import add_signal
+            
+            action = signal.get('action', 'BTO')
+            symbol = signal.get('symbol', '')
+            quantity = signal.get('quantity', 1)
+            price = signal.get('price')
+            asset_type = signal.get('asset_type', 'option')
+            strike = signal.get('strike')
+            expiry = signal.get('expiry')
+            call_put = signal.get('option_type') or signal.get('call_put')
+            author_name = signal.get('author_name', msg.author_name)
+            channel_id = signal.get('channel_id', str(msg.chat_id))
+            market = signal.get('market', 'US')
+            
+            signal_id = add_signal(
+                discord_channel_id=channel_id,
+                message_id=str(msg.message_id),
+                signal_type=action,
+                symbol=symbol,
+                quantity=quantity,
+                price=price,
+                asset_type=asset_type,
+                author_name=author_name,
+                strike=strike,
+                expiry=expiry,
+                call_put=call_put,
+                market=market
+            )
+            
+            if signal_id:
+                print(f"[TELEGRAM] ✓ Signal saved for tracking (ID: {signal_id}, Market: {market})")
+            else:
+                print(f"[TELEGRAM] ⚠️ Failed to save signal for tracking")
+                
+        except Exception as e:
+            print(f"[TELEGRAM] Error in _save_signal_for_tracking: {e}")
+            import traceback
+            traceback.print_exc()
+
     async def _submit_signal_to_queue(self, signal: Dict[str, Any]) -> bool:
         """
         Submit signal to the order queue in a thread-safe manner.

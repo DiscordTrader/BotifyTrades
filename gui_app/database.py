@@ -2741,13 +2741,13 @@ def get_performance_metrics(channel_id: int = None, period_start=None, period_en
 
 
 # Signal management functions
-def add_signal(discord_channel_id: str, message_id: str, signal_type: str, symbol: str, quantity: int, price: float = None, asset_type: str = 'stock', author_name: str = None, strike: float = None, expiry: str = None, call_put: str = None):
+def add_signal(discord_channel_id: str, message_id: str, signal_type: str, symbol: str, quantity: int, price: float = None, asset_type: str = 'stock', author_name: str = None, strike: float = None, expiry: str = None, call_put: str = None, market: str = 'US'):
     """Add a new signal to the database with author attribution and option details"""
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Get channel internal ID
-    cursor.execute('SELECT id FROM channels WHERE discord_channel_id = ?', (discord_channel_id,))
+    # Get channel internal ID - check both discord_channel_id and telegram_chat_id
+    cursor.execute('SELECT id FROM channels WHERE discord_channel_id = ? OR telegram_chat_id = ?', (discord_channel_id, discord_channel_id))
     channel = cursor.fetchone()
     channel_id = channel['id'] if channel else None
     
@@ -2755,9 +2755,9 @@ def add_signal(discord_channel_id: str, message_id: str, signal_type: str, symbo
         cursor.execute('''
             INSERT INTO signals (
                 channel_id, message_id, direction, asset_type, symbol,
-                quantity, price, strike, expiry, call_put, author_name, received_at, executed
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 0)
-        ''', (channel_id, message_id, signal_type, asset_type, symbol, quantity, price, strike, expiry, call_put, author_name))
+                quantity, price, strike, expiry, call_put, author_name, received_at, executed, market
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 0, ?)
+        ''', (channel_id, message_id, signal_type, asset_type, symbol, quantity, price, strike, expiry, call_put, author_name, market))
         
         conn.commit()
         return cursor.lastrowid
