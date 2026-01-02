@@ -1527,7 +1527,7 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
                stop_loss_pct, trailing_stop_pct, trailing_activation_pct, position_size_pct,
                created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct,
                profit_target_4_pct, profit_target_qty_1, profit_target_qty_2, profit_target_qty_3,
-               profit_target_qty_4, trim_order_mode, trim_limit_offset
+               profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode
         FROM channels WHERE id = ?
     ''', (channel_id,))
     
@@ -1565,7 +1565,8 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
         'profit_target_qty_3': row[26],
         'profit_target_qty_4': row[27],
         'trim_order_mode': row[28] if row[28] else 'market',
-        'trim_limit_offset': row[29] if row[29] is not None else 0.01
+        'trim_limit_offset': row[29] if row[29] is not None else 0.01,
+        'exit_strategy_mode': row[30] if row[30] else 'signal'
     }
 
 
@@ -1581,7 +1582,7 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
                stop_loss_pct, trailing_stop_pct, trailing_activation_pct, position_size_pct,
                created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct,
                profit_target_4_pct, profit_target_qty_1, profit_target_qty_2, profit_target_qty_3,
-               profit_target_qty_4, trim_order_mode, trim_limit_offset
+               profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode
         FROM channels WHERE discord_channel_id = ?
     ''', (str(discord_channel_id),))
     
@@ -1619,7 +1620,8 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
         'profit_target_qty_3': row[26],
         'profit_target_qty_4': row[27],
         'trim_order_mode': row[28] if row[28] else 'market',
-        'trim_limit_offset': row[29] if row[29] is not None else 0.01
+        'trim_limit_offset': row[29] if row[29] is not None else 0.01,
+        'exit_strategy_mode': row[30] if len(row) > 30 and row[30] else 'signal'
     }
 
 
@@ -1637,7 +1639,7 @@ def update_channel(channel_id: int, **kwargs):
                    'profit_target_4_pct', 'profit_target_qty_1', 'profit_target_qty_2', 'profit_target_qty_3', 'profit_target_qty_4',
                    'stop_loss_pct', 'trailing_stop_pct', 'trailing_activation_pct', 'enabled_brokers', 'position_size_pct', 'tracking_position_size_pct',
                    'default_quantity', 'risk_management_enabled', 'leave_runner_enabled', 'leave_runner_pct',
-                   'trim_order_mode', 'trim_limit_offset']:
+                   'trim_order_mode', 'trim_limit_offset', 'exit_strategy_mode']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))
