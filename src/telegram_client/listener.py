@@ -17,8 +17,36 @@ from datetime import datetime
 
 def _print_flush(msg: str) -> None:
     """Print with explicit flush to ensure output appears in logs."""
-    print(msg, flush=True)
+    # Try to use _original_print if available (set by selfbot_webull.py)
+    import builtins
+    printer = getattr(builtins, '_original_print', print)
+    printer(msg, flush=True)
     sys.stdout.flush()
+
+
+def _normalize_chat_id(chat_id: Union[int, str]) -> int:
+    """
+    Normalize Telegram chat ID to handle -100 prefix variations.
+    Telethon supergroups/channels use -100 prefix (e.g., -1005164376330)
+    but users often store without it (e.g., -5164376330).
+    Returns the base ID without -100 prefix for comparison.
+    """
+    if isinstance(chat_id, str):
+        if chat_id.startswith('@'):
+            return chat_id  # Username, return as-is
+        try:
+            chat_id = int(chat_id)
+        except ValueError:
+            return chat_id  # Return as string if not convertible
+    
+    # Convert to positive for easier manipulation
+    if chat_id < 0:
+        chat_id_str = str(abs(chat_id))
+        # Remove -100 prefix if present (supergroup/channel format)
+        if chat_id_str.startswith('100') and len(chat_id_str) > 10:
+            return -int(chat_id_str[3:])  # Strip '100' prefix
+        return chat_id
+    return chat_id
 
 
 try:
@@ -150,9 +178,20 @@ class TelegramListener:
     
     def _is_chat_monitored(self, chat_id: int, username: Optional[str] = None) -> Tuple[bool, Union[int, str, None]]:
         """Check if a chat is being monitored. Returns (is_monitored, config_key)."""
-        # Check by numeric ID first
+        # Normalize the incoming chat_id (strip -100 prefix if present)
+        normalized_incoming = _normalize_chat_id(chat_id)
+        
+        # Check by exact numeric ID first
         if chat_id in self._monitored_chats:
             return True, chat_id
+        
+        # Check by normalized ID (handles -100 prefix mismatch)
+        for monitored in self._monitored_chats:
+            if isinstance(monitored, (int, str)) and not str(monitored).startswith('@'):
+                normalized_monitored = _normalize_chat_id(monitored)
+                if normalized_incoming == normalized_monitored:
+                    _print_flush(f"[TELEGRAM] Matched chat {chat_id} to stored ID {monitored} (normalized: {normalized_incoming})")
+                    return True, monitored
         
         # Check by @username
         if username:
