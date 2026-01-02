@@ -591,16 +591,24 @@
     }
 
     async function testConnection() {
+        console.log('[Telegram] Test connection clicked');
         const btn = document.querySelector('button[onclick="testConnection()"]');
+        if (!btn) {
+            console.error('[Telegram] Button not found');
+            alert('Test Connection button not found');
+            return;
+        }
         const originalText = btn.innerHTML;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
         btn.disabled = true;
         
         try {
+            console.log('[Telegram] Calling /api/telegram/test-connection...');
             const response = await fetch('/api/telegram/test-connection', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
             });
+            console.log('[Telegram] Response status:', response.status);
             
             const data = await response.json();
             
