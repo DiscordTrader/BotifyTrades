@@ -277,10 +277,27 @@ class SettingsValidator:
     def _validate_global_settings(self, report: ValidationReport):
         """Validate global risk management and slippage settings"""
         try:
-            settings = self.db.get_risk_management_settings()
+            risk_settings = self.db.get_risk_management_settings()
+            
+            combined_settings = {
+                'risk_management_enabled': risk_settings.get('enabled', False),
+                'slippage_pct': 2.0,
+                'max_slippage_pct': 5.0,
+                'default_position_size_pct': 5.0,
+                'slippage_protection_enabled': True,
+                'auto_trade_enabled': False,
+            }
+            
+            try:
+                from gui_app.database import get_slippage_settings
+                slippage = get_slippage_settings()
+                combined_settings['slippage_pct'] = slippage.get('threshold_percent', 2.0)
+                combined_settings['slippage_protection_enabled'] = slippage.get('enabled', True)
+            except Exception:
+                pass
             
             for field_name, schema in CRITICAL_GLOBAL_SETTINGS.items():
-                value = settings.get(field_name)
+                value = combined_settings.get(field_name)
                 
                 if value is None and schema['required']:
                     report.add_issue(ValidationIssue(
