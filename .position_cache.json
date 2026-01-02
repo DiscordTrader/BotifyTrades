@@ -3134,5 +3134,21 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "created_at": "2026-01-02T15:10:40.395349"
+  },
+  "Webull_QQQ_617.0_01/02_C": {
+    "entry_price": 1.19,
+    "highest_price": 1.83,
+    "trailing_activated": false,
+    "closing": true,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "Webull",
+    "raw_symbol": null,
+    "tier1_hit": true,
+    "tier2_hit": true,
+    "tier3_hit": true,
+    "tier4_hit": true,
+    "created_at": "2026-01-02T15:38:34.688513"
   }
 }
