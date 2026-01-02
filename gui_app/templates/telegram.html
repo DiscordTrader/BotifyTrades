@@ -626,7 +626,7 @@
                 updateConnectionStatus('connected');
             } else if (data.needs_auth && data.code_sent) {
                 showToast(data.message || 'Verification code sent to your phone', 'info');
-                promptForVerificationCode(data.phone);
+                promptForVerificationCode(data.phone, data.phone_code_hash, data.temp_session);
             } else if (data.needs_auth) {
                 showToast(data.message || data.error || 'Login required', 'error');
                 updateConnectionStatus('disconnected');
@@ -791,7 +791,10 @@
         return div.innerHTML;
     }
 
-    async function promptForVerificationCode(phone) {
+    let pendingTempSession = null;
+    
+    async function promptForVerificationCode(phone, phoneCodeHash, tempSession) {
+        pendingTempSession = tempSession;
         const code = prompt(`Enter the verification code sent to ${phone}:`);
         if (!code || code.trim() === '') {
             showToast('Verification cancelled', 'info');
@@ -804,7 +807,12 @@
             const response = await fetch('/api/telegram/verify-code', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: code.trim(), phone: phone })
+                body: JSON.stringify({ 
+                    code: code.trim(), 
+                    phone: phone,
+                    phone_code_hash: phoneCodeHash,
+                    temp_session: tempSession
+                })
             });
             
             const data = await response.json();
@@ -816,7 +824,7 @@
             } else if (data.needs_2fa) {
                 const password = prompt('Two-factor authentication required. Enter your Telegram password:');
                 if (password) {
-                    await verify2FA(password, phone);
+                    await verify2FA(password, phone, tempSession);
                 }
             } else {
                 showToast(data.error || 'Verification failed', 'error');
@@ -827,12 +835,16 @@
         }
     }
     
-    async function verify2FA(password, phone) {
+    async function verify2FA(password, phone, tempSession) {
         try {
             const response = await fetch('/api/telegram/verify-2fa', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: password, phone: phone })
+                body: JSON.stringify({ 
+                    password: password, 
+                    phone: phone,
+                    temp_session: tempSession || pendingTempSession
+                })
             });
             
             const data = await response.json();

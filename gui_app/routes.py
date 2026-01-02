@@ -5440,13 +5440,17 @@ def register_routes(app):
                             if phone_number:
                                 print(f"[TELEGRAM] User not authorized, sending verification code to {phone_number}")
                                 try:
-                                    await client.send_code_request(phone_number)
+                                    sent_code = await client.send_code_request(phone_number)
+                                    phone_code_hash = sent_code.phone_code_hash
+                                    temp_session = client.session.save()
                                     await client.disconnect()
                                     return {
                                         'connected': False,
                                         'needs_auth': True,
                                         'code_sent': True,
                                         'phone': phone_number,
+                                        'phone_code_hash': phone_code_hash,
+                                        'temp_session': temp_session,
                                         'message': f'Verification code sent to {phone_number}. Enter the code to complete login.'
                                     }
                                 except Exception as e:
@@ -5520,14 +5524,21 @@ def register_routes(app):
             data = request.json
             code = data.get('code')
             phone = data.get('phone')
+            phone_code_hash = data.get('phone_code_hash')
+            temp_session = data.get('temp_session', '')
             
             if not code:
                 return jsonify({'success': False, 'error': 'Verification code required'}), 400
+            
+            if not phone_code_hash:
+                return jsonify({'success': False, 'error': 'phone_code_hash required - please click Test Connection again'}), 400
             
             settings = get_telegram_settings()
             api_id = settings.get('api_id')
             api_hash = settings.get('api_hash')
             phone_number = phone or settings.get('phone_number')
+            
+            print(f"[TELEGRAM] Verifying code for {phone_number}, hash={phone_code_hash[:10]}...")
             
             try:
                 from telethon.sync import TelegramClient
@@ -5537,7 +5548,7 @@ def register_routes(app):
                 
                 async def verify_code():
                     client = TelegramClient(
-                        StringSession(),
+                        StringSession(temp_session) if temp_session else StringSession(),
                         int(api_id),
                         api_hash,
                         device_model="BotifyTrades",
@@ -5548,7 +5559,7 @@ def register_routes(app):
                     await client.connect()
                     
                     try:
-                        await client.sign_in(phone_number, code)
+                        await client.sign_in(phone_number, code, phone_code_hash=phone_code_hash)
                         me = await client.get_me()
                         session_string = client.session.save()
                         await client.disconnect()
@@ -5561,10 +5572,12 @@ def register_routes(app):
                             'message': f'Connected as {me.first_name or me.username}'
                         }
                     except SessionPasswordNeededError:
+                        temp_sess = client.session.save()
                         await client.disconnect()
                         return {
                             'connected': False,
                             'needs_2fa': True,
+                            'temp_session': temp_sess,
                             'message': 'Two-factor authentication required'
                         }
                     except Exception as e:
@@ -5608,14 +5621,20 @@ def register_routes(app):
             data = request.json
             password = data.get('password')
             phone = data.get('phone')
+            temp_session = data.get('temp_session', '')
             
             if not password:
                 return jsonify({'success': False, 'error': '2FA password required'}), 400
+            
+            if not temp_session:
+                return jsonify({'success': False, 'error': 'Session expired - please click Test Connection again'}), 400
             
             settings = get_telegram_settings()
             api_id = settings.get('api_id')
             api_hash = settings.get('api_hash')
             phone_number = phone or settings.get('phone_number')
+            
+            print(f"[TELEGRAM] Verifying 2FA for {phone_number}...")
             
             try:
                 from telethon.sync import TelegramClient
@@ -5624,7 +5643,7 @@ def register_routes(app):
                 
                 async def verify_2fa():
                     client = TelegramClient(
-                        StringSession(),
+                        StringSession(temp_session),
                         int(api_id),
                         api_hash,
                         device_model="BotifyTrades",
