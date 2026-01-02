@@ -3420,6 +3420,15 @@ class Database:
     def find_open_bto_trade(self, symbol: str, asset_type: str, broker: str = None,
                             strike: float = None, expiry: str = None, call_put: str = None):
         return find_open_bto_trade(symbol, asset_type, broker, strike, expiry, call_put)
+    
+    def get_risk_management_settings(self):
+        return get_risk_management_settings()
+    
+    def save_setting(self, key: str, value):
+        return save_setting(key, value)
+    
+    def get_setting(self, key: str, default=None):
+        return get_setting(key, default)
 
 
 if __name__ == '__main__':
