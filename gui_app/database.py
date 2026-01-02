@@ -3910,7 +3910,10 @@ def get_channel_by_telegram_id(telegram_chat_id: str) -> Optional[Dict[str, Any]
     conn = get_connection()
     cursor = conn.cursor()
     
-    normalized_id = str(telegram_chat_id).lstrip('@')
+    chat_id_str = str(telegram_chat_id)
+    normalized_id = chat_id_str.lstrip('@').lstrip('-')
+    if normalized_id.startswith('100'):
+        normalized_id = normalized_id[3:]
     
     cursor.execute('''
         SELECT id, name, discord_channel_id, telegram_chat_id, telegram_username, platform,
@@ -3920,9 +3923,11 @@ def get_channel_by_telegram_id(telegram_chat_id: str) -> Optional[Dict[str, Any]
                trailing_stop_pct, trailing_activation_pct, exit_strategy_mode,
                default_quantity, is_active
         FROM channels
-        WHERE telegram_chat_id = ? OR telegram_username = ? OR telegram_chat_id = ?
+        WHERE telegram_chat_id = ? 
+           OR telegram_username = ? 
+           OR REPLACE(REPLACE(telegram_chat_id, '-100', ''), '-', '') = ?
         LIMIT 1
-    ''', (telegram_chat_id, normalized_id, normalized_id))
+    ''', (chat_id_str, chat_id_str.lstrip('@'), normalized_id))
     
     row = cursor.fetchone()
     if not row:

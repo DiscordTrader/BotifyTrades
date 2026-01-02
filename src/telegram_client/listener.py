@@ -466,7 +466,8 @@ class TelegramListener:
                     print(f"[TELEGRAM] Failed to parse enabled_brokers: {e}")
             
             default_qty = chat_config.get('default_quantity')
-            if default_qty and not signal.get('_qty_from_signal'):
+            has_explicit_qty = signal.get('_qty_from_signal') or signal.get('qty') or signal.get('lots')
+            if default_qty and not has_explicit_qty:
                 signal['qty'] = default_qty
                 signal['_qty_source'] = 'channel_default'
                 print(f"[TELEGRAM] Using channel default quantity: {default_qty}")
