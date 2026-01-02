@@ -533,10 +533,18 @@
 
 {% block extra_js %}
 <script>
+    console.log('[Telegram] Page script initializing...');
     let telegramSettings = {};
     let telegramChannels = [];
 
+    // Global error handler
+    window.onerror = function(msg, url, lineNo, columnNo, error) {
+        console.error('[Telegram] Global error:', msg, 'at line', lineNo);
+        return false;
+    };
+
     async function loadSettings() {
+        console.log('[Telegram] loadSettings called');
         try {
             const response = await fetch('/api/settings/telegram');
             const data = await response.json();
@@ -557,6 +565,8 @@
     }
 
     async function saveSettings() {
+        console.log('[Telegram] saveSettings clicked');
+        alert('Save Settings button clicked!'); // Debug - remove after testing
         try {
             const apiHash = document.getElementById('apiHash').value;
             const payload = {
@@ -808,9 +818,11 @@
 
     // Initialize
     document.addEventListener('DOMContentLoaded', function() {
+        console.log('[Telegram] DOMContentLoaded - initializing page');
         loadSettings();
         loadChannels();
     });
+    console.log('[Telegram] Script loaded successfully');
 </script>
 <style>
     @keyframes slideIn {

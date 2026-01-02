@@ -1514,7 +1514,11 @@ def register_routes(app):
     @login_required
     def telegram():
         """Telegram integration settings and channel management page"""
-        return render_template('telegram.html')
+        response = make_response(render_template('telegram.html'))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
     
     @app.route('/architecture')
     def architecture():
