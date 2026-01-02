@@ -165,6 +165,7 @@ class TelegramListener:
     
     async def connect(self) -> bool:
         """Connect to Telegram."""
+        print(f"[TELEGRAM] connect() called - api_id={self.api_id}, has_hash={bool(self.api_hash)}, has_session={bool(self.session_string)}")
         if not self.api_id or not self.api_hash:
             print("[TELEGRAM] API credentials not configured")
             return False
@@ -172,8 +173,10 @@ class TelegramListener:
         try:
             if self.session_string:
                 session = StringSession(self.session_string)
+                print("[TELEGRAM] Using existing session string")
             else:
                 session = StringSession()
+                print("[TELEGRAM] No session string - will need authorization")
             
             self.client = TelegramClient(
                 session,
@@ -182,7 +185,9 @@ class TelegramListener:
                 system_version="4.16.30-vxBotify"
             )
             
+            print("[TELEGRAM] Connecting to Telegram servers...")
             await self.client.connect()
+            print("[TELEGRAM] Connected to Telegram, checking authorization...")
             
             if not await self.client.is_user_authorized():
                 if self.phone_number:

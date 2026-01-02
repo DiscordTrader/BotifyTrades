@@ -9119,11 +9119,14 @@ def run_telegram_bot_thread():
             if parse_stock_signal:
                 listener.register_parser('stock_signal', parse_stock_signal)
             
+            _original_print(f"[Telegram Thread] Loading channels from database...")
             listener.load_channels_from_db()
             
+            _original_print(f"[Telegram Thread] Attempting connection with api_id={api_id}, has_session={bool(session_string)}")
             connected = await listener.connect()
+            _original_print(f"[Telegram Thread] Connection result: {connected}")
             if not connected:
-                _original_print("[Telegram Thread] Could not connect to Telegram")
+                _original_print("[Telegram Thread] Could not connect to Telegram - check logs above for details")
                 _telegram_ready_event.set()
                 return
             

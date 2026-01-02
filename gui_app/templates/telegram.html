@@ -624,8 +624,11 @@
             if (data.connected) {
                 showToast(`Connected to Telegram as ${data.username || 'user'}`, 'success');
                 updateConnectionStatus('connected');
+            } else if (data.needs_auth && data.code_sent) {
+                showToast(data.message || 'Verification code sent to your phone', 'info');
+                promptForVerificationCode(data.phone);
             } else if (data.needs_auth) {
-                showToast(data.message || 'Login required - bot will prompt for auth code on startup', 'info');
+                showToast(data.message || data.error || 'Login required', 'error');
                 updateConnectionStatus('disconnected');
             } else {
                 showToast(data.error || 'Connection failed', 'error');
@@ -786,6 +789,65 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    async function promptForVerificationCode(phone) {
+        const code = prompt(`Enter the verification code sent to ${phone}:`);
+        if (!code || code.trim() === '') {
+            showToast('Verification cancelled', 'info');
+            return;
+        }
+        
+        showToast('Verifying code...', 'info');
+        
+        try {
+            const response = await fetch('/api/telegram/verify-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: code.trim(), phone: phone })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success && data.connected) {
+                showToast(`Successfully logged in as ${data.username || 'user'}`, 'success');
+                updateConnectionStatus('connected');
+                loadSettings();
+            } else if (data.needs_2fa) {
+                const password = prompt('Two-factor authentication required. Enter your Telegram password:');
+                if (password) {
+                    await verify2FA(password, phone);
+                }
+            } else {
+                showToast(data.error || 'Verification failed', 'error');
+            }
+        } catch (error) {
+            console.error('Error verifying code:', error);
+            showToast('Error verifying code: ' + error.message, 'error');
+        }
+    }
+    
+    async function verify2FA(password, phone) {
+        try {
+            const response = await fetch('/api/telegram/verify-2fa', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: password, phone: phone })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success && data.connected) {
+                showToast(`Successfully logged in as ${data.username || 'user'}`, 'success');
+                updateConnectionStatus('connected');
+                loadSettings();
+            } else {
+                showToast(data.error || '2FA verification failed', 'error');
+            }
+        } catch (error) {
+            console.error('Error with 2FA:', error);
+            showToast('Error with 2FA: ' + error.message, 'error');
+        }
     }
 
     function showToast(message, type = 'info') {

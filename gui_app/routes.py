@@ -5394,10 +5394,12 @@ def register_routes(app):
     @login_required
     def api_test_telegram_connection():
         """Test Telegram connection with provided credentials"""
+        print("[TELEGRAM] Test connection endpoint called")
         try:
             from gui_app.database import get_telegram_settings
             
             settings = get_telegram_settings()
+            print(f"[TELEGRAM] Settings loaded: api_id={settings.get('api_id')}, has_hash={bool(settings.get('api_hash'))}")
             
             api_id = settings.get('api_id')
             api_hash = settings.get('api_hash')
@@ -5415,10 +5417,12 @@ def register_routes(app):
                 from telethon.sessions import StringSession
                 import asyncio
                 
+                print("[TELEGRAM] Telethon imported successfully")
                 session_string = settings.get('session_string', '')
                 
                 async def test_connection():
                     try:
+                        print(f"[TELEGRAM] Creating client with api_id={api_id}")
                         client = TelegramClient(
                             StringSession(session_string) if session_string else StringSession(),
                             int(api_id),
@@ -5428,15 +5432,37 @@ def register_routes(app):
                             app_version="1.0"
                         )
                         
+                        print("[TELEGRAM] Connecting to Telegram...")
                         await client.connect()
+                        print("[TELEGRAM] Connected, checking authorization...")
                         
                         if not await client.is_user_authorized():
-                            await client.disconnect()
-                            return {
-                                'connected': False,
-                                'needs_auth': True,
-                                'message': 'Credentials valid but login required. The bot will prompt for auth code on startup.'
-                            }
+                            if phone_number:
+                                print(f"[TELEGRAM] User not authorized, sending verification code to {phone_number}")
+                                try:
+                                    await client.send_code_request(phone_number)
+                                    await client.disconnect()
+                                    return {
+                                        'connected': False,
+                                        'needs_auth': True,
+                                        'code_sent': True,
+                                        'phone': phone_number,
+                                        'message': f'Verification code sent to {phone_number}. Enter the code to complete login.'
+                                    }
+                                except Exception as e:
+                                    await client.disconnect()
+                                    return {
+                                        'connected': False,
+                                        'needs_auth': True,
+                                        'error': f'Failed to send code: {str(e)}'
+                                    }
+                            else:
+                                await client.disconnect()
+                                return {
+                                    'connected': False,
+                                    'needs_auth': True,
+                                    'message': 'Phone number required to send verification code.'
+                                }
                         
                         me = await client.get_me()
                         new_session = client.session.save()
@@ -5483,6 +5509,174 @@ def register_routes(app):
             import traceback
             traceback.print_exc()
             return jsonify({'success': False, 'connected': False, 'error': str(e)}), 500
+    
+    @app.route('/api/telegram/verify-code', methods=['POST'])
+    @login_required
+    def api_verify_telegram_code():
+        """Verify Telegram authentication code"""
+        print("[TELEGRAM] Verify code endpoint called")
+        try:
+            from gui_app.database import get_telegram_settings, update_telegram_settings
+            data = request.json
+            code = data.get('code')
+            phone = data.get('phone')
+            
+            if not code:
+                return jsonify({'success': False, 'error': 'Verification code required'}), 400
+            
+            settings = get_telegram_settings()
+            api_id = settings.get('api_id')
+            api_hash = settings.get('api_hash')
+            phone_number = phone or settings.get('phone_number')
+            
+            try:
+                from telethon.sync import TelegramClient
+                from telethon.sessions import StringSession
+                from telethon.errors import SessionPasswordNeededError
+                import asyncio
+                
+                async def verify_code():
+                    client = TelegramClient(
+                        StringSession(),
+                        int(api_id),
+                        api_hash,
+                        device_model="BotifyTrades",
+                        system_version="1.0",
+                        app_version="1.0"
+                    )
+                    
+                    await client.connect()
+                    
+                    try:
+                        await client.sign_in(phone_number, code)
+                        me = await client.get_me()
+                        session_string = client.session.save()
+                        await client.disconnect()
+                        
+                        return {
+                            'connected': True,
+                            'username': me.username or me.first_name,
+                            'user_id': me.id,
+                            'session_string': session_string,
+                            'message': f'Connected as {me.first_name or me.username}'
+                        }
+                    except SessionPasswordNeededError:
+                        await client.disconnect()
+                        return {
+                            'connected': False,
+                            'needs_2fa': True,
+                            'message': 'Two-factor authentication required'
+                        }
+                    except Exception as e:
+                        await client.disconnect()
+                        return {
+                            'connected': False,
+                            'error': str(e)
+                        }
+                
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(verify_code())
+                loop.close()
+                
+                if result.get('session_string'):
+                    update_telegram_settings(
+                        session_string=result['session_string'],
+                        session_status='connected'
+                    )
+                    print(f"[TELEGRAM] Session saved for user {result.get('username')}")
+                    del result['session_string']
+                
+                return jsonify({'success': True, **result})
+                
+            except ImportError:
+                return jsonify({'success': False, 'error': 'Telethon library not installed'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error verifying Telegram code: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/telegram/verify-2fa', methods=['POST'])
+    @login_required
+    def api_verify_telegram_2fa():
+        """Verify Telegram 2FA password"""
+        print("[TELEGRAM] Verify 2FA endpoint called")
+        try:
+            from gui_app.database import get_telegram_settings, update_telegram_settings
+            data = request.json
+            password = data.get('password')
+            phone = data.get('phone')
+            
+            if not password:
+                return jsonify({'success': False, 'error': '2FA password required'}), 400
+            
+            settings = get_telegram_settings()
+            api_id = settings.get('api_id')
+            api_hash = settings.get('api_hash')
+            phone_number = phone or settings.get('phone_number')
+            
+            try:
+                from telethon.sync import TelegramClient
+                from telethon.sessions import StringSession
+                import asyncio
+                
+                async def verify_2fa():
+                    client = TelegramClient(
+                        StringSession(),
+                        int(api_id),
+                        api_hash,
+                        device_model="BotifyTrades",
+                        system_version="1.0",
+                        app_version="1.0"
+                    )
+                    
+                    await client.connect()
+                    
+                    try:
+                        await client.sign_in(password=password)
+                        me = await client.get_me()
+                        session_string = client.session.save()
+                        await client.disconnect()
+                        
+                        return {
+                            'connected': True,
+                            'username': me.username or me.first_name,
+                            'user_id': me.id,
+                            'session_string': session_string,
+                            'message': f'Connected as {me.first_name or me.username}'
+                        }
+                    except Exception as e:
+                        await client.disconnect()
+                        return {
+                            'connected': False,
+                            'error': str(e)
+                        }
+                
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(verify_2fa())
+                loop.close()
+                
+                if result.get('session_string'):
+                    update_telegram_settings(
+                        session_string=result['session_string'],
+                        session_status='connected'
+                    )
+                    print(f"[TELEGRAM] Session saved after 2FA for user {result.get('username')}")
+                    del result['session_string']
+                
+                return jsonify({'success': True, **result})
+                
+            except ImportError:
+                return jsonify({'success': False, 'error': 'Telethon library not installed'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error verifying Telegram 2FA: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/telegram/channels', methods=['GET'])
     @login_required
