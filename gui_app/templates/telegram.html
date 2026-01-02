@@ -932,8 +932,8 @@
         container.innerHTML = telegramChannels.map(channel => `
             <div class="channel-card" data-id="${channel.id}">
                 <div class="channel-info">
-                    <div class="channel-icon">
-                        <i class="fab fa-telegram"></i>
+                    <div class="channel-icon" style="width: 40px; height: 40px; background: linear-gradient(135deg, #0088CC, #00AAFF); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white;">
+                        T
                     </div>
                     <div class="channel-details">
                         <h4>${escapeHtml(channel.name)}</h4>
@@ -963,10 +963,10 @@
                 </div>
                 <div class="channel-actions">
                     <button class="btn-settings" onclick="openChannelSettings(${channel.id})" title="Channel Settings">
-                        <i class="fas fa-cog"></i>
+                        Settings
                     </button>
                     <button class="btn-danger" onclick="deleteChannel(${channel.id})" title="Delete channel">
-                        <i class="fas fa-trash"></i>
+                        Delete
                     </button>
                 </div>
             </div>
