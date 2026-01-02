@@ -695,15 +695,29 @@
                         <div class="chat-id">${escapeHtml(channel.telegram_chat_id || '')}</div>
                     </div>
                     <div class="channel-badges">
-                        ${channel.execute_enabled ? '<span class="badge execute">Execute</span>' : ''}
-                        ${channel.track_enabled ? '<span class="badge track">Track</span>' : ''}
+                        ${channel.track_enabled ? '<span class="badge track">TRACK</span>' : ''}
+                    </div>
+                </div>
+                <div class="channel-toggles" style="display: flex; align-items: center; gap: 20px; margin-left: auto;">
+                    <div class="toggle-item" style="display: flex; align-items: center; gap: 8px;">
+                        <span style="color: var(--text-secondary); font-size: 0.85rem;">Execute</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" ${channel.execute_enabled ? 'checked' : ''} 
+                                   onchange="toggleChannelSetting(${channel.id}, 'execute_enabled', this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="toggle-item" style="display: flex; align-items: center; gap: 8px;">
+                        <span style="color: var(--text-secondary); font-size: 0.85rem;">Track</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" ${channel.track_enabled ? 'checked' : ''} 
+                                   onchange="toggleChannelSetting(${channel.id}, 'track_enabled', this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
                     </div>
                 </div>
                 <div class="channel-actions">
-                    <button class="btn-secondary" onclick="editChannel(${channel.id})">
-                        <i class="fas fa-cog"></i>
-                    </button>
-                    <button class="btn-danger" onclick="deleteChannel(${channel.id})">
+                    <button class="btn-danger" onclick="deleteChannel(${channel.id})" title="Delete channel">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -778,6 +792,30 @@
         } catch (error) {
             console.error('Error deleting channel:', error);
             showToast('Error deleting channel', 'error');
+        }
+    }
+
+    async function toggleChannelSetting(channelId, setting, value) {
+        try {
+            const response = await fetch(`/api/telegram/channels/${channelId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [setting]: value ? 1 : 0 })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast(`${setting === 'execute_enabled' ? 'Execute' : 'Track'} ${value ? 'enabled' : 'disabled'}`, 'success');
+                loadChannels();
+            } else {
+                showToast(data.error || 'Failed to update setting', 'error');
+                loadChannels();
+            }
+        } catch (error) {
+            console.error('Error updating channel setting:', error);
+            showToast('Error updating setting', 'error');
+            loadChannels();
         }
     }
 
