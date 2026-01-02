@@ -7363,6 +7363,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     opt['channel_id'] = str(message.channel.id)
                     opt['message_id'] = str(message.id)
                     opt['author'] = author_name
+                    opt['_channel_name'] = channel_info.get('name', message.channel.name)
+                    opt['_broker_override'] = channel_info.get('broker_override')
                     print(f"[DATABASE] ✓ Added channel_record_id={opt['channel_record_id']} for trade tracking")
                 
                 await self.order_queue.put(opt)
@@ -7587,10 +7589,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     stk['channel_id'] = str(message.channel.id)
                     stk['message_id'] = str(message.id)
                     stk['author'] = author_name
+                    stk['_channel_name'] = channel_info.get('name', message.channel.name)
+                    stk['_broker_override'] = channel_info.get('broker_override')
                     print(f"[DATABASE] ✓ Added channel_record_id={stk['channel_record_id']} for trade tracking")
                 
                 await self.order_queue.put(stk)
-                print(f"[QUEUE] ✓ Signal queued for LIVE execution on Webull")
+                print(f"[QUEUE] ✓ Signal queued for LIVE execution")
             
             if track_enabled and not execute_enabled:
                 # Check if paper trading is enabled for this tracking channel
@@ -8421,6 +8425,26 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     
                     # Check if this is a paper trading signal from tracking channel
                     is_paper_trade = signal.get('_paper_trade_mode', False)
+                    
+                    # CHECK: Skip live execution if no broker is selected for this channel
+                    # Risk management orders are exempt (they need to close positions on whatever broker holds them)
+                    is_risk_order = signal.get('_risk_management_order', False)
+                    has_broker_config = bool(signal.get('_enabled_brokers')) or bool(signal.get('_broker_override'))
+                    
+                    if not is_paper_trade and not is_risk_order and not has_broker_config:
+                        channel_name = signal.get('_channel_name', 'Unknown')
+                        _original_print(f"[EXECUTION] ⚠️ SKIPPING - No broker selected for channel '{channel_name}'")
+                        _original_print(f"[EXECUTION] Configure a broker in the Execution page to enable trading for this channel")
+                        # Save to database as skipped for tracking
+                        try:
+                            from gui_app.database import save_signal
+                            signal_copy = signal.copy()
+                            signal_copy['_skipped'] = True
+                            signal_copy['_skip_reason'] = 'No broker configured'
+                            save_signal(signal_copy)
+                        except Exception as e:
+                            _original_print(f"[EXECUTION] Failed to log skipped signal: {e}")
+                        continue
                     paper_config = signal.get('_channel_paper_config', {})
                     _original_print(f"[DEBUG] Paper trade mode: {is_paper_trade}, Signal: {signal.get('action')} {signal.get('symbol')}", flush=True)
                     
