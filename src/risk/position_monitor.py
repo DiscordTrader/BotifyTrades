@@ -261,13 +261,14 @@ class RiskDBAdapter:
             return None
         
         try:
+            # Pass type-safe values (the db method handles None internally)
             return self._db.find_open_bto_trade(
                 symbol=symbol,
                 asset_type=asset_type,
                 broker=broker,
-                strike=strike,
-                expiry=expiry,
-                call_put=call_put
+                strike=strike if strike is not None else 0.0,
+                expiry=expiry if expiry is not None else "",
+                call_put=call_put if call_put is not None else ""
             )
         except Exception as e:
             print(f"[RISK] Warning: Could not find open BTO trade: {e}")
@@ -426,6 +427,9 @@ class RiskManager:
     async def _fetch_alpaca_positions(self) -> List[PositionSnapshot]:
         """Fetch and parse Alpaca positions."""
         positions = []
+        
+        if not self.alpaca_broker or not hasattr(self.alpaca_broker, 'trading_client'):
+            return positions
         
         alpaca_raw = await asyncio.to_thread(
             self.alpaca_broker.trading_client.get_all_positions

@@ -13,13 +13,9 @@ from typing import Optional, Dict, Any, List, Tuple
 import os
 import logging
 
+from gui_app.database import get_db_path
+
 logger = logging.getLogger(__name__)
-
-
-def get_db_path():
-    """Get database path - use same logic as database.py for consistency."""
-    from pathlib import Path
-    return Path.cwd() / 'bot_data.db'
 
 
 def get_db_connection():
