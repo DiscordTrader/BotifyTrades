@@ -125,7 +125,7 @@
             </div>
 
             <div class="nav-dropdown">
-                <button class="nav-dropdown-btn {% if request.path in ['/settings', '/architecture', '/license', '/health'] %}active{% endif %}">
+                <button class="nav-dropdown-btn {% if request.path in ['/settings', '/architecture', '/license', '/health', '/telegram', '/brokers'] %}active{% endif %}">
                     Admin
                     <span class="dropdown-arrow">▼</span>
                 </button>
@@ -144,6 +144,11 @@
                         <span class="dropdown-icon">🏦</span>
                         <span class="dropdown-text">Broker Config</span>
                         <span class="dropdown-desc">Multi-country brokers</span>
+                    </a>
+                    <a href="/telegram" class="dropdown-item {% if request.path == '/telegram' %}active{% endif %}">
+                        <span class="dropdown-icon">📱</span>
+                        <span class="dropdown-text">Telegram</span>
+                        <span class="dropdown-desc">Telegram integration</span>
                     </a>
                     <a href="/license" class="dropdown-item {% if request.path == '/license' %}active{% endif %}">
                         <span class="dropdown-icon">🔐</span>
