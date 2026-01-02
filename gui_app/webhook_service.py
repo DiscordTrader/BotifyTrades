@@ -558,7 +558,7 @@ def post_bto_signal(
     
     option_display = format_option_display(symbol, strike, expiry, call_put)
     
-    main_message = f"BTO {option_display} @ {price:.2f} @everyone ({trade_type})"
+    main_message = f"BTO {qty} {option_display} @ {price:.2f} @everyone ({trade_type})"
     
     embed = {
         "description": f"Opened {qty} {option_display} @ ${price:.2f} (Actual Cost: ${price:.2f})",
@@ -619,7 +619,7 @@ def post_stc_signal(
     pnl_sign = "+" if result['pnl_percent'] >= 0 else ""
     pnl_color = 3066993 if result['pnl_percent'] >= 0 else 15158332
     
-    main_text = f"Closed {result['close_qty']} {option_display} @ ${close_price:.2f} (Entry: ${result['entry_price']:.2f}) | Gain: {pnl_sign}{result['pnl_percent']:.1f}%"
+    main_text = f"STC {result['close_qty']} {option_display} @ {close_price:.2f} @everyone (Entry: ${result['entry_price']:.2f}) | Gain: {pnl_sign}{result['pnl_percent']:.1f}%"
     
     summary_embed = {
         "title": "Trade Summary",
