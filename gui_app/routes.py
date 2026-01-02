@@ -5384,6 +5384,100 @@ def register_routes(app):
             print(f"[API] Error updating Telegram settings: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/telegram/test-connection', methods=['POST'])
+    @login_required
+    def api_test_telegram_connection():
+        """Test Telegram connection with provided credentials"""
+        try:
+            from gui_app.database import get_telegram_settings
+            
+            settings = get_telegram_settings()
+            
+            api_id = settings.get('api_id')
+            api_hash = settings.get('api_hash')
+            phone_number = settings.get('phone_number')
+            
+            if not api_id or not api_hash:
+                return jsonify({
+                    'success': False,
+                    'connected': False,
+                    'error': 'API ID and API Hash are required. Please save your credentials first.'
+                }), 400
+            
+            try:
+                from telethon.sync import TelegramClient
+                from telethon.sessions import StringSession
+                import asyncio
+                
+                session_string = settings.get('session_string', '')
+                
+                async def test_connection():
+                    try:
+                        client = TelegramClient(
+                            StringSession(session_string) if session_string else StringSession(),
+                            int(api_id),
+                            api_hash,
+                            device_model="BotifyTrades",
+                            system_version="1.0",
+                            app_version="1.0"
+                        )
+                        
+                        await client.connect()
+                        
+                        if not await client.is_user_authorized():
+                            await client.disconnect()
+                            return {
+                                'connected': False,
+                                'needs_auth': True,
+                                'message': 'Credentials valid but login required. The bot will prompt for auth code on startup.'
+                            }
+                        
+                        me = await client.get_me()
+                        new_session = client.session.save()
+                        await client.disconnect()
+                        
+                        return {
+                            'connected': True,
+                            'username': me.username or me.first_name,
+                            'user_id': me.id,
+                            'session_string': new_session,
+                            'message': f'Connected as {me.first_name or me.username}'
+                        }
+                        
+                    except Exception as e:
+                        return {
+                            'connected': False,
+                            'error': str(e)
+                        }
+                
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(test_connection())
+                loop.close()
+                
+                if result.get('session_string'):
+                    from gui_app.database import update_telegram_settings
+                    update_telegram_settings(
+                        session_string=result['session_string'],
+                        session_status='connected'
+                    )
+                    del result['session_string']
+                
+                return jsonify({'success': True, **result})
+                
+            except ImportError:
+                return jsonify({
+                    'success': False,
+                    'connected': False,
+                    'error': 'Telethon library not installed. Install with: pip install telethon'
+                }), 500
+                
+        except Exception as e:
+            print(f"[API] Error testing Telegram connection: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'connected': False, 'error': str(e)}), 500
+    
     @app.route('/api/telegram/channels', methods=['GET'])
     @login_required
     def api_get_telegram_channels():

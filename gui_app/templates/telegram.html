@@ -591,7 +591,37 @@
     }
 
     async function testConnection() {
-        showToast('Connection testing not yet implemented. Save credentials first.', 'info');
+        const btn = document.querySelector('button[onclick="testConnection()"]');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+        btn.disabled = true;
+        
+        try {
+            const response = await fetch('/api/telegram/test-connection', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            const data = await response.json();
+            
+            if (data.connected) {
+                showToast(`Connected to Telegram as ${data.username || 'user'}`, 'success');
+                updateConnectionStatus('connected');
+            } else if (data.needs_auth) {
+                showToast(data.message || 'Login required - bot will prompt for auth code on startup', 'info');
+                updateConnectionStatus('disconnected');
+            } else {
+                showToast(data.error || 'Connection failed', 'error');
+                updateConnectionStatus('disconnected');
+            }
+        } catch (error) {
+            console.error('Error testing connection:', error);
+            showToast('Error testing connection: ' + error.message, 'error');
+            updateConnectionStatus('disconnected');
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
     }
 
     function updateConnectionStatus(status) {
