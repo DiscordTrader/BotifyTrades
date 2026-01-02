@@ -9102,6 +9102,9 @@ def run_telegram_bot_thread():
                 return
             
             from src.telegram_client import TelegramListener
+            from src.signals.parser import (
+                parse_india_option_signal, parse_india_stock_signal
+            )
             
             listener = TelegramListener(
                 api_id=api_id,
@@ -9118,6 +9121,8 @@ def run_telegram_bot_thread():
                 listener.register_parser('option_signal', parse_option_signal)
             if parse_stock_signal:
                 listener.register_parser('stock_signal', parse_stock_signal)
+            listener.register_parser('india_option_signal', parse_india_option_signal)
+            listener.register_parser('india_stock_signal', parse_india_stock_signal)
             
             _original_print(f"[Telegram Thread] Loading channels from database...")
             listener.load_channels_from_db()
