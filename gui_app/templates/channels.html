@@ -1207,6 +1207,19 @@ function renderChannels() {
                             <span>% position</span>
                         </div>
                     </div>
+                    
+                    <div class="control-group" style="margin-top: 12px;">
+                        <label style="font-size: 0.85rem; color: var(--text-secondary);">
+                            Exit Strategy
+                        </label>
+                        <select class="exec-input" style="width: 100%; padding: 6px 10px; margin-top: 4px;"
+                                onchange="updateExitStrategy(${channel.id}, this.value)"
+                                title="How to handle exits: follow trader signals, use automated risk management, or both">
+                            <option value="signal" ${(channel.exit_strategy_mode || 'signal') === 'signal' ? 'selected' : ''}>Signal (Follow Trader)</option>
+                            <option value="risk" ${channel.exit_strategy_mode === 'risk' ? 'selected' : ''}>Risk (Auto Targets/Stops)</option>
+                            <option value="hybrid" ${channel.exit_strategy_mode === 'hybrid' ? 'selected' : ''}>Hybrid (Both)</option>
+                        </select>
+                    </div>
                 </div>
                 
                 <div class="channel-footer">
@@ -1359,6 +1372,31 @@ async function updateDefaultQuantity(channelId, value) {
             showNotification(`Default quantity set to ${displayValue}`);
         } else {
             showNotification('Error updating default quantity', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function updateExitStrategy(channelId, mode) {
+    try {
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ exit_strategy_mode: mode })
+        });
+        
+        if (response.ok) {
+            const modeLabels = {
+                'signal': 'Signal (Follow Trader)',
+                'risk': 'Risk (Auto Targets/Stops)',
+                'hybrid': 'Hybrid (Both)'
+            };
+            showNotification(`Exit strategy set to ${modeLabels[mode] || mode}`);
+        } else {
+            showNotification('Error updating exit strategy', 'error');
             await loadChannels();
         }
     } catch (error) {
