@@ -9069,6 +9069,11 @@ def run_discord_bot_thread():
 _telegram_ready_event = None
 _telegram_shutdown_event = None
 _telegram_signal_queue = None
+_telegram_listener = None
+
+def get_telegram_listener():
+    """Get the Telegram listener instance (for API access to reload configs)."""
+    return _telegram_listener
 
 def run_telegram_bot_thread():
     """
@@ -9076,7 +9081,7 @@ def run_telegram_bot_thread():
     Uses Telethon to connect as a user account to read trading signals.
     Signals are passed via a thread-safe queue.Queue to avoid cross-loop issues.
     """
-    global _telegram_ready_event, _telegram_shutdown_event, _telegram_signal_queue
+    global _telegram_ready_event, _telegram_shutdown_event, _telegram_signal_queue, _telegram_listener
     
     async def telegram_main():
         """Async entrypoint for Telegram listener with proper lifecycle"""
@@ -9106,12 +9111,14 @@ def run_telegram_bot_thread():
                 parse_india_option_signal, parse_india_stock_signal
             )
             
+            global _telegram_listener
             listener = TelegramListener(
                 api_id=api_id,
                 api_hash=api_hash,
                 phone_number=phone_number,
                 session_string=session_string,
             )
+            _telegram_listener = listener
             
             if _telegram_signal_queue is not None:
                 listener.set_sync_signal_queue(_telegram_signal_queue)

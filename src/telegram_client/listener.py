@@ -247,6 +247,14 @@ class TelegramListener:
             print(f"[TELEGRAM] Error loading channels from database: {e}")
             return 0
     
+    def reload_channels_from_db(self) -> int:
+        """Reload Telegram channel configs from database (called when settings change via UI)."""
+        self._monitored_chats.clear()
+        self._chat_configs.clear()
+        count = self.load_channels_from_db()
+        print(f"[TELEGRAM] Reloaded {count} channel configs from database")
+        return count
+    
     async def connect(self) -> bool:
         """Connect to Telegram."""
         print(f"[TELEGRAM] connect() called - api_id={self.api_id}, has_hash={bool(self.api_hash)}, has_session={bool(self.session_string)}")

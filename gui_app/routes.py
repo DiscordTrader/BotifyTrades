@@ -5747,6 +5747,14 @@ def register_routes(app):
             success = db.update_channel(channel_id, **data)
             
             if success:
+                try:
+                    from src.selfbot_webull import get_telegram_listener
+                    listener = get_telegram_listener()
+                    if listener:
+                        listener.reload_channels_from_db()
+                        print(f"[API] Telegram listener reloaded channel configs")
+                except Exception as reload_err:
+                    print(f"[API] Warning: Could not reload Telegram listener: {reload_err}")
                 return jsonify({'success': True, 'message': 'Telegram channel updated'})
             else:
                 return jsonify({'success': False, 'error': 'Failed to update channel'}), 500
