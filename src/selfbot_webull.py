@@ -255,7 +255,8 @@ def smart_print(*args, **kwargs):
                                          '[SYNC]', '[DATABASE]', '[STARTUP]', '[POSITION SIZE]',
                                          '[SIGNAL PARSED]', '[QUEUE]', '[PAPER TRADE]',
                                          '[ORDER', '[MULTI-BROKER]', '[RISK]', '[TASTYTRADE]',
-                                         '[ROBINHOOD]', '[IBKR]', '[OPTIONS API]']):
+                                         '[ROBINHOOD]', '[IBKR]', '[OPTIONS API]', '[TELEGRAM]',
+                                         '[DHANQ]', '[ZERODHA]', '[UPSTOX]']):
         # Trading/broker messages - show in console
         logger.info(message)
         _original_print(message)
