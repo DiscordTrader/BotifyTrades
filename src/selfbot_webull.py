@@ -4085,6 +4085,30 @@ def parse_option_signal(text: str) -> Optional[dict]:
                                                                                                 "_bishop_format": True
                                                                                             }
                                                                                 
+                                                                                # Try Bishop "stopped out" format: "Got stopped out at $1.65"
+                                                                                # This requires position matching since it doesn't include contract details
+                                                                                bishop_stopped_m = BISHOP_STOPPED_REGEX.search(text.strip())
+                                                                                if bishop_stopped_m:
+                                                                                    price_str = bishop_stopped_m.group(1)
+                                                                                    price = float(price_str) if price_str else None
+                                                                                    print(f"[Discord] ✓ Matched Bishop STOPPED format: exit @ ${price_str}")
+                                                                                    # Mark this signal for position matching (will be resolved during execution)
+                                                                                    return {
+                                                                                        "asset": "option",
+                                                                                        "action": "STC",
+                                                                                        "qty": 0,  # Will be filled from position
+                                                                                        "qty_specified": False,
+                                                                                        "symbol": None,  # Will be matched from most recent position
+                                                                                        "strike": None,
+                                                                                        "opt_type": None,
+                                                                                        "expiry": None,
+                                                                                        "price": price,
+                                                                                        "is_market_order": price is None,
+                                                                                        "_bishop_stopped": True,
+                                                                                        "_exit_type": "ALL",
+                                                                                        "_needs_position_match": True  # Flag for position matching
+                                                                                    }
+                                                                                
                                                                                 # Try EvaPanda format: BTO FSLR 01/16/26 300C @ 3.25
                                                                                 # Uses embed title "Open" or "Close" to indicate entry/exit
                                                                                 evapanda_m = EVAPANDA_REGEX.search(text.strip())
@@ -4723,12 +4747,63 @@ class SelfClient(discord.Client):
         except Exception as e:
             print(f"[DATABASE] Error saving signal: {e}")
     
+    def _resolve_position_match(self, signal: dict, channel_id: int) -> bool:
+        """Resolve signals that need position matching (e.g., Bishop 'stopped out' signals).
+        
+        For exit signals that don't include contract details, this function finds
+        the most recent open position from the channel and fills in the missing info.
+        
+        Returns:
+            True if position was found and signal was resolved
+            False if no matching position found
+        """
+        if not signal.get('_needs_position_match'):
+            return True  # No matching needed
+        
+        try:
+            # Import database function
+            import sys
+            from pathlib import Path
+            parent_dir = Path(__file__).parent.parent
+            if str(parent_dir) not in sys.path:
+                sys.path.insert(0, str(parent_dir))
+            
+            from gui_app.database import get_most_recent_open_lot
+            
+            # Find most recent open lot from this channel
+            lot = get_most_recent_open_lot(channel_id, asset_type='option')
+            
+            if lot:
+                # Fill in contract details from the lot
+                signal['symbol'] = lot['symbol']
+                signal['strike'] = lot['strike']
+                signal['expiry'] = lot['expiry']
+                signal['opt_type'] = lot['call_put']
+                signal['qty'] = lot['remaining_qty']
+                signal['_matched_lot_id'] = lot['id']
+                
+                print(f"[POSITION_MATCH] ✓ Matched 'stopped out' to: {lot['symbol']} {lot['strike']}{lot['call_put']} {lot['expiry']} (qty={lot['remaining_qty']})")
+                return True
+            else:
+                print(f"[POSITION_MATCH] ⚠️ No open position found for channel {channel_id} - skipping 'stopped out' signal")
+                return False
+                
+        except Exception as e:
+            print(f"[POSITION_MATCH] Error matching position: {e}")
+            return False
+    
     def _process_lot_tracking(self, signal: dict, channel_id: int, message_id: int):
         """Process BTO/STC signals for PNL tracking using FIFO lot matching"""
         if not self.db:
             return
         
         try:
+            # Handle position matching for signals that need it (e.g., Bishop 'stopped out')
+            if signal.get('_needs_position_match'):
+                if not self._resolve_position_match(signal, channel_id):
+                    print(f"[PNL_TRACKER] Skipping signal - no matching position found")
+                    return
+            
             # Import lot matcher
             import sys
             from pathlib import Path
