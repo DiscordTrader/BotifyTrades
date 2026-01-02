@@ -117,7 +117,8 @@ class RiskDBAdapter:
                                c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
                                c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
                                c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
-                               c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset
+                               c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
+                               c.exit_strategy_mode
                         FROM trades t
                         LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
                         WHERE t.symbol = ? AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
@@ -136,7 +137,8 @@ class RiskDBAdapter:
                            c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
                            c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
                            c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
-                           c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset
+                           c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
+                           c.exit_strategy_mode
                     FROM trades t
                     LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
                     WHERE t.symbol = ? AND t.asset_type = 'stock'
@@ -174,6 +176,9 @@ class RiskDBAdapter:
                 trim_mode = row[16] if len(row) > 16 and row[16] else 'market'
                 trim_offset = row[17] if len(row) > 17 and row[17] is not None else 0.01
                 
+                # Extract exit strategy mode (signal, risk, hybrid)
+                exit_mode = row[18] if len(row) > 18 and row[18] else 'signal'
+                
                 # Risk management is enabled - return settings
                 return ChannelRiskSettings(
                     channel_id=str(row[0]),
@@ -192,7 +197,8 @@ class RiskDBAdapter:
                     leave_runner_enabled=leave_runner_enabled,
                     leave_runner_pct=leave_runner_pct,
                     trim_order_mode=trim_mode,
-                    trim_limit_offset=trim_offset
+                    trim_limit_offset=trim_offset,
+                    exit_strategy_mode=exit_mode
                 )
             
             return None
@@ -527,11 +533,18 @@ class RiskManager:
                 print(f"[RISK] Using per-channel settings from '{channel_settings.channel_name}': "
                       f"Targets={channel_settings.profit_target_1_pct}%/"
                       f"{channel_settings.profit_target_2_pct}%/{channel_settings.profit_target_3_pct}%, "
-                      f"StopLoss={channel_settings.stop_loss_pct}%")
+                      f"StopLoss={channel_settings.stop_loss_pct}%, ExitMode={channel_settings.exit_strategy_mode}")
         
         # Skip position if global is disabled AND no channel settings - no risk management applies
         if not channel_settings and not risk_settings.enabled:
             return  # Skip this position entirely
+        
+        # Check exit_strategy_mode - if 'signal', skip automated risk evaluation
+        # 'signal' mode = follow trader exit signals only, no automated exits
+        # 'risk' mode = use automated risk management only
+        # 'hybrid' mode = both trader signals AND automated exits
+        if channel_settings and channel_settings.exit_strategy_mode == 'signal':
+            return  # Signal mode: don't apply automated risk management, follow trader signals only
         
         self._log_position_status(position, cache, channel_settings, pct_change)
         

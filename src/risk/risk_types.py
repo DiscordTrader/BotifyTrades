@@ -76,6 +76,7 @@ class ChannelRiskSettings:
     leave_runner_pct: float = 25.0  # Percentage of position to leave as runner
     trim_order_mode: str = 'market'  # 'market' or 'limit' for trim orders
     trim_limit_offset: float = 0.01  # Offset for limit orders (e.g., 0.01 = $0.01)
+    exit_strategy_mode: str = 'signal'  # 'signal' = follow trader, 'risk' = auto exits, 'hybrid' = both
     
     @property
     def has_tiered_targets(self) -> bool:
