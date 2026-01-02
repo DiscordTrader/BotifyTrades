@@ -45,6 +45,46 @@
     <button onclick="resetPNLData()" style="padding: 8px 20px; background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%); color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
         🗑️ Reset All Data
     </button>
+    
+    <button onclick="showPurgeModal()" style="padding: 8px 20px; background: linear-gradient(135deg, #ff8800 0%, #cc5500 100%); color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+        🎯 Selective Purge
+    </button>
+</div>
+
+<!-- Selective Purge Modal -->
+<div id="purgeModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: #2C2C2E; border-radius: 16px; padding: 24px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #fff;">🎯 Selective Data Purge</h3>
+            <button onclick="hidePurgeModal()" style="background: none; border: none; color: #888; font-size: 24px; cursor: pointer;">&times;</button>
+        </div>
+        
+        <!-- Purge by Date Section -->
+        <div style="background: #1C1C1E; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+            <h4 style="color: #ff8800; margin: 0 0 12px 0;">📅 Purge by Date</h4>
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
+                <input type="date" id="purgeStartDate" style="padding: 8px 12px; border-radius: 8px; background: #3A3A3C; color: #fff; border: 1px solid #555; font-size: 14px;">
+                <span style="color: #888;">to</span>
+                <input type="date" id="purgeEndDate" style="padding: 8px 12px; border-radius: 8px; background: #3A3A3C; color: #fff; border: 1px solid #555; font-size: 14px;">
+            </div>
+            <button onclick="purgeByDate()" style="padding: 8px 16px; background: #ff4444; color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%;">
+                Delete Data for Selected Dates
+            </button>
+            <div id="datesList" style="margin-top: 12px; max-height: 150px; overflow-y: auto;"></div>
+        </div>
+        
+        <!-- Purge by Author Section -->
+        <div style="background: #1C1C1E; border-radius: 12px; padding: 16px;">
+            <h4 style="color: #ff8800; margin: 0 0 12px 0;">👤 Purge by Person</h4>
+            <select id="purgeAuthorSelect" style="width: 100%; padding: 10px; border-radius: 8px; background: #3A3A3C; color: #fff; border: 1px solid #555; font-size: 14px; margin-bottom: 12px;">
+                <option value="">Select a person to remove...</option>
+            </select>
+            <button onclick="purgeByAuthor()" style="padding: 8px 16px; background: #ff4444; color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%;">
+                Delete All Data for Selected Person
+            </button>
+            <div id="authorsList" style="margin-top: 12px; max-height: 200px; overflow-y: auto;"></div>
+        </div>
+    </div>
 </div>
 
 <div id="summary-stats" style="display: flex; gap: 24px; margin-bottom: 24px; padding: 16px 20px; background: #2C2C2E; border-radius: 12px; font-size: 14px; flex-wrap: wrap;">
@@ -528,6 +568,136 @@ async function resetPNLData() {
     } catch (error) {
         console.error('Error resetting PNL data:', error);
         alert('❌ Error resetting data. Check console for details.');
+    }
+}
+
+// Show/Hide Purge Modal
+function showPurgeModal() {
+    document.getElementById('purgeModal').style.display = 'flex';
+    loadPurgeData();
+}
+
+function hidePurgeModal() {
+    document.getElementById('purgeModal').style.display = 'none';
+}
+
+// Load purge data (dates and authors)
+async function loadPurgeData() {
+    try {
+        // Load dates with trade data
+        const datesResponse = await fetch('/api/pnl/dates');
+        const datesData = await datesResponse.json();
+        
+        if (datesData.success && datesData.dates.length > 0) {
+            const datesList = document.getElementById('datesList');
+            datesList.innerHTML = '<div style="color: #888; font-size: 12px; margin-bottom: 8px;">Recent dates with data:</div>' +
+                datesData.dates.slice(0, 10).map(d => {
+                    const pnlColor = d.total_pnl >= 0 ? '#00ff88' : '#ff3b30';
+                    return `<div style="display: flex; justify-content: space-between; padding: 4px 8px; background: #2C2C2E; border-radius: 4px; margin-bottom: 4px; font-size: 12px;">
+                        <span style="color: #fff;">${d.date}</span>
+                        <span style="color: #888;">${d.trade_count} trades</span>
+                        <span style="color: ${pnlColor};">$${d.total_pnl.toFixed(2)}</span>
+                    </div>`;
+                }).join('');
+        }
+        
+        // Load authors with trade data
+        const authorsResponse = await fetch('/api/pnl/authors');
+        const authorsData = await authorsResponse.json();
+        
+        if (authorsData.success && authorsData.authors.length > 0) {
+            const select = document.getElementById('purgeAuthorSelect');
+            select.innerHTML = '<option value="">Select a person to remove...</option>';
+            
+            authorsData.authors.forEach(a => {
+                const pnlColor = a.total_pnl >= 0 ? '🟢' : '🔴';
+                select.innerHTML += `<option value="${a.author_name}">${a.author_name} (${a.trade_count} trades, ${pnlColor} $${a.total_pnl.toFixed(2)})</option>`;
+            });
+            
+            const authorsList = document.getElementById('authorsList');
+            authorsList.innerHTML = '<div style="color: #888; font-size: 12px; margin-bottom: 8px;">People with PNL data:</div>' +
+                authorsData.authors.map(a => {
+                    const pnlColor = a.total_pnl >= 0 ? '#00ff88' : '#ff3b30';
+                    return `<div style="display: flex; justify-content: space-between; padding: 4px 8px; background: #2C2C2E; border-radius: 4px; margin-bottom: 4px; font-size: 12px;">
+                        <span style="color: #fff;">${a.author_name}</span>
+                        <span style="color: #888;">${a.trade_count} trades</span>
+                        <span style="color: ${pnlColor};">$${a.total_pnl.toFixed(2)}</span>
+                    </div>`;
+                }).join('');
+        }
+    } catch (error) {
+        console.error('Error loading purge data:', error);
+    }
+}
+
+// Purge by date
+async function purgeByDate() {
+    const startDate = document.getElementById('purgeStartDate').value;
+    const endDate = document.getElementById('purgeEndDate').value || startDate;
+    
+    if (!startDate) {
+        alert('Please select a start date.');
+        return;
+    }
+    
+    if (!confirm(`⚠️ WARNING: This will permanently delete ALL PNL data from ${startDate} to ${endDate}.\n\nThis action cannot be undone. Are you sure?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/pnl/purge/by-date', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ start_date: startDate, end_date: endDate })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`✅ Deleted data from ${startDate} to ${endDate}:\n• ${data.deleted.closures} P/L records\n• ${data.deleted.lots} positions\n• ${data.deleted.signals} signals`);
+            hidePurgeModal();
+            loadPNLData();
+        } else {
+            alert('❌ Error: ' + (data.error || 'Failed to purge data'));
+        }
+    } catch (error) {
+        console.error('Error purging by date:', error);
+        alert('❌ Error purging data. Check console for details.');
+    }
+}
+
+// Purge by author
+async function purgeByAuthor() {
+    const authorName = document.getElementById('purgeAuthorSelect').value;
+    
+    if (!authorName) {
+        alert('Please select a person to remove.');
+        return;
+    }
+    
+    if (!confirm(`⚠️ WARNING: This will permanently delete ALL PNL data for "${authorName}".\n\nThis action cannot be undone. Are you sure?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/pnl/purge/by-author', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ author_name: authorName })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`✅ Deleted all data for "${authorName}":\n• ${data.deleted.closures} P/L records\n• ${data.deleted.lots} positions\n• ${data.deleted.signals} signals`);
+            hidePurgeModal();
+            loadPNLData();
+        } else {
+            alert('❌ Error: ' + (data.error || 'Failed to purge data'));
+        }
+    } catch (error) {
+        console.error('Error purging by author:', error);
+        alert('❌ Error purging data. Check console for details.');
     }
 }
 

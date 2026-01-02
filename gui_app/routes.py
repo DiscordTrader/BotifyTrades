@@ -7081,25 +7081,44 @@ def register_routes(app):
             conn = sqlite3.connect(db.get_db_path())
             cursor = conn.cursor()
             
-            # Delete lot_closures for the date range
+            # Initialize counters
+            closures_deleted = 0
+            
+            # First, get all signal_lots that will be affected
+            cursor.execute('''
+                SELECT id FROM signal_lots 
+                WHERE date(opened_at) BETWEEN ? AND ?
+            ''', (start_date, end_date))
+            lot_ids = [row[0] for row in cursor.fetchall()]
+            
+            # Delete lot_closures for those lots
+            if lot_ids:
+                placeholders = ','.join(['?'] * len(lot_ids))
+                cursor.execute(f'''
+                    DELETE FROM lot_closures 
+                    WHERE lot_id IN ({placeholders})
+                ''', lot_ids)
+                closures_deleted = cursor.rowcount
+            
+            # Also delete closures by date (catches any orphaned closures)
             cursor.execute('''
                 DELETE FROM lot_closures 
                 WHERE date(closed_at) BETWEEN ? AND ?
             ''', (start_date, end_date))
-            closures_deleted = cursor.rowcount
+            closures_deleted += cursor.rowcount
             
-            # Delete signal_lots opened in the date range that are now empty
+            # Delete ALL signal_lots for the date range (regardless of status)
             cursor.execute('''
                 DELETE FROM signal_lots 
                 WHERE date(opened_at) BETWEEN ? AND ?
-                AND status = 'CLOSED'
             ''', (start_date, end_date))
             lots_deleted = cursor.rowcount
             
-            # Delete signals from the date range
+            # Only delete signals that no longer have any associated lots
             cursor.execute('''
                 DELETE FROM signals 
                 WHERE date(timestamp) BETWEEN ? AND ?
+                AND id NOT IN (SELECT DISTINCT signal_id FROM signal_lots WHERE signal_id IS NOT NULL)
             ''', (start_date, end_date))
             signals_deleted = cursor.rowcount
             
