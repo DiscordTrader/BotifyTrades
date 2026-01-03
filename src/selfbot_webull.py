@@ -6392,6 +6392,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     try:
                         symbol = order['symbol']
                         broker_name = order.get('broker_primary', 'Webull')
+                        market = order.get('market', 'US')
                         
                         # Build a BTO signal from the conditional order
                         signal = {
@@ -6404,6 +6405,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             '_broker_override': broker_name,
                         }
                         
+                        # Handle Indian options orders
+                        if market == 'INDIA':
+                            signal['market'] = 'INDIA'
+                            signal['asset'] = 'option'
+                            signal['asset_type'] = 'option'
+                            if order.get('strike'):
+                                signal['strike'] = order['strike']
+                            if order.get('opt_type'):
+                                signal['opt_type'] = order['opt_type']
+                                signal['call_put'] = order['opt_type']
+                            if order.get('expiry'):
+                                signal['expiry'] = order['expiry']
+                            if order.get('lot_size'):
+                                signal['lot_size'] = order['lot_size']
+                            if order.get('lots'):
+                                signal['lots'] = order['lots']
+                            signal['exchange_segment'] = 'NSE_FNO'
+                        
                         # Add position sizing
                         size_mode = order.get('size_mode')
                         if size_mode == 'percent_account':
@@ -6412,7 +6431,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elif size_mode == 'fixed_qty':
                             signal['qty'] = int(order.get('qty_value', 1))
                         else:
-                            signal['qty'] = 1
+                            # For India, use lots; for US, use qty = 1
+                            if market == 'INDIA' and order.get('lots'):
+                                signal['qty'] = int(order['lots'])
+                            else:
+                                signal['qty'] = 1
                         
                         # Add stop loss and profit targets
                         if order.get('stop_loss_value'):
@@ -6426,6 +6449,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             targets = json.loads(order['take_profit_targets']) if isinstance(order['take_profit_targets'], str) else order['take_profit_targets']
                             if targets and len(targets) > 0:
                                 signal['profit_target_price'] = targets[0]
+                                signal['profit_targets'] = targets
                         
                         # Thread-safe handoff to Discord's event loop (non-blocking)
                         async def queue_signal():
@@ -6438,7 +6462,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         def on_done(fut):
                             try:
                                 fut.result()
-                                print(f"[CONDITIONAL] ✓ Queued BTO {symbol} @ ${triggered_price:.2f}")
+                                currency = '₹' if market == 'INDIA' else '$'
+                                option_info = f" {order.get('strike')}{order.get('opt_type')}" if order.get('strike') else ""
+                                print(f"[CONDITIONAL] ✓ Queued BTO {symbol}{option_info} @ {currency}{triggered_price:.2f}")
                             except Exception as e:
                                 print(f"[CONDITIONAL] ❌ Queue error: {e}")
                         
