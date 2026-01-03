@@ -7031,7 +7031,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 # Submit to conditional order service
                                 order_id = conditional_order_service.create_order(cond_channel_id, parsed_cond, cond_broker)
                                 if order_id:
-                                    print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {parsed_cond['condition']} ${parsed_cond['trigger_price']}")
+                                    trigger_type = parsed_cond.get('trigger_type', 'over')
+                                    print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {trigger_type} ${parsed_cond['trigger_price']}")
                                     # Acknowledge in Discord with hourglass reaction
                                     try:
                                         await message.add_reaction('⏳')
