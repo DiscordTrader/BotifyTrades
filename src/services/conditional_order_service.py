@@ -419,6 +419,34 @@ class ConditionalOrderService:
         """Set callback for notifications."""
         self.notification_callback = callback
     
+    def _get_order_by_message_id(self, message_id: str) -> Optional[Dict[str, Any]]:
+        """Check if a conditional order already exists for this message_id."""
+        try:
+            from gui_app.database import get_connection
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT id, symbol, status FROM conditional_orders 
+                WHERE original_message LIKE ? AND status NOT IN ('TERMINATED', 'CANCELED', 'EXPIRED')
+            ''', (f'%message_id={message_id}%',))
+            row = cursor.fetchone()
+            if row:
+                return {'id': row[0], 'symbol': row[1], 'status': row[2]}
+            
+            # Also check signal_id field
+            cursor.execute('''
+                SELECT id, symbol, status FROM conditional_orders 
+                WHERE signal_id = ? AND status NOT IN ('TERMINATED', 'CANCELED', 'EXPIRED')
+            ''', (message_id,))
+            row = cursor.fetchone()
+            if row:
+                return {'id': row[0], 'symbol': row[1], 'status': row[2]}
+            
+            return None
+        except Exception as e:
+            print(f"[CONDITIONAL] Error checking for duplicate: {e}")
+            return None
+    
     def create_order(
         self,
         channel_id: str,
@@ -439,6 +467,15 @@ class ConditionalOrderService:
         if not self.is_enabled():
             print("[CONDITIONAL] Service is disabled")
             return None
+        
+        # Deduplication: Check if order already exists for this message
+        message_id = parsed_signal.get('message_id')
+        if message_id:
+            # Check if we already have an order for this message_id
+            existing = self._get_order_by_message_id(message_id)
+            if existing:
+                print(f"[CONDITIONAL] ⚠️ Duplicate order request for message {message_id} - skipping")
+                return existing.get('id')  # Return existing order ID
         
         channel_settings = get_channel_conditional_settings(channel_id)
         if not channel_settings.get('conditional_order_enabled', True):
@@ -504,6 +541,7 @@ class ConditionalOrderService:
             expires_at=expires_at,
             original_message=parsed_signal.get('_original_message', ''),
             asset_type=parsed_signal.get('asset_type', 'stock'),
+            signal_id=message_id,  # Store message_id for deduplication
             strike=strike,
             opt_type=opt_type,
             market=market,
