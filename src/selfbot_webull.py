@@ -7047,8 +7047,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 parsed_cond['author_id'] = str(message.author.id)
                                 parsed_cond['author_name'] = str(message.author)
                                 
-                                # Determine broker (use channel setting or default to Alpaca paper)
-                                cond_broker = 'Alpaca' if hasattr(self, 'paper_broker') and self.paper_broker else 'Webull'
+                                # Determine broker (use channel setting first, then default)
+                                cond_broker = None
+                                if channel_info and channel_info.get('broker_override'):
+                                    cond_broker = channel_info.get('broker_override')
+                                    print(f"[COND ORDER] Using channel broker override: {cond_broker}")
+                                else:
+                                    cond_broker = 'Alpaca' if hasattr(self, 'paper_broker') and self.paper_broker else 'Webull'
+                                    print(f"[COND ORDER] Using default broker: {cond_broker}")
                                 
                                 # Submit to conditional order service
                                 order_id = conditional_order_service.create_order(cond_channel_id, parsed_cond, cond_broker)
