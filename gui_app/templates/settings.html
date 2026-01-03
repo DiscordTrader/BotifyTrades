@@ -739,6 +739,54 @@ input:checked + .slider:before {
         <div id="robinhood-account-info" class="account-info" style="display: none;"></div>
     </div>
     
+    <!-- Charles Schwab OAuth Integration -->
+    <div class="settings-card" style="background: linear-gradient(135deg, #0a1628 0%, #1a2d47 100%); border-color: rgba(0, 123, 255, 0.4);">
+        <h3 style="color: #0078d7;">🏦 Charles Schwab</h3>
+        <p class="description">Connect your Schwab account via OAuth for stock and options trading</p>
+        
+        <div style="background: rgba(0, 123, 255, 0.1); border: 1px solid rgba(0, 123, 255, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+            <p style="font-size: 12px; color: rgba(0, 123, 255, 0.9); margin: 0;">
+                <strong>OAuth Setup Required:</strong> You need to create an app at <a href="https://developer.schwab.com" target="_blank" style="color: #00d4ff;">developer.schwab.com</a> to get your Client ID and Secret.
+            </p>
+        </div>
+        
+        <div id="schwab-connection-status" class="connection-status disconnected">
+            <span class="status-dot"></span>
+            <span id="schwab-status-text">Not connected</span>
+        </div>
+        
+        <div class="form-group">
+            <label>Client ID (App Key)</label>
+            <input type="text" id="schwab-client-id" placeholder="Your Schwab App Key">
+            <p class="help-text">From Schwab Developer Portal → Your Apps → App Details</p>
+        </div>
+        <div class="form-group">
+            <label>Client Secret</label>
+            <input type="password" id="schwab-client-secret" placeholder="Your Schwab App Secret">
+            <p class="help-text">From Schwab Developer Portal → Your Apps → App Details</p>
+        </div>
+        <div class="form-group">
+            <label>Redirect URI</label>
+            <input type="text" id="schwab-redirect-uri" readonly style="background: rgba(0,0,0,0.3); cursor: not-allowed;">
+            <p class="help-text">Add this URI to your Schwab app's Authorized Redirect URIs</p>
+        </div>
+        
+        <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 10px;">
+                <input type="checkbox" id="schwab-dry-run" checked style="width: auto;">
+                <span>Dry Run Mode (Log orders without executing)</span>
+            </label>
+            <p class="help-text" style="color: #ffc107;">When enabled, orders are logged but NOT sent to Schwab. Disable for real trading.</p>
+        </div>
+        
+        <div class="btn-group">
+            <button id="save-schwab" class="btn btn-success">💾 Save Credentials</button>
+            <button id="connect-schwab" class="btn btn-connect" style="background: linear-gradient(135deg, #0078d7 0%, #005a9e 100%);">🔗 Connect with Schwab</button>
+            <button id="disconnect-schwab" class="btn" style="background: linear-gradient(135deg, #ff5252 0%, #d32f2f 100%); display: none;">❌ Disconnect</button>
+        </div>
+        <div id="schwab-account-info" class="account-info" style="display: none;"></div>
+    </div>
+    
     <!-- Clear Stale Trades - Data Management -->
     <div class="settings-card" style="background: linear-gradient(135deg, #2a1f0d 0%, #3d2a0f 100%); border-color: rgba(255, 170, 0, 0.3);">
         <h3 style="color: #ffaa00;">🧹 Clear Stale Trades</h3>
@@ -2023,6 +2071,133 @@ document.getElementById('connect-robinhood').addEventListener('click', async () 
 
 // Load Robinhood settings on page load
 document.addEventListener('DOMContentLoaded', loadRobinhoodSettings);
+
+// ========== SCHWAB SETTINGS ==========
+
+async function loadSchwabStatus() {
+    try {
+        const response = await fetch('/schwab/status');
+        const data = await response.json();
+        
+        const statusEl = document.getElementById('schwab-connection-status');
+        const statusText = document.getElementById('schwab-status-text');
+        const connectBtn = document.getElementById('connect-schwab');
+        const disconnectBtn = document.getElementById('disconnect-schwab');
+        
+        document.getElementById('schwab-redirect-uri').value = data.redirect_uri || '';
+        
+        if (data.authenticated) {
+            statusEl.className = 'connection-status connected';
+            statusText.textContent = 'Connected';
+            connectBtn.style.display = 'none';
+            disconnectBtn.style.display = 'inline-block';
+        } else if (data.configured) {
+            statusEl.className = 'connection-status disconnected';
+            statusText.textContent = 'Ready to connect';
+            connectBtn.style.display = 'inline-block';
+            disconnectBtn.style.display = 'none';
+        } else {
+            statusEl.className = 'connection-status disconnected';
+            statusText.textContent = 'Not configured';
+            connectBtn.style.display = 'none';
+            disconnectBtn.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error loading Schwab status:', error);
+    }
+}
+
+async function loadSchwabCredentials() {
+    try {
+        const response = await fetch('/api/brokers/SCHWAB/credentials');
+        const data = await response.json();
+        
+        if (data.success && data.credentials) {
+            if (data.credentials.client_id) {
+                document.getElementById('schwab-client-id').placeholder = data.credentials.client_id;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading Schwab credentials:', error);
+    }
+}
+
+document.getElementById('save-schwab').addEventListener('click', async () => {
+    const client_id = document.getElementById('schwab-client-id').value.trim();
+    const client_secret = document.getElementById('schwab-client-secret').value.trim();
+    const redirect_uri = document.getElementById('schwab-redirect-uri').value.trim();
+    const dry_run = document.getElementById('schwab-dry-run').checked;
+    
+    if (!client_id || !client_secret) {
+        const msg = document.getElementById('save-message');
+        msg.textContent = '❌ Client ID and Client Secret are required';
+        msg.className = 'message error';
+        setTimeout(() => msg.textContent = '', 3000);
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/brokers/SCHWAB/credentials', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                credentials: {
+                    client_id: client_id,
+                    client_secret: client_secret,
+                    redirect_uri: redirect_uri,
+                    dry_run: dry_run
+                }
+            })
+        });
+        
+        const result = await response.json();
+        const msg = document.getElementById('save-message');
+        if (result.success) {
+            msg.textContent = '✅ Schwab credentials saved! Click "Connect with Schwab" to authenticate.';
+            msg.className = 'message success';
+            loadSchwabStatus();
+        } else {
+            msg.textContent = '❌ Error: ' + (result.error || 'Failed to save');
+            msg.className = 'message error';
+        }
+        setTimeout(() => msg.textContent = '', 5000);
+    } catch (error) {
+        const msg = document.getElementById('save-message');
+        msg.textContent = '❌ Error: ' + error.message;
+        msg.className = 'message error';
+        setTimeout(() => msg.textContent = '', 3000);
+    }
+});
+
+document.getElementById('connect-schwab').addEventListener('click', () => {
+    window.location.href = '/schwab/login';
+});
+
+document.getElementById('disconnect-schwab').addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to disconnect from Schwab?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/schwab/disconnect', {
+            method: 'POST'
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            const msg = document.getElementById('save-message');
+            msg.textContent = '✅ Disconnected from Schwab';
+            msg.className = 'message success';
+            setTimeout(() => msg.textContent = '', 3000);
+            loadSchwabStatus();
+        }
+    } catch (error) {
+        console.error('Error disconnecting from Schwab:', error);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', loadSchwabStatus);
+document.addEventListener('DOMContentLoaded', loadSchwabCredentials);
 
 // ========== AI & MARKET DATA API KEYS ==========
 
