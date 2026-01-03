@@ -7014,11 +7014,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     try:
                         from src.signals.parser import is_conditional_order_signal, parse_conditional_order_signal
                         if is_conditional_order_signal(message.content):
-                            print(f"[COND ORDER] ✓ Detected conditional order signal in channel {channel_id}")
+                            cond_channel_id = str(message.channel.id)
+                            print(f"[COND ORDER] ✓ Detected conditional order signal in channel {cond_channel_id}")
                             parsed_cond = parse_conditional_order_signal(message.content)
                             if parsed_cond and hasattr(self, 'conditional_order_service') and self.conditional_order_service:
                                 # Add channel context
-                                parsed_cond['channel_id'] = str(channel_id)
+                                parsed_cond['channel_id'] = cond_channel_id
                                 parsed_cond['message_id'] = str(message.id)
                                 parsed_cond['author_id'] = str(message.author.id)
                                 parsed_cond['author_name'] = str(message.author)
