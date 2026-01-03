@@ -1514,6 +1514,24 @@ def register_routes(app):
         """Channel management page"""
         return render_template('channels.html')
     
+    @app.route('/channels/india')
+    def channels_india():
+        """India Market Channels - NSE/BSE/MCX trading with Indian brokers"""
+        response = make_response(render_template('channels_india.html'))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    
+    @app.route('/channels/canada')
+    def channels_canada():
+        """Canada Market Channels - TSX/CSE trading with Canadian brokers"""
+        response = make_response(render_template('channels_canada.html'))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    
     @app.route('/telegram')
     @login_required
     def telegram():
@@ -1548,15 +1566,19 @@ def register_routes(app):
     # Channel management
     @app.route('/api/channels', methods=['GET'])
     def api_get_channels():
-        """Get all channels"""
+        """Get all channels, optionally filtered by category and/or market"""
         category = request.args.get('category')
-        channels = db.get_channels(category=category)
+        market = request.args.get('market')  # US, IN, CA
+        channels = db.get_channels(category=category, market=market)
         return jsonify(channels)
     
     @app.route('/api/channels', methods=['POST'])
     def api_add_channel():
-        """Add a new channel with dual-mode and multi-broker support"""
+        """Add a new channel with dual-mode, multi-broker support, and market segmentation"""
         data = request.json
+        
+        # Get market from request (US, IN, CA) - defaults to US
+        market = data.get('market', 'US')
         
         # Support both old API (category) and new API (flags)
         if 'execute_enabled' in data or 'track_enabled' in data:
@@ -1567,7 +1589,8 @@ def register_routes(app):
                 execute_enabled=data.get('execute_enabled', 0),
                 track_enabled=data.get('track_enabled', 0),
                 broker_override=data.get('broker_override'),
-                enabled_brokers=data.get('enabled_brokers')
+                enabled_brokers=data.get('enabled_brokers'),
+                market=market
             )
         else:
             # Old API: use category (backwards compatible)
@@ -1576,7 +1599,8 @@ def register_routes(app):
                 name=data['name'],
                 category=data.get('category', 'EXECUTE'),
                 broker_override=data.get('broker_override'),
-                enabled_brokers=data.get('enabled_brokers')
+                enabled_brokers=data.get('enabled_brokers'),
+                market=market
             )
         
         if channel_id:

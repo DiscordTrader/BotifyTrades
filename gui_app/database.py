@@ -463,6 +463,14 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added platform columns for multi-platform support (Discord + Telegram)")
     
+    # Migrate: Add market column for regional market segmentation (US, IN, CA)
+    try:
+        cursor.execute('SELECT market FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE channels ADD COLUMN market TEXT DEFAULT 'US'")
+        conn.commit()
+        print("[DATABASE] ✓ Added market column for regional segmentation (US, IN, CA)")
+    
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -1500,8 +1508,8 @@ def get_user_email(username: str) -> Optional[str]:
 
 
 # Channel management functions
-def add_channel(discord_channel_id: str, name: str, category: str = None, execute_enabled: int = 0, track_enabled: int = 0, broker_override: Optional[str] = None, enabled_brokers = None):
-    """Add a new channel with dual-mode and multi-broker support"""
+def add_channel(discord_channel_id: str, name: str, category: str = None, execute_enabled: int = 0, track_enabled: int = 0, broker_override: Optional[str] = None, enabled_brokers = None, market: str = 'US'):
+    """Add a new channel with dual-mode, multi-broker support, and market segmentation"""
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -1525,31 +1533,47 @@ def add_channel(discord_channel_id: str, name: str, category: str = None, execut
     if isinstance(enabled_brokers, list):
         enabled_brokers = json.dumps(enabled_brokers)
     
+    # Validate market code
+    if market not in ('US', 'IN', 'CA'):
+        market = 'US'
+    
     try:
         cursor.execute('''
-            INSERT INTO channels (discord_channel_id, name, category, execute_enabled, track_enabled, broker_override, enabled_brokers)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (discord_channel_id, name, category, execute_enabled, track_enabled, broker_override, enabled_brokers))
+            INSERT INTO channels (discord_channel_id, name, category, execute_enabled, track_enabled, broker_override, enabled_brokers, market)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (discord_channel_id, name, category, execute_enabled, track_enabled, broker_override, enabled_brokers, market))
         conn.commit()
         return cursor.lastrowid
     except sqlite3.IntegrityError:
         return None  # Channel already exists
 
 
-def get_channels(category: Optional[str] = None) -> List[Dict]:
-    """Get all channels or filter by category/flags with signal statistics"""
+def get_channels(category: Optional[str] = None, market: Optional[str] = None) -> List[Dict]:
+    """Get all channels or filter by category/flags and/or market with signal statistics"""
     conn = get_connection()
     cursor = conn.cursor()
     
+    # Build query with optional market filter
+    conditions = []
+    params = []
+    
     if category == 'EXECUTE':
-        # Show channels with execute_enabled=1
-        cursor.execute('SELECT * FROM channels WHERE execute_enabled = 1 ORDER BY name')
+        conditions.append('execute_enabled = 1')
     elif category == 'TRACK':
-        # Show channels with track_enabled=1
-        cursor.execute('SELECT * FROM channels WHERE track_enabled = 1 ORDER BY name')
+        conditions.append('track_enabled = 1')
     elif category:
-        # Fallback to old category filtering for backwards compatibility
-        cursor.execute('SELECT * FROM channels WHERE category = ? ORDER BY name', (category,))
+        conditions.append('category = ?')
+        params.append(category)
+    
+    # Add market filter if provided (US, IN, CA)
+    if market and market in ('US', 'IN', 'CA'):
+        conditions.append('market = ?')
+        params.append(market)
+    
+    # Build and execute query
+    if conditions:
+        query = f'SELECT * FROM channels WHERE {" AND ".join(conditions)} ORDER BY name'
+        cursor.execute(query, params)
     else:
         cursor.execute('SELECT * FROM channels ORDER BY category, name')
     

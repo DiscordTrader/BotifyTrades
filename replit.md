@@ -31,6 +31,12 @@ The **Portfolio Simulation Engine** (`services/simulation.py`) projects portfoli
 
 **Telegram Integration** supports reading trading signals from Telegram groups/channels using a Telethon user client. It features a cross-thread architecture, unified signal processing with Discord, GUI management of Telegram settings, session persistence, and channel-aware routing for independent risk settings and broker selection. Per-channel settings include broker override, default quantity (applied only when signal lacks explicit quantity), position size percentage, exit strategy mode (signal/risk/hybrid), and full risk management configuration (profit targets, stop loss, trailing stops). The unified channel lookup (`get_channel_by_telegram_id`) normalizes Telegram IDs with -100 prefix handling for proper database matching.
 
+**Market-Specific Channel Pages** provide dedicated management for regional markets:
+- **India Markets** (`/channels/india`): NSE/BSE/MCX trading with DhanQ, Upstox, Zerodha brokers. Features F&O lot size reference (NIFTY=25, BANKNIFTY=15, etc.), ₹ INR currency, 9:15 AM - 3:30 PM IST hours. All India brokers are LIVE only (no paper trading).
+- **Canada Markets** (`/channels/canada`): TSX/CSE/NEO trading with Questrade broker (LIVE + PAPER modes). Features CAD currency, TFSA/RRSP account types, 9:30 AM - 4:00 PM ET hours.
+- **Database Schema**: Added `market TEXT DEFAULT 'US'` column to channels table for regional segmentation (US, IN, CA)
+- **Navigation**: India and Canada links in Trading dropdown of main navigation
+
 **Conditional Order Monitoring System** (`src/services/conditional_order_service.py`) monitors price conditions and executes orders when triggered. Supports signals like "LVRO over 1.30 SL 10% profit target 1.43" with price monitoring fallback chain: broker-native APIs (Webull, Alpaca) → Finnhub API (requires FINNHUB_API_KEY) → yfinance (free, no API key required). Features include:
 - **Signal Parsing**: Detects "over/above" and "under/below" trigger patterns with SL (fixed or %), PT (single or multiple targets), and position sizing (% of account or fixed qty) - parser gated to avoid hijacking regular BTO/STC signals
 - **Indian Market Conditional Orders**: Supports signals like "BUY NIFTY 25900 CE ABOVE ₹190 SL ₹180 TGT ₹202-220-240" with IndiaPriceMonitor class using Upstox/Zerodha APIs or yfinance fallback for NSE index prices. Stores strike, opt_type, market, expiry, lot_size, lots fields in database.

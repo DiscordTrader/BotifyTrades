@@ -48,6 +48,16 @@
                         <span class="dropdown-text">Execution</span>
                         <span class="dropdown-desc">Signal processing</span>
                     </a>
+                    <a href="/channels/india" class="dropdown-item {% if request.path == '/channels/india' %}active{% endif %}">
+                        <span class="dropdown-icon">🇮🇳</span>
+                        <span class="dropdown-text">India Markets</span>
+                        <span class="dropdown-desc">NSE/BSE/MCX</span>
+                    </a>
+                    <a href="/channels/canada" class="dropdown-item {% if request.path == '/channels/canada' %}active{% endif %}">
+                        <span class="dropdown-icon">🇨🇦</span>
+                        <span class="dropdown-text">Canada Markets</span>
+                        <span class="dropdown-desc">TSX/CSE</span>
+                    </a>
                     <a href="/pnl" class="dropdown-item {% if request.path == '/pnl' %}active{% endif %}">
                         <span class="dropdown-icon">💰</span>
                         <span class="dropdown-text">PNL</span>
