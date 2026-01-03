@@ -1539,49 +1539,112 @@ async function loadConditionalOrders() {
         
         let html = '<div class="positions-grid">';
         for (const order of orders) {
-            const statusColor = order.status === 'active_monitoring' ? '#22c55e' : 
-                               order.status === 'pending' ? '#f59e0b' : 
-                               order.status === 'triggered' ? '#3b82f6' : 
-                               order.status === 'executed' ? '#22c55e' : '#6b7280';
-            const statusIcon = order.status === 'active_monitoring' ? '📡' : 
-                              order.status === 'pending' ? '⏳' : 
-                              order.status === 'triggered' ? '⚡' : 
-                              order.status === 'executed' ? '✅' : '⏸️';
-            const statusLabel = order.status === 'active_monitoring' ? 'Monitoring' : 
-                               order.status.charAt(0).toUpperCase() + order.status.slice(1).replace(/_/g, ' ');
+            const statusColor = order.status === 'active_monitoring' || order.status === 'ACTIVE_MONITORING' ? '#22c55e' : 
+                               order.status === 'pending' || order.status === 'PENDING' ? '#f59e0b' : 
+                               order.status === 'triggered' || order.status === 'TRIGGERED' ? '#3b82f6' : 
+                               order.status === 'executed' || order.status === 'EXECUTED' ? '#22c55e' : '#6b7280';
+            const statusIcon = order.status === 'active_monitoring' || order.status === 'ACTIVE_MONITORING' ? '📡' : 
+                              order.status === 'pending' || order.status === 'PENDING' ? '⏳' : 
+                              order.status === 'triggered' || order.status === 'TRIGGERED' ? '⚡' : 
+                              order.status === 'executed' || order.status === 'EXECUTED' ? '✅' : '⏸️';
+            const statusLower = (order.status || '').toLowerCase();
+            const statusLabel = statusLower === 'active_monitoring' ? 'Monitoring' : 
+                               statusLower.charAt(0).toUpperCase() + statusLower.slice(1).replace(/_/g, ' ');
             
             const triggerDirection = order.trigger_type === 'over' ? '↑' : '↓';
             const triggerText = order.trigger_type === 'over' ? 'Above' : 'Below';
+            const triggerPrice = parseFloat(order.trigger_price) || 0;
+            const adjustedPrice = parseFloat(order.adjusted_trigger_price) || triggerPrice;
+            const currentOffset = triggerPrice > 0 ? ((adjustedPrice - triggerPrice) / triggerPrice * 100) : 0;
+            const offsetSign = currentOffset >= 0 ? '+' : '';
+            
+            const slValue = order.stop_loss_value ? parseFloat(order.stop_loss_value) : null;
+            const slType = order.stop_loss_type || '';
+            const slDisplay = slValue ? (slType === 'percent' ? `${slValue}%` : `$${slValue.toFixed(2)}`) : null;
+            
+            let ptDisplay = null;
+            try {
+                const targets = order.take_profit_targets ? JSON.parse(order.take_profit_targets) : [];
+                if (targets.length > 0) {
+                    ptDisplay = targets.map(t => `$${parseFloat(t).toFixed(2)}`).join(', ');
+                }
+            } catch(e) {}
+            
+            const sizeMode = order.size_mode || '';
+            const qtyValue = order.qty_value ? parseFloat(order.qty_value) : null;
+            const calcQty = order.calculated_qty ? parseInt(order.calculated_qty) : null;
+            let sizeDisplay = '';
+            if (sizeMode === 'percent_account' && qtyValue) {
+                sizeDisplay = `${qtyValue}% of account`;
+            } else if (sizeMode === 'fixed_qty' && qtyValue) {
+                sizeDisplay = `${parseInt(qtyValue)} shares`;
+            } else if (calcQty) {
+                sizeDisplay = `${calcQty} shares`;
+            }
+            
+            const isActive = statusLower === 'active_monitoring' || statusLower === 'pending';
             
             html += `
                 <div class="position-card" style="border-left: 3px solid ${statusColor};">
-                    <div class="position-main" style="grid-template-columns: 1fr 1fr 1fr 1fr auto;">
+                    <div class="position-main" style="display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: start;">
                         <div class="position-symbol">
-                            <div style="font-size: 1.125rem; font-weight: 700; color: var(--text-primary);">${order.symbol}</div>
-                            <div style="font-size: 0.75rem; color: var(--text-muted);">Conditional</div>
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">Trigger</div>
-                            <div style="font-size: 1rem; font-weight: 600; color: var(--accent-teal);">${triggerDirection} $${parseFloat(order.trigger_price).toFixed(2)}</div>
-                            <div style="font-size: 0.75rem; color: var(--text-muted);">${triggerText}</div>
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">Risk</div>
-                            ${order.stop_loss ? `<div style="font-size: 0.875rem; color: #ef4444;">SL: $${parseFloat(order.stop_loss).toFixed(2)}</div>` : '<div style="color: var(--text-muted);">—</div>'}
-                            ${order.profit_target ? `<div style="font-size: 0.875rem; color: #22c55e;">PT: $${parseFloat(order.profit_target).toFixed(2)}</div>` : ''}
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">Status</div>
-                            <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px; background: ${statusColor}20; color: ${statusColor}; font-size: 0.8125rem; font-weight: 600;">
+                            <div style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">${order.symbol}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">${order.asset_type || 'stock'}</div>
+                            <div style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 10px; background: ${statusColor}20; color: ${statusColor}; font-size: 0.7rem; font-weight: 600; margin-top: 8px;">
                                 ${statusIcon} ${statusLabel}
                             </div>
                         </div>
-                        <div style="display: flex; gap: 8px;">
-                            ${(order.status === 'active_monitoring' || order.status === 'pending') ? 
-                                `<button onclick="cancelConditionalOrder(${order.id})" class="btn btn-small" style="background: linear-gradient(135deg, #ef4444, #dc2626); border: none; color: white; padding: 6px 12px; font-size: 0.75rem;">
-                                    Cancel
-                                </button>` : ''
-                            }
+                        
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px;">
+                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Trigger</div>
+                                <div style="font-size: 1rem; font-weight: 600; color: var(--accent-teal);">${triggerDirection} $${triggerPrice.toFixed(2)}</div>
+                                <div style="font-size: 0.7rem; color: var(--text-muted);">${triggerText}</div>
+                            </div>
+                            
+                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Adjusted</div>
+                                <div style="font-size: 1rem; font-weight: 600; color: ${currentOffset !== 0 ? '#f59e0b' : 'var(--text-primary)'};">$${adjustedPrice.toFixed(2)}</div>
+                                <div style="font-size: 0.7rem; color: ${currentOffset >= 0 ? '#22c55e' : '#ef4444'};">${offsetSign}${currentOffset.toFixed(1)}%</div>
+                            </div>
+                            
+                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Position</div>
+                                <div style="font-size: 0.875rem; font-weight: 500; color: var(--text-primary);">${sizeDisplay || '—'}</div>
+                            </div>
+                            
+                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Stop Loss</div>
+                                <div style="font-size: 0.875rem; font-weight: 500; color: ${slDisplay ? '#ef4444' : 'var(--text-muted)'};">${slDisplay || '—'}</div>
+                            </div>
+                            
+                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Profit Target</div>
+                                <div style="font-size: 0.875rem; font-weight: 500; color: ${ptDisplay ? '#22c55e' : 'var(--text-muted)'};">${ptDisplay || '—'}</div>
+                            </div>
+                            
+                            ${isActive ? `
+                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Adjust Offset</div>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <input type="range" id="offset-${order.id}" min="-10" max="10" step="0.5" value="${currentOffset.toFixed(1)}" 
+                                        style="width: 80px; accent-color: var(--accent-teal);"
+                                        onchange="updateOffsetDisplay(${order.id}, this.value)">
+                                    <span id="offset-label-${order.id}" style="font-size: 0.8rem; font-weight: 600; color: var(--accent-teal); min-width: 45px;">${offsetSign}${currentOffset.toFixed(1)}%</span>
+                                </div>
+                                <button onclick="applyOffset(${order.id})" class="btn btn-small" style="margin-top: 6px; background: linear-gradient(135deg, var(--accent-teal), var(--accent-blue)); border: none; color: white; padding: 4px 10px; font-size: 0.7rem; width: 100%;">
+                                    Apply
+                                </button>
+                            </div>
+                            ` : ''}
+                            
+                            ${isActive ? `
+                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                                <button onclick="cancelConditionalOrder(${order.id})" class="btn btn-small" style="background: linear-gradient(135deg, #ef4444, #dc2626); border: none; color: white; padding: 8px 16px; font-size: 0.75rem;">
+                                    Cancel Order
+                                </button>
+                            </div>
+                            ` : ''}
                         </div>
                     </div>
                 </div>
@@ -1593,6 +1656,40 @@ async function loadConditionalOrders() {
     } catch (err) {
         console.error('[loadConditionalOrders] Error:', err);
         container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">Error loading conditional orders: ${err.message}</div>`;
+    }
+}
+
+function updateOffsetDisplay(orderId, value) {
+    const label = document.getElementById(`offset-label-${orderId}`);
+    if (label) {
+        const v = parseFloat(value);
+        const sign = v >= 0 ? '+' : '';
+        label.textContent = `${sign}${v.toFixed(1)}%`;
+        label.style.color = v === 0 ? 'var(--accent-teal)' : (v > 0 ? '#22c55e' : '#ef4444');
+    }
+}
+
+async function applyOffset(orderId) {
+    const slider = document.getElementById(`offset-${orderId}`);
+    if (!slider) return;
+    
+    const offsetPercent = parseFloat(slider.value);
+    
+    try {
+        const response = await fetch(`/api/conditional_orders/${orderId}/offset`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ offset_percent: offsetPercent })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            loadConditionalOrders();
+        } else {
+            alert('Failed to update offset: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
     }
 }
 

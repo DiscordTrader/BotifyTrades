@@ -7708,6 +7708,46 @@ def cancel_conditional_order(order_id: int, reason: str = 'User cancelled') -> b
     )
 
 
+def update_conditional_order_trigger_offset(order_id: int, offset_percent: float) -> bool:
+    """Update the trigger offset for a conditional order and recalculate adjusted price"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT trigger_price, trigger_type FROM conditional_orders WHERE id = ?', (order_id,))
+        row = cursor.fetchone()
+        if not row:
+            return False
+        
+        trigger_price = row['trigger_price']
+        trigger_type = row['trigger_type']
+        
+        if trigger_type == 'over':
+            adjusted_price = trigger_price * (1 + offset_percent / 100)
+        else:
+            adjusted_price = trigger_price * (1 - offset_percent / 100)
+        
+        cursor.execute('''
+            UPDATE conditional_orders 
+            SET adjusted_trigger_price = ?
+            WHERE id = ?
+        ''', (adjusted_price, order_id))
+        
+        cursor.execute('''
+            INSERT INTO conditional_order_audit (order_id, previous_status, new_status, event, details)
+            SELECT id, status, status, 'OFFSET_ADJUSTED', ?
+            FROM conditional_orders WHERE id = ?
+        ''', (f'Trigger offset adjusted to {offset_percent:+.1f}% -> ${adjusted_price:.2f}', order_id))
+        
+        conn.commit()
+        print(f"[DATABASE] Updated conditional order #{order_id} offset to {offset_percent:+.1f}%")
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error updating conditional order trigger offset: {e}")
+        conn.rollback()
+        return False
+
+
 def expire_old_conditional_orders() -> int:
     """Expire conditional orders that have passed their expiry time"""
     conn = get_connection()

@@ -5338,6 +5338,32 @@ def register_routes(app):
             print(f"[API] Error fetching conditional order audit: {e}")
             return jsonify({'error': str(e)}), 500
     
+    @app.route('/api/conditional_orders/<int:order_id>/offset', methods=['POST'])
+    def api_update_conditional_order_offset(order_id):
+        """Update trigger offset for a conditional order"""
+        try:
+            data = request.json or {}
+            offset_percent = float(data.get('offset_percent', 0))
+            
+            if offset_percent < -50 or offset_percent > 50:
+                return jsonify({'error': 'Offset must be between -50% and +50%'}), 400
+            
+            success = db.update_conditional_order_trigger_offset(order_id, offset_percent)
+            
+            if success:
+                order = db.get_conditional_order_by_id(order_id)
+                return jsonify({
+                    'success': True,
+                    'message': f'Offset updated to {offset_percent:+.1f}%',
+                    'adjusted_trigger_price': order.get('adjusted_trigger_price') if order else None
+                })
+            else:
+                return jsonify({'error': 'Failed to update offset'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error updating conditional order offset: {e}")
+            return jsonify({'error': str(e)}), 500
+    
     # Risk Management Settings
     @app.route('/api/settings/risk_management', methods=['GET'])
     def api_get_risk_management_settings():
