@@ -28,9 +28,12 @@ INDIA_OPT_PATTERN_4 = r'(?:^|\s)(BUY|SELL)\s+(?:(\d+)\s+(?:LOT|LOTS|QTY)\s+)?([A
 
 INDIA_OPT_PATTERN_5 = r'(?:^|\s)(BUY|SELL)\s+(\d+)\s+([A-Za-z]+)\s+(\d+)\s*(CE|PE)\s*(?:@|AT)?\s*[₹]?([\d.]+)'
 
+INDIA_OPT_PATTERN_ABOVE = r'(?:^|\s)(BUY|SELL)\s+([A-Za-z]+)\s+(\d+)\s*(CE|PE)\s+(?:ABOVE|BELOW)\s*[₹]?([\d.]+)'
+
 INDIA_STK_PATTERN = r'(?:^|\s)(BUY|SELL)\s+([A-Za-z]+)\s*(?:@|AT)?\s*[₹]?([\d.]+)'
 
 INDIA_PATTERNS = [
+    INDIA_OPT_PATTERN_ABOVE,
     INDIA_OPT_PATTERN_1,
     INDIA_OPT_PATTERN_2,
     INDIA_OPT_PATTERN_3,

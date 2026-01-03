@@ -12,6 +12,7 @@ from .patterns import (
     create_option_regex,
     create_stock_regex,
     INDIA_PATTERNS,
+    INDIA_OPT_PATTERN_ABOVE,
     INDIA_STK_PATTERN,
     INDIA_MONTH_MAP,
     NSE_LOT_SIZES,
@@ -1193,6 +1194,10 @@ def normalize_bullwinkle_format(text: str) -> str:
     return text
 
 
+INDIA_SL_PATTERN = re.compile(r'SL\s*[₹]?([\d.]+)', re.IGNORECASE)
+INDIA_TGT_PATTERN = re.compile(r'(?:TGT|TARGET|TP)\s*[₹]?([\d.\-]+)', re.IGNORECASE)
+
+
 def parse_india_option_signal(text: str) -> Optional[Dict[str, Any]]:
     """
     Parse an Indian option trading signal from text.
@@ -1203,6 +1208,7 @@ def parse_india_option_signal(text: str) -> Optional[Dict[str, Any]]:
     - "NIFTY 24100 CE BUY @ 130"
     - "BUY 2 LOT NIFTY 24000 CE @ 145"
     - "BUY NIFTY 24000 CE 28 DEC @ 145"
+    - "BUY NIFTY 25900 CE ABOVE ₹190 SL ₹180 TGT ₹202-220-240"
     
     Args:
         text: Raw message text to parse
@@ -1214,29 +1220,33 @@ def parse_india_option_signal(text: str) -> Optional[Dict[str, Any]]:
     
     text_clean = text.strip()
     
-    for pattern in INDIA_PATTERNS:
+    for i, pattern in enumerate(INDIA_PATTERNS):
         regex = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
         m = regex.search(text_clean)
         
         if m:
             groups = m.groups()
             
-            if 'INDIA_OPT_PATTERN_1' in pattern or pattern == INDIA_PATTERNS[0]:
+            if pattern == INDIA_OPT_PATTERN_ABOVE:
                 direction, symbol, strike, opt_type, price_str = groups[0], groups[1], groups[2], groups[3], groups[4]
                 expiry_str = None
                 qty = None
-            elif pattern == INDIA_PATTERNS[1]:
+            elif i == 1:
+                direction, symbol, strike, opt_type, price_str = groups[0], groups[1], groups[2], groups[3], groups[4]
+                expiry_str = None
+                qty = None
+            elif i == 2:
                 symbol, strike, opt_type, direction, price_str = groups[0], groups[1], groups[2], groups[3], groups[4]
                 expiry_str = None
                 qty = None
-            elif pattern == INDIA_PATTERNS[2]:
+            elif i == 3:
                 direction, symbol, strike, opt_type, expiry_str, price_str = groups[0], groups[1], groups[2], groups[3], groups[4], groups[5]
                 qty = None
-            elif pattern == INDIA_PATTERNS[3]:
+            elif i == 4:
                 direction, qty_str, symbol, strike, opt_type, price_str = groups[0], groups[1], groups[2], groups[3], groups[4], groups[5]
                 qty = int(qty_str) if qty_str else None
                 expiry_str = None
-            elif pattern == INDIA_PATTERNS[4]:
+            elif i == 5:
                 direction, qty_str, symbol, strike, opt_type, price_str = groups[0], groups[1], groups[2], groups[3], groups[4], groups[5]
                 qty = int(qty_str) if qty_str else None
                 expiry_str = None
@@ -1263,6 +1273,26 @@ def parse_india_option_signal(text: str) -> Optional[Dict[str, Any]]:
             except (ValueError, TypeError):
                 price = None
             
+            stop_loss = None
+            sl_match = INDIA_SL_PATTERN.search(text_clean)
+            if sl_match:
+                try:
+                    stop_loss = float(sl_match.group(1))
+                except (ValueError, TypeError):
+                    pass
+            
+            profit_targets = []
+            tgt_match = INDIA_TGT_PATTERN.search(text_clean)
+            if tgt_match:
+                tgt_str = tgt_match.group(1)
+                for tgt in re.split(r'[-,\s]+', tgt_str):
+                    tgt_clean = tgt.strip()
+                    if tgt_clean:
+                        try:
+                            profit_targets.append(float(tgt_clean))
+                        except (ValueError, TypeError):
+                            pass
+            
             result = {
                 'asset': 'option',
                 'action': action,
@@ -1282,9 +1312,13 @@ def parse_india_option_signal(text: str) -> Optional[Dict[str, Any]]:
                 'exchange_segment': 'NSE_FNO',
                 'is_market_order': price is None,
                 'original_format': 'INDIA',
+                'stop_loss': stop_loss,
+                'profit_targets': profit_targets if profit_targets else None,
             }
             
-            print(f"[INDIA] ✓ Parsed: {action} {quantity} {symbol} {strike}{opt_type} {expiry} @ {price}")
+            sl_str = f" SL=₹{stop_loss}" if stop_loss else ""
+            tgt_str = f" TGT={profit_targets}" if profit_targets else ""
+            print(f"[INDIA] ✓ Parsed: {action} {quantity} {symbol} {strike}{opt_type} {expiry} @ ₹{price}{sl_str}{tgt_str}")
             return result
     
     return None
