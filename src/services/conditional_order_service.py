@@ -753,7 +753,14 @@ class ConditionalOrderService:
         if not order:
             return
         
-        trigger_price = order.get('adjusted_trigger_price') or order.get('trigger_price')
+        # Reload adjusted_trigger_price from database to pick up GUI offset changes
+        fresh_order = get_conditional_order_by_id(order_id)
+        if fresh_order:
+            trigger_price = fresh_order.get('adjusted_trigger_price') or fresh_order.get('trigger_price')
+            # Update cached order with fresh adjusted price
+            order['adjusted_trigger_price'] = fresh_order.get('adjusted_trigger_price')
+        else:
+            trigger_price = order.get('adjusted_trigger_price') or order.get('trigger_price')
         trigger_type = order.get('trigger_type', 'over')
         
         triggered = False
