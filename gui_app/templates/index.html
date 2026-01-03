@@ -1566,7 +1566,11 @@ async function loadConditionalOrders() {
             try {
                 const targets = order.take_profit_targets ? JSON.parse(order.take_profit_targets) : [];
                 if (targets.length > 0) {
-                    ptDisplay = targets.map(t => `$${parseFloat(t).toFixed(2)}`).join(', ');
+                    const isChannelSource = order.params_source === 'channel';
+                    ptDisplay = targets.map(t => {
+                        const val = parseFloat(t);
+                        return isChannelSource ? `${val}%` : `$${val.toFixed(2)}`;
+                    }).join(', ');
                 }
             } catch(e) {}
             
