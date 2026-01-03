@@ -90,3 +90,4 @@ openai
 PySide6
 upstox-python-sdk
 telethon
+schwab-py
