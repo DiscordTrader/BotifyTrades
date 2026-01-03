@@ -33,7 +33,8 @@ The **Portfolio Simulation Engine** (`services/simulation.py`) projects portfoli
 
 **Conditional Order Monitoring System** (`src/services/conditional_order_service.py`) monitors price conditions and executes orders when triggered. Supports signals like "LVRO over 1.30 SL 10% profit target 1.43" with price monitoring fallback chain: broker-native APIs (Webull, Alpaca) → Finnhub API (requires FINNHUB_API_KEY) → yfinance (free, no API key required). Features include:
 - **Signal Parsing**: Detects "over/above" and "under/below" trigger patterns with SL (fixed or %), PT (single or multiple targets), and position sizing (% of account or fixed qty) - parser gated to avoid hijacking regular BTO/STC signals
-- **Price Monitoring**: Three-tier fallback: BrokerPriceMonitor → FinnhubPriceMonitor → YFinancePriceMonitor (always available, no API key)
+- **Indian Market Conditional Orders**: Supports signals like "BUY NIFTY 25900 CE ABOVE ₹190 SL ₹180 TGT ₹202-220-240" with IndiaPriceMonitor class using Upstox/Zerodha APIs or yfinance fallback for NSE index prices. Stores strike, opt_type, market, expiry, lot_size, lots fields in database.
+- **Price Monitoring**: Three-tier fallback for US: BrokerPriceMonitor → FinnhubPriceMonitor → YFinancePriceMonitor. For India: IndiaPriceMonitor (Upstox API → yfinance fallback)
 - **Per-Channel Settings**: trigger_offset_percent (+/- to confirm breakout or early entry), conditional_order_expiry (end_of_day, 1_hour, 4_hours), conditional_auto_execute
 - **State Machine**: PENDING → VALIDATING → ACTIVE_MONITORING → TRIGGERED → EXECUTING → TRACKING → TERMINATED
 - **Audit Trail**: Full lifecycle logging in conditional_order_audit table for debugging and compliance
