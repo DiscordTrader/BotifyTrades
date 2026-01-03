@@ -1196,6 +1196,7 @@ def normalize_bullwinkle_format(text: str) -> str:
 
 INDIA_SL_PATTERN = re.compile(r'SL\s*[₹]?([\d.]+)', re.IGNORECASE)
 INDIA_TGT_PATTERN = re.compile(r'(?:TGT|TARGET|TP)\s*[₹]?([\d.\-]+)', re.IGNORECASE)
+INDIA_CONDITIONAL_PATTERN = re.compile(r'\b(ABOVE|BELOW)\b', re.IGNORECASE)
 
 
 def parse_india_option_signal(text: str) -> Optional[Dict[str, Any]]:
@@ -1293,6 +1294,10 @@ def parse_india_option_signal(text: str) -> Optional[Dict[str, Any]]:
                         except (ValueError, TypeError):
                             pass
             
+            is_conditional = bool(INDIA_CONDITIONAL_PATTERN.search(text_clean))
+            conditional_match = INDIA_CONDITIONAL_PATTERN.search(text_clean)
+            trigger_type = conditional_match.group(1).lower() if conditional_match else None
+            
             result = {
                 'asset': 'option',
                 'action': action,
@@ -1314,11 +1319,15 @@ def parse_india_option_signal(text: str) -> Optional[Dict[str, Any]]:
                 'original_format': 'INDIA',
                 'stop_loss': stop_loss,
                 'profit_targets': profit_targets if profit_targets else None,
+                '_conditional_order': is_conditional,
+                'trigger_price': price if is_conditional else None,
+                'trigger_type': 'over' if trigger_type == 'above' else 'under' if trigger_type == 'below' else None,
             }
             
             sl_str = f" SL=₹{stop_loss}" if stop_loss else ""
             tgt_str = f" TGT={profit_targets}" if profit_targets else ""
-            print(f"[INDIA] ✓ Parsed: {action} {quantity} {symbol} {strike}{opt_type} {expiry} @ ₹{price}{sl_str}{tgt_str}")
+            cond_str = f" [CONDITIONAL: {trigger_type} ₹{price}]" if is_conditional else ""
+            print(f"[INDIA] ✓ Parsed: {action} {quantity} {symbol} {strike}{opt_type} {expiry} @ ₹{price}{sl_str}{tgt_str}{cond_str}")
             return result
     
     return None

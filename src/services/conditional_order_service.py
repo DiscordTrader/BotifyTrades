@@ -257,8 +257,100 @@ class BrokerPriceMonitor(PriceMonitor):
                     if quote and 'close' in quote:
                         return float(quote['close'])
             
+            elif self.broker_name.lower() == 'upstox':
+                if hasattr(self.broker_instance, 'get_quote'):
+                    quote = await self.broker_instance.get_quote(self.symbol)
+                    if quote and isinstance(quote, dict):
+                        for key, data in quote.items():
+                            if hasattr(data, 'last_price'):
+                                return float(data.last_price)
+                            elif isinstance(data, dict) and 'last_price' in data:
+                                return float(data['last_price'])
+            
         except Exception as e:
             print(f"[{self.broker_name.upper()}] Quote error for {self.symbol}: {e}")
+        
+        return None
+
+
+class IndiaPriceMonitor(PriceMonitor):
+    """
+    Price monitor for Indian markets (NSE options).
+    Uses Upstox/Zerodha API or fallback to yfinance for index prices.
+    """
+    
+    def __init__(self, symbol: str, strike: float, opt_type: str, callback: Callable[[str, float], None], broker_instance: Any = None):
+        super().__init__(symbol, callback)
+        self.strike = strike
+        self.opt_type = opt_type
+        self.broker_instance = broker_instance
+        self.poll_interval = 5
+        self._error_count = 0
+        self._max_errors = 10
+        self.instrument_key = self._build_instrument_key()
+    
+    def _build_instrument_key(self) -> str:
+        """Build Upstox instrument key for NSE options."""
+        index_map = {
+            'NIFTY': 'NSE_INDEX|Nifty 50',
+            'BANKNIFTY': 'NSE_INDEX|Nifty Bank',
+            'FINNIFTY': 'NSE_INDEX|Nifty Fin Service',
+        }
+        return index_map.get(self.symbol.upper(), f'NSE_EQ|{self.symbol}')
+    
+    async def start(self):
+        """Start polling for price updates."""
+        self.is_running = True
+        print(f"[INDIA] Starting price monitor for {self.symbol} {self.strike}{self.opt_type}")
+        
+        while self.is_running and self._error_count < self._max_errors:
+            try:
+                price = await self._fetch_price()
+                if price and price != self.last_price:
+                    self.last_price = price
+                    self._error_count = 0
+                    await self.callback(self.symbol, price)
+            except Exception as e:
+                self._error_count += 1
+                print(f"[INDIA] Error fetching price for {self.symbol}: {e}")
+            
+            await asyncio.sleep(self.poll_interval)
+        
+        if self._error_count >= self._max_errors:
+            print(f"[INDIA] Too many errors, stopping monitor for {self.symbol}")
+    
+    async def _fetch_price(self) -> Optional[float]:
+        """Fetch option price from broker or fallback."""
+        if self.broker_instance and hasattr(self.broker_instance, 'get_quote'):
+            try:
+                opt_suffix = 'CE' if self.opt_type == 'C' else 'PE'
+                option_symbol = f"NSE_FO|{self.symbol}{int(self.strike)}{opt_suffix}"
+                quote = await self.broker_instance.get_quote(option_symbol)
+                if quote:
+                    for key, data in quote.items() if isinstance(quote, dict) else []:
+                        if hasattr(data, 'last_price'):
+                            return float(data.last_price)
+                        elif isinstance(data, dict) and 'last_price' in data:
+                            return float(data['last_price'])
+            except Exception as e:
+                print(f"[INDIA] Broker quote failed: {e}")
+        
+        try:
+            import yfinance as yf
+            loop = asyncio.get_event_loop()
+            
+            yf_symbol = f"^NSEI" if self.symbol.upper() == 'NIFTY' else f"^NSEBANK" if self.symbol.upper() == 'BANKNIFTY' else self.symbol
+            
+            def get_index_price():
+                ticker = yf.Ticker(yf_symbol)
+                fast_info = ticker.fast_info
+                return fast_info.get('lastPrice') or fast_info.get('regularMarketPrice')
+            
+            index_price = await loop.run_in_executor(None, get_index_price)
+            if index_price:
+                return float(index_price)
+        except Exception as e:
+            print(f"[INDIA] yfinance fallback failed: {e}")
         
         return None
 
