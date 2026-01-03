@@ -7370,6 +7370,21 @@ def init_conditional_orders_table():
         CREATE INDEX IF NOT EXISTS idx_conditional_channel ON conditional_orders(channel_id)
     ''')
     
+    india_columns = [
+        ('strike', 'REAL'),
+        ('opt_type', 'TEXT'),
+        ('market', 'TEXT DEFAULT "US"'),
+        ('expiry', 'TEXT'),
+        ('lot_size', 'INTEGER'),
+        ('lots', 'INTEGER DEFAULT 1'),
+    ]
+    for col_name, col_type in india_columns:
+        try:
+            cursor.execute(f'ALTER TABLE conditional_orders ADD COLUMN {col_name} {col_type}')
+            print(f"[DATABASE] Added column {col_name} to conditional_orders")
+        except Exception:
+            pass
+    
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conditional_order_audit (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -7544,7 +7559,13 @@ def create_conditional_order(
     original_message: str = None,
     asset_type: str = 'stock',
     adjusted_trigger_price: float = None,
-    signal_id: str = None
+    signal_id: str = None,
+    strike: float = None,
+    opt_type: str = None,
+    market: str = 'US',
+    expiry: str = None,
+    lot_size: int = None,
+    lots: int = None
 ) -> Optional[int]:
     """Create a new conditional order"""
     conn = get_connection()
@@ -7556,24 +7577,26 @@ def create_conditional_order(
                 channel_id, symbol, trigger_type, trigger_price, adjusted_trigger_price,
                 broker_primary, stop_loss_type, stop_loss_value, take_profit_targets,
                 size_mode, qty_value, calculated_qty, params_source, expires_at,
-                original_message, asset_type, signal_id, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
+                original_message, asset_type, signal_id, strike, opt_type, market, expiry, lot_size, lots, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
         ''', (
             channel_id, symbol.upper(), trigger_type, trigger_price, adjusted_trigger_price,
             broker_primary, stop_loss_type, stop_loss_value, take_profit_targets,
             size_mode, qty_value, calculated_qty, params_source, expires_at,
-            original_message, asset_type, signal_id
+            original_message, asset_type, signal_id, strike, opt_type, market, expiry, lot_size, lots
         ))
         
         order_id = cursor.lastrowid
         
+        market_info = f" [{market}]" if market != 'US' else ""
+        option_info = f" {strike}{opt_type}" if strike and opt_type else ""
         cursor.execute('''
             INSERT INTO conditional_order_audit (order_id, previous_status, new_status, event, details)
             VALUES (?, NULL, 'PENDING', 'CREATED', ?)
-        ''', (order_id, f'Conditional order created for {symbol} {trigger_type} {trigger_price}'))
+        ''', (order_id, f'Conditional order created for {symbol}{option_info} {trigger_type} {trigger_price}{market_info}'))
         
         conn.commit()
-        print(f"[DATABASE] ✓ Created conditional order #{order_id} for {symbol}")
+        print(f"[DATABASE] ✓ Created conditional order #{order_id} for {symbol}{option_info}{market_info}")
         return order_id
     except Exception as e:
         print(f"[DATABASE] Error creating conditional order: {e}")

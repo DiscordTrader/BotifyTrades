@@ -7324,6 +7324,59 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             if not opt:
                 india_stock_signal = parse_india_stock_signal(normalized_content)
         
+        # Route Indian CONDITIONAL orders (with ABOVE/BELOW) to conditional order service
+        if opt and opt.get('_conditional_order') and opt.get('market') == 'INDIA':
+            print(f"[INDIA CONDITIONAL] ✓ Detected conditional order: {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt.get('trigger_type')} ₹{opt.get('trigger_price')}")
+            
+            try:
+                from src.services.conditional_order_service import conditional_order_service
+                
+                if conditional_order_service.is_enabled():
+                    broker = channel_info.get('broker_override', 'Upstox') if channel_info else 'Upstox'
+                    
+                    conditional_signal = {
+                        'symbol': opt['symbol'],
+                        'strike': opt['strike'],
+                        'opt_type': opt['opt_type'],
+                        'trigger_price': opt.get('trigger_price'),
+                        'trigger_type': opt.get('trigger_type', 'over'),
+                        'stop_loss': opt.get('stop_loss'),
+                        'profit_targets': opt.get('profit_targets', []),
+                        'qty': opt.get('qty'),
+                        'lots': opt.get('lots', 1),
+                        'lot_size': opt.get('lot_size'),
+                        'expiry': opt.get('expiry'),
+                        'market': 'INDIA',
+                        'asset_type': 'option',
+                        'message_id': str(message.id),
+                        'author_id': str(message.author.id),
+                        'author_name': str(message.author),
+                    }
+                    
+                    order_id = conditional_order_service.create_order(
+                        channel_id=str(message.channel.id),
+                        parsed_signal=conditional_signal,
+                        broker=broker
+                    )
+                    
+                    if order_id:
+                        print(f"[INDIA CONDITIONAL] ✓ Created conditional order #{order_id} - monitoring started")
+                        if execute_enabled:
+                            try:
+                                await message.add_reaction('⏳')
+                            except:
+                                pass
+                    else:
+                        print(f"[INDIA CONDITIONAL] ⚠️ Failed to create conditional order")
+                else:
+                    print(f"[INDIA CONDITIONAL] ⚠️ Conditional order service disabled - signal ignored")
+            except ImportError as e:
+                print(f"[INDIA CONDITIONAL] ⚠️ Conditional order service not available: {e}")
+            except Exception as e:
+                print(f"[INDIA CONDITIONAL] ❌ Error creating conditional order: {e}")
+            
+            return
+        
         # Fall back to US format parser if not India signal or India parser failed
         if opt is None and india_stock_signal is None:
             opt = parse_option_signal(normalized_content)

@@ -477,6 +477,17 @@ class ConditionalOrderService:
         profit_targets = parsed_signal.get('profit_targets', [])
         take_profit_json = json.dumps(profit_targets) if profit_targets else None
         
+        stop_loss = parsed_signal.get('stop_loss')
+        stop_loss_type = parsed_signal.get('stop_loss_type')
+        stop_loss_value = parsed_signal.get('stop_loss_value') or stop_loss
+        
+        market = parsed_signal.get('market', 'US')
+        strike = parsed_signal.get('strike')
+        opt_type = parsed_signal.get('opt_type')
+        option_expiry = parsed_signal.get('expiry')
+        lot_size = parsed_signal.get('lot_size')
+        lots = parsed_signal.get('lots')
+        
         order_id = create_conditional_order(
             channel_id=channel_id,
             symbol=parsed_signal.get('symbol', ''),
@@ -484,8 +495,8 @@ class ConditionalOrderService:
             trigger_price=trigger_price,
             adjusted_trigger_price=adjusted_price,
             broker_primary=effective_broker,
-            stop_loss_type=parsed_signal.get('stop_loss_type'),
-            stop_loss_value=parsed_signal.get('stop_loss_value'),
+            stop_loss_type=stop_loss_type,
+            stop_loss_value=stop_loss_value,
             take_profit_targets=take_profit_json,
             size_mode=size_mode,
             qty_value=qty_value,
@@ -493,6 +504,12 @@ class ConditionalOrderService:
             expires_at=expires_at,
             original_message=parsed_signal.get('_original_message', ''),
             asset_type=parsed_signal.get('asset_type', 'stock'),
+            strike=strike,
+            opt_type=opt_type,
+            market=market,
+            expiry=option_expiry,
+            lot_size=lot_size,
+            lots=lots,
         )
         
         if order_id:
@@ -545,9 +562,11 @@ class ConditionalOrderService:
         """Start a price monitor for an order.
         
         Priority: Broker API -> Finnhub -> yfinance
+        For India orders: India broker API (Upstox/Zerodha) -> yfinance
         """
         symbol = order['symbol']
         broker = order['broker_primary']
+        market = order.get('market', 'US')
         
         settings = get_conditional_order_settings()
         threshold = settings.get('rate_limit_threshold', 80) / 100
@@ -563,7 +582,37 @@ class ConditionalOrderService:
         async def price_callback(sym: str, price: float):
             await self._on_price_update(order_id, sym, price)
         
-        if broker_instance and broker_rate_ok:
+        if market == 'INDIA':
+            strike = order.get('strike', 0)
+            opt_type = order.get('opt_type', 'C')
+            
+            india_brokers = ['upstox', 'zerodha', 'dhanq']
+            india_broker_instance = None
+            india_broker_name = None
+            
+            for india_broker in india_brokers:
+                if india_broker in self.broker_instances:
+                    india_broker_instance = self.broker_instances[india_broker]
+                    india_broker_name = india_broker
+                    break
+            
+            print(f"[CONDITIONAL] Using IndiaPriceMonitor for {symbol} {strike}{opt_type} (broker: {india_broker_name or 'fallback'})")
+            monitor = IndiaPriceMonitor(
+                symbol,
+                strike,
+                opt_type,
+                price_callback,
+                india_broker_instance
+            )
+            data_source = india_broker_name or 'yfinance'
+            update_conditional_order_status(
+                order_id,
+                'ACTIVE_MONITORING',
+                data_source_active=data_source,
+                event='INDIA_MONITOR_STARTED',
+                details=f"Monitoring {symbol} {strike}{opt_type}"
+            )
+        elif broker_instance and broker_rate_ok:
             data_source = broker.lower()
             print(f"[CONDITIONAL] Using broker {broker} for price monitoring of {symbol}")
             monitor = BrokerPriceMonitor(
