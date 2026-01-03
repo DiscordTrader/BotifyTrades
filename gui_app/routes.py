@@ -12919,6 +12919,9 @@ def register_routes(app):
             elif broker_name == 'robinhood':
                 result = {'success': False, 'message': 'Use the existing Robinhood settings in Settings page'}
             
+            elif broker_name == 'schwab' or broker_name == 'SCHWAB':
+                result = {'success': False, 'message': 'Use the "Connect with Schwab" OAuth button in Settings page'}
+            
             else:
                 result = {'success': False, 'message': f'Unknown broker: {broker_name}'}
             

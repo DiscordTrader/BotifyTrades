@@ -43,7 +43,16 @@ The **Portfolio Simulation Engine** (`services/simulation.py`) projects portfoli
 - **Default State**: Service disabled by default - enable via Settings page
 
 ### System Design Choices
-The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Questrade, Upstox, Zerodha, and DhanQ. The system emphasizes user experience through an interactive setup wizard, GUI-based credential management, and automatic license renewal. The Discord bot runs in a dedicated thread with an isolated asyncio event loop. Broker credentials are loaded hierarchically. Discord channel IDs and all bot settings, including signal regex patterns and allowed author/guild IDs, are GUI-manageable and stored in SQLite. Per-channel risk management can override global defaults. The system employs a dual-build license architecture separating Admin and User deployments.
+The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ.
+
+**Charles Schwab Integration** (`src/brokers/schwab_broker.py`) provides OAuth2-authenticated trading on Schwab accounts:
+- **OAuth2 Flow**: User initiates login via Settings page → redirected to Schwab → callback receives auth code → exchange for access/refresh tokens → saved to schwab_token.json
+- **Token Management**: Access token expires in 30 min (auto-refresh), Refresh token valid for 7 days
+- **API Endpoints**: Trading API at `https://api.schwabapi.com/trader/v1`
+- **Security**: schwab_token.json added to .gitignore, tokens never committed
+- **Dry-run mode**: Controlled by `dry_run` config parameter, logs orders without executing
+- **OCC Options Format**: SYMBOL + YYMMDD + C/P + strike*1000 (e.g., AAPL240119C00150000)
+- **Flask Routes**: `/schwab/login`, `/schwab/callback`, `/schwab/status`, `/schwab/disconnect` The system emphasizes user experience through an interactive setup wizard, GUI-based credential management, and automatic license renewal. The Discord bot runs in a dedicated thread with an isolated asyncio event loop. Broker credentials are loaded hierarchically. Discord channel IDs and all bot settings, including signal regex patterns and allowed author/guild IDs, are GUI-manageable and stored in SQLite. Per-channel risk management can override global defaults. The system employs a dual-build license architecture separating Admin and User deployments.
 
 ## External Dependencies
 
@@ -63,6 +72,7 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 - **robin-stocks**: Robinhood brokerage integration
 - **pyotp**: TOTP 2FA code generation
 - **Telethon**: Telegram user client
+- **httpx**: HTTP client for Schwab API
 - **ALPHA_VANTAGE_API_KEY**: Market data
 - **FINNHUB_API_KEY**: Market data
 - **GMAIL_APP_PASSWORD**: For Gmail SMTP

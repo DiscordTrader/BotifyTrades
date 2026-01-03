@@ -17,8 +17,9 @@ SCHWAB_TOKEN_FILE = "schwab_token.json"
 def get_schwab_credentials():
     """Get Schwab credentials from database"""
     try:
-        creds = db.get_broker_credentials('SCHWAB')
-        if creds:
+        result = db.get_broker_credentials('SCHWAB')
+        if result:
+            creds = result.get('credentials', {})
             return {
                 'client_id': creds.get('client_id', ''),
                 'client_secret': creds.get('client_secret', ''),
