@@ -7021,13 +7021,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             parsed_cond = parse_conditional_order_signal(message.content)
                             if parsed_cond:
                                 # Add channel context
-                                parsed_cond['channel_id'] = cond_channel_id
                                 parsed_cond['message_id'] = str(message.id)
                                 parsed_cond['author_id'] = str(message.author.id)
                                 parsed_cond['author_name'] = str(message.author)
                                 
+                                # Determine broker (use channel setting or default to Alpaca paper)
+                                cond_broker = 'Alpaca' if hasattr(self, 'paper_broker') and self.paper_broker else 'Webull'
+                                
                                 # Submit to conditional order service
-                                order_id = conditional_order_service.create_order(parsed_cond)
+                                order_id = conditional_order_service.create_order(cond_channel_id, parsed_cond, cond_broker)
                                 if order_id:
                                     print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {parsed_cond['condition']} ${parsed_cond['trigger_price']}")
                                     # Acknowledge in Discord with hourglass reaction
