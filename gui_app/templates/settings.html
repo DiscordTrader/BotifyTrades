@@ -1360,10 +1360,9 @@ input:checked + .slider:before {
     </div>
 
     <!-- Conditional Orders Settings -->
-    <div class="settings-section">
+    <div class="settings-card">
         <h3>⏳ Conditional Orders</h3>
-        <p class="section-description">Monitor price conditions and execute orders when triggered. Supports signals like "AAPL over 150 SL 5% PT 160".</p>
-        
+        <p class="description">Monitor price conditions and execute orders when triggered. Supports signals like "AAPL over 150 SL 5% PT 160"</p>
         <div class="form-group">
             <div class="toggle-row">
                 <label class="toggle-label">
@@ -1371,13 +1370,13 @@ input:checked + .slider:before {
                     <span class="toggle-slider"></span>
                 </label>
                 <span>Enable Conditional Order Service</span>
-                <span id="conditional-orders-status" style="margin-left: 8px; font-weight: bold;">OFF</span>
+                <span id="conditional-orders-status" class="toggle-status">OFF</span>
             </div>
+            <p class="help-text">When enabled, the bot monitors for "SYMBOL over/under PRICE" signals and executes when triggered</p>
         </div>
-        
         <div class="form-group">
             <label>Default Order Expiry</label>
-            <select id="conditional-orders-expiry" class="form-control">
+            <select id="conditional-orders-expiry">
                 <option value="end_of_day">End of Day (4 PM)</option>
                 <option value="1_hour">1 Hour</option>
                 <option value="4_hours">4 Hours</option>
@@ -1385,13 +1384,11 @@ input:checked + .slider:before {
             </select>
             <p class="help-text">How long to monitor price conditions before expiring</p>
         </div>
-        
         <div class="form-group">
             <label>Global Trigger Offset (%)</label>
-            <input type="number" id="conditional-orders-offset" class="form-control" value="0" min="-10" max="10" step="0.1">
+            <input type="number" id="conditional-orders-offset" value="0" min="-10" max="10" step="0.1">
             <p class="help-text">Adjust trigger price by +/- percentage (e.g., +0.5% to confirm breakout, -0.5% for early entry)</p>
         </div>
-        
         <div class="form-group">
             <div class="toggle-row">
                 <label class="toggle-label">
@@ -1402,13 +1399,11 @@ input:checked + .slider:before {
             </div>
             <p class="help-text">Automatically place the order when price condition is met</p>
         </div>
-        
         <div class="form-group" style="margin-top: 16px; padding: 12px; background: rgba(0, 212, 255, 0.1); border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.3);">
             <p style="margin: 0; color: #00d4ff; font-size: 13px;">
                 <strong>📡 Price Data Sources:</strong> Broker APIs (Webull, Alpaca) → Finnhub API → yfinance (free fallback)
             </p>
         </div>
-        
         <div class="btn-group">
             <button id="save-conditional-orders" class="btn btn-success">💾 Save Conditional Order Settings</button>
             <span id="conditional-orders-save-status" style="margin-left: 12px; font-size: 13px;"></span>
