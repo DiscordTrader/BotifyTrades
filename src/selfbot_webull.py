@@ -6386,9 +6386,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 discord_loop = asyncio.get_running_loop()
                 order_queue = self.order_queue
                 
-                # Set up execution callback with thread-safe handoff
-                def execute_conditional_order_sync(order, triggered_price):
-                    """Execute a triggered conditional order (called from service thread)."""
+                # Set up async execution callback with thread-safe handoff
+                async def execute_conditional_order(order, triggered_price):
+                    """Execute a triggered conditional order (called from service's event loop)."""
                     try:
                         symbol = order['symbol']
                         broker_name = order.get('broker_primary', 'Webull')
@@ -6427,14 +6427,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             if targets and len(targets) > 0:
                                 signal['profit_target_price'] = targets[0]
                         
-                        # Thread-safe handoff to Discord's event loop
+                        # Thread-safe handoff to Discord's event loop (non-blocking)
                         async def queue_signal():
                             await order_queue.put(signal)
+                            return True
                         
                         future = asyncio.run_coroutine_threadsafe(queue_signal(), discord_loop)
-                        future.result(timeout=5.0)  # Wait up to 5 seconds
-                        print(f"[CONDITIONAL] ✓ Queued BTO {symbol} @ ${triggered_price:.2f}")
-                        return True
+                        
+                        # Add done callback for error handling (non-blocking)
+                        def on_done(fut):
+                            try:
+                                fut.result()
+                                print(f"[CONDITIONAL] ✓ Queued BTO {symbol} @ ${triggered_price:.2f}")
+                            except Exception as e:
+                                print(f"[CONDITIONAL] ❌ Queue error: {e}")
+                        
+                        future.add_done_callback(on_done)
+                        return True  # Return immediately, actual queue happens async
                         
                     except Exception as e:
                         print(f"[CONDITIONAL] ❌ Execution error: {e}")
@@ -6442,7 +6451,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         traceback.print_exc()
                         return False
                 
-                conditional_order_service.set_execution_callback(execute_conditional_order_sync)
+                conditional_order_service.set_execution_callback(execute_conditional_order)
                 conditional_order_service.start()
                 print("[STARTUP] ✓ Conditional Order Service started")
             else:

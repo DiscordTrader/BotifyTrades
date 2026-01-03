@@ -7766,6 +7766,44 @@ def get_channel_conditional_settings(channel_id: str) -> Dict[str, Any]:
         return {}
 
 
+def get_conditional_orders_by_status(status: str) -> List[Dict[str, Any]]:
+    """Get all conditional orders with a specific status"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT * FROM conditional_orders
+            WHERE status = ?
+            ORDER BY created_at DESC
+        ''', (status,))
+        
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DATABASE] Error getting conditional orders by status: {e}")
+        return []
+
+
+def get_conditional_order_audit(order_id: int) -> List[Dict[str, Any]]:
+    """Get audit trail for a conditional order"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT * FROM conditional_order_audit
+            WHERE order_id = ?
+            ORDER BY created_at ASC
+        ''', (order_id,))
+        
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DATABASE] Error getting conditional order audit: {e}")
+        return []
+
+
 # Initialize tables
 init_channel_messages_table()
 init_signal_formats_table()
