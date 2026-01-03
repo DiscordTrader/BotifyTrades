@@ -1514,7 +1514,8 @@ async function loadConditionalOrders() {
     
     try {
         const response = await fetch('/api/conditional_orders');
-        const orders = await response.json();
+        const data = await response.json();
+        const orders = data.orders || [];
         
         console.log('[loadConditionalOrders] Orders:', orders);
         
