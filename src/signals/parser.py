@@ -102,6 +102,59 @@ BULLWINKLE_EXIT_COMPLEX = re.compile(
 BULLWINKLE_ENTRY_PATTERN = BULLWINKLE_ENTRY_STANDARD
 BULLWINKLE_EXIT_PATTERN = BULLWINKLE_EXIT_PIPE_PRICE
 
+# ============ CONDITIONAL ORDER PATTERNS ============
+# These patterns detect price-triggered conditional orders
+# Examples:
+#   "LVRO over 1.30 SL 10% profit target 1.43"
+#   "AAPL over 250 10% of ACCOUNT PT 260 SL 240"
+#   "SPY under 680 stop loss 2% take profit 675"
+
+# Main conditional trigger pattern: SYMBOL over/under PRICE
+CONDITIONAL_TRIGGER_PATTERN = re.compile(
+    r'(?:^|\s)\$?([A-Z]{1,5})\s+(?:over|above)\s+\$?([\d.]+)',
+    re.IGNORECASE
+)
+
+CONDITIONAL_TRIGGER_UNDER_PATTERN = re.compile(
+    r'(?:^|\s)\$?([A-Z]{1,5})\s+(?:under|below)\s+\$?([\d.]+)',
+    re.IGNORECASE
+)
+
+# Stop loss patterns for conditional orders
+CONDITIONAL_SL_PERCENT_PATTERN = re.compile(
+    r'(?:SL|stop\s*loss|stop)\s*[:\s]*(\d+(?:\.\d+)?)\s*%',
+    re.IGNORECASE
+)
+
+CONDITIONAL_SL_FIXED_PATTERN = re.compile(
+    r'(?:SL|stop\s*loss|stop)\s*[:\s@]*\$?([\d.]+)(?!\s*%)',
+    re.IGNORECASE
+)
+
+# Profit target patterns for conditional orders
+CONDITIONAL_PT_PATTERN = re.compile(
+    r'(?:PT|profit\s*target|target|take\s*profit|TP)\s*[:\s@]*\$?([\d.]+)',
+    re.IGNORECASE
+)
+
+# Multiple profit targets: PT 1.43, 1.50, 1.60
+CONDITIONAL_MULTI_PT_PATTERN = re.compile(
+    r'(?:PT|profit\s*target|targets?|take\s*profit|TP)\s*[:\s]*\$?([\d.]+)(?:[,\s]+\$?([\d.]+))?(?:[,\s]+\$?([\d.]+))?(?:[,\s]+\$?([\d.]+))?',
+    re.IGNORECASE
+)
+
+# Position sizing: 10% of ACCOUNT, 10% ACCOUNT, 10% portfolio
+CONDITIONAL_POSITION_SIZE_PATTERN = re.compile(
+    r'(\d+(?:\.\d+)?)\s*%\s*(?:of\s*)?(?:account|portfolio|capital)',
+    re.IGNORECASE
+)
+
+# Fixed quantity: 100 shares, 50 contracts, qty 100
+CONDITIONAL_QTY_PATTERN = re.compile(
+    r'(?:qty|quantity)?\s*(\d+)\s*(?:shares?|contracts?|cons?)?',
+    re.IGNORECASE
+)
+
 # Z-Scalps format patterns (simple pipe format WITHOUT emojis)
 # Entry: TSLA | $460 C NEXT WEEK 7.15 @everyone
 # Entry: SPY | $680 P 1.82 @everyone (immediate price after C/P)
@@ -369,6 +422,161 @@ def format_jacob_for_webhook(parsed: Dict[str, Any]) -> str:
         result += f"\nTargets: {targets_str}"
     
     return result
+
+
+def is_conditional_order_signal(text: str) -> bool:
+    """
+    Check if text is a conditional order signal (price-triggered entry).
+    
+    Conditional orders require explicit 'over/above' or 'under/below' keywords
+    to distinguish from regular BTO/STC signals.
+    """
+    text_upper = text.upper()
+    
+    # Must have over/under trigger AND at least one of SL/PT
+    has_over_trigger = CONDITIONAL_TRIGGER_PATTERN.search(text) is not None
+    has_under_trigger = CONDITIONAL_TRIGGER_UNDER_PATTERN.search(text) is not None
+    
+    if not (has_over_trigger or has_under_trigger):
+        return False
+    
+    # Must have SL or PT to be a valid conditional order (not just a price mention)
+    has_sl = CONDITIONAL_SL_PERCENT_PATTERN.search(text) or CONDITIONAL_SL_FIXED_PATTERN.search(text)
+    has_pt = CONDITIONAL_PT_PATTERN.search(text)
+    has_position_size = CONDITIONAL_POSITION_SIZE_PATTERN.search(text)
+    
+    # Require at least one of: SL, PT, or position size
+    return bool(has_sl or has_pt or has_position_size)
+
+
+def parse_conditional_order_signal(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse conditional order signal (price-triggered entry with SL/PT).
+    
+    Examples:
+        "LVRO over 1.30 SL 10% profit target 1.43"
+        "AAPL over 250 10% of ACCOUNT PT 260 SL 240"
+        "SPY under 680 stop loss 2% take profit 675"
+    
+    Returns dict with parsed conditional order or None if not matched.
+    """
+    if not is_conditional_order_signal(text):
+        return None
+    
+    # Try to match over/above trigger
+    trigger_match = CONDITIONAL_TRIGGER_PATTERN.search(text)
+    trigger_type = 'over'
+    
+    if not trigger_match:
+        # Try under/below trigger
+        trigger_match = CONDITIONAL_TRIGGER_UNDER_PATTERN.search(text)
+        trigger_type = 'under'
+    
+    if not trigger_match:
+        return None
+    
+    symbol = trigger_match.group(1).upper()
+    trigger_price = float(trigger_match.group(2))
+    
+    # Parse stop loss (percentage or fixed)
+    stop_loss_type = None
+    stop_loss_value = None
+    
+    sl_pct_match = CONDITIONAL_SL_PERCENT_PATTERN.search(text)
+    if sl_pct_match:
+        stop_loss_type = 'percent'
+        stop_loss_value = float(sl_pct_match.group(1))
+    else:
+        sl_fixed_match = CONDITIONAL_SL_FIXED_PATTERN.search(text)
+        if sl_fixed_match:
+            stop_loss_type = 'fixed'
+            stop_loss_value = float(sl_fixed_match.group(1))
+    
+    # Parse profit targets (single or multiple)
+    profit_targets = []
+    multi_pt_match = CONDITIONAL_MULTI_PT_PATTERN.search(text)
+    if multi_pt_match:
+        for i in range(1, 5):
+            pt_val = multi_pt_match.group(i)
+            if pt_val:
+                profit_targets.append(float(pt_val))
+    else:
+        pt_match = CONDITIONAL_PT_PATTERN.search(text)
+        if pt_match:
+            profit_targets.append(float(pt_match.group(1)))
+    
+    # Parse position sizing
+    position_size_pct = None
+    fixed_qty = None
+    size_mode = None
+    
+    pct_match = CONDITIONAL_POSITION_SIZE_PATTERN.search(text)
+    if pct_match:
+        position_size_pct = float(pct_match.group(1))
+        size_mode = 'percent_account'
+    else:
+        # Try to find a standalone quantity (e.g., "100 shares")
+        qty_match = re.search(r'(\d+)\s*(?:shares?|contracts?|cons?)', text, re.IGNORECASE)
+        if qty_match:
+            fixed_qty = int(qty_match.group(1))
+            size_mode = 'fixed_qty'
+    
+    result = {
+        'format': 'CONDITIONAL_ORDER',
+        'is_conditional': True,
+        'ticker': symbol,
+        'symbol': symbol,
+        'trigger_type': trigger_type,  # 'over' or 'under'
+        'trigger_price': trigger_price,
+        'stop_loss_type': stop_loss_type,
+        'stop_loss_value': stop_loss_value,
+        'profit_targets': profit_targets,
+        'position_size_pct': position_size_pct,
+        'fixed_qty': fixed_qty,
+        'size_mode': size_mode,
+        'asset': 'stock',
+        'asset_type': 'stock',
+        '_conditional_order': True,
+        '_original_message': text,
+    }
+    
+    # Log parsed conditional order
+    sl_str = f"{stop_loss_value}%" if stop_loss_type == 'percent' else f"${stop_loss_value}" if stop_loss_value else "None"
+    pt_str = ', '.join([f"${pt}" for pt in profit_targets]) if profit_targets else "None"
+    size_str = f"{position_size_pct}% of account" if position_size_pct else f"{fixed_qty} shares" if fixed_qty else "channel default"
+    
+    print(f"[CONDITIONAL] ✓ Parsed: {symbol} {trigger_type} ${trigger_price}")
+    print(f"[CONDITIONAL]   SL: {sl_str}, PT: {pt_str}, Size: {size_str}")
+    
+    return result
+
+
+def format_conditional_for_display(parsed: Dict[str, Any]) -> str:
+    """Format a parsed conditional order for display/logging."""
+    symbol = parsed.get('symbol', '')
+    trigger_type = parsed.get('trigger_type', 'over')
+    trigger_price = parsed.get('trigger_price', 0)
+    stop_loss_type = parsed.get('stop_loss_type')
+    stop_loss_value = parsed.get('stop_loss_value')
+    profit_targets = parsed.get('profit_targets', [])
+    position_size_pct = parsed.get('position_size_pct')
+    
+    lines = [f"Conditional Order: {symbol} {trigger_type} ${trigger_price:.2f}"]
+    
+    if position_size_pct:
+        lines.append(f"Position Size: {position_size_pct}% of account")
+    
+    if stop_loss_type and stop_loss_value:
+        if stop_loss_type == 'percent':
+            lines.append(f"Stop Loss: {stop_loss_value}%")
+        else:
+            lines.append(f"Stop Loss: ${stop_loss_value:.2f}")
+    
+    if profit_targets:
+        pt_str = ', '.join([f"${pt:.2f}" for pt in profit_targets])
+        lines.append(f"Profit Targets: {pt_str}")
+    
+    return '\n'.join(lines)
 
 
 def parse_bracket_order_signal(text: str) -> Optional[Dict[str, Any]]:

@@ -7296,8 +7296,482 @@ def partial_exit_signal_instance(
         return None
 
 
+# ============ CONDITIONAL ORDERS SERVICE ============
+
+def init_conditional_orders_table():
+    """Create conditional_orders table for price-triggered order monitoring"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS conditional_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            channel_id TEXT NOT NULL,
+            signal_id TEXT,
+            symbol TEXT NOT NULL,
+            asset_type TEXT DEFAULT 'stock',
+            
+            -- Trigger conditions
+            trigger_type TEXT NOT NULL,
+            trigger_price REAL NOT NULL,
+            adjusted_trigger_price REAL,
+            
+            -- Risk management (from signal or channel)
+            stop_loss_type TEXT,
+            stop_loss_value REAL,
+            take_profit_targets TEXT,
+            trailing_stop_enabled INTEGER DEFAULT 0,
+            leave_runner INTEGER DEFAULT 0,
+            
+            -- Position sizing
+            size_mode TEXT,
+            qty_value REAL,
+            calculated_qty INTEGER,
+            
+            -- Source tracking
+            params_source TEXT DEFAULT 'channel',
+            
+            -- Broker & data source
+            broker_primary TEXT NOT NULL,
+            data_source_active TEXT,
+            fallback_reason TEXT,
+            
+            -- Status tracking
+            status TEXT DEFAULT 'PENDING',
+            
+            -- Timestamps
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP,
+            triggered_at TIMESTAMP,
+            executed_at TIMESTAMP,
+            
+            -- Execution reference
+            executed_trade_id INTEGER,
+            error_code TEXT,
+            error_message TEXT,
+            
+            -- Original signal content
+            original_message TEXT,
+            
+            -- Metadata
+            metadata TEXT,
+            
+            FOREIGN KEY (channel_id) REFERENCES channels(discord_channel_id)
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_conditional_status ON conditional_orders(status)
+    ''')
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_conditional_symbol ON conditional_orders(symbol)
+    ''')
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_conditional_channel ON conditional_orders(channel_id)
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS conditional_order_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            previous_status TEXT,
+            new_status TEXT,
+            event TEXT,
+            details TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            
+            FOREIGN KEY (order_id) REFERENCES conditional_orders(id)
+        )
+    ''')
+    
+    conn.commit()
+    print("[DATABASE] ✓ Conditional orders tables ready")
+
+
+def migrate_channels_for_conditional_orders():
+    """Add conditional order columns to channels table"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("PRAGMA table_info(channels)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'conditional_order_enabled' not in columns:
+            cursor.execute('ALTER TABLE channels ADD COLUMN conditional_order_enabled INTEGER DEFAULT 1')
+            print("[DATABASE] ✓ Added conditional_order_enabled column to channels")
+        
+        if 'trigger_offset_percent' not in columns:
+            cursor.execute('ALTER TABLE channels ADD COLUMN trigger_offset_percent REAL DEFAULT 0.0')
+            print("[DATABASE] ✓ Added trigger_offset_percent column to channels")
+        
+        if 'conditional_order_expiry' not in columns:
+            cursor.execute("ALTER TABLE channels ADD COLUMN conditional_order_expiry TEXT DEFAULT 'end_of_day'")
+            print("[DATABASE] ✓ Added conditional_order_expiry column to channels")
+        
+        if 'conditional_auto_execute' not in columns:
+            cursor.execute('ALTER TABLE channels ADD COLUMN conditional_auto_execute INTEGER DEFAULT 1')
+            print("[DATABASE] ✓ Added conditional_auto_execute column to channels")
+        
+        conn.commit()
+    except Exception as e:
+        print(f"[DATABASE] Error migrating channels for conditional orders: {e}")
+
+
+def migrate_trades_for_conditional_orders():
+    """Add source and conditional_order_id columns to trades table"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("PRAGMA table_info(trades)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'source' not in columns:
+            cursor.execute("ALTER TABLE trades ADD COLUMN source TEXT DEFAULT 'signal'")
+            print("[DATABASE] ✓ Added source column to trades")
+        
+        if 'conditional_order_id' not in columns:
+            cursor.execute('ALTER TABLE trades ADD COLUMN conditional_order_id INTEGER')
+            print("[DATABASE] ✓ Added conditional_order_id column to trades")
+        
+        conn.commit()
+    except Exception as e:
+        print(f"[DATABASE] Error migrating trades for conditional orders: {e}")
+
+
+def init_conditional_order_settings():
+    """Initialize global conditional order settings in bot_settings"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    default_settings = [
+        ('conditional_order_enabled', 'false'),
+        ('conditional_order_default_expiry', 'end_of_day'),
+        ('conditional_order_finnhub_fallback', 'true'),
+        ('conditional_order_rate_limit_threshold', '80'),
+    ]
+    
+    try:
+        for key, value in default_settings:
+            cursor.execute('''
+                INSERT OR IGNORE INTO settings (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            ''', (key, value))
+        
+        conn.commit()
+        print("[DATABASE] ✓ Conditional order settings initialized")
+    except Exception as e:
+        print(f"[DATABASE] Error initializing conditional order settings: {e}")
+
+
+def get_conditional_order_settings() -> Dict[str, Any]:
+    """Get global conditional order settings"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT key, value FROM settings
+            WHERE key LIKE 'conditional_order_%'
+        ''')
+        
+        rows = cursor.fetchall()
+        settings = {}
+        for row in rows:
+            key = row['key'].replace('conditional_order_', '')
+            value = row['value']
+            if value == 'true':
+                settings[key] = True
+            elif value == 'false':
+                settings[key] = False
+            elif value.isdigit():
+                settings[key] = int(value)
+            else:
+                settings[key] = value
+        
+        return settings
+    except Exception as e:
+        print(f"[DATABASE] Error getting conditional order settings: {e}")
+        return {
+            'enabled': False,
+            'default_expiry': 'end_of_day',
+            'finnhub_fallback': True,
+            'rate_limit_threshold': 80
+        }
+
+
+def save_conditional_order_settings(settings: Dict[str, Any]) -> bool:
+    """Save global conditional order settings"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        for key, value in settings.items():
+            full_key = f'conditional_order_{key}'
+            if isinstance(value, bool):
+                str_value = 'true' if value else 'false'
+            else:
+                str_value = str(value)
+            
+            cursor.execute('''
+                INSERT INTO settings (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP
+            ''', (full_key, str_value, str_value))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error saving conditional order settings: {e}")
+        return False
+
+
+def create_conditional_order(
+    channel_id: str,
+    symbol: str,
+    trigger_type: str,
+    trigger_price: float,
+    broker_primary: str,
+    stop_loss_type: str = None,
+    stop_loss_value: float = None,
+    take_profit_targets: str = None,
+    size_mode: str = None,
+    qty_value: float = None,
+    calculated_qty: int = None,
+    params_source: str = 'channel',
+    expires_at: str = None,
+    original_message: str = None,
+    asset_type: str = 'stock',
+    adjusted_trigger_price: float = None,
+    signal_id: str = None
+) -> Optional[int]:
+    """Create a new conditional order"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO conditional_orders (
+                channel_id, symbol, trigger_type, trigger_price, adjusted_trigger_price,
+                broker_primary, stop_loss_type, stop_loss_value, take_profit_targets,
+                size_mode, qty_value, calculated_qty, params_source, expires_at,
+                original_message, asset_type, signal_id, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
+        ''', (
+            channel_id, symbol.upper(), trigger_type, trigger_price, adjusted_trigger_price,
+            broker_primary, stop_loss_type, stop_loss_value, take_profit_targets,
+            size_mode, qty_value, calculated_qty, params_source, expires_at,
+            original_message, asset_type, signal_id
+        ))
+        
+        order_id = cursor.lastrowid
+        
+        cursor.execute('''
+            INSERT INTO conditional_order_audit (order_id, previous_status, new_status, event, details)
+            VALUES (?, NULL, 'PENDING', 'CREATED', ?)
+        ''', (order_id, f'Conditional order created for {symbol} {trigger_type} {trigger_price}'))
+        
+        conn.commit()
+        print(f"[DATABASE] ✓ Created conditional order #{order_id} for {symbol}")
+        return order_id
+    except Exception as e:
+        print(f"[DATABASE] Error creating conditional order: {e}")
+        conn.rollback()
+        return None
+
+
+def update_conditional_order_status(
+    order_id: int,
+    new_status: str,
+    event: str = None,
+    details: str = None,
+    **kwargs
+) -> bool:
+    """Update conditional order status and log to audit"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT status FROM conditional_orders WHERE id = ?', (order_id,))
+        row = cursor.fetchone()
+        if not row:
+            return False
+        
+        old_status = row['status']
+        
+        update_fields = ['status = ?']
+        update_values = [new_status]
+        
+        if new_status == 'TRIGGERED':
+            update_fields.append('triggered_at = CURRENT_TIMESTAMP')
+        elif new_status == 'EXECUTING':
+            update_fields.append('executed_at = CURRENT_TIMESTAMP')
+        
+        for key, value in kwargs.items():
+            update_fields.append(f'{key} = ?')
+            update_values.append(value)
+        
+        update_values.append(order_id)
+        
+        cursor.execute(f'''
+            UPDATE conditional_orders
+            SET {', '.join(update_fields)}
+            WHERE id = ?
+        ''', update_values)
+        
+        cursor.execute('''
+            INSERT INTO conditional_order_audit (order_id, previous_status, new_status, event, details)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (order_id, old_status, new_status, event or f'Status changed to {new_status}', details))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error updating conditional order status: {e}")
+        conn.rollback()
+        return False
+
+
+def get_active_conditional_orders() -> List[Dict[str, Any]]:
+    """Get all active conditional orders that need monitoring"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT co.*, c.trigger_offset_percent, c.broker_override, c.exit_strategy_mode,
+                   c.default_quantity, c.position_size_pct
+            FROM conditional_orders co
+            LEFT JOIN channels c ON co.channel_id = c.discord_channel_id
+            WHERE co.status IN ('PENDING', 'ACTIVE_MONITORING', 'FALLBACK_MONITORING')
+            AND (co.expires_at IS NULL OR co.expires_at > CURRENT_TIMESTAMP)
+            ORDER BY co.created_at ASC
+        ''')
+        
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DATABASE] Error getting active conditional orders: {e}")
+        return []
+
+
+def get_conditional_order_by_id(order_id: int) -> Optional[Dict[str, Any]]:
+    """Get a single conditional order by ID"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT co.*, c.trigger_offset_percent, c.broker_override, c.exit_strategy_mode,
+                   c.default_quantity, c.position_size_pct
+            FROM conditional_orders co
+            LEFT JOIN channels c ON co.channel_id = c.discord_channel_id
+            WHERE co.id = ?
+        ''', (order_id,))
+        
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+    except Exception as e:
+        print(f"[DATABASE] Error getting conditional order {order_id}: {e}")
+        return None
+
+
+def get_conditional_orders_by_channel(channel_id: str) -> List[Dict[str, Any]]:
+    """Get all conditional orders for a channel"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT * FROM conditional_orders
+            WHERE channel_id = ?
+            ORDER BY created_at DESC
+        ''', (channel_id,))
+        
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DATABASE] Error getting conditional orders for channel {channel_id}: {e}")
+        return []
+
+
+def cancel_conditional_order(order_id: int, reason: str = 'User cancelled') -> bool:
+    """Cancel a conditional order"""
+    return update_conditional_order_status(
+        order_id, 
+        'CANCELED', 
+        event='CANCELED',
+        details=reason
+    )
+
+
+def expire_old_conditional_orders() -> int:
+    """Expire conditional orders that have passed their expiry time"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT id FROM conditional_orders
+            WHERE status IN ('PENDING', 'ACTIVE_MONITORING', 'FALLBACK_MONITORING')
+            AND expires_at IS NOT NULL
+            AND expires_at <= CURRENT_TIMESTAMP
+        ''')
+        
+        rows = cursor.fetchall()
+        expired_count = 0
+        
+        for row in rows:
+            update_conditional_order_status(
+                row['id'],
+                'EXPIRED',
+                event='EXPIRED',
+                details='Order expired'
+            )
+            expired_count += 1
+        
+        return expired_count
+    except Exception as e:
+        print(f"[DATABASE] Error expiring conditional orders: {e}")
+        return 0
+
+
+def get_channel_conditional_settings(channel_id: str) -> Dict[str, Any]:
+    """Get conditional order settings for a specific channel"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT conditional_order_enabled, trigger_offset_percent,
+                   conditional_order_expiry, conditional_auto_execute,
+                   broker_override, exit_strategy_mode, default_quantity,
+                   position_size_pct, stop_loss_pct, profit_target_pct,
+                   profit_target_1_pct, profit_target_2_pct, profit_target_3_pct,
+                   profit_target_4_pct, trailing_stop_pct, leave_runner_enabled,
+                   leave_runner_pct
+            FROM channels
+            WHERE discord_channel_id = ?
+        ''', (channel_id,))
+        
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return {}
+    except Exception as e:
+        print(f"[DATABASE] Error getting channel conditional settings: {e}")
+        return {}
+
+
 # Initialize tables
 init_channel_messages_table()
 init_signal_formats_table()
+init_conditional_orders_table()
+migrate_channels_for_conditional_orders()
+migrate_trades_for_conditional_orders()
+init_conditional_order_settings()
 
 init_db()
