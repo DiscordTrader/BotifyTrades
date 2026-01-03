@@ -1359,6 +1359,62 @@ input:checked + .slider:before {
         </div>
     </div>
 
+    <!-- Conditional Orders Settings -->
+    <div class="settings-section">
+        <h3>⏳ Conditional Orders</h3>
+        <p class="section-description">Monitor price conditions and execute orders when triggered. Supports signals like "AAPL over 150 SL 5% PT 160".</p>
+        
+        <div class="form-group">
+            <div class="toggle-row">
+                <label class="toggle-label">
+                    <input type="checkbox" id="conditional-orders-enabled">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span>Enable Conditional Order Service</span>
+                <span id="conditional-orders-status" style="margin-left: 8px; font-weight: bold;">OFF</span>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label>Default Order Expiry</label>
+            <select id="conditional-orders-expiry" class="form-control">
+                <option value="end_of_day">End of Day (4 PM)</option>
+                <option value="1_hour">1 Hour</option>
+                <option value="4_hours">4 Hours</option>
+                <option value="1_day">1 Day</option>
+            </select>
+            <p class="help-text">How long to monitor price conditions before expiring</p>
+        </div>
+        
+        <div class="form-group">
+            <label>Global Trigger Offset (%)</label>
+            <input type="number" id="conditional-orders-offset" class="form-control" value="0" min="-10" max="10" step="0.1">
+            <p class="help-text">Adjust trigger price by +/- percentage (e.g., +0.5% to confirm breakout, -0.5% for early entry)</p>
+        </div>
+        
+        <div class="form-group">
+            <div class="toggle-row">
+                <label class="toggle-label">
+                    <input type="checkbox" id="conditional-orders-auto-execute" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <span>Auto-Execute When Triggered</span>
+            </div>
+            <p class="help-text">Automatically place the order when price condition is met</p>
+        </div>
+        
+        <div class="form-group" style="margin-top: 16px; padding: 12px; background: rgba(0, 212, 255, 0.1); border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.3);">
+            <p style="margin: 0; color: #00d4ff; font-size: 13px;">
+                <strong>📡 Price Data Sources:</strong> Broker APIs (Webull, Alpaca) → Finnhub API → yfinance (free fallback)
+            </p>
+        </div>
+        
+        <div class="btn-group">
+            <button id="save-conditional-orders" class="btn btn-success">💾 Save Conditional Order Settings</button>
+            <span id="conditional-orders-save-status" style="margin-left: 12px; font-size: 13px;"></span>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -2575,6 +2631,80 @@ async function loadWebhookChannelsForTradeMonitor() {
 
 document.getElementById('trade-monitor-enabled').addEventListener('change', updateTradeMonitorToggleStatus);
 
+// ========== CONDITIONAL ORDERS SETTINGS ==========
+
+function updateConditionalOrdersToggleStatus() {
+    const checkbox = document.getElementById('conditional-orders-enabled');
+    const status = document.getElementById('conditional-orders-status');
+    if (checkbox && status) {
+        status.textContent = checkbox.checked ? 'ON' : 'OFF';
+        status.style.color = checkbox.checked ? '#00ff88' : '#6c757d';
+    }
+}
+
+async function loadConditionalOrdersSettings() {
+    try {
+        console.log('[Conditional Orders] Loading settings...');
+        const response = await fetch('/api/settings/conditional_orders');
+        const settings = await response.json();
+        console.log('[Conditional Orders] API response:', settings);
+        
+        if (settings) {
+            document.getElementById('conditional-orders-enabled').checked = settings.enabled === true;
+            document.getElementById('conditional-orders-expiry').value = settings.default_expiry || 'end_of_day';
+            document.getElementById('conditional-orders-offset').value = settings.trigger_offset_percent || 0;
+            document.getElementById('conditional-orders-auto-execute').checked = settings.auto_execute !== false;
+            updateConditionalOrdersToggleStatus();
+            console.log('[Conditional Orders] UI updated: enabled=' + settings.enabled);
+        }
+    } catch (error) {
+        console.error('[Conditional Orders] Error loading settings:', error);
+    }
+}
+
+document.getElementById('conditional-orders-enabled').addEventListener('change', updateConditionalOrdersToggleStatus);
+
+document.getElementById('save-conditional-orders').addEventListener('click', async () => {
+    const data = {
+        enabled: document.getElementById('conditional-orders-enabled').checked,
+        default_expiry: document.getElementById('conditional-orders-expiry').value,
+        trigger_offset_percent: parseFloat(document.getElementById('conditional-orders-offset').value) || 0,
+        auto_execute: document.getElementById('conditional-orders-auto-execute').checked
+    };
+    
+    const inlineStatus = document.getElementById('conditional-orders-save-status');
+    inlineStatus.textContent = '⏳ Saving...';
+    inlineStatus.style.color = '#ffc107';
+    
+    try {
+        const response = await fetch('/api/settings/conditional_orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            inlineStatus.textContent = '✅ Saved! Restart bot to apply.';
+            inlineStatus.style.color = '#00ff88';
+        } else {
+            inlineStatus.textContent = '❌ ' + (result.error || 'Failed');
+            inlineStatus.style.color = '#ff6b6b';
+        }
+        setTimeout(() => {
+            inlineStatus.textContent = '';
+        }, 3000);
+    } catch (error) {
+        console.error('[Conditional Orders] Save error:', error);
+        inlineStatus.textContent = '❌ ' + error.message;
+        inlineStatus.style.color = '#ff6b6b';
+        setTimeout(() => {
+            inlineStatus.textContent = '';
+        }, 3000);
+    }
+});
+
 // ========== BACKGROUND SERVICES SETTINGS ==========
 
 function updateBackgroundServicesToggleStatus() {
@@ -3394,6 +3524,7 @@ loadNotificationSettings();
 loadDiscordNotifications();
 loadWebhookChannelsForTradeMonitor().then(() => loadTradeMonitorSettings());
 loadBackgroundServicesSettings();
+loadConditionalOrdersSettings();
 
 // Refresh broker status every 30 seconds
 setInterval(loadBrokerStatus, 30000);
