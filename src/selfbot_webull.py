@@ -6520,6 +6520,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         print(f"[Discord RESUMED] Current latency: {self.latency * 1000:.2f}ms")
 
     async def on_message(self, message: discord.Message):
+        # FIRST: Deduplicate messages BEFORE any processing (Discord self-bot sometimes delivers duplicate events)
+        # Check-and-add atomically using lock to prevent race condition
+        if self._message_dedupe_lock:
+            async with self._message_dedupe_lock:
+                if message.id in self._processed_messages:
+                    return  # Silent skip for duplicates
+                self._processed_messages.add(message.id)
+        else:
+            # Fallback if lock not initialized - still check but may have race condition
+            if message.id in self._processed_messages:
+                return
+            self._processed_messages.add(message.id)
+        
+        # Limit cache size to prevent memory growth (do this after dedupe check)
+        if len(self._processed_messages) > self._max_processed_cache:
+            to_remove = list(self._processed_messages)[:self._max_processed_cache // 2]
+            for msg_id in to_remove:
+                self._processed_messages.discard(msg_id)
+        
         # Check database for channel info (dual-mode support)
         channel_info = self._get_channel_info(message.channel.id)
         channel_category = channel_info['category'] if channel_info else None
@@ -6544,31 +6563,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if not channel_info and message.channel.id not in CHANNEL_IDS and not is_mapped_source_channel:
             return
         
-        # Deduplicate messages (Discord self-bot sometimes delivers duplicate events)
-        # Use lock to prevent race condition where two concurrent on_message calls for same ID
-        # both pass the check before either adds to the set
-        if self._message_dedupe_lock:
-            async with self._message_dedupe_lock:
-                if message.id in self._processed_messages:
-                    print(f"[Discord] Skipping duplicate message ID: {message.id}")
-                    return
-                self._processed_messages.add(message.id)
-        else:
-            # Fallback if lock not initialized (shouldn't happen)
-            if message.id in self._processed_messages:
-                print(f"[Discord] Skipping duplicate message ID: {message.id}")
-                return
-            self._processed_messages.add(message.id)
-        
         print(f"[Discord] Processing message ID: {message.id}")
         print(f"[DEBUG] Author: {message.author.name} (ID: {message.author.id}), Channel: {message.channel.id}")
-        
-        # Limit cache size to prevent memory growth
-        if len(self._processed_messages) > self._max_processed_cache:
-            # Remove oldest half of cached message IDs
-            to_remove = list(self._processed_messages)[:self._max_processed_cache // 2]
-            for msg_id in to_remove:
-                self._processed_messages.discard(msg_id)
         
         # Add message to sentiment analyzer if enabled
         if self.sentiment_analyzer and not message.author.bot:
