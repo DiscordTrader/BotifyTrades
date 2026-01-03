@@ -502,21 +502,51 @@ class ConditionalOrderService:
         expiry = channel_settings.get('conditional_order_expiry', 'end_of_day')
         expires_at = self._calculate_expiry(expiry)
         
+        # Position sizing: signal first, then channel settings
         size_mode = parsed_signal.get('size_mode')
         qty_value = None
+        params_source = 'signal'
+        
         if size_mode == 'percent_account':
             qty_value = parsed_signal.get('position_size_pct')
         elif size_mode == 'fixed_qty':
             qty_value = parsed_signal.get('fixed_qty')
+        else:
+            # Fall back to channel settings
+            params_source = 'channel'
+            if channel_settings.get('position_size_pct'):
+                size_mode = 'percent_account'
+                qty_value = channel_settings.get('position_size_pct')
+                print(f"[CONDITIONAL] Using channel position_size_pct: {qty_value}%")
+            elif channel_settings.get('default_quantity'):
+                size_mode = 'fixed_qty'
+                qty_value = channel_settings.get('default_quantity')
+                print(f"[CONDITIONAL] Using channel default_quantity: {qty_value}")
         
-        params_source = 'signal' if size_mode else 'channel'
-        
+        # Profit targets: signal first, then channel settings
         profit_targets = parsed_signal.get('profit_targets', [])
+        if not profit_targets:
+            # Build profit targets from channel risk settings
+            channel_targets = []
+            for i in range(1, 5):
+                pt_pct = channel_settings.get(f'profit_target_{i}_pct')
+                if pt_pct and pt_pct > 0:
+                    channel_targets.append(pt_pct)
+            if channel_targets:
+                profit_targets = channel_targets
+                print(f"[CONDITIONAL] Using channel profit targets: {profit_targets}")
+        
         take_profit_json = json.dumps(profit_targets) if profit_targets else None
         
+        # Stop loss: signal first, then channel settings
         stop_loss = parsed_signal.get('stop_loss')
         stop_loss_type = parsed_signal.get('stop_loss_type')
         stop_loss_value = parsed_signal.get('stop_loss_value') or stop_loss
+        
+        if not stop_loss_value and channel_settings.get('stop_loss_pct'):
+            stop_loss_type = 'percent'
+            stop_loss_value = channel_settings.get('stop_loss_pct')
+            print(f"[CONDITIONAL] Using channel stop_loss_pct: {stop_loss_value}%")
         
         market = parsed_signal.get('market', 'US')
         strike = parsed_signal.get('strike')
