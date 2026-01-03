@@ -41,6 +41,8 @@ config.ini.local
 *.secret
 .env
 .env.local
+schwab_token.json
+token.json
 
 # Logs
 *.log

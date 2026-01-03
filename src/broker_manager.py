@@ -105,6 +105,20 @@ class BrokerManager:
             except Exception as e:
                 print(f"[BROKER MANAGER] ❌ IBKR PAPER error: {e}")
         
+        # Initialize Schwab (LIVE only - no paper trading with Schwab)
+        if brokers_config.get('enable_schwab', False):
+            try:
+                schwab_config = self.config.get('schwab', {}).copy()
+                schwab_config['dry_run'] = brokers_config.get('schwab_dry_run', True)
+                schwab_broker = BrokerFactory.create_broker('SCHWAB', schwab_config)
+                if schwab_broker and await schwab_broker.connect():
+                    self.brokers['SCHWAB'] = schwab_broker
+                    print(f"[BROKER MANAGER] ✓ Schwab initialized")
+                else:
+                    print(f"[BROKER MANAGER] ⚠️  Schwab not authenticated - use Settings to connect")
+            except Exception as e:
+                print(f"[BROKER MANAGER] ❌ Schwab error: {e}")
+        
         # Set default broker
         self.default_broker = brokers_config.get('default_broker', 'WEBULL')
         if self.default_broker not in self.brokers:

@@ -20,12 +20,14 @@ from .webull_broker import WebullBroker
 from .alpaca_broker import AlpacaBroker
 from .ibkr_broker import IBKRBroker
 from .robinhood_broker import RobinhoodBroker
+from .schwab_broker import SchwabBroker
 
 # Register broker implementations with factory
 BrokerFactory.register_broker('WEBULL', WebullBroker)
 BrokerFactory.register_broker('ALPACA', AlpacaBroker)
 BrokerFactory.register_broker('IBKR', IBKRBroker)
 BrokerFactory.register_broker('ROBINHOOD', RobinhoodBroker)
+BrokerFactory.register_broker('SCHWAB', SchwabBroker)
 
 __all__ = [
     'BrokerInterface',
@@ -34,5 +36,6 @@ __all__ = [
     'WebullBroker',
     'AlpacaBroker',
     'IBKRBroker',
-    'RobinhoodBroker'
+    'RobinhoodBroker',
+    'SchwabBroker'
 ]

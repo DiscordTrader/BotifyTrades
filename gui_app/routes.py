@@ -659,6 +659,10 @@ def register_routes(app):
     from .google_auth import google_auth
     app.register_blueprint(google_auth)
     
+    # Register Schwab OAuth blueprint
+    from .schwab_auth import schwab_auth
+    app.register_blueprint(schwab_auth)
+    
     # Inject config variables into all templates
     @app.context_processor
     def inject_config():
