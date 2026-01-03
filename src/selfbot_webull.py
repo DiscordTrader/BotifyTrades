@@ -7013,11 +7013,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # Check for CONDITIONAL ORDER signals (e.g., "AAPL over 150 SL 5%")
                     try:
                         from src.signals.parser import is_conditional_order_signal, parse_conditional_order_signal
-                        if is_conditional_order_signal(message.content):
+                        from src.services.conditional_order_service import conditional_order_service
+                        
+                        if is_conditional_order_signal(message.content) and conditional_order_service.is_enabled():
                             cond_channel_id = str(message.channel.id)
                             print(f"[COND ORDER] ✓ Detected conditional order signal in channel {cond_channel_id}")
                             parsed_cond = parse_conditional_order_signal(message.content)
-                            if parsed_cond and hasattr(self, 'conditional_order_service') and self.conditional_order_service:
+                            if parsed_cond:
                                 # Add channel context
                                 parsed_cond['channel_id'] = cond_channel_id
                                 parsed_cond['message_id'] = str(message.id)
@@ -7025,10 +7027,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 parsed_cond['author_name'] = str(message.author)
                                 
                                 # Submit to conditional order service
-                                order_id = self.conditional_order_service.create_order(parsed_cond)
+                                order_id = conditional_order_service.create_order(parsed_cond)
                                 if order_id:
                                     print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {parsed_cond['condition']} ${parsed_cond['trigger_price']}")
-                                    # Optionally acknowledge in Discord
+                                    # Acknowledge in Discord with hourglass reaction
                                     try:
                                         await message.add_reaction('⏳')
                                     except:
@@ -7036,10 +7038,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 else:
                                     print(f"[COND ORDER] ⚠️ Failed to create conditional order")
                             else:
-                                print(f"[COND ORDER] ⚠️ Conditional order service not available")
+                                print(f"[COND ORDER] ⚠️ Could not parse conditional order signal")
                             return  # Don't forward conditional order signals
                     except Exception as e:
+                        import traceback
                         print(f"[COND ORDER] ⚠️ Error checking conditional order: {e}")
+                        traceback.print_exc()
                     
                     # Check if target is a webhook URL (for channel mappings)
                     if target_execution_channel_id and target_execution_channel_id.startswith('https://'):
