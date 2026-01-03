@@ -7009,6 +7009,37 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[DEBUG] Non-signal message detected (not BTO/STC or Bullwinkle)")
                     print(f"[DEBUG] should_forward={should_forward}, target_execution_channel_id={target_execution_channel_id}")
                     print(f"[DEBUG] Message preview: {message.content[:100]}...")
+                    
+                    # Check for CONDITIONAL ORDER signals (e.g., "AAPL over 150 SL 5%")
+                    try:
+                        from src.signals.parser import is_conditional_order_signal, parse_conditional_order_signal
+                        if is_conditional_order_signal(message.content):
+                            print(f"[COND ORDER] ✓ Detected conditional order signal in channel {channel_id}")
+                            parsed_cond = parse_conditional_order_signal(message.content)
+                            if parsed_cond and hasattr(self, 'conditional_order_service') and self.conditional_order_service:
+                                # Add channel context
+                                parsed_cond['channel_id'] = str(channel_id)
+                                parsed_cond['message_id'] = str(message.id)
+                                parsed_cond['author_id'] = str(message.author.id)
+                                parsed_cond['author_name'] = str(message.author)
+                                
+                                # Submit to conditional order service
+                                order_id = self.conditional_order_service.create_order(parsed_cond)
+                                if order_id:
+                                    print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {parsed_cond['condition']} ${parsed_cond['trigger_price']}")
+                                    # Optionally acknowledge in Discord
+                                    try:
+                                        await message.add_reaction('⏳')
+                                    except:
+                                        pass
+                                else:
+                                    print(f"[COND ORDER] ⚠️ Failed to create conditional order")
+                            else:
+                                print(f"[COND ORDER] ⚠️ Conditional order service not available")
+                            return  # Don't forward conditional order signals
+                    except Exception as e:
+                        print(f"[COND ORDER] ⚠️ Error checking conditional order: {e}")
+                    
                     # Check if target is a webhook URL (for channel mappings)
                     if target_execution_channel_id and target_execution_channel_id.startswith('https://'):
                         print(f"[DEBUG] Inside webhook URL block, parsing message...")
