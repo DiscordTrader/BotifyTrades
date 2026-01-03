@@ -1408,17 +1408,6 @@ input:checked + .slider:before {
             <button id="save-conditional-orders" class="btn btn-success">💾 Save Conditional Order Settings</button>
             <span id="conditional-orders-save-status" style="margin-left: 12px; font-size: 13px;"></span>
         </div>
-        
-        <!-- Active Conditional Orders List -->
-        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(0, 212, 255, 0.2);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <h4 style="margin: 0; color: #00d4ff; font-size: 14px;">📋 Active Conditional Orders</h4>
-                <button id="refresh-conditional-orders" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">🔄 Refresh</button>
-            </div>
-            <div id="conditional-orders-list" style="max-height: 300px; overflow-y: auto;">
-                <p style="color: var(--text-secondary); font-size: 13px;">Loading...</p>
-            </div>
-        </div>
     </div>
 
 </div>
@@ -2711,74 +2700,6 @@ document.getElementById('save-conditional-orders').addEventListener('click', asy
     }
 });
 
-// Load and display conditional orders list
-async function loadConditionalOrdersList() {
-    const container = document.getElementById('conditional-orders-list');
-    try {
-        const response = await fetch('/api/conditional_orders');
-        const orders = await response.json();
-        
-        if (!orders || orders.length === 0) {
-            container.innerHTML = '<p style="color: var(--text-secondary); font-size: 13px; text-align: center; padding: 20px;">No active conditional orders</p>';
-            return;
-        }
-        
-        let html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
-        for (const order of orders) {
-            const statusColor = order.status === 'active_monitoring' ? '#00ff88' : 
-                               order.status === 'pending' ? '#ffc107' : 
-                               order.status === 'triggered' ? '#00d4ff' : '#6c757d';
-            const statusIcon = order.status === 'active_monitoring' ? '📡' : 
-                              order.status === 'pending' ? '⏳' : 
-                              order.status === 'triggered' ? '⚡' : '⏸️';
-            
-            html += `
-                <div style="background: rgba(0, 50, 80, 0.4); border: 1px solid rgba(0, 212, 255, 0.2); border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <span style="font-weight: 600; color: #00d4ff;">${order.symbol}</span>
-                        <span style="color: var(--text-secondary); margin-left: 8px;">${order.trigger_type} $${order.trigger_price}</span>
-                        ${order.stop_loss ? `<span style="color: #ff6b6b; margin-left: 8px;">SL: $${order.stop_loss}</span>` : ''}
-                        ${order.profit_target ? `<span style="color: #00ff88; margin-left: 8px;">PT: $${order.profit_target}</span>` : ''}
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <span style="color: ${statusColor}; font-size: 12px;">${statusIcon} ${order.status}</span>
-                        <button onclick="cancelConditionalOrder(${order.id})" class="btn btn-danger" style="padding: 4px 10px; font-size: 11px;">Cancel</button>
-                    </div>
-                </div>
-            `;
-        }
-        html += '</div>';
-        container.innerHTML = html;
-    } catch (error) {
-        console.error('[Conditional Orders] Load list error:', error);
-        container.innerHTML = '<p style="color: #ff6b6b; font-size: 13px;">Error loading orders</p>';
-    }
-}
-
-async function cancelConditionalOrder(orderId) {
-    if (!confirm('Cancel this conditional order?')) return;
-    
-    try {
-        const response = await fetch(`/api/conditional_orders/${orderId}/cancel`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ reason: 'Cancelled by user via GUI' })
-        });
-        
-        const result = await response.json();
-        if (result.success) {
-            showToast('Order cancelled', 'success');
-            loadConditionalOrdersList();
-        } else {
-            showToast('Failed to cancel: ' + (result.error || 'Unknown error'), 'error');
-        }
-    } catch (error) {
-        showToast('Error: ' + error.message, 'error');
-    }
-}
-
-document.getElementById('refresh-conditional-orders').addEventListener('click', loadConditionalOrdersList);
-
 // ========== BACKGROUND SERVICES SETTINGS ==========
 
 function updateBackgroundServicesToggleStatus() {
@@ -3599,7 +3520,6 @@ loadDiscordNotifications();
 loadWebhookChannelsForTradeMonitor().then(() => loadTradeMonitorSettings());
 loadBackgroundServicesSettings();
 loadConditionalOrdersSettings();
-loadConditionalOrdersList();
 
 // Refresh broker status every 30 seconds
 setInterval(loadBrokerStatus, 30000);

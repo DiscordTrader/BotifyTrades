@@ -125,6 +125,9 @@
         <button id="tab-bot-trades" class="tab" onclick="switchTab('bot-trades')">
             🤖 Bot Trades
         </button>
+        <button id="tab-conditional" class="tab" onclick="switchTab('conditional')">
+            ⏳ Conditional Orders
+        </button>
     </div>
     
     <div id="trades-table-container">
@@ -175,6 +178,24 @@
             <div style="text-align: center; padding: 60px 20px;">
                 <div class="spinner" style="margin: 0 auto 20px;"></div>
                 <div style="color: var(--text-secondary); font-size: 0.9375rem;">Loading bot trades...</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Conditional Orders Container -->
+    <div id="conditional-orders-container" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px;">
+            <div>
+                <span style="font-size: 0.875rem; color: var(--text-secondary);">Monitoring price conditions for automated execution</span>
+            </div>
+            <button onclick="loadConditionalOrders()" class="btn btn-small" style="background: linear-gradient(135deg, #10b981, #059669);">
+                🔄 Refresh
+            </button>
+        </div>
+        <div id="conditional-orders-table">
+            <div style="text-align: center; padding: 60px 20px;">
+                <div class="spinner" style="margin: 0 auto 20px;"></div>
+                <div style="color: var(--text-secondary); font-size: 0.9375rem;">Loading conditional orders...</div>
             </div>
         </div>
     </div>
@@ -768,14 +789,21 @@ async function switchTab(tab) {
     // Show/hide appropriate containers
     const tradesContainer = document.getElementById('trades-table-container');
     const botTradesContainer = document.getElementById('bot-trades-container');
+    const conditionalContainer = document.getElementById('conditional-orders-container');
+    
+    // Hide all containers first
+    tradesContainer.style.display = 'none';
+    botTradesContainer.style.display = 'none';
+    conditionalContainer.style.display = 'none';
     
     if (tab === 'bot-trades') {
-        tradesContainer.style.display = 'none';
         botTradesContainer.style.display = 'block';
         await loadBotTrades();
+    } else if (tab === 'conditional') {
+        conditionalContainer.style.display = 'block';
+        await loadConditionalOrders();
     } else {
         tradesContainer.style.display = 'block';
-        botTradesContainer.style.display = 'none';
         
         // Load trades - use order history API for filled orders
         if (tab === 'filled') {
@@ -1473,6 +1501,118 @@ async function loadStats() {
         }
     } catch (err) {
         console.error('Error loading stats:', err);
+    }
+}
+
+// ============ CONDITIONAL ORDERS TAB FUNCTIONS ============
+async function loadConditionalOrders() {
+    console.log('[loadConditionalOrders] Starting...');
+    const container = document.getElementById('conditional-orders-table');
+    if (!container) return;
+    
+    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading conditional orders...</div></div>';
+    
+    try {
+        const response = await fetch('/api/conditional_orders');
+        const orders = await response.json();
+        
+        console.log('[loadConditionalOrders] Orders:', orders);
+        
+        // Update summary
+        const summaryEl = document.getElementById('summary-text');
+        if (summaryEl) {
+            const activeCount = orders.filter(o => o.status === 'active_monitoring' || o.status === 'pending').length;
+            summaryEl.textContent = `${activeCount} active conditional order${activeCount !== 1 ? 's' : ''}`;
+        }
+        
+        if (!orders || orders.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 60px 20px;">
+                    <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">⏳</div>
+                    <div style="color: var(--text-secondary); font-size: 1rem; margin-bottom: 8px;">No conditional orders</div>
+                    <div style="color: var(--text-muted); font-size: 0.875rem;">Send signals like "AAPL over 150 SL 5" to create conditional orders</div>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '<div class="positions-grid">';
+        for (const order of orders) {
+            const statusColor = order.status === 'active_monitoring' ? '#22c55e' : 
+                               order.status === 'pending' ? '#f59e0b' : 
+                               order.status === 'triggered' ? '#3b82f6' : 
+                               order.status === 'executed' ? '#22c55e' : '#6b7280';
+            const statusIcon = order.status === 'active_monitoring' ? '📡' : 
+                              order.status === 'pending' ? '⏳' : 
+                              order.status === 'triggered' ? '⚡' : 
+                              order.status === 'executed' ? '✅' : '⏸️';
+            const statusLabel = order.status === 'active_monitoring' ? 'Monitoring' : 
+                               order.status.charAt(0).toUpperCase() + order.status.slice(1).replace(/_/g, ' ');
+            
+            const triggerDirection = order.trigger_type === 'over' ? '↑' : '↓';
+            const triggerText = order.trigger_type === 'over' ? 'Above' : 'Below';
+            
+            html += `
+                <div class="position-card" style="border-left: 3px solid ${statusColor};">
+                    <div class="position-main" style="grid-template-columns: 1fr 1fr 1fr 1fr auto;">
+                        <div class="position-symbol">
+                            <div style="font-size: 1.125rem; font-weight: 700; color: var(--text-primary);">${order.symbol}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">Conditional</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">Trigger</div>
+                            <div style="font-size: 1rem; font-weight: 600; color: var(--accent-teal);">${triggerDirection} $${parseFloat(order.trigger_price).toFixed(2)}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">${triggerText}</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">Risk</div>
+                            ${order.stop_loss ? `<div style="font-size: 0.875rem; color: #ef4444;">SL: $${parseFloat(order.stop_loss).toFixed(2)}</div>` : '<div style="color: var(--text-muted);">—</div>'}
+                            ${order.profit_target ? `<div style="font-size: 0.875rem; color: #22c55e;">PT: $${parseFloat(order.profit_target).toFixed(2)}</div>` : ''}
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">Status</div>
+                            <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px; background: ${statusColor}20; color: ${statusColor}; font-size: 0.8125rem; font-weight: 600;">
+                                ${statusIcon} ${statusLabel}
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            ${(order.status === 'active_monitoring' || order.status === 'pending') ? 
+                                `<button onclick="cancelConditionalOrder(${order.id})" class="btn btn-small" style="background: linear-gradient(135deg, #ef4444, #dc2626); border: none; color: white; padding: 6px 12px; font-size: 0.75rem;">
+                                    Cancel
+                                </button>` : ''
+                            }
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        html += '</div>';
+        container.innerHTML = html;
+        
+    } catch (err) {
+        console.error('[loadConditionalOrders] Error:', err);
+        container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">Error loading conditional orders: ${err.message}</div>`;
+    }
+}
+
+async function cancelConditionalOrder(orderId) {
+    if (!confirm('Cancel this conditional order?')) return;
+    
+    try {
+        const response = await fetch(`/api/conditional_orders/${orderId}/cancel`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: 'Cancelled by user via Dashboard' })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            loadConditionalOrders();
+        } else {
+            alert('Failed to cancel: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
     }
 }
 
