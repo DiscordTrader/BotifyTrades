@@ -6371,6 +6371,87 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             print(f"[STARTUP] Warning: Could not start Trade Monitor: {e}", flush=True)
             traceback.print_exc()
         
+        # Start Conditional Order Service if enabled
+        try:
+            from src.services.conditional_order_service import conditional_order_service
+            
+            if conditional_order_service.is_enabled():
+                # Register broker instances for price monitoring
+                if self.broker:
+                    conditional_order_service.set_broker_instance('Webull', self.broker)
+                if hasattr(self, 'paper_broker') and self.paper_broker:
+                    conditional_order_service.set_broker_instance('Alpaca', self.paper_broker)
+                
+                # Capture the Discord event loop for thread-safe queue operations
+                discord_loop = asyncio.get_running_loop()
+                order_queue = self.order_queue
+                
+                # Set up execution callback with thread-safe handoff
+                def execute_conditional_order_sync(order, triggered_price):
+                    """Execute a triggered conditional order (called from service thread)."""
+                    try:
+                        symbol = order['symbol']
+                        broker_name = order.get('broker_primary', 'Webull')
+                        
+                        # Build a BTO signal from the conditional order
+                        signal = {
+                            'asset': order.get('asset_type', 'stock'),
+                            'action': 'BTO',
+                            'symbol': symbol,
+                            'price': triggered_price,
+                            'is_market_order': True,
+                            '_conditional_order_id': order['id'],
+                            '_broker_override': broker_name,
+                        }
+                        
+                        # Add position sizing
+                        size_mode = order.get('size_mode')
+                        if size_mode == 'percent_account':
+                            signal['_position_size_pct'] = order.get('qty_value')
+                            signal['_calculate_qty'] = True
+                        elif size_mode == 'fixed_qty':
+                            signal['qty'] = int(order.get('qty_value', 1))
+                        else:
+                            signal['qty'] = 1
+                        
+                        # Add stop loss and profit targets
+                        if order.get('stop_loss_value'):
+                            if order.get('stop_loss_type') == 'percent':
+                                signal['stop_loss_pct'] = order['stop_loss_value']
+                            else:
+                                signal['stop_loss_price'] = order['stop_loss_value']
+                        
+                        import json
+                        if order.get('take_profit_targets'):
+                            targets = json.loads(order['take_profit_targets']) if isinstance(order['take_profit_targets'], str) else order['take_profit_targets']
+                            if targets and len(targets) > 0:
+                                signal['profit_target_price'] = targets[0]
+                        
+                        # Thread-safe handoff to Discord's event loop
+                        async def queue_signal():
+                            await order_queue.put(signal)
+                        
+                        future = asyncio.run_coroutine_threadsafe(queue_signal(), discord_loop)
+                        future.result(timeout=5.0)  # Wait up to 5 seconds
+                        print(f"[CONDITIONAL] ✓ Queued BTO {symbol} @ ${triggered_price:.2f}")
+                        return True
+                        
+                    except Exception as e:
+                        print(f"[CONDITIONAL] ❌ Execution error: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        return False
+                
+                conditional_order_service.set_execution_callback(execute_conditional_order_sync)
+                conditional_order_service.start()
+                print("[STARTUP] ✓ Conditional Order Service started")
+            else:
+                print("[STARTUP] Conditional Order Service disabled (enable in Settings)")
+        except ImportError as e:
+            print(f"[STARTUP] ⚠️ Conditional Order Service not available: {e}")
+        except Exception as e:
+            print(f"[STARTUP] Warning: Could not start Conditional Order Service: {e}")
+        
         # Signal ready event for thread synchronization (if available)
         try:
             global _discord_ready_event
@@ -7201,7 +7282,48 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         
         # Check for bracket order signal (stock with targets and stop loss)
         bracket_signal = None
-        from src.signals.parser import is_bracket_order_signal, parse_bracket_order_signal, is_jacob_signal, parse_jacob_signal
+        from src.signals.parser import is_bracket_order_signal, parse_bracket_order_signal, is_jacob_signal, parse_jacob_signal, is_conditional_order_signal, parse_conditional_order_signal
+        
+        # Check for conditional order signal FIRST (before regular BTO/STC parsing)
+        # This routes price-triggered orders to the conditional order service
+        if is_conditional_order_signal(normalized_content):
+            conditional_signal = parse_conditional_order_signal(normalized_content)
+            if conditional_signal:
+                print(f"[CONDITIONAL] ✓ Detected conditional order: {conditional_signal['symbol']} {conditional_signal['trigger_type']} ${conditional_signal['trigger_price']}")
+                
+                # Route to conditional order service if enabled
+                try:
+                    from src.services.conditional_order_service import conditional_order_service
+                    
+                    if conditional_order_service.is_enabled():
+                        # Get broker from channel override or default
+                        broker = channel_info.get('broker_override', 'Webull') if channel_info else 'Webull'
+                        
+                        order_id = conditional_order_service.create_order(
+                            channel_id=str(message.channel.id),
+                            parsed_signal=conditional_signal,
+                            broker=broker
+                        )
+                        
+                        if order_id:
+                            print(f"[CONDITIONAL] ✓ Created conditional order #{order_id} - monitoring started")
+                            # Acknowledge in channel if this is an execute channel
+                            if execute_enabled:
+                                try:
+                                    await message.add_reaction('⏳')  # Hourglass to indicate pending
+                                except:
+                                    pass
+                        else:
+                            print(f"[CONDITIONAL] ⚠️ Failed to create conditional order")
+                    else:
+                        print(f"[CONDITIONAL] ⚠️ Conditional order service disabled - signal ignored")
+                except ImportError as e:
+                    print(f"[CONDITIONAL] ⚠️ Conditional order service not available: {e}")
+                except Exception as e:
+                    print(f"[CONDITIONAL] ❌ Error creating conditional order: {e}")
+                
+                return  # Don't process as regular signal
+        
         if opt is None and india_stock_signal is None and is_bracket_order_signal(normalized_content):
             bracket_signal = parse_bracket_order_signal(normalized_content)
             if bracket_signal:

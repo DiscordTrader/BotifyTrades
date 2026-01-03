@@ -32,12 +32,15 @@ The **Portfolio Simulation Engine** (`services/simulation.py`) projects portfoli
 **Telegram Integration** supports reading trading signals from Telegram groups/channels using a Telethon user client. It features a cross-thread architecture, unified signal processing with Discord, GUI management of Telegram settings, session persistence, and channel-aware routing for independent risk settings and broker selection. Per-channel settings include broker override, default quantity (applied only when signal lacks explicit quantity), position size percentage, exit strategy mode (signal/risk/hybrid), and full risk management configuration (profit targets, stop loss, trailing stops). The unified channel lookup (`get_channel_by_telegram_id`) normalizes Telegram IDs with -100 prefix handling for proper database matching.
 
 **Conditional Order Monitoring System** (`src/services/conditional_order_service.py`) monitors price conditions and executes orders when triggered. Supports signals like "LVRO over 1.30 SL 10% profit target 1.43" with price monitoring fallback chain: broker-native APIs (Webull, Alpaca) → Finnhub API (requires FINNHUB_API_KEY) → yfinance (free, no API key required). Features include:
-- **Signal Parsing**: Detects "over/above" and "under/below" trigger patterns with SL (fixed or %), PT (single or multiple targets), and position sizing (% of account or fixed qty)
-- **Price Monitoring**: Async polling with rate limiting per broker, automatic fallback when rate limits reached
+- **Signal Parsing**: Detects "over/above" and "under/below" trigger patterns with SL (fixed or %), PT (single or multiple targets), and position sizing (% of account or fixed qty) - parser gated to avoid hijacking regular BTO/STC signals
+- **Price Monitoring**: Three-tier fallback: BrokerPriceMonitor → FinnhubPriceMonitor → YFinancePriceMonitor (always available, no API key)
 - **Per-Channel Settings**: trigger_offset_percent (+/- to confirm breakout or early entry), conditional_order_expiry (end_of_day, 1_hour, 4_hours), conditional_auto_execute
 - **State Machine**: PENDING → VALIDATING → ACTIVE_MONITORING → TRIGGERED → EXECUTING → TRACKING → TERMINATED
 - **Audit Trail**: Full lifecycle logging in conditional_order_audit table for debugging and compliance
-- **Integration**: Works with existing position sizing and risk management systems
+- **Thread-Safe Execution**: Uses asyncio.run_coroutine_threadsafe for handoff from service thread to Discord event loop
+- **Integration**: Works with existing position sizing and risk management systems, preserves all per-channel settings
+- **API Routes**: GET/POST /api/settings/conditional_orders, GET /api/conditional_orders, cancel/audit endpoints
+- **Default State**: Service disabled by default - enable via Settings page
 
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Questrade, Upstox, Zerodha, and DhanQ. The system emphasizes user experience through an interactive setup wizard, GUI-based credential management, and automatic license renewal. The Discord bot runs in a dedicated thread with an isolated asyncio event loop. Broker credentials are loaded hierarchically. Discord channel IDs and all bot settings, including signal regex patterns and allowed author/guild IDs, are GUI-manageable and stored in SQLite. Per-channel risk management can override global defaults. The system employs a dual-build license architecture separating Admin and User deployments.

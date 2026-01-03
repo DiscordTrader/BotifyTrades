@@ -5241,6 +5241,103 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
     
+    # Conditional Order Settings
+    @app.route('/api/settings/conditional_orders', methods=['GET'])
+    def api_get_conditional_order_settings():
+        """Get conditional order service settings"""
+        try:
+            settings = db.get_conditional_order_settings()
+            return jsonify(settings)
+        except Exception as e:
+            print(f"[API] Error fetching conditional order settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/settings/conditional_orders', methods=['POST'])
+    def api_update_conditional_order_settings():
+        """Update conditional order service settings"""
+        try:
+            data = request.json
+            success = db.save_conditional_order_settings(data)
+            
+            if success:
+                return jsonify({
+                    'success': True,
+                    'message': 'Conditional order settings updated successfully'
+                })
+            else:
+                return jsonify({'error': 'Failed to update settings'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error updating conditional order settings: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/conditional_orders', methods=['GET'])
+    def api_get_conditional_orders():
+        """Get all conditional orders with optional status filter"""
+        try:
+            status = request.args.get('status', None)
+            if status:
+                orders = db.get_conditional_orders_by_status(status)
+            else:
+                orders = db.get_active_conditional_orders()
+            return jsonify({'orders': orders})
+        except Exception as e:
+            print(f"[API] Error fetching conditional orders: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/conditional_orders/<int:order_id>', methods=['GET'])
+    def api_get_conditional_order(order_id):
+        """Get a specific conditional order"""
+        try:
+            order = db.get_conditional_order_by_id(order_id)
+            if order:
+                return jsonify({'order': order})
+            else:
+                return jsonify({'error': 'Order not found'}), 404
+        except Exception as e:
+            print(f"[API] Error fetching conditional order: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/conditional_orders/<int:order_id>/cancel', methods=['POST'])
+    def api_cancel_conditional_order(order_id):
+        """Cancel a conditional order"""
+        try:
+            data = request.json or {}
+            reason = data.get('reason', 'Cancelled via GUI')
+            
+            success = db.cancel_conditional_order(order_id, reason)
+            
+            if success:
+                # Also stop monitoring in the service
+                try:
+                    from src.services.conditional_order_service import conditional_order_service
+                    conditional_order_service.cancel_order(order_id, reason)
+                except:
+                    pass
+                
+                return jsonify({
+                    'success': True,
+                    'message': f'Conditional order #{order_id} cancelled'
+                })
+            else:
+                return jsonify({'error': 'Failed to cancel order'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error cancelling conditional order: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/conditional_orders/<int:order_id>/audit', methods=['GET'])
+    def api_get_conditional_order_audit(order_id):
+        """Get audit trail for a conditional order"""
+        try:
+            audit = db.get_conditional_order_audit(order_id)
+            return jsonify({'audit': audit})
+        except Exception as e:
+            print(f"[API] Error fetching conditional order audit: {e}")
+            return jsonify({'error': str(e)}), 500
+    
     # Risk Management Settings
     @app.route('/api/settings/risk_management', methods=['GET'])
     def api_get_risk_management_settings():
