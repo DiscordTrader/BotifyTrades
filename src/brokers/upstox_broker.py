@@ -229,25 +229,31 @@ class UpstoxBroker(BrokerInterface):
         
         opt_suffix = 'CE' if actual_opt_type.lower() in ('c', 'call', 'ce') else 'PE'
         
-        instrument_token = await self._lookup_instrument_key(
+        lookup_result = await self._lookup_instrument_key(
             symbol=symbol.upper(),
             strike=float(strike),
             opt_type=opt_suffix,
             expiry=actual_expiry
         )
         
+        instrument_token, lot_size = lookup_result
+        
         if not instrument_token:
             formatted_expiry = self._format_expiry_for_upstox(actual_expiry)
             instrument_token = f"NSE_FO|{symbol.upper()}{formatted_expiry}{int(strike)}{opt_suffix}"
-            print(f"[UPSTOX] ⚠️ Could not lookup instrument, using fallback: {instrument_token}")
+            lot_size = 75
+            print(f"[UPSTOX] ⚠️ Could not lookup instrument, using fallback: {instrument_token} (lot_size={lot_size})")
         
-        print(f"[UPSTOX] Placing option: {action} {actual_qty} {instrument_token} @ {actual_price}")
+        order_qty = actual_qty * lot_size
+        print(f"[UPSTOX] Quantity: {actual_qty} lots x {lot_size} = {order_qty} units")
+        
+        print(f"[UPSTOX] Placing option: {action} {order_qty} {instrument_token} @ {actual_price}")
         
         order_type = 'limit' if actual_price else 'market'
         return await self.place_order(
             symbol=instrument_token,
             action=action,
-            quantity=actual_qty,
+            quantity=order_qty,
             order_type=order_type,
             price=actual_price,
             product_type='INTRADAY'
@@ -320,8 +326,9 @@ class UpstoxBroker(BrokerInterface):
                 if (contract.get('strike_price') == strike and 
                     contract.get('instrument_type') == opt_type):
                     instrument_key = contract.get('instrument_key')
-                    print(f"[UPSTOX] ✓ Found instrument key: {instrument_key}")
-                    return instrument_key
+                    lot_size = contract.get('lot_size', 1)
+                    print(f"[UPSTOX] ✓ Found instrument key: {instrument_key} (lot_size={lot_size})")
+                    return instrument_key, lot_size
             
             matching_type = [c for c in contracts if c.get('instrument_type') == opt_type]
             if matching_type:
@@ -329,17 +336,18 @@ class UpstoxBroker(BrokerInterface):
                 closest_strike = closest.get('strike_price')
                 if abs(closest_strike - strike) <= 100:
                     instrument_key = closest.get('instrument_key')
-                    print(f"[UPSTOX] ✓ Using nearest strike {closest_strike} (requested {strike}): {instrument_key}")
-                    return instrument_key
+                    lot_size = closest.get('lot_size', 1)
+                    print(f"[UPSTOX] ✓ Using nearest strike {closest_strike} (requested {strike}): {instrument_key} (lot_size={lot_size})")
+                    return instrument_key, lot_size
                 else:
                     print(f"[UPSTOX] ⚠️ Nearest strike {closest_strike} too far from {strike}")
             
             print(f"[UPSTOX] ⚠️ No matching contract found for {symbol} {strike} {opt_type}")
-            return None
+            return None, 1
             
         except Exception as e:
             print(f"[UPSTOX] Error looking up instrument: {e}")
-            return None
+            return None, 1
     
     def _format_expiry_to_date(self, expiry: str) -> str:
         """Convert expiry to YYYY-MM-DD format for API"""
