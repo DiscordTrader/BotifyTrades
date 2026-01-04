@@ -354,3 +354,277 @@ function showToast(message, type) {
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
 }
+
+// ============ UPSTOX DASHBOARD FUNCTIONS ============
+
+let upstoxOrdersData = [];
+let currentUpstoxOrderFilter = 'all';
+
+async function refreshUpstoxData() {
+    await Promise.all([
+        loadUpstoxAccount(),
+        loadUpstoxConditionalOrders()
+    ]);
+}
+
+async function loadUpstoxAccount() {
+    try {
+        const response = await fetch('/api/brokers/upstox/account');
+        const data = await response.json();
+        
+        if (!data.success || !data.connected) {
+            document.getElementById('upstox-status-badge').textContent = 'NOT CONNECTED';
+            document.getElementById('upstox-balance').textContent = '₹0.00';
+            document.getElementById('upstox-positions').textContent = '0';
+            document.getElementById('upstox-positions-body').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #ff6b6b;">Upstox not connected</td></tr>';
+            document.getElementById('upstox-orders-body').innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #ff6b6b;">Upstox not connected</td></tr>';
+            document.getElementById('upstox-trades-body').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #ff6b6b;">Upstox not connected</td></tr>';
+            return;
+        }
+        
+        // Update status badge
+        const badge = document.getElementById('upstox-status-badge');
+        badge.style.background = 'rgba(0, 255, 136, 0.2)';
+        badge.style.color = '#00ff88';
+        badge.textContent = 'CONNECTED';
+        
+        // Update funds
+        if (data.funds) {
+            const available = data.funds.total_available || data.funds.equity?.available_margin || 0;
+            document.getElementById('upstox-balance').textContent = `₹${available.toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
+        }
+        
+        // Update positions count
+        document.getElementById('upstox-positions').textContent = data.positions?.length || 0;
+        
+        // Render positions table
+        renderUpstoxPositions(data.positions || []);
+        
+        // Store orders data and render
+        upstoxOrdersData = [...(data.open_orders || []), ...(data.filled_orders || [])];
+        renderUpstoxOrders(upstoxOrdersData);
+        
+        // Load trades separately
+        await loadUpstoxTrades();
+        
+    } catch (error) {
+        console.error('Error loading Upstox account:', error);
+    }
+}
+
+function renderUpstoxPositions(positions) {
+    const tbody = document.getElementById('upstox-positions-body');
+    
+    if (!positions || positions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #8E8E93;">No open positions</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = positions.map(p => {
+        const pnl = parseFloat(p.pnl || 0);
+        const pnlColor = pnl >= 0 ? '#00ff88' : '#ff6b6b';
+        const pnlSign = pnl >= 0 ? '+' : '';
+        const product = p.product === 'I' ? 'Intraday' : 'Delivery';
+        
+        return `
+            <tr style="border-bottom: 1px solid rgba(0, 200, 83, 0.1);">
+                <td style="padding: 12px; font-weight: 600; color: #ffffff;">${p.trading_symbol || 'N/A'}</td>
+                <td style="padding: 12px; text-align: center; font-weight: 600; color: ${p.quantity >= 0 ? '#00ff88' : '#ff6b6b'};">${p.quantity || 0}</td>
+                <td style="padding: 12px; text-align: right;">₹${parseFloat(p.average_price || 0).toFixed(2)}</td>
+                <td style="padding: 12px; text-align: right;">₹${parseFloat(p.last_price || 0).toFixed(2)}</td>
+                <td style="padding: 12px; text-align: right; font-weight: 600; color: ${pnlColor};">${pnlSign}₹${pnl.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+                <td style="padding: 12px; text-align: center;"><span style="padding: 3px 8px; background: rgba(0, 200, 83, 0.1); border-radius: 4px; font-size: 11px; color: #00c853;">${product}</span></td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderUpstoxOrders(orders) {
+    const tbody = document.getElementById('upstox-orders-body');
+    
+    // Filter based on current filter
+    let filteredOrders = orders;
+    if (currentUpstoxOrderFilter === 'open') {
+        filteredOrders = orders.filter(o => ['open', 'pending', 'trigger pending', 'validation pending'].includes(o.status?.toLowerCase()));
+    } else if (currentUpstoxOrderFilter === 'filled') {
+        filteredOrders = orders.filter(o => o.status?.toLowerCase() === 'complete');
+    } else if (currentUpstoxOrderFilter === 'rejected') {
+        filteredOrders = orders.filter(o => ['rejected', 'cancelled'].includes(o.status?.toLowerCase()));
+    }
+    
+    if (!filteredOrders || filteredOrders.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 40px; color: #8E8E93;">No ${currentUpstoxOrderFilter === 'all' ? '' : currentUpstoxOrderFilter + ' '}orders</td></tr>`;
+        return;
+    }
+    
+    tbody.innerHTML = filteredOrders.map(o => {
+        const status = o.status || 'unknown';
+        let statusColor = '#8E8E93';
+        if (status.toLowerCase() === 'complete') statusColor = '#00ff88';
+        else if (['open', 'pending', 'trigger pending'].includes(status.toLowerCase())) statusColor = '#ffc107';
+        else if (['rejected', 'cancelled'].includes(status.toLowerCase())) statusColor = '#ff6b6b';
+        
+        const sideColor = o.transaction_type === 'BUY' ? '#00ff88' : '#ff6b6b';
+        const time = o.order_timestamp ? new Date(o.order_timestamp).toLocaleTimeString('en-IN') : 'N/A';
+        
+        return `
+            <tr style="border-bottom: 1px solid rgba(0, 200, 83, 0.1);">
+                <td style="padding: 12px; font-size: 11px; color: #8E8E93; font-family: monospace;">${o.order_id || 'N/A'}</td>
+                <td style="padding: 12px; font-weight: 600; color: #ffffff;">${o.trading_symbol || 'N/A'}</td>
+                <td style="padding: 12px; text-align: center; font-weight: 600; color: ${sideColor};">${o.transaction_type || 'N/A'}</td>
+                <td style="padding: 12px; text-align: center;">${o.quantity || 0}</td>
+                <td style="padding: 12px; text-align: right;">₹${parseFloat(o.average_price || o.price || 0).toFixed(2)}</td>
+                <td style="padding: 12px; text-align: center;"><span style="padding: 3px 8px; background: ${statusColor}22; border-radius: 4px; font-size: 11px; color: ${statusColor}; font-weight: 600;">${status.toUpperCase()}</span></td>
+                <td style="padding: 12px; text-align: center; font-size: 11px; color: #8E8E93;">${time}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+async function loadUpstoxTrades() {
+    try {
+        const response = await fetch('/api/brokers/upstox/trades');
+        const data = await response.json();
+        
+        const tbody = document.getElementById('upstox-trades-body');
+        
+        if (!data.success || !data.trades || data.trades.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #8E8E93;">No trades today</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = data.trades.map(t => {
+            const sideColor = t.transaction_type === 'BUY' ? '#00ff88' : '#ff6b6b';
+            const time = t.order_timestamp ? new Date(t.order_timestamp).toLocaleTimeString('en-IN') : 'N/A';
+            
+            return `
+                <tr style="border-bottom: 1px solid rgba(0, 200, 83, 0.1);">
+                    <td style="padding: 12px; font-size: 11px; color: #8E8E93; font-family: monospace;">${t.trade_id || 'N/A'}</td>
+                    <td style="padding: 12px; font-weight: 600; color: #ffffff;">${t.trading_symbol || 'N/A'}</td>
+                    <td style="padding: 12px; text-align: center; font-weight: 600; color: ${sideColor};">${t.transaction_type || 'N/A'}</td>
+                    <td style="padding: 12px; text-align: center;">${t.quantity || 0}</td>
+                    <td style="padding: 12px; text-align: right;">₹${parseFloat(t.price || 0).toFixed(2)}</td>
+                    <td style="padding: 12px; text-align: center; font-size: 11px; color: #8E8E93;">${time}</td>
+                </tr>
+            `;
+        }).join('');
+        
+    } catch (error) {
+        console.error('Error loading Upstox trades:', error);
+    }
+}
+
+async function loadUpstoxConditionalOrders() {
+    try {
+        const response = await fetch('/api/conditional_orders?market=IN');
+        const data = await response.json();
+        
+        const tbody = document.getElementById('upstox-conditional-body');
+        
+        if (!data.success || !data.orders || data.orders.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #8E8E93;">No conditional orders for India market</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = data.orders.map(o => {
+            const statusColors = {
+                'PENDING': '#ffc107',
+                'ACTIVE_MONITORING': '#00d4ff',
+                'TRIGGERED': '#00ff88',
+                'EXECUTING': '#ff9900',
+                'TRACKING': '#8a2be2',
+                'TERMINATED': '#8E8E93',
+                'CANCELLED': '#ff6b6b'
+            };
+            const statusColor = statusColors[o.status] || '#8E8E93';
+            const triggerText = o.trigger_condition === 'above' ? `Above ₹${o.trigger_price}` : `Below ₹${o.trigger_price}`;
+            const slpt = `SL: ₹${o.stop_loss || 'N/A'} | PT: ${o.profit_targets || 'N/A'}`;
+            const created = o.created_at ? new Date(o.created_at).toLocaleString('en-IN') : 'N/A';
+            
+            return `
+                <tr style="border-bottom: 1px solid rgba(0, 200, 83, 0.1);">
+                    <td style="padding: 12px; font-weight: 600; color: #ffffff;">${o.symbol || 'N/A'} ${o.strike || ''} ${o.opt_type || ''}</td>
+                    <td style="padding: 12px; text-align: center; color: #ffc107;">${triggerText}</td>
+                    <td style="padding: 12px; text-align: center;"><span style="padding: 3px 8px; background: ${statusColor}22; border-radius: 4px; font-size: 11px; color: ${statusColor}; font-weight: 600;">${o.status}</span></td>
+                    <td style="padding: 12px; text-align: center; font-size: 11px; color: #8E8E93;">${slpt}</td>
+                    <td style="padding: 12px; text-align: center;"><span style="padding: 2px 6px; background: rgba(0, 200, 83, 0.15); border-radius: 4px; font-size: 10px; color: #00c853; font-weight: 600;">${o.broker || 'UPSTOX'}</span></td>
+                    <td style="padding: 12px; text-align: center; font-size: 11px; color: #8E8E93;">${created}</td>
+                    <td style="padding: 12px; text-align: center;">
+                        ${o.status !== 'TERMINATED' && o.status !== 'CANCELLED' ? `<button onclick="cancelConditionalOrder(${o.id})" style="background: rgba(255, 107, 107, 0.1); border: 1px solid rgba(255, 107, 107, 0.3); color: #ff6b6b; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">Cancel</button>` : '-'}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        
+    } catch (error) {
+        console.error('Error loading conditional orders:', error);
+    }
+}
+
+function switchUpstoxTab(tabName) {
+    // Hide all tabs
+    document.querySelectorAll('.upstox-tab-content').forEach(el => el.style.display = 'none');
+    
+    // Remove active class from all tab buttons
+    document.querySelectorAll('.upstox-tab').forEach(el => {
+        el.style.background = 'transparent';
+        el.style.color = '#8E8E93';
+        el.style.border = '1px solid rgba(0, 200, 83, 0.2)';
+    });
+    
+    // Show selected tab
+    document.getElementById(`upstox-${tabName}-tab`).style.display = 'block';
+    
+    // Activate tab button
+    const activeBtn = document.getElementById(`tab-${tabName}`);
+    activeBtn.style.background = 'rgba(0, 200, 83, 0.2)';
+    activeBtn.style.color = '#00c853';
+    activeBtn.style.border = '1px solid rgba(0, 200, 83, 0.4)';
+}
+
+function filterUpstoxOrders(filter) {
+    currentUpstoxOrderFilter = filter;
+    
+    // Update filter button styles
+    document.querySelectorAll('.order-filter').forEach(btn => {
+        btn.style.background = 'transparent';
+        btn.classList.remove('active');
+    });
+    
+    event.target.style.background = 'rgba(0, 200, 83, 0.2)';
+    event.target.classList.add('active');
+    
+    // Re-render orders with filter
+    renderUpstoxOrders(upstoxOrdersData);
+}
+
+async function cancelConditionalOrder(orderId) {
+    if (!confirm('Are you sure you want to cancel this conditional order?')) return;
+    
+    try {
+        const response = await fetch(`/api/conditional_orders/${orderId}/cancel`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            showToast('Conditional order cancelled', 'success');
+            await loadUpstoxConditionalOrders();
+        } else {
+            showToast(data.error || 'Failed to cancel order', 'error');
+        }
+    } catch (error) {
+        showToast('Error cancelling order', 'error');
+    }
+}
+
+// Initialize Upstox data on page load
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+        refreshUpstoxData();
+    }, 1000);
+    
+    // Auto-refresh every 30 seconds
+    setInterval(refreshUpstoxData, 30000);
+});

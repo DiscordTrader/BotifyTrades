@@ -100,6 +100,111 @@
     </div>
 </div>
 
+<!-- Upstox Dashboard Section -->
+<div id="upstox-dashboard" class="table-container" style="margin-bottom: 24px; background: linear-gradient(135deg, #0f1f0f 0%, #1a2f1a 100%); border: 1px solid rgba(0, 200, 83, 0.4);">
+    <div class="table-header" style="border-bottom: 1px solid rgba(0, 200, 83, 0.2); display: flex; justify-content: space-between; align-items: center;">
+        <h3 class="table-title" style="color: #00c853; margin: 0;">📈 Upstox Account Dashboard</h3>
+        <button onclick="refreshUpstoxData()" style="background: rgba(0, 200, 83, 0.2); border: 1px solid rgba(0, 200, 83, 0.4); color: #00c853; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">🔄 Refresh</button>
+    </div>
+    <div style="padding: 20px;">
+        <!-- Tabs for Orders -->
+        <div style="display: flex; gap: 8px; margin-bottom: 20px;">
+            <button id="tab-positions" onclick="switchUpstoxTab('positions')" class="upstox-tab active" style="padding: 10px 20px; border: 1px solid rgba(0, 200, 83, 0.4); background: rgba(0, 200, 83, 0.2); color: #00c853; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;">📊 Positions</button>
+            <button id="tab-orders" onclick="switchUpstoxTab('orders')" class="upstox-tab" style="padding: 10px 20px; border: 1px solid rgba(0, 200, 83, 0.2); background: transparent; color: #8E8E93; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;">📋 Orders</button>
+            <button id="tab-trades" onclick="switchUpstoxTab('trades')" class="upstox-tab" style="padding: 10px 20px; border: 1px solid rgba(0, 200, 83, 0.2); background: transparent; color: #8E8E93; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;">💹 Trades</button>
+            <button id="tab-conditional" onclick="switchUpstoxTab('conditional')" class="upstox-tab" style="padding: 10px 20px; border: 1px solid rgba(0, 200, 83, 0.2); background: transparent; color: #8E8E93; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;">⏰ Conditional</button>
+        </div>
+        
+        <!-- Positions Tab -->
+        <div id="upstox-positions-tab" class="upstox-tab-content">
+            <table class="data-table" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: rgba(0, 200, 83, 0.05);">
+                        <th style="text-align: left; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Symbol</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Qty</th>
+                        <th style="text-align: right; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Avg Price</th>
+                        <th style="text-align: right; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">LTP</th>
+                        <th style="text-align: right; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">P&L</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Product</th>
+                    </tr>
+                </thead>
+                <tbody id="upstox-positions-body">
+                    <tr><td colspan="6" style="text-align: center; padding: 40px; color: #8E8E93;">Loading positions...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Orders Tab -->
+        <div id="upstox-orders-tab" class="upstox-tab-content" style="display: none;">
+            <!-- Order Status Filter -->
+            <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                <button onclick="filterUpstoxOrders('all')" class="order-filter active" style="padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; background: rgba(0, 200, 83, 0.2); border: 1px solid rgba(0, 200, 83, 0.4); color: #00c853;">All</button>
+                <button onclick="filterUpstoxOrders('open')" class="order-filter" style="padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; background: transparent; border: 1px solid rgba(255, 193, 7, 0.4); color: #ffc107;">Open</button>
+                <button onclick="filterUpstoxOrders('filled')" class="order-filter" style="padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; background: transparent; border: 1px solid rgba(0, 255, 136, 0.4); color: #00ff88;">Filled</button>
+                <button onclick="filterUpstoxOrders('rejected')" class="order-filter" style="padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; background: transparent; border: 1px solid rgba(255, 107, 107, 0.4); color: #ff6b6b;">Rejected</button>
+            </div>
+            <table class="data-table" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: rgba(0, 200, 83, 0.05);">
+                        <th style="text-align: left; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Order ID</th>
+                        <th style="text-align: left; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Symbol</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Type</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Qty</th>
+                        <th style="text-align: right; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Price</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Status</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Time</th>
+                    </tr>
+                </thead>
+                <tbody id="upstox-orders-body">
+                    <tr><td colspan="7" style="text-align: center; padding: 40px; color: #8E8E93;">Loading orders...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Trades Tab -->
+        <div id="upstox-trades-tab" class="upstox-tab-content" style="display: none;">
+            <table class="data-table" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: rgba(0, 200, 83, 0.05);">
+                        <th style="text-align: left; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Trade ID</th>
+                        <th style="text-align: left; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Symbol</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Side</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Qty</th>
+                        <th style="text-align: right; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Price</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Time</th>
+                    </tr>
+                </thead>
+                <tbody id="upstox-trades-body">
+                    <tr><td colspan="6" style="text-align: center; padding: 40px; color: #8E8E93;">Loading trades...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Conditional Orders Tab -->
+        <div id="upstox-conditional-tab" class="upstox-tab-content" style="display: none;">
+            <div style="margin-bottom: 16px; padding: 12px; background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 8px;">
+                <div style="font-size: 12px; color: #ffc107;">⚡ Conditional orders monitor price conditions and execute when triggered. Supports India market signals like "BUY NIFTY 25900 CE ABOVE ₹190 SL ₹180"</div>
+            </div>
+            <table class="data-table" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: rgba(0, 200, 83, 0.05);">
+                        <th style="text-align: left; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Symbol</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Trigger</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Status</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">SL/PT</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Broker</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Created</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="upstox-conditional-body">
+                    <tr><td colspan="7" style="text-align: center; padding: 40px; color: #8E8E93;">Loading conditional orders...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <!-- Lot Size Calculator -->
 <div class="table-container" style="margin-bottom: 24px; background: linear-gradient(135deg, #0a1628 0%, #162447 100%); border: 1px solid rgba(0, 212, 255, 0.3);">
     <div class="table-header" style="border-bottom: 1px solid rgba(0, 212, 255, 0.2);">
