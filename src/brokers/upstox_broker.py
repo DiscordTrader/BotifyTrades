@@ -192,31 +192,43 @@ class UpstoxBroker(BrokerInterface):
     
     async def place_option_order(
         self,
-        symbol: str,
-        strike: float,
-        expiry: str,
-        option_type: str,
-        action: str,
-        quantity: int,
-        price: Optional[float] = None
+        symbol: str = None,
+        strike: float = None,
+        expiry: str = None,
+        option_type: str = None,
+        action: str = None,
+        quantity: int = None,
+        price: Optional[float] = None,
+        qty: int = None,
+        opt_type: str = None,
+        expiry_mmdd: str = None,
+        limit_price: float = None,
+        **kwargs
     ) -> OrderResult:
         """
         Place an option order on Upstox
         
-        For Indian markets, the option symbol format is:
-        {underlying}|{expiry}{strike}{CE/PE}
-        Example: NIFTY|24JAN26000CE
+        Supports both Alpaca-style and Webull-style parameters:
+        - Alpaca style: symbol, strike, expiry, option_type, action, quantity, price
+        - Webull style: action, qty, symbol, strike, opt_type, expiry_mmdd, limit_price
         """
-        opt_suffix = 'CE' if option_type.lower() in ('c', 'call', 'ce') else 'PE'
-        instrument_token = f"{symbol}|{expiry}{int(strike)}{opt_suffix}"
+        actual_qty = quantity or qty or 1
+        actual_opt_type = option_type or opt_type or 'CE'
+        actual_expiry = expiry or expiry_mmdd or ''
+        actual_price = price or limit_price
         
-        order_type = 'limit' if price else 'market'
+        opt_suffix = 'CE' if actual_opt_type.lower() in ('c', 'call', 'ce') else 'PE'
+        instrument_token = f"{symbol}|{actual_expiry}{int(strike)}{opt_suffix}"
+        
+        print(f"[UPSTOX] Placing option: {action} {actual_qty} {instrument_token} @ {actual_price}")
+        
+        order_type = 'limit' if actual_price else 'market'
         return await self.place_order(
             symbol=instrument_token,
             action=action,
-            quantity=quantity,
+            quantity=actual_qty,
             order_type=order_type,
-            price=price,
+            price=actual_price,
             product_type='INTRADAY'
         )
     
