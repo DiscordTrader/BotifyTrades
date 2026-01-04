@@ -13089,6 +13089,21 @@ def register_routes(app):
                     if _bot_instance:
                         import asyncio
                         try:
+                            # Disconnect old broker first to avoid race conditions
+                            old_broker = getattr(_bot_instance, 'upstox_broker', None)
+                            if old_broker:
+                                try:
+                                    loop = getattr(_bot_instance, 'loop', None)
+                                    if loop and loop.is_running():
+                                        disconnect_future = asyncio.run_coroutine_threadsafe(
+                                            old_broker.disconnect(), loop
+                                        )
+                                        disconnect_future.result(timeout=5)
+                                        print("[UPSTOX] ✓ Old broker disconnected")
+                                except Exception as disc_err:
+                                    print(f"[UPSTOX] ⚠️ Could not disconnect old broker: {disc_err}")
+                            
+                            # Create and connect new broker
                             new_broker = UpstoxBroker({
                                 'access_token': access_token
                             })
@@ -13099,12 +13114,14 @@ def register_routes(app):
                                 if connected:
                                     _bot_instance.upstox_broker = new_broker
                                     print("[UPSTOX] ✓ Broker instance replaced with new credentials")
+                                else:
+                                    print("[UPSTOX] ⚠️ New broker failed to connect")
                         except Exception as e:
                             print(f"[UPSTOX] ⚠️ Could not replace broker instance: {e}")
                     
                     return jsonify({
                         'success': True,
-                        'message': 'Upstox reconnected successfully with new credentials',
+                        'message': 'Upstox reconnected successfully. For full sync service updates, a bot restart may be needed.',
                         'account': result.get('account', {})
                     })
                 else:
