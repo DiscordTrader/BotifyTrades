@@ -119,6 +119,14 @@ except ImportError as e:
     print(f"[WARNING] Could not import DhanQBroker: {e}")
     DHANQ_AVAILABLE = False
 
+# Import Upstox broker (India - OAuth2 API)
+try:
+    from brokers.upstox_broker import UpstoxBroker
+    UPSTOX_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARNING] Could not import UpstoxBroker: {e}")
+    UPSTOX_AVAILABLE = False
+
 # Import BrokerSyncService for real-time trade synchronization
 from broker_sync_service import BrokerSyncService
 
@@ -5259,6 +5267,56 @@ class SelfClient(discord.Client):
             traceback.print_exc()
             self.dhanq_broker = None
 
+        # Initialize Upstox broker (India - OAuth2 API - Always LIVE)
+        self.upstox_broker = None
+        try:
+            if UPSTOX_AVAILABLE:
+                _original_print("[UPSTOX] Starting broker initialization...", flush=True)
+                _original_print("[UPSTOX] ⚠️ WARNING: Upstox has NO paper trading mode - ALL trades are LIVE", flush=True)
+                
+                from gui_app.database import get_broker_credentials
+                upstox_creds = get_broker_credentials('upstox')
+                
+                if upstox_creds and upstox_creds.get('credentials'):
+                    creds = upstox_creds.get('credentials', {})
+                    upstox_access_token = creds.get('access_token', '')
+                    
+                    if upstox_access_token:
+                        _original_print(f"[UPSTOX] ✓ Loaded credentials from DATABASE", flush=True)
+                        _original_print(f"[UPSTOX] Creating UpstoxBroker instance...", flush=True)
+                        
+                        self.upstox_broker = UpstoxBroker({
+                            'access_token': upstox_access_token
+                        })
+                        
+                        connected = await self.upstox_broker.connect()
+                        if connected:
+                            _original_print(f"[UPSTOX] ✓ Connected successfully (LIVE trading)", flush=True)
+                            try:
+                                from gui_app.database import update_broker_connection_status
+                                account_info = await self.upstox_broker.get_account_info()
+                                update_broker_connection_status('upstox', True, f"Connected - User: {self.upstox_broker.user_id}")
+                                _original_print(f"[UPSTOX] ✓ Broker status updated in GUI", flush=True)
+                            except Exception as status_err:
+                                _original_print(f"[UPSTOX] ⚠️ Failed to update broker status: {status_err}", flush=True)
+                        else:
+                            _original_print("[UPSTOX] ⚠️ Connection failed - token may be expired", flush=True)
+                            _original_print("[UPSTOX]   Go to Settings → Brokers → Upstox to update access token", flush=True)
+                            from gui_app.database import update_broker_connection_status
+                            update_broker_connection_status('upstox', False, 'Connection failed - token may be expired')
+                            self.upstox_broker = None
+                    else:
+                        _original_print("[UPSTOX] ⚠️ Incomplete credentials - missing access_token", flush=True)
+                else:
+                    _original_print("[UPSTOX] No credentials configured - broker disabled", flush=True)
+            else:
+                _original_print("[UPSTOX] UpstoxBroker not available (upstox-python-sdk not installed)", flush=True)
+        except Exception as e:
+            _original_print(f"[UPSTOX] ⚠️ Initialization failed: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            self.upstox_broker = None
+
         # CRITICAL: Set broker_ready if ANY broker is available (not just Webull)
         # This fixes user builds where only Alpaca/Tastytrade are configured
         if not self.broker_ready.is_set():
@@ -5268,7 +5326,8 @@ class SelfClient(discord.Client):
                 self.tastytrade_broker or
                 self.robinhood_broker or
                 self.ibkr_broker or
-                self.dhanq_broker
+                self.dhanq_broker or
+                self.upstox_broker
             )
             if any_broker_available:
                 self.broker_ready.set()
@@ -5292,15 +5351,16 @@ class SelfClient(discord.Client):
                 
                 # Create simple broker manager for sync service
                 class BrokerManager:
-                    def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None, dhanq_broker=None):
+                    def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None, dhanq_broker=None, upstox_broker=None):
                         self.webull_broker = webull_broker
                         self.alpaca_paper_broker = alpaca_paper_broker
                         self.tastytrade_broker = tastytrade_broker
                         self.robinhood_broker = robinhood_broker
                         self.ibkr_broker = ibkr_broker
                         self.dhanq_broker = dhanq_broker
+                        self.upstox_broker = upstox_broker
                 
-                broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker)
+                broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker, self.upstox_broker)
                 
                 self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=30)
                 await self.sync_service.start()
@@ -8464,6 +8524,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elif broker_name_lower in ('tastytrade_live', 'tastytrade') and self.tastytrade_broker and self.tastytrade_broker.connected and self.tastytrade_broker.is_live:
                             broker_instance = self.tastytrade_broker
                             _original_print(f"[MULTI-BROKER] Using Tastytrade LIVE broker")
+                        # DhanQ (India - Always LIVE): 'dhanq', 'DHANQ'
+                        elif broker_name_lower == 'dhanq' and self.dhanq_broker and self.dhanq_broker.connected:
+                            broker_instance = self.dhanq_broker
+                            _original_print(f"[MULTI-BROKER] Using DhanQ LIVE broker (India)")
+                        # Upstox (India - Always LIVE): 'upstox', 'UPSTOX'
+                        elif broker_name_lower == 'upstox' and self.upstox_broker and self.upstox_broker.connected:
+                            broker_instance = self.upstox_broker
+                            _original_print(f"[MULTI-BROKER] Using Upstox LIVE broker (India)")
                         else:
                             _original_print(f"[MULTI-BROKER] ⚠️  Broker '{broker_name}' not available or not connected")
                             _original_print(f"[DEBUG] Requested: '{broker_name_lower}', paper_broker: {getattr(self.paper_broker, 'name', None) if self.paper_broker else None}, broker: {getattr(self.broker, 'name', None) if self.broker else None}")

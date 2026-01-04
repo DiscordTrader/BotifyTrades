@@ -172,6 +172,54 @@ class UpstoxBroker(BrokerInterface):
         except Exception as e:
             return OrderResult(success=False, message=str(e))
     
+    async def place_stock_order(
+        self,
+        symbol: str,
+        action: str,
+        quantity: int,
+        price: Optional[float] = None
+    ) -> OrderResult:
+        """Place a stock order on Upstox"""
+        order_type = 'limit' if price else 'market'
+        return await self.place_order(
+            symbol=symbol,
+            action=action,
+            quantity=quantity,
+            order_type=order_type,
+            price=price,
+            product_type='INTRADAY'
+        )
+    
+    async def place_option_order(
+        self,
+        symbol: str,
+        strike: float,
+        expiry: str,
+        option_type: str,
+        action: str,
+        quantity: int,
+        price: Optional[float] = None
+    ) -> OrderResult:
+        """
+        Place an option order on Upstox
+        
+        For Indian markets, the option symbol format is:
+        {underlying}|{expiry}{strike}{CE/PE}
+        Example: NIFTY|24JAN26000CE
+        """
+        opt_suffix = 'CE' if option_type.lower() in ('c', 'call', 'ce') else 'PE'
+        instrument_token = f"{symbol}|{expiry}{int(strike)}{opt_suffix}"
+        
+        order_type = 'limit' if price else 'market'
+        return await self.place_order(
+            symbol=instrument_token,
+            action=action,
+            quantity=quantity,
+            order_type=order_type,
+            price=price,
+            product_type='INTRADAY'
+        )
+    
     async def get_quote(self, symbol: str) -> Dict[str, Any]:
         """Get current quote for a symbol"""
         if not self.quote_api:
