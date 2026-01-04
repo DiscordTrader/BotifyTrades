@@ -5866,7 +5866,7 @@ def register_routes(app):
     @app.route('/api/telegram/channels', methods=['POST'])
     @login_required
     def api_add_telegram_channel():
-        """Add a new Telegram channel"""
+        """Add a new Telegram channel with execution/tracking settings"""
         try:
             from gui_app.database import add_telegram_channel
             
@@ -5875,13 +5875,38 @@ def register_routes(app):
             name = data.get('name')
             chat_type = data.get('chat_type', 'group')
             username = data.get('username')
+            category = data.get('category', 'TRACK')
+            execute_enabled = data.get('execute_enabled', category == 'EXECUTE')
+            track_enabled = data.get('track_enabled', True)
+            market = data.get('market', 'US')
+            enabled_brokers = data.get('enabled_brokers', [])
             
             if not telegram_chat_id or not name:
                 return jsonify({'success': False, 'error': 'Chat ID and name are required'}), 400
             
-            channel_id = add_telegram_channel(telegram_chat_id, name, chat_type, username)
+            channel_id = add_telegram_channel(
+                telegram_chat_id=telegram_chat_id,
+                name=name,
+                chat_type=chat_type,
+                username=username,
+                category=category,
+                execute_enabled=execute_enabled,
+                track_enabled=track_enabled,
+                market=market,
+                enabled_brokers=enabled_brokers
+            )
             
             if channel_id:
+                # Reload Telegram listener to pick up new channel
+                try:
+                    from src.selfbot_webull import get_telegram_listener
+                    listener = get_telegram_listener()
+                    if listener:
+                        listener.reload_channels_from_db()
+                        print(f"[API] Telegram listener reloaded after adding channel")
+                except Exception as reload_err:
+                    print(f"[API] Warning: Could not reload Telegram listener: {reload_err}")
+                
                 return jsonify({'success': True, 'channel_id': channel_id, 'message': 'Telegram channel added'})
             else:
                 return jsonify({'success': False, 'error': 'Failed to add channel'}), 500

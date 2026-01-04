@@ -3909,20 +3909,44 @@ def get_telegram_channels() -> List[Dict[str, Any]]:
 
 
 def add_telegram_channel(telegram_chat_id: str, name: str, chat_type: str = 'group',
-                          username: str = None) -> Optional[int]:
-    """Add a new Telegram channel"""
+                          username: str = None, category: str = 'TRACK',
+                          execute_enabled: bool = False, track_enabled: bool = True,
+                          market: str = 'US', enabled_brokers: list = None) -> Optional[int]:
+    """Add a new Telegram channel with proper execution/tracking settings
+    
+    Args:
+        telegram_chat_id: Telegram chat ID (numeric or @username)
+        name: Channel display name
+        chat_type: Type of chat (group, channel, etc.)
+        username: Telegram username if applicable
+        category: EXECUTE or TRACK
+        execute_enabled: Whether to execute trades (queue signals)
+        track_enabled: Whether to track signals for PNL
+        market: US, IN (India), or CA (Canada)
+        enabled_brokers: List of broker names to use for execution
+    """
     conn = get_connection()
     cursor = conn.cursor()
+    
+    # If category is EXECUTE, default execute_enabled to True
+    if category == 'EXECUTE' and not execute_enabled:
+        execute_enabled = True
+    
+    # Serialize enabled_brokers to JSON
+    brokers_json = json.dumps(enabled_brokers) if enabled_brokers else None
     
     try:
         cursor.execute('''
             INSERT INTO channels (discord_channel_id, name, category, platform, 
                                   telegram_chat_id, telegram_chat_type, telegram_username,
-                                  track_enabled)
-            VALUES (?, ?, 'TRACK', 'telegram', ?, ?, ?, 1)
-        ''', (f'tg_{telegram_chat_id}', name, telegram_chat_id, chat_type, username))
+                                  execute_enabled, track_enabled, market, enabled_brokers)
+            VALUES (?, ?, ?, 'telegram', ?, ?, ?, ?, ?, ?, ?)
+        ''', (f'tg_{telegram_chat_id}', name, category, telegram_chat_id, chat_type, 
+              username, 1 if execute_enabled else 0, 1 if track_enabled else 0, 
+              market, brokers_json))
         
         conn.commit()
+        print(f"[DATABASE] Telegram channel added: {name} (execute={execute_enabled}, track={track_enabled}, market={market})")
         return cursor.lastrowid
     except Exception as e:
         print(f"[DATABASE] Error adding Telegram channel: {e}")
