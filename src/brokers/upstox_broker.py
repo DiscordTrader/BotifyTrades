@@ -99,23 +99,34 @@ class UpstoxBroker(BrokerInterface):
         return True
     
     async def get_account_info(self) -> Dict[str, Any]:
-        """Get account information"""
-        if not self.user_api:
-            return {}
-        
+        """Get account information using REST API"""
         try:
-            funds = await asyncio.to_thread(
-                self.user_api.get_fund_and_margin,
-                api_version='2.0'
-            )
-            return {
-                'user_id': self.user_id,
-                'currency': self.CURRENCY,
-                'funds': funds.data if funds else None
+            access_token = self.config.get('access_token')
+            url = "https://api.upstox.com/v2/user/get-funds-and-margin"
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Accept': 'application/json'
             }
+            
+            response = await asyncio.to_thread(requests.get, url, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'success':
+                    funds_data = data.get('data', {})
+                    equity = funds_data.get('equity', {})
+                    
+                    return {
+                        'user_id': self.user_id,
+                        'currency': self.CURRENCY,
+                        'available_balance': equity.get('available_margin', 0),
+                        'buying_power': equity.get('available_margin', 0),
+                        'portfolio_value': equity.get('available_margin', 0) + equity.get('used_margin', 0)
+                    }
+            return {'user_id': self.user_id, 'currency': self.CURRENCY}
         except Exception as e:
             print(f"[{self.name}] Error getting account info: {e}")
-            return {}
+            return {'user_id': self.user_id, 'currency': self.CURRENCY}
     
     async def get_positions(self) -> List[Dict[str, Any]]:
         """Get current positions"""
