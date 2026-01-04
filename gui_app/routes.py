@@ -13440,6 +13440,83 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/brokers/upstox/execution-timing', methods=['GET'])
+    @login_required
+    def api_upstox_execution_timing():
+        """Get execution timing data - signal detection vs broker execution"""
+        try:
+            from datetime import datetime, timedelta
+            
+            # Get recent trades from database with signal timestamps
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Get trades with their signal/execution times for India market
+            cursor.execute('''
+                SELECT t.id, t.symbol, t.direction, t.asset_type, t.quantity, 
+                       t.executed_price, t.executed_at, t.broker, t.order_id,
+                       s.received_at as signal_detected_at, s.content as signal_content,
+                       c.name as channel_name
+                FROM trades t
+                LEFT JOIN signals s ON t.message_id = s.message_id
+                LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
+                WHERE t.broker IN ('UPSTOX', 'Upstox', 'upstox')
+                  AND t.executed_at IS NOT NULL
+                ORDER BY t.executed_at DESC
+                LIMIT 50
+            ''')
+            
+            trades = []
+            for row in cursor.fetchall():
+                trade = dict(row)
+                
+                # Calculate latency
+                latency_ms = None
+                latency_str = 'N/A'
+                if trade.get('signal_detected_at') and trade.get('executed_at'):
+                    try:
+                        detected = datetime.fromisoformat(str(trade['signal_detected_at']).replace('Z', '+00:00'))
+                        executed = datetime.fromisoformat(str(trade['executed_at']).replace('Z', '+00:00'))
+                        latency = (executed - detected).total_seconds() * 1000
+                        latency_ms = int(latency)
+                        
+                        if latency_ms < 1000:
+                            latency_str = f'{latency_ms}ms'
+                        elif latency_ms < 60000:
+                            latency_str = f'{latency_ms/1000:.1f}s'
+                        else:
+                            latency_str = f'{latency_ms/60000:.1f}m'
+                    except:
+                        pass
+                
+                trade['latency_ms'] = latency_ms
+                trade['latency_str'] = latency_str
+                trades.append(trade)
+            
+            conn.close()
+            
+            # Calculate stats
+            latencies = [t['latency_ms'] for t in trades if t['latency_ms'] is not None]
+            avg_latency = sum(latencies) / len(latencies) if latencies else 0
+            min_latency = min(latencies) if latencies else 0
+            max_latency = max(latencies) if latencies else 0
+            
+            return jsonify({
+                'success': True,
+                'trades': trades,
+                'stats': {
+                    'total_trades': len(trades),
+                    'avg_latency_ms': int(avg_latency),
+                    'min_latency_ms': min_latency,
+                    'max_latency_ms': max_latency,
+                    'trades_with_timing': len(latencies)
+                }
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/api/brokers/upstox/holdings', methods=['GET'])
     @login_required
     def api_upstox_holdings():
@@ -13557,6 +13634,39 @@ def register_routes(app):
             import traceback
             traceback.print_exc()
             return jsonify({'success': False, 'connected': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/upstox/cancel-order', methods=['POST'])
+    @login_required
+    def api_upstox_cancel_order():
+        """Cancel an open Upstox order"""
+        try:
+            if not _bot_instance:
+                return jsonify({'success': False, 'error': 'Bot not running'})
+            
+            upstox_broker = getattr(_bot_instance, 'upstox_broker', None)
+            if not upstox_broker or not getattr(upstox_broker, 'connected', False):
+                return jsonify({'success': False, 'error': 'Upstox not connected'})
+            
+            data = request.get_json()
+            order_id = data.get('order_id')
+            
+            if not order_id:
+                return jsonify({'success': False, 'error': 'Order ID required'})
+            
+            import asyncio
+            loop = getattr(_bot_instance, 'loop', None)
+            if loop and loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(
+                    upstox_broker.cancel_order(order_id), loop
+                )
+                result = future.result(timeout=15)
+                return jsonify(result)
+            else:
+                return jsonify({'success': False, 'error': 'Event loop not running'})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
     
     # ============ SIGNAL VERIFICATION API ============
     

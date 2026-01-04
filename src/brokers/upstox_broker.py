@@ -311,6 +311,39 @@ class UpstoxBroker(BrokerInterface):
             print(f"[{self.name}] Error getting holdings: {e}")
             return []
     
+    async def cancel_order(self, order_id: str) -> Dict[str, Any]:
+        """Cancel an open order"""
+        try:
+            access_token = self.config.get('access_token')
+            url = f"https://api.upstox.com/v2/order/cancel"
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+            params = {'order_id': order_id}
+            
+            print(f"[{self.name}] Cancelling order: {order_id}")
+            response = await asyncio.to_thread(requests.delete, url, headers=headers, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'success':
+                    print(f"[{self.name}] ✓ Order {order_id} cancelled successfully")
+                    return {'success': True, 'message': 'Order cancelled successfully', 'data': data.get('data')}
+                else:
+                    print(f"[{self.name}] ✗ Failed to cancel order: {data}")
+                    return {'success': False, 'message': data.get('message', 'Cancel failed')}
+            else:
+                error_msg = response.text
+                print(f"[{self.name}] ✗ Cancel order HTTP error: {response.status_code} - {error_msg}")
+                return {'success': False, 'message': f'HTTP {response.status_code}: {error_msg}'}
+        except Exception as e:
+            print(f"[{self.name}] Error cancelling order: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'success': False, 'message': str(e)}
+    
     async def place_order(self, symbol: str, action: str, quantity: int,
                           order_type: str = 'market', price: float = None,
                           product_type: str = 'INTRADAY', **kwargs) -> OrderResult:

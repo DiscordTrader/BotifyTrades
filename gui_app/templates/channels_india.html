@@ -153,16 +153,38 @@
                         <th style="text-align: right; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Price</th>
                         <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Status</th>
                         <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Time</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Action</th>
                     </tr>
                 </thead>
                 <tbody id="upstox-orders-body">
-                    <tr><td colspan="7" style="text-align: center; padding: 40px; color: #8E8E93;">Loading orders...</td></tr>
+                    <tr><td colspan="8" style="text-align: center; padding: 40px; color: #8E8E93;">Loading orders...</td></tr>
                 </tbody>
             </table>
         </div>
         
         <!-- Trades Tab -->
         <div id="upstox-trades-tab" class="upstox-tab-content" style="display: none;">
+            <!-- Execution Timing Stats -->
+            <div id="execution-timing-stats" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+                <div style="background: linear-gradient(135deg, rgba(0, 200, 83, 0.1), rgba(0, 200, 83, 0.05)); border: 1px solid rgba(0, 200, 83, 0.3); border-radius: 12px; padding: 16px; text-align: center;">
+                    <div style="font-size: 10px; color: #8E8E93; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Avg Latency</div>
+                    <div id="stat-avg-latency" style="font-size: 24px; font-weight: 700; color: #00c853;">--</div>
+                </div>
+                <div style="background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(0, 212, 255, 0.05)); border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 12px; padding: 16px; text-align: center;">
+                    <div style="font-size: 10px; color: #8E8E93; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Min Latency</div>
+                    <div id="stat-min-latency" style="font-size: 24px; font-weight: 700; color: #00d4ff;">--</div>
+                </div>
+                <div style="background: linear-gradient(135deg, rgba(255, 193, 7, 0.1), rgba(255, 193, 7, 0.05)); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 12px; padding: 16px; text-align: center;">
+                    <div style="font-size: 10px; color: #8E8E93; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Max Latency</div>
+                    <div id="stat-max-latency" style="font-size: 24px; font-weight: 700; color: #ffc107;">--</div>
+                </div>
+                <div style="background: linear-gradient(135deg, rgba(156, 39, 176, 0.1), rgba(156, 39, 176, 0.05)); border: 1px solid rgba(156, 39, 176, 0.3); border-radius: 12px; padding: 16px; text-align: center;">
+                    <div style="font-size: 10px; color: #8E8E93; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Total Trades</div>
+                    <div id="stat-total-trades" style="font-size: 24px; font-weight: 700; color: #9c27b0;">--</div>
+                </div>
+            </div>
+            
+            <!-- Trades Table -->
             <table class="data-table" style="width: 100%; border-collapse: collapse;">
                 <thead>
                     <tr style="background: rgba(0, 200, 83, 0.05);">
@@ -171,13 +193,21 @@
                         <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Side</th>
                         <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Qty</th>
                         <th style="text-align: right; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Price</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Time</th>
+                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Executed</th>
                     </tr>
                 </thead>
                 <tbody id="upstox-trades-body">
                     <tr><td colspan="6" style="text-align: center; padding: 40px; color: #8E8E93;">Loading trades...</td></tr>
                 </tbody>
             </table>
+            
+            <!-- Execution Timeline -->
+            <div id="execution-timeline" style="margin-top: 20px; display: none;">
+                <h4 style="color: #00c853; font-size: 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 18px;">⚡</span> Signal to Execution Timeline
+                </h4>
+                <div id="timeline-container" style="border: 1px solid rgba(0, 200, 83, 0.2); border-radius: 8px; overflow: hidden;"></div>
+            </div>
         </div>
         
         <!-- Conditional Orders Tab -->

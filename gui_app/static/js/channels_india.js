@@ -479,19 +479,32 @@ function renderUpstoxOrders(orders) {
     }
     
     if (!filteredOrders || filteredOrders.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 40px; color: #8E8E93;">No ${currentUpstoxOrderFilter === 'all' ? '' : currentUpstoxOrderFilter + ' '}orders</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 40px; color: #8E8E93;">No ${currentUpstoxOrderFilter === 'all' ? '' : currentUpstoxOrderFilter + ' '}orders</td></tr>`;
         return;
     }
     
     tbody.innerHTML = filteredOrders.map(o => {
         const status = o.status || 'unknown';
         let statusColor = '#8E8E93';
+        const isOpen = isOpenStatus(status);
         if (isFilledStatus(status)) statusColor = '#00ff88';
-        else if (isOpenStatus(status)) statusColor = '#ffc107';
+        else if (isOpen) statusColor = '#ffc107';
         else if (isRejectedStatus(status)) statusColor = '#ff6b6b';
         
         const sideColor = o.transaction_type === 'BUY' ? '#00ff88' : '#ff6b6b';
         const time = o.order_timestamp ? new Date(o.order_timestamp).toLocaleTimeString('en-IN') : 'N/A';
+        
+        // Cancel button for open orders
+        const cancelBtn = isOpen ? `
+            <button onclick="cancelUpstoxOrder('${o.order_id}')" 
+                    style="padding: 4px 10px; background: rgba(255, 107, 107, 0.15); border: 1px solid rgba(255, 107, 107, 0.4); 
+                           color: #ff6b6b; border-radius: 4px; font-size: 10px; font-weight: 600; cursor: pointer;
+                           transition: all 0.2s ease;"
+                    onmouseover="this.style.background='rgba(255, 107, 107, 0.3)'"
+                    onmouseout="this.style.background='rgba(255, 107, 107, 0.15)'">
+                CANCEL
+            </button>
+        ` : '';
         
         return `
             <tr style="border-bottom: 1px solid rgba(0, 200, 83, 0.1);">
@@ -502,24 +515,68 @@ function renderUpstoxOrders(orders) {
                 <td style="padding: 12px; text-align: right;">₹${parseFloat(o.average_price || o.price || 0).toFixed(2)}</td>
                 <td style="padding: 12px; text-align: center;"><span style="padding: 3px 8px; background: ${statusColor}22; border-radius: 4px; font-size: 11px; color: ${statusColor}; font-weight: 600;">${status.toUpperCase()}</span></td>
                 <td style="padding: 12px; text-align: center; font-size: 11px; color: #8E8E93;">${time}</td>
+                <td style="padding: 12px; text-align: center;">${cancelBtn}</td>
             </tr>
         `;
     }).join('');
 }
 
+async function cancelUpstoxOrder(orderId) {
+    if (!confirm('Are you sure you want to cancel this order?')) return;
+    
+    try {
+        const response = await fetch('/api/brokers/upstox/cancel-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order_id: orderId })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            showToast('Order cancelled successfully', 'success');
+            await refreshUpstoxData();
+        } else {
+            showToast(data.error || data.message || 'Failed to cancel order', 'error');
+        }
+    } catch (error) {
+        console.error('Error cancelling order:', error);
+        showToast('Error cancelling order', 'error');
+    }
+}
+
 async function loadUpstoxTrades() {
     try {
-        const response = await fetch('/api/brokers/upstox/trades');
-        const data = await response.json();
+        // Fetch both trades and timing data
+        const [tradesResponse, timingResponse] = await Promise.all([
+            fetch('/api/brokers/upstox/trades'),
+            fetch('/api/brokers/upstox/execution-timing')
+        ]);
+        
+        const tradesData = await tradesResponse.json();
+        const timingData = await timingResponse.json();
         
         const tbody = document.getElementById('upstox-trades-body');
         
-        if (!data.success || !data.trades || data.trades.length === 0) {
+        // Update timing stats
+        if (timingData.success && timingData.stats) {
+            const stats = timingData.stats;
+            document.getElementById('stat-avg-latency').textContent = formatLatency(stats.avg_latency_ms);
+            document.getElementById('stat-min-latency').textContent = formatLatency(stats.min_latency_ms);
+            document.getElementById('stat-max-latency').textContent = formatLatency(stats.max_latency_ms);
+            document.getElementById('stat-total-trades').textContent = stats.total_trades || '0';
+            
+            // Show timeline if we have timing data
+            if (timingData.trades && timingData.trades.length > 0) {
+                renderExecutionTimeline(timingData.trades.slice(0, 10));
+            }
+        }
+        
+        if (!tradesData.success || !tradesData.trades || tradesData.trades.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #8E8E93;">No trades today</td></tr>';
             return;
         }
         
-        tbody.innerHTML = data.trades.map(t => {
+        tbody.innerHTML = tradesData.trades.map(t => {
             const sideColor = t.transaction_type === 'BUY' ? '#00ff88' : '#ff6b6b';
             const time = t.order_timestamp ? new Date(t.order_timestamp).toLocaleTimeString('en-IN') : 'N/A';
             
@@ -538,6 +595,65 @@ async function loadUpstoxTrades() {
     } catch (error) {
         console.error('Error loading Upstox trades:', error);
     }
+}
+
+function formatLatency(ms) {
+    if (ms === null || ms === undefined || ms === 0) return '--';
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${(ms/1000).toFixed(1)}s`;
+    return `${(ms/60000).toFixed(1)}m`;
+}
+
+function renderExecutionTimeline(trades) {
+    const container = document.getElementById('timeline-container');
+    const section = document.getElementById('execution-timeline');
+    
+    if (!trades || trades.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+    
+    section.style.display = 'block';
+    
+    container.innerHTML = trades.map((t, i) => {
+        const latencyMs = t.latency_ms;
+        let latencyColor = '#00c853';
+        if (latencyMs > 5000) latencyColor = '#ffc107';
+        if (latencyMs > 30000) latencyColor = '#ff6b6b';
+        
+        const latencyWidth = Math.min(100, Math.max(5, (latencyMs || 100) / 100));
+        const detected = t.signal_detected_at ? new Date(t.signal_detected_at).toLocaleTimeString('en-IN') : 'N/A';
+        const executed = t.executed_at ? new Date(t.executed_at).toLocaleTimeString('en-IN') : 'N/A';
+        
+        return `
+            <div style="padding: 12px 16px; border-bottom: 1px solid rgba(0, 200, 83, 0.1); ${i % 2 === 0 ? 'background: rgba(0, 200, 83, 0.02);' : ''}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-weight: 600; color: #ffffff;">${t.symbol || 'N/A'}</span>
+                        <span style="font-size: 11px; padding: 2px 8px; background: ${t.direction === 'BTO' ? 'rgba(0, 255, 136, 0.15)' : 'rgba(255, 107, 107, 0.15)'}; 
+                                     color: ${t.direction === 'BTO' ? '#00ff88' : '#ff6b6b'}; border-radius: 4px; font-weight: 600;">${t.direction || 'N/A'}</span>
+                        <span style="font-size: 11px; color: #8E8E93;">${t.channel_name || 'Unknown Channel'}</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <span style="font-size: 20px; font-weight: 700; color: ${latencyColor};">${t.latency_str || 'N/A'}</span>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <span style="width: 8px; height: 8px; background: #00d4ff; border-radius: 50%;"></span>
+                        <span style="font-size: 10px; color: #8E8E93;">Signal: ${detected}</span>
+                    </div>
+                    <div style="flex: 1; height: 4px; background: rgba(0, 200, 83, 0.1); border-radius: 2px; position: relative; overflow: hidden;">
+                        <div style="height: 100%; width: ${latencyWidth}%; background: linear-gradient(90deg, #00d4ff, ${latencyColor}); border-radius: 2px;"></div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <span style="width: 8px; height: 8px; background: ${latencyColor}; border-radius: 50%;"></span>
+                        <span style="font-size: 10px; color: #8E8E93;">Exec: ${executed}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 async function loadUpstoxConditionalOrders() {
