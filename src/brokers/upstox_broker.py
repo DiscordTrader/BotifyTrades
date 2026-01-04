@@ -316,6 +316,17 @@ class UpstoxBroker(BrokerInterface):
                     print(f"[UPSTOX] ✓ Found instrument key: {instrument_key}")
                     return instrument_key
             
+            matching_type = [c for c in contracts if c.get('instrument_type') == opt_type]
+            if matching_type:
+                closest = min(matching_type, key=lambda c: abs(c.get('strike_price', 0) - strike))
+                closest_strike = closest.get('strike_price')
+                if abs(closest_strike - strike) <= 100:
+                    instrument_key = closest.get('instrument_key')
+                    print(f"[UPSTOX] ✓ Using nearest strike {closest_strike} (requested {strike}): {instrument_key}")
+                    return instrument_key
+                else:
+                    print(f"[UPSTOX] ⚠️ Nearest strike {closest_strike} too far from {strike}")
+            
             print(f"[UPSTOX] ⚠️ No matching contract found for {symbol} {strike} {opt_type}")
             return None
             
