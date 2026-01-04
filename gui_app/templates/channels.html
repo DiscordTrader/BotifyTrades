@@ -876,6 +876,14 @@
                            placeholder="my-signals" required>
                 </div>
                 <div class="form-group">
+                    <label>Market / Country</label>
+                    <select class="form-input" id="newMarket" style="padding: 10px; border-radius: 8px;">
+                        <option value="US">US Markets</option>
+                        <option value="IN">India Markets</option>
+                        <option value="CA">Canada Markets</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label>Execute Trades</label>
                     <label class="mode-toggle">
                         <input type="checkbox" id="newExecuteEnabled">
@@ -1182,17 +1190,26 @@ function renderChannels() {
             modeText = 'Track';
         }
         
+        const market = channel.market || 'US';
+        const marketEmoji = market === 'IN' ? '🇮🇳' : market === 'CA' ? '🇨🇦' : '🇺🇸';
+        const marketLabel = market === 'IN' ? 'India' : market === 'CA' ? 'Canada' : 'US';
+        const platform = channel.platform || 'discord';
+        const platformIcon = platform === 'telegram' ? '📱' : '💬';
+        
         return `
             <div class="channel-card ${isActive ? '' : 'inactive'}">
                 <div class="channel-card-header">
                     <div class="channel-info">
                         <div class="channel-name">
                             <span class="status-dot ${isActive ? '' : 'inactive'}"></span>
-                            ${channel.name}
+                            ${platformIcon} ${channel.name}
                         </div>
-                        <span class="channel-id">${channel.discord_channel_id}</span>
+                        <span class="channel-id">${channel.discord_channel_id || channel.telegram_chat_id || ''}</span>
                     </div>
-                    <span class="channel-mode-badge ${modeClass}">${modeText}</span>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <span style="font-size: 11px; padding: 3px 8px; background: rgba(100,100,100,0.3); border-radius: 4px;">${marketEmoji} ${marketLabel}</span>
+                        <span class="channel-mode-badge ${modeClass}">${modeText}</span>
+                    </div>
                 </div>
                 
                 <div class="channel-controls">
@@ -1276,6 +1293,7 @@ function renderChannels() {
 async function addChannel() {
     const channelId = document.getElementById('newChannelId').value.trim();
     const name = document.getElementById('newChannelName').value.trim();
+    const market = document.getElementById('newMarket').value;
     const executeEnabled = document.getElementById('newExecuteEnabled').checked ? 1 : 0;
     const trackEnabled = document.getElementById('newTrackEnabled').checked ? 1 : 0;
     
@@ -1296,6 +1314,7 @@ async function addChannel() {
             body: JSON.stringify({
                 discord_channel_id: channelId,
                 name: name,
+                market: market,
                 execute_enabled: executeEnabled,
                 track_enabled: trackEnabled
             })
@@ -1304,9 +1323,10 @@ async function addChannel() {
         const result = await response.json();
         
         if (result.success) {
+            const marketLabel = market === 'IN' ? 'India' : market === 'CA' ? 'Canada' : 'US';
             document.getElementById('addChannelForm').reset();
             await loadChannels();
-            showNotification('Channel added successfully!');
+            showNotification(`Channel added to ${marketLabel} Markets!`);
         } else {
             showNotification('Error: ' + (result.error || 'Failed to add channel'), 'error');
         }

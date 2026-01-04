@@ -646,8 +646,20 @@
                         </select>
                     </div>
                     <div class="form-group">
+                        <label>Market / Country</label>
+                        <select id="newMarket" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); border-radius: 10px; padding: 12px; color: var(--text-primary);">
+                            <option value="US">US Markets (NYSE, NASDAQ)</option>
+                            <option value="IN">India Markets (NSE, BSE)</option>
+                            <option value="CA">Canada Markets (TSX)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
                         <label>Username (optional)</label>
                         <input type="text" id="newUsername" placeholder="e.g., @tradingsignals">
+                    </div>
+                    <div class="form-group">
                     </div>
                 </div>
                 <div class="button-row">
@@ -929,7 +941,12 @@
             return;
         }
         
-        container.innerHTML = telegramChannels.map(channel => `
+        container.innerHTML = telegramChannels.map(channel => {
+            const market = channel.market || 'US';
+            const marketEmoji = market === 'IN' ? '🇮🇳' : market === 'CA' ? '🇨🇦' : '🇺🇸';
+            const marketLabel = market === 'IN' ? 'India' : market === 'CA' ? 'Canada' : 'US';
+            
+            return `
             <div class="channel-card" data-id="${channel.id}">
                 <div class="channel-info">
                     <div class="channel-icon" style="width: 40px; height: 40px; background: linear-gradient(135deg, #0088CC, #00AAFF); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white;">
@@ -940,6 +957,8 @@
                         <div class="chat-id">${escapeHtml(channel.telegram_chat_id || '')}</div>
                     </div>
                     <div class="channel-badges">
+                        <span class="badge" style="background: rgba(100,100,100,0.4); padding: 4px 8px; border-radius: 4px; font-size: 11px;">${marketEmoji} ${marketLabel}</span>
+                        ${channel.execute_enabled ? '<span class="badge execute" style="background: rgba(0,200,83,0.2); color: #00c853;">EXECUTE</span>' : ''}
                         ${channel.track_enabled ? '<span class="badge track">TRACK</span>' : ''}
                     </div>
                 </div>
@@ -969,8 +988,8 @@
                         Delete
                     </button>
                 </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
     }
 
     function toggleAddForm() {
@@ -982,6 +1001,7 @@
         const name = document.getElementById('newChannelName').value.trim();
         const chatId = document.getElementById('newChatId').value.trim();
         const chatType = document.getElementById('newChatType').value;
+        const market = document.getElementById('newMarket').value;
         const username = document.getElementById('newUsername').value.trim();
         
         if (!name || !chatId) {
@@ -997,6 +1017,7 @@
                     name: name,
                     telegram_chat_id: chatId,
                     chat_type: chatType,
+                    market: market,
                     username: username || null
                 })
             });
@@ -1004,11 +1025,13 @@
             const data = await response.json();
             
             if (data.success) {
-                showToast('Channel added successfully', 'success');
+                const marketLabel = market === 'IN' ? 'India' : market === 'CA' ? 'Canada' : 'US';
+                showToast(`Channel added to ${marketLabel} Markets`, 'success');
                 toggleAddForm();
                 document.getElementById('newChannelName').value = '';
                 document.getElementById('newChatId').value = '';
                 document.getElementById('newUsername').value = '';
+                document.getElementById('newMarket').value = 'US';
                 loadChannels();
             } else {
                 showToast(data.error || 'Failed to add channel', 'error');
