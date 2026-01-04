@@ -13460,7 +13460,7 @@ def register_routes(app):
                 FROM trades t
                 LEFT JOIN signals s ON t.message_id = s.message_id
                 LEFT JOIN channels c ON t.channel_id = c.discord_channel_id
-                WHERE t.broker IN ('UPSTOX', 'Upstox', 'upstox')
+                WHERE LOWER(t.broker) LIKE '%upstox%'
                   AND t.executed_at IS NOT NULL
                 ORDER BY t.executed_at DESC
                 LIMIT 50

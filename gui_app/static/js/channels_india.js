@@ -607,13 +607,16 @@ function formatLatency(ms) {
 function renderExecutionTimeline(trades) {
     const container = document.getElementById('timeline-container');
     const section = document.getElementById('execution-timeline');
+    const emptyState = document.getElementById('timing-empty-state');
     
     if (!trades || trades.length === 0) {
         section.style.display = 'none';
+        if (emptyState) emptyState.style.display = 'block';
         return;
     }
     
     section.style.display = 'block';
+    if (emptyState) emptyState.style.display = 'none';
     
     container.innerHTML = trades.map((t, i) => {
         const latencyMs = t.latency_ms;
