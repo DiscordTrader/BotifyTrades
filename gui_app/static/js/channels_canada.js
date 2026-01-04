@@ -48,7 +48,21 @@ async function loadCanadaChannels() {
     const container = document.getElementById('channels-list');
     
     try {
-        const channels = await fetch(`/api/channels?category=${canadaChannelCategory}&market=CA`).then(r => r.json());
+        const response = await fetch(`/api/channels?category=${canadaChannelCategory}&market=CA`);
+        const channels = await response.json();
+        
+        // Handle error responses (like auth required)
+        if (channels.error || !Array.isArray(channels)) {
+            console.error('API error:', channels.error || 'Invalid response');
+            container.innerHTML = `
+                <div style="text-align: center; padding: 60px 20px;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">🇨🇦</div>
+                    <div style="font-size: 18px; color: #ff0000; font-weight: 600; margin-bottom: 8px;">No Canada Channels Yet</div>
+                    <div style="color: #8E8E93; font-size: 14px;">Add your first Canada market channel to start trading TSX, CSE stocks!</div>
+                </div>
+            `;
+            return;
+        }
         
         if (channels.length === 0) {
             container.innerHTML = `
