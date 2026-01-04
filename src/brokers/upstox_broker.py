@@ -285,17 +285,21 @@ class UpstoxBroker(BrokerInterface):
             
             access_token = self.config.get('access_token')
             url = f"https://api.upstox.com/v2/option/contract"
-            params = {
-                'instrument_key': underlying_key,
-                'expiry_date': formatted_expiry
-            }
+            
+            from urllib.parse import quote
+            encoded_key = quote(underlying_key, safe='')
+            
+            full_url = f"{url}?instrument_key={encoded_key}"
+            print(f"[UPSTOX] Fetching contracts from: {full_url}")
+            
             headers = {
                 'Authorization': f'Bearer {access_token}',
-                'Accept': 'application/json'
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
             }
             
             response = await asyncio.to_thread(
-                requests.get, url, params=params, headers=headers
+                requests.get, full_url, headers=headers
             )
             
             if response.status_code != 200:
