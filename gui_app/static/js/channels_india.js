@@ -442,14 +442,34 @@ function renderUpstoxPositions(positions) {
 function renderUpstoxOrders(orders) {
     const tbody = document.getElementById('upstox-orders-body');
     
+    // Helper functions for Upstox status matching
+    function isOpenStatus(status) {
+        if (!status) return false;
+        const s = status.toLowerCase();
+        return s.includes('open') || s.includes('pending') || s.includes('trigger') || 
+               s.includes('validation') || s.includes('after market order req received');
+    }
+    
+    function isFilledStatus(status) {
+        if (!status) return false;
+        const s = status.toLowerCase();
+        return s.includes('complete') || s.includes('filled') || s.includes('traded');
+    }
+    
+    function isRejectedStatus(status) {
+        if (!status) return false;
+        const s = status.toLowerCase();
+        return s.includes('rejected') || s.includes('cancel');
+    }
+    
     // Filter based on current filter
     let filteredOrders = orders;
     if (currentUpstoxOrderFilter === 'open') {
-        filteredOrders = orders.filter(o => ['open', 'pending', 'trigger pending', 'validation pending'].includes(o.status?.toLowerCase()));
+        filteredOrders = orders.filter(o => isOpenStatus(o.status));
     } else if (currentUpstoxOrderFilter === 'filled') {
-        filteredOrders = orders.filter(o => o.status?.toLowerCase() === 'complete');
+        filteredOrders = orders.filter(o => isFilledStatus(o.status));
     } else if (currentUpstoxOrderFilter === 'rejected') {
-        filteredOrders = orders.filter(o => ['rejected', 'cancelled'].includes(o.status?.toLowerCase()));
+        filteredOrders = orders.filter(o => isRejectedStatus(o.status));
     }
     
     if (!filteredOrders || filteredOrders.length === 0) {
@@ -460,9 +480,9 @@ function renderUpstoxOrders(orders) {
     tbody.innerHTML = filteredOrders.map(o => {
         const status = o.status || 'unknown';
         let statusColor = '#8E8E93';
-        if (status.toLowerCase() === 'complete') statusColor = '#00ff88';
-        else if (['open', 'pending', 'trigger pending'].includes(status.toLowerCase())) statusColor = '#ffc107';
-        else if (['rejected', 'cancelled'].includes(status.toLowerCase())) statusColor = '#ff6b6b';
+        if (isFilledStatus(status)) statusColor = '#00ff88';
+        else if (isOpenStatus(status)) statusColor = '#ffc107';
+        else if (isRejectedStatus(status)) statusColor = '#ff6b6b';
         
         const sideColor = o.transaction_type === 'BUY' ? '#00ff88' : '#ff6b6b';
         const time = o.order_timestamp ? new Date(o.order_timestamp).toLocaleTimeString('en-IN') : 'N/A';
