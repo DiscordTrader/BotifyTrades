@@ -135,41 +135,52 @@ class UpstoxBroker(BrokerInterface):
     async def place_order(self, symbol: str, action: str, quantity: int,
                           order_type: str = 'market', price: float = None,
                           product_type: str = 'INTRADAY', **kwargs) -> OrderResult:
-        """Place an order on Upstox"""
+        """Place an order on Upstox using PlaceOrderRequest body"""
         if not self.order_api:
             return OrderResult(success=False, message="Not connected")
         
         try:
-            order_params = {
-                'instrument_token': symbol,
-                'quantity': quantity,
-                'transaction_type': 'BUY' if action.upper() == 'BTO' else 'SELL',
-                'order_type': 'MARKET' if order_type == 'market' else 'LIMIT',
-                'product': product_type,
-                'validity': 'DAY',
-                'disclosed_quantity': 0,
-                'trigger_price': 0,
-                'is_amo': False
-            }
+            from upstox_client import PlaceOrderRequest
             
-            if order_type == 'limit' and price:
-                order_params['price'] = price
-            else:
-                order_params['price'] = 0
+            transaction_type = 'BUY' if action.upper() in ('BTO', 'BUY') else 'SELL'
+            upstox_order_type = 'MARKET' if order_type == 'market' else 'LIMIT'
+            product = 'I' if product_type == 'INTRADAY' else 'D'
+            
+            body = PlaceOrderRequest(
+                quantity=int(quantity),
+                product=product,
+                validity='DAY',
+                price=float(price) if price and upstox_order_type == 'LIMIT' else 0.0,
+                instrument_token=symbol,
+                order_type=upstox_order_type,
+                transaction_type=transaction_type,
+                disclosed_quantity=0,
+                trigger_price=0.0,
+                is_amo=False
+            )
+            
+            print(f"[{self.name}] Order body: {transaction_type} {quantity} {symbol} @ {price or 'MARKET'}")
             
             result = await asyncio.to_thread(
                 self.order_api.place_order,
-                api_version='2.0',
-                **order_params
+                body,
+                api_version='2.0'
             )
+            
+            order_id = ''
+            if result and hasattr(result, 'data') and result.data:
+                order_id = str(getattr(result.data, 'order_id', ''))
+            
+            print(f"[{self.name}] ✓ Order placed successfully! Order ID: {order_id}")
             
             return OrderResult(
                 success=True,
-                order_id=str(result.data.order_id) if result and result.data else '',
+                order_id=order_id,
                 message=f"Order placed: {action} {quantity} {symbol}"
             )
             
         except Exception as e:
+            print(f"[{self.name}] ❌ Option order FAILED: {e}")
             return OrderResult(success=False, message=str(e))
     
     async def place_stock_order(
