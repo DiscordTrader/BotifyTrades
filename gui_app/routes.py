@@ -9004,6 +9004,27 @@ def register_routes(app):
                     set_broker_status('tastytrade_paper', False, 'disconnected')
                     status['tastytrade_live'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                     status['tastytrade_paper'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+                
+                # India Brokers - Upstox
+                upstox_broker = getattr(_bot_instance, 'upstox_broker', None)
+                if upstox_broker and getattr(upstox_broker, 'connected', False):
+                    status['upstox'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': {'mode': 'LIVE'}}
+                else:
+                    status['upstox'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+                
+                # India Brokers - DhanQ
+                dhanq_broker = getattr(_bot_instance, 'dhanq_broker', None)
+                if dhanq_broker and getattr(dhanq_broker, 'connected', False):
+                    status['dhanq'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': {'mode': 'LIVE'}}
+                else:
+                    status['dhanq'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+                
+                # India Brokers - Zerodha
+                zerodha_broker = getattr(_bot_instance, 'zerodha_broker', None)
+                if zerodha_broker and getattr(zerodha_broker, 'connected', False):
+                    status['zerodha'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': {'mode': 'LIVE'}}
+                else:
+                    status['zerodha'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
             
             return jsonify({
                 'success': True,
@@ -13040,6 +13061,54 @@ def register_routes(app):
                     })
                 else:
                     db.update_broker_connection_status('dhanq', False, result.get('message', 'Connection failed'))
+                    return jsonify(result)
+            
+            elif broker_name == 'upstox':
+                stored = db.get_broker_credentials('upstox')
+                if not stored or not stored.get('credentials'):
+                    return jsonify({
+                        'success': False,
+                        'message': 'No Upstox credentials found. Please save credentials first.'
+                    })
+                
+                creds = stored.get('credentials', {})
+                access_token = creds.get('access_token', '')
+                
+                if not access_token:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Incomplete credentials. Access token is required.'
+                    })
+                
+                from src.brokers.upstox_broker import UpstoxBroker
+                result = UpstoxBroker.test_connection(access_token)
+                
+                if result.get('success'):
+                    db.update_broker_connection_status('upstox', True, f"Connected - User: {result.get('user_id', 'Unknown')}")
+                    
+                    if _bot_instance:
+                        import asyncio
+                        try:
+                            new_broker = UpstoxBroker({
+                                'access_token': access_token
+                            })
+                            loop = getattr(_bot_instance, 'loop', None)
+                            if loop and loop.is_running():
+                                future = asyncio.run_coroutine_threadsafe(new_broker.connect(), loop)
+                                connected = future.result(timeout=15)
+                                if connected:
+                                    _bot_instance.upstox_broker = new_broker
+                                    print("[UPSTOX] ✓ Broker instance replaced with new credentials")
+                        except Exception as e:
+                            print(f"[UPSTOX] ⚠️ Could not replace broker instance: {e}")
+                    
+                    return jsonify({
+                        'success': True,
+                        'message': 'Upstox reconnected successfully with new credentials',
+                        'account': result.get('account', {})
+                    })
+                else:
+                    db.update_broker_connection_status('upstox', False, result.get('message', 'Connection failed'))
                     return jsonify(result)
             
             else:

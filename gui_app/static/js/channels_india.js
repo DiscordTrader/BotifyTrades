@@ -301,43 +301,50 @@ async function deleteIndiaChannel(channelId, name) {
 
 async function loadIndiaBrokerStatus() {
     try {
-        const response = await fetch('/api/broker/status');
+        const response = await fetch('/api/brokers/status');
         const data = await response.json();
         
-        if (data.dhanq) {
+        // Handle response format - status is nested in data.status
+        const statusData = data.status || data;
+        
+        if (statusData.dhanq) {
             const badge = document.getElementById('dhanq-status-badge');
-            if (data.dhanq.connected) {
+            if (statusData.dhanq.connected) {
                 badge.style.background = 'rgba(0, 255, 136, 0.2)';
                 badge.style.color = '#00ff88';
                 badge.textContent = 'CONNECTED';
-                document.getElementById('dhanq-balance').textContent = `₹${(data.dhanq.balance || 0).toLocaleString('en-IN')}`;
+                document.getElementById('dhanq-balance').textContent = `₹${(statusData.dhanq.balance || 0).toLocaleString('en-IN')}`;
             } else {
                 badge.style.background = 'rgba(255, 107, 107, 0.2)';
                 badge.style.color = '#ff6b6b';
-                badge.textContent = 'DISCONNECTED';
-            }
-        }
-        
-        if (data.upstox) {
-            const badge = document.getElementById('upstox-status-badge');
-            if (data.upstox.connected) {
-                badge.style.background = 'rgba(0, 255, 136, 0.2)';
-                badge.style.color = '#00ff88';
-                badge.textContent = 'CONNECTED';
-                document.getElementById('upstox-balance').textContent = `₹${(data.upstox.balance || 0).toLocaleString('en-IN')}`;
-            } else {
                 badge.textContent = 'NOT CONNECTED';
             }
         }
         
-        if (data.zerodha) {
-            const badge = document.getElementById('zerodha-status-badge');
-            if (data.zerodha.connected) {
+        if (statusData.upstox) {
+            const badge = document.getElementById('upstox-status-badge');
+            if (statusData.upstox.connected) {
                 badge.style.background = 'rgba(0, 255, 136, 0.2)';
                 badge.style.color = '#00ff88';
                 badge.textContent = 'CONNECTED';
-                document.getElementById('zerodha-balance').textContent = `₹${(data.zerodha.balance || 0).toLocaleString('en-IN')}`;
+                document.getElementById('upstox-balance').textContent = `₹${(statusData.upstox.balance || 0).toLocaleString('en-IN')}`;
             } else {
+                badge.style.background = 'rgba(255, 107, 107, 0.2)';
+                badge.style.color = '#ff6b6b';
+                badge.textContent = 'NOT CONNECTED';
+            }
+        }
+        
+        if (statusData.zerodha) {
+            const badge = document.getElementById('zerodha-status-badge');
+            if (statusData.zerodha.connected) {
+                badge.style.background = 'rgba(0, 255, 136, 0.2)';
+                badge.style.color = '#00ff88';
+                badge.textContent = 'CONNECTED';
+                document.getElementById('zerodha-balance').textContent = `₹${(statusData.zerodha.balance || 0).toLocaleString('en-IN')}`;
+            } else {
+                badge.style.background = 'rgba(255, 107, 107, 0.2)';
+                badge.style.color = '#ff6b6b';
                 badge.textContent = 'NOT CONNECTED';
             }
         }
