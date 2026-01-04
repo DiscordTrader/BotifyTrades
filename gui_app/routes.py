@@ -13278,6 +13278,244 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    # ============ UPSTOX BROKER API (India) ============
+    
+    @app.route('/api/brokers/upstox/funds', methods=['GET'])
+    @login_required
+    def api_upstox_funds():
+        """Get Upstox account funds and margin"""
+        try:
+            if not _bot_instance:
+                return jsonify({'success': False, 'error': 'Bot not running'})
+            
+            upstox_broker = getattr(_bot_instance, 'upstox_broker', None)
+            if not upstox_broker:
+                return jsonify({'success': False, 'error': 'Upstox broker not initialized'})
+            
+            if not getattr(upstox_broker, 'connected', False):
+                return jsonify({'success': False, 'error': 'Upstox not connected'})
+            
+            import asyncio
+            loop = getattr(_bot_instance, 'loop', None)
+            if loop and loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(
+                    upstox_broker.get_funds(), loop
+                )
+                funds = future.result(timeout=15)
+                return jsonify({'success': True, 'funds': funds})
+            else:
+                return jsonify({'success': False, 'error': 'Event loop not running'})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/upstox/positions', methods=['GET'])
+    @login_required
+    def api_upstox_positions():
+        """Get Upstox positions"""
+        try:
+            if not _bot_instance:
+                return jsonify({'success': False, 'error': 'Bot not running'})
+            
+            upstox_broker = getattr(_bot_instance, 'upstox_broker', None)
+            if not upstox_broker or not getattr(upstox_broker, 'connected', False):
+                return jsonify({'success': False, 'error': 'Upstox not connected'})
+            
+            import asyncio
+            loop = getattr(_bot_instance, 'loop', None)
+            if loop and loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(
+                    upstox_broker.get_positions(), loop
+                )
+                positions = future.result(timeout=15)
+                
+                normalized = []
+                for p in positions:
+                    if hasattr(p, '__dict__'):
+                        normalized.append({
+                            'trading_symbol': getattr(p, 'trading_symbol', ''),
+                            'instrument_token': getattr(p, 'instrument_token', ''),
+                            'quantity': getattr(p, 'quantity', 0),
+                            'average_price': getattr(p, 'average_price', 0),
+                            'last_price': getattr(p, 'last_price', 0),
+                            'pnl': getattr(p, 'pnl', 0),
+                            'day_buy_quantity': getattr(p, 'day_buy_quantity', 0),
+                            'day_sell_quantity': getattr(p, 'day_sell_quantity', 0),
+                            'product': getattr(p, 'product', ''),
+                            'exchange': getattr(p, 'exchange', ''),
+                        })
+                    elif isinstance(p, dict):
+                        normalized.append(p)
+                
+                return jsonify({'success': True, 'positions': normalized})
+            else:
+                return jsonify({'success': False, 'error': 'Event loop not running'})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/upstox/orders', methods=['GET'])
+    @login_required
+    def api_upstox_orders():
+        """Get Upstox order book"""
+        try:
+            if not _bot_instance:
+                return jsonify({'success': False, 'error': 'Bot not running'})
+            
+            upstox_broker = getattr(_bot_instance, 'upstox_broker', None)
+            if not upstox_broker or not getattr(upstox_broker, 'connected', False):
+                return jsonify({'success': False, 'error': 'Upstox not connected'})
+            
+            import asyncio
+            loop = getattr(_bot_instance, 'loop', None)
+            if loop and loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(
+                    upstox_broker.get_order_book(), loop
+                )
+                orders = future.result(timeout=15)
+                
+                open_orders = [o for o in orders if o.get('status') in ('open', 'pending', 'trigger pending', 'validation pending')]
+                filled_orders = [o for o in orders if o.get('status') == 'complete']
+                rejected_orders = [o for o in orders if o.get('status') in ('rejected', 'cancelled')]
+                
+                return jsonify({
+                    'success': True,
+                    'orders': orders,
+                    'open': open_orders,
+                    'filled': filled_orders,
+                    'rejected': rejected_orders
+                })
+            else:
+                return jsonify({'success': False, 'error': 'Event loop not running'})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/upstox/trades', methods=['GET'])
+    @login_required
+    def api_upstox_trades():
+        """Get Upstox trades for today"""
+        try:
+            if not _bot_instance:
+                return jsonify({'success': False, 'error': 'Bot not running'})
+            
+            upstox_broker = getattr(_bot_instance, 'upstox_broker', None)
+            if not upstox_broker or not getattr(upstox_broker, 'connected', False):
+                return jsonify({'success': False, 'error': 'Upstox not connected'})
+            
+            import asyncio
+            loop = getattr(_bot_instance, 'loop', None)
+            if loop and loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(
+                    upstox_broker.get_trades(), loop
+                )
+                trades = future.result(timeout=15)
+                return jsonify({'success': True, 'trades': trades})
+            else:
+                return jsonify({'success': False, 'error': 'Event loop not running'})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/upstox/holdings', methods=['GET'])
+    @login_required
+    def api_upstox_holdings():
+        """Get Upstox holdings (delivery positions)"""
+        try:
+            if not _bot_instance:
+                return jsonify({'success': False, 'error': 'Bot not running'})
+            
+            upstox_broker = getattr(_bot_instance, 'upstox_broker', None)
+            if not upstox_broker or not getattr(upstox_broker, 'connected', False):
+                return jsonify({'success': False, 'error': 'Upstox not connected'})
+            
+            import asyncio
+            loop = getattr(_bot_instance, 'loop', None)
+            if loop and loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(
+                    upstox_broker.get_holdings(), loop
+                )
+                holdings = future.result(timeout=15)
+                return jsonify({'success': True, 'holdings': holdings})
+            else:
+                return jsonify({'success': False, 'error': 'Event loop not running'})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/upstox/account', methods=['GET'])
+    @login_required
+    def api_upstox_account():
+        """Get complete Upstox account summary"""
+        try:
+            if not _bot_instance:
+                return jsonify({'success': False, 'error': 'Bot not running', 'connected': False})
+            
+            upstox_broker = getattr(_bot_instance, 'upstox_broker', None)
+            if not upstox_broker:
+                return jsonify({'success': False, 'error': 'Upstox broker not initialized', 'connected': False})
+            
+            is_connected = getattr(upstox_broker, 'connected', False)
+            if not is_connected:
+                return jsonify({'success': True, 'connected': False, 'error': 'Upstox not connected'})
+            
+            import asyncio
+            loop = getattr(_bot_instance, 'loop', None)
+            
+            if loop and loop.is_running():
+                funds_future = asyncio.run_coroutine_threadsafe(
+                    upstox_broker.get_funds(), loop
+                )
+                positions_future = asyncio.run_coroutine_threadsafe(
+                    upstox_broker.get_positions(), loop
+                )
+                orders_future = asyncio.run_coroutine_threadsafe(
+                    upstox_broker.get_order_book(), loop
+                )
+                
+                funds = funds_future.result(timeout=15)
+                positions_raw = positions_future.result(timeout=15)
+                orders = orders_future.result(timeout=15)
+                
+                positions = []
+                for p in positions_raw:
+                    if hasattr(p, '__dict__'):
+                        positions.append({
+                            'trading_symbol': getattr(p, 'trading_symbol', ''),
+                            'quantity': getattr(p, 'quantity', 0),
+                            'average_price': getattr(p, 'average_price', 0),
+                            'last_price': getattr(p, 'last_price', 0),
+                            'pnl': getattr(p, 'pnl', 0),
+                            'product': getattr(p, 'product', ''),
+                        })
+                    elif isinstance(p, dict):
+                        positions.append(p)
+                
+                open_orders = [o for o in orders if o.get('status') in ('open', 'pending', 'trigger pending')]
+                filled_orders = [o for o in orders if o.get('status') == 'complete']
+                
+                return jsonify({
+                    'success': True,
+                    'connected': True,
+                    'user_id': getattr(upstox_broker, 'user_id', ''),
+                    'funds': funds,
+                    'positions': positions,
+                    'open_orders': open_orders,
+                    'filled_orders': filled_orders,
+                    'total_orders': len(orders)
+                })
+            else:
+                return jsonify({'success': False, 'connected': True, 'error': 'Event loop not running'})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'connected': False, 'error': str(e)}), 500
+    
     # ============ SIGNAL VERIFICATION API ============
     
     @app.route('/verification')

@@ -132,6 +132,163 @@ class UpstoxBroker(BrokerInterface):
             print(f"[{self.name}] Error getting positions: {e}")
             return []
     
+    async def get_funds(self) -> Dict[str, Any]:
+        """Get fund and margin details"""
+        if not self.user_api:
+            return {}
+        
+        try:
+            access_token = self.config.get('access_token')
+            url = "https://api.upstox.com/v2/user/get-funds-and-margin"
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Accept': 'application/json'
+            }
+            
+            response = await asyncio.to_thread(requests.get, url, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'success':
+                    funds_data = data.get('data', {})
+                    equity = funds_data.get('equity', {})
+                    commodity = funds_data.get('commodity', {})
+                    
+                    return {
+                        'currency': self.CURRENCY,
+                        'equity': {
+                            'available_margin': equity.get('available_margin', 0),
+                            'used_margin': equity.get('used_margin', 0),
+                            'payin_amount': equity.get('payin_amount', 0),
+                            'span_margin': equity.get('span_margin', 0),
+                            'exposure_margin': equity.get('exposure_margin', 0),
+                        },
+                        'commodity': {
+                            'available_margin': commodity.get('available_margin', 0),
+                            'used_margin': commodity.get('used_margin', 0),
+                        },
+                        'total_available': equity.get('available_margin', 0) + commodity.get('available_margin', 0),
+                        'total_used': equity.get('used_margin', 0) + commodity.get('used_margin', 0)
+                    }
+            return {}
+        except Exception as e:
+            print(f"[{self.name}] Error getting funds: {e}")
+            return {}
+    
+    async def get_order_book(self) -> List[Dict[str, Any]]:
+        """Get all orders for today"""
+        if not self.order_api:
+            return []
+        
+        try:
+            access_token = self.config.get('access_token')
+            url = "https://api.upstox.com/v2/order/retrieve-all"
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Accept': 'application/json'
+            }
+            
+            response = await asyncio.to_thread(requests.get, url, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'success':
+                    orders = data.get('data', [])
+                    return [{
+                        'order_id': o.get('order_id'),
+                        'trading_symbol': o.get('trading_symbol'),
+                        'instrument_token': o.get('instrument_token'),
+                        'transaction_type': o.get('transaction_type'),
+                        'quantity': o.get('quantity'),
+                        'price': o.get('price'),
+                        'trigger_price': o.get('trigger_price'),
+                        'order_type': o.get('order_type'),
+                        'product': o.get('product'),
+                        'status': o.get('status'),
+                        'filled_quantity': o.get('filled_quantity', 0),
+                        'pending_quantity': o.get('pending_quantity', 0),
+                        'average_price': o.get('average_price'),
+                        'order_timestamp': o.get('order_timestamp'),
+                        'exchange_timestamp': o.get('exchange_timestamp'),
+                        'exchange': o.get('exchange'),
+                        'validity': o.get('validity'),
+                    } for o in orders]
+            return []
+        except Exception as e:
+            print(f"[{self.name}] Error getting orders: {e}")
+            return []
+    
+    async def get_trades(self) -> List[Dict[str, Any]]:
+        """Get all trades for today"""
+        try:
+            access_token = self.config.get('access_token')
+            url = "https://api.upstox.com/v2/order/trades/get-trades-for-day"
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Accept': 'application/json'
+            }
+            
+            response = await asyncio.to_thread(requests.get, url, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'success':
+                    trades = data.get('data', [])
+                    return [{
+                        'trade_id': t.get('trade_id'),
+                        'order_id': t.get('order_id'),
+                        'trading_symbol': t.get('trading_symbol'),
+                        'instrument_token': t.get('instrument_token'),
+                        'transaction_type': t.get('transaction_type'),
+                        'quantity': t.get('quantity'),
+                        'price': t.get('average_price') or t.get('price'),
+                        'exchange': t.get('exchange'),
+                        'product': t.get('product'),
+                        'order_timestamp': t.get('order_timestamp'),
+                        'exchange_timestamp': t.get('exchange_timestamp'),
+                    } for t in trades]
+            return []
+        except Exception as e:
+            print(f"[{self.name}] Error getting trades: {e}")
+            return []
+    
+    async def get_holdings(self) -> List[Dict[str, Any]]:
+        """Get holdings (delivery positions)"""
+        if not self.portfolio_api:
+            return []
+        
+        try:
+            access_token = self.config.get('access_token')
+            url = "https://api.upstox.com/v2/portfolio/long-term-holdings"
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Accept': 'application/json'
+            }
+            
+            response = await asyncio.to_thread(requests.get, url, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'success':
+                    holdings = data.get('data', [])
+                    return [{
+                        'trading_symbol': h.get('trading_symbol'),
+                        'instrument_token': h.get('instrument_token'),
+                        'quantity': h.get('quantity'),
+                        'average_price': h.get('average_price'),
+                        'last_price': h.get('last_price'),
+                        'close_price': h.get('close_price'),
+                        'pnl': h.get('pnl'),
+                        'day_change': h.get('day_change'),
+                        'day_change_percentage': h.get('day_change_percentage'),
+                        'exchange': h.get('exchange'),
+                        'isin': h.get('isin'),
+                    } for h in holdings]
+            return []
+        except Exception as e:
+            print(f"[{self.name}] Error getting holdings: {e}")
+            return []
+    
     async def place_order(self, symbol: str, action: str, quantity: int,
                           order_type: str = 'market', price: float = None,
                           product_type: str = 'INTRADAY', **kwargs) -> OrderResult:
