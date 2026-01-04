@@ -220,7 +220,7 @@ class UpstoxBroker(BrokerInterface):
         Place an option order on Upstox
         
         Supports both Alpaca-style and Webull-style parameters.
-        Converts to Upstox instrument token format: NSE_FO|NIFTY09JAN26400CE
+        Looks up the actual Upstox instrument key from API.
         """
         actual_qty = quantity or qty or 1
         actual_opt_type = option_type or opt_type or 'CE'
@@ -229,9 +229,17 @@ class UpstoxBroker(BrokerInterface):
         
         opt_suffix = 'CE' if actual_opt_type.lower() in ('c', 'call', 'ce') else 'PE'
         
-        formatted_expiry = self._format_expiry_for_upstox(actual_expiry)
+        instrument_token = await self._lookup_instrument_key(
+            symbol=symbol.upper(),
+            strike=float(strike),
+            opt_type=opt_suffix,
+            expiry=actual_expiry
+        )
         
-        instrument_token = f"NSE_FO|{symbol.upper()}{formatted_expiry}{int(strike)}{opt_suffix}"
+        if not instrument_token:
+            formatted_expiry = self._format_expiry_for_upstox(actual_expiry)
+            instrument_token = f"NSE_FO|{symbol.upper()}{formatted_expiry}{int(strike)}{opt_suffix}"
+            print(f"[UPSTOX] ⚠️ Could not lookup instrument, using fallback: {instrument_token}")
         
         print(f"[UPSTOX] Placing option: {action} {actual_qty} {instrument_token} @ {actual_price}")
         
@@ -244,6 +252,107 @@ class UpstoxBroker(BrokerInterface):
             price=actual_price,
             product_type='INTRADAY'
         )
+    
+    async def _lookup_instrument_key(self, symbol: str, strike: float, opt_type: str, expiry: str) -> Optional[str]:
+        """
+        Look up the actual Upstox instrument key from the option contracts API.
+        
+        Args:
+            symbol: Underlying symbol (NIFTY, BANKNIFTY, etc.)
+            strike: Strike price
+            opt_type: CE or PE
+            expiry: Expiry date in any format
+            
+        Returns:
+            Instrument key like 'NSE_FO|37590' or None if not found
+        """
+        try:
+            underlying_keys = {
+                'NIFTY': 'NSE_INDEX|Nifty 50',
+                'BANKNIFTY': 'NSE_INDEX|Nifty Bank',
+                'FINNIFTY': 'NSE_INDEX|Nifty Fin Service',
+                'SENSEX': 'BSE_INDEX|SENSEX',
+            }
+            
+            underlying_key = underlying_keys.get(symbol.upper())
+            if not underlying_key:
+                print(f"[UPSTOX] Unknown underlying: {symbol}")
+                return None
+            
+            formatted_expiry = self._format_expiry_to_date(expiry)
+            
+            print(f"[UPSTOX] Looking up: {symbol} {strike} {opt_type} expiry={formatted_expiry}")
+            
+            access_token = self.config.get('access_token')
+            url = f"https://api.upstox.com/v2/option/contract"
+            params = {
+                'instrument_key': underlying_key,
+                'expiry_date': formatted_expiry
+            }
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Accept': 'application/json'
+            }
+            
+            response = await asyncio.to_thread(
+                requests.get, url, params=params, headers=headers
+            )
+            
+            if response.status_code != 200:
+                print(f"[UPSTOX] Option contracts API error: {response.status_code}")
+                return None
+            
+            data = response.json()
+            if data.get('status') != 'success':
+                print(f"[UPSTOX] API error: {data}")
+                return None
+            
+            contracts = data.get('data', [])
+            
+            for contract in contracts:
+                if (contract.get('strike_price') == strike and 
+                    contract.get('instrument_type') == opt_type):
+                    instrument_key = contract.get('instrument_key')
+                    print(f"[UPSTOX] ✓ Found instrument key: {instrument_key}")
+                    return instrument_key
+            
+            print(f"[UPSTOX] ⚠️ No matching contract found for {symbol} {strike} {opt_type}")
+            return None
+            
+        except Exception as e:
+            print(f"[UPSTOX] Error looking up instrument: {e}")
+            return None
+    
+    def _format_expiry_to_date(self, expiry: str) -> str:
+        """Convert expiry to YYYY-MM-DD format for API"""
+        from datetime import datetime
+        import re
+        
+        if not expiry:
+            return datetime.now().strftime('%Y-%m-%d')
+        
+        try:
+            if re.match(r'^\d{1,2}/\d{1,2}$', expiry):
+                month, day = expiry.split('/')
+                year = datetime.now().year
+                return f"{year}-{int(month):02d}-{int(day):02d}"
+            
+            elif re.match(r'^\d{4}-\d{2}-\d{2}$', expiry):
+                return expiry
+            
+            elif re.match(r'^\d{1,2}/\d{1,2}/\d{2,4}$', expiry):
+                parts = expiry.split('/')
+                if len(parts[2]) == 2:
+                    dt = datetime.strptime(expiry, '%m/%d/%y')
+                else:
+                    dt = datetime.strptime(expiry, '%m/%d/%Y')
+                return dt.strftime('%Y-%m-%d')
+            
+            else:
+                return datetime.now().strftime('%Y-%m-%d')
+                
+        except Exception:
+            return datetime.now().strftime('%Y-%m-%d')
     
     def _format_expiry_for_upstox(self, expiry: str) -> str:
         """
