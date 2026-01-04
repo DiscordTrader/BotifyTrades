@@ -188,9 +188,6 @@ class UpstoxBroker(BrokerInterface):
     
     async def get_order_book(self) -> List[Dict[str, Any]]:
         """Get all orders for today"""
-        if not self.order_api:
-            return []
-        
         try:
             access_token = self.config.get('access_token')
             url = "https://api.upstox.com/v2/order/retrieve-all"
@@ -199,13 +196,20 @@ class UpstoxBroker(BrokerInterface):
                 'Accept': 'application/json'
             }
             
+            print(f"[{self.name}] Fetching order book...")
             response = await asyncio.to_thread(requests.get, url, headers=headers)
+            
+            print(f"[{self.name}] Order book response: status={response.status_code}")
             
             if response.status_code == 200:
                 data = response.json()
+                print(f"[{self.name}] Order book API status: {data.get('status')}")
                 if data.get('status') == 'success':
                     orders = data.get('data', [])
-                    return [{
+                    print(f"[{self.name}] Found {len(orders)} orders")
+                    if orders:
+                        print(f"[{self.name}] Sample order statuses: {[o.get('status') for o in orders[:5]]}")
+                    result = [{
                         'order_id': o.get('order_id'),
                         'trading_symbol': o.get('trading_symbol'),
                         'instrument_token': o.get('instrument_token'),
@@ -224,9 +228,16 @@ class UpstoxBroker(BrokerInterface):
                         'exchange': o.get('exchange'),
                         'validity': o.get('validity'),
                     } for o in orders]
+                    return result
+                else:
+                    print(f"[{self.name}] Order book API error: {data}")
+            else:
+                print(f"[{self.name}] Order book HTTP error: {response.text}")
             return []
         except Exception as e:
             print(f"[{self.name}] Error getting orders: {e}")
+            import traceback
+            traceback.print_exc()
             return []
     
     async def get_trades(self) -> List[Dict[str, Any]]:

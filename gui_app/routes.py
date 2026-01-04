@@ -13376,9 +13376,28 @@ def register_routes(app):
                 )
                 orders = future.result(timeout=15)
                 
-                open_orders = [o for o in orders if o.get('status') in ('open', 'pending', 'trigger pending', 'validation pending')]
-                filled_orders = [o for o in orders if o.get('status') == 'complete']
-                rejected_orders = [o for o in orders if o.get('status') in ('rejected', 'cancelled')]
+                # Upstox uses various status strings - normalize matching
+                def is_open_status(status):
+                    if not status:
+                        return False
+                    s = status.lower()
+                    return any(x in s for x in ['open', 'pending', 'trigger', 'validation', 'after market order req received'])
+                
+                def is_filled_status(status):
+                    if not status:
+                        return False
+                    s = status.lower()
+                    return any(x in s for x in ['complete', 'filled', 'traded'])
+                
+                def is_rejected_status(status):
+                    if not status:
+                        return False
+                    s = status.lower()
+                    return any(x in s for x in ['rejected', 'cancelled', 'cancel'])
+                
+                open_orders = [o for o in orders if is_open_status(o.get('status'))]
+                filled_orders = [o for o in orders if is_filled_status(o.get('status'))]
+                rejected_orders = [o for o in orders if is_rejected_status(o.get('status'))]
                 
                 return jsonify({
                     'success': True,
