@@ -303,11 +303,14 @@ class UpstoxBroker(BrokerInterface):
                 return None
             
             data = response.json()
+            print(f"[UPSTOX] Option contracts API response status: {data.get('status')}")
+            
             if data.get('status') != 'success':
                 print(f"[UPSTOX] API error: {data}")
                 return None
             
             contracts = data.get('data', [])
+            print(f"[UPSTOX] Found {len(contracts)} contracts for expiry {formatted_expiry}")
             
             for contract in contracts:
                 if (contract.get('strike_price') == strike and 
