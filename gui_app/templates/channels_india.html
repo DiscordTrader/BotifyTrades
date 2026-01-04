@@ -275,14 +275,11 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/channels_india.js') }}"></script>
 <script>
-let currentChannelType = 'EXECUTE';
 const MARKET = 'IN';
-const INDIA_BROKERS = ['DHANQ', 'UPSTOX', 'ZERODHA'];
-
-initIndiaChannelManagement(currentChannelType);
 
 function switchChannelType(type) {
-    currentChannelType = type;
+    console.log('[India] Switching to category:', type);
+    indiaChannelCategory = type;
     document.getElementById('channel-type-execute').style.background = type === 'EXECUTE' ? 'linear-gradient(135deg, #ff9900, #ff6600)' : 'transparent';
     document.getElementById('channel-type-execute').style.color = type === 'EXECUTE' ? 'white' : 'var(--text-secondary)';
     document.getElementById('channel-type-track').style.background = type === 'TRACK' ? 'linear-gradient(135deg, #ff9900, #ff6600)' : 'transparent';
@@ -291,10 +288,14 @@ function switchChannelType(type) {
     loadIndiaChannels();
 }
 
-document.getElementById('channel-type-select').addEventListener('change', function() {
-    switchChannelType(this.value);
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('[India] Page loaded, initializing...');
+    initIndiaChannelManagement('EXECUTE');
+    loadIndiaBrokerStatus();
+    
+    document.getElementById('channel-type-select').addEventListener('change', function() {
+        switchChannelType(this.value);
+    });
 });
-
-loadIndiaBrokerStatus();
 </script>
 {% endblock %}

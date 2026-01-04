@@ -210,14 +210,11 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/channels_canada.js') }}"></script>
 <script>
-let currentChannelType = 'EXECUTE';
 const MARKET = 'CA';
-const CANADA_BROKERS = ['QUESTRADE', 'QUESTRADE_PAPER'];
-
-initCanadaChannelManagement(currentChannelType);
 
 function switchChannelType(type) {
-    currentChannelType = type;
+    console.log('[Canada] Switching to category:', type);
+    canadaChannelCategory = type;
     document.getElementById('channel-type-execute').style.background = type === 'EXECUTE' ? 'linear-gradient(135deg, #ff0000, #cc0000)' : 'transparent';
     document.getElementById('channel-type-execute').style.color = type === 'EXECUTE' ? 'white' : 'var(--text-secondary)';
     document.getElementById('channel-type-track').style.background = type === 'TRACK' ? 'linear-gradient(135deg, #ff0000, #cc0000)' : 'transparent';
@@ -226,10 +223,14 @@ function switchChannelType(type) {
     loadCanadaChannels();
 }
 
-document.getElementById('channel-type-select').addEventListener('change', function() {
-    switchChannelType(this.value);
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('[Canada] Page loaded, initializing...');
+    initCanadaChannelManagement('EXECUTE');
+    loadCanadaBrokerStatus();
+    
+    document.getElementById('channel-type-select').addEventListener('change', function() {
+        switchChannelType(this.value);
+    });
 });
-
-loadCanadaBrokerStatus();
 </script>
 {% endblock %}
