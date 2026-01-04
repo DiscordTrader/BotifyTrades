@@ -219,9 +219,8 @@ class UpstoxBroker(BrokerInterface):
         """
         Place an option order on Upstox
         
-        Supports both Alpaca-style and Webull-style parameters:
-        - Alpaca style: symbol, strike, expiry, option_type, action, quantity, price
-        - Webull style: action, qty, symbol, strike, opt_type, expiry_mmdd, limit_price
+        Supports both Alpaca-style and Webull-style parameters.
+        Converts to Upstox instrument token format: NSE_FO|NIFTY09JAN26400CE
         """
         actual_qty = quantity or qty or 1
         actual_opt_type = option_type or opt_type or 'CE'
@@ -229,7 +228,10 @@ class UpstoxBroker(BrokerInterface):
         actual_price = price or limit_price
         
         opt_suffix = 'CE' if actual_opt_type.lower() in ('c', 'call', 'ce') else 'PE'
-        instrument_token = f"{symbol}|{actual_expiry}{int(strike)}{opt_suffix}"
+        
+        formatted_expiry = self._format_expiry_for_upstox(actual_expiry)
+        
+        instrument_token = f"NSE_FO|{symbol.upper()}{formatted_expiry}{int(strike)}{opt_suffix}"
         
         print(f"[UPSTOX] Placing option: {action} {actual_qty} {instrument_token} @ {actual_price}")
         
@@ -242,6 +244,49 @@ class UpstoxBroker(BrokerInterface):
             price=actual_price,
             product_type='INTRADAY'
         )
+    
+    def _format_expiry_for_upstox(self, expiry: str) -> str:
+        """
+        Convert expiry from various formats to Upstox format (DDMMMYY)
+        Input formats: 01/08, 1/8, 2024-01-08, 01/08/24
+        Output format: 08JAN24
+        """
+        from datetime import datetime
+        import re
+        
+        if not expiry:
+            today = datetime.now()
+            return today.strftime('%d%b%y').upper()
+        
+        try:
+            if re.match(r'^\d{1,2}/\d{1,2}$', expiry):
+                month, day = expiry.split('/')
+                year = datetime.now().year
+                dt = datetime(year, int(month), int(day))
+                return dt.strftime('%d%b%y').upper()
+            
+            elif re.match(r'^\d{4}-\d{2}-\d{2}$', expiry):
+                dt = datetime.strptime(expiry, '%Y-%m-%d')
+                return dt.strftime('%d%b%y').upper()
+            
+            elif re.match(r'^\d{1,2}/\d{1,2}/\d{2,4}$', expiry):
+                parts = expiry.split('/')
+                if len(parts[2]) == 2:
+                    dt = datetime.strptime(expiry, '%m/%d/%y')
+                else:
+                    dt = datetime.strptime(expiry, '%m/%d/%Y')
+                return dt.strftime('%d%b%y').upper()
+            
+            elif re.match(r'^\d{2}[A-Z]{3}\d{2}$', expiry.upper()):
+                return expiry.upper()
+            
+            else:
+                print(f"[UPSTOX] Unknown expiry format: {expiry}, using as-is")
+                return expiry.upper().replace('/', '')
+                
+        except Exception as e:
+            print(f"[UPSTOX] Error parsing expiry '{expiry}': {e}")
+            return expiry.upper().replace('/', '')
     
     async def get_quote(self, symbol: str) -> Dict[str, Any]:
         """Get current quote for a symbol"""
