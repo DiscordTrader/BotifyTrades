@@ -400,8 +400,14 @@ async function loadUpstoxAccount() {
         // Render positions table
         renderUpstoxPositions(data.positions || []);
         
-        // Store orders data and render
-        upstoxOrdersData = [...(data.open_orders || []), ...(data.filled_orders || [])];
+        // Store orders data and render (include ALL orders: open, filled, and cancelled/rejected)
+        upstoxOrdersData = [
+            ...(data.open_orders || []), 
+            ...(data.filled_orders || []),
+            ...(data.rejected_orders || [])
+        ];
+        console.log('[loadUpstoxAccount] Loaded orders:', upstoxOrdersData.length, 'orders');
+        console.log('[loadUpstoxAccount] Open:', (data.open_orders || []).length, 'Filled:', (data.filled_orders || []).length, 'Cancelled:', (data.rejected_orders || []).length);
         renderUpstoxOrders(upstoxOrdersData);
         
         // Load trades separately

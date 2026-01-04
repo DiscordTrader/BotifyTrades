@@ -13515,8 +13515,30 @@ def register_routes(app):
                     elif isinstance(p, dict):
                         positions.append(p)
                 
-                open_orders = [o for o in orders if o.get('status') in ('open', 'pending', 'trigger pending')]
-                filled_orders = [o for o in orders if o.get('status') == 'complete']
+                # Upstox uses various status strings - normalize matching
+                def is_open_status(status):
+                    if not status:
+                        return False
+                    s = status.lower()
+                    return any(x in s for x in ['open', 'pending', 'trigger', 'validation', 'after market order req received'])
+                
+                def is_filled_status(status):
+                    if not status:
+                        return False
+                    s = status.lower()
+                    return any(x in s for x in ['complete', 'filled', 'traded'])
+                
+                def is_cancelled_status(status):
+                    if not status:
+                        return False
+                    s = status.lower()
+                    return any(x in s for x in ['rejected', 'cancel'])
+                
+                open_orders = [o for o in orders if is_open_status(o.get('status'))]
+                filled_orders = [o for o in orders if is_filled_status(o.get('status'))]
+                rejected_orders = [o for o in orders if is_cancelled_status(o.get('status'))]
+                
+                print(f"[API] Upstox orders: {len(orders)} total, {len(open_orders)} open, {len(filled_orders)} filled, {len(rejected_orders)} cancelled")
                 
                 return jsonify({
                     'success': True,
@@ -13526,6 +13548,7 @@ def register_routes(app):
                     'positions': positions,
                     'open_orders': open_orders,
                     'filled_orders': filled_orders,
+                    'rejected_orders': rejected_orders,
                     'total_orders': len(orders)
                 })
             else:
