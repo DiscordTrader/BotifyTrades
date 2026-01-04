@@ -323,16 +323,31 @@ async function loadIndiaBrokerStatus() {
         
         if (statusData.upstox) {
             const badge = document.getElementById('upstox-status-badge');
+            const reconnectBtn = document.getElementById('upstox-reconnect-btn');
+            const statusMsg = document.getElementById('upstox-status-msg');
             if (statusData.upstox.connected) {
                 badge.style.background = 'rgba(0, 255, 136, 0.2)';
                 badge.style.color = '#00ff88';
                 badge.textContent = 'CONNECTED';
                 document.getElementById('upstox-balance').textContent = `₹${(statusData.upstox.balance || 0).toLocaleString('en-IN')}`;
+                if (reconnectBtn) reconnectBtn.style.display = 'none';
+                if (statusMsg) statusMsg.innerHTML = '<span style="color: #00c853;">✓ Connected to Upstox</span>';
             } else {
                 badge.style.background = 'rgba(255, 107, 107, 0.2)';
                 badge.style.color = '#ff6b6b';
                 badge.textContent = 'NOT CONNECTED';
+                if (reconnectBtn) reconnectBtn.style.display = 'inline-block';
+                if (statusMsg) statusMsg.innerHTML = '<span style="color: #ff6b6b;">Token may be expired. Click Reconnect or go to Settings → Upstox</span>';
             }
+        } else {
+            const badge = document.getElementById('upstox-status-badge');
+            const reconnectBtn = document.getElementById('upstox-reconnect-btn');
+            const statusMsg = document.getElementById('upstox-status-msg');
+            badge.style.background = 'rgba(255, 107, 107, 0.2)';
+            badge.style.color = '#ff6b6b';
+            badge.textContent = 'NOT CONNECTED';
+            if (reconnectBtn) reconnectBtn.style.display = 'inline-block';
+            if (statusMsg) statusMsg.innerHTML = '<span style="color: #ffb700;">Upstox not configured. Go to Settings → Upstox</span>';
         }
         
         if (statusData.zerodha) {
@@ -362,6 +377,38 @@ function showToast(message, type) {
     setTimeout(() => toast.remove(), 3000);
 }
 
+async function reconnectUpstox() {
+    const btn = document.getElementById('upstox-reconnect-btn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Connecting...';
+    btn.disabled = true;
+    
+    try {
+        const response = await fetch('/api/brokers/upstox/reconnect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Upstox reconnected successfully!', 'success');
+            await loadIndiaBrokerStatus();
+            await refreshUpstoxData();
+        } else {
+            showToast(data.error || 'Failed to reconnect Upstox', 'error');
+            const statusMsg = document.getElementById('upstox-status-msg');
+            if (statusMsg && data.error) {
+                statusMsg.innerHTML = `<span style="color: #ff6b6b;">${data.error}</span>`;
+            }
+        }
+    } catch (error) {
+        showToast('Error reconnecting: ' + error.message, 'error');
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
 // ============ UPSTOX DASHBOARD FUNCTIONS ============
 
 let upstoxOrdersData = [];
@@ -379,21 +426,30 @@ async function loadUpstoxAccount() {
         const response = await fetch('/api/brokers/upstox/account');
         const data = await response.json();
         
+        const badge = document.getElementById('upstox-status-badge');
+        const reconnectBtn = document.getElementById('upstox-reconnect-btn');
+        const statusMsg = document.getElementById('upstox-status-msg');
+        
         if (!data.success || !data.connected) {
-            document.getElementById('upstox-status-badge').textContent = 'NOT CONNECTED';
+            badge.style.background = 'rgba(255, 107, 107, 0.2)';
+            badge.style.color = '#ff6b6b';
+            badge.textContent = 'NOT CONNECTED';
             document.getElementById('upstox-balance').textContent = '₹0.00';
             document.getElementById('upstox-positions').textContent = '0';
-            document.getElementById('upstox-positions-body').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #ff6b6b;">Upstox not connected</td></tr>';
+            document.getElementById('upstox-positions-body').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #ff6b6b;">Upstox not connected - Click Reconnect above</td></tr>';
             document.getElementById('upstox-orders-body').innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #ff6b6b;">Upstox not connected</td></tr>';
             document.getElementById('upstox-trades-body').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #ff6b6b;">Upstox not connected</td></tr>';
+            if (reconnectBtn) reconnectBtn.style.display = 'inline-block';
+            if (statusMsg) statusMsg.innerHTML = `<span style="color: #ff6b6b;">${data.error || 'Token expired or not configured'}</span>`;
             return;
         }
         
-        // Update status badge
-        const badge = document.getElementById('upstox-status-badge');
+        // Update status badge - connected
         badge.style.background = 'rgba(0, 255, 136, 0.2)';
         badge.style.color = '#00ff88';
         badge.textContent = 'CONNECTED';
+        if (reconnectBtn) reconnectBtn.style.display = 'none';
+        if (statusMsg) statusMsg.innerHTML = '<span style="color: #00c853;">✓ Connected to Upstox</span>';
         
         // Update funds
         if (data.funds) {

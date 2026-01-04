@@ -57,7 +57,10 @@
     <div class="table-container" style="background: linear-gradient(135deg, #0f1f0f 0%, #1a2f1a 100%); border: 1px solid rgba(0, 200, 83, 0.4);">
         <div class="table-header" style="border-bottom: 1px solid rgba(0, 200, 83, 0.2); display: flex; justify-content: space-between; align-items: center;">
             <h3 class="table-title" style="color: #00c853; margin: 0;">📈 Upstox</h3>
-            <span id="upstox-status-badge" style="padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; background: rgba(142, 142, 147, 0.2); color: #8E8E93;">CHECKING...</span>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <button id="upstox-reconnect-btn" onclick="reconnectUpstox()" style="display: none; background: rgba(255, 165, 0, 0.2); border: 1px solid rgba(255, 165, 0, 0.4); color: #ffb700; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 10px; font-weight: 600;">🔌 Reconnect</button>
+                <span id="upstox-status-badge" style="padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; background: rgba(142, 142, 147, 0.2); color: #8E8E93;">CHECKING...</span>
+            </div>
         </div>
         <div style="padding: 20px;">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
@@ -70,7 +73,7 @@
                     <div id="upstox-positions" style="font-size: 18px; font-weight: bold; color: #00ff88;">0</div>
                 </div>
             </div>
-            <div style="font-size: 11px; color: #8E8E93; text-align: center;">
+            <div id="upstox-status-msg" style="font-size: 11px; color: #8E8E93; text-align: center;">
                 OAuth2 authentication required
             </div>
         </div>
