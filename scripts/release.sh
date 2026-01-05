@@ -126,7 +126,17 @@ print_success "Committed: $COMMIT_MSG"
 
 # Step 5: Push to private repo
 print_step 5 6 "Pushing to origin..."
-git push origin main
+
+# Use RELEASE_TOKEN for push if available (bypasses Replit's limited git scope)
+if [ -n "$RELEASE_TOKEN" ]; then
+    # Configure git to use RELEASE_TOKEN for this push
+    git remote set-url origin "https://x-access-token:${RELEASE_TOKEN}@github.com/$PRIVATE_REPO.git"
+    git push origin main
+    # Reset to SSH URL (more secure for future operations)
+    git remote set-url origin "https://github.com/$PRIVATE_REPO.git"
+else
+    git push origin main
+fi
 print_success "Pushed to BotifyTradesv2 (private)"
 
 # Step 6: Trigger build workflow
