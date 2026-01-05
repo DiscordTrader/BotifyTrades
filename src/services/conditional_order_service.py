@@ -276,32 +276,141 @@ class BrokerPriceMonitor(PriceMonitor):
 class IndiaPriceMonitor(PriceMonitor):
     """
     Price monitor for Indian markets (NSE options).
-    Uses Upstox/Zerodha API or fallback to yfinance for index prices.
+    Uses Upstox/Zerodha API with proper instrument key lookup.
+    Falls back to yfinance for index prices if broker API fails.
     """
     
-    def __init__(self, symbol: str, strike: float, opt_type: str, callback: Callable[[str, float], None], broker_instance: Any = None):
+    def __init__(self, symbol: str, strike: float, opt_type: str, callback: Callable[[str, float], None], broker_instance: Any = None, expiry: str = None):
         super().__init__(symbol, callback)
         self.strike = strike
         self.opt_type = opt_type
         self.broker_instance = broker_instance
+        self.expiry = expiry
         self.poll_interval = 5
         self._error_count = 0
         self._max_errors = 10
-        self.instrument_key = self._build_instrument_key()
+        self._instrument_key = None
+        self._instrument_key_lookup_done = False
     
-    def _build_instrument_key(self) -> str:
-        """Build Upstox instrument key for NSE options."""
+    def _get_underlying_key(self) -> str:
+        """Get Upstox underlying key for NSE indices."""
         index_map = {
             'NIFTY': 'NSE_INDEX|Nifty 50',
             'BANKNIFTY': 'NSE_INDEX|Nifty Bank',
             'FINNIFTY': 'NSE_INDEX|Nifty Fin Service',
+            'SENSEX': 'BSE_INDEX|SENSEX',
         }
         return index_map.get(self.symbol.upper(), f'NSE_EQ|{self.symbol}')
+    
+    async def _lookup_instrument_key(self) -> Optional[str]:
+        """Look up actual Upstox instrument key from option contracts API."""
+        if self._instrument_key_lookup_done:
+            return self._instrument_key
+        
+        self._instrument_key_lookup_done = True
+        
+        if not self.broker_instance:
+            print(f"[INDIA] No broker instance for instrument lookup")
+            return None
+        
+        try:
+            import requests
+            from urllib.parse import quote
+            from datetime import datetime
+            
+            underlying_key = self._get_underlying_key()
+            access_token = self.broker_instance.config.get('access_token') if hasattr(self.broker_instance, 'config') else None
+            
+            if not access_token:
+                print(f"[INDIA] No access token for instrument lookup")
+                return None
+            
+            expiry_date = self._format_expiry_to_date(self.expiry) if self.expiry else self._get_next_expiry()
+            opt_type_str = 'CE' if self.opt_type == 'C' else 'PE'
+            
+            encoded_key = quote(underlying_key, safe='')
+            url = f"https://api.upstox.com/v2/option/contract?instrument_key={encoded_key}&expiry_date={expiry_date}"
+            
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Accept': 'application/json'
+            }
+            
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, lambda: requests.get(url, headers=headers, timeout=10))
+            
+            if response.status_code != 200:
+                print(f"[INDIA] Option contracts API error: {response.status_code}")
+                return None
+            
+            data = response.json()
+            if data.get('status') != 'success':
+                print(f"[INDIA] API error: {data}")
+                return None
+            
+            contracts = data.get('data', [])
+            expiry_contracts = [c for c in contracts if c.get('expiry') == expiry_date]
+            
+            print(f"[INDIA] Found {len(expiry_contracts)} contracts for {self.symbol} {expiry_date}")
+            
+            for contract in expiry_contracts:
+                if (contract.get('strike_price') == self.strike and 
+                    contract.get('instrument_type') == opt_type_str):
+                    self._instrument_key = contract.get('instrument_key')
+                    print(f"[INDIA] ✓ Resolved instrument key: {self._instrument_key}")
+                    return self._instrument_key
+            
+            print(f"[INDIA] ⚠️ No exact match for {self.symbol} {self.strike} {opt_type_str}")
+            return None
+            
+        except Exception as e:
+            print(f"[INDIA] Instrument lookup error: {e}")
+            return None
+    
+    def _format_expiry_to_date(self, expiry: str) -> str:
+        """Convert expiry to YYYY-MM-DD format."""
+        from datetime import datetime
+        import re
+        
+        if not expiry:
+            return self._get_next_expiry()
+        
+        try:
+            if re.match(r'^\d{1,2}/\d{1,2}$', expiry):
+                month, day = expiry.split('/')
+                year = datetime.now().year
+                return f"{year}-{int(month):02d}-{int(day):02d}"
+            elif re.match(r'^\d{4}-\d{2}-\d{2}$', expiry):
+                return expiry
+        except Exception:
+            pass
+        
+        return self._get_next_expiry()
+    
+    def _get_next_expiry(self) -> str:
+        """Get next Thursday expiry for weekly options."""
+        from datetime import datetime, timedelta
+        
+        now = datetime.now()
+        days_ahead = 3 - now.weekday()
+        if days_ahead < 0:
+            days_ahead += 7
+        elif days_ahead == 0 and now.hour >= 15:
+            days_ahead = 7
+        
+        next_thursday = now + timedelta(days=days_ahead)
+        return next_thursday.strftime("%Y-%m-%d")
     
     async def start(self):
         """Start polling for price updates."""
         self.is_running = True
         print(f"[INDIA] Starting price monitor for {self.symbol} {self.strike}{self.opt_type}")
+        
+        instrument_key = await self._lookup_instrument_key()
+        if instrument_key:
+            print(f"[INDIA] Monitoring option premium via {instrument_key}")
+        else:
+            print(f"[INDIA] Using fallback monitoring (index price)")
         
         while self.is_running and self._error_count < self._max_errors:
             try:
@@ -320,26 +429,30 @@ class IndiaPriceMonitor(PriceMonitor):
             print(f"[INDIA] Too many errors, stopping monitor for {self.symbol}")
     
     async def _fetch_price(self) -> Optional[float]:
-        """Fetch option price from broker or fallback."""
-        if self.broker_instance and hasattr(self.broker_instance, 'get_quote'):
+        """Fetch option premium from broker using resolved instrument key."""
+        if self._instrument_key and self.broker_instance:
             try:
-                opt_suffix = 'CE' if self.opt_type == 'C' else 'PE'
-                option_symbol = f"NSE_FO|{self.symbol}{int(self.strike)}{opt_suffix}"
-                quote = await self.broker_instance.get_quote(option_symbol)
-                if quote:
-                    for key, data in quote.items() if isinstance(quote, dict) else []:
-                        if hasattr(data, 'last_price'):
-                            return float(data.last_price)
-                        elif isinstance(data, dict) and 'last_price' in data:
-                            return float(data['last_price'])
+                if hasattr(self.broker_instance, 'get_ltp'):
+                    ltp = await self.broker_instance.get_ltp(self._instrument_key)
+                    if ltp:
+                        return float(ltp)
+                
+                if hasattr(self.broker_instance, 'get_quote'):
+                    quote = await self.broker_instance.get_quote(self._instrument_key)
+                    if quote and isinstance(quote, dict):
+                        for key, data in quote.items():
+                            if hasattr(data, 'last_price'):
+                                return float(data.last_price)
+                            elif isinstance(data, dict) and 'last_price' in data:
+                                return float(data['last_price'])
             except Exception as e:
-                print(f"[INDIA] Broker quote failed: {e}")
+                print(f"[INDIA] Broker quote failed for {self._instrument_key}: {e}")
         
         try:
             import yfinance as yf
             loop = asyncio.get_event_loop()
             
-            yf_symbol = f"^NSEI" if self.symbol.upper() == 'NIFTY' else f"^NSEBANK" if self.symbol.upper() == 'BANKNIFTY' else self.symbol
+            yf_symbol = "^NSEI" if self.symbol.upper() == 'NIFTY' else "^NSEBANK" if self.symbol.upper() == 'BANKNIFTY' else self.symbol
             
             def get_index_price():
                 ticker = yf.Ticker(yf_symbol)
@@ -653,6 +766,7 @@ class ConditionalOrderService:
         if market == 'INDIA':
             strike = order.get('strike', 0)
             opt_type = order.get('opt_type', 'C')
+            expiry = order.get('expiry')
             
             india_brokers = ['upstox', 'zerodha', 'dhanq']
             india_broker_instance = None
@@ -664,13 +778,14 @@ class ConditionalOrderService:
                     india_broker_name = india_broker
                     break
             
-            print(f"[CONDITIONAL] Using IndiaPriceMonitor for {symbol} {strike}{opt_type} (broker: {india_broker_name or 'fallback'})")
+            print(f"[CONDITIONAL] Using IndiaPriceMonitor for {symbol} {strike}{opt_type} expiry={expiry} (broker: {india_broker_name or 'fallback'})")
             monitor = IndiaPriceMonitor(
                 symbol,
                 strike,
                 opt_type,
                 price_callback,
-                india_broker_instance
+                india_broker_instance,
+                expiry
             )
             data_source = india_broker_name or 'yfinance'
             update_conditional_order_status(
