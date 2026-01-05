@@ -7,11 +7,33 @@ Logging configuration for QuantumPulse Discord Trading Bot
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import sys
 from pathlib import Path
 
-# Create logs directory
-LOGS_DIR = Path(__file__).parent.parent / 'logs'
-LOGS_DIR.mkdir(exist_ok=True)
+def get_app_directory():
+    """Get the application directory - works for both script and frozen exe."""
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller exe - use exe's directory
+        return Path(sys.executable).parent
+    else:
+        # Running as script - use parent of src/
+        return Path(__file__).parent.parent
+
+# Create logs directory next to the exe or in project root
+APP_DIR = get_app_directory()
+LOGS_DIR = APP_DIR / 'logs'
+
+try:
+    LOGS_DIR.mkdir(exist_ok=True)
+    print(f"[LOGGING] ✓ Logs directory: {LOGS_DIR}")
+except Exception as e:
+    # Fallback to current working directory if app dir is not writable
+    LOGS_DIR = Path.cwd() / 'logs'
+    try:
+        LOGS_DIR.mkdir(exist_ok=True)
+        print(f"[LOGGING] ✓ Logs directory (fallback): {LOGS_DIR}")
+    except Exception as e2:
+        print(f"[LOGGING] ⚠️ Could not create logs directory: {e2}")
 
 # Log file paths
 BOT_LOG_FILE = LOGS_DIR / 'bot.log'
