@@ -127,13 +127,11 @@ print_success "Committed: $COMMIT_MSG"
 # Step 5: Push to private repo
 print_step 5 6 "Pushing to origin..."
 
-# Use RELEASE_TOKEN for push if available (bypasses Replit's limited git scope)
+# Use credential helper with RELEASE_TOKEN for secure push
 if [ -n "$RELEASE_TOKEN" ]; then
-    # Configure git to use RELEASE_TOKEN for this push
-    git remote set-url origin "https://x-access-token:${RELEASE_TOKEN}@github.com/$PRIVATE_REPO.git"
-    git push origin main
-    # Reset to SSH URL (more secure for future operations)
-    git remote set-url origin "https://github.com/$PRIVATE_REPO.git"
+    # Configure credential helper to use token (doesn't expose in URL/logs)
+    git -c credential.helper="!f() { echo username=x-access-token; echo password=$RELEASE_TOKEN; }; f" \
+        push https://github.com/$PRIVATE_REPO.git main
 else
     git push origin main
 fi
