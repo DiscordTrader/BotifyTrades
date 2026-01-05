@@ -19,6 +19,7 @@
 # =============================================================================
 
 set -e
+set +H 2>/dev/null || true  # Disable bash history expansion for credential helper
 
 BUILD_TYPE_ARG=${1:-}
 VERSION=${2:-}
