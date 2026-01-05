@@ -7770,21 +7770,33 @@ def update_conditional_order_status(
         return False
 
 
-def get_active_conditional_orders() -> List[Dict[str, Any]]:
-    """Get all active conditional orders that need monitoring"""
+def get_active_conditional_orders(market: str = None) -> List[Dict[str, Any]]:
+    """Get all active conditional orders that need monitoring, optionally filtered by market"""
     conn = get_connection()
     cursor = conn.cursor()
     
     try:
-        cursor.execute('''
-            SELECT co.*, c.trigger_offset_percent, c.broker_override, c.exit_strategy_mode,
-                   c.default_quantity, c.position_size_pct
-            FROM conditional_orders co
-            LEFT JOIN channels c ON co.channel_id = c.discord_channel_id
-            WHERE co.status IN ('PENDING', 'ACTIVE_MONITORING', 'FALLBACK_MONITORING')
-            AND (co.expires_at IS NULL OR co.expires_at > CURRENT_TIMESTAMP)
-            ORDER BY co.created_at ASC
-        ''')
+        if market:
+            cursor.execute('''
+                SELECT co.*, c.trigger_offset_percent, c.broker_override, c.exit_strategy_mode,
+                       c.default_quantity, c.position_size_pct
+                FROM conditional_orders co
+                LEFT JOIN channels c ON co.channel_id = c.discord_channel_id
+                WHERE co.status IN ('PENDING', 'ACTIVE_MONITORING', 'FALLBACK_MONITORING')
+                AND (co.expires_at IS NULL OR co.expires_at > CURRENT_TIMESTAMP)
+                AND co.market = ?
+                ORDER BY co.created_at ASC
+            ''', (market,))
+        else:
+            cursor.execute('''
+                SELECT co.*, c.trigger_offset_percent, c.broker_override, c.exit_strategy_mode,
+                       c.default_quantity, c.position_size_pct
+                FROM conditional_orders co
+                LEFT JOIN channels c ON co.channel_id = c.discord_channel_id
+                WHERE co.status IN ('PENDING', 'ACTIVE_MONITORING', 'FALLBACK_MONITORING')
+                AND (co.expires_at IS NULL OR co.expires_at > CURRENT_TIMESTAMP)
+                ORDER BY co.created_at ASC
+            ''')
         
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
@@ -7943,17 +7955,24 @@ def get_channel_conditional_settings(channel_id: str) -> Dict[str, Any]:
         return {}
 
 
-def get_conditional_orders_by_status(status: str) -> List[Dict[str, Any]]:
-    """Get all conditional orders with a specific status"""
+def get_conditional_orders_by_status(status: str, market: str = None) -> List[Dict[str, Any]]:
+    """Get all conditional orders with a specific status, optionally filtered by market"""
     conn = get_connection()
     cursor = conn.cursor()
     
     try:
-        cursor.execute('''
-            SELECT * FROM conditional_orders
-            WHERE status = ?
-            ORDER BY created_at DESC
-        ''', (status,))
+        if market:
+            cursor.execute('''
+                SELECT * FROM conditional_orders
+                WHERE status = ? AND market = ?
+                ORDER BY created_at DESC
+            ''', (status, market))
+        else:
+            cursor.execute('''
+                SELECT * FROM conditional_orders
+                WHERE status = ?
+                ORDER BY created_at DESC
+            ''', (status,))
         
         rows = cursor.fetchall()
         return [dict(row) for row in rows]

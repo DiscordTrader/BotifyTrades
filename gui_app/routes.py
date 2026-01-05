@@ -5458,14 +5458,21 @@ def register_routes(app):
     
     @app.route('/api/conditional_orders', methods=['GET'])
     def api_get_conditional_orders():
-        """Get all conditional orders with optional status filter"""
+        """Get all conditional orders with optional status and market filter"""
         try:
             status = request.args.get('status', None)
+            market = request.args.get('market', None)
+            
+            # Normalize market values: 'IN' -> 'INDIA', 'CA' -> 'CANADA'
+            if market:
+                market_map = {'IN': 'INDIA', 'CA': 'CANADA', 'INDIA': 'INDIA', 'CANADA': 'CANADA', 'US': 'US'}
+                market = market_map.get(market.upper(), market.upper())
+            
             if status:
-                orders = db.get_conditional_orders_by_status(status)
+                orders = db.get_conditional_orders_by_status(status, market=market)
             else:
-                orders = db.get_active_conditional_orders()
-            return jsonify({'orders': orders})
+                orders = db.get_active_conditional_orders(market=market)
+            return jsonify({'success': True, 'orders': orders})
         except Exception as e:
             print(f"[API] Error fetching conditional orders: {e}")
             return jsonify({'error': str(e)}), 500

@@ -744,11 +744,15 @@ async function loadUpstoxConditionalOrders() {
                 'EXECUTING': '#ff9900',
                 'TRACKING': '#8a2be2',
                 'TERMINATED': '#8E8E93',
-                'CANCELLED': '#ff6b6b'
+                'CANCELLED': '#ff6b6b',
+                'CANCELED': '#ff6b6b',
+                'ERROR': '#ff5722',
+                'EXPIRED': '#8E8E93'
             };
             const statusColor = statusColors[o.status] || '#8E8E93';
-            const triggerText = o.trigger_condition === 'above' ? `Above ₹${o.trigger_price}` : `Below ₹${o.trigger_price}`;
-            const slpt = `SL: ₹${o.stop_loss || 'N/A'} | PT: ${o.profit_targets || 'N/A'}`;
+            const triggerType = o.trigger_type || o.trigger_condition || 'over';
+            const triggerText = (triggerType === 'above' || triggerType === 'over') ? `Above ₹${o.trigger_price}` : `Below ₹${o.trigger_price}`;
+            const slpt = `SL: ₹${o.stop_loss_value || 'N/A'} | PT: ${o.take_profit_targets || 'N/A'}`;
             const created = o.created_at ? new Date(o.created_at).toLocaleString('en-IN') : 'N/A';
             
             return `
@@ -757,10 +761,10 @@ async function loadUpstoxConditionalOrders() {
                     <td style="padding: 12px; text-align: center; color: #ffc107;">${triggerText}</td>
                     <td style="padding: 12px; text-align: center;"><span style="padding: 3px 8px; background: ${statusColor}22; border-radius: 4px; font-size: 11px; color: ${statusColor}; font-weight: 600;">${o.status}</span></td>
                     <td style="padding: 12px; text-align: center; font-size: 11px; color: #8E8E93;">${slpt}</td>
-                    <td style="padding: 12px; text-align: center;"><span style="padding: 2px 6px; background: rgba(0, 200, 83, 0.15); border-radius: 4px; font-size: 10px; color: #00c853; font-weight: 600;">${o.broker || 'UPSTOX'}</span></td>
+                    <td style="padding: 12px; text-align: center;"><span style="padding: 2px 6px; background: rgba(0, 200, 83, 0.15); border-radius: 4px; font-size: 10px; color: #00c853; font-weight: 600;">${o.broker_primary || o.broker || 'UPSTOX'}</span></td>
                     <td style="padding: 12px; text-align: center; font-size: 11px; color: #8E8E93;">${created}</td>
                     <td style="padding: 12px; text-align: center;">
-                        ${o.status !== 'TERMINATED' && o.status !== 'CANCELLED' ? `<button onclick="cancelConditionalOrder(${o.id})" style="background: rgba(255, 107, 107, 0.1); border: 1px solid rgba(255, 107, 107, 0.3); color: #ff6b6b; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">Cancel</button>` : '-'}
+                        ${!['TERMINATED', 'CANCELLED', 'CANCELED', 'ERROR', 'EXPIRED'].includes(o.status) ? `<button onclick="cancelConditionalOrder(${o.id})" style="background: rgba(255, 107, 107, 0.1); border: 1px solid rgba(255, 107, 107, 0.3); color: #ff6b6b; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">Cancel</button>` : '-'}
                     </td>
                 </tr>
             `;
