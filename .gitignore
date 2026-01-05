@@ -44,6 +44,13 @@ config.ini.local
 schwab_token.json
 token.json
 
+# PyArmor license files - NEVER COMMIT THESE
+pyarmor-regcode-*.txt
+pyarmor-regfile-*.zip
+pyarmor-ci-*.zip
+pyarmor-device-regfile-*.zip
+license_backup/
+
 # Logs
 *.log
 logs/

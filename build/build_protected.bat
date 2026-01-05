@@ -3,7 +3,7 @@ REM Protected Build Script - PyArmor + PyInstaller
 REM Creates obfuscated executable with machine-bound licensing
 
 echo ============================================================
-echo Discord Trading Bot - PROTECTED BUILD
+echo BotifyTrades - PROTECTED BUILD (Licensed PyArmor)
 echo ============================================================
 echo.
 
@@ -27,7 +27,49 @@ if errorlevel 1 (
     echo.
 )
 
-echo [1/6] Cleaning previous builds...
+REM ============================================================
+REM PyArmor License Registration
+REM ============================================================
+echo [0/7] Checking PyArmor license...
+
+REM Check if already registered
+pyarmor -v 2>nul | findstr /i "license" >nul
+if errorlevel 1 (
+    echo PyArmor not registered. Checking for license files...
+    
+    REM Option 1: Use CI regfile if available (for automated builds)
+    if exist "pyarmor-ci-*.zip" (
+        echo Found CI license file, registering...
+        for %%f in (pyarmor-ci-*.zip) do pyarmor reg "%%f"
+    ) else if exist "pyarmor-regfile-*.zip" (
+        REM Option 2: Use registration file (for manual builds)
+        echo Found registration file, registering...
+        for %%f in (pyarmor-regfile-*.zip) do pyarmor reg "%%f"
+    ) else if exist "pyarmor-regcode-*.txt" (
+        REM Option 3: First-time registration with activation code
+        echo Found activation code, performing initial registration...
+        for %%f in (pyarmor-regcode-*.txt) do (
+            pyarmor reg -p "BotifyTrades" "%%f"
+            echo.
+            echo [IMPORTANT] Registration file created: pyarmor-regfile-*.zip
+            echo Please backup this file for future builds!
+        )
+    ) else (
+        echo [WARNING] No PyArmor license file found!
+        echo.
+        echo To use licensed PyArmor, place one of these files in this directory:
+        echo   - pyarmor-regcode-xxxx.txt (first-time activation)
+        echo   - pyarmor-regfile-xxxx.zip (registered license)
+        echo   - pyarmor-ci-xxxx.zip (CI/automated builds)
+        echo.
+        echo Continuing with trial/basic PyArmor...
+    )
+) else (
+    echo PyArmor license already registered.
+)
+echo.
+
+echo [1/7] Cleaning previous builds...
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
 if exist obfuscated rmdir /s /q obfuscated
@@ -85,18 +127,27 @@ xcopy src_backup\ src\ /E /I /Y /Q
 rmdir /s /q src_backup obfuscated
 echo.
 
+echo [7/7] Backing up registration file...
+if exist "pyarmor-regfile-*.zip" (
+    if not exist license_backup mkdir license_backup
+    copy pyarmor-regfile-*.zip license_backup\ >nul
+    echo Registration file backed up to license_backup\
+)
+echo.
+
 echo ============================================================
 echo [SUCCESS] Protected build completed!
 echo ============================================================
 echo.
-echo Output location: dist\DiscordTradingBot.exe
+echo Output location: dist\BotifyTrades.exe
 echo Protection level: STRONG (PyArmor obfuscated + machine-bound licenses)
 echo.
 echo File size: 
-dir dist\DiscordTradingBot.exe | find "DiscordTradingBot.exe"
+dir dist\BotifyTrades.exe 2>nul | find "BotifyTrades.exe"
+if errorlevel 1 dir dist\ | find ".exe"
 echo.
 echo Next steps:
-echo   1. Test the exe: cd dist ^&^& DiscordTradingBot.exe
+echo   1. Test the exe: cd dist ^&^& BotifyTrades.exe
 echo   2. Get customer's Machine ID
 echo   3. Generate license: python generate_license_secure.py --customer NAME --machine ID --days 30
 echo   4. Distribute exe + config.ini + license key
