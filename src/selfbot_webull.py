@@ -8364,18 +8364,32 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         price=signal.get('price')  # None for market orders
                     )
                 else:
-                    # Webull and other brokers
+                    # Webull and other US brokers
                     _original_print(f"[{broker_name}] Placing option order: {signal['action']} {signal['qty']} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @ ${signal.get('price')}")
-                    result = await broker_instance.place_option_order(
-                        action=signal['action'],
-                        qty=signal['qty'],
-                        symbol=signal['symbol'],
-                        strike=signal['strike'],
-                        opt_type=signal['opt_type'],
-                        expiry_mmdd=signal['expiry'],
-                        limit_price=signal.get('price'),  # None for market orders
-                        lots=signal.get('lots')  # Raw lot count for India signals
-                    )
+                    # Only pass lots parameter to Indian brokers (Upstox, Zerodha, DhanQ)
+                    india_brokers = ['UPSTOX', 'ZERODHA', 'DHANQ']
+                    if broker_name.upper() in india_brokers and signal.get('lots'):
+                        result = await broker_instance.place_option_order(
+                            action=signal['action'],
+                            qty=signal['qty'],
+                            symbol=signal['symbol'],
+                            strike=signal['strike'],
+                            opt_type=signal['opt_type'],
+                            expiry_mmdd=signal['expiry'],
+                            limit_price=signal.get('price'),
+                            lots=signal.get('lots')
+                        )
+                    else:
+                        # US brokers (Webull, etc.) - no lots parameter
+                        result = await broker_instance.place_option_order(
+                            action=signal['action'],
+                            qty=signal['qty'],
+                            symbol=signal['symbol'],
+                            strike=signal['strike'],
+                            opt_type=signal['opt_type'],
+                            expiry_mmdd=signal['expiry'],
+                            limit_price=signal.get('price')
+                        )
                     # Log the result for debugging
                     if hasattr(result, 'success'):
                         if result.success:
