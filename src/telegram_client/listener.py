@@ -425,7 +425,10 @@ class TelegramListener:
         execute_enabled = chat_config.get('execute_enabled', 0)
         track_enabled = chat_config.get('track_enabled', 0)
         
+        _print_flush(f"[TELEGRAM DEBUG] config_key={config_key}, chat_id={msg.chat_id}, config_found={bool(chat_config)}, execute={execute_enabled}, track={track_enabled}")
+        
         if not execute_enabled and not track_enabled:
+            _print_flush(f"[TELEGRAM] Skipping - execution/tracking not enabled for chat {msg.chat_id}")
             return
         
         signal = None
