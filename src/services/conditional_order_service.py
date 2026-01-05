@@ -404,13 +404,13 @@ class IndiaPriceMonitor(PriceMonitor):
     async def start(self):
         """Start polling for price updates."""
         self.is_running = True
-        print(f"[INDIA] Starting price monitor for {self.symbol} {self.strike}{self.opt_type}")
+        print(f"[INDIA] Starting price monitor for {self.symbol} {self.strike}{self.opt_type}", flush=True)
         
         instrument_key = await self._lookup_instrument_key()
         if instrument_key:
-            print(f"[INDIA] Monitoring option premium via {instrument_key}")
+            print(f"[INDIA] Monitoring option premium via {instrument_key}", flush=True)
         else:
-            print(f"[INDIA] Using fallback monitoring (index price)")
+            print(f"[INDIA] ❌ No instrument key - cannot monitor option premium", flush=True)
         
         while self.is_running and self._error_count < self._max_errors:
             try:
@@ -435,6 +435,7 @@ class IndiaPriceMonitor(PriceMonitor):
                 if hasattr(self.broker_instance, 'get_ltp'):
                     ltp = await self.broker_instance.get_ltp(self._instrument_key)
                     if ltp:
+                        print(f"[INDIA] LTP for {self._instrument_key}: ₹{ltp:.2f}", flush=True)
                         return float(ltp)
                 
                 if hasattr(self.broker_instance, 'get_quote'):
@@ -442,29 +443,17 @@ class IndiaPriceMonitor(PriceMonitor):
                     if quote and isinstance(quote, dict):
                         for key, data in quote.items():
                             if hasattr(data, 'last_price'):
-                                return float(data.last_price)
+                                ltp = float(data.last_price)
+                                print(f"[INDIA] Quote LTP for {self._instrument_key}: ₹{ltp:.2f}")
+                                return ltp
                             elif isinstance(data, dict) and 'last_price' in data:
-                                return float(data['last_price'])
+                                ltp = float(data['last_price'])
+                                print(f"[INDIA] Quote LTP for {self._instrument_key}: ₹{ltp:.2f}")
+                                return ltp
             except Exception as e:
                 print(f"[INDIA] Broker quote failed for {self._instrument_key}: {e}")
         
-        try:
-            import yfinance as yf
-            loop = asyncio.get_event_loop()
-            
-            yf_symbol = "^NSEI" if self.symbol.upper() == 'NIFTY' else "^NSEBANK" if self.symbol.upper() == 'BANKNIFTY' else self.symbol
-            
-            def get_index_price():
-                ticker = yf.Ticker(yf_symbol)
-                fast_info = ticker.fast_info
-                return fast_info.get('lastPrice') or fast_info.get('regularMarketPrice')
-            
-            index_price = await loop.run_in_executor(None, get_index_price)
-            if index_price:
-                return float(index_price)
-        except Exception as e:
-            print(f"[INDIA] yfinance fallback failed: {e}")
-        
+        print(f"[INDIA] ⚠️ No option premium available for {self.symbol} {self.strike}{self.opt_type} - broker API required")
         return None
 
 
@@ -971,15 +960,22 @@ class ConditionalOrderService:
     
     def _run_event_loop(self):
         """Run the asyncio event loop in a separate thread."""
+        import sys
+        print("[CONDITIONAL] Starting event loop thread...", flush=True)
+        
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
         
         try:
             self._loop.run_until_complete(self._main_loop())
         except Exception as e:
-            print(f"[CONDITIONAL] Event loop error: {e}")
+            print(f"[CONDITIONAL] Event loop error: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            sys.stdout.flush()
         finally:
             self._loop.close()
+            print("[CONDITIONAL] Event loop closed", flush=True)
     
     async def _main_loop(self):
         """Main service loop."""
@@ -994,15 +990,18 @@ class ConditionalOrderService:
     
     async def _restore_active_orders(self):
         """Restore monitoring for active orders after restart."""
+        print("[CONDITIONAL] Checking for active orders to restore...", flush=True)
         active_orders = get_active_conditional_orders()
+        print(f"[CONDITIONAL] Found {len(active_orders)} active orders", flush=True)
         
         for order in active_orders:
             order_id = order['id']
             self.pending_orders[order_id] = order
+            print(f"[CONDITIONAL] Restoring monitor for order #{order_id}: {order.get('symbol')} {order.get('strike')}{order.get('opt_type')}", flush=True)
             await self._start_monitor(order_id, order)
         
         if active_orders:
-            print(f"[CONDITIONAL] Restored {len(active_orders)} active orders")
+            print(f"[CONDITIONAL] ✓ Restored {len(active_orders)} active orders", flush=True)
     
     def stop(self):
         """Stop the conditional order service."""

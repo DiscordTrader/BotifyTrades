@@ -1152,6 +1152,28 @@ class UpstoxBroker(BrokerInterface):
             print(f"[UPSTOX] Error parsing expiry '{expiry}': {e}")
             return expiry.upper().replace('/', '')
     
+    async def get_ltp(self, instrument_key: str) -> Optional[float]:
+        """Get last traded price for an instrument key (used by conditional order monitoring)."""
+        if not self.quote_api:
+            return None
+        
+        try:
+            result = await asyncio.to_thread(
+                self.quote_api.ltp,
+                symbol=instrument_key,
+                api_version='2.0'
+            )
+            if result and result.data:
+                for key, data in result.data.items():
+                    if hasattr(data, 'last_price'):
+                        return float(data.last_price)
+                    elif isinstance(data, dict) and 'last_price' in data:
+                        return float(data['last_price'])
+            return None
+        except Exception as e:
+            print(f"[{self.name}] Error getting LTP for {instrument_key}: {e}")
+            return None
+    
     async def get_quote(self, symbol: str) -> Dict[str, Any]:
         """Get current quote for a symbol"""
         if not self.quote_api:
