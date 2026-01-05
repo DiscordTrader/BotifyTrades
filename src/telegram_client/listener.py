@@ -433,15 +433,20 @@ class TelegramListener:
         
         signal = None
         
+        _print_flush(f"[TELEGRAM DEBUG] Trying {len(self._parsers)} parsers: {list(self._parsers.keys())}")
+        
         for parser_name, parser_func in self._parsers.items():
             try:
                 result = parser_func(msg.content)
+                _print_flush(f"[TELEGRAM DEBUG] Parser {parser_name}: {'MATCH' if result else 'no match'}")
                 if result:
                     signal = result
-                    print(f"[TELEGRAM] Signal parsed by {parser_name}: {result.get('action', '')} {result.get('symbol', '')}")
+                    _print_flush(f"[TELEGRAM] Signal parsed by {parser_name}: {result.get('action', '')} {result.get('symbol', '')}")
                     break
             except Exception as e:
-                print(f"[TELEGRAM] Parser {parser_name} error: {e}")
+                _print_flush(f"[TELEGRAM] Parser {parser_name} error: {e}")
+                import traceback
+                traceback.print_exc()
         
         if signal:
             signal['platform'] = 'telegram'
