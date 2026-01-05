@@ -129,8 +129,10 @@ print_step 5 6 "Pushing to origin..."
 
 # Use credential helper with RELEASE_TOKEN for secure push
 if [ -n "$RELEASE_TOKEN" ]; then
-    # Configure credential helper to use token (doesn't expose in URL/logs)
-    git -c credential.helper="!f() { echo username=x-access-token; echo password=$RELEASE_TOKEN; }; f" \
+    # Clear any cached credentials first
+    git credential-cache exit 2>/dev/null || true
+    # Fine-grained PATs require username=oauth2 (not x-access-token)
+    git -c credential.helper="!f() { echo username=oauth2; echo password=$RELEASE_TOKEN; }; f" \
         push https://github.com/$PRIVATE_REPO.git main
 else
     git push origin main
