@@ -35,6 +35,16 @@ The **Portfolio Simulation Engine** projects portfolio growth using various posi
 
 **Conditional Order Monitoring System** monitors price conditions and executes orders when triggered, supporting signals with "over/above" and "under/below" triggers, SL/PT, and position sizing. It uses a three-tier price monitoring fallback (broker-native APIs → Finnhub API → yfinance). Indian market conditional orders are supported via Upstox/Zerodha APIs or yfinance.
 
+**Expiry Resolver Service** (`src/services/expiry_resolver.py`) automatically picks the next valid expiry for Indian F&O signals when not specified:
+- Fetches instrument masters from broker APIs (Upstox V2 option contracts, Zerodha instrument master)
+- TTL-based caching (12 hours default) to minimize API calls
+- Supports multiple date formats: MM/DD, YYYY-MM-DD, DD-MMM-YY, DDMMMYY, month codes (JAN, FEB)
+- Symbol alias normalization: NIFTY50 → NIFTY, BANK NIFTY → BANKNIFTY
+- Resolves both OPTIONS (strike + option type) and FUTURES (month code)
+- Falls back to hardcoded expiry calculation if broker API unavailable
+- NSE weekly expiry: **Tuesday** (effective September 2025) for NIFTY only
+- Monthly expiry: Last Tuesday for BANKNIFTY, FINNIFTY, MIDCPNIFTY, stock F&O
+
 **Signal Tracking System** provides comprehensive lifecycle tracking for all signals from detection through broker execution with full audit trails. Features include:
 - Full signal lifecycle states: DETECTED → VALIDATED → SUBMITTED → EXECUTED/REJECTED/FAILED
 - Immutable audit trail via `signal_event_transitions` table recording every state change
