@@ -141,7 +141,7 @@ jobs:
 
   build-macos-intel:
     needs: set-build-type
-    runs-on: macos-13
+    runs-on: macos-15
     
     steps:
       - name: Download modified source
