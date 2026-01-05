@@ -75,7 +75,7 @@ restore_files() {
     echo "Cleaning up temporary files..."
     rm -rf dist_obf
     rm -rf packaging/macos/build_temp
-    rm -rf license/pyarmor_runtime_000000
+    rm -rf license/pyarmor_runtime_*
 }
 
 # Set trap to restore files on exit
@@ -111,9 +111,15 @@ cp -f "dist_obf/constants.py" "license/config/constants.py"
 cp -f "dist_obf/manager_secure.py" "license/client/manager_secure.py"
 cp -f "dist_obf/manager_activation.py" "license/client/manager_activation.py"
 
-# Copy PyArmor runtime
-mkdir -p "license/pyarmor_runtime_000000"
-cp -r dist_obf/pyarmor_runtime_000000/* "license/pyarmor_runtime_000000/" 2>/dev/null || true
+# Copy PyArmor runtime (dynamic name detection)
+PYARMOR_RUNTIME=$(ls -d dist_obf/pyarmor_runtime_* 2>/dev/null | head -1 | xargs basename)
+if [ -z "$PYARMOR_RUNTIME" ]; then
+    echo "ERROR: No PyArmor runtime found in dist_obf!"
+    exit 1
+fi
+echo "Found PyArmor runtime: $PYARMOR_RUNTIME"
+mkdir -p "license/$PYARMOR_RUNTIME"
+cp -r "dist_obf/$PYARMOR_RUNTIME/"* "license/$PYARMOR_RUNTIME/"
 
 # Clean previous builds
 echo ""

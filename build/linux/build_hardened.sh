@@ -100,8 +100,9 @@ echo "[5/7] Locating PyArmor runtime module..."
 cd build/linux/obfuscated
 PYARMOR_RUNTIME=$(ls -d pyarmor_runtime_* 2>/dev/null | head -1)
 if [ -z "$PYARMOR_RUNTIME" ]; then
-    echo "WARNING: No PyArmor runtime found, using default name"
-    PYARMOR_RUNTIME="pyarmor_runtime_000000"
+    echo "ERROR: No PyArmor runtime found in obfuscated directory!"
+    echo "Expected pyarmor_runtime_* folder in build/linux/obfuscated/"
+    exit 1
 else
     echo "Found runtime: $PYARMOR_RUNTIME"
 fi

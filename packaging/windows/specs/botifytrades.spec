@@ -8,6 +8,7 @@
 
 import os
 import sys
+import glob
 from datetime import datetime
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(SPEC), '..', '..', '..')))
@@ -24,6 +25,18 @@ SPEC_DIR = os.path.dirname(os.path.abspath(SPEC))
 PROJECT_ROOT = os.path.abspath(os.path.join(SPEC_DIR, '..', '..', '..'))
 DIST_DIR = os.path.join(PROJECT_ROOT, 'packaging', 'windows', 'dist')
 WORK_DIR = os.path.join(PROJECT_ROOT, 'packaging', 'windows', 'build_temp')
+
+# Find PyArmor runtime module (dynamically named)
+pyarmor_hidden = []
+for pattern in ['license/pyarmor_runtime_*', 'src/pyarmor_runtime_*', 'pyarmor_runtime_*']:
+    for runtime_dir in glob.glob(os.path.join(PROJECT_ROOT, pattern)):
+        if os.path.isdir(runtime_dir):
+            runtime_name = os.path.basename(runtime_dir)
+            pyarmor_hidden.append(runtime_name)
+            print(f"[BUILD] Found PyArmor runtime: {runtime_name}")
+
+if not pyarmor_hidden:
+    print("[BUILD] WARNING: No PyArmor runtime found - build may fail if code is obfuscated")
 
 # Include SSL certificates for HTTPS requests
 import certifi
@@ -93,7 +106,7 @@ a = Analysis(
         'src.setup_wizard',
         'setup_wizard',
         'certifi',  # SSL certificates
-        'pyarmor_runtime_000000',  # PyArmor runtime for obfuscated license
+    ] + pyarmor_hidden + [  # PyArmor runtime (dynamically detected)
         # PySide6 for Setup Wizard GUI
         'PySide6',
         'PySide6.QtWidgets',

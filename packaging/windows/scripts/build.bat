@@ -73,9 +73,23 @@ copy /Y "dist_obf\constants.py" "license\config\constants.py" >nul
 copy /Y "dist_obf\manager_secure.py" "license\client\manager_secure.py" >nul
 copy /Y "dist_obf\manager_activation.py" "license\client\manager_activation.py" >nul
 
-REM Copy PyArmor runtime
-if not exist "license\pyarmor_runtime_000000" mkdir "license\pyarmor_runtime_000000"
-xcopy /Y /E "dist_obf\pyarmor_runtime_000000\*" "license\pyarmor_runtime_000000\" >nul
+REM Copy PyArmor runtime (dynamic name detection with delayed expansion)
+setlocal enabledelayedexpansion
+set "PYARMOR_RUNTIME="
+for /d %%d in (dist_obf\pyarmor_runtime_*) do (
+    if not defined PYARMOR_RUNTIME (
+        set "PYARMOR_RUNTIME=%%~nxd"
+        echo Found PyArmor runtime: %%~nxd
+    )
+)
+if not defined PYARMOR_RUNTIME (
+    echo ERROR: No PyArmor runtime found in dist_obf!
+    endlocal
+    goto :restore
+)
+if not exist "license\!PYARMOR_RUNTIME!" mkdir "license\!PYARMOR_RUNTIME!"
+xcopy /Y /E "dist_obf\!PYARMOR_RUNTIME!\*" "license\!PYARMOR_RUNTIME!\" >nul
+endlocal
 
 REM Clean previous builds
 echo.
@@ -159,7 +173,7 @@ REM Clean up
 echo Cleaning up temporary files...
 if exist "dist_obf" rmdir /s /q "dist_obf"
 if exist "packaging\windows\build_temp" rmdir /s /q "packaging\windows\build_temp"
-if exist "license\pyarmor_runtime_000000" rmdir /s /q "license\pyarmor_runtime_000000"
+for /d %%d in (license\pyarmor_runtime_*) do rmdir /s /q "%%d"
 
 echo.
 echo ========================================================================
