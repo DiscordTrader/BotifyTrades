@@ -82,6 +82,13 @@ a = Analysis(
         'hmac',
         'hashlib',
         
+        # Logging (critical for PyInstaller)
+        'logging',
+        'logging.handlers',
+        'logging.config',
+        'src.logging_config',
+        'logging_config',
+        
         # Encryption (for credential storage)
         'cryptography',
         'cryptography.fernet',

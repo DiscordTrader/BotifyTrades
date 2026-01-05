@@ -68,6 +68,11 @@ a = Analysis(
         'hmac',
         'uuid',
         'sqlite3',
+        'logging',
+        'logging.handlers',
+        'logging.config',
+        'src.logging_config',
+        'logging_config',
         # Note: license/, services/, gui_app/, src/ modules are included via datas section
         # Only include imports for modules that exist as actual Python packages
         'certifi',
