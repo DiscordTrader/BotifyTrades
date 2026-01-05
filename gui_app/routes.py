@@ -2728,6 +2728,74 @@ def register_routes(app):
             })
             return result
     
+    @app.route('/api/ibkr/balance', methods=['GET'])
+    def api_ibkr_balance() -> Any:
+        """Get Interactive Brokers account balance for Dashboard"""
+        import asyncio
+        
+        cache_key = 'ibkr_balance'
+        if cache_key in _api_cache:
+            cached_value, timestamp = _api_cache[cache_key]
+            if time.time() - timestamp < 5:
+                return cached_value
+        
+        if not _bot_instance or not hasattr(_bot_instance, 'ibkr_broker') or not _bot_instance.ibkr_broker:
+            result = jsonify({
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'equity': 0,
+                'unrealized_pnl': 0,
+                'status': 'not_initialized'
+            })
+            _api_cache[cache_key] = (result, time.time())
+            return result
+        
+        try:
+            loop = _bot_instance.loop if hasattr(_bot_instance, 'loop') else asyncio.new_event_loop()
+            future = asyncio.run_coroutine_threadsafe(
+                _bot_instance.ibkr_broker.get_account_info(),
+                loop
+            )
+            account_info = future.result(timeout=10)
+            
+            if account_info:
+                result = jsonify({
+                    'buying_power': account_info.get('buying_power', 0),
+                    'cash_balance': account_info.get('cash', account_info.get('available_funds', 0)),
+                    'net_liquidation': account_info.get('net_liquidation', account_info.get('portfolio_value', 0)),
+                    'equity': account_info.get('equity', account_info.get('net_liquidation', 0)),
+                    'unrealized_pnl': account_info.get('unrealized_pnl', 0),
+                    'status': 'ok'
+                })
+                _api_cache[cache_key] = (result, time.time())
+                return result
+            else:
+                result = jsonify({
+                    'buying_power': 0,
+                    'cash_balance': 0,
+                    'net_liquidation': 0,
+                    'equity': 0,
+                    'unrealized_pnl': 0,
+                    'status': 'loading'
+                })
+                _api_cache[cache_key] = (result, time.time())
+                return result
+                
+        except Exception as e:
+            print(f"[API] Exception in IBKR balance endpoint: {e}")
+            result = jsonify({
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'equity': 0,
+                'unrealized_pnl': 0,
+                'status': 'error',
+                'error': str(e)
+            })
+            _api_cache[cache_key] = (result, time.time())
+            return result
+    
     @app.route('/api/alpaca/positions/<symbol>/close', methods=['POST'])
     def api_alpaca_close_position(symbol: str) -> Any:
         """Close an Alpaca position by symbol with optional limit price and partial quantity"""
