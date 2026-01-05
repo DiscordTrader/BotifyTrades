@@ -1223,11 +1223,14 @@ def parse_india_option_signal(text: str) -> Optional[Dict[str, Any]]:
     
     text_clean = text.strip()
     
-    text_clean = re.sub(r'\*\*(.+?)\*\*', r'\1', text_clean)
-    text_clean = re.sub(r'\*(.+?)\*', r'\1', text_clean)
-    text_clean = re.sub(r'__(.+?)__', r'\1', text_clean)
-    text_clean = re.sub(r'_(.+?)_', r'\1', text_clean)
-    text_clean = re.sub(r'~~(.+?)~~', r'\1', text_clean)
+    text_clean = re.sub(r'\*\*(.+?)\*\*', r'\1', text_clean, flags=re.DOTALL)
+    text_clean = re.sub(r'\*(.+?)\*', r'\1', text_clean, flags=re.DOTALL)
+    text_clean = re.sub(r'__(.+?)__', r'\1', text_clean, flags=re.DOTALL)
+    text_clean = re.sub(r'_(.+?)_', r'\1', text_clean, flags=re.DOTALL)
+    text_clean = re.sub(r'~~(.+?)~~', r'\1', text_clean, flags=re.DOTALL)
+    
+    text_clean = re.sub(r'[\r\n]+', ' ', text_clean)
+    text_clean = re.sub(r'\s+', ' ', text_clean).strip()
     
     for i, pattern in enumerate(INDIA_PATTERNS):
         regex = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
@@ -1364,10 +1367,13 @@ def parse_india_stock_signal(text: str) -> Optional[Dict[str, Any]]:
         Dictionary with signal details or None if not matched
     """
     text_clean = text.strip()
-    text_clean = re.sub(r'\*\*(.+?)\*\*', r'\1', text_clean)
-    text_clean = re.sub(r'\*(.+?)\*', r'\1', text_clean)
-    text_clean = re.sub(r'__(.+?)__', r'\1', text_clean)
-    text_clean = re.sub(r'_(.+?)_', r'\1', text_clean)
+    text_clean = re.sub(r'\*\*(.+?)\*\*', r'\1', text_clean, flags=re.DOTALL)
+    text_clean = re.sub(r'\*(.+?)\*', r'\1', text_clean, flags=re.DOTALL)
+    text_clean = re.sub(r'__(.+?)__', r'\1', text_clean, flags=re.DOTALL)
+    text_clean = re.sub(r'_(.+?)_', r'\1', text_clean, flags=re.DOTALL)
+    
+    text_clean = re.sub(r'[\r\n]+', ' ', text_clean)
+    text_clean = re.sub(r'\s+', ' ', text_clean).strip()
     
     regex = re.compile(INDIA_STK_PATTERN, re.IGNORECASE | re.MULTILINE)
     m = regex.search(text_clean)
