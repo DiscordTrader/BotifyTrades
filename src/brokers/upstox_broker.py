@@ -894,6 +894,7 @@ class UpstoxBroker(BrokerInterface):
         
         Supports both Alpaca-style and Webull-style parameters.
         Looks up the actual Upstox instrument key from API.
+        Uses ExpiryResolver to auto-pick next valid expiry when not specified.
         
         For INDIA signals, use 'lots' parameter (raw lot count) to avoid double multiplication.
         If 'lots' is provided, we multiply by lot_size from API.
@@ -904,6 +905,49 @@ class UpstoxBroker(BrokerInterface):
         actual_price = price or limit_price
         
         opt_suffix = 'CE' if actual_opt_type.lower() in ('c', 'call', 'ce') else 'PE'
+        
+        if not actual_expiry:
+            try:
+                from src.services.expiry_resolver import expiry_resolver
+                resolved = expiry_resolver.resolve_option(
+                    underlying=symbol.upper(),
+                    strike=float(strike),
+                    option_type=opt_suffix,
+                    expiry=None,
+                    broker='upstox'
+                )
+                if resolved:
+                    actual_expiry = resolved.expiry_date
+                    print(f"[UPSTOX] Auto-resolved expiry: {actual_expiry}")
+                    if resolved.instrument_key:
+                        instrument_token = resolved.instrument_key
+                        api_lot_size = resolved.lot_size
+                        print(f"[UPSTOX] ✓ Using resolved instrument: {instrument_token} (lot_size={api_lot_size})")
+                        
+                        if lots is not None:
+                            order_qty = lots * api_lot_size
+                            print(f"[UPSTOX] Quantity: {lots} lots x {api_lot_size} = {order_qty} units")
+                        else:
+                            order_qty = quantity or qty or api_lot_size
+                            print(f"[UPSTOX] Quantity: {order_qty} units (passed directly)")
+                        
+                        symbol_display = f"{symbol.upper()} {int(strike)} {opt_suffix} {actual_expiry}"
+                        print(f"[UPSTOX] Placing option: {action} {order_qty} {instrument_token} @ {actual_price}")
+                        
+                        order_type = 'limit' if actual_price else 'market'
+                        return await self.place_order(
+                            symbol=instrument_token,
+                            action=action,
+                            quantity=order_qty,
+                            order_type=order_type,
+                            price=actual_price,
+                            product_type='INTRADAY',
+                            symbol_display=symbol_display
+                        )
+            except ImportError:
+                print("[UPSTOX] ExpiryResolver not available, using fallback lookup")
+            except Exception as e:
+                print(f"[UPSTOX] ExpiryResolver error: {e}, using fallback lookup")
         
         lookup_result = await self._lookup_instrument_key(
             symbol=symbol.upper(),
