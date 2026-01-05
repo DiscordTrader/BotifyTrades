@@ -14,40 +14,45 @@ openai_imports = collect_submodules('openai')
 ta_imports = collect_submodules('ta')
 crypto_imports = collect_submodules('cryptography')
 
+# Get the project root directory (parent of build/)
+import sys
+SPEC_DIR = os.path.dirname(os.path.abspath(SPEC))
+PROJECT_ROOT = os.path.dirname(SPEC_DIR)
+
 # Analysis - what files to include
 a = Analysis(
-    ['src/selfbot_webull.py'],  # Main script
-    pathex=[],
+    [os.path.join(PROJECT_ROOT, 'src', 'selfbot_webull.py')],  # Main script
+    pathex=[PROJECT_ROOT],
     binaries=[],
     datas=[
-        # Include all source modules
-        ('src/setup_wizard.py', 'src'),
-        ('src/license_manager_activation.py', 'src'),
-        ('src/license_manager_secure.py', 'src'),
-        ('src/machine_fingerprint.py', 'src'),
-        ('src/ai_analyzer.py', 'src'),
-        ('src/swing_analyzer.py', 'src'),
-        ('src/fundamental_analyzer.py', 'src'),
-        ('src/news_service.py', 'src'),
-        ('src/alpha_vantage_scanner.py', 'src'),
-        ('src/broker_interface.py', 'src'),
-        ('src/broker_manager.py', 'src'),
-        ('src/trade_tracker.py', 'src'),
+        # Include all source modules (using absolute paths)
+        (os.path.join(PROJECT_ROOT, 'src', 'setup_wizard.py'), 'src'),
+        (os.path.join(PROJECT_ROOT, 'src', 'license_manager_activation.py'), 'src'),
+        (os.path.join(PROJECT_ROOT, 'src', 'license_manager_secure.py'), 'src'),
+        (os.path.join(PROJECT_ROOT, 'src', 'machine_fingerprint.py'), 'src'),
+        (os.path.join(PROJECT_ROOT, 'src', 'ai_analyzer.py'), 'src'),
+        (os.path.join(PROJECT_ROOT, 'src', 'swing_analyzer.py'), 'src'),
+        (os.path.join(PROJECT_ROOT, 'src', 'fundamental_analyzer.py'), 'src'),
+        (os.path.join(PROJECT_ROOT, 'src', 'news_service.py'), 'src'),
+        (os.path.join(PROJECT_ROOT, 'src', 'alpha_vantage_scanner.py'), 'src'),
+        (os.path.join(PROJECT_ROOT, 'src', 'broker_interface.py'), 'src'),
+        (os.path.join(PROJECT_ROOT, 'src', 'broker_manager.py'), 'src'),
+        (os.path.join(PROJECT_ROOT, 'src', 'trade_tracker.py'), 'src'),
         
         # Include GUI app (Flask web control panel)
-        ('gui_app/__init__.py', 'gui_app'),
-        ('gui_app/app.py', 'gui_app'),
-        ('gui_app/routes.py', 'gui_app'),
-        ('gui_app/database.py', 'gui_app'),
-        ('gui_app/config_service.py', 'gui_app'),
-        ('gui_app/discord_notifier.py', 'gui_app'),
-        ('gui_app/lot_matcher.py', 'gui_app'),
-        ('gui_app/templates', 'gui_app/templates'),
-        ('gui_app/static', 'gui_app/static'),
+        (os.path.join(PROJECT_ROOT, 'gui_app', '__init__.py'), 'gui_app'),
+        (os.path.join(PROJECT_ROOT, 'gui_app', 'app.py'), 'gui_app'),
+        (os.path.join(PROJECT_ROOT, 'gui_app', 'routes.py'), 'gui_app'),
+        (os.path.join(PROJECT_ROOT, 'gui_app', 'database.py'), 'gui_app'),
+        (os.path.join(PROJECT_ROOT, 'gui_app', 'config_service.py'), 'gui_app'),
+        (os.path.join(PROJECT_ROOT, 'gui_app', 'discord_notifier.py'), 'gui_app'),
+        (os.path.join(PROJECT_ROOT, 'gui_app', 'lot_matcher.py'), 'gui_app'),
+        (os.path.join(PROJECT_ROOT, 'gui_app', 'templates'), 'gui_app/templates'),
+        (os.path.join(PROJECT_ROOT, 'gui_app', 'static'), 'gui_app/static'),
         
         # Include broker modules
-        ('src/brokers', 'src/brokers'),
-        ('src/data_providers', 'src/data_providers'),
+        (os.path.join(PROJECT_ROOT, 'src', 'brokers'), 'src/brokers'),
+        (os.path.join(PROJECT_ROOT, 'src', 'data_providers'), 'src/data_providers'),
     ],
     hiddenimports=discord_imports + webull_imports + openai_imports + ta_imports + crypto_imports + [
         # Market Data
@@ -151,10 +156,16 @@ exe = EXE(
 # Post-build: Copy config.ini template to dist folder
 print("\n[BUILD] Copying config.ini to dist folder...")
 try:
-    if not os.path.exists('dist'):
-        os.makedirs('dist')
-    shutil.copyfile('config.ini', 'dist/config.ini')
-    print("[BUILD] ✓ config.ini copied to dist/")
+    dist_dir = os.path.join(PROJECT_ROOT, 'dist')
+    if not os.path.exists(dist_dir):
+        os.makedirs(dist_dir)
+    src_config = os.path.join(PROJECT_ROOT, 'config.ini')
+    dst_config = os.path.join(dist_dir, 'config.ini')
+    if os.path.exists(src_config):
+        shutil.copyfile(src_config, dst_config)
+        print("[BUILD] ✓ config.ini copied to dist/")
+    else:
+        print("[BUILD] ⚠️  config.ini not found, skipping")
 except Exception as e:
     print(f"[BUILD] ⚠️  Warning: Could not copy config.ini: {e}")
 
