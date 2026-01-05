@@ -182,11 +182,12 @@ if [ "$BUILD_TYPE_UPPER" == "ADMIN" ]; then
     exit 0
 fi
 
-# USER BUILD: Trigger workflow on PUBLIC repo (hardened build)
+# USER BUILD: Trigger workflow on PRIVATE repo (builds here, releases to PUBLIC)
 echo ""
 echo -e "${CYAN}============================================${NC}"
 echo -e "${CYAN}  USER BUILD - Building HARDENED release${NC}"
-echo -e "${CYAN}  Target: PUBLIC repo (BotifyTrades)${NC}"
+echo -e "${CYAN}  Build on: PRIVATE repo (source code)${NC}"
+echo -e "${CYAN}  Release to: PUBLIC repo (BotifyTrades)${NC}"
 echo -e "${CYAN}============================================${NC}"
 echo ""
 
@@ -194,28 +195,30 @@ if [ -z "$RELEASE_TOKEN" ]; then
     print_warning "RELEASE_TOKEN not set - skipping automatic build trigger"
     echo ""
     echo "To trigger the User build manually:"
-    echo "  1. Go to: https://github.com/$PUBLIC_REPO/actions"
+    echo "  1. Go to: https://github.com/$PRIVATE_REPO/actions"
     echo "  2. Select 'Build User Release (Hardened)' workflow"
     echo "  3. Click 'Run workflow'"
     echo "  4. Enter version: $VERSION"
     echo ""
 else
-    # Trigger repository_dispatch event on PUBLIC repo for hardened user build
+    # Trigger repository_dispatch event on PRIVATE repo (has source code)
+    # The workflow will build here and publish release to PUBLIC repo
     RESPONSE=$(curl -s -X POST \
         -H "Accept: application/vnd.github+json" \
         -H "Authorization: Bearer $RELEASE_TOKEN" \
         -H "X-GitHub-Api-Version: 2022-11-28" \
-        "https://api.github.com/repos/$PUBLIC_REPO/dispatches" \
+        "https://api.github.com/repos/$PRIVATE_REPO/dispatches" \
         -d "{\"event_type\":\"user_release_ready\",\"client_payload\":{\"version\":\"$VERSION\",\"build_type\":\"USER\"}}" \
         -w "%{http_code}" \
         -o /dev/null)
     
     if [ "$RESPONSE" == "204" ]; then
-        print_success "Hardened User build workflow triggered on $PUBLIC_REPO"
+        print_success "Hardened User build workflow triggered on $PRIVATE_REPO"
+        echo "  (Release will be published to $PUBLIC_REPO)"
     else
         print_warning "Failed to trigger workflow (HTTP $RESPONSE)"
         echo "You may need to trigger manually at:"
-        echo "  https://github.com/$PUBLIC_REPO/actions"
+        echo "  https://github.com/$PRIVATE_REPO/actions"
     fi
 fi
 
@@ -233,6 +236,6 @@ echo "  • All user trading features"
 echo ""
 
 echo "Next steps:"
-echo "  • Check build status: https://github.com/$PUBLIC_REPO/actions"
+echo "  • Check build status: https://github.com/$PRIVATE_REPO/actions"
 echo "  • View release: https://github.com/$PUBLIC_REPO/releases"
 echo ""
