@@ -7762,17 +7762,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 except Exception as e:
                     print(f"[PNL_TRACKER] ❌ Failed to post Trade Summary: {e}")
             
-            # Dual-mode routing: require BOTH execute_enabled AND category='EXECUTE' for safety
-            # This prevents accidental execution if flags get out of sync with category
-            is_execute_channel = channel_category == 'EXECUTE' if channel_category else False
-            if execute_enabled and is_execute_channel:
+            # Execute if execute_enabled flag is True (category is for UI organization only)
+            if execute_enabled:
                 print(f"[ROUTE] EXECUTE enabled - adding to order queue", flush=True)
                 print(f"[DEBUG] Queue size BEFORE put: {self.order_queue.qsize()}", flush=True)
-            elif execute_enabled and not is_execute_channel:
-                print(f"[ROUTE] ⚠️ SAFETY BLOCK: execute_enabled=True but category={channel_category} - NOT executing (sync issue detected)")
-                execute_enabled = False  # Force disable for rest of this signal
             
-            if execute_enabled and is_execute_channel:
+            if execute_enabled:
                 
                 # Add EXECUTION position size percentage for dynamic qty calculation
                 # Priority: Signal percentage (from Jacob/etc with _calculate_qty) > Channel percentage
@@ -7816,11 +7811,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 print(f"[DEBUG] Queue size AFTER put: {self.order_queue.qsize()}", flush=True)
                 print(f"[QUEUE] ✅ Signal successfully queued for LIVE execution", flush=True)
             
-            if track_enabled and not execute_enabled:
-                # Check if paper trading is enabled for this tracking channel
+            # Paper trading - runs if track_enabled AND paper_trade_enabled (regardless of execute_enabled)
+            if track_enabled:
                 paper_trade_enabled = channel_info.get('paper_trade_enabled', 0) if channel_info else 0
                 if paper_trade_enabled:
-                    print(f"[ROUTE] TRACK channel with PAPER TRADING enabled - executing in PAPER mode")
+                    dual_mode = execute_enabled
+                    print(f"[ROUTE] {'DUAL mode - ' if dual_mode else ''}PAPER TRADING enabled - executing in PAPER mode")
                     
                     # Add TRACKING position size percentage for paper trading
                     # Priority: Signal percentage (from Jacob/etc with _calculate_qty) > Channel percentage
@@ -7871,8 +7867,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[QUEUE] ✓ Signal queued for PAPER execution")
                 else:
                     print(f"[ROUTE] TRACK-only channel (paper trading disabled) - signal saved for performance analysis")
-            elif track_enabled and execute_enabled:
-                print(f"[ROUTE] DUAL mode - executing trade AND tracking performance")
             
             # Legacy fallback - channel in config.ini CHANNEL_IDS list
             if not execute_enabled and not track_enabled and message.channel.id in CHANNEL_IDS:
@@ -7974,8 +7968,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 opt['author'] = author_name
                             await self.order_queue.put(opt)
                             print(f"[QUEUE] ✓ Signal queued for execution")
-                        elif execute_enabled and not is_exec_channel:
-                            print(f"[ROUTE] ⚠️ SAFETY BLOCK: execute_enabled=True but category={channel_category} - NOT executing")
                         return
                     else:
                         print(f"[BULLWINKLE STC] ⚠️ No open option position found for {stk['symbol']} - processing as stock")
@@ -7990,13 +7982,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             self._save_signal_to_db(stk, message.channel.id, message.id, author_name)
             print(f"[DATABASE] ✓ Signal saved to database")
             
-            # Dual-mode routing: require BOTH execute_enabled AND category='EXECUTE' for safety
-            is_execute_channel = channel_category == 'EXECUTE' if channel_category else False
-            if execute_enabled and not is_execute_channel:
-                print(f"[ROUTE] ⚠️ SAFETY BLOCK: execute_enabled=True but category={channel_category} - NOT executing stock signal")
-                execute_enabled = False  # Force disable for rest of this signal
-            
-            if execute_enabled and is_execute_channel:
+            # Execute if execute_enabled flag is True (category is for UI organization only)
+            if execute_enabled:
                 print(f"[ROUTE] EXECUTE enabled - adding to order queue")
                 
                 # Log bracket order info if present
@@ -8041,11 +8028,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 await self.order_queue.put(stk)
                 print(f"[QUEUE] ✓ Signal queued for LIVE execution")
             
-            if track_enabled and not execute_enabled:
-                # Check if paper trading is enabled for this tracking channel
+            # Paper trading - runs if track_enabled AND paper_trade_enabled (regardless of execute_enabled)
+            if track_enabled:
                 paper_trade_enabled = channel_info.get('paper_trade_enabled', 0) if channel_info else 0
                 if paper_trade_enabled:
-                    print(f"[ROUTE] TRACK channel with PAPER TRADING enabled - executing in PAPER mode")
+                    dual_mode = execute_enabled
+                    print(f"[ROUTE] {'DUAL mode - ' if dual_mode else ''}PAPER TRADING enabled - executing in PAPER mode")
                     
                     # Add TRACKING position size percentage for paper trading
                     # Priority: Signal percentage (from Jacob/etc with _calculate_qty) > Channel percentage
