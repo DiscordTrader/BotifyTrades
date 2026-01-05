@@ -6678,16 +6678,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
 
     async def on_message(self, message: discord.Message):
         # FIRST: Deduplicate messages BEFORE any processing (Discord self-bot sometimes delivers duplicate events)
+        # Ensure lock exists (create if needed)
+        if not self._message_dedupe_lock:
+            self._message_dedupe_lock = asyncio.Lock()
+        
         # Check-and-add atomically using lock to prevent race condition
-        if self._message_dedupe_lock:
-            async with self._message_dedupe_lock:
-                if message.id in self._processed_messages:
-                    return  # Silent skip for duplicates
-                self._processed_messages.add(message.id)
-        else:
-            # Fallback if lock not initialized - still check but may have race condition
+        async with self._message_dedupe_lock:
             if message.id in self._processed_messages:
-                return
+                return  # Silent skip for duplicates
             self._processed_messages.add(message.id)
         
         # Limit cache size to prevent memory growth (do this after dedupe check)
