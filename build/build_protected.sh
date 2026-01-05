@@ -80,6 +80,16 @@ echo ""
 echo "[3/6] Copying obfuscated files..."
 cp -r src src_backup
 cp -r obfuscated/src/* src/
+
+# Critical: Copy PyArmor runtime module to src/ directory
+echo "Copying PyArmor runtime module..."
+for runtime_dir in obfuscated/pyarmor_runtime_*; do
+    if [ -d "$runtime_dir" ]; then
+        runtime_name=$(basename "$runtime_dir")
+        echo "Found runtime: $runtime_name"
+        cp -r "$runtime_dir" "src/$runtime_name"
+    fi
+done
 echo ""
 
 echo "[4/6] Building protected executable..."

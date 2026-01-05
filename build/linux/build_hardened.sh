@@ -94,10 +94,21 @@ python3 -m pyarmor gen \
 # Copy only non-Python files (configs, etc.)
 cp config.ini.example build/linux/obfuscated/
 
+# Locate PyArmor runtime module (dynamic name)
+echo ""
+echo "[5/7] Locating PyArmor runtime module..."
+cd build/linux/obfuscated
+PYARMOR_RUNTIME=$(ls -d pyarmor_runtime_* 2>/dev/null | head -1)
+if [ -z "$PYARMOR_RUNTIME" ]; then
+    echo "WARNING: No PyArmor runtime found, using default name"
+    PYARMOR_RUNTIME="pyarmor_runtime_000000"
+else
+    echo "Found runtime: $PYARMOR_RUNTIME"
+fi
+
 # Build with PyInstaller from obfuscated code
 echo ""
-echo "[5/7] Building executable from obfuscated code..."
-cd build/linux/obfuscated
+echo "[6/7] Building executable from obfuscated code..."
 
 python3 -m PyInstaller --clean \
     --noconfirm \
@@ -106,7 +117,7 @@ python3 -m PyInstaller --clean \
     --add-data "gui_app:gui_app" \
     --add-data "brokers:brokers" \
     --add-data "broker_sync_service.py:." \
-    --add-data "pyarmor_runtime_000000:pyarmor_runtime_000000" \
+    --add-data "$PYARMOR_RUNTIME:$PYARMOR_RUNTIME" \
     --add-data "config.ini.example:." \
     --paths "." \
     --hidden-import discord \

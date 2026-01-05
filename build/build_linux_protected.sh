@@ -161,6 +161,16 @@ if [ $? -ne 0 ]; then
     rm -rf src_backup obfuscated
     exit 1
 fi
+
+# Critical: Copy PyArmor runtime module to src/ directory
+echo "Copying PyArmor runtime module..."
+for runtime_dir in obfuscated/pyarmor_runtime_*; do
+    if [ -d "$runtime_dir" ]; then
+        runtime_name=$(basename "$runtime_dir")
+        echo "Found runtime: $runtime_name"
+        cp -r "$runtime_dir" "src/$runtime_name"
+    fi
+done
 echo "✓ Source overwritten with obfuscated code"
 
 echo ""

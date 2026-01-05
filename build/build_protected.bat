@@ -106,6 +106,13 @@ echo.
 echo [4/6] Replacing source with obfuscated version...
 rmdir /s /q src
 xcopy obfuscated\src\ src\ /E /I /Y /Q
+
+REM Critical: Copy PyArmor runtime module to src/ directory
+echo Copying PyArmor runtime module...
+for /d %%d in (obfuscated\pyarmor_runtime_*) do (
+    echo Found runtime: %%~nxd
+    xcopy "%%d" "src\%%~nxd\" /E /I /Y /Q >nul
+)
 echo.
 
 echo [5/6] Building protected executable...

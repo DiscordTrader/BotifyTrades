@@ -106,6 +106,20 @@ REM Build with PyInstaller from obfuscated code
 echo.
 echo [6/8] Building executable from obfuscated code...
 cd build\windows\obfuscated
+
+REM Locate PyArmor runtime module (dynamic name) - must be done AFTER cd
+echo Locating PyArmor runtime module...
+set "PYARMOR_RUNTIME="
+for /d %%d in (pyarmor_runtime_*) do (
+    echo Found runtime: %%d
+    set "PYARMOR_RUNTIME=%%d"
+)
+if not defined PYARMOR_RUNTIME (
+    echo ERROR: No PyArmor runtime found! Build may fail.
+    echo Expected pyarmor_runtime_* folder in build\windows\obfuscated\
+    pause
+    exit /b 1
+)
 pyinstaller --clean ^
     --noconfirm ^
     --onefile ^
@@ -114,7 +128,7 @@ pyinstaller --clean ^
     --key "%ENCRYPTION_KEY%" ^
     --add-data "gui_app;gui_app" ^
     --add-data "brokers;brokers" ^
-    --add-data "pyarmor_runtime_000000;pyarmor_runtime_000000" ^
+    --add-data "%PYARMOR_RUNTIME%;%PYARMOR_RUNTIME%" ^
     --add-data "config.ini.example;." ^
     --hidden-import discord ^
     --hidden-import webull ^

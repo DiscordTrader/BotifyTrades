@@ -136,6 +136,13 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
+
+REM Critical: Copy PyArmor runtime module to src/ directory
+echo Copying PyArmor runtime module...
+for /d %%d in (obfuscated\pyarmor_runtime_*) do (
+    echo Found runtime: %%~nxd
+    xcopy "%%d" "src\%%~nxd\" /E /I /Y /Q >nul
+)
 echo ✓ Source overwritten with obfuscated code
 
 echo.
