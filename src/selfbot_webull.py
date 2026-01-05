@@ -8501,7 +8501,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             current_price = None
             try:
                 if hasattr(self, 'upstox_broker') and self.upstox_broker:
-                    current_price = self.upstox_broker.get_ltp(symbol, float(strike) if strike else 0, opt_type, expiry)
+                    instrument_key = await self.upstox_broker._lookup_instrument_key(
+                        symbol, float(strike) if strike else 0, opt_type, expiry
+                    )
+                    if instrument_key:
+                        current_price = await self.upstox_broker.get_ltp(instrument_key)
                     if current_price:
                         _original_print(f"[TELEGRAM CONDITIONAL] Current LTP: ₹{current_price:.2f}", flush=True)
                         
