@@ -164,7 +164,7 @@ class TrayIconManager(QObject):
                 self.status_action.setText(f"Status: {status_text}")
     
     def show_notification(self, title: str, message: str, 
-                         icon: QSystemTrayIcon.MessageIcon = QSystemTrayIcon.Information,
+                         icon: QSystemTrayIcon.MessageIcon = QSystemTrayIcon.MessageIcon.Information,
                          duration_ms: int = 5000):
         """Show a system notification"""
         if self.tray_icon and self.tray_icon.isVisible():

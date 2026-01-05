@@ -10066,6 +10066,11 @@ Environment Variables:
                             5000
                         )
                         
+                        import webbrowser
+                        url = f"http://localhost:{startup_state['gui_port']}"
+                        _original_print(f"[GUI] Opening control panel in browser: {url}")
+                        webbrowser.open(url)
+                        
                         def shutdown_handler():
                             _original_print("[MAIN] Shutdown requested from tray")
                             _discord_shutdown_event.set()
