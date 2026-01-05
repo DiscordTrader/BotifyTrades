@@ -1586,7 +1586,29 @@ async function loadConditionalOrders() {
                 sizeDisplay = `${calcQty} shares`;
             }
             
-            const isActive = statusLower === 'active_monitoring' || statusLower === 'pending';
+            const isActive = statusLower === 'active_monitoring' || statusLower === 'pending' || statusLower === 'tracking' || statusLower === 'fallback_monitoring';
+            
+            // Calculate time remaining if expires_at exists
+            let timeRemaining = '';
+            if (order.expires_at) {
+                const expiresAt = new Date(order.expires_at);
+                const now = new Date();
+                const diffMs = expiresAt - now;
+                if (diffMs > 0) {
+                    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                    if (hours > 24) {
+                        const days = Math.floor(hours / 24);
+                        timeRemaining = `${days}d ${hours % 24}h`;
+                    } else if (hours > 0) {
+                        timeRemaining = `${hours}h ${mins}m`;
+                    } else {
+                        timeRemaining = `${mins}m`;
+                    }
+                } else {
+                    timeRemaining = 'Expired';
+                }
+            }
             
             html += `
                 <div class="position-card" style="border-left: 3px solid ${statusColor};">
@@ -1625,6 +1647,11 @@ async function loadConditionalOrders() {
                             <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
                                 <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Profit Target</div>
                                 <div style="font-size: 0.875rem; font-weight: 500; color: ${ptDisplay ? '#22c55e' : 'var(--text-muted)'};">${ptDisplay || '—'}</div>
+                            </div>
+                            
+                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Timeout</div>
+                                <div style="font-size: 0.875rem; font-weight: 500; color: ${timeRemaining === 'Expired' ? '#ef4444' : timeRemaining ? '#f59e0b' : 'var(--text-muted)'};">${timeRemaining || 'No limit'}</div>
                             </div>
                             
                             ${isActive ? `
