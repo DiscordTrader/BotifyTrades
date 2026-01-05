@@ -10001,7 +10001,7 @@ Environment Variables:
     if use_gui_mode:
         # GUI mode: Show splash screen with progress, then minimize to system tray
         try:
-            from PySide6.QtWidgets import QApplication
+            from PySide6.QtWidgets import QApplication, QSystemTrayIcon
             from PySide6.QtCore import QTimer, Signal, QObject
             from src.gui.splash_screen import SplashScreen, StartupProgress
             from src.gui.system_tray import setup_system_tray, get_tray_manager
@@ -10062,7 +10062,7 @@ Environment Variables:
                         tray.show_notification(
                             "BotifyTrades",
                             "Bot started successfully! Running in background.",
-                            tray.tray_icon.Information,
+                            QSystemTrayIcon.MessageIcon.Information,
                             5000
                         )
                         

@@ -240,7 +240,7 @@ if __name__ == "__main__":
         QTimer.singleShot(2500, lambda: tray.show_notification(
             "BotifyTrades",
             "Bot is now running and monitoring for signals",
-            QSystemTrayIcon.Information
+            QSystemTrayIcon.MessageIcon.Information
         ))
     
     QTimer.singleShot(500, simulate_startup)
