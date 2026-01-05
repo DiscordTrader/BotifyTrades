@@ -7981,6 +7981,33 @@ def get_conditional_orders_by_status(status: str, market: str = None) -> List[Di
         return []
 
 
+def get_all_conditional_orders(market: str = None, limit: int = 50) -> List[Dict[str, Any]]:
+    """Get all conditional orders including ERROR/CANCELLED/EXECUTED, optionally filtered by market"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        if market:
+            cursor.execute('''
+                SELECT * FROM conditional_orders
+                WHERE market = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+            ''', (market, limit))
+        else:
+            cursor.execute('''
+                SELECT * FROM conditional_orders
+                ORDER BY created_at DESC
+                LIMIT ?
+            ''', (limit,))
+        
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DATABASE] Error getting all conditional orders: {e}")
+        return []
+
+
 def get_conditional_order_audit(order_id: int) -> List[Dict[str, Any]]:
     """Get audit trail for a conditional order"""
     conn = get_connection()

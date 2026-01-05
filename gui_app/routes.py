@@ -5465,6 +5465,7 @@ def register_routes(app):
         try:
             status = request.args.get('status', None)
             market = request.args.get('market', None)
+            active_only = request.args.get('active_only', 'false').lower() == 'true'
             
             # Normalize market values: 'IN' -> 'INDIA', 'CA' -> 'CANADA'
             if market:
@@ -5473,8 +5474,10 @@ def register_routes(app):
             
             if status:
                 orders = db.get_conditional_orders_by_status(status, market=market)
-            else:
+            elif active_only:
                 orders = db.get_active_conditional_orders(market=market)
+            else:
+                orders = db.get_all_conditional_orders(market=market)
             return jsonify({'success': True, 'orders': orders})
         except Exception as e:
             print(f"[API] Error fetching conditional orders: {e}")
