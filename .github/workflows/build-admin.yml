@@ -7,6 +7,11 @@ on:
         description: 'Version number (e.g., 3.2.1)'
         required: true
         type: string
+  repository_dispatch:
+    types: [admin_release_ready]
+
+env:
+  VERSION: ${{ github.event.inputs.version || github.event.client_payload.version }}
 
 jobs:
   set-build-type:
@@ -25,7 +30,7 @@ jobs:
       - name: Update version
         run: |
           BUILD_DATE=$(date +%Y-%m-%d)
-          sed -i "s/APP_VERSION = \"[^\"]*\"/APP_VERSION = \"${{ inputs.version }}\"/" upgrade/version.py
+          sed -i "s/APP_VERSION = \"[^\"]*\"/APP_VERSION = \"${{ env.VERSION }}\"/" upgrade/version.py
           sed -i "s/BUILD_DATE = \"[^\"]*\"/BUILD_DATE = \"$BUILD_DATE\"/" upgrade/version.py
       
       - name: Upload modified source
@@ -92,7 +97,7 @@ jobs:
       - name: Upload Windows Admin
         uses: actions/upload-artifact@v4
         with:
-          name: BotifyTrades-Admin-Windows-v${{ inputs.version }}
+          name: BotifyTrades-Admin-Windows-v${{ env.VERSION }}
           path: dist/
           retention-days: 90
 
@@ -136,7 +141,7 @@ jobs:
       - name: Upload Linux Admin
         uses: actions/upload-artifact@v4
         with:
-          name: BotifyTrades-Admin-Linux-v${{ inputs.version }}
+          name: BotifyTrades-Admin-Linux-v${{ env.VERSION }}
           path: dist/
           retention-days: 90
 
@@ -180,7 +185,7 @@ jobs:
       - name: Upload macOS Admin
         uses: actions/upload-artifact@v4
         with:
-          name: BotifyTrades-Admin-macOS-v${{ inputs.version }}
+          name: BotifyTrades-Admin-macOS-v${{ env.VERSION }}
           path: dist/
           retention-days: 90
 
