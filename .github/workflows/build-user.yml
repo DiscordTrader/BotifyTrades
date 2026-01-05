@@ -78,12 +78,27 @@ jobs:
           chcp 65001
           $env:PYTHONIOENCODING = "utf-8"
           pyarmor gen --output obfuscated src/
+          
+          # Debug: Show what PyArmor created
+          Write-Host "=== PyArmor output structure ==="
+          Get-ChildItem -Path obfuscated -Recurse | Select-Object FullName
       
       - name: Build with PyInstaller
         shell: powershell
         run: |
           Copy-Item -Path src -Destination src_backup -Recurse
           Copy-Item -Path obfuscated/src/* -Destination src/ -Recurse -Force
+          
+          # Critical: Copy PyArmor runtime module to src/ directory
+          Get-ChildItem -Path obfuscated -Directory -Filter "pyarmor_runtime_*" | ForEach-Object {
+            Write-Host "Copying PyArmor runtime: $($_.Name)"
+            Copy-Item -Path $_.FullName -Destination "src/$($_.Name)" -Recurse -Force
+          }
+          
+          # Debug: Verify runtime is in place
+          Write-Host "=== src/ directory structure ==="
+          Get-ChildItem -Path src -Directory -Filter "pyarmor_runtime_*"
+          
           pyinstaller build/build_exe.spec --clean --noconfirm
           Remove-Item -Path src -Recurse -Force
           Move-Item -Path src_backup -Destination src
@@ -128,8 +143,27 @@ jobs:
       - name: Obfuscate and Build
         run: |
           pyarmor gen --output obfuscated src/
+          
+          # Debug: Show what PyArmor created
+          echo "=== PyArmor output structure ==="
+          find obfuscated -type d -name "pyarmor_runtime_*"
+          
           cp -r src src_backup
           cp -r obfuscated/src/* src/
+          
+          # Critical: Copy PyArmor runtime module to src/ directory
+          for runtime_dir in obfuscated/pyarmor_runtime_*; do
+            if [ -d "$runtime_dir" ]; then
+              runtime_name=$(basename "$runtime_dir")
+              echo "Copying PyArmor runtime: $runtime_name"
+              cp -r "$runtime_dir" "src/$runtime_name"
+            fi
+          done
+          
+          # Debug: Verify runtime is in place
+          echo "=== src/ directory pyarmor runtimes ==="
+          ls -la src/pyarmor_runtime_* 2>/dev/null || echo "No runtime found in src/"
+          
           pyinstaller build/build_exe.spec --clean --noconfirm
           rm -rf src && mv src_backup src
           mv dist/DiscordTradingBot dist/BotifyTrades-Linux
@@ -173,8 +207,27 @@ jobs:
       - name: Obfuscate and Build
         run: |
           pyarmor gen --output obfuscated src/
+          
+          # Debug: Show what PyArmor created
+          echo "=== PyArmor output structure ==="
+          find obfuscated -type d -name "pyarmor_runtime_*"
+          
           cp -r src src_backup
           cp -r obfuscated/src/* src/
+          
+          # Critical: Copy PyArmor runtime module to src/ directory
+          for runtime_dir in obfuscated/pyarmor_runtime_*; do
+            if [ -d "$runtime_dir" ]; then
+              runtime_name=$(basename "$runtime_dir")
+              echo "Copying PyArmor runtime: $runtime_name"
+              cp -r "$runtime_dir" "src/$runtime_name"
+            fi
+          done
+          
+          # Debug: Verify runtime is in place
+          echo "=== src/ directory pyarmor runtimes ==="
+          ls -la src/pyarmor_runtime_* 2>/dev/null || echo "No runtime found in src/"
+          
           pyinstaller build/build_exe.spec --clean --noconfirm
           rm -rf src && mv src_backup src
           mv dist/DiscordTradingBot dist/BotifyTrades-macOS-Intel
@@ -218,8 +271,27 @@ jobs:
       - name: Obfuscate and Build
         run: |
           pyarmor gen --output obfuscated src/
+          
+          # Debug: Show what PyArmor created
+          echo "=== PyArmor output structure ==="
+          find obfuscated -type d -name "pyarmor_runtime_*"
+          
           cp -r src src_backup
           cp -r obfuscated/src/* src/
+          
+          # Critical: Copy PyArmor runtime module to src/ directory
+          for runtime_dir in obfuscated/pyarmor_runtime_*; do
+            if [ -d "$runtime_dir" ]; then
+              runtime_name=$(basename "$runtime_dir")
+              echo "Copying PyArmor runtime: $runtime_name"
+              cp -r "$runtime_dir" "src/$runtime_name"
+            fi
+          done
+          
+          # Debug: Verify runtime is in place
+          echo "=== src/ directory pyarmor runtimes ==="
+          ls -la src/pyarmor_runtime_* 2>/dev/null || echo "No runtime found in src/"
+          
           pyinstaller build/build_exe.spec --clean --noconfirm
           rm -rf src && mv src_backup src
           mv dist/DiscordTradingBot dist/BotifyTrades-macOS-Silicon
