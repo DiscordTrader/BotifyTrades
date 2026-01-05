@@ -977,7 +977,7 @@ class UpstoxBroker(BrokerInterface):
             from urllib.parse import quote
             encoded_key = quote(underlying_key, safe='')
             
-            full_url = f"{url}?instrument_key={encoded_key}"
+            full_url = f"{url}?instrument_key={encoded_key}&expiry_date={formatted_expiry}"
             print(f"[UPSTOX] Fetching contracts from: {full_url}")
             
             headers = {
@@ -1002,9 +1002,12 @@ class UpstoxBroker(BrokerInterface):
                 return None
             
             contracts = data.get('data', [])
-            print(f"[UPSTOX] Found {len(contracts)} contracts for expiry {formatted_expiry}")
+            print(f"[UPSTOX] Found {len(contracts)} total contracts")
             
-            for contract in contracts:
+            expiry_contracts = [c for c in contracts if c.get('expiry') == formatted_expiry]
+            print(f"[UPSTOX] Filtered to {len(expiry_contracts)} contracts for expiry {formatted_expiry}")
+            
+            for contract in expiry_contracts:
                 if (contract.get('strike_price') == strike and 
                     contract.get('instrument_type') == opt_type):
                     instrument_key = contract.get('instrument_key')
@@ -1012,7 +1015,7 @@ class UpstoxBroker(BrokerInterface):
                     print(f"[UPSTOX] ✓ Found instrument key: {instrument_key} (lot_size={lot_size})")
                     return instrument_key, lot_size
             
-            matching_type = [c for c in contracts if c.get('instrument_type') == opt_type]
+            matching_type = [c for c in expiry_contracts if c.get('instrument_type') == opt_type]
             if matching_type:
                 closest = min(matching_type, key=lambda c: abs(c.get('strike_price', 0) - strike))
                 closest_strike = closest.get('strike_price')
