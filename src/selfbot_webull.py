@@ -6488,6 +6488,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     conditional_order_service.set_broker_instance('Webull', self.broker)
                 if hasattr(self, 'paper_broker') and self.paper_broker:
                     conditional_order_service.set_broker_instance('Alpaca', self.paper_broker)
+                # Register India brokers for conditional order monitoring
+                if hasattr(self, 'upstox_broker') and self.upstox_broker:
+                    conditional_order_service.set_broker_instance('upstox', self.upstox_broker)
+                    print("[STARTUP] ✓ Upstox registered for conditional order monitoring", flush=True)
+                if hasattr(self, 'dhanq_broker') and self.dhanq_broker:
+                    conditional_order_service.set_broker_instance('dhanq', self.dhanq_broker)
+                    print("[STARTUP] ✓ DhanQ registered for conditional order monitoring", flush=True)
                 
                 # Capture the Discord event loop for thread-safe queue operations
                 discord_loop = asyncio.get_running_loop()
