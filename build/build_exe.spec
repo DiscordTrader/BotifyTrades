@@ -25,34 +25,11 @@ a = Analysis(
     pathex=[PROJECT_ROOT],
     binaries=[],
     datas=[
-        # Include all source modules (using absolute paths)
-        (os.path.join(PROJECT_ROOT, 'src', 'setup_wizard.py'), 'src'),
-        (os.path.join(PROJECT_ROOT, 'src', 'license_manager_activation.py'), 'src'),
-        (os.path.join(PROJECT_ROOT, 'src', 'license_manager_secure.py'), 'src'),
-        (os.path.join(PROJECT_ROOT, 'src', 'machine_fingerprint.py'), 'src'),
-        (os.path.join(PROJECT_ROOT, 'src', 'ai_analyzer.py'), 'src'),
-        (os.path.join(PROJECT_ROOT, 'src', 'swing_analyzer.py'), 'src'),
-        (os.path.join(PROJECT_ROOT, 'src', 'fundamental_analyzer.py'), 'src'),
-        (os.path.join(PROJECT_ROOT, 'src', 'news_service.py'), 'src'),
-        (os.path.join(PROJECT_ROOT, 'src', 'alpha_vantage_scanner.py'), 'src'),
-        (os.path.join(PROJECT_ROOT, 'src', 'broker_interface.py'), 'src'),
-        (os.path.join(PROJECT_ROOT, 'src', 'broker_manager.py'), 'src'),
-        (os.path.join(PROJECT_ROOT, 'src', 'trade_tracker.py'), 'src'),
+        # Include entire src directory (simpler and more reliable)
+        (os.path.join(PROJECT_ROOT, 'src'), 'src'),
         
         # Include GUI app (Flask web control panel)
-        (os.path.join(PROJECT_ROOT, 'gui_app', '__init__.py'), 'gui_app'),
-        (os.path.join(PROJECT_ROOT, 'gui_app', 'app.py'), 'gui_app'),
-        (os.path.join(PROJECT_ROOT, 'gui_app', 'routes.py'), 'gui_app'),
-        (os.path.join(PROJECT_ROOT, 'gui_app', 'database.py'), 'gui_app'),
-        (os.path.join(PROJECT_ROOT, 'gui_app', 'config_service.py'), 'gui_app'),
-        (os.path.join(PROJECT_ROOT, 'gui_app', 'discord_notifier.py'), 'gui_app'),
-        (os.path.join(PROJECT_ROOT, 'gui_app', 'lot_matcher.py'), 'gui_app'),
-        (os.path.join(PROJECT_ROOT, 'gui_app', 'templates'), 'gui_app/templates'),
-        (os.path.join(PROJECT_ROOT, 'gui_app', 'static'), 'gui_app/static'),
-        
-        # Include broker modules
-        (os.path.join(PROJECT_ROOT, 'src', 'brokers'), 'src/brokers'),
-        (os.path.join(PROJECT_ROOT, 'src', 'data_providers'), 'src/data_providers'),
+        (os.path.join(PROJECT_ROOT, 'gui_app'), 'gui_app'),
     ],
     hiddenimports=discord_imports + webull_imports + openai_imports + ta_imports + crypto_imports + [
         # Market Data
