@@ -743,6 +743,9 @@ def register_routes(app):
         # Allow build info API (for UI to check admin features)
         if request.path == '/api/system/build-info':
             return None
+        # Allow conditional orders status API (for debugging)
+        if request.path == '/api/conditional_orders/status':
+            return None
         # Allow user dashboard routes (handled by user_login_required decorator)
         if request.path.startswith('/user/') or request.path.startswith('/api/user/'):
             return None
@@ -5526,6 +5529,35 @@ def register_routes(app):
             return jsonify({'audit': audit})
         except Exception as e:
             print(f"[API] Error fetching conditional order audit: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/conditional_orders/status', methods=['GET'])
+    def api_get_conditional_order_service_status():
+        """Get diagnostic status of the conditional order service"""
+        try:
+            from src.services.conditional_order_service import conditional_order_service, get_thread_logs
+            
+            thread_alive = False
+            thread_id = None
+            if conditional_order_service._thread:
+                thread_alive = conditional_order_service._thread.is_alive()
+                thread_id = conditional_order_service._thread.ident
+            
+            return jsonify({
+                'success': True,
+                'service_running': conditional_order_service.is_running,
+                'thread_alive': thread_alive,
+                'thread_id': thread_id,
+                'monitors_count': len(conditional_order_service.monitors),
+                'pending_orders_count': len(conditional_order_service.pending_orders),
+                'registered_brokers': list(conditional_order_service.broker_instances.keys()),
+                'loop_running': conditional_order_service._loop is not None and conditional_order_service._loop.is_running() if conditional_order_service._loop else False,
+                'active_monitor_ids': list(conditional_order_service.monitors.keys()),
+                'recent_logs': get_thread_logs()[-20:],
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
             return jsonify({'error': str(e)}), 500
     
     @app.route('/api/conditional_orders/<int:order_id>/offset', methods=['POST'])

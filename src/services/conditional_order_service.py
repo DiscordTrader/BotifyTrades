@@ -8,13 +8,28 @@ import asyncio
 import aiohttp
 import threading
 import json
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from collections import deque
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+_thread_logs = deque(maxlen=100)
+
+def _log(msg: str, flush: bool = True):
+    """Thread-safe logging that captures to both stdout and internal buffer."""
+    timestamp = datetime.now().strftime('%H:%M:%S')
+    full_msg = f"[{timestamp}] {msg}"
+    _thread_logs.append(full_msg)
+    print(msg, flush=flush)
+
+def get_thread_logs() -> list:
+    """Get recent logs from the monitoring thread."""
+    return list(_thread_logs)
 
 from gui_app.database import (
     get_conditional_order_settings,
@@ -404,13 +419,14 @@ class IndiaPriceMonitor(PriceMonitor):
     async def start(self):
         """Start polling for price updates."""
         self.is_running = True
-        print(f"[INDIA] Starting price monitor for {self.symbol} {self.strike}{self.opt_type}", flush=True)
+        _log(f"[INDIA] Starting price monitor for {self.symbol} {self.strike}{self.opt_type}")
         
         instrument_key = await self._lookup_instrument_key()
         if instrument_key:
-            print(f"[INDIA] Monitoring option premium via {instrument_key}", flush=True)
+            _log(f"[INDIA] Monitoring option premium via {instrument_key}")
         else:
-            print(f"[INDIA] ❌ No instrument key - cannot monitor option premium", flush=True)
+            _log(f"[INDIA] ❌ No instrument key - cannot monitor option premium")
+            return
         
         while self.is_running and self._error_count < self._max_errors:
             try:
@@ -418,15 +434,16 @@ class IndiaPriceMonitor(PriceMonitor):
                 if price and price != self.last_price:
                     self.last_price = price
                     self._error_count = 0
+                    _log(f"[INDIA] Price update: {self.symbol} {self.strike}{self.opt_type} = ₹{price:.2f}")
                     await self.callback(self.symbol, price)
             except Exception as e:
                 self._error_count += 1
-                print(f"[INDIA] Error fetching price for {self.symbol}: {e}")
+                _log(f"[INDIA] Error fetching price for {self.symbol}: {e}")
             
             await asyncio.sleep(self.poll_interval)
         
         if self._error_count >= self._max_errors:
-            print(f"[INDIA] Too many errors, stopping monitor for {self.symbol}")
+            _log(f"[INDIA] Too many errors, stopping monitor for {self.symbol}")
     
     async def _fetch_price(self) -> Optional[float]:
         """Fetch option premium from broker using resolved instrument key."""
@@ -945,23 +962,29 @@ class ConditionalOrderService:
     def start(self):
         """Start the conditional order service."""
         if self.is_running:
+            print("[CONDITIONAL] Service already running", flush=True)
             return
         
         if not self.is_enabled():
-            print("[CONDITIONAL] Service is disabled in settings")
+            print("[CONDITIONAL] Service is disabled in settings", flush=True)
             return
         
         self.is_running = True
         
-        self._thread = threading.Thread(target=self._run_event_loop, daemon=True)
+        self._thread = threading.Thread(target=self._run_event_loop, daemon=True, name="ConditionalOrderService")
         self._thread.start()
         
-        print("[CONDITIONAL] Service started")
+        import time
+        time.sleep(0.5)
+        
+        if self._thread.is_alive():
+            print(f"[CONDITIONAL] ✓ Service thread started (ID: {self._thread.ident})", flush=True)
+        else:
+            print("[CONDITIONAL] ❌ Service thread failed to start", flush=True)
     
     def _run_event_loop(self):
         """Run the asyncio event loop in a separate thread."""
-        import sys
-        print("[CONDITIONAL] Starting event loop thread...", flush=True)
+        _log("[CONDITIONAL] Starting event loop thread...")
         
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
@@ -969,13 +992,12 @@ class ConditionalOrderService:
         try:
             self._loop.run_until_complete(self._main_loop())
         except Exception as e:
-            print(f"[CONDITIONAL] Event loop error: {e}", flush=True)
+            _log(f"[CONDITIONAL] Event loop error: {e}")
             import traceback
             traceback.print_exc()
-            sys.stdout.flush()
         finally:
             self._loop.close()
-            print("[CONDITIONAL] Event loop closed", flush=True)
+            _log("[CONDITIONAL] Event loop closed")
     
     async def _main_loop(self):
         """Main service loop."""
@@ -990,18 +1012,18 @@ class ConditionalOrderService:
     
     async def _restore_active_orders(self):
         """Restore monitoring for active orders after restart."""
-        print("[CONDITIONAL] Checking for active orders to restore...", flush=True)
+        _log("[CONDITIONAL] Checking for active orders to restore...")
         active_orders = get_active_conditional_orders()
-        print(f"[CONDITIONAL] Found {len(active_orders)} active orders", flush=True)
+        _log(f"[CONDITIONAL] Found {len(active_orders)} active orders")
         
         for order in active_orders:
             order_id = order['id']
             self.pending_orders[order_id] = order
-            print(f"[CONDITIONAL] Restoring monitor for order #{order_id}: {order.get('symbol')} {order.get('strike')}{order.get('opt_type')}", flush=True)
+            _log(f"[CONDITIONAL] Restoring monitor for order #{order_id}: {order.get('symbol')} {order.get('strike')}{order.get('opt_type')}")
             await self._start_monitor(order_id, order)
         
         if active_orders:
-            print(f"[CONDITIONAL] ✓ Restored {len(active_orders)} active orders", flush=True)
+            _log(f"[CONDITIONAL] ✓ Restored {len(active_orders)} active orders")
     
     def stop(self):
         """Stop the conditional order service."""
