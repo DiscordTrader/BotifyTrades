@@ -3185,7 +3185,7 @@
   },
   "ALPACA_PAPER_DVLT_stock": {
     "entry_price": 0.94,
-    "highest_price": 1.3,
+    "highest_price": 1.32,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
