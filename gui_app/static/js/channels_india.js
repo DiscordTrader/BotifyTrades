@@ -876,7 +876,8 @@ async function cancelConditionalOrder(orderId) {
     try {
         const response = await fetch(`/api/conditional_orders/${orderId}/cancel`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: 'Cancelled via GUI' })
         });
         
         const data = await response.json();
