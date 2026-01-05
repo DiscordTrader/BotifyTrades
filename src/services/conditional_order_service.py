@@ -961,6 +961,11 @@ class ConditionalOrderService:
     
     def start(self):
         """Start the conditional order service."""
+        import sys
+        sys.stderr.write("[CONDITIONAL] start() called\n")
+        sys.stderr.flush()
+        print("[CONDITIONAL] start() called", flush=True)
+        
         if self.is_running:
             print("[CONDITIONAL] Service already running", flush=True)
             return
@@ -969,6 +974,8 @@ class ConditionalOrderService:
             print("[CONDITIONAL] Service is disabled in settings", flush=True)
             return
         
+        print("[CONDITIONAL] Creating service thread...", flush=True)
+        sys.stderr.write("[CONDITIONAL] Creating thread...\n")
         self.is_running = True
         
         self._thread = threading.Thread(target=self._run_event_loop, daemon=True, name="ConditionalOrderService")
@@ -981,6 +988,7 @@ class ConditionalOrderService:
             print(f"[CONDITIONAL] ✓ Service thread started (ID: {self._thread.ident})", flush=True)
         else:
             print("[CONDITIONAL] ❌ Service thread failed to start", flush=True)
+        sys.stdout.flush()
     
     def _run_event_loop(self):
         """Run the asyncio event loop in a separate thread."""

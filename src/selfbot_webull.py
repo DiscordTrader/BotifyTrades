@@ -6634,8 +6634,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         return False
                 
                 conditional_order_service.set_execution_callback(execute_conditional_order)
+                print(f"[STARTUP] Calling conditional_order_service.start() is_running={conditional_order_service.is_running}", flush=True)
                 conditional_order_service.start()
-                print("[STARTUP] ✓ Conditional Order Service started")
+                print(f"[STARTUP] ✓ Conditional Order Service started is_running={conditional_order_service.is_running}", flush=True)
             else:
                 print("[STARTUP] Conditional Order Service disabled (enable in Settings)")
         except ImportError as e:
