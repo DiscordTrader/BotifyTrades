@@ -8438,8 +8438,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     
                     _original_print(f"[TELEGRAM BRIDGE] Received signal: {signal.get('action')} {signal.get('symbol')}", flush=True)
                     
-                    await self.order_queue.put(signal)
-                    _original_print(f"[TELEGRAM BRIDGE] ✓ Signal forwarded to order queue", flush=True)
+                    if signal.get('_conditional_order') and signal.get('market') == 'INDIA':
+                        await self._route_telegram_conditional_order(signal)
+                    else:
+                        await self.order_queue.put(signal)
+                        _original_print(f"[TELEGRAM BRIDGE] ✓ Signal forwarded to order queue", flush=True)
                     
                 except std_queue.Empty:
                     pass
@@ -8452,6 +8455,67 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             except Exception as e:
                 _original_print(f"[TELEGRAM BRIDGE] Error: {e}", flush=True)
                 await asyncio.sleep(1.0)
+    
+    async def _route_telegram_conditional_order(self, signal):
+        """Route Telegram conditional order to conditional order service."""
+        try:
+            from src.services.conditional_order_service import conditional_order_service
+            from gui_app.database import create_conditional_order
+            
+            symbol = signal.get('symbol')
+            strike = signal.get('strike')
+            opt_type = signal.get('opt_type', 'C')
+            trigger_price = signal.get('trigger_price') or signal.get('price')
+            trigger_type = signal.get('trigger_type', 'over')
+            expiry = signal.get('expiry')
+            stop_loss = signal.get('stop_loss')
+            profit_targets = signal.get('profit_targets')
+            
+            _original_print(f"[TELEGRAM CONDITIONAL] ✓ Detected conditional order: {symbol} {strike}{opt_type} {trigger_type} ₹{trigger_price}", flush=True)
+            
+            if not conditional_order_service.is_enabled():
+                _original_print("[TELEGRAM CONDITIONAL] ⚠️ Conditional order service DISABLED - executing immediately", flush=True)
+                await self.order_queue.put(signal)
+                return
+            
+            order_data = {
+                'symbol': symbol,
+                'trigger_price': float(trigger_price) if trigger_price else 0,
+                'trigger_type': trigger_type,
+                'stop_loss': float(stop_loss) if stop_loss else None,
+                'profit_target': profit_targets[0] if profit_targets else None,
+                'position_size_pct': None,
+                'quantity': signal.get('qty', 1),
+                'broker_primary': signal.get('_broker_list', ['UPSTOX'])[0] if signal.get('_broker_list') else 'UPSTOX',
+                'market': 'INDIA',
+                'strike': float(strike) if strike else None,
+                'opt_type': opt_type[0].upper() if opt_type else 'C',
+                'expiry': expiry,
+                'channel_id': signal.get('channel_id'),
+                'author': signal.get('author'),
+            }
+            
+            order_id = create_conditional_order(order_data)
+            
+            if order_id:
+                _original_print(f"[TELEGRAM CONDITIONAL] ✓ Created conditional order #{order_id}", flush=True)
+                _original_print(f"[TELEGRAM CONDITIONAL]   Symbol: {symbol} {strike}{opt_type} exp={expiry}", flush=True)
+                _original_print(f"[TELEGRAM CONDITIONAL]   Trigger: {trigger_type.upper()} ₹{trigger_price}", flush=True)
+                if stop_loss:
+                    _original_print(f"[TELEGRAM CONDITIONAL]   SL: ₹{stop_loss}", flush=True)
+                if profit_targets:
+                    _original_print(f"[TELEGRAM CONDITIONAL]   Targets: {profit_targets}", flush=True)
+                
+                conditional_order_service.add_order(order_id, order_data)
+            else:
+                _original_print(f"[TELEGRAM CONDITIONAL] ❌ Failed to create conditional order", flush=True)
+                await self.order_queue.put(signal)
+                
+        except Exception as e:
+            _original_print(f"[TELEGRAM CONDITIONAL] ❌ Error routing conditional order: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            await self.order_queue.put(signal)
     
     async def worker(self):
         """Process orders from queue with pre-trade analysis"""
