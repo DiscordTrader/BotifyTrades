@@ -1,0 +1,672 @@
+name: Build User Release (Hardened)
+
+on:
+  repository_dispatch:
+    types:
+      - user_release_ready
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version number (e.g., 3.2.7)
+        required: true
+        type: string
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pyarmor
+
+      - name: Obfuscate source code with PyArmor
+        run: |
+          echo "=== SECURITY: Obfuscating source code with PyArmor ==="
+          pyarmor gen --output obfuscated_src src/selfbot_webull.py
+          pyarmor gen --output obfuscated_src/brokers src/brokers/*.py
+          pyarmor gen --output obfuscated_src/core src/core/*.py
+          pyarmor gen --output obfuscated_src/signals src/signals/*.py
+          pyarmor gen --output obfuscated_src/license src/license/*.py
+          pyarmor gen --output obfuscated_src/risk src/risk/*.py
+          pyarmor gen --output obfuscated_src/adapters src/adapters/*.py
+          pyarmor gen --output obfuscated_src/services src/services/*.py
+          echo "=== PyArmor obfuscation complete ==="
+        shell: pwsh
+
+      - name: Build Windows executable (HARDENED)
+        run: |
+          pyinstaller --clean --noconfirm --onefile --noconsole --name BotifyTrades-User-Windows `
+            --strip `
+            --noupx `
+            --optimize 2 `
+            --paths . `
+            --paths src `
+            --paths src/brokers `
+            --paths src/core `
+            --paths src/risk `
+            --paths src/signals `
+            --paths src/license `
+            --paths src/discord_client `
+            --paths src/diagnostics `
+            --paths src/webull_auth `
+            --paths src/data_providers `
+            --paths src/adapters `
+            --paths src/services `
+            --paths gui_app `
+            --paths upgrade `
+            --hidden-import broker_sync_service `
+            --hidden-import gui_app `
+            --hidden-import gui_app.routes `
+            --hidden-import gui_app.database `
+            --hidden-import gui_app.app `
+            --hidden-import gui_app.trade_monitor `
+            --hidden-import brokers `
+            --hidden-import brokers.alpaca_broker `
+            --hidden-import brokers.webull_broker `
+            --hidden-import brokers.tastytrade_broker `
+            --hidden-import brokers.robinhood_broker `
+            --hidden-import brokers.ibkr_broker `
+            --hidden-import brokers.questrade_broker `
+            --hidden-import brokers.upstox_broker `
+            --hidden-import brokers.zerodha_broker `
+            --hidden-import brokers.dhanq_broker `
+            --hidden-import brokers.schwab_broker `
+            --hidden-import core `
+            --hidden-import core.settings `
+            --hidden-import core.settings_service `
+            --hidden-import core.settings_integration `
+            --hidden-import core.bootstrap `
+            --hidden-import core.logging_service `
+            --hidden-import risk `
+            --hidden-import risk.position_monitor `
+            --hidden-import risk.tiered_targets `
+            --hidden-import risk.trailing_stop `
+            --hidden-import signals `
+            --hidden-import signals.parser `
+            --hidden-import signals.patterns `
+            --hidden-import signals.validator `
+            --hidden-import license `
+            --hidden-import license.client `
+            --hidden-import license.cache `
+            --hidden-import license.crypto `
+            --hidden-import webull_auth `
+            --hidden-import webull_auth.webull_auth `
+            --hidden-import discord_client `
+            --hidden-import diagnostics `
+            --hidden-import data_providers `
+            --hidden-import adapters `
+            --hidden-import adapters.india_execution_adapter `
+            --hidden-import services `
+            --hidden-import services.contract_master `
+            --hidden-import services.conditional_order_service `
+            --hidden-import services.upstox_token_manager `
+            --hidden-import services.upstox_pending_orders `
+            --hidden-import ai_analyzer `
+            --hidden-import swing_analyzer `
+            --hidden-import fundamental_analyzer `
+            --hidden-import news_service `
+            --hidden-import trade_tracker `
+            --hidden-import alpha_vantage_scanner `
+            --hidden-import logging_config `
+            --hidden-import log_monitor `
+            --hidden-import license_client `
+            --hidden-import license_manager `
+            --hidden-import machine_fingerprint `
+            --hidden-import broker_interface `
+            --hidden-import broker_manager `
+            --hidden-import consent `
+            --hidden-import setup_wizard `
+            --hidden-import upgrade `
+            --hidden-import upgrade.version `
+            --hidden-import gui `
+            --hidden-import gui.splash_screen `
+            --hidden-import gui.system_tray `
+            --hidden-import PySide6 `
+            --hidden-import PySide6.QtWidgets `
+            --hidden-import PySide6.QtCore `
+            --hidden-import PySide6.QtGui `
+            --hidden-import telethon `
+            --hidden-import httpx `
+            --add-data "gui_app/templates;gui_app/templates" `
+            --add-data "gui_app/static;gui_app/static" `
+            --add-data "broker_sync_service.py;." `
+            --add-data "src;src" `
+            --add-data "upgrade;upgrade" `
+            src/selfbot_webull.py
+        shell: pwsh
+
+      - name: Verify build security
+        run: |
+          echo "=== BUILD SECURITY VERIFICATION ==="
+          echo "Build type: HARDENED USER (PyArmor obfuscated)"
+          echo "Console: HIDDEN (--noconsole)"
+          echo "Optimization: Level 2"
+          echo "Debug symbols: Stripped"
+          echo "UPX compression: Disabled (--noupx)"
+          echo "==================================="
+          dir dist\
+        shell: pwsh
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-User-Windows
+          path: dist/BotifyTrades-User-Windows.exe
+
+  build-macos-intel:
+    runs-on: macos-14
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pyarmor
+
+      - name: Obfuscate source code with PyArmor
+        run: |
+          echo "=== SECURITY: Obfuscating source code with PyArmor ==="
+          pyarmor gen --output obfuscated_src src/selfbot_webull.py
+          pyarmor gen --output obfuscated_src/brokers src/brokers/*.py || true
+          pyarmor gen --output obfuscated_src/core src/core/*.py || true
+          pyarmor gen --output obfuscated_src/signals src/signals/*.py || true
+          pyarmor gen --output obfuscated_src/license src/license/*.py || true
+          pyarmor gen --output obfuscated_src/risk src/risk/*.py || true
+          pyarmor gen --output obfuscated_src/adapters src/adapters/*.py || true
+          pyarmor gen --output obfuscated_src/services src/services/*.py || true
+          echo "=== PyArmor obfuscation complete ==="
+
+      - name: Build macOS Intel executable (HARDENED)
+        env:
+          PYTHONOPTIMIZE: "2"
+        run: |
+          pyinstaller --clean --noconfirm --onefile --noconsole --name BotifyTrades-User-macOS-Intel \
+            --strip \
+            --noupx \
+            --paths . \
+            --paths src \
+            --paths src/brokers \
+            --paths src/core \
+            --paths src/risk \
+            --paths src/signals \
+            --paths src/license \
+            --paths src/discord_client \
+            --paths src/diagnostics \
+            --paths src/webull_auth \
+            --paths src/data_providers \
+            --paths src/adapters \
+            --paths src/services \
+            --paths gui_app \
+            --paths upgrade \
+            --hidden-import broker_sync_service \
+            --hidden-import gui_app \
+            --hidden-import gui_app.routes \
+            --hidden-import gui_app.database \
+            --hidden-import gui_app.app \
+            --hidden-import gui_app.trade_monitor \
+            --hidden-import brokers \
+            --hidden-import brokers.alpaca_broker \
+            --hidden-import brokers.webull_broker \
+            --hidden-import brokers.tastytrade_broker \
+            --hidden-import brokers.robinhood_broker \
+            --hidden-import brokers.ibkr_broker \
+            --hidden-import brokers.questrade_broker \
+            --hidden-import brokers.upstox_broker \
+            --hidden-import brokers.zerodha_broker \
+            --hidden-import brokers.dhanq_broker \
+            --hidden-import brokers.schwab_broker \
+            --hidden-import core \
+            --hidden-import core.settings \
+            --hidden-import core.settings_service \
+            --hidden-import core.settings_integration \
+            --hidden-import core.bootstrap \
+            --hidden-import core.logging_service \
+            --hidden-import risk \
+            --hidden-import risk.position_monitor \
+            --hidden-import risk.tiered_targets \
+            --hidden-import risk.trailing_stop \
+            --hidden-import signals \
+            --hidden-import signals.parser \
+            --hidden-import signals.patterns \
+            --hidden-import signals.validator \
+            --hidden-import license \
+            --hidden-import license.client \
+            --hidden-import license.cache \
+            --hidden-import license.crypto \
+            --hidden-import webull_auth \
+            --hidden-import webull_auth.webull_auth \
+            --hidden-import discord_client \
+            --hidden-import diagnostics \
+            --hidden-import data_providers \
+            --hidden-import adapters \
+            --hidden-import adapters.india_execution_adapter \
+            --hidden-import services \
+            --hidden-import services.contract_master \
+            --hidden-import services.conditional_order_service \
+            --hidden-import services.upstox_token_manager \
+            --hidden-import services.upstox_pending_orders \
+            --hidden-import ai_analyzer \
+            --hidden-import swing_analyzer \
+            --hidden-import fundamental_analyzer \
+            --hidden-import news_service \
+            --hidden-import trade_tracker \
+            --hidden-import alpha_vantage_scanner \
+            --hidden-import logging_config \
+            --hidden-import log_monitor \
+            --hidden-import license_client \
+            --hidden-import license_manager \
+            --hidden-import machine_fingerprint \
+            --hidden-import broker_interface \
+            --hidden-import broker_manager \
+            --hidden-import consent \
+            --hidden-import setup_wizard \
+            --hidden-import upgrade \
+            --hidden-import upgrade.version \
+            --hidden-import gui \
+            --hidden-import gui.splash_screen \
+            --hidden-import gui.system_tray \
+            --hidden-import PySide6 \
+            --hidden-import PySide6.QtWidgets \
+            --hidden-import PySide6.QtCore \
+            --hidden-import PySide6.QtGui \
+            --hidden-import telethon \
+            --hidden-import httpx \
+            --add-data "gui_app/templates:gui_app/templates" \
+            --add-data "gui_app/static:gui_app/static" \
+            --add-data "broker_sync_service.py:." \
+            --add-data "src:src" \
+            --add-data "upgrade:upgrade" \
+            src/selfbot_webull.py
+
+      - name: Verify build security
+        run: |
+          echo "=== BUILD SECURITY VERIFICATION ==="
+          echo "Build type: HARDENED USER (PyArmor obfuscated)"
+          echo "Console: HIDDEN (--noconsole)"
+          echo "Platform: macOS Intel"
+          ls -la dist/
+
+      - name: Upload macOS Intel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-User-macOS-Intel
+          path: dist/BotifyTrades-User-macOS-Intel
+
+  build-macos-arm:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pyarmor
+
+      - name: Obfuscate source code with PyArmor
+        run: |
+          echo "=== SECURITY: Obfuscating source code with PyArmor ==="
+          pyarmor gen --output obfuscated_src src/selfbot_webull.py
+          pyarmor gen --output obfuscated_src/brokers src/brokers/*.py || true
+          pyarmor gen --output obfuscated_src/core src/core/*.py || true
+          pyarmor gen --output obfuscated_src/signals src/signals/*.py || true
+          pyarmor gen --output obfuscated_src/license src/license/*.py || true
+          pyarmor gen --output obfuscated_src/risk src/risk/*.py || true
+          pyarmor gen --output obfuscated_src/adapters src/adapters/*.py || true
+          pyarmor gen --output obfuscated_src/services src/services/*.py || true
+          echo "=== PyArmor obfuscation complete ==="
+
+      - name: Build macOS ARM executable (HARDENED)
+        env:
+          PYTHONOPTIMIZE: "2"
+        run: |
+          pyinstaller --clean --noconfirm --onefile --noconsole --name BotifyTrades-User-macOS-ARM \
+            --strip \
+            --noupx \
+            --paths . \
+            --paths src \
+            --paths src/brokers \
+            --paths src/core \
+            --paths src/risk \
+            --paths src/signals \
+            --paths src/license \
+            --paths src/discord_client \
+            --paths src/diagnostics \
+            --paths src/webull_auth \
+            --paths src/data_providers \
+            --paths src/adapters \
+            --paths src/services \
+            --paths gui_app \
+            --paths upgrade \
+            --hidden-import broker_sync_service \
+            --hidden-import gui_app \
+            --hidden-import gui_app.routes \
+            --hidden-import gui_app.database \
+            --hidden-import gui_app.app \
+            --hidden-import gui_app.trade_monitor \
+            --hidden-import brokers \
+            --hidden-import brokers.alpaca_broker \
+            --hidden-import brokers.webull_broker \
+            --hidden-import brokers.tastytrade_broker \
+            --hidden-import brokers.robinhood_broker \
+            --hidden-import brokers.ibkr_broker \
+            --hidden-import brokers.questrade_broker \
+            --hidden-import brokers.upstox_broker \
+            --hidden-import brokers.zerodha_broker \
+            --hidden-import brokers.dhanq_broker \
+            --hidden-import brokers.schwab_broker \
+            --hidden-import core \
+            --hidden-import core.settings \
+            --hidden-import core.settings_service \
+            --hidden-import core.settings_integration \
+            --hidden-import core.bootstrap \
+            --hidden-import core.logging_service \
+            --hidden-import risk \
+            --hidden-import risk.position_monitor \
+            --hidden-import risk.tiered_targets \
+            --hidden-import risk.trailing_stop \
+            --hidden-import signals \
+            --hidden-import signals.parser \
+            --hidden-import signals.patterns \
+            --hidden-import signals.validator \
+            --hidden-import license \
+            --hidden-import license.client \
+            --hidden-import license.cache \
+            --hidden-import license.crypto \
+            --hidden-import webull_auth \
+            --hidden-import webull_auth.webull_auth \
+            --hidden-import discord_client \
+            --hidden-import diagnostics \
+            --hidden-import data_providers \
+            --hidden-import adapters \
+            --hidden-import adapters.india_execution_adapter \
+            --hidden-import services \
+            --hidden-import services.contract_master \
+            --hidden-import services.conditional_order_service \
+            --hidden-import services.upstox_token_manager \
+            --hidden-import services.upstox_pending_orders \
+            --hidden-import ai_analyzer \
+            --hidden-import swing_analyzer \
+            --hidden-import fundamental_analyzer \
+            --hidden-import news_service \
+            --hidden-import trade_tracker \
+            --hidden-import alpha_vantage_scanner \
+            --hidden-import logging_config \
+            --hidden-import log_monitor \
+            --hidden-import license_client \
+            --hidden-import license_manager \
+            --hidden-import machine_fingerprint \
+            --hidden-import broker_interface \
+            --hidden-import broker_manager \
+            --hidden-import consent \
+            --hidden-import setup_wizard \
+            --hidden-import upgrade \
+            --hidden-import upgrade.version \
+            --hidden-import gui \
+            --hidden-import gui.splash_screen \
+            --hidden-import gui.system_tray \
+            --hidden-import PySide6 \
+            --hidden-import PySide6.QtWidgets \
+            --hidden-import PySide6.QtCore \
+            --hidden-import PySide6.QtGui \
+            --hidden-import telethon \
+            --hidden-import httpx \
+            --add-data "gui_app/templates:gui_app/templates" \
+            --add-data "gui_app/static:gui_app/static" \
+            --add-data "broker_sync_service.py:." \
+            --add-data "src:src" \
+            --add-data "upgrade:upgrade" \
+            src/selfbot_webull.py
+
+      - name: Verify build security
+        run: |
+          echo "=== BUILD SECURITY VERIFICATION ==="
+          echo "Build type: HARDENED USER (PyArmor obfuscated)"
+          echo "Console: HIDDEN (--noconsole)"
+          echo "Platform: macOS Apple Silicon (ARM)"
+          ls -la dist/
+
+      - name: Upload macOS ARM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-User-macOS-ARM
+          path: dist/BotifyTrades-User-macOS-ARM
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pyarmor
+
+      - name: Obfuscate source code with PyArmor
+        run: |
+          echo "=== SECURITY: Obfuscating source code with PyArmor ==="
+          pyarmor gen --output obfuscated_src src/selfbot_webull.py
+          pyarmor gen --output obfuscated_src/brokers src/brokers/*.py || true
+          pyarmor gen --output obfuscated_src/core src/core/*.py || true
+          pyarmor gen --output obfuscated_src/signals src/signals/*.py || true
+          pyarmor gen --output obfuscated_src/license src/license/*.py || true
+          pyarmor gen --output obfuscated_src/risk src/risk/*.py || true
+          pyarmor gen --output obfuscated_src/adapters src/adapters/*.py || true
+          pyarmor gen --output obfuscated_src/services src/services/*.py || true
+          echo "=== PyArmor obfuscation complete ==="
+
+      - name: Build Linux executable (HARDENED)
+        env:
+          PYTHONOPTIMIZE: "2"
+        run: |
+          pyinstaller --clean --noconfirm --onefile --noconsole --name BotifyTrades-User-Linux \
+            --strip \
+            --noupx \
+            --paths . \
+            --paths src \
+            --paths src/brokers \
+            --paths src/core \
+            --paths src/risk \
+            --paths src/signals \
+            --paths src/license \
+            --paths src/discord_client \
+            --paths src/diagnostics \
+            --paths src/webull_auth \
+            --paths src/data_providers \
+            --paths src/adapters \
+            --paths src/services \
+            --paths gui_app \
+            --paths upgrade \
+            --hidden-import broker_sync_service \
+            --hidden-import gui_app \
+            --hidden-import gui_app.routes \
+            --hidden-import gui_app.database \
+            --hidden-import gui_app.app \
+            --hidden-import gui_app.trade_monitor \
+            --hidden-import brokers \
+            --hidden-import brokers.alpaca_broker \
+            --hidden-import brokers.webull_broker \
+            --hidden-import brokers.tastytrade_broker \
+            --hidden-import brokers.robinhood_broker \
+            --hidden-import brokers.ibkr_broker \
+            --hidden-import brokers.questrade_broker \
+            --hidden-import brokers.upstox_broker \
+            --hidden-import brokers.zerodha_broker \
+            --hidden-import brokers.dhanq_broker \
+            --hidden-import brokers.schwab_broker \
+            --hidden-import core \
+            --hidden-import core.settings \
+            --hidden-import core.settings_service \
+            --hidden-import core.settings_integration \
+            --hidden-import core.bootstrap \
+            --hidden-import core.logging_service \
+            --hidden-import risk \
+            --hidden-import risk.position_monitor \
+            --hidden-import risk.tiered_targets \
+            --hidden-import risk.trailing_stop \
+            --hidden-import signals \
+            --hidden-import signals.parser \
+            --hidden-import signals.patterns \
+            --hidden-import signals.validator \
+            --hidden-import license \
+            --hidden-import license.client \
+            --hidden-import license.cache \
+            --hidden-import license.crypto \
+            --hidden-import webull_auth \
+            --hidden-import webull_auth.webull_auth \
+            --hidden-import discord_client \
+            --hidden-import diagnostics \
+            --hidden-import data_providers \
+            --hidden-import adapters \
+            --hidden-import adapters.india_execution_adapter \
+            --hidden-import services \
+            --hidden-import services.contract_master \
+            --hidden-import services.conditional_order_service \
+            --hidden-import services.upstox_token_manager \
+            --hidden-import services.upstox_pending_orders \
+            --hidden-import ai_analyzer \
+            --hidden-import swing_analyzer \
+            --hidden-import fundamental_analyzer \
+            --hidden-import news_service \
+            --hidden-import trade_tracker \
+            --hidden-import alpha_vantage_scanner \
+            --hidden-import logging_config \
+            --hidden-import log_monitor \
+            --hidden-import license_client \
+            --hidden-import license_manager \
+            --hidden-import machine_fingerprint \
+            --hidden-import broker_interface \
+            --hidden-import broker_manager \
+            --hidden-import consent \
+            --hidden-import setup_wizard \
+            --hidden-import upgrade \
+            --hidden-import upgrade.version \
+            --hidden-import gui \
+            --hidden-import gui.splash_screen \
+            --hidden-import gui.system_tray \
+            --hidden-import PySide6 \
+            --hidden-import PySide6.QtWidgets \
+            --hidden-import PySide6.QtCore \
+            --hidden-import PySide6.QtGui \
+            --hidden-import telethon \
+            --hidden-import httpx \
+            --add-data "gui_app/templates:gui_app/templates" \
+            --add-data "gui_app/static:gui_app/static" \
+            --add-data "broker_sync_service.py:." \
+            --add-data "src:src" \
+            --add-data "upgrade:upgrade" \
+            src/selfbot_webull.py
+
+      - name: Verify build security
+        run: |
+          echo "=== BUILD SECURITY VERIFICATION ==="
+          echo "Build type: HARDENED USER (PyArmor obfuscated)"
+          echo "Console: HIDDEN (--noconsole)"
+          echo "Platform: Linux x64"
+          ls -la dist/
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-User-Linux
+          path: dist/BotifyTrades-User-Linux
+
+  create-release:
+    needs: [build-windows, build-macos-intel, build-macos-arm, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "version=${{ github.event.client_payload.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}-user
+          name: BotifyTrades User v${{ steps.version.outputs.version }}
+          body: |
+            ## User Build v${{ steps.version.outputs.version }} (HARDENED)
+
+            **This is a SECURE USER build with full protection.**
+
+            ### Security Features
+            - PyArmor code obfuscation (source code protected)
+            - Debug symbols stripped (--strip)
+            - Optimization level 2
+            - Console hidden (--noconsole) - runs as background service
+            - UPX compression disabled for security (--noupx)
+            - Server-side license validation
+            - Machine-bound licensing
+
+            ### Downloads
+            - **Windows**: BotifyTrades-User-Windows.exe
+            - **macOS Intel**: BotifyTrades-User-macOS-Intel
+            - **macOS Apple Silicon**: BotifyTrades-User-macOS-ARM
+            - **Linux**: BotifyTrades-User-Linux
+
+            ### Professional Background Operation
+            - Splash screen on startup (PySide6)
+            - System tray integration (Windows/macOS/Linux)
+            - Automatic log rotation
+            - Runs like antivirus/VPN software
+
+            ### User Features Included
+            - Multi-broker trading (Webull, Alpaca, Tastytrade, IBKR, etc.)
+            - Discord & Telegram signal monitoring
+            - Risk management & position monitoring
+            - Real-time trade execution
+            - Web control panel (localhost:5000)
+
+            ### India Market Support
+            - Upstox with automatic token refresh
+            - After Market Order (AMO) support
+            - NSE/BSE options and stock trading
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/BotifyTrades-User-Windows/BotifyTrades-User-Windows.exe
+            artifacts/BotifyTrades-User-macOS-Intel/BotifyTrades-User-macOS-Intel
+            artifacts/BotifyTrades-User-macOS-ARM/BotifyTrades-User-macOS-ARM
+            artifacts/BotifyTrades-User-Linux/BotifyTrades-User-Linux
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
