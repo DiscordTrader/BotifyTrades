@@ -7811,12 +7811,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 print(f"[DEBUG] Queue size AFTER put: {self.order_queue.qsize()}", flush=True)
                 print(f"[QUEUE] ✅ Signal successfully queued for LIVE execution", flush=True)
             
-            # Paper trading - runs if track_enabled AND paper_trade_enabled (regardless of execute_enabled)
-            if track_enabled:
+            # Paper trading - only queue separately if execute_enabled is False
+            # If execute_enabled is True, multi-broker execution already handles paper brokers via enabled_brokers
+            if track_enabled and not execute_enabled:
                 paper_trade_enabled = channel_info.get('paper_trade_enabled', 0) if channel_info else 0
                 if paper_trade_enabled:
-                    dual_mode = execute_enabled
-                    print(f"[ROUTE] {'DUAL mode - ' if dual_mode else ''}PAPER TRADING enabled - executing in PAPER mode")
+                    print(f"[ROUTE] PAPER TRADING enabled - executing in PAPER mode")
                     
                     # Add TRACKING position size percentage for paper trading
                     # Priority: Signal percentage (from Jacob/etc with _calculate_qty) > Channel percentage
@@ -8028,12 +8028,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 await self.order_queue.put(stk)
                 print(f"[QUEUE] ✓ Signal queued for LIVE execution")
             
-            # Paper trading - runs if track_enabled AND paper_trade_enabled (regardless of execute_enabled)
-            if track_enabled:
+            # Paper trading - only queue separately if execute_enabled is False
+            # If execute_enabled is True, multi-broker execution already handles paper brokers via enabled_brokers
+            if track_enabled and not execute_enabled:
                 paper_trade_enabled = channel_info.get('paper_trade_enabled', 0) if channel_info else 0
                 if paper_trade_enabled:
-                    dual_mode = execute_enabled
-                    print(f"[ROUTE] {'DUAL mode - ' if dual_mode else ''}PAPER TRADING enabled - executing in PAPER mode")
+                    print(f"[ROUTE] PAPER TRADING enabled - executing in PAPER mode")
                     
                     # Add TRACKING position size percentage for paper trading
                     # Priority: Signal percentage (from Jacob/etc with _calculate_qty) > Channel percentage
