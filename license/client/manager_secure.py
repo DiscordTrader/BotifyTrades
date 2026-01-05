@@ -14,7 +14,9 @@ from typing import Tuple
 try:
     from license.config import SECRET_KEY
 except ImportError:
-    SECRET_KEY = b"01690f93dc8536b80ddc194e47970d07fd85d3bb8758d5e0744e429edb8c876dd2d8e227a16f4d3b09beac10c9c2984a"
+    # SECURITY: Never hardcode SECRET_KEY - require proper configuration
+    SECRET_KEY = None
+    print("[LICENSE] WARNING: No SECRET_KEY configured - legacy validation disabled")
 
 try:
     from src.machine_fingerprint import get_machine_id
@@ -40,6 +42,10 @@ def validate_legacy_license(license_key: str) -> Tuple[bool, dict]:
     Returns:
         Tuple of (is_valid, license_data)
     """
+    # SECURITY: Require SECRET_KEY to be configured
+    if SECRET_KEY is None:
+        return False, {"error": "License validation not configured - contact support"}
+    
     try:
         combined = base64.b64decode(license_key.encode('utf-8'))
         

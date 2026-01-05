@@ -417,7 +417,9 @@ let currentUpstoxOrderFilter = 'all';
 async function refreshUpstoxData() {
     await Promise.all([
         loadUpstoxAccount(),
-        loadUpstoxConditionalOrders()
+        loadUpstoxConditionalOrders(),
+        loadAmoOrders(),
+        loadAmoQueueStatus()
     ]);
 }
 
@@ -824,6 +826,167 @@ async function cancelConditionalOrder(orderId) {
         }
     } catch (error) {
         showToast('Error cancelling order', 'error');
+    }
+}
+
+// AMO (After Market Orders) Functions
+let amoOrdersData = [];
+let currentAmoFilter = 'all';
+
+async function loadAmoQueueStatus() {
+    try {
+        const response = await fetch('/api/upstox/amo-queue-enabled');
+        const data = await response.json();
+        if (data.success) {
+            const toggle = document.getElementById('amo-queue-toggle');
+            if (toggle) {
+                toggle.checked = data.enabled;
+                updateToggleStyle(toggle);
+            }
+        }
+    } catch (error) {
+        console.error('Error loading AMO queue status:', error);
+    }
+}
+
+function updateToggleStyle(toggle) {
+    const slider = toggle.nextElementSibling;
+    if (toggle.checked) {
+        slider.style.backgroundColor = '#9c27b0';
+        slider.innerHTML = '<span style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 10px; color: white;"></span>';
+    } else {
+        slider.style.backgroundColor = '#3a3a3c';
+        slider.innerHTML = '';
+    }
+    // Add the circle
+    const circleStyle = toggle.checked ? 'left: 26px;' : 'left: 2px;';
+    slider.innerHTML += `<span style="position: absolute; ${circleStyle} top: 2px; width: 22px; height: 22px; background: white; border-radius: 50%; transition: .3s;"></span>`;
+}
+
+async function toggleAmoQueue(enabled) {
+    try {
+        const response = await fetch('/api/upstox/amo-queue-enabled', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: enabled })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            showToast(`AMO queue ${enabled ? 'enabled' : 'disabled'}`, 'success');
+            updateToggleStyle(document.getElementById('amo-queue-toggle'));
+        } else {
+            showToast(data.error || 'Failed to update AMO queue setting', 'error');
+            // Revert toggle
+            document.getElementById('amo-queue-toggle').checked = !enabled;
+        }
+    } catch (error) {
+        console.error('Error toggling AMO queue:', error);
+        showToast('Error updating AMO queue setting', 'error');
+        document.getElementById('amo-queue-toggle').checked = !enabled;
+    }
+}
+
+async function loadAmoOrders() {
+    try {
+        const response = await fetch('/api/upstox/pending-orders');
+        const data = await response.json();
+        
+        if (data.success) {
+            amoOrdersData = data.orders || [];
+            renderAmoOrders(amoOrdersData);
+        }
+    } catch (error) {
+        console.error('Error loading AMO orders:', error);
+    }
+}
+
+function renderAmoOrders(orders) {
+    const tbody = document.getElementById('upstox-amo-body');
+    const emptyState = document.getElementById('amo-empty-state');
+    
+    if (!tbody) return;
+    
+    // Apply filter
+    let filteredOrders = orders;
+    if (currentAmoFilter !== 'all') {
+        filteredOrders = orders.filter(o => o.status === currentAmoFilter);
+    }
+    
+    if (filteredOrders.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 40px; color: #8E8E93;">No AMO orders found</td></tr>`;
+        if (emptyState && orders.length === 0) {
+            emptyState.style.display = 'block';
+        }
+        return;
+    }
+    
+    if (emptyState) emptyState.style.display = 'none';
+    
+    const statusColors = {
+        'PENDING': '#ffc107',
+        'SUBMITTED': '#00ff88',
+        'CANCELLED': '#ff6b6b',
+        'FAILED': '#ff5722'
+    };
+    
+    tbody.innerHTML = filteredOrders.map(o => {
+        const statusColor = statusColors[o.status] || '#8E8E93';
+        const queuedAt = o.created_at ? new Date(o.created_at).toLocaleString('en-IN') : 'N/A';
+        const sideColor = o.side === 'BUY' ? '#00ff88' : '#ff6b6b';
+        
+        return `
+            <tr style="border-bottom: 1px solid rgba(156, 39, 176, 0.1);">
+                <td style="padding: 12px; font-weight: 600; color: #ffffff;">${o.symbol || 'N/A'}</td>
+                <td style="padding: 12px; text-align: center;"><span style="color: ${sideColor}; font-weight: 600;">${o.side || 'BUY'}</span></td>
+                <td style="padding: 12px; text-align: center; color: #ffffff;">${o.quantity || 0}</td>
+                <td style="padding: 12px; text-align: center; color: #8E8E93;">${o.order_type || 'MARKET'}</td>
+                <td style="padding: 12px; text-align: right; color: #ffffff;">${o.price ? '₹' + o.price : 'MKT'}</td>
+                <td style="padding: 12px; text-align: center;"><span style="padding: 3px 8px; background: ${statusColor}22; border-radius: 4px; font-size: 11px; color: ${statusColor}; font-weight: 600;">${o.status}</span></td>
+                <td style="padding: 12px; text-align: center; font-size: 11px; color: #8E8E93;">${queuedAt}</td>
+                <td style="padding: 12px; text-align: center;">
+                    ${o.status === 'PENDING' ? `<button onclick="cancelAmoOrder('${o.id}')" style="background: rgba(255, 107, 107, 0.1); border: 1px solid rgba(255, 107, 107, 0.3); color: #ff6b6b; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">Cancel</button>` : 
+                      o.order_id ? `<span style="font-size: 10px; color: #00c853;">${o.order_id}</span>` : '-'}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function filterAmoOrders(filter) {
+    currentAmoFilter = filter;
+    
+    // Update filter button styles
+    document.querySelectorAll('.amo-filter').forEach(btn => {
+        btn.style.background = 'transparent';
+        btn.classList.remove('active');
+    });
+    
+    event.target.style.background = 'rgba(156, 39, 176, 0.2)';
+    event.target.classList.add('active');
+    
+    // Re-render orders with filter
+    renderAmoOrders(amoOrdersData);
+}
+
+async function cancelAmoOrder(orderId) {
+    if (!confirm('Are you sure you want to cancel this AMO order?')) return;
+    
+    try {
+        const response = await fetch(`/api/upstox/pending-orders/${orderId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            showToast('AMO order cancelled', 'success');
+            await loadAmoOrders();
+        } else {
+            showToast(data.error || 'Failed to cancel AMO order', 'error');
+        }
+    } catch (error) {
+        console.error('Error cancelling AMO order:', error);
+        showToast('Error cancelling AMO order', 'error');
     }
 }
 

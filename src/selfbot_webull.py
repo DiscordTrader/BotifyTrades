@@ -5280,13 +5280,21 @@ class SelfClient(discord.Client):
                 if upstox_creds and upstox_creds.get('credentials'):
                     creds = upstox_creds.get('credentials', {})
                     upstox_access_token = creds.get('access_token', '')
+                    upstox_refresh_token = creds.get('refresh_token', '')
+                    upstox_api_key = creds.get('api_key', '')
+                    upstox_api_secret = creds.get('api_secret', '')
+                    token_issued_at = creds.get('token_issued_at', '')
                     
                     if upstox_access_token:
                         _original_print(f"[UPSTOX] ✓ Loaded credentials from DATABASE", flush=True)
                         _original_print(f"[UPSTOX] Creating UpstoxBroker instance...", flush=True)
                         
                         self.upstox_broker = UpstoxBroker({
-                            'access_token': upstox_access_token
+                            'access_token': upstox_access_token,
+                            'refresh_token': upstox_refresh_token,
+                            'api_key': upstox_api_key,
+                            'api_secret': upstox_api_secret,
+                            'token_issued_at': token_issued_at
                         })
                         
                         connected = await self.upstox_broker.connect()
@@ -5297,14 +5305,43 @@ class SelfClient(discord.Client):
                                 account_info = await self.upstox_broker.get_account_info()
                                 update_broker_connection_status('upstox', True, f"Connected - User: {self.upstox_broker.user_id}")
                                 _original_print(f"[UPSTOX] ✓ Broker status updated in GUI", flush=True)
+                                
+                                if upstox_refresh_token:
+                                    try:
+                                        await self.upstox_broker.start_token_refresh_scheduler()
+                                    except Exception as sched_err:
+                                        _original_print(f"[UPSTOX] ⚠️ Auto-refresh scheduler failed: {sched_err}", flush=True)
                             except Exception as status_err:
                                 _original_print(f"[UPSTOX] ⚠️ Failed to update broker status: {status_err}", flush=True)
                         else:
                             _original_print("[UPSTOX] ⚠️ Connection failed - token may be expired", flush=True)
-                            _original_print("[UPSTOX]   Go to Settings → Brokers → Upstox to update access token", flush=True)
-                            from gui_app.database import update_broker_connection_status
-                            update_broker_connection_status('upstox', False, 'Connection failed - token may be expired')
-                            self.upstox_broker = None
+                            if upstox_refresh_token:
+                                _original_print("[UPSTOX]   Attempting token refresh...", flush=True)
+                                refresh_success = await self.upstox_broker.refresh_access_token()
+                                if refresh_success:
+                                    _original_print("[UPSTOX] ✓ Token refreshed, retrying connection...", flush=True)
+                                    self.upstox_broker.config['token_issued_at'] = datetime.now().isoformat()
+                                    retry_connected = await self.upstox_broker.connect()
+                                    if retry_connected:
+                                        _original_print(f"[UPSTOX] ✓ Reconnected after token refresh (LIVE trading)", flush=True)
+                                        from gui_app.database import update_broker_connection_status
+                                        update_broker_connection_status('upstox', True, f"Connected - User: {self.upstox_broker.user_id}")
+                                        await self.upstox_broker.start_token_refresh_scheduler()
+                                    else:
+                                        _original_print("[UPSTOX] ⚠️ Reconnection failed after refresh", flush=True)
+                                        from gui_app.database import update_broker_connection_status
+                                        update_broker_connection_status('upstox', False, 'Reconnection failed after token refresh')
+                                        self.upstox_broker = None
+                                else:
+                                    _original_print("[UPSTOX] ⚠️ Token refresh failed - manual re-auth required", flush=True)
+                                    from gui_app.database import update_broker_connection_status
+                                    update_broker_connection_status('upstox', False, 'Token refresh failed - manual re-auth required')
+                                    self.upstox_broker = None
+                            else:
+                                _original_print("[UPSTOX]   Go to Settings → Brokers → Upstox to update access token", flush=True)
+                                from gui_app.database import update_broker_connection_status
+                                update_broker_connection_status('upstox', False, 'Connection failed - token may be expired')
+                                self.upstox_broker = None
                     else:
                         _original_print("[UPSTOX] ⚠️ Incomplete credentials - missing access_token", flush=True)
                 else:
@@ -8257,7 +8294,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         strike=signal['strike'],
                         opt_type=signal['opt_type'],
                         expiry_mmdd=signal['expiry'],
-                        limit_price=signal.get('price')  # None for market orders
+                        limit_price=signal.get('price'),  # None for market orders
+                        lots=signal.get('lots')  # Raw lot count for India signals
                     )
                     # Log the result for debugging
                     if hasattr(result, 'success'):
@@ -8550,8 +8588,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         responses.append(resp)
                     
                     # Handle multi-broker responses
-                    successes = [r for r in responses if r.get('success') or 'orderId' in r]
-                    failures = [r for r in responses if not (r.get('success') or 'orderId' in r)]
+                    # Check success flag OR if orderId has a truthy value (not just key existence)
+                    successes = [r for r in responses if r.get('success') or r.get('orderId')]
+                    failures = [r for r in responses if not (r.get('success') or r.get('orderId'))]
                     
                     _original_print(f"[MULTI-BROKER] Results: {len(successes)} succeeded, {len(failures)} failed")
                     
@@ -9406,12 +9445,16 @@ def run_discord_bot_thread():
             await client.start(USER_TOKEN)
             
         except Exception as e:
-            _original_print(f"[Discord Thread ERROR] Bot crashed: {e}")
-            log_error_to_db('discord_connection', f"Discord bot crashed: {str(e)}", 
-                           'DiscordClient', 'critical', 'Check Discord token and network connection')
-            import traceback
-            traceback.print_exc()
-            # Propagate error to main thread
+            error_msg = str(e)
+            if 'expected token to be a str' in error_msg or 'NoneType' in error_msg:
+                _original_print("[Discord Thread] Discord token not configured - this is expected if you haven't set it up yet")
+                _original_print("[Discord Thread] Configure your Discord token in Settings > Discord to enable signal reading")
+            else:
+                _original_print(f"[Discord Thread ERROR] Bot crashed: {e}")
+                log_error_to_db('discord_connection', f"Discord bot crashed: {str(e)}", 
+                               'DiscordClient', 'critical', 'Check Discord token and network connection')
+                import traceback
+                traceback.print_exc()
             _discord_error_queue.put(e)
             raise
     
@@ -9421,7 +9464,11 @@ def run_discord_bot_thread():
     except KeyboardInterrupt:
         _original_print("\n[Discord Thread] Bot stopped by user (Ctrl+C)")
     except Exception as e:
-        _original_print(f"[Discord Thread] Exception escaped asyncio.run(): {e}")
+        error_msg = str(e)
+        if 'expected token to be a str' in error_msg or 'NoneType' in error_msg:
+            _original_print("[Discord Thread] Discord not configured - set your token in Settings to enable")
+        else:
+            _original_print(f"[Discord Thread] Exception escaped asyncio.run(): {e}")
         _discord_error_queue.put(e)
     finally:
         _original_print("[Discord Thread] Shutting down...")
@@ -9530,6 +9577,162 @@ def run_telegram_bot_thread():
         _telegram_shutdown_event.set()
 
 
+def run_bot_startup(progress_callback=None):
+    """
+    Run the full bot startup sequence.
+    progress_callback: Optional function to report progress (step, message)
+    """
+    global _discord_ready_event, _discord_shutdown_event, _discord_error_queue
+    global _telegram_ready_event, _telegram_shutdown_event, _telegram_signal_queue
+    
+    def report_progress(step, message):
+        if progress_callback:
+            progress_callback(step, message)
+        _original_print(f"[STARTUP] {message}")
+    
+    report_progress(1, "Loading configuration...")
+    
+    # Initialize global lifecycle events
+    _discord_ready_event = threading.Event()
+    _discord_shutdown_event = threading.Event()
+    _discord_error_queue = queue.Queue()
+    _telegram_ready_event = threading.Event()
+    _telegram_shutdown_event = threading.Event()
+    _telegram_signal_queue = queue.Queue()
+    
+    report_progress(2, "Running diagnostics...")
+    
+    # Run startup diagnostics
+    try:
+        from src.diagnostics import run_all_checks
+        diag_summary = run_all_checks(print_summary=True)
+        if diag_summary.failed > 0:
+            _original_print(f"[STARTUP] ⚠️  {diag_summary.failed} check(s) failed - review above for details")
+        else:
+            _original_print(f"[STARTUP] ✓ All {diag_summary.passed} checks passed")
+    except Exception as e:
+        _original_print(f"[STARTUP] ⚠️  Diagnostics skipped: {e}")
+    
+    # Run settings audit via SettingsService
+    try:
+        if SETTINGS_SERVICE_AVAILABLE:
+            log_settings_at_startup()
+            _original_print("[STARTUP] ✓ Settings audit complete")
+    except ImportError:
+        _original_print("[STARTUP] Diagnostics module not available, skipping health checks")
+    except Exception as e:
+        _original_print(f"[STARTUP] Warning: Could not run diagnostics: {e}")
+    
+    report_progress(3, "Starting web control panel...")
+    
+    # Start Flask GUI server
+    gui_port = 5000
+    try:
+        import sys
+        from pathlib import Path
+        parent_dir = Path(__file__).parent.parent
+        if str(parent_dir) not in sys.path:
+            sys.path.insert(0, str(parent_dir))
+        
+        from gui_app import start_gui_server, get_gui_port
+        gui_port = get_gui_port()
+        gui_thread, gui_port = start_gui_server()
+        _original_print(f"[GUI] ✓ Web control panel started on port {gui_port}")
+    except Exception as e:
+        _original_print(f"[GUI] ⚠️  Failed to start web GUI: {e}")
+        _original_print("[GUI] Bot will continue without web interface")
+    
+    report_progress(4, "Connecting to Discord...")
+    
+    # Start Discord bot in dedicated thread
+    discord_thread = threading.Thread(target=run_discord_bot_thread, name="DiscordBot", daemon=False)
+    discord_thread.start()
+    _original_print("[MAIN] ✓ Discord bot started in dedicated thread")
+    
+    report_progress(5, "Starting Telegram listener...")
+    
+    # Start Telegram listener in dedicated thread (if enabled)
+    telegram_thread = None
+    try:
+        from gui_app.database import get_telegram_settings
+        telegram_settings = get_telegram_settings()
+        if telegram_settings.get('enabled') and telegram_settings.get('api_id') and telegram_settings.get('api_hash'):
+            telegram_thread = threading.Thread(target=run_telegram_bot_thread, name="TelegramBot", daemon=False)
+            telegram_thread.start()
+            _original_print("[MAIN] ✓ Telegram listener started in dedicated thread")
+        else:
+            _original_print("[MAIN] Telegram integration not enabled or not configured")
+    except Exception as e:
+        _original_print(f"[MAIN] Telegram startup skipped: {e}")
+    
+    report_progress(6, "Waiting for Discord connection...")
+    
+    # Wait for Discord to be ready (with timeout)
+    if _discord_ready_event.wait(timeout=30):
+        _original_print("[MAIN] ✓ Discord bot is ready and connected")
+        report_progress(8, "Discord connected!")
+    else:
+        _original_print("[MAIN] ⚠️  Discord bot did not connect within 30 seconds")
+        report_progress(8, "Discord connection timeout")
+    
+    report_progress(9, "Waiting for Telegram...")
+    
+    # Wait for Telegram if it was started
+    if telegram_thread:
+        if _telegram_ready_event.wait(timeout=15):
+            _original_print("[MAIN] ✓ Telegram listener ready")
+        else:
+            _original_print("[MAIN] ⚠️  Telegram listener did not connect within 15 seconds")
+    
+    report_progress(10, "Ready!")
+    
+    return discord_thread, telegram_thread, gui_port
+
+
+def run_main_loop(discord_thread, telegram_thread, gui_port):
+    """Main monitoring loop - runs until shutdown"""
+    discord_failed = False
+    try:
+        while True:
+            try:
+                error = _discord_error_queue.get(timeout=1)
+                error_msg = str(error)
+                
+                if 'token' in error_msg.lower() or 'NoneType' in error_msg:
+                    if not discord_failed:
+                        discord_failed = True
+                        _original_print(f"[MAIN] Discord connection failed: {error}")
+                        _original_print("[MAIN] Discord token not configured - configure in web GUI")
+                else:
+                    _original_print(f"[MAIN] FATAL: Discord thread reported error: {error}")
+                    _original_print("[MAIN] Shutting down due to Discord thread failure...")
+                    break
+            except queue.Empty:
+                pass
+            
+            if _discord_shutdown_event.is_set() and not discord_failed:
+                _original_print("[MAIN] Discord thread shutdown detected")
+                break
+            
+            if discord_failed:
+                import time
+                time.sleep(1)
+                continue
+                
+    except KeyboardInterrupt:
+        _original_print("\n[MAIN] Shutdown signal received (Ctrl+C)")
+    
+    # Clean shutdown
+    _original_print("[MAIN] Waiting for Discord thread to terminate...")
+    discord_thread.join(timeout=5)
+    if discord_thread.is_alive():
+        _original_print("[MAIN] ⚠️  Discord thread did not terminate cleanly")
+    else:
+        _original_print("[MAIN] ✓ Discord thread terminated cleanly")
+    
+    _original_print("[MAIN] Shutdown complete. Exiting...")
+
+
 if __name__ == '__main__':
     import threading
     import queue
@@ -9548,6 +9751,7 @@ Examples:
   %(prog)s                    # Start with default port 5000
   %(prog)s --port 8080        # Start on port 8080 (useful for macOS where 5000 is used by AirPlay)
   %(prog)s --wizard           # Launch the setup wizard
+  %(prog)s --no-gui           # Run without splash screen (console mode)
   
 Environment Variables:
   GUI_PORT                    # Alternative way to set the web GUI port (default: 5000)
@@ -9557,6 +9761,8 @@ Environment Variables:
                         help='Port for web control panel (default: 5000, or GUI_PORT env var)')
     parser.add_argument('--wizard', action='store_true', 
                         help='Launch the setup wizard')
+    parser.add_argument('--no-gui', action='store_true',
+                        help='Run without splash screen (console mode)')
     
     args = parser.parse_args()
     
@@ -9579,139 +9785,108 @@ Environment Variables:
             traceback.print_exc()
             sys.exit(1)
     
-    # Initialize global lifecycle events
-    _discord_ready_event = threading.Event()
-    _discord_shutdown_event = threading.Event()
-    _discord_error_queue = queue.Queue()
-    _telegram_ready_event = threading.Event()
-    _telegram_shutdown_event = threading.Event()
-    _telegram_signal_queue = queue.Queue()
+    # Check if running in GUI mode (with splash screen and system tray)
+    use_gui_mode = not args.no_gui and getattr(sys, 'frozen', False)
     
-    # Run startup diagnostics
-    try:
-        from src.diagnostics import run_all_checks
-        _original_print("\n[STARTUP] Running system diagnostics...")
-        diag_summary = run_all_checks(print_summary=True)
-        if diag_summary.failed > 0:
-            _original_print(f"[STARTUP] ⚠️  {diag_summary.failed} check(s) failed - review above for details")
-        else:
-            _original_print(f"[STARTUP] ✓ All {diag_summary.passed} checks passed")
-    except Exception as e:
-        _original_print(f"[STARTUP] ⚠️  Diagnostics skipped: {e}")
-    
-    # Run settings audit via SettingsService
-    try:
-        if SETTINGS_SERVICE_AVAILABLE:
-            log_settings_at_startup()
-            _original_print("[STARTUP] ✓ Settings audit complete")
-    except ImportError:
-        _original_print("[STARTUP] Diagnostics module not available, skipping health checks")
-    except Exception as e:
-        _original_print(f"[STARTUP] Warning: Could not run diagnostics: {e}")
-    
-    # Start Flask GUI server in main thread
-    try:
-        import sys
-        from pathlib import Path
-        # Add parent directory to path so gui_app can be imported
-        parent_dir = Path(__file__).parent.parent
-        if str(parent_dir) not in sys.path:
-            sys.path.insert(0, str(parent_dir))
-        
-        from gui_app import start_gui_server, get_gui_port
-        gui_port = get_gui_port()
-        gui_thread, gui_port = start_gui_server()  # Port configurable via GUI_PORT env var (default: 5000)
-        _original_print(f"[GUI] ✓ Web control panel started on port {gui_port}")
-    except Exception as e:
-        _original_print(f"[GUI] ⚠️  Failed to start web GUI: {e}")
-        _original_print("[GUI] Bot will continue without web interface")
-    
-    # Start Discord bot in dedicated NON-daemon thread (explicit lifecycle)
-    discord_thread = threading.Thread(target=run_discord_bot_thread, name="DiscordBot", daemon=False)
-    discord_thread.start()
-    _original_print("[MAIN] ✓ Discord bot started in dedicated thread")
-    
-    # Start Telegram listener in dedicated thread (if enabled)
-    telegram_thread = None
-    try:
-        from gui_app.database import get_telegram_settings
-        telegram_settings = get_telegram_settings()
-        if telegram_settings.get('enabled') and telegram_settings.get('api_id') and telegram_settings.get('api_hash'):
-            telegram_thread = threading.Thread(target=run_telegram_bot_thread, name="TelegramBot", daemon=False)
-            telegram_thread.start()
-            _original_print("[MAIN] ✓ Telegram listener started in dedicated thread")
-        else:
-            _original_print("[MAIN] Telegram integration not enabled or not configured")
-    except Exception as e:
-        _original_print(f"[MAIN] Telegram startup skipped: {e}")
-    
-    # Wait for Discord to be ready (with timeout)
-    _original_print("[MAIN] Waiting for Discord bot to connect...")
-    if _discord_ready_event.wait(timeout=30):
-        _original_print("[MAIN] ✓ Discord bot is ready and connected")
-    else:
-        _original_print("[MAIN] ⚠️  Discord bot did not connect within 30 seconds")
-    
-    # Wait for Telegram if it was started
-    if telegram_thread:
-        if _telegram_ready_event.wait(timeout=15):
-            _original_print("[MAIN] ✓ Telegram listener ready")
-        else:
-            _original_print("[MAIN] ⚠️  Telegram listener did not connect within 15 seconds")
-    
-    # Main thread monitoring loop - check for Discord errors and keep GUI alive
-    discord_failed = False
-    try:
-        while True:
-            # Check for errors from Discord thread
-            try:
-                error = _discord_error_queue.get(timeout=1)
-                error_msg = str(error)
-                
-                # Check if this is a configuration error (token missing/invalid)
-                if 'token' in error_msg.lower() or 'NoneType' in error_msg:
-                    if not discord_failed:
-                        discord_failed = True
-                        _original_print(f"[MAIN] Discord connection failed: {error}")
-                        _original_print("[MAIN] ═══════════════════════════════════════════════════════════")
-                        _original_print("[MAIN] Discord token not configured or invalid.")
-                        _original_print("[MAIN] Please configure your Discord token in the web GUI:")
-                        _original_print(f"[MAIN]   → Open http://localhost:{gui_port}/settings")
-                        _original_print("[MAIN]   → Enter your Discord token")
-                        _original_print("[MAIN]   → Save and restart the application")
-                        _original_print("[MAIN] ═══════════════════════════════════════════════════════════")
-                        _original_print("[MAIN] GUI is still running. Press Ctrl+C to exit.")
-                    # Keep running - GUI is still available for configuration
+    if use_gui_mode:
+        # GUI mode: Show splash screen with progress, then minimize to system tray
+        try:
+            from PySide6.QtWidgets import QApplication
+            from PySide6.QtCore import QTimer, Signal, QObject
+            from src.gui.splash_screen import SplashScreen, StartupProgress
+            from src.gui.system_tray import setup_system_tray, get_tray_manager
+            
+            class StartupWorker(QObject):
+                """Thread-safe progress signaler for Qt main thread updates"""
+                progress_signal = Signal(int, str)
+                complete_signal = Signal()
+                error_signal = Signal(str)
+            
+            app = QApplication(sys.argv)
+            app.setQuitOnLastWindowClosed(False)
+            app.setApplicationName("BotifyTrades")
+            
+            progress = StartupProgress()
+            splash = SplashScreen(progress)
+            splash.show()
+            app.processEvents()
+            
+            worker = StartupWorker()
+            worker.progress_signal.connect(lambda step, msg: progress.update(step, msg))
+            worker.complete_signal.connect(progress.complete)
+            worker.error_signal.connect(lambda e: progress.fail(e))
+            
+            startup_state = {
+                'discord_thread': None,
+                'telegram_thread': None,
+                'gui_port': 5000,
+                'error': None
+            }
+            
+            def do_startup():
+                try:
+                    def update_progress(step, message):
+                        worker.progress_signal.emit(step, message)
+                    
+                    d_thread, t_thread, port = run_bot_startup(update_progress)
+                    startup_state['discord_thread'] = d_thread
+                    startup_state['telegram_thread'] = t_thread
+                    startup_state['gui_port'] = port
+                    worker.complete_signal.emit()
+                except Exception as e:
+                    startup_state['error'] = str(e)
+                    worker.error_signal.emit(str(e))
+            
+            startup_thread = threading.Thread(target=do_startup, daemon=True)
+            startup_thread.start()
+            
+            def check_startup():
+                if startup_thread.is_alive():
+                    QTimer.singleShot(100, check_startup)
                 else:
-                    _original_print(f"[MAIN] FATAL: Discord thread reported error: {error}")
-                    _original_print("[MAIN] Shutting down due to Discord thread failure...")
-                    break
-            except queue.Empty:
-                pass  # No errors, continue monitoring
+                    splash.close()
+                    if startup_state['error'] is None:
+                        tray = setup_system_tray()
+                        tray.web_panel_port = startup_state['gui_port']
+                        tray.set_status("running", "Bot is active and monitoring signals")
+                        tray.show_notification(
+                            "BotifyTrades",
+                            "Bot started successfully! Running in background.",
+                            tray.tray_icon.Information,
+                            5000
+                        )
+                        
+                        def shutdown_handler():
+                            _original_print("[MAIN] Shutdown requested from tray")
+                            _discord_shutdown_event.set()
+                            _telegram_shutdown_event.set()
+                            app.quit()
+                        
+                        tray.shutdown_requested.connect(shutdown_handler)
+                    else:
+                        _original_print(f"[MAIN] Startup failed: {startup_state['error']}")
+                        app.quit()
             
-            # Check if shutdown requested by user (Ctrl+C or explicit shutdown)
-            if _discord_shutdown_event.is_set() and not discord_failed:
-                _original_print("[MAIN] Discord thread shutdown detected")
-                break
+            QTimer.singleShot(100, check_startup)
             
-            # If Discord failed but GUI is running, keep the main loop alive
-            if discord_failed:
-                # Keep main thread alive for GUI
-                import time
-                time.sleep(1)
-                continue
-                
-    except KeyboardInterrupt:
-        _original_print("\n[MAIN] Shutdown signal received (Ctrl+C)")
+            exit_code = app.exec()
+            
+            if startup_state['discord_thread'] and startup_state['discord_thread'].is_alive():
+                _original_print("[MAIN] Waiting for Discord thread...")
+                startup_state['discord_thread'].join(timeout=5)
+            
+            if startup_state['telegram_thread'] and startup_state['telegram_thread'].is_alive():
+                _original_print("[MAIN] Waiting for Telegram thread...")
+                startup_state['telegram_thread'].join(timeout=5)
+            
+            sys.exit(exit_code)
+            
+        except ImportError as e:
+            _original_print(f"[MAIN] PySide6 not available, falling back to console mode: {e}")
+            use_gui_mode = False
     
-    # Clean shutdown - wait for Discord thread to finish
-    _original_print("[MAIN] Waiting for Discord thread to terminate...")
-    discord_thread.join(timeout=5)
-    if discord_thread.is_alive():
-        _original_print("[MAIN] ⚠️  Discord thread did not terminate cleanly")
-    else:
-        _original_print("[MAIN] ✓ Discord thread terminated cleanly")
-    
-    _original_print("[MAIN] Shutdown complete. Exiting...")
-    import sys
-    sys.exit(0)
+    if not use_gui_mode:
+        # Console mode: Run without splash screen
+        discord_thread, telegram_thread, gui_port = run_bot_startup()
+        run_main_loop(discord_thread, telegram_thread, gui_port)
+        sys.exit(0)

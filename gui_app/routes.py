@@ -1487,8 +1487,31 @@ def register_routes(app):
     
     @app.route('/signals')
     def signal_history():
-        """Signal history page"""
-        return render_template('signals.html')
+        """Signal history page - comprehensive signal tracking"""
+        response = make_response(render_template('signal_history.html', market=None))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        return response
+    
+    @app.route('/signals/us')
+    def signal_history_us():
+        """US Market signal history"""
+        response = make_response(render_template('signal_history.html', market='US'))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        return response
+    
+    @app.route('/signals/india')
+    def signal_history_india():
+        """India Market signal history"""
+        response = make_response(render_template('signal_history.html', market='IN'))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        return response
+    
+    @app.route('/signals/canada')
+    def signal_history_canada():
+        """Canada Market signal history"""
+        response = make_response(render_template('signal_history.html', market='CA'))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        return response
     
     @app.route('/leaderboard')
     def leaderboard():
@@ -2158,6 +2181,138 @@ def register_routes(app):
             })
         
         return jsonify(formatted_signals)
+    
+    # Enhanced Signal History API with comprehensive filtering
+    @app.route('/api/signals/history', methods=['GET'])
+    def api_get_signal_history_filtered():
+        """Get signal history with comprehensive filtering, pagination, and export"""
+        limit = request.args.get('limit', 50, type=int)
+        offset = request.args.get('offset', 0, type=int)
+        symbol = request.args.get('symbol')
+        channel_id = request.args.get('channel_id')
+        author_id = request.args.get('author_id')
+        execution_status = request.args.get('status')
+        market = request.args.get('market')
+        broker_target = request.args.get('broker')
+        source_platform = request.args.get('platform')
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
+        
+        try:
+            signals, total_count = db.get_signal_history_filtered(
+                limit=limit,
+                offset=offset,
+                symbol=symbol,
+                channel_id=channel_id,
+                author_id=author_id,
+                execution_status=execution_status,
+                market=market,
+                broker_target=broker_target,
+                source_platform=source_platform,
+                date_from=date_from,
+                date_to=date_to
+            )
+            
+            return jsonify({
+                'signals': signals,
+                'total': total_count,
+                'limit': limit,
+                'offset': offset,
+                'has_more': (offset + limit) < total_count
+            })
+        except Exception as e:
+            print(f"[API] Error getting signal history: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/signals/<int:signal_id>', methods=['GET'])
+    def api_get_signal_detail(signal_id):
+        """Get detailed signal info including transitions audit trail"""
+        try:
+            signal = db.get_signal_by_id(signal_id)
+            if signal:
+                return jsonify(signal)
+            return jsonify({'error': 'Signal not found'}), 404
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/signals/statistics', methods=['GET'])
+    def api_get_signal_statistics():
+        """Get signal statistics for dashboard widgets"""
+        market = request.args.get('market')
+        days = request.args.get('days', 7, type=int)
+        
+        try:
+            stats = db.get_signal_statistics(market=market, days=days)
+            return jsonify(stats)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/signals/export', methods=['GET'])
+    def api_export_signals():
+        """Export signals to CSV"""
+        import csv
+        import io
+        
+        symbol = request.args.get('symbol')
+        market = request.args.get('market')
+        execution_status = request.args.get('status')
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
+        
+        try:
+            signals, _ = db.get_signal_history_filtered(
+                limit=10000,
+                symbol=symbol,
+                market=market,
+                execution_status=execution_status,
+                date_from=date_from,
+                date_to=date_to
+            )
+            
+            output = io.StringIO()
+            writer = csv.writer(output)
+            
+            writer.writerow([
+                'ID', 'Symbol', 'Direction', 'Asset Type', 'Quantity', 'Price',
+                'Strike', 'Expiry', 'Market', 'Status', 'Broker', 'Broker Response',
+                'Channel', 'Author', 'Platform', 'Received At', 'Executed At',
+                'PNL', 'PNL %', 'Error'
+            ])
+            
+            for s in signals:
+                writer.writerow([
+                    s.get('id'),
+                    s.get('symbol'),
+                    s.get('direction'),
+                    s.get('asset_type'),
+                    s.get('quantity'),
+                    s.get('price'),
+                    s.get('strike'),
+                    s.get('expiry'),
+                    s.get('market'),
+                    s.get('execution_status'),
+                    s.get('broker_target'),
+                    s.get('broker_response'),
+                    s.get('channel_name'),
+                    s.get('author_name'),
+                    s.get('source_platform'),
+                    s.get('received_at'),
+                    s.get('executed_at'),
+                    s.get('pnl_realized'),
+                    s.get('pnl_percent'),
+                    s.get('last_error')
+                ])
+            
+            output.seek(0)
+            return Response(
+                output.getvalue(),
+                mimetype='text/csv',
+                headers={'Content-Disposition': 'attachment; filename=signal_history.csv'}
+            )
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
     
     # Channel messages retention settings
     @app.route('/api/channel-messages/settings', methods=['GET'])
@@ -13752,6 +13907,78 @@ def register_routes(app):
         except Exception as e:
             import traceback
             traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # ============ UPSTOX PENDING ORDERS API ============
+    
+    @app.route('/api/upstox/pending-orders', methods=['GET'])
+    @login_required
+    def api_upstox_pending_orders():
+        """Get all pending Upstox AMO orders"""
+        try:
+            status_filter = request.args.get('status', None)
+            
+            if status_filter:
+                orders = db.get_upstox_pending_orders(status_filter)
+            else:
+                orders = db.get_all_upstox_pending_orders()
+            
+            return jsonify({
+                'success': True,
+                'orders': orders,
+                'count': len(orders)
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/upstox/pending-orders/<pending_order_id>', methods=['DELETE'])
+    @login_required
+    def api_upstox_cancel_pending_order(pending_order_id):
+        """Cancel a pending Upstox AMO order"""
+        try:
+            success = False
+            
+            if _bot_instance:
+                upstox_broker = getattr(_bot_instance, 'upstox_broker', None)
+                if upstox_broker:
+                    success = upstox_broker.cancel_pending_order(pending_order_id)
+            
+            if not success:
+                success = db.cancel_upstox_pending_order(pending_order_id)
+            
+            if success:
+                return jsonify({'success': True, 'message': 'Order cancelled'})
+            else:
+                return jsonify({'success': False, 'error': 'Order not found or already processed'}), 404
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/upstox/amo-queue-enabled', methods=['GET'])
+    @login_required
+    def api_upstox_amo_queue_status():
+        """Get AMO queue enabled status"""
+        try:
+            enabled = db.get_upstox_amo_queue_enabled()
+            return jsonify({'success': True, 'enabled': enabled})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/upstox/amo-queue-enabled', methods=['POST'])
+    @login_required
+    def api_upstox_toggle_amo_queue():
+        """Enable/disable AMO queue"""
+        try:
+            data = request.get_json()
+            enabled = data.get('enabled', True)
+            
+            db.set_upstox_amo_queue_enabled(enabled)
+            
+            return jsonify({
+                'success': True,
+                'enabled': enabled,
+                'message': 'AMO queue ' + ('enabled' if enabled else 'disabled')
+            })
+        except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
     
     # ============ SIGNAL VERIFICATION API ============

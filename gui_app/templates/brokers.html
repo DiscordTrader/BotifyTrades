@@ -462,8 +462,164 @@
     <div id="mainContent" style="display: none;">
         <div class="country-tabs" id="countryTabs"></div>
         <div id="brokerSections"></div>
+        
+        <div id="upstoxPendingSection" class="upstox-pending-section" style="display: none;">
+            <div class="section-header" style="margin-top: 32px;">
+                <h2>Upstox Pending Orders (AMO Queue)</h2>
+                <div class="amo-toggle">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="amoQueueToggle" onchange="toggleAmoQueue(this.checked)">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text">Accept AMO Orders</span>
+                    </label>
+                </div>
+            </div>
+            <p class="pending-info">Orders placed during API blackout (12:00 AM - 5:30 AM IST) are queued here and auto-submitted after 5:30 AM.</p>
+            <div id="pendingOrdersList" class="pending-orders-list">
+                <div class="empty-state">No pending orders</div>
+            </div>
+        </div>
     </div>
 </div>
+
+<style>
+.upstox-pending-section {
+    margin-top: 32px;
+    padding: 24px;
+    background: linear-gradient(135deg, #0d2a3a 0%, #0f3a4f 100%);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 12px;
+}
+.upstox-pending-section .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+.upstox-pending-section h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+}
+.pending-info {
+    color: #8ab4c4;
+    font-size: 13px;
+    margin-bottom: 16px;
+}
+.amo-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+.toggle-label input {
+    display: none;
+}
+.toggle-slider {
+    width: 44px;
+    height: 24px;
+    background: #3a5a6a;
+    border-radius: 12px;
+    position: relative;
+    transition: background 0.3s;
+}
+.toggle-slider::after {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    top: 3px;
+    left: 3px;
+    transition: transform 0.3s;
+}
+.toggle-label input:checked + .toggle-slider {
+    background: #10b981;
+}
+.toggle-label input:checked + .toggle-slider::after {
+    transform: translateX(20px);
+}
+.toggle-text {
+    font-size: 13px;
+    color: #8ab4c4;
+}
+.pending-orders-list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+.pending-order-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+.pending-order-item:last-child {
+    margin-bottom: 0;
+}
+.order-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.order-symbol {
+    font-weight: 600;
+    color: #ffffff;
+    font-size: 15px;
+}
+.order-meta {
+    font-size: 12px;
+    color: #8ab4c4;
+}
+.order-status {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+.order-status.pending {
+    background: rgba(251, 191, 36, 0.2);
+    color: #fbbf24;
+}
+.order-status.submitted {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+.order-status.cancelled {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+.order-status.failed {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+.btn-cancel-order {
+    padding: 6px 12px;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    color: #ef4444;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+.btn-cancel-order:hover {
+    background: rgba(239, 68, 68, 0.3);
+}
+.btn-cancel-order:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+</style>
 
 <script>
 let groupedBrokers = {};
@@ -816,5 +972,107 @@ function showError(message) {
         </button>
     `;
 }
+
+async function loadUpstoxPendingOrders() {
+    try {
+        const [ordersRes, toggleRes] = await Promise.all([
+            fetch('/api/upstox/pending-orders'),
+            fetch('/api/upstox/amo-queue-enabled')
+        ]);
+        
+        const ordersData = await ordersRes.json();
+        const toggleData = await toggleRes.json();
+        
+        if (toggleData.success) {
+            document.getElementById('amoQueueToggle').checked = toggleData.enabled;
+        }
+        
+        if (ordersData.success) {
+            renderPendingOrders(ordersData.orders);
+            document.getElementById('upstoxPendingSection').style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Error loading Upstox pending orders:', error);
+    }
+}
+
+function renderPendingOrders(orders) {
+    const container = document.getElementById('pendingOrdersList');
+    
+    if (!orders || orders.length === 0) {
+        container.innerHTML = '<div class="empty-state">No pending orders</div>';
+        return;
+    }
+    
+    let html = '';
+    for (const order of orders) {
+        const statusClass = order.status.toLowerCase();
+        const canCancel = order.status === 'PENDING';
+        const createdAt = new Date(order.created_at).toLocaleString();
+        const symbol = order.symbol_display || order.instrument_token || 'Unknown';
+        
+        html += `
+            <div class="pending-order-item" data-order-id="${order.pending_order_id}">
+                <div class="order-details">
+                    <div class="order-symbol">${order.transaction_type} ${order.quantity} ${symbol}</div>
+                    <div class="order-meta">
+                        ID: ${order.pending_order_id} | ${order.order_type} | Queued: ${createdAt}
+                    </div>
+                    ${order.error_message ? `<div class="order-meta" style="color: #ef4444;">Error: ${order.error_message}</div>` : ''}
+                    ${order.submitted_order_ids ? `<div class="order-meta" style="color: #10b981;">Submitted: ${order.submitted_order_ids}</div>` : ''}
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span class="order-status ${statusClass}">${order.status}</span>
+                    ${canCancel ? `<button class="btn-cancel-order" onclick="cancelPendingOrder('${order.pending_order_id}')">Cancel</button>` : ''}
+                </div>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+async function toggleAmoQueue(enabled) {
+    try {
+        const response = await fetch('/api/upstox/amo-queue-enabled', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled })
+        });
+        
+        const data = await response.json();
+        if (!data.success) {
+            alert('Failed to update AMO queue setting: ' + data.error);
+            document.getElementById('amoQueueToggle').checked = !enabled;
+        }
+    } catch (error) {
+        alert('Error updating AMO queue setting: ' + error.message);
+        document.getElementById('amoQueueToggle').checked = !enabled;
+    }
+}
+
+async function cancelPendingOrder(orderId) {
+    if (!confirm('Cancel this pending order?')) return;
+    
+    try {
+        const response = await fetch(`/api/upstox/pending-orders/${orderId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            loadUpstoxPendingOrders();
+        } else {
+            alert('Failed to cancel order: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error cancelling order: ' + error.message);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(loadUpstoxPendingOrders, 1000);
+    setInterval(loadUpstoxPendingOrders, 30000);
+});
 </script>
 {% endblock %}

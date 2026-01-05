@@ -182,29 +182,36 @@ if [ "$BUILD_TYPE_UPPER" == "ADMIN" ]; then
     exit 0
 fi
 
-# USER BUILD: Trigger workflow on PUBLIC repo
+# USER BUILD: Trigger workflow on PUBLIC repo (hardened build)
+echo ""
+echo -e "${CYAN}============================================${NC}"
+echo -e "${CYAN}  USER BUILD - Building HARDENED release${NC}"
+echo -e "${CYAN}  Target: PUBLIC repo (BotifyTrades)${NC}"
+echo -e "${CYAN}============================================${NC}"
+echo ""
+
 if [ -z "$RELEASE_TOKEN" ]; then
     print_warning "RELEASE_TOKEN not set - skipping automatic build trigger"
     echo ""
-    echo "To trigger the build manually:"
+    echo "To trigger the User build manually:"
     echo "  1. Go to: https://github.com/$PUBLIC_REPO/actions"
-    echo "  2. Select 'Build and Release' workflow"
+    echo "  2. Select 'Build User Release (Hardened)' workflow"
     echo "  3. Click 'Run workflow'"
     echo "  4. Enter version: $VERSION"
     echo ""
 else
-    # Trigger repository_dispatch event with build type
+    # Trigger repository_dispatch event on PUBLIC repo for hardened user build
     RESPONSE=$(curl -s -X POST \
         -H "Accept: application/vnd.github+json" \
         -H "Authorization: Bearer $RELEASE_TOKEN" \
         -H "X-GitHub-Api-Version: 2022-11-28" \
         "https://api.github.com/repos/$PUBLIC_REPO/dispatches" \
-        -d "{\"event_type\":\"release_ready\",\"client_payload\":{\"version\":\"$VERSION\",\"build_type\":\"$BUILD_TYPE_UPPER\"}}" \
+        -d "{\"event_type\":\"user_release_ready\",\"client_payload\":{\"version\":\"$VERSION\",\"build_type\":\"USER\"}}" \
         -w "%{http_code}" \
         -o /dev/null)
     
     if [ "$RESPONSE" == "204" ]; then
-        print_success "Build workflow triggered on $PUBLIC_REPO"
+        print_success "Hardened User build workflow triggered on $PUBLIC_REPO"
     else
         print_warning "Failed to trigger workflow (HTTP $RESPONSE)"
         echo "You may need to trigger manually at:"
@@ -214,14 +221,16 @@ fi
 
 echo ""
 echo "============================================"
-echo -e "  ${GREEN}✓ Release v$VERSION ($BUILD_TYPE_UPPER) Complete!${NC}"
+echo -e "  ${GREEN}✓ User Release v$VERSION Complete!${NC}"
 echo "============================================"
 echo ""
 
-if [ "$BUILD_TYPE_UPPER" == "USER" ]; then
-    echo -e "${YELLOW}Note: This is a USER build - admin features are hidden${NC}"
-    echo ""
-fi
+echo -e "${YELLOW}USER builds are HARDENED and include:${NC}"
+echo "  • PyArmor code obfuscation"
+echo "  • Console hidden (--noconsole)"
+echo "  • Debug symbols stripped"
+echo "  • All user trading features"
+echo ""
 
 echo "Next steps:"
 echo "  • Check build status: https://github.com/$PUBLIC_REPO/actions"

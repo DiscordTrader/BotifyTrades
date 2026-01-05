@@ -1,21 +1,33 @@
 """
 Upstox Broker Implementation (India)
 OAuth 2.0 based trading platform for Indian markets (NSE/BSE)
+Includes automatic token refresh functionality
 """
 
 import sys
 import os
 import asyncio
 import requests
+import threading
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timedelta
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
+gui_app_dir = os.path.join(parent_dir, 'gui_app')
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
+if gui_app_dir not in sys.path:
+    sys.path.insert(0, gui_app_dir)
 
 from broker_interface import BrokerInterface, OrderResult, BrokerFactory
+
+try:
+    from gui_app import database as db
+    DB_AVAILABLE = True
+except ImportError:
+    DB_AVAILABLE = False
+    print("[UPSTOX] Warning: Database module not available - pending orders will be in-memory only")
 
 try:
     from upstox_client import Configuration, ApiClient, UserApi, OrderApi, PortfolioApi, MarketQuoteApi, OptionsApi
@@ -26,10 +38,13 @@ except ImportError:
 
 
 class UpstoxBroker(BrokerInterface):
-    """Upstox broker implementation for Indian markets"""
+    """Upstox broker implementation for Indian markets with automatic token refresh"""
     
     COUNTRY_CODE = 'IN'
     CURRENCY = 'INR'
+    TOKEN_REFRESH_URL = 'https://api.upstox.com/v2/login/authorization/token'
+    TOKEN_EXPIRY_HOURS = 24
+    REFRESH_BUFFER_HOURS = 2
     
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
@@ -41,6 +56,13 @@ class UpstoxBroker(BrokerInterface):
         self.quote_api = None
         self.options_api = None
         self.user_id = None
+        self.token_issued_at = None
+        self.token_expires_at = None
+        self._refresh_scheduler_running = False
+        self._refresh_lock = threading.Lock()
+        self._pending_orders = []
+        self._pending_order_lock = threading.Lock()
+        self._pending_order_scheduler_running = False
     
     @property
     def is_live(self) -> bool:
@@ -81,6 +103,28 @@ class UpstoxBroker(BrokerInterface):
                 print(f"[{self.name}] Connected! User: {self.user_id}")
                 print(f"[{self.name}] Name: {profile.data.user_name}")
                 self.connected = True
+                
+                token_issued_at = self.config.get('token_issued_at')
+                if token_issued_at:
+                    try:
+                        if isinstance(token_issued_at, str):
+                            self.token_issued_at = datetime.fromisoformat(token_issued_at)
+                        else:
+                            self.token_issued_at = token_issued_at
+                        self.token_expires_at = self.token_issued_at + timedelta(hours=self.TOKEN_EXPIRY_HOURS)
+                        time_left = self.get_time_until_expiry()
+                        if time_left:
+                            hours = int(time_left.total_seconds() // 3600)
+                            mins = int((time_left.total_seconds() % 3600) // 60)
+                            print(f"[{self.name}] Token expires in: {hours}h {mins}m")
+                    except Exception as e:
+                        print(f"[{self.name}] Could not parse token_issued_at: {e}")
+                
+                if self.config.get('refresh_token'):
+                    print(f"[{self.name}] ✓ Auto-refresh enabled (refresh_token available)")
+                else:
+                    print(f"[{self.name}] ⚠️  No refresh_token - manual re-auth needed when token expires")
+                
                 return True
             else:
                 print(f"[{self.name}] Failed to get user profile")
@@ -95,7 +139,188 @@ class UpstoxBroker(BrokerInterface):
         """Disconnect from Upstox"""
         self.api_client = None
         self.connected = False
+        self._refresh_scheduler_running = False
         print(f"[{self.name}] Disconnected")
+        return True
+    
+    def is_token_expired(self) -> bool:
+        """Check if the access token is expired or about to expire"""
+        if not self.token_expires_at:
+            issued_at = self.config.get('token_issued_at')
+            if issued_at:
+                try:
+                    if isinstance(issued_at, str):
+                        self.token_issued_at = datetime.fromisoformat(issued_at)
+                    else:
+                        self.token_issued_at = issued_at
+                    self.token_expires_at = self.token_issued_at + timedelta(hours=self.TOKEN_EXPIRY_HOURS)
+                except:
+                    return True
+            else:
+                return True
+        
+        buffer = timedelta(hours=self.REFRESH_BUFFER_HOURS)
+        return datetime.now() >= (self.token_expires_at - buffer)
+    
+    def get_time_until_expiry(self) -> Optional[timedelta]:
+        """Get time remaining until token expires"""
+        if not self.token_expires_at:
+            return None
+        return self.token_expires_at - datetime.now()
+    
+    async def refresh_access_token(self) -> bool:
+        """
+        Refresh the access token using the refresh token.
+        Upstox refresh tokens are single-use and return a new refresh token.
+        """
+        with self._refresh_lock:
+            try:
+                api_key = self.config.get('api_key')
+                api_secret = self.config.get('api_secret')
+                refresh_token = self.config.get('refresh_token')
+                
+                if not all([api_key, api_secret, refresh_token]):
+                    print(f"[{self.name}] Cannot refresh - missing api_key, api_secret, or refresh_token")
+                    return False
+                
+                print(f"[{self.name}] Refreshing access token...")
+                
+                data = {
+                    'client_id': api_key,
+                    'client_secret': api_secret,
+                    'refresh_token': refresh_token,
+                    'grant_type': 'refresh_token'
+                }
+                
+                headers = {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Accept': 'application/json'
+                }
+                
+                response = await asyncio.to_thread(
+                    requests.post,
+                    self.TOKEN_REFRESH_URL,
+                    data=data,
+                    headers=headers
+                )
+                
+                if response.status_code == 200:
+                    token_data = response.json()
+                    new_access_token = token_data.get('access_token')
+                    new_refresh_token = token_data.get('refresh_token')
+                    expires_in = token_data.get('expires_in', 86400)
+                    
+                    if new_access_token:
+                        self.config['access_token'] = new_access_token
+                        if new_refresh_token:
+                            self.config['refresh_token'] = new_refresh_token
+                        
+                        self.token_issued_at = datetime.now()
+                        self.token_expires_at = self.token_issued_at + timedelta(seconds=expires_in)
+                        
+                        if self.api_client and hasattr(self.api_client, 'configuration'):
+                            self.api_client.configuration.access_token = new_access_token
+                        
+                        self._save_tokens_to_database(new_access_token, new_refresh_token)
+                        
+                        print(f"[{self.name}] ✓ Token refreshed successfully!")
+                        print(f"[{self.name}]   Expires at: {self.token_expires_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                        return True
+                    else:
+                        print(f"[{self.name}] Token refresh failed - no access_token in response")
+                        return False
+                else:
+                    error_msg = response.text[:200] if response.text else 'Unknown error'
+                    print(f"[{self.name}] Token refresh failed: {response.status_code} - {error_msg}")
+                    if response.status_code == 401:
+                        print(f"[{self.name}] ⚠️  Refresh token may be expired. Manual re-authentication required.")
+                    return False
+                    
+            except Exception as e:
+                print(f"[{self.name}] Token refresh error: {e}")
+                return False
+    
+    def _save_tokens_to_database(self, access_token: str, refresh_token: Optional[str] = None):
+        """Save refreshed tokens to the database"""
+        try:
+            gui_app_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'gui_app')
+            sys.path.insert(0, gui_app_path)
+            from database import get_db
+            
+            conn = get_db()
+            cursor = conn.cursor()
+            
+            update_fields = ['access_token = ?', 'token_issued_at = ?']
+            values = [access_token, datetime.now().isoformat()]
+            
+            if refresh_token:
+                update_fields.append('refresh_token = ?')
+                values.append(refresh_token)
+            
+            values.append('upstox')
+            
+            cursor.execute(f'''
+                UPDATE broker_credentials 
+                SET {', '.join(update_fields)}
+                WHERE broker_id = ?
+            ''', values)
+            conn.commit()
+            print(f"[{self.name}] ✓ Tokens saved to database")
+            
+        except Exception as e:
+            print(f"[{self.name}] Warning: Could not save tokens to database: {e}")
+    
+    async def start_token_refresh_scheduler(self):
+        """Start a background scheduler to automatically refresh tokens before expiry"""
+        if self._refresh_scheduler_running:
+            print(f"[{self.name}] Token refresh scheduler already running")
+            return
+        
+        self._refresh_scheduler_running = True
+        print(f"[{self.name}] ✓ Token auto-refresh scheduler started")
+        
+        async def refresh_loop():
+            while self._refresh_scheduler_running and self.connected:
+                try:
+                    time_until_expiry = self.get_time_until_expiry()
+                    
+                    if time_until_expiry and time_until_expiry.total_seconds() > 0:
+                        refresh_in = time_until_expiry.total_seconds() - (self.REFRESH_BUFFER_HOURS * 3600)
+                        
+                        if refresh_in > 0:
+                            hours = int(refresh_in // 3600)
+                            mins = int((refresh_in % 3600) // 60)
+                            print(f"[{self.name}] Next token refresh in {hours}h {mins}m")
+                            await asyncio.sleep(min(refresh_in, 3600))
+                        else:
+                            print(f"[{self.name}] Token nearing expiry, refreshing now...")
+                            success = await self.refresh_access_token()
+                            if not success:
+                                print(f"[{self.name}] ⚠️  Auto-refresh failed, will retry in 5 minutes")
+                                await asyncio.sleep(300)
+                    else:
+                        print(f"[{self.name}] Token expired, attempting refresh...")
+                        success = await self.refresh_access_token()
+                        if success:
+                            await self.connect()
+                        else:
+                            print(f"[{self.name}] ⚠️  Token refresh failed, manual re-auth needed")
+                            self._refresh_scheduler_running = False
+                            break
+                            
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    print(f"[{self.name}] Refresh scheduler error: {e}")
+                    await asyncio.sleep(300)
+        
+        self._refresh_task = asyncio.create_task(refresh_loop())
+    
+    async def ensure_valid_token(self) -> bool:
+        """Ensure we have a valid token before making API calls"""
+        if self.is_token_expired():
+            print(f"[{self.name}] Token expired, attempting refresh...")
+            return await self.refresh_access_token()
         return True
     
     async def get_account_info(self) -> Dict[str, Any]:
@@ -344,55 +569,290 @@ class UpstoxBroker(BrokerInterface):
             traceback.print_exc()
             return {'success': False, 'message': str(e)}
     
+    def _is_blackout_window(self) -> bool:
+        """Check if current time is in Upstox API blackout window (12:00 AM - 5:30 AM IST)"""
+        try:
+            import pytz
+            ist = pytz.timezone('Asia/Kolkata')
+            now_ist = datetime.now(ist)
+            hour = now_ist.hour
+            minute = now_ist.minute
+            
+            if hour < 5 or (hour == 5 and minute < 30):
+                return True
+            return False
+        except Exception:
+            return False
+    
+    def _get_market_session(self) -> str:
+        """Get current market session for logging"""
+        try:
+            import pytz
+            ist = pytz.timezone('Asia/Kolkata')
+            now_ist = datetime.now(ist)
+            hour = now_ist.hour
+            minute = now_ist.minute
+            
+            if hour < 5 or (hour == 5 and minute < 30):
+                return "BLACKOUT (12:00 AM - 5:30 AM IST)"
+            elif hour < 9 or (hour == 9 and minute < 15):
+                return "PRE-MARKET (AMO Window)"
+            elif hour < 15 or (hour == 15 and minute < 30):
+                return "MARKET HOURS"
+            else:
+                return "POST-MARKET (AMO Window)"
+        except Exception:
+            return "UNKNOWN"
+
+    def _queue_pending_order(self, order_params: Dict[str, Any]) -> Optional[str]:
+        """Queue an order for execution after blackout window ends.
+        Returns None if AMO queue is disabled."""
+        import uuid
+        
+        if DB_AVAILABLE:
+            if not db.get_upstox_amo_queue_enabled():
+                print(f"[{self.name}] ❌ AMO queue is disabled - order rejected during blackout")
+                return None
+        
+        with self._pending_order_lock:
+            order_id = f"PENDING_{uuid.uuid4().hex[:8]}"
+            order_params['pending_order_id'] = order_id
+            order_params['queued_at'] = datetime.now().isoformat()
+            self._pending_orders.append(order_params)
+            
+            if DB_AVAILABLE:
+                db.save_upstox_pending_order(order_params)
+            
+            print(f"[{self.name}] 📋 Order queued for AMO submission: {order_id}")
+            print(f"[{self.name}]    Pending orders count: {len(self._pending_orders)}")
+            
+            if not self._pending_order_scheduler_running:
+                self._start_pending_order_scheduler()
+            
+            return order_id
+    
+    def _start_pending_order_scheduler(self):
+        """Start background scheduler to process pending orders after blackout"""
+        if self._pending_order_scheduler_running:
+            return
+        
+        self._pending_order_scheduler_running = True
+        
+        def scheduler_loop():
+            import time
+            print(f"[{self.name}] ⏰ Pending order scheduler started - checking every 60 seconds")
+            while self._pending_order_scheduler_running:
+                try:
+                    if not self._is_blackout_window():
+                        with self._pending_order_lock:
+                            if self._pending_orders:
+                                print(f"[{self.name}] 🌅 Blackout ended - processing {len(self._pending_orders)} pending orders")
+                                self._process_pending_orders_sync()
+                    time.sleep(60)
+                except Exception as e:
+                    print(f"[{self.name}] Pending order scheduler error: {e}")
+                    time.sleep(60)
+        
+        thread = threading.Thread(target=scheduler_loop, daemon=True, name="UpstoxPendingOrderScheduler")
+        thread.start()
+    
+    def _process_pending_orders_sync(self):
+        """Process all pending orders synchronously (called from scheduler thread)"""
+        if DB_AVAILABLE:
+            db_orders = db.get_upstox_pending_orders('PENDING')
+            for db_order in db_orders:
+                found = any(o.get('pending_order_id') == db_order['pending_order_id'] for o in self._pending_orders)
+                if not found:
+                    self._pending_orders.append(db_order)
+        
+        orders_to_process = list(self._pending_orders)
+        self._pending_orders.clear()
+        
+        for order in orders_to_process:
+            try:
+                pending_id = order.get('pending_order_id', 'unknown')
+                print(f"[{self.name}] 📤 Submitting queued order: {pending_id}")
+                
+                access_token = self.config.get('access_token')
+                if not access_token:
+                    print(f"[{self.name}] ❌ No access token - cannot submit pending order")
+                    if DB_AVAILABLE:
+                        db.update_upstox_pending_order_status(pending_id, 'FAILED', error='No access token')
+                    continue
+                
+                order_body = {
+                    'quantity': order['quantity'],
+                    'product': order['product'],
+                    'validity': 'DAY',
+                    'price': order.get('price', 0),
+                    'instrument_token': order['instrument_token'],
+                    'order_type': order['order_type'],
+                    'transaction_type': order['transaction_type'],
+                    'disclosed_quantity': 0,
+                    'trigger_price': 0.0,
+                    'is_amo': True,
+                    'slice': order.get('slice', True)
+                }
+                
+                url = "https://api-hft.upstox.com/v3/order/place"
+                headers = {
+                    'Authorization': f'Bearer {access_token}',
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+                
+                response = requests.post(url, json=order_body, headers=headers)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('status') == 'success':
+                        order_ids = data.get('data', {}).get('order_ids', [])
+                        order_ids_str = ','.join(order_ids)
+                        print(f"[{self.name}] ✓ Pending order {pending_id} submitted! IDs: {order_ids_str}")
+                        if DB_AVAILABLE:
+                            db.update_upstox_pending_order_status(pending_id, 'SUBMITTED', order_ids=order_ids_str)
+                    else:
+                        error_msg = data.get('message', 'Unknown error')
+                        print(f"[{self.name}] ❌ Pending order {pending_id} failed: {error_msg}")
+                        if DB_AVAILABLE:
+                            db.update_upstox_pending_order_status(pending_id, 'FAILED', error=error_msg)
+                else:
+                    error_msg = f"HTTP error {response.status_code}"
+                    print(f"[{self.name}] ❌ Pending order {pending_id}: {error_msg}")
+                    if DB_AVAILABLE:
+                        db.update_upstox_pending_order_status(pending_id, 'FAILED', error=error_msg)
+                    
+            except Exception as e:
+                print(f"[{self.name}] ❌ Error processing pending order: {e}")
+                if DB_AVAILABLE:
+                    db.update_upstox_pending_order_status(pending_id, 'FAILED', error=str(e))
+    
+    def get_pending_orders(self) -> List[Dict]:
+        """Get list of pending orders waiting for blackout to end"""
+        with self._pending_order_lock:
+            if DB_AVAILABLE:
+                return db.get_upstox_pending_orders('PENDING')
+            return list(self._pending_orders)
+    
+    def cancel_pending_order(self, pending_order_id: str) -> bool:
+        """Cancel a pending order before it's submitted"""
+        with self._pending_order_lock:
+            self._pending_orders = [o for o in self._pending_orders if o.get('pending_order_id') != pending_order_id]
+            
+            if DB_AVAILABLE:
+                return db.cancel_upstox_pending_order(pending_order_id)
+            return True
+
     async def place_order(self, symbol: str, action: str, quantity: int,
                           order_type: str = 'market', price: float = None,
-                          product_type: str = 'INTRADAY', **kwargs) -> OrderResult:
-        """Place an order on Upstox using PlaceOrderRequest body"""
-        if not self.order_api:
+                          product_type: str = 'INTRADAY', slice_order: bool = True,
+                          tag: str = None, symbol_display: str = None, **kwargs) -> OrderResult:
+        """Place an order on Upstox using V3 HFT API with auto-slicing support"""
+        access_token = self.config.get('access_token')
+        if not access_token:
             return OrderResult(success=False, message="Not connected")
         
+        session = self._get_market_session()
+        print(f"[{self.name}] Market session: {session}")
+        
+        transaction_type = 'BUY' if action.upper() in ('BTO', 'BUY') else 'SELL'
+        upstox_order_type = 'MARKET' if order_type == 'market' else 'LIMIT'
+        product = 'I' if product_type == 'INTRADAY' else 'D'
+        
+        if self._is_blackout_window():
+            order_params = {
+                'quantity': int(quantity),
+                'product': product,
+                'price': float(price) if price and upstox_order_type == 'LIMIT' else 0.0,
+                'instrument_token': symbol,
+                'order_type': upstox_order_type,
+                'transaction_type': transaction_type,
+                'slice': slice_order,
+                'action': action,
+                'symbol_display': symbol_display or symbol
+            }
+            pending_id = self._queue_pending_order(order_params)
+            
+            if pending_id is None:
+                msg = "Order rejected - AMO queue is disabled. Enable AMO queue in settings or wait until 5:30 AM IST."
+                print(f"[{self.name}] ❌ {msg}")
+                return OrderResult(success=False, message=msg)
+            
+            msg = f"Order queued (ID: {pending_id}). Will auto-submit after 5:30 AM IST."
+            print(f"[{self.name}] ⏳ {msg}")
+            return OrderResult(success=True, order_id=pending_id, message=msg)
+        
         try:
-            from upstox_client import PlaceOrderRequest
+            order_body = {
+                'quantity': int(quantity),
+                'product': product,
+                'validity': 'DAY',
+                'price': float(price) if price and upstox_order_type == 'LIMIT' else 0.0,
+                'instrument_token': symbol,
+                'order_type': upstox_order_type,
+                'transaction_type': transaction_type,
+                'disclosed_quantity': 0,
+                'trigger_price': 0.0,
+                'is_amo': False,
+                'slice': slice_order
+            }
             
-            transaction_type = 'BUY' if action.upper() in ('BTO', 'BUY') else 'SELL'
-            upstox_order_type = 'MARKET' if order_type == 'market' else 'LIMIT'
-            product = 'I' if product_type == 'INTRADAY' else 'D'
+            if tag:
+                order_body['tag'] = tag[:40]
             
-            body = PlaceOrderRequest(
-                quantity=int(quantity),
-                product=product,
-                validity='DAY',
-                price=float(price) if price and upstox_order_type == 'LIMIT' else 0.0,
-                instrument_token=symbol,
-                order_type=upstox_order_type,
-                transaction_type=transaction_type,
-                disclosed_quantity=0,
-                trigger_price=0.0,
-                is_amo=False
-            )
+            print(f"[{self.name}] V3 Order: {transaction_type} {quantity} {symbol} @ {price or 'MARKET'} (slice={slice_order})")
             
-            print(f"[{self.name}] Order body: {transaction_type} {quantity} {symbol} @ {price or 'MARKET'}")
+            url = "https://api-hft.upstox.com/v3/order/place"
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
             
-            result = await asyncio.to_thread(
-                self.order_api.place_order,
-                body,
-                api_version='2.0'
-            )
+            response = await asyncio.to_thread(requests.post, url, json=order_body, headers=headers)
             
-            order_id = ''
-            if result and hasattr(result, 'data') and result.data:
-                order_id = str(getattr(result.data, 'order_id', ''))
-            
-            print(f"[{self.name}] ✓ Order placed successfully! Order ID: {order_id}")
-            
-            return OrderResult(
-                success=True,
-                order_id=order_id,
-                message=f"Order placed: {action} {quantity} {symbol}"
-            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'success':
+                    order_ids = data.get('data', {}).get('order_ids', [])
+                    latency = data.get('metadata', {}).get('latency', 0)
+                    order_id_str = ','.join(order_ids) if order_ids else ''
+                    print(f"[{self.name}] ✓ Order placed! IDs: {order_id_str} (latency: {latency}ms)")
+                    return OrderResult(
+                        success=True,
+                        order_id=order_id_str,
+                        message=f"Order placed: {action} {quantity} {symbol}"
+                    )
+                else:
+                    error_msg = data.get('message', 'Order failed')
+                    print(f"[{self.name}] ❌ Order failed: {error_msg}")
+                    return OrderResult(success=False, message=error_msg)
+            else:
+                error_data = {}
+                try:
+                    error_data = response.json()
+                except:
+                    pass
+                errors = error_data.get('errors', [])
+                if errors:
+                    error_code = errors[0].get('errorCode', errors[0].get('error_code', ''))
+                    error_msg = errors[0].get('message', response.text)
+                    print(f"[{self.name}] ❌ Order HTTP {response.status_code} [{error_code}]: {error_msg}")
+                    
+                    if error_code == 'UDAPI100074':
+                        return OrderResult(success=False, message="API blackout (12:00 AM - 5:30 AM IST). Try after 5:30 AM.")
+                    elif error_code == 'UDAPI100039':
+                        return OrderResult(success=False, message="AMO not allowed during market hours")
+                else:
+                    error_msg = response.text
+                    print(f"[{self.name}] ❌ Order HTTP {response.status_code}: {error_msg}")
+                
+                return OrderResult(success=False, message=error_msg)
             
         except Exception as e:
-            print(f"[{self.name}] ❌ Option order FAILED: {e}")
+            print(f"[{self.name}] ❌ Order FAILED: {e}")
+            import traceback
+            traceback.print_exc()
             return OrderResult(success=False, message=str(e))
     
     async def place_stock_order(
@@ -426,6 +886,7 @@ class UpstoxBroker(BrokerInterface):
         opt_type: str = None,
         expiry_mmdd: str = None,
         limit_price: float = None,
+        lots: int = None,
         **kwargs
     ) -> OrderResult:
         """
@@ -433,8 +894,11 @@ class UpstoxBroker(BrokerInterface):
         
         Supports both Alpaca-style and Webull-style parameters.
         Looks up the actual Upstox instrument key from API.
+        
+        For INDIA signals, use 'lots' parameter (raw lot count) to avoid double multiplication.
+        If 'lots' is provided, we multiply by lot_size from API.
+        If only 'qty' is provided and it's already in units (pre-multiplied), we use it directly.
         """
-        actual_qty = quantity or qty or 1
         actual_opt_type = option_type or opt_type or 'CE'
         actual_expiry = expiry or expiry_mmdd or ''
         actual_price = price or limit_price
@@ -448,17 +912,22 @@ class UpstoxBroker(BrokerInterface):
             expiry=actual_expiry
         )
         
-        instrument_token, lot_size = lookup_result
+        instrument_token, api_lot_size = lookup_result
         
         if not instrument_token:
             formatted_expiry = self._format_expiry_for_upstox(actual_expiry)
             instrument_token = f"NSE_FO|{symbol.upper()}{formatted_expiry}{int(strike)}{opt_suffix}"
-            lot_size = 75
-            print(f"[UPSTOX] ⚠️ Could not lookup instrument, using fallback: {instrument_token} (lot_size={lot_size})")
+            api_lot_size = 75
+            print(f"[UPSTOX] ⚠️ Could not lookup instrument, using fallback: {instrument_token} (lot_size={api_lot_size})")
         
-        order_qty = actual_qty * lot_size
-        print(f"[UPSTOX] Quantity: {actual_qty} lots x {lot_size} = {order_qty} units")
+        if lots is not None:
+            order_qty = lots * api_lot_size
+            print(f"[UPSTOX] Quantity: {lots} lots x {api_lot_size} = {order_qty} units")
+        else:
+            order_qty = quantity or qty or api_lot_size
+            print(f"[UPSTOX] Quantity: {order_qty} units (passed directly)")
         
+        symbol_display = f"{symbol.upper()} {int(strike)} {opt_suffix} {actual_expiry}"
         print(f"[UPSTOX] Placing option: {action} {order_qty} {instrument_token} @ {actual_price}")
         
         order_type = 'limit' if actual_price else 'market'
@@ -468,7 +937,8 @@ class UpstoxBroker(BrokerInterface):
             quantity=order_qty,
             order_type=order_type,
             price=actual_price,
-            product_type='INTRADAY'
+            product_type='INTRADAY',
+            symbol_display=symbol_display
         )
     
     async def _lookup_instrument_key(self, symbol: str, strike: float, opt_type: str, expiry: str) -> Optional[str]:

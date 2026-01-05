@@ -296,8 +296,23 @@ def get_date_filter_bounds(period: str, start_date: str = None, end_date: str = 
 _local = threading.local()
 
 def get_db_path():
-    """Get database file path"""
-    return Path.cwd() / 'bot_data.db'
+    """Get database file path - handles both development and PyInstaller modes"""
+    import sys
+    
+    # Check if running as PyInstaller bundle
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable - use executable's directory
+        base_path = Path(sys.executable).parent
+    else:
+        # Running as script - use current working directory
+        base_path = Path.cwd()
+    
+    db_path = base_path / 'bot_data.db'
+    
+    # Ensure parent directory exists
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    return db_path
 
 
 def get_connection():
@@ -689,6 +704,57 @@ def init_db():
         cursor.execute("ALTER TABLE signals ADD COLUMN market TEXT DEFAULT 'US'")
         conn.commit()
         print("[DATABASE] ✓ Market segmentation column added to signals")
+    
+    # Migration: Add comprehensive signal tracking columns for full lifecycle visibility
+    signal_tracking_columns = [
+        ('source_platform', "TEXT DEFAULT 'discord'"),
+        ('guild_id', 'TEXT'),
+        ('author_id', 'TEXT'),
+        ('broker_target', 'TEXT'),
+        ('broker_order_id', 'TEXT'),
+        ('broker_response', 'TEXT'),
+        ('status_timestamps', 'TEXT'),
+        ('last_error', 'TEXT'),
+        ('pnl_realized', 'REAL'),
+        ('pnl_percent', 'REAL'),
+        ('detected_at', 'TIMESTAMP'),
+        ('validated_at', 'TIMESTAMP'),
+        ('submitted_at', 'TIMESTAMP'),
+        ('executed_at', 'TIMESTAMP'),
+        ('raw_message', 'TEXT'),
+    ]
+    for col_name, col_type in signal_tracking_columns:
+        try:
+            cursor.execute(f'SELECT {col_name} FROM signals LIMIT 1')
+        except sqlite3.OperationalError:
+            print(f"[DATABASE] Adding {col_name} column to signals table...")
+            cursor.execute(f"ALTER TABLE signals ADD COLUMN {col_name} {col_type}")
+            conn.commit()
+    
+    # Signal Event Transitions - Immutable audit trail for signal lifecycle
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS signal_event_transitions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            signal_id INTEGER NOT NULL,
+            from_status TEXT,
+            to_status TEXT NOT NULL,
+            details TEXT,
+            actor TEXT DEFAULT 'system',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (signal_id) REFERENCES signals(id)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_transitions_signal ON signal_event_transitions(signal_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_transitions_status ON signal_event_transitions(to_status)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_transitions_time ON signal_event_transitions(created_at)')
+    
+    # Additional indexes for signal history filtering
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signals_symbol ON signals(symbol)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signals_market ON signals(market)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signals_status ON signals(execution_status)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signals_broker ON signals(broker_target)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signals_received ON signals(received_at)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signals_author ON signals(author_id)')
     
     # Signal lots (BTO positions tracking for FIFO matching)
     cursor.execute('''
@@ -6133,7 +6199,7 @@ def init_signal_formats_table():
             ('US', 'tastytrade', 'Tastytrade', '["username","password","client_secret","refresh_token"]', 'tastytrade', 1, 1, 1, '15-minute token', 4),
             ('US', 'robinhood', 'Robinhood', '["username","password","totp_secret"]', 'robin-stocks', 1, 1, 0, 'Session-based', 5),
             ('CA', 'questrade', 'Questrade', '["refresh_token"]', 'qtrade', 1, 1, 0, '30-min access / 3-day refresh', 1),
-            ('IN', 'upstox', 'Upstox', '["api_key","api_secret","redirect_uri","access_token"]', 'upstox-python-sdk', 1, 1, 0, '1 day', 1),
+            ('IN', 'upstox', 'Upstox', '["api_key","api_secret","redirect_uri","access_token","refresh_token","token_issued_at"]', 'upstox-python-sdk', 1, 1, 0, '24h access / auto-refresh', 1),
             ('IN', 'zerodha', 'Zerodha (Kite)', '["api_key","api_secret","user_id","password","totp_secret"]', 'kiteconnect', 1, 1, 0, 'Daily 6 AM IST', 2),
             ('IN', 'dhanq', 'DhanQ', '["client_id","access_token"]', 'dhanhq', 1, 1, 0, '24 hours (auto-refresh available)', 3)
     ''')
@@ -7915,6 +7981,563 @@ def get_conditional_order_audit(order_id: int) -> List[Dict[str, Any]]:
         return []
 
 
+# ============ UPSTOX PENDING ORDERS ============
+
+def init_upstox_pending_orders_table():
+    """Create table for Upstox pending AMO orders during blackout"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS upstox_pending_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pending_order_id TEXT UNIQUE NOT NULL,
+            instrument_token TEXT NOT NULL,
+            symbol_display TEXT,
+            transaction_type TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            price REAL,
+            order_type TEXT NOT NULL,
+            product TEXT NOT NULL,
+            slice INTEGER DEFAULT 1,
+            
+            -- Status: PENDING, SUBMITTED, CANCELLED, FAILED
+            status TEXT DEFAULT 'PENDING',
+            
+            -- Execution info
+            submitted_order_ids TEXT,
+            error_message TEXT,
+            
+            -- Timestamps
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            submitted_at TIMESTAMP,
+            cancelled_at TIMESTAMP
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_upstox_pending_status ON upstox_pending_orders(status)
+    ''')
+    
+    conn.commit()
+    print("[DATABASE] ✓ Upstox pending orders table ready")
+
+
+def init_upstox_settings():
+    """Initialize Upstox-specific settings"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    default_settings = [
+        ('upstox_allow_amo_queue', 'true'),
+    ]
+    
+    try:
+        for key, value in default_settings:
+            cursor.execute('''
+                INSERT OR IGNORE INTO settings (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            ''', (key, value))
+        
+        conn.commit()
+    except Exception as e:
+        print(f"[DATABASE] Error initializing Upstox settings: {e}")
+
+
+def get_upstox_amo_queue_enabled() -> bool:
+    """Check if Upstox AMO queue is enabled"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("SELECT value FROM settings WHERE key = 'upstox_allow_amo_queue'")
+        row = cursor.fetchone()
+        if row:
+            return row['value'].lower() == 'true'
+        return True
+    except Exception:
+        return True
+
+
+def set_upstox_amo_queue_enabled(enabled: bool):
+    """Enable/disable Upstox AMO queue"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT OR REPLACE INTO settings (key, value, updated_at)
+            VALUES ('upstox_allow_amo_queue', ?, CURRENT_TIMESTAMP)
+        ''', ('true' if enabled else 'false',))
+        conn.commit()
+    except Exception as e:
+        print(f"[DATABASE] Error setting Upstox AMO queue: {e}")
+
+
+def save_upstox_pending_order(order: Dict[str, Any]) -> bool:
+    """Save a pending order to the database"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO upstox_pending_orders 
+            (pending_order_id, instrument_token, symbol_display, transaction_type, 
+             quantity, price, order_type, product, slice, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
+        ''', (
+            order.get('pending_order_id'),
+            order.get('instrument_token'),
+            order.get('symbol_display'),
+            order.get('transaction_type'),
+            order.get('quantity'),
+            order.get('price', 0),
+            order.get('order_type'),
+            order.get('product'),
+            1 if order.get('slice', True) else 0
+        ))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error saving pending order: {e}")
+        return False
+
+
+def get_upstox_pending_orders(status: str = 'PENDING') -> List[Dict[str, Any]]:
+    """Get all pending Upstox orders with given status"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT * FROM upstox_pending_orders
+            WHERE status = ?
+            ORDER BY created_at DESC
+        ''', (status,))
+        
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DATABASE] Error getting pending orders: {e}")
+        return []
+
+
+def get_all_upstox_pending_orders() -> List[Dict[str, Any]]:
+    """Get all Upstox pending orders regardless of status"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT * FROM upstox_pending_orders
+            ORDER BY created_at DESC
+            LIMIT 100
+        ''')
+        
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DATABASE] Error getting all pending orders: {e}")
+        return []
+
+
+def update_upstox_pending_order_status(pending_order_id: str, status: str, 
+                                        order_ids: str = None, error: str = None):
+    """Update status of a pending order"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        if status == 'SUBMITTED':
+            cursor.execute('''
+                UPDATE upstox_pending_orders 
+                SET status = ?, submitted_order_ids = ?, submitted_at = CURRENT_TIMESTAMP
+                WHERE pending_order_id = ?
+            ''', (status, order_ids, pending_order_id))
+        elif status == 'CANCELLED':
+            cursor.execute('''
+                UPDATE upstox_pending_orders 
+                SET status = ?, cancelled_at = CURRENT_TIMESTAMP
+                WHERE pending_order_id = ?
+            ''', (status, pending_order_id))
+        elif status == 'FAILED':
+            cursor.execute('''
+                UPDATE upstox_pending_orders 
+                SET status = ?, error_message = ?
+                WHERE pending_order_id = ?
+            ''', (status, error, pending_order_id))
+        else:
+            cursor.execute('''
+                UPDATE upstox_pending_orders 
+                SET status = ?
+                WHERE pending_order_id = ?
+            ''', (status, pending_order_id))
+        
+        conn.commit()
+    except Exception as e:
+        print(f"[DATABASE] Error updating pending order status: {e}")
+
+
+def cancel_upstox_pending_order(pending_order_id: str) -> bool:
+    """Cancel a pending order"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT pending_order_id, status FROM upstox_pending_orders WHERE pending_order_id = ?', (pending_order_id,))
+        row = cursor.fetchone()
+        print(f"[DATABASE] Looking for order {pending_order_id}: found={row is not None}, current_status={dict(row) if row else 'N/A'}")
+        
+        cursor.execute('''
+            UPDATE upstox_pending_orders 
+            SET status = 'CANCELLED', cancelled_at = CURRENT_TIMESTAMP
+            WHERE pending_order_id = ? AND status = 'PENDING'
+        ''', (pending_order_id,))
+        
+        conn.commit()
+        affected = cursor.rowcount
+        print(f"[DATABASE] Cancel result: {affected} row(s) affected")
+        return affected > 0
+    except Exception as e:
+        print(f"[DATABASE] Error cancelling pending order: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+# ============================================================
+# SIGNAL TRACKING FUNCTIONS - Full lifecycle tracking
+# ============================================================
+
+def save_signal_event(
+    channel_id: str,
+    message_id: str,
+    direction: str,
+    asset_type: str,
+    symbol: str,
+    price: float = None,
+    quantity: int = None,
+    strike: float = None,
+    expiry: str = None,
+    call_put: str = None,
+    author_name: str = None,
+    author_id: str = None,
+    guild_id: str = None,
+    source_platform: str = 'discord',
+    market: str = 'US',
+    broker_target: str = None,
+    raw_message: str = None,
+    execution_status: str = 'DETECTED'
+) -> Optional[int]:
+    """
+    Save a signal event to the database with full tracking info.
+    Returns the signal ID or None if failed.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO signals (
+                channel_id, message_id, direction, asset_type, symbol, 
+                price, quantity, strike, expiry, call_put,
+                author_name, author_id, guild_id, source_platform, market,
+                broker_target, raw_message, execution_status, detected_at, received_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ''', (
+            channel_id, message_id, direction, asset_type, symbol,
+            price, quantity, strike, expiry, call_put,
+            author_name, author_id, guild_id, source_platform, market,
+            broker_target, raw_message, execution_status
+        ))
+        conn.commit()
+        signal_id = cursor.lastrowid
+        
+        add_signal_transition(signal_id, None, execution_status, 
+                             f"Signal detected from {source_platform}")
+        
+        return signal_id
+    except sqlite3.IntegrityError:
+        return None
+    except Exception as e:
+        print(f"[DATABASE] Error saving signal event: {e}")
+        return None
+
+
+def update_signal_status(
+    signal_id: int,
+    new_status: str,
+    broker_target: str = None,
+    broker_order_id: str = None,
+    broker_response: str = None,
+    last_error: str = None,
+    pnl_realized: float = None,
+    pnl_percent: float = None,
+    details: str = None
+):
+    """Update signal status with optional broker info and P&L"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT execution_status FROM signals WHERE id = ?', (signal_id,))
+        row = cursor.fetchone()
+        old_status = row[0] if row else None
+        
+        timestamp_col = None
+        if new_status == 'VALIDATED':
+            timestamp_col = 'validated_at'
+        elif new_status == 'SUBMITTED':
+            timestamp_col = 'submitted_at'
+        elif new_status in ('EXECUTED', 'REJECTED', 'FAILED'):
+            timestamp_col = 'executed_at'
+        
+        updates = ['execution_status = ?']
+        params = [new_status]
+        
+        if broker_target:
+            updates.append('broker_target = ?')
+            params.append(broker_target)
+        if broker_order_id:
+            updates.append('broker_order_id = ?')
+            params.append(broker_order_id)
+        if broker_response:
+            updates.append('broker_response = ?')
+            params.append(broker_response)
+        if last_error:
+            updates.append('last_error = ?')
+            params.append(last_error)
+        if pnl_realized is not None:
+            updates.append('pnl_realized = ?')
+            params.append(pnl_realized)
+        if pnl_percent is not None:
+            updates.append('pnl_percent = ?')
+            params.append(pnl_percent)
+        if timestamp_col:
+            updates.append(f'{timestamp_col} = CURRENT_TIMESTAMP')
+        
+        params.append(signal_id)
+        cursor.execute(f"UPDATE signals SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+        
+        add_signal_transition(signal_id, old_status, new_status, details or broker_response)
+        
+    except Exception as e:
+        print(f"[DATABASE] Error updating signal status: {e}")
+
+
+def add_signal_transition(signal_id: int, from_status: str, to_status: str, 
+                          details: str = None, actor: str = 'system'):
+    """Add an immutable transition record to the audit trail"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO signal_event_transitions (signal_id, from_status, to_status, details, actor)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (signal_id, from_status, to_status, details, actor))
+        conn.commit()
+    except Exception as e:
+        print(f"[DATABASE] Error adding signal transition: {e}")
+
+
+def get_signal_history_filtered(
+    limit: int = 100,
+    offset: int = 0,
+    symbol: str = None,
+    channel_id: str = None,
+    author_id: str = None,
+    execution_status: str = None,
+    market: str = None,
+    broker_target: str = None,
+    source_platform: str = None,
+    date_from: str = None,
+    date_to: str = None
+) -> Tuple[List[Dict], int]:
+    """
+    Get signal history with comprehensive filtering and pagination.
+    Returns (signals_list, total_count)
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    where_clauses = []
+    params = []
+    
+    if symbol:
+        where_clauses.append('symbol LIKE ?')
+        params.append(f'%{symbol}%')
+    if channel_id:
+        where_clauses.append('channel_id = ?')
+        params.append(channel_id)
+    if author_id:
+        where_clauses.append('author_id = ?')
+        params.append(author_id)
+    if execution_status:
+        where_clauses.append('execution_status = ?')
+        params.append(execution_status)
+    if market:
+        where_clauses.append('market = ?')
+        params.append(market)
+    if broker_target:
+        where_clauses.append('broker_target = ?')
+        params.append(broker_target)
+    if source_platform:
+        where_clauses.append('source_platform = ?')
+        params.append(source_platform)
+    if date_from:
+        where_clauses.append('received_at >= ?')
+        params.append(date_from)
+    if date_to:
+        where_clauses.append('received_at <= ?')
+        params.append(date_to)
+    
+    where_sql = ' AND '.join(where_clauses) if where_clauses else '1=1'
+    
+    try:
+        cursor.execute(f'SELECT COUNT(*) FROM signals WHERE {where_sql}', params)
+        total_count = cursor.fetchone()[0]
+        
+        cursor.execute(f'''
+            SELECT s.*, c.name as channel_name
+            FROM signals s
+            LEFT JOIN channels c ON s.channel_id = c.discord_channel_id OR s.channel_id = CAST(c.id AS TEXT)
+            WHERE {where_sql}
+            ORDER BY s.received_at DESC
+            LIMIT ? OFFSET ?
+        ''', params + [limit, offset])
+        
+        rows = cursor.fetchall()
+        signals = []
+        for row in rows:
+            signal = dict(row)
+            for key in ['received_at', 'detected_at', 'validated_at', 'submitted_at', 'executed_at']:
+                if key in signal and signal[key] is not None:
+                    if hasattr(signal[key], 'isoformat'):
+                        signal[key] = signal[key].isoformat()
+            signals.append(signal)
+        
+        return signals, total_count
+    except Exception as e:
+        print(f"[DATABASE] Error getting signal history: {e}")
+        import traceback
+        traceback.print_exc()
+        return [], 0
+
+
+def get_signal_transitions(signal_id: int) -> List[Dict]:
+    """Get all transitions for a signal (audit trail)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT * FROM signal_event_transitions
+            WHERE signal_id = ?
+            ORDER BY created_at ASC
+        ''', (signal_id,))
+        
+        rows = cursor.fetchall()
+        transitions = []
+        for row in rows:
+            t = dict(row)
+            if 'created_at' in t and t['created_at'] is not None:
+                if hasattr(t['created_at'], 'isoformat'):
+                    t['created_at'] = t['created_at'].isoformat()
+            transitions.append(t)
+        return transitions
+    except Exception as e:
+        print(f"[DATABASE] Error getting signal transitions: {e}")
+        return []
+
+
+def get_signal_statistics(market: str = None, days: int = 7) -> Dict[str, Any]:
+    """Get signal statistics for dashboard"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    market_filter = ''
+    params = []
+    if market:
+        market_filter = 'AND market = ?'
+        params.append(market)
+    
+    try:
+        cursor.execute(f'''
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN execution_status = 'EXECUTED' THEN 1 ELSE 0 END) as executed,
+                SUM(CASE WHEN execution_status = 'REJECTED' THEN 1 ELSE 0 END) as rejected,
+                SUM(CASE WHEN execution_status = 'FAILED' THEN 1 ELSE 0 END) as failed,
+                SUM(CASE WHEN execution_status = 'VALIDATED' THEN 1 ELSE 0 END) as validated,
+                SUM(CASE WHEN execution_status = 'DETECTED' THEN 1 ELSE 0 END) as detected,
+                AVG(pnl_percent) as avg_pnl_percent,
+                SUM(pnl_realized) as total_pnl
+            FROM signals
+            WHERE received_at >= datetime('now', '-{days} days') {market_filter}
+        ''', params)
+        
+        row = cursor.fetchone()
+        stats = dict(row) if row else {}
+        
+        cursor.execute(f'''
+            SELECT broker_target, COUNT(*) as count
+            FROM signals
+            WHERE received_at >= datetime('now', '-{days} days') 
+            AND broker_target IS NOT NULL {market_filter}
+            GROUP BY broker_target
+        ''', params)
+        
+        broker_stats = {row['broker_target']: row['count'] for row in cursor.fetchall()}
+        stats['by_broker'] = broker_stats
+        
+        cursor.execute(f'''
+            SELECT execution_status, last_error, COUNT(*) as count
+            FROM signals
+            WHERE received_at >= datetime('now', '-{days} days')
+            AND execution_status IN ('REJECTED', 'FAILED') {market_filter}
+            GROUP BY execution_status, last_error
+            ORDER BY count DESC
+            LIMIT 10
+        ''', params)
+        
+        stats['rejection_reasons'] = [dict(row) for row in cursor.fetchall()]
+        
+        return stats
+    except Exception as e:
+        print(f"[DATABASE] Error getting signal statistics: {e}")
+        return {}
+
+
+def get_signal_by_id(signal_id: int) -> Optional[Dict]:
+    """Get a single signal by ID with full details"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT s.*, c.name as channel_name
+            FROM signals s
+            LEFT JOIN channels c ON s.channel_id = c.discord_channel_id OR s.channel_id = CAST(c.id AS TEXT)
+            WHERE s.id = ?
+        ''', (signal_id,))
+        
+        row = cursor.fetchone()
+        if row:
+            signal = dict(row)
+            for key in ['received_at', 'detected_at', 'validated_at', 'submitted_at', 'executed_at']:
+                if key in signal and signal[key] is not None:
+                    if hasattr(signal[key], 'isoformat'):
+                        signal[key] = signal[key].isoformat()
+            signal['transitions'] = get_signal_transitions(signal_id)
+            return signal
+        return None
+    except Exception as e:
+        print(f"[DATABASE] Error getting signal by ID: {e}")
+        return None
+
+
 # Initialize tables
 init_channel_messages_table()
 init_signal_formats_table()
@@ -7922,5 +8545,7 @@ init_conditional_orders_table()
 migrate_channels_for_conditional_orders()
 migrate_trades_for_conditional_orders()
 init_conditional_order_settings()
+init_upstox_pending_orders_table()
+init_upstox_settings()
 
 init_db()
