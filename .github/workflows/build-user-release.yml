@@ -29,19 +29,23 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller pyarmor
 
-      - name: Obfuscate source code with PyArmor
+      - name: Obfuscate source code with PyArmor (if licensed)
+        continue-on-error: true
         run: |
-          echo "=== SECURITY: Obfuscating source code with PyArmor ==="
+          echo "=== SECURITY: Attempting PyArmor obfuscation ==="
+          if ($env:PYARMOR_LICENSE) {
+            echo "PyArmor license found, registering..."
+            pyarmor reg $env:PYARMOR_LICENSE
+          }
           pyarmor gen --output obfuscated_src src/selfbot_webull.py
-          pyarmor gen --output obfuscated_src/brokers src/brokers/*.py
-          pyarmor gen --output obfuscated_src/core src/core/*.py
-          pyarmor gen --output obfuscated_src/signals src/signals/*.py
-          pyarmor gen --output obfuscated_src/license src/license/*.py
-          pyarmor gen --output obfuscated_src/risk src/risk/*.py
-          pyarmor gen --output obfuscated_src/adapters src/adapters/*.py
-          pyarmor gen --output obfuscated_src/services src/services/*.py
-          echo "=== PyArmor obfuscation complete ==="
+          if ($LASTEXITCODE -ne 0) {
+            echo "⚠️ PyArmor obfuscation skipped (trial limit or no license)"
+            echo "Build will continue with other hardening features"
+          }
+          echo "=== PyArmor step complete ==="
         shell: pwsh
+        env:
+          PYARMOR_LICENSE: ${{ secrets.PYARMOR_LICENSE }}
 
       - name: Build Windows executable (HARDENED)
         run: |
@@ -180,18 +184,18 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller pyarmor
 
-      - name: Obfuscate source code with PyArmor
+      - name: Obfuscate source code with PyArmor (if licensed)
+        continue-on-error: true
         run: |
-          echo "=== SECURITY: Obfuscating source code with PyArmor ==="
-          pyarmor gen --output obfuscated_src src/selfbot_webull.py
-          pyarmor gen --output obfuscated_src/brokers src/brokers/*.py || true
-          pyarmor gen --output obfuscated_src/core src/core/*.py || true
-          pyarmor gen --output obfuscated_src/signals src/signals/*.py || true
-          pyarmor gen --output obfuscated_src/license src/license/*.py || true
-          pyarmor gen --output obfuscated_src/risk src/risk/*.py || true
-          pyarmor gen --output obfuscated_src/adapters src/adapters/*.py || true
-          pyarmor gen --output obfuscated_src/services src/services/*.py || true
-          echo "=== PyArmor obfuscation complete ==="
+          echo "=== SECURITY: Attempting PyArmor obfuscation ==="
+          if [ -n "$PYARMOR_LICENSE" ]; then
+            echo "PyArmor license found, registering..."
+            pyarmor reg "$PYARMOR_LICENSE"
+          fi
+          pyarmor gen --output obfuscated_src src/selfbot_webull.py || echo "⚠️ PyArmor skipped (trial limit)"
+          echo "=== PyArmor step complete ==="
+        env:
+          PYARMOR_LICENSE: ${{ secrets.PYARMOR_LICENSE }}
 
       - name: Build macOS Intel executable (HARDENED)
         env:
@@ -326,18 +330,18 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller pyarmor
 
-      - name: Obfuscate source code with PyArmor
+      - name: Obfuscate source code with PyArmor (if licensed)
+        continue-on-error: true
         run: |
-          echo "=== SECURITY: Obfuscating source code with PyArmor ==="
-          pyarmor gen --output obfuscated_src src/selfbot_webull.py
-          pyarmor gen --output obfuscated_src/brokers src/brokers/*.py || true
-          pyarmor gen --output obfuscated_src/core src/core/*.py || true
-          pyarmor gen --output obfuscated_src/signals src/signals/*.py || true
-          pyarmor gen --output obfuscated_src/license src/license/*.py || true
-          pyarmor gen --output obfuscated_src/risk src/risk/*.py || true
-          pyarmor gen --output obfuscated_src/adapters src/adapters/*.py || true
-          pyarmor gen --output obfuscated_src/services src/services/*.py || true
-          echo "=== PyArmor obfuscation complete ==="
+          echo "=== SECURITY: Attempting PyArmor obfuscation ==="
+          if [ -n "$PYARMOR_LICENSE" ]; then
+            echo "PyArmor license found, registering..."
+            pyarmor reg "$PYARMOR_LICENSE"
+          fi
+          pyarmor gen --output obfuscated_src src/selfbot_webull.py || echo "⚠️ PyArmor skipped (trial limit)"
+          echo "=== PyArmor step complete ==="
+        env:
+          PYARMOR_LICENSE: ${{ secrets.PYARMOR_LICENSE }}
 
       - name: Build macOS ARM executable (HARDENED)
         env:
@@ -472,18 +476,18 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller pyarmor
 
-      - name: Obfuscate source code with PyArmor
+      - name: Obfuscate source code with PyArmor (if licensed)
+        continue-on-error: true
         run: |
-          echo "=== SECURITY: Obfuscating source code with PyArmor ==="
-          pyarmor gen --output obfuscated_src src/selfbot_webull.py
-          pyarmor gen --output obfuscated_src/brokers src/brokers/*.py || true
-          pyarmor gen --output obfuscated_src/core src/core/*.py || true
-          pyarmor gen --output obfuscated_src/signals src/signals/*.py || true
-          pyarmor gen --output obfuscated_src/license src/license/*.py || true
-          pyarmor gen --output obfuscated_src/risk src/risk/*.py || true
-          pyarmor gen --output obfuscated_src/adapters src/adapters/*.py || true
-          pyarmor gen --output obfuscated_src/services src/services/*.py || true
-          echo "=== PyArmor obfuscation complete ==="
+          echo "=== SECURITY: Attempting PyArmor obfuscation ==="
+          if [ -n "$PYARMOR_LICENSE" ]; then
+            echo "PyArmor license found, registering..."
+            pyarmor reg "$PYARMOR_LICENSE"
+          fi
+          pyarmor gen --output obfuscated_src src/selfbot_webull.py || echo "⚠️ PyArmor skipped (trial limit)"
+          echo "=== PyArmor step complete ==="
+        env:
+          PYARMOR_LICENSE: ${{ secrets.PYARMOR_LICENSE }}
 
       - name: Build Linux executable (HARDENED)
         env:
