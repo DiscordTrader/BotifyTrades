@@ -6507,6 +6507,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         symbol = order['symbol']
                         broker_name = order.get('broker_primary', 'Webull')
                         market = order.get('market', 'US')
+                        currency = '₹' if market == 'INDIA' else '$'
+                        option_info = f" {order.get('strike')}{order.get('opt_type')}" if order.get('strike') else ""
+                        print(f"[CONDITIONAL] Executing order #{order['id']}: {symbol}{option_info} @ {currency}{triggered_price:.2f}")
                         
                         # Build a BTO signal from the conditional order
                         signal = {
@@ -8494,6 +8497,26 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 _original_print("[TELEGRAM CONDITIONAL] ⚠️ Conditional order service DISABLED - executing immediately", flush=True)
                 await self.order_queue.put(signal)
                 return
+            
+            current_price = None
+            try:
+                if hasattr(self, 'upstox_broker') and self.upstox_broker:
+                    current_price = self.upstox_broker.get_ltp(symbol, float(strike) if strike else 0, opt_type, expiry)
+                    if current_price:
+                        _original_print(f"[TELEGRAM CONDITIONAL] Current LTP: ₹{current_price:.2f}", flush=True)
+                        
+                        already_triggered = False
+                        if trigger_type == 'over' and current_price >= float(trigger_price):
+                            already_triggered = True
+                            _original_print(f"[TELEGRAM CONDITIONAL] ⚠️ WARNING: Price ₹{current_price:.2f} already ABOVE trigger ₹{trigger_price}", flush=True)
+                        elif trigger_type == 'under' and current_price <= float(trigger_price):
+                            already_triggered = True
+                            _original_print(f"[TELEGRAM CONDITIONAL] ⚠️ WARNING: Price ₹{current_price:.2f} already BELOW trigger ₹{trigger_price}", flush=True)
+                        
+                        if already_triggered:
+                            _original_print(f"[TELEGRAM CONDITIONAL] Creating order anyway - it will trigger immediately", flush=True)
+            except Exception as e:
+                _original_print(f"[TELEGRAM CONDITIONAL] Could not check current price: {e}", flush=True)
             
             channel_id = str(signal.get('channel_id', ''))
             broker_primary = signal.get('_broker_list', ['UPSTOX'])[0] if signal.get('_broker_list') else 'UPSTOX'
