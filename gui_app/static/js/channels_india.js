@@ -724,8 +724,54 @@ function renderExecutionTimeline(trades) {
     }).join('');
 }
 
+async function loadConditionalMonitorStatus() {
+    try {
+        const response = await fetch('/api/conditional_orders/status');
+        const data = await response.json();
+        
+        const statusContainer = document.getElementById('conditional-monitor-status');
+        if (!statusContainer) return;
+        
+        if (!data.success) {
+            statusContainer.innerHTML = '<div style="color: #ff6b6b; padding: 10px;">Error loading monitor status</div>';
+            return;
+        }
+        
+        const statusColor = data.thread_alive ? '#00ff88' : '#ff6b6b';
+        const statusText = data.thread_alive ? 'RUNNING' : 'STOPPED';
+        
+        const logsHtml = (data.recent_logs || []).slice(-10).map(log => {
+            let color = '#8E8E93';
+            if (log.includes('Price update')) color = '#00d4ff';
+            if (log.includes('Error') || log.includes('❌')) color = '#ff6b6b';
+            if (log.includes('✓') || log.includes('Monitoring')) color = '#00ff88';
+            if (log.includes('Starting')) color = '#ffc107';
+            return `<div style="font-size: 11px; color: ${color}; padding: 2px 0; font-family: monospace;">${log}</div>`;
+        }).join('');
+        
+        statusContainer.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 8px; height: 8px; background: ${statusColor}; border-radius: 50%; animation: ${data.thread_alive ? 'pulse 2s infinite' : 'none'};"></span>
+                    <span style="font-size: 12px; color: ${statusColor}; font-weight: 600;">Monitor: ${statusText}</span>
+                </div>
+                <div style="font-size: 11px; color: #8E8E93;">
+                    Active: ${data.monitors_count} | Brokers: ${(data.registered_brokers || []).join(', ')}
+                </div>
+            </div>
+            <div style="max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.3); border-radius: 4px; padding: 8px;">
+                ${logsHtml || '<div style="color: #8E8E93; font-size: 11px;">No recent activity</div>'}
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error loading monitor status:', error);
+    }
+}
+
 async function loadUpstoxConditionalOrders() {
     try {
+        loadConditionalMonitorStatus();
+        
         const response = await fetch('/api/conditional_orders?market=IN');
         const data = await response.json();
         
@@ -775,6 +821,8 @@ async function loadUpstoxConditionalOrders() {
     }
 }
 
+let conditionalStatusInterval = null;
+
 function switchUpstoxTab(tabName) {
     // Hide all tabs
     document.querySelectorAll('.upstox-tab-content').forEach(el => el.style.display = 'none');
@@ -794,6 +842,16 @@ function switchUpstoxTab(tabName) {
     activeBtn.style.background = 'rgba(0, 200, 83, 0.2)';
     activeBtn.style.color = '#00c853';
     activeBtn.style.border = '1px solid rgba(0, 200, 83, 0.4)';
+    
+    // Start/stop auto-refresh for conditional status
+    if (conditionalStatusInterval) {
+        clearInterval(conditionalStatusInterval);
+        conditionalStatusInterval = null;
+    }
+    if (tabName === 'conditional') {
+        loadConditionalMonitorStatus();
+        conditionalStatusInterval = setInterval(loadConditionalMonitorStatus, 5000);
+    }
 }
 
 function filterUpstoxOrders(filter) {
