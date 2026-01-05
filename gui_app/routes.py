@@ -1390,7 +1390,7 @@ def register_routes(app):
     def api_notify_waitlist():
         """Send email notifications to waitlist users (admin only)"""
         import asyncio
-        from services.gmail_service import get_gmail_service
+        from src.services.gmail_service import get_gmail_service
         
         data = request.get_json() or {}
         ids = data.get('ids', [])
@@ -8678,7 +8678,7 @@ def register_routes(app):
         """
         try:
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-            from services.simulation import run_simulation
+            from src.services.simulation import run_simulation
             
             data = request.json or {}
             
@@ -8760,7 +8760,7 @@ def register_routes(app):
         """Get available simulation presets"""
         try:
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-            from services.simulation import get_simulation_presets
+            from src.services.simulation import get_simulation_presets
             
             presets = get_simulation_presets()
             return jsonify({
@@ -8776,7 +8776,7 @@ def register_routes(app):
         """Get stats for a user or channel to pre-populate simulation form"""
         try:
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-            from services.simulation import get_user_stats, get_channel_stats
+            from src.services.simulation import get_user_stats, get_channel_stats
             
             if entity_type == 'user':
                 stats = get_user_stats(entity_id)
@@ -8821,7 +8821,7 @@ def register_routes(app):
                 return jsonify({'success': False, 'error': 'entity_id is required'}), 400
             
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-            from services.simulation import run_exact_trades_simulation
+            from src.services.simulation import run_exact_trades_simulation
             
             result = run_exact_trades_simulation(
                 entity_type=entity_type,
@@ -8854,7 +8854,7 @@ def register_routes(app):
                 return jsonify({'success': False, 'error': 'entity_id is required'}), 400
             
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-            from services.simulation import run_exact_historical_simulation
+            from src.services.simulation import run_exact_historical_simulation
             
             result = run_exact_historical_simulation(
                 entity_type=entity_type,
@@ -8887,7 +8887,7 @@ def register_routes(app):
                 return jsonify({'success': False, 'error': 'trades array is required'}), 400
             
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-            from services.simulation import run_custom_trade_simulation
+            from src.services.simulation import run_custom_trade_simulation
             
             result = run_custom_trade_simulation(
                 trades_data=trades_data,
@@ -8987,7 +8987,7 @@ def register_routes(app):
                 return jsonify({'success': False, 'error': 'entity_id is required'}), 400
             
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-            from services.simulation import run_risk_optimizer
+            from src.services.simulation import run_risk_optimizer
             
             portfolio_start = float(data.get('portfolio_start', 3000))
             basis = data.get('basis', 'percent_start')
@@ -9043,7 +9043,7 @@ def register_routes(app):
                 risk_cap = 0.25
             
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-            from services.simulation import run_copy_1to1_report
+            from src.services.simulation import run_copy_1to1_report
             
             result = run_copy_1to1_report(
                 entity_type=entity_type,
@@ -9085,7 +9085,7 @@ def register_routes(app):
                 target_recovery = float(target_recovery)
             
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-            from services.simulation import run_recovery_calculator
+            from src.services.simulation import run_recovery_calculator
             
             result = run_recovery_calculator(
                 entity_type=entity_type,
@@ -14037,7 +14037,7 @@ def register_routes(app):
         """Get connection status of brokers for verification data source"""
         try:
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-            from services.signal_verification import _webull_client, _tastytrade_session
+            from src.services.signal_verification import _webull_client, _tastytrade_session
             
             return jsonify({
                 'success': True,
@@ -14061,7 +14061,7 @@ def register_routes(app):
             data = request.get_json()
             
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-            from services.signal_verification import verify_single_signal
+            from src.services.signal_verification import verify_single_signal
             
             signal_data = {
                 'ticker': data.get('ticker', ''),
@@ -14093,7 +14093,7 @@ def register_routes(app):
             db.ensure_signal_verification_tables()
             
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-            from services.signal_verification import get_verification_report
+            from src.services.signal_verification import get_verification_report
             
             report = get_verification_report(entity_type, entity_id, days)
             return jsonify(report)
@@ -14114,7 +14114,7 @@ def register_routes(app):
             db.ensure_signal_verification_tables()
             
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-            from services.signal_verification import SignalVerificationService
+            from src.services.signal_verification import SignalVerificationService
             
             service = SignalVerificationService()
             analysis = service.analyze_trade_history(entity_type, entity_id, days)
@@ -14135,7 +14135,7 @@ def register_routes(app):
             days = request.args.get('days', 30, type=int)
             
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-            from services.signal_verification import SignalVerificationService
+            from src.services.signal_verification import SignalVerificationService
             
             service = SignalVerificationService()
             stats = service.get_verification_stats(entity_type, entity_id, days)

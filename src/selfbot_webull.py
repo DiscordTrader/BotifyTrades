@@ -81,7 +81,7 @@ if parent_dir not in sys.path:
 
 # Import Alpaca broker for paper trading
 try:
-    from brokers.alpaca_broker import AlpacaBroker
+    from src.brokers.alpaca_broker import AlpacaBroker
     ALPACA_AVAILABLE = True
 except ImportError as e:
     print(f"[WARNING] Could not import AlpacaBroker: {e}")
@@ -89,7 +89,7 @@ except ImportError as e:
 
 # Import Tastytrade broker
 try:
-    from brokers.tastytrade_broker import TastytradeBroker
+    from src.brokers.tastytrade_broker import TastytradeBroker
     TASTYTRADE_AVAILABLE = True
 except ImportError as e:
     print(f"[WARNING] Could not import TastytradeBroker: {e}")
@@ -97,7 +97,7 @@ except ImportError as e:
 
 # Import Robinhood broker (WARNING: No paper trading - all trades are LIVE)
 try:
-    from brokers.robinhood_broker import RobinhoodBroker
+    from src.brokers.robinhood_broker import RobinhoodBroker
     ROBINHOOD_AVAILABLE = True
 except ImportError as e:
     print(f"[WARNING] Could not import RobinhoodBroker: {e}")
@@ -105,7 +105,7 @@ except ImportError as e:
 
 # Import IBKR broker (requires TWS or IB Gateway running)
 try:
-    from brokers.ibkr_broker import IBKRBroker
+    from src.brokers.ibkr_broker import IBKRBroker
     IBKR_AVAILABLE = True
 except ImportError as e:
     print(f"[WARNING] Could not import IBKRBroker: {e}")
@@ -113,7 +113,7 @@ except ImportError as e:
 
 # Import DhanQ broker (India - DhanHQ v2 API)
 try:
-    from brokers.dhanq_broker import DhanQBroker
+    from src.brokers.dhanq_broker import DhanQBroker
     DHANQ_AVAILABLE = True
 except ImportError as e:
     print(f"[WARNING] Could not import DhanQBroker: {e}")
@@ -121,14 +121,14 @@ except ImportError as e:
 
 # Import Upstox broker (India - OAuth2 API)
 try:
-    from brokers.upstox_broker import UpstoxBroker
+    from src.brokers.upstox_broker import UpstoxBroker
     UPSTOX_AVAILABLE = True
 except ImportError as e:
     print(f"[WARNING] Could not import UpstoxBroker: {e}")
     UPSTOX_AVAILABLE = False
 
 # Import BrokerSyncService for real-time trade synchronization
-from services.broker_sync_service import BrokerSyncService
+from src.services.broker_sync_service import BrokerSyncService
 
 # Import webull_auth early to apply monkey-patch for Webull API v2 (rzone fix)
 try:
@@ -5480,7 +5480,7 @@ class SelfClient(discord.Client):
         
         # Initialize Signal Verification Service with real-time broker data
         try:
-            from services.signal_verification import set_broker_clients
+            from src.services.signal_verification import set_broker_clients
             webull_client = getattr(self.broker, 'wb', None) if self.broker else None
             tastytrade_session = getattr(self.tastytrade_broker, 'session', None) if self.tastytrade_broker else None
             alpaca_broker = self.paper_broker if self.paper_broker and hasattr(self.paper_broker, 'connected') and self.paper_broker.connected else None

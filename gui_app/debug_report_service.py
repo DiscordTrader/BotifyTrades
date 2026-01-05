@@ -231,7 +231,7 @@ Sensitive data (credentials, balances, account numbers) has been filtered.
         print(f"[DEBUG-REPORT] Attempting to send report {ref} to {self.admin_email}")
         
         try:
-            from services.gmail_service import get_gmail_service
+            from src.services.gmail_service import get_gmail_service
             
             gmail = get_gmail_service()
             text_body = self.format_email_body(report_data)

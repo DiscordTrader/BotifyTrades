@@ -94,7 +94,7 @@ def load_optional_imports() -> dict:
         print("[STARTUP] Broker manager not available")
     
     try:
-        from brokers.alpaca_broker import AlpacaBroker as AB
+        from src.brokers.alpaca_broker import AlpacaBroker as AB
         AlpacaBroker = AB
         ALPACA_AVAILABLE = True
     except ImportError as e:
