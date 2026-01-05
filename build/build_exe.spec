@@ -140,14 +140,11 @@ try:
     dst_config = os.path.join(dist_dir, 'config.ini')
     if os.path.exists(src_config):
         shutil.copyfile(src_config, dst_config)
-        print("[BUILD] ✓ config.ini copied to dist/")
+        print("[BUILD] OK - config.ini copied to dist/")
     else:
-        print("[BUILD] ⚠️  config.ini not found, skipping")
+        print("[BUILD] WARN - config.ini not found, skipping")
 except Exception as e:
-    print(f"[BUILD] ⚠️  Warning: Could not copy config.ini: {e}")
+    print("[BUILD] WARN - Could not copy config.ini: " + str(e))
 
 print("\n[BUILD] Build complete!")
 print("[BUILD] Distributable files are in: dist/")
-print("[BUILD] Package contents:")
-print("  - DiscordTradingBot.exe")
-print("  - config.ini")
