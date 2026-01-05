@@ -5953,16 +5953,26 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
     
     def clean_signal_text(self, text: str) -> str:
         """
-        Normalize signal text by removing invisible unicode characters
-        and standardizing punctuation for reliable regex parsing.
+        Normalize signal text by removing invisible unicode characters,
+        markdown formatting, and standardizing punctuation for reliable regex parsing.
         
-        Handles: zero-width joiners, RTL/LTR marks, unicode dashes/colons,
-        fullwidth characters, and other problematic invisible formatting.
+        Handles: markdown (**bold**, _italic_, __underline__), zero-width joiners, 
+        RTL/LTR marks, unicode dashes/colons, fullwidth characters, and other 
+        problematic invisible formatting.
         """
         import unicodedata
+        import re as re_local
         
         if not text:
             return text
+        
+        # Strip markdown formatting: **bold**, *italic*, __underline__, _italic_, ~~strikethrough~~
+        text = re_local.sub(r'\*\*(.+?)\*\*', r'\1', text)  # **bold**
+        text = re_local.sub(r'\*(.+?)\*', r'\1', text)      # *italic*
+        text = re_local.sub(r'__(.+?)__', r'\1', text)      # __underline__
+        text = re_local.sub(r'_(.+?)_', r'\1', text)        # _italic_
+        text = re_local.sub(r'~~(.+?)~~', r'\1', text)      # ~~strikethrough~~
+        text = re_local.sub(r'`(.+?)`', r'\1', text)        # `code`
         
         # First, normalize using NFKC to fold compatibility characters
         # This handles fullwidth chars, some special forms, etc.
