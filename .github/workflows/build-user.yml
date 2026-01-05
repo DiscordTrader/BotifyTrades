@@ -87,12 +87,13 @@ jobs:
           pyinstaller build/build_exe.spec --clean --noconfirm
           Remove-Item -Path src -Recurse -Force
           Move-Item -Path src_backup -Destination src
+          Rename-Item -Path dist/DiscordTradingBot.exe -NewName BotifyTrades-Windows.exe
       
       - name: Upload Windows User
         uses: actions/upload-artifact@v4
         with:
           name: BotifyTrades-Windows-v${{ env.VERSION }}
-          path: dist/
+          path: dist/BotifyTrades-Windows.exe
           retention-days: 90
 
   build-linux:
@@ -131,12 +132,13 @@ jobs:
           cp -r obfuscated/src/* src/
           pyinstaller build/build_exe.spec --clean --noconfirm
           rm -rf src && mv src_backup src
+          mv dist/DiscordTradingBot dist/BotifyTrades-Linux
       
       - name: Upload Linux User
         uses: actions/upload-artifact@v4
         with:
           name: BotifyTrades-Linux-v${{ env.VERSION }}
-          path: dist/
+          path: dist/BotifyTrades-Linux
           retention-days: 90
 
   build-macos-intel:
@@ -175,12 +177,13 @@ jobs:
           cp -r obfuscated/src/* src/
           pyinstaller build/build_exe.spec --clean --noconfirm
           rm -rf src && mv src_backup src
+          mv dist/DiscordTradingBot dist/BotifyTrades-macOS-Intel
       
       - name: Upload macOS Intel User
         uses: actions/upload-artifact@v4
         with:
           name: BotifyTrades-macOS-Intel-v${{ env.VERSION }}
-          path: dist/
+          path: dist/BotifyTrades-macOS-Intel
           retention-days: 90
 
   build-macos-silicon:
@@ -219,12 +222,13 @@ jobs:
           cp -r obfuscated/src/* src/
           pyinstaller build/build_exe.spec --clean --noconfirm
           rm -rf src && mv src_backup src
+          mv dist/DiscordTradingBot dist/BotifyTrades-macOS-Silicon
       
       - name: Upload macOS Silicon User
         uses: actions/upload-artifact@v4
         with:
           name: BotifyTrades-macOS-Silicon-v${{ env.VERSION }}
-          path: dist/
+          path: dist/BotifyTrades-macOS-Silicon
           retention-days: 90
 
   publish-to-public-repo:
