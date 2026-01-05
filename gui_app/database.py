@@ -7542,6 +7542,11 @@ def migrate_channels_for_conditional_orders():
             cursor.execute('ALTER TABLE channels ADD COLUMN conditional_auto_execute INTEGER DEFAULT 1')
             print("[DATABASE] ✓ Added conditional_auto_execute column to channels")
         
+        # Channel-level timeout in minutes (NULL = no timeout configured, must be set explicitly)
+        if 'conditional_order_timeout_minutes' not in columns:
+            cursor.execute('ALTER TABLE channels ADD COLUMN conditional_order_timeout_minutes INTEGER DEFAULT NULL')
+            print("[DATABASE] ✓ Added conditional_order_timeout_minutes column to channels")
+        
         conn.commit()
     except Exception as e:
         print(f"[DATABASE] Error migrating channels for conditional orders: {e}")
@@ -7937,6 +7942,7 @@ def get_channel_conditional_settings(channel_id: str) -> Dict[str, Any]:
         cursor.execute('''
             SELECT conditional_order_enabled, trigger_offset_percent,
                    conditional_order_expiry, conditional_auto_execute,
+                   conditional_order_timeout_minutes,
                    broker_override, exit_strategy_mode, default_quantity,
                    position_size_pct, stop_loss_pct, profit_target_pct,
                    profit_target_1_pct, profit_target_2_pct, profit_target_3_pct,

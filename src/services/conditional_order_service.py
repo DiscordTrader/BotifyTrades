@@ -618,8 +618,21 @@ class ConditionalOrderService:
         else:
             adjusted_price = trigger_price
         
-        expiry = channel_settings.get('conditional_order_expiry', 'end_of_day')
-        expires_at = self._calculate_expiry(expiry)
+        # Channel-level timeout in minutes takes priority (NULL = use legacy expiry setting)
+        timeout_minutes = channel_settings.get('conditional_order_timeout_minutes')
+        if timeout_minutes:
+            # Explicit timeout configured: X minutes from entry
+            expires_at = self._calculate_expiry_minutes(timeout_minutes)
+            print(f"[CONDITIONAL] Using channel timeout: {timeout_minutes} min from entry")
+        else:
+            # No timeout configured - use legacy expiry setting or no expiry
+            expiry = channel_settings.get('conditional_order_expiry')
+            if expiry:
+                expires_at = self._calculate_expiry(expiry)
+            else:
+                # No expiry configured - order stays active indefinitely
+                expires_at = None
+                print(f"[CONDITIONAL] No timeout configured for channel - order has no expiry")
         
         # Position sizing: signal first, then channel settings
         size_mode = parsed_signal.get('size_mode')
@@ -707,8 +720,14 @@ class ConditionalOrderService:
         
         return order_id
     
+    def _calculate_expiry_minutes(self, minutes: int) -> str:
+        """Calculate expiry datetime from now + X minutes (channel-level timeout)."""
+        now = datetime.now()
+        expiry = now + timedelta(minutes=minutes)
+        return expiry.strftime('%Y-%m-%d %H:%M:%S')
+    
     def _calculate_expiry(self, expiry_setting: str) -> str:
-        """Calculate expiry datetime based on setting."""
+        """Calculate expiry datetime based on legacy setting."""
         now = datetime.now()
         
         if expiry_setting == 'end_of_day':
@@ -722,7 +741,8 @@ class ConditionalOrderService:
         elif expiry_setting == '1_day':
             expiry = now + timedelta(days=1)
         else:
-            expiry = now + timedelta(days=1)
+            # Unknown setting - no expiry
+            return None
         
         return expiry.strftime('%Y-%m-%d %H:%M:%S')
     
