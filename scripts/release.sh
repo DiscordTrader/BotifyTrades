@@ -14,7 +14,8 @@
 # 5. For ADMIN: Triggers build on BotifyTradesv2 (private)
 #
 # Requirements:
-# - RELEASE_TOKEN environment variable (GitHub PAT with 'repo' and 'workflow' scopes)
+# - RELEASE_TOKEN secret in Replit Secrets (GitHub PAT with 'repo' and 'workflow' scopes)
+#   OR set as environment variable: export RELEASE_TOKEN="ghp_xxx"
 # =============================================================================
 
 set -e
@@ -23,6 +24,9 @@ BUILD_TYPE_ARG=${1:-}
 VERSION=${2:-}
 PUBLIC_REPO="DiscordTrader/BotifyTrades"
 PRIVATE_REPO="DiscordTrader/BotifyTradesv2"
+
+# RELEASE_TOKEN is automatically available from Replit Secrets
+# No need to export manually - just add it to Replit Secrets panel
 
 # Colors for output
 RED='\033[0;31m'
