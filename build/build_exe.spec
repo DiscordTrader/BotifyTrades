@@ -3,6 +3,7 @@
 
 import shutil
 import os
+import glob
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 block_cipher = None
@@ -19,6 +20,22 @@ import sys
 SPEC_DIR = os.path.dirname(os.path.abspath(SPEC))
 PROJECT_ROOT = os.path.dirname(SPEC_DIR)
 
+# Find PyArmor runtime module (created during obfuscation)
+pyarmor_runtime_data = []
+pyarmor_hidden = []
+
+# Search for pyarmor_runtime in src directory (where obfuscated code is copied)
+for pattern in ['src/pyarmor_runtime_*', 'pyarmor_runtime_*']:
+    for runtime_dir in glob.glob(os.path.join(PROJECT_ROOT, pattern)):
+        if os.path.isdir(runtime_dir):
+            runtime_name = os.path.basename(runtime_dir)
+            pyarmor_runtime_data.append((runtime_dir, runtime_name))
+            pyarmor_hidden.append(runtime_name)
+            print(f"[BUILD] Found PyArmor runtime: {runtime_name}")
+
+if not pyarmor_runtime_data:
+    print("[BUILD] WARNING: No PyArmor runtime found - build may fail if code is obfuscated")
+
 # Analysis - what files to include
 a = Analysis(
     [os.path.join(PROJECT_ROOT, 'src', 'selfbot_webull.py')],  # Main script
@@ -30,8 +47,8 @@ a = Analysis(
         
         # Include GUI app (Flask web control panel)
         (os.path.join(PROJECT_ROOT, 'gui_app'), 'gui_app'),
-    ],
-    hiddenimports=discord_imports + webull_imports + openai_imports + ta_imports + crypto_imports + [
+    ] + pyarmor_runtime_data,
+    hiddenimports=discord_imports + webull_imports + openai_imports + ta_imports + crypto_imports + pyarmor_hidden + [
         # Market Data
         'yfinance',
         'pandas',
