@@ -13,6 +13,8 @@ from .patterns import (
     create_stock_regex,
     INDIA_PATTERNS,
     INDIA_OPT_PATTERN_ABOVE,
+    INDIA_OPT_PATTERN_EXPIRY_FIRST,
+    INDIA_OPT_PATTERN_NO_PRICE,
     INDIA_STK_PATTERN,
     INDIA_MONTH_MAP,
     NSE_LOT_SIZES,
@@ -1232,22 +1234,30 @@ def parse_india_option_signal(text: str) -> Optional[Dict[str, Any]]:
                 direction, symbol, strike, opt_type, price_str = groups[0], groups[1], groups[2], groups[3], groups[4]
                 expiry_str = None
                 qty = None
-            elif i == 1:
+            elif pattern == INDIA_OPT_PATTERN_EXPIRY_FIRST:
+                direction, qty_str, symbol, expiry_str, strike, opt_type = groups[0], groups[1], groups[2], groups[3], groups[4], groups[5]
+                price_str = groups[6] if len(groups) > 6 else None
+                qty = int(qty_str) if qty_str else None
+            elif pattern == INDIA_OPT_PATTERN_NO_PRICE:
+                direction, qty_str, symbol, strike, opt_type, expiry_str = groups[0], groups[1], groups[2], groups[3], groups[4], groups[5]
+                price_str = None
+                qty = int(qty_str) if qty_str else None
+            elif i == 3:
                 direction, symbol, strike, opt_type, price_str = groups[0], groups[1], groups[2], groups[3], groups[4]
                 expiry_str = None
                 qty = None
-            elif i == 2:
+            elif i == 4:
                 symbol, strike, opt_type, direction, price_str = groups[0], groups[1], groups[2], groups[3], groups[4]
                 expiry_str = None
                 qty = None
-            elif i == 3:
+            elif i == 5:
                 direction, symbol, strike, opt_type, expiry_str, price_str = groups[0], groups[1], groups[2], groups[3], groups[4], groups[5]
                 qty = None
-            elif i == 4:
+            elif i == 6:
                 direction, qty_str, symbol, strike, opt_type, price_str = groups[0], groups[1], groups[2], groups[3], groups[4], groups[5]
                 qty = int(qty_str) if qty_str else None
                 expiry_str = None
-            elif i == 5:
+            elif i == 7:
                 direction, qty_str, symbol, strike, opt_type, price_str = groups[0], groups[1], groups[2], groups[3], groups[4], groups[5]
                 qty = int(qty_str) if qty_str else None
                 expiry_str = None

@@ -30,10 +30,16 @@ INDIA_OPT_PATTERN_5 = r'(?:^|\s)(BUY|SELL)\s+(\d+)\s+([A-Za-z]+)\s+(\d+)\s*(CE|P
 
 INDIA_OPT_PATTERN_ABOVE = r'(?:^|\s)(BUY|SELL)\s+([A-Za-z]+)\s+(\d+)\s*(CE|PE)\s+(?:ABOVE|BELOW)\s*[₹]?([\d.]+)'
 
+INDIA_OPT_PATTERN_EXPIRY_FIRST = r'(?:^|\s)(BUY|SELL)\s+(\d+)\s+([A-Za-z]+)\s+(\d{1,2}[A-Z]{3}\d{2})\s+(\d+)\s*(CE|PE)(?:\s*(?:@|AT)?\s*[₹]?([\d.]+))?'
+
+INDIA_OPT_PATTERN_NO_PRICE = r'(?:^|\s)(BUY|SELL)\s+(\d+)\s+([A-Za-z]+)\s+(\d+)\s*(CE|PE)\s+(\d{1,2}[A-Z]{3}\d{2})'
+
 INDIA_STK_PATTERN = r'(?:^|\s)(BUY|SELL)\s+([A-Za-z]+)\s*(?:@|AT)?\s*[₹]?([\d.]+)'
 
 INDIA_PATTERNS = [
     INDIA_OPT_PATTERN_ABOVE,
+    INDIA_OPT_PATTERN_EXPIRY_FIRST,
+    INDIA_OPT_PATTERN_NO_PRICE,
     INDIA_OPT_PATTERN_1,
     INDIA_OPT_PATTERN_2,
     INDIA_OPT_PATTERN_3,
