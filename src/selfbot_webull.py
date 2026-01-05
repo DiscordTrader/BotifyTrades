@@ -7224,10 +7224,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         except Exception as e:
                                             print(f"[COND ORDER] Error parsing enabled_brokers: {e}")
                                 
-                                # Fall back to default if still not set
+                                # Fall back to Webull (live broker) if still not set - conditional orders should use live broker
                                 if not cond_broker:
-                                    cond_broker = 'Alpaca' if hasattr(self, 'paper_broker') and self.paper_broker else 'Webull'
-                                    print(f"[COND ORDER] Using default broker: {cond_broker}")
+                                    cond_broker = 'Webull'
+                                    print(f"[COND ORDER] Using default live broker: {cond_broker}")
                                 
                                 # Submit to conditional order service
                                 order_id = conditional_order_service.create_order(cond_channel_id, parsed_cond, cond_broker)
@@ -7598,8 +7598,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     from src.services.conditional_order_service import conditional_order_service
                     
                     if conditional_order_service.is_enabled():
-                        # Get broker from channel override or default
-                        broker = channel_info.get('broker_override', 'Webull') if channel_info else 'Webull'
+                        # Get broker from channel config - prefer live broker
+                        broker = None
+                        if channel_info:
+                            # Check broker_override first
+                            if channel_info.get('broker_override'):
+                                broker = channel_info.get('broker_override')
+                            # Then check enabled_brokers
+                            elif channel_info.get('enabled_brokers'):
+                                try:
+                                    import json
+                                    enabled = channel_info.get('enabled_brokers')
+                                    if isinstance(enabled, str):
+                                        enabled = json.loads(enabled)
+                                    if enabled and len(enabled) > 0:
+                                        # Map uppercase names and prefer live brokers
+                                        broker_map = {'WEBULL': 'Webull', 'ALPACA': 'Alpaca', 'TASTYTRADE': 'Tastytrade', 'IBKR': 'IBKR', 'SCHWAB': 'Schwab'}
+                                        broker = broker_map.get(enabled[0].upper(), enabled[0])
+                                except Exception:
+                                    pass
+                        # Default to Webull (live broker) for conditional orders
+                        if not broker:
+                            broker = 'Webull'
+                        print(f"[CONDITIONAL] Using broker: {broker}")
                         
                         order_id = conditional_order_service.create_order(
                             channel_id=str(message.channel.id),
