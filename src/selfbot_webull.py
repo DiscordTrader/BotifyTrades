@@ -128,7 +128,7 @@ except ImportError as e:
     UPSTOX_AVAILABLE = False
 
 # Import BrokerSyncService for real-time trade synchronization
-from broker_sync_service import BrokerSyncService
+from services.broker_sync_service import BrokerSyncService
 
 # Import webull_auth early to apply monkey-patch for Webull API v2 (rzone fix)
 try:
