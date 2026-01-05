@@ -425,28 +425,20 @@ class TelegramListener:
         execute_enabled = chat_config.get('execute_enabled', 0)
         track_enabled = chat_config.get('track_enabled', 0)
         
-        _print_flush(f"[TELEGRAM DEBUG] config_key={config_key}, chat_id={msg.chat_id}, config_found={bool(chat_config)}, execute={execute_enabled}, track={track_enabled}")
-        
         if not execute_enabled and not track_enabled:
-            _print_flush(f"[TELEGRAM] Skipping - execution/tracking not enabled for chat {msg.chat_id}")
             return
         
         signal = None
         
-        _print_flush(f"[TELEGRAM DEBUG] Trying {len(self._parsers)} parsers: {list(self._parsers.keys())}")
-        
         for parser_name, parser_func in self._parsers.items():
             try:
                 result = parser_func(msg.content)
-                _print_flush(f"[TELEGRAM DEBUG] Parser {parser_name}: {'MATCH' if result else 'no match'}")
                 if result:
                     signal = result
                     _print_flush(f"[TELEGRAM] Signal parsed by {parser_name}: {result.get('action', '')} {result.get('symbol', '')}")
                     break
             except Exception as e:
                 _print_flush(f"[TELEGRAM] Parser {parser_name} error: {e}")
-                import traceback
-                traceback.print_exc()
         
         if signal:
             signal['platform'] = 'telegram'
