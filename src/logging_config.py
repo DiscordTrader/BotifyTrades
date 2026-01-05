@@ -2,6 +2,7 @@
 Logging configuration for QuantumPulse Discord Trading Bot
 - Clean console output (signals, channels, balance only)
 - Detailed logs saved to rotating files (max 10MB, keep 5 files)
+- Log rotation on every restart with timestamp
 """
 
 import logging
@@ -9,31 +10,19 @@ from logging.handlers import RotatingFileHandler
 import os
 import sys
 from pathlib import Path
+from datetime import datetime
 
 def get_app_directory():
     """Get the application directory - works for both script and frozen exe."""
     if getattr(sys, 'frozen', False):
-        # Running as PyInstaller exe - use exe's directory
         return Path(sys.executable).parent
     else:
-        # Running as script - use parent of src/
         return Path(__file__).parent.parent
 
-# Create logs directory next to the exe or in project root
+# Create logs directory (minimal output for fast startup)
 APP_DIR = get_app_directory()
 LOGS_DIR = APP_DIR / 'logs'
-
-try:
-    LOGS_DIR.mkdir(exist_ok=True)
-    print(f"[LOGGING] ✓ Logs directory: {LOGS_DIR}")
-except Exception as e:
-    # Fallback to current working directory if app dir is not writable
-    LOGS_DIR = Path.cwd() / 'logs'
-    try:
-        LOGS_DIR.mkdir(exist_ok=True)
-        print(f"[LOGGING] ✓ Logs directory (fallback): {LOGS_DIR}")
-    except Exception as e2:
-        print(f"[LOGGING] ⚠️ Could not create logs directory: {e2}")
+LOGS_DIR.mkdir(exist_ok=True)
 
 # Log file paths
 BOT_LOG_FILE = LOGS_DIR / 'bot.log'
@@ -42,7 +31,34 @@ ERRORS_LOG_FILE = LOGS_DIR / 'errors.log'
 
 # Log rotation settings
 MAX_LOG_SIZE = 10 * 1024 * 1024  # 10 MB
-BACKUP_COUNT = 5  # Keep last 5 files
+BACKUP_COUNT = 5  # Keep last 5 sessions
+
+
+def rotate_logs_on_startup():
+    """Rotate logs on every restart - archive with timestamp."""
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    
+    for log_file in [BOT_LOG_FILE, TRADES_LOG_FILE, ERRORS_LOG_FILE]:
+        if log_file.exists() and log_file.stat().st_size > 0:
+            # Rename current log to timestamped archive
+            archive_name = log_file.with_suffix(f'.{timestamp}.log')
+            try:
+                log_file.rename(archive_name)
+            except:
+                pass  # Skip if file is locked
+    
+    # Clean up old archives (keep last 5 per log type)
+    for pattern in ['bot.*.log', 'trades.*.log', 'errors.*.log']:
+        archives = sorted(LOGS_DIR.glob(pattern), key=lambda f: f.stat().st_mtime, reverse=True)
+        for old_archive in archives[BACKUP_COUNT:]:
+            try:
+                old_archive.unlink()
+            except:
+                pass
+
+
+# Rotate logs on startup (fast, non-blocking)
+rotate_logs_on_startup()
 
 
 class CleanConsoleFormatter(logging.Formatter):
