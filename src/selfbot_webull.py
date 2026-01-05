@@ -8478,24 +8478,41 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 await self.order_queue.put(signal)
                 return
             
+            channel_id = str(signal.get('channel_id', ''))
+            broker_primary = signal.get('_broker_list', ['UPSTOX'])[0] if signal.get('_broker_list') else 'UPSTOX'
+            quantity = signal.get('qty', 1)
+            
+            order_id = create_conditional_order(
+                channel_id=channel_id,
+                symbol=symbol,
+                trigger_type=trigger_type,
+                trigger_price=float(trigger_price) if trigger_price else 0,
+                broker_primary=broker_primary,
+                stop_loss_type='fixed' if stop_loss else None,
+                stop_loss_value=float(stop_loss) if stop_loss else None,
+                take_profit_targets=','.join(str(t) for t in profit_targets) if profit_targets else None,
+                size_mode='fixed',
+                qty_value=float(quantity),
+                calculated_qty=int(quantity),
+                params_source='signal',
+                original_message=signal.get('raw_message', ''),
+                asset_type='option',
+                strike=float(strike) if strike else None,
+                opt_type=opt_type[0].upper() if opt_type else 'C',
+                expiry=expiry,
+                market='INDIA',
+            )
+            
             order_data = {
                 'symbol': symbol,
                 'trigger_price': float(trigger_price) if trigger_price else 0,
                 'trigger_type': trigger_type,
-                'stop_loss': float(stop_loss) if stop_loss else None,
-                'profit_target': profit_targets[0] if profit_targets else None,
-                'position_size_pct': None,
-                'quantity': signal.get('qty', 1),
-                'broker_primary': signal.get('_broker_list', ['UPSTOX'])[0] if signal.get('_broker_list') else 'UPSTOX',
-                'market': 'INDIA',
                 'strike': float(strike) if strike else None,
                 'opt_type': opt_type[0].upper() if opt_type else 'C',
                 'expiry': expiry,
-                'channel_id': signal.get('channel_id'),
-                'author': signal.get('author'),
+                'quantity': quantity,
+                'broker_primary': broker_primary,
             }
-            
-            order_id = create_conditional_order(order_data)
             
             if order_id:
                 _original_print(f"[TELEGRAM CONDITIONAL] ✓ Created conditional order #{order_id}", flush=True)
