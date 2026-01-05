@@ -8533,7 +8533,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 if profit_targets:
                     _original_print(f"[TELEGRAM CONDITIONAL]   Targets: {profit_targets}", flush=True)
                 
-                _original_print(f"[TELEGRAM CONDITIONAL] ✓ Order #{order_id} will be monitored by conditional order service", flush=True)
+                conditional_order_service._schedule_monitoring(order_id)
+                _original_print(f"[TELEGRAM CONDITIONAL] ✓ Order #{order_id} monitoring started", flush=True)
             else:
                 _original_print(f"[TELEGRAM CONDITIONAL] ❌ Failed to create conditional order", flush=True)
                 await self.order_queue.put(signal)
