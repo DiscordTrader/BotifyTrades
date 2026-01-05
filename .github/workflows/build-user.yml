@@ -1,0 +1,228 @@
+name: Build User (Public Release)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 3.2.1)'
+        required: true
+        type: string
+
+jobs:
+  set-build-type:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set BUILD_TYPE to USER
+        run: |
+          sed -i "s/^BUILD_TYPE = .*/BUILD_TYPE = 'USER'  # Set by release.sh/" src/selfbot_webull.py
+          echo "BUILD_TYPE set to USER:"
+          cat src/selfbot_webull.py | grep BUILD_TYPE
+      
+      - name: Update version
+        run: |
+          BUILD_DATE=$(date +%Y-%m-%d)
+          sed -i "s/APP_VERSION = \"[^\"]*\"/APP_VERSION = \"${{ inputs.version }}\"/" upgrade/version.py
+          sed -i "s/BUILD_DATE = \"[^\"]*\"/BUILD_DATE = \"$BUILD_DATE\"/" upgrade/version.py
+      
+      - name: Upload modified source
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-user
+          path: .
+          retention-days: 1
+
+  build-windows:
+    needs: set-build-type
+    runs-on: windows-latest
+    
+    steps:
+      - name: Download modified source
+        uses: actions/download-artifact@v4
+        with:
+          name: source-user
+          path: .
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarmor pyinstaller
+          pip install -r requirements.txt
+      
+      - name: Restore PyArmor License
+        shell: powershell
+        run: |
+          $bytes = [Convert]::FromBase64String("${{ secrets.PYARMOR_LICENSE }}")
+          [IO.File]::WriteAllBytes("pyarmor-regfile.zip", $bytes)
+          pyarmor reg pyarmor-regfile.zip
+          Remove-Item pyarmor-regfile.zip
+          pyarmor -v
+      
+      - name: Obfuscate source code
+        shell: powershell
+        run: |
+          chcp 65001
+          $env:PYTHONIOENCODING = "utf-8"
+          pyarmor gen --output obfuscated src/
+      
+      - name: Build with PyInstaller
+        shell: powershell
+        run: |
+          Copy-Item -Path src -Destination src_backup -Recurse
+          Copy-Item -Path obfuscated/src/* -Destination src/ -Recurse -Force
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          Remove-Item -Path src -Recurse -Force
+          Move-Item -Path src_backup -Destination src
+      
+      - name: Upload Windows User
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-Windows-v${{ inputs.version }}
+          path: dist/
+          retention-days: 90
+
+  build-linux:
+    needs: set-build-type
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download modified source
+        uses: actions/download-artifact@v4
+        with:
+          name: source-user
+          path: .
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarmor pyinstaller
+          pip install -r requirements.txt
+      
+      - name: Restore PyArmor License
+        run: |
+          echo "${{ secrets.PYARMOR_LICENSE }}" | base64 -d > pyarmor-regfile.zip
+          pyarmor reg pyarmor-regfile.zip
+          rm pyarmor-regfile.zip
+          pyarmor -v
+      
+      - name: Obfuscate and Build
+        run: |
+          pyarmor gen --output obfuscated src/
+          cp -r src src_backup
+          cp -r obfuscated/src/* src/
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          rm -rf src && mv src_backup src
+      
+      - name: Upload Linux User
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-Linux-v${{ inputs.version }}
+          path: dist/
+          retention-days: 90
+
+  build-macos:
+    needs: set-build-type
+    runs-on: macos-latest
+    
+    steps:
+      - name: Download modified source
+        uses: actions/download-artifact@v4
+        with:
+          name: source-user
+          path: .
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarmor pyinstaller
+          pip install -r requirements.txt
+      
+      - name: Restore PyArmor License
+        run: |
+          echo "${{ secrets.PYARMOR_LICENSE }}" | base64 -d > pyarmor-regfile.zip
+          pyarmor reg pyarmor-regfile.zip
+          rm pyarmor-regfile.zip
+          pyarmor -v
+      
+      - name: Obfuscate and Build
+        run: |
+          pyarmor gen --output obfuscated src/
+          cp -r src src_backup
+          cp -r obfuscated/src/* src/
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          rm -rf src && mv src_backup src
+      
+      - name: Upload macOS User
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-macOS-v${{ inputs.version }}
+          path: dist/
+          retention-days: 90
+
+  publish-to-public-repo:
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: releases
+          pattern: BotifyTrades-*
+      
+      - name: Create Release on Public Repo
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: DiscordTrader/BotifyTrades
+          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          tag_name: v${{ inputs.version }}
+          name: BotifyTrades v${{ inputs.version }}
+          body: |
+            ## BotifyTrades v${{ inputs.version }}
+            
+            ### Downloads
+            - **Windows**: BotifyTrades-Windows.exe
+            - **Linux**: BotifyTrades-Linux
+            - **macOS**: BotifyTrades-macOS
+            
+            ### Installation
+            1. Download the appropriate file for your OS
+            2. Run the executable
+            3. Follow the setup wizard
+            
+            ### Requirements
+            - Valid license key
+            - Discord account
+          files: |
+            releases/**/*
+          draft: false
+          prerelease: false
+
+  cleanup:
+    needs: [publish-to-public-repo]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Delete source artifact
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: source-user
