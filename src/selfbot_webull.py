@@ -6555,18 +6555,57 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 signal['qty'] = 1
                         
                         # Add stop loss and profit targets
-                        if order.get('stop_loss_value'):
+                        # Priority: 1) Signal values, 2) Channel settings
+                        import json
+                        from gui_app.database import get_channel_by_discord_id
+                        
+                        has_signal_sl = bool(order.get('stop_loss_value'))
+                        has_signal_targets = bool(order.get('take_profit_targets'))
+                        
+                        channel_id = order.get('channel_id')
+                        channel_settings = None
+                        if channel_id and (not has_signal_sl or not has_signal_targets):
+                            channel_settings = get_channel_by_discord_id(str(channel_id))
+                        
+                        # Stop Loss: Signal value first, then channel settings
+                        if has_signal_sl:
                             if order.get('stop_loss_type') == 'percent':
                                 signal['stop_loss_pct'] = order['stop_loss_value']
                             else:
                                 signal['stop_loss_price'] = order['stop_loss_value']
+                            print(f"[CONDITIONAL] Using signal SL: {order['stop_loss_value']}")
+                        elif channel_settings and channel_settings.get('stop_loss_pct'):
+                            signal['stop_loss_pct'] = channel_settings['stop_loss_pct']
+                            print(f"[CONDITIONAL] Using channel SL: {channel_settings['stop_loss_pct']}%")
                         
-                        import json
-                        if order.get('take_profit_targets'):
+                        # Profit Targets: Signal values first, then channel settings
+                        if has_signal_targets:
                             targets = json.loads(order['take_profit_targets']) if isinstance(order['take_profit_targets'], str) else order['take_profit_targets']
                             if targets and len(targets) > 0:
                                 signal['profit_target_price'] = targets[0]
                                 signal['profit_targets'] = targets
+                                print(f"[CONDITIONAL] Using signal targets: {targets}")
+                        elif channel_settings:
+                            channel_targets = []
+                            for i in range(1, 5):
+                                pct = channel_settings.get(f'profit_target_{i}_pct')
+                                if pct:
+                                    channel_targets.append(pct)
+                            if channel_targets:
+                                signal['profit_target_pct'] = channel_targets[0]
+                                signal['profit_targets_pct'] = channel_targets
+                                print(f"[CONDITIONAL] Using channel targets: {channel_targets}%")
+                        
+                        # Trailing Stop: Always from channel settings
+                        if channel_settings:
+                            if channel_settings.get('trailing_stop_pct'):
+                                signal['trailing_stop_pct'] = channel_settings['trailing_stop_pct']
+                                print(f"[CONDITIONAL] Trailing stop: {channel_settings['trailing_stop_pct']}%")
+                            if channel_settings.get('trailing_activation_pct'):
+                                signal['trailing_activation_pct'] = channel_settings['trailing_activation_pct']
+                            if channel_settings.get('leave_runner_enabled'):
+                                signal['leave_runner'] = True
+                                signal['leave_runner_pct'] = channel_settings.get('leave_runner_pct', 25)
                         
                         # Thread-safe handoff to Discord's event loop (non-blocking)
                         async def queue_signal():
