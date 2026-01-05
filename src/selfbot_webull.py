@@ -9770,13 +9770,22 @@ def run_bot_startup(progress_callback=None):
     Run the full bot startup sequence.
     progress_callback: Optional function to report progress (step, message)
     """
+    import time
     global _discord_ready_event, _discord_shutdown_event, _discord_error_queue
     global _telegram_ready_event, _telegram_shutdown_event, _telegram_signal_queue
     
+    startup_start = time.time()
+    step_times = {}
+    
     def report_progress(step, message):
+        step_times[step] = time.time()
+        elapsed = time.time() - startup_start
         if progress_callback:
             progress_callback(step, message)
-        _original_print(f"[STARTUP] {message}")
+        if is_debug_mode():
+            _original_print(f"[STARTUP] [{elapsed:.2f}s] Step {step}: {message}")
+        else:
+            _original_print(f"[STARTUP] {message}")
     
     report_progress(1, "Loading configuration...")
     
@@ -9872,7 +9881,20 @@ def run_bot_startup(progress_callback=None):
         else:
             _original_print("[MAIN] ⚠️  Telegram listener did not connect within 15 seconds")
     
-    report_progress(10, "Ready!")
+    total_time = time.time() - startup_start
+    report_progress(10, f"Ready! (startup took {total_time:.1f}s)")
+    
+    # Debug: Print startup timing breakdown
+    if is_debug_mode() and len(step_times) > 1:
+        _original_print("\n[STARTUP] ===== TIMING BREAKDOWN =====")
+        sorted_steps = sorted(step_times.items())
+        for i, (step, ts) in enumerate(sorted_steps):
+            if i > 0:
+                prev_step, prev_ts = sorted_steps[i-1]
+                duration = ts - prev_ts
+                _original_print(f"[STARTUP]   Step {prev_step}→{step}: {duration:.2f}s")
+        _original_print(f"[STARTUP]   TOTAL: {total_time:.1f}s")
+        _original_print("[STARTUP] ================================\n")
     
     return discord_thread, telegram_thread, gui_port
 
