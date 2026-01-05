@@ -1424,38 +1424,40 @@ def _get_next_nse_expiry(symbol: str) -> str:
     """
     Get the next expiry date for NSE F&O.
     
-    - NIFTY/BANKNIFTY/FINNIFTY: Weekly (Thursday)
-    - Others: Monthly (last Thursday)
+    NSE Expiry Schedule (effective September 2025):
+    - NIFTY: Weekly (Tuesday) - only index with weekly options
+    - BANKNIFTY/FINNIFTY/MIDCPNIFTY: Monthly only (last Tuesday)
+    - Stock options: Monthly (last Tuesday)
     """
     from datetime import datetime, timedelta
     
     now = datetime.now()
     
-    weekly_symbols = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'SENSEX', 'BANKEX']
+    weekly_symbols = ['NIFTY']
     
     if symbol.upper() in weekly_symbols:
-        days_ahead = 3 - now.weekday()
+        days_ahead = 1 - now.weekday()
         if days_ahead < 0:
             days_ahead += 7
         elif days_ahead == 0 and now.hour >= 15:
             days_ahead = 7
         
-        next_thursday = now + timedelta(days=days_ahead)
-        return next_thursday.strftime("%m/%d")
+        next_tuesday = now + timedelta(days=days_ahead)
+        return next_tuesday.strftime("%m/%d")
     else:
         year = now.year
         month = now.month
         
         last_day = (datetime(year, month % 12 + 1, 1) - timedelta(days=1)).day if month < 12 else 31
-        last_thursday = None
+        last_tuesday = None
         
         for day in range(last_day, 0, -1):
             test_date = datetime(year, month, day)
-            if test_date.weekday() == 3:
-                last_thursday = test_date
+            if test_date.weekday() == 1:
+                last_tuesday = test_date
                 break
         
-        if last_thursday and last_thursday <= now:
+        if last_tuesday and last_tuesday <= now:
             if month == 12:
                 month = 1
                 year += 1
@@ -1464,11 +1466,11 @@ def _get_next_nse_expiry(symbol: str) -> str:
             last_day = (datetime(year, month % 12 + 1, 1) - timedelta(days=1)).day if month < 12 else 31
             for day in range(last_day, 0, -1):
                 test_date = datetime(year, month, day)
-                if test_date.weekday() == 3:
-                    last_thursday = test_date
+                if test_date.weekday() == 1:
+                    last_tuesday = test_date
                     break
         
-        return last_thursday.strftime("%m/%d") if last_thursday else now.strftime("%m/%d")
+        return last_tuesday.strftime("%m/%d") if last_tuesday else now.strftime("%m/%d")
 
 
 def is_india_signal(text: str) -> bool:

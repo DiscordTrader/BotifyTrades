@@ -388,18 +388,18 @@ class IndiaPriceMonitor(PriceMonitor):
         return self._get_next_expiry()
     
     def _get_next_expiry(self) -> str:
-        """Get next Thursday expiry for weekly options."""
+        """Get next Tuesday expiry for NSE weekly options (effective Sept 2025)."""
         from datetime import datetime, timedelta
         
         now = datetime.now()
-        days_ahead = 3 - now.weekday()
+        days_ahead = 1 - now.weekday()
         if days_ahead < 0:
             days_ahead += 7
         elif days_ahead == 0 and now.hour >= 15:
             days_ahead = 7
         
-        next_thursday = now + timedelta(days=days_ahead)
-        return next_thursday.strftime("%Y-%m-%d")
+        next_tuesday = now + timedelta(days=days_ahead)
+        return next_tuesday.strftime("%Y-%m-%d")
     
     async def start(self):
         """Start polling for price updates."""

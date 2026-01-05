@@ -425,44 +425,37 @@ class IndiaExecutionAdapter:
         """
         Get the next expiry date for a symbol.
         
-        - NIFTY/BANKNIFTY: Weekly (Thursday)
-        - FINNIFTY: Weekly (Tuesday)
-        - Stock options: Monthly (last Thursday)
+        NSE Expiry Schedule (effective September 2025):
+        - NIFTY: Weekly (Tuesday) - only index with weekly options
+        - BANKNIFTY/FINNIFTY/MIDCPNIFTY: Monthly only (last Tuesday)
+        - Stock options: Monthly (last Tuesday)
         """
         today = datetime.now()
         
-        # Weekly expiry symbols
-        weekly_symbols = {'NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY'}
+        weekly_symbols = {'NIFTY'}
         
         if symbol in weekly_symbols:
-            # Find next Thursday (or Tuesday for FINNIFTY)
-            if symbol == 'FINNIFTY':
-                target_weekday = 1  # Tuesday
-            else:
-                target_weekday = 3  # Thursday
+            target_weekday = 1
             
             days_ahead = target_weekday - today.weekday()
-            if days_ahead <= 0:  # Target day already passed this week
+            if days_ahead <= 0:
                 days_ahead += 7
             
             return today + timedelta(days=days_ahead)
         else:
-            # Monthly expiry: last Thursday of the month
             next_month = today.replace(day=28) + timedelta(days=4)
             last_day = next_month - timedelta(days=next_month.day)
             
-            # Find last Thursday
-            days_to_thursday = (last_day.weekday() - 3) % 7
-            last_thursday = last_day - timedelta(days=days_to_thursday)
+            days_to_tuesday = (last_day.weekday() - 1) % 7
+            last_tuesday = last_day - timedelta(days=days_to_tuesday)
             
-            if last_thursday <= today:
-                # Move to next month
+            if last_tuesday <= today:
                 next_month = (today.replace(day=28) + timedelta(days=35)).replace(day=28) + timedelta(days=4)
                 last_day = next_month - timedelta(days=next_month.day)
-                days_to_thursday = (last_day.weekday() - 3) % 7
-                last_thursday = last_day - timedelta(days=days_to_thursday)
+                days_to_tuesday = (last_day.weekday() - 1) % 7
+                last_tuesday = last_day - timedelta(days=days_to_tuesday)
             
-            return last_thursday
+            return last_tuesday
     
     def format_inr_currency(self, amount: float) -> str:
         """Format amount as Indian Rupees with proper notation."""
