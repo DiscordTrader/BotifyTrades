@@ -145,9 +145,9 @@ jobs:
           path: dist/
           retention-days: 90
 
-  build-macos:
+  build-macos-intel:
     needs: set-build-type
-    runs-on: macos-latest
+    runs-on: macos-13
     
     steps:
       - name: Download modified source
@@ -182,15 +182,59 @@ jobs:
           pyinstaller build/build_exe.spec --clean --noconfirm
           rm -rf src && mv src_backup src
       
-      - name: Upload macOS Admin
+      - name: Upload macOS Intel Admin
         uses: actions/upload-artifact@v4
         with:
-          name: BotifyTrades-Admin-macOS-v${{ env.VERSION }}
+          name: BotifyTrades-Admin-macOS-Intel-v${{ env.VERSION }}
+          path: dist/
+          retention-days: 90
+
+  build-macos-silicon:
+    needs: set-build-type
+    runs-on: macos-14
+    
+    steps:
+      - name: Download modified source
+        uses: actions/download-artifact@v4
+        with:
+          name: source-admin
+          path: .
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarmor pyinstaller
+          pip install -r requirements.txt
+      
+      - name: Restore PyArmor License
+        run: |
+          echo "${{ secrets.PYARMOR_LICENSE }}" | base64 -d > pyarmor-regfile.zip
+          pyarmor reg pyarmor-regfile.zip
+          rm pyarmor-regfile.zip
+          pyarmor -v
+      
+      - name: Obfuscate and Build
+        run: |
+          pyarmor gen --output obfuscated src/
+          cp -r src src_backup
+          cp -r obfuscated/src/* src/
+          pyinstaller build/build_exe.spec --clean --noconfirm
+          rm -rf src && mv src_backup src
+      
+      - name: Upload macOS Silicon Admin
+        uses: actions/upload-artifact@v4
+        with:
+          name: BotifyTrades-Admin-macOS-Silicon-v${{ env.VERSION }}
           path: dist/
           retention-days: 90
 
   cleanup:
-    needs: [build-windows, build-linux, build-macos]
+    needs: [build-windows, build-linux, build-macos-intel, build-macos-silicon]
     runs-on: ubuntu-latest
     if: always()
     steps:
