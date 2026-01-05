@@ -753,17 +753,30 @@ class ConditionalOrderService:
         Priority: Broker API -> Finnhub -> yfinance
         For India orders: India broker API (Upstox/Zerodha) -> yfinance
         """
+        import sys
         symbol = order['symbol']
         broker = order['broker_primary']
         market = order.get('market', 'US')
+        sys.stderr.write(f"[CONDITIONAL] _start_monitor called for #{order_id} {symbol} broker={broker} market={market}\n")
+        sys.stderr.flush()
         
-        settings = get_conditional_order_settings()
-        threshold = settings.get('rate_limit_threshold', 80) / 100
-        
-        rate_limiter = self.rate_limiters.get(broker.lower()) if broker else None
-        broker_instance = self.broker_instances.get(broker.lower()) if broker else None
-        broker_rate_ok = rate_limiter and not rate_limiter.should_fallback(threshold)
-        finnhub_available = bool(self.finnhub_api_key)
+        try:
+            settings = get_conditional_order_settings()
+            threshold = settings.get('rate_limit_threshold', 80) / 100
+            
+            rate_limiter = self.rate_limiters.get(broker.lower()) if broker else None
+            broker_instance = self.broker_instances.get(broker.lower()) if broker else None
+            broker_rate_ok = rate_limiter and not rate_limiter.should_fallback(threshold)
+            finnhub_available = bool(self.finnhub_api_key)
+            
+            sys.stderr.write(f"[CONDITIONAL] broker_instance={broker_instance is not None}, rate_ok={broker_rate_ok}, finnhub={finnhub_available}\n")
+            sys.stderr.flush()
+        except Exception as e:
+            sys.stderr.write(f"[CONDITIONAL] ❌ Error in setup: {e}\n")
+            sys.stderr.flush()
+            import traceback
+            traceback.print_exc()
+            return
         
         monitor = None
         data_source = None
@@ -995,48 +1008,79 @@ class ConditionalOrderService:
     def _run_event_loop(self):
         """Run the asyncio event loop in a separate thread."""
         import sys
-        sys.stdout.write("[CONDITIONAL] Starting event loop thread...\n")
-        sys.stdout.flush()
-        print("[CONDITIONAL] Starting event loop thread...", flush=True)
+        import logging
+        logger = logging.getLogger(__name__)
         
-        self._loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self._loop)
+        sys.stderr.write("[CONDITIONAL] Starting event loop thread...\n")
+        sys.stderr.flush()
         
         try:
+            sys.stderr.write("[CONDITIONAL] Creating new event loop...\n")
+            sys.stderr.flush()
+            self._loop = asyncio.new_event_loop()
+            sys.stderr.write("[CONDITIONAL] Setting event loop...\n")
+            sys.stderr.flush()
+            asyncio.set_event_loop(self._loop)
+            sys.stderr.write("[CONDITIONAL] Running _main_loop...\n")
+            sys.stderr.flush()
             self._loop.run_until_complete(self._main_loop())
         except Exception as e:
-            print(f"[CONDITIONAL] Event loop error: {e}", flush=True)
+            sys.stderr.write(f"[CONDITIONAL] ❌ Event loop error: {e}\n")
+            sys.stderr.flush()
             import traceback
             traceback.print_exc()
         finally:
-            self._loop.close()
-            print("[CONDITIONAL] Event loop closed", flush=True)
+            if self._loop:
+                self._loop.close()
+            sys.stderr.write("[CONDITIONAL] Event loop closed\n")
+            sys.stderr.flush()
     
     async def _main_loop(self):
         """Main service loop."""
-        await self._restore_active_orders()
+        import sys
+        sys.stderr.write("[CONDITIONAL] _main_loop starting...\n")
+        sys.stderr.flush()
+        try:
+            await self._restore_active_orders()
+        except Exception as e:
+            sys.stderr.write(f"[CONDITIONAL] ❌ Error in _restore_active_orders: {e}\n")
+            sys.stderr.flush()
+            import traceback
+            traceback.print_exc()
         
+        sys.stderr.write("[CONDITIONAL] Entering monitoring loop...\n")
+        sys.stderr.flush()
         while self.is_running:
-            expired = expire_old_conditional_orders()
-            if expired > 0:
-                print(f"[CONDITIONAL] Expired {expired} orders")
+            try:
+                expired = expire_old_conditional_orders()
+                if expired > 0:
+                    sys.stderr.write(f"[CONDITIONAL] Expired {expired} orders\n")
+                    sys.stderr.flush()
+            except Exception as e:
+                sys.stderr.write(f"[CONDITIONAL] ❌ Error in expire check: {e}\n")
+                sys.stderr.flush()
             
             await asyncio.sleep(60)
     
     async def _restore_active_orders(self):
         """Restore monitoring for active orders after restart."""
-        print("[CONDITIONAL] Checking for active orders to restore...", flush=True)
+        import sys
+        sys.stderr.write("[CONDITIONAL] Checking for active orders to restore...\n")
+        sys.stderr.flush()
         active_orders = get_active_conditional_orders()
-        print(f"[CONDITIONAL] Found {len(active_orders)} active orders", flush=True)
+        sys.stderr.write(f"[CONDITIONAL] Found {len(active_orders)} active orders\n")
+        sys.stderr.flush()
         
         for order in active_orders:
             order_id = order['id']
             self.pending_orders[order_id] = order
-            print(f"[CONDITIONAL] Restoring monitor for order #{order_id}: {order.get('symbol')} {order.get('strike')}{order.get('opt_type')}", flush=True)
+            sys.stderr.write(f"[CONDITIONAL] Restoring monitor for order #{order_id}: {order.get('symbol')} {order.get('strike')}{order.get('opt_type')}\n")
+            sys.stderr.flush()
             await self._start_monitor(order_id, order)
         
         if active_orders:
-            print(f"[CONDITIONAL] ✓ Restored {len(active_orders)} active orders", flush=True)
+            sys.stderr.write(f"[CONDITIONAL] ✓ Restored {len(active_orders)} active orders\n")
+            sys.stderr.flush()
     
     def stop(self):
         """Stop the conditional order service."""
