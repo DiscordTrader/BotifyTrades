@@ -671,8 +671,10 @@ class ConditionalOrderService:
         strike = parsed_signal.get('strike')
         opt_type = parsed_signal.get('opt_type')
         option_expiry = parsed_signal.get('expiry')
-        lot_size = parsed_signal.get('lot_size')
-        lots = parsed_signal.get('lots')
+        
+        # Only use lot_size/lots for Indian markets - US uses contracts/qty
+        lot_size = parsed_signal.get('lot_size') if market == 'INDIA' else None
+        lots = parsed_signal.get('lots') if market == 'INDIA' else None
         
         order_id = create_conditional_order(
             channel_id=channel_id,
