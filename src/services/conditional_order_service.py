@@ -994,7 +994,10 @@ class ConditionalOrderService:
     
     def _run_event_loop(self):
         """Run the asyncio event loop in a separate thread."""
-        _log("[CONDITIONAL] Starting event loop thread...")
+        import sys
+        sys.stdout.write("[CONDITIONAL] Starting event loop thread...\n")
+        sys.stdout.flush()
+        print("[CONDITIONAL] Starting event loop thread...", flush=True)
         
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
@@ -1002,12 +1005,12 @@ class ConditionalOrderService:
         try:
             self._loop.run_until_complete(self._main_loop())
         except Exception as e:
-            _log(f"[CONDITIONAL] Event loop error: {e}")
+            print(f"[CONDITIONAL] Event loop error: {e}", flush=True)
             import traceback
             traceback.print_exc()
         finally:
             self._loop.close()
-            _log("[CONDITIONAL] Event loop closed")
+            print("[CONDITIONAL] Event loop closed", flush=True)
     
     async def _main_loop(self):
         """Main service loop."""
@@ -1022,18 +1025,18 @@ class ConditionalOrderService:
     
     async def _restore_active_orders(self):
         """Restore monitoring for active orders after restart."""
-        _log("[CONDITIONAL] Checking for active orders to restore...")
+        print("[CONDITIONAL] Checking for active orders to restore...", flush=True)
         active_orders = get_active_conditional_orders()
-        _log(f"[CONDITIONAL] Found {len(active_orders)} active orders")
+        print(f"[CONDITIONAL] Found {len(active_orders)} active orders", flush=True)
         
         for order in active_orders:
             order_id = order['id']
             self.pending_orders[order_id] = order
-            _log(f"[CONDITIONAL] Restoring monitor for order #{order_id}: {order.get('symbol')} {order.get('strike')}{order.get('opt_type')}")
+            print(f"[CONDITIONAL] Restoring monitor for order #{order_id}: {order.get('symbol')} {order.get('strike')}{order.get('opt_type')}", flush=True)
             await self._start_monitor(order_id, order)
         
         if active_orders:
-            _log(f"[CONDITIONAL] ✓ Restored {len(active_orders)} active orders")
+            print(f"[CONDITIONAL] ✓ Restored {len(active_orders)} active orders", flush=True)
     
     def stop(self):
         """Stop the conditional order service."""
