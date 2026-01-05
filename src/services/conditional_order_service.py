@@ -838,7 +838,8 @@ class ConditionalOrderService:
             )
         elif broker_instance and broker_rate_ok:
             data_source = broker.lower()
-            print(f"[CONDITIONAL] Using broker {broker} for price monitoring of {symbol}")
+            sys.stderr.write(f"[CONDITIONAL] Using broker {broker} for price monitoring of {symbol}\n")
+            sys.stderr.flush()
             monitor = BrokerPriceMonitor(
                 symbol,
                 price_callback,
@@ -853,7 +854,8 @@ class ConditionalOrderService:
         elif finnhub_available:
             data_source = 'finnhub'
             fallback_reason = 'broker_rate_limit' if (rate_limiter and rate_limiter.should_fallback(threshold)) else 'no_broker_instance'
-            print(f"[CONDITIONAL] Using Finnhub for price monitoring of {symbol} (reason: {fallback_reason})")
+            sys.stderr.write(f"[CONDITIONAL] Using Finnhub for price monitoring of {symbol} (reason: {fallback_reason})\n")
+            sys.stderr.flush()
             monitor = FinnhubPriceMonitor(
                 symbol,
                 price_callback,
@@ -867,7 +869,8 @@ class ConditionalOrderService:
             )
         elif YFINANCE_AVAILABLE:
             data_source = 'yfinance'
-            print(f"[CONDITIONAL] Using yfinance for price monitoring of {symbol} (no API key required)")
+            sys.stderr.write(f"[CONDITIONAL] Using yfinance for price monitoring of {symbol} (delayed ~15min)\n")
+            sys.stderr.flush()
             monitor = YFinancePriceMonitor(
                 symbol,
                 price_callback
