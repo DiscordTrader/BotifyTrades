@@ -17,6 +17,25 @@ def create_app():
         base_path = Path(getattr(sys, '_MEIPASS', '.'))
         template_folder = str(base_path / 'gui_app' / 'templates')
         static_folder = str(base_path / 'gui_app' / 'static')
+        
+        # Debug logging for PyInstaller builds
+        print(f"[FLASK] PyInstaller mode - base_path: {base_path}")
+        print(f"[FLASK] Template folder: {template_folder}")
+        print(f"[FLASK] Template folder exists: {os.path.exists(template_folder)}")
+        
+        # Verify templates exist
+        if os.path.exists(template_folder):
+            templates = os.listdir(template_folder)
+            print(f"[FLASK] Found {len(templates)} templates: {templates[:5]}...")
+        else:
+            print(f"[FLASK] WARNING: Template folder not found!")
+            # Try alternate path - look for gui_app as sibling
+            alt_base = Path(sys.executable).parent
+            alt_template = str(alt_base / 'gui_app' / 'templates')
+            if os.path.exists(alt_template):
+                print(f"[FLASK] Using alternate path: {alt_template}")
+                template_folder = alt_template
+                static_folder = str(alt_base / 'gui_app' / 'static')
     else:
         # Running from source - use default relative paths
         template_folder = None  # Flask default
