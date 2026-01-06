@@ -1175,22 +1175,44 @@ class UpstoxBroker(BrokerInterface):
             return expiry.upper().replace('/', '')
     
     async def get_ltp(self, instrument_key: str) -> Optional[float]:
-        """Get last traded price for an instrument key (used by conditional order monitoring)."""
-        if not self.quote_api:
+        """Get last traded price for an instrument key using V3 API.
+        
+        Uses the V3 LTP endpoint: /v3/market-quote/ltp
+        Docs: https://upstox.com/developer/api-documentation/ltp-v3
+        """
+        access_token = self.config.get('access_token')
+        if not access_token:
+            print(f"[{self.name}] No access token for LTP fetch")
             return None
         
         try:
-            result = await asyncio.to_thread(
-                self.quote_api.ltp,
-                symbol=instrument_key,
-                api_version='2.0'
+            import requests
+            from urllib.parse import quote
+            
+            encoded_key = quote(instrument_key, safe='')
+            url = f"https://api.upstox.com/v3/market-quote/ltp?instrument_key={encoded_key}"
+            
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+            
+            response = await asyncio.to_thread(
+                requests.get, url, headers=headers, timeout=10
             )
-            if result and result.data:
-                for key, data in result.data.items():
-                    if hasattr(data, 'last_price'):
-                        return float(data.last_price)
-                    elif isinstance(data, dict) and 'last_price' in data:
-                        return float(data['last_price'])
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'success' and data.get('data'):
+                    for key, quote_data in data['data'].items():
+                        if isinstance(quote_data, dict) and 'last_price' in quote_data:
+                            ltp = float(quote_data['last_price'])
+                            print(f"[{self.name}] V3 LTP for {instrument_key}: ₹{ltp:.2f}")
+                            return ltp
+            else:
+                print(f"[{self.name}] LTP V3 API error: {response.status_code} - {response.text[:200]}")
+            
             return None
         except Exception as e:
             print(f"[{self.name}] Error getting LTP for {instrument_key}: {e}")
@@ -1276,6 +1298,176 @@ class UpstoxBroker(BrokerInterface):
             print(f"[{self.name}] Error getting option contracts: {e}")
             return {'success': False, 'error': str(e)}
     
+    async def place_gtt_order(
+        self,
+        instrument_key: str,
+        quantity: int,
+        transaction_type: str,  # 'BUY' or 'SELL'
+        trigger_type: str,      # 'ABOVE' or 'BELOW'
+        trigger_price: float,
+        product: str = 'D',     # 'I' (Intraday), 'D' (Delivery), 'MTF'
+        stop_loss_price: Optional[float] = None,
+        target_price: Optional[float] = None,
+        trailing_gap: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Place a GTT (Good Till Triggered) order using V3 API.
+        
+        Docs: https://upstox.com/developer/api-documentation/place-gtt-order
+        
+        Args:
+            instrument_key: Upstox instrument key (e.g., 'NSE_FO|40477')
+            quantity: Order quantity
+            transaction_type: 'BUY' or 'SELL'
+            trigger_type: 'ABOVE' or 'BELOW' for ENTRY
+            trigger_price: Price at which to trigger the order
+            product: 'I' (Intraday), 'D' (Delivery), 'MTF'
+            stop_loss_price: Optional stop loss trigger price
+            target_price: Optional target price
+            trailing_gap: Optional trailing stop gap (for TSL orders)
+        
+        Returns:
+            Dict with order result
+        """
+        access_token = self.config.get('access_token')
+        if not access_token:
+            return {'success': False, 'error': 'No access token'}
+        
+        try:
+            import requests
+            
+            rules = [
+                {
+                    'strategy': 'ENTRY',
+                    'trigger_type': trigger_type.upper(),
+                    'trigger_price': trigger_price
+                }
+            ]
+            
+            gtt_type = 'SINGLE'
+            
+            if stop_loss_price or target_price:
+                gtt_type = 'MULTIPLE'
+                
+                if target_price:
+                    rules.append({
+                        'strategy': 'TARGET',
+                        'trigger_type': 'IMMEDIATE',
+                        'trigger_price': target_price
+                    })
+                
+                if stop_loss_price:
+                    sl_rule = {
+                        'strategy': 'STOPLOSS',
+                        'trigger_type': 'IMMEDIATE',
+                        'trigger_price': stop_loss_price
+                    }
+                    if trailing_gap:
+                        sl_rule['trailing_gap'] = trailing_gap
+                    rules.append(sl_rule)
+            
+            payload = {
+                'type': gtt_type,
+                'quantity': quantity,
+                'product': product,
+                'instrument_token': instrument_key,
+                'transaction_type': transaction_type.upper(),
+                'rules': rules
+            }
+            
+            url = 'https://api.upstox.com/v3/order/gtt/place'
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+            
+            print(f"[{self.name}] Placing GTT order: {payload}")
+            
+            response = await asyncio.to_thread(
+                requests.post, url, json=payload, headers=headers, timeout=30
+            )
+            
+            result = response.json()
+            
+            if response.status_code in [200, 201] and result.get('status') == 'success':
+                gtt_order_ids = result.get('data', {}).get('gtt_order_ids', [])
+                print(f"[{self.name}] ✓ GTT order placed: {gtt_order_ids}")
+                return {
+                    'success': True,
+                    'gtt_order_ids': gtt_order_ids,
+                    'latency': result.get('metadata', {}).get('latency')
+                }
+            else:
+                error_msg = result.get('errors', [{}])[0].get('message', 'Unknown error')
+                print(f"[{self.name}] ❌ GTT order failed: {error_msg}")
+                return {'success': False, 'error': error_msg}
+                
+        except Exception as e:
+            print(f"[{self.name}] Error placing GTT order: {e}")
+            return {'success': False, 'error': str(e)}
+
+    async def cancel_gtt_order(self, gtt_order_id: str) -> Dict[str, Any]:
+        """Cancel a GTT order."""
+        access_token = self.config.get('access_token')
+        if not access_token:
+            return {'success': False, 'error': 'No access token'}
+        
+        try:
+            import requests
+            
+            url = f'https://api.upstox.com/v3/order/gtt/cancel?gtt_order_id={gtt_order_id}'
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Accept': 'application/json'
+            }
+            
+            response = await asyncio.to_thread(
+                requests.delete, url, headers=headers, timeout=10
+            )
+            
+            result = response.json()
+            
+            if response.status_code == 200 and result.get('status') == 'success':
+                print(f"[{self.name}] ✓ GTT order cancelled: {gtt_order_id}")
+                return {'success': True}
+            else:
+                error_msg = result.get('errors', [{}])[0].get('message', 'Unknown error')
+                return {'success': False, 'error': error_msg}
+                
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    async def get_gtt_order_details(self, gtt_order_id: str) -> Dict[str, Any]:
+        """Get details of a GTT order."""
+        access_token = self.config.get('access_token')
+        if not access_token:
+            return {'success': False, 'error': 'No access token'}
+        
+        try:
+            import requests
+            
+            url = f'https://api.upstox.com/v3/order/gtt/details?gtt_order_id={gtt_order_id}'
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Accept': 'application/json'
+            }
+            
+            response = await asyncio.to_thread(
+                requests.get, url, headers=headers, timeout=10
+            )
+            
+            result = response.json()
+            
+            if response.status_code == 200 and result.get('status') == 'success':
+                return {'success': True, 'data': result.get('data')}
+            else:
+                error_msg = result.get('errors', [{}])[0].get('message', 'Unknown error')
+                return {'success': False, 'error': error_msg}
+                
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
     @staticmethod
     def get_common_instrument_keys() -> Dict[str, str]:
         """Get common Upstox instrument keys for Indian markets"""
