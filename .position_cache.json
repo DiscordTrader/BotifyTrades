@@ -49,7 +49,7 @@
   },
   "ALPACA_PAPER_SPY_stock": {
     "entry_price": 687.49,
-    "highest_price": 692.17,
+    "highest_price": 692.29,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
