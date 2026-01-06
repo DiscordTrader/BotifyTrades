@@ -89,3 +89,31 @@ The system emphasizes user experience through an interactive setup wizard, GUI-b
 - **FINNHUB_API_KEY**: Market data
 - **GMAIL_APP_PASSWORD**: For Gmail SMTP
 - **SMTP_PASSWORD**: For custom SMTP
+
+## Milestones
+
+### INDIA 1 - Conditional Order Monitoring for India Markets (January 6, 2026)
+**Status: ✅ COMPLETE**
+
+Implemented automatic conditional order monitoring and execution for India market options via Upstox broker integration.
+
+**Features Delivered:**
+- Real-time price monitoring via Upstox V3 LTP API for Indian F&O instruments
+- ABOVE/BELOW trigger detection with automatic execution when market conditions are met
+- Telegram signal parsing for Indian options with conditional triggers (e.g., "BUY NIFTY 26100 CE ABOVE ₹160")
+- Full execution pipeline: Signal → Conditional Order → Price Monitor → Trigger → Upstox Order
+- Support for stop loss and multi-target profit taking from signals
+- Proper status tracking: ACTIVE_MONITORING → TRIGGERED → EXECUTING → EXECUTED
+- IndiaPriceMonitor class with broker-native LTP polling (~1 second intervals)
+- Automatic expiry resolution for NIFTY/BANKNIFTY weekly options
+
+**Key Files:**
+- `src/services/conditional_order_service.py` - Core monitoring service with IndiaPriceMonitor
+- `src/selfbot_webull.py` - Execution callback and signal queue integration
+- `src/brokers/upstox_broker.py` - V3 LTP API and order placement
+- `gui_app/database.py` - Conditional order storage and status updates
+
+**Fixes Applied:**
+- Resolved logging visibility (stdout→stderr for workflow logs)
+- Fixed profit targets parsing for both JSON arrays and comma-separated strings
+- Corrected status update from TRACKING to EXECUTED on success
