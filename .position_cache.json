@@ -49,7 +49,7 @@
   },
   "ALPACA_PAPER_SPY_stock": {
     "entry_price": 687.49,
-    "highest_price": 691.04,
+    "highest_price": 691.08,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3297,7 +3297,7 @@
   },
   "ALPACA_PAPER_SPY_700.0_2026-01-23_C": {
     "entry_price": 2.73,
-    "highest_price": 2.84,
+    "highest_price": 2.85,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3329,7 +3329,7 @@
   },
   "Webull_NFLX_91.0_01/09_C": {
     "entry_price": 0.78,
-    "highest_price": 0.87,
+    "highest_price": 0.905,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3361,7 +3361,7 @@
   },
   "ALPACA_PAPER_QQQ_621.0_2026-01-06_C": {
     "entry_price": 0.95,
-    "highest_price": 1.84,
+    "highest_price": 1.95,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3409,7 +3409,7 @@
   },
   "ALPACA_PAPER_NFLX_91.0_2026-01-09_C": {
     "entry_price": 0.71,
-    "highest_price": 0.86,
+    "highest_price": 0.9,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3425,7 +3425,7 @@
   },
   "ALPACA_PAPER_SPY_690.0_2026-01-06_C": {
     "entry_price": 0.29,
-    "highest_price": 1.25,
+    "highest_price": 1.27,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3441,7 +3441,7 @@
   },
   "ALPACA_PAPER_DIS_115.0_2026-01-16_C": {
     "entry_price": 1.6,
-    "highest_price": 1.47,
+    "highest_price": 1.5,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
