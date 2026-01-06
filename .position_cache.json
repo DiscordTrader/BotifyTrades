@@ -49,7 +49,7 @@
   },
   "ALPACA_PAPER_SPY_stock": {
     "entry_price": 687.49,
-    "highest_price": 690.33,
+    "highest_price": 690.65,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3153,7 +3153,7 @@
   },
   "ALPACA_PAPER_HOOD_stock": {
     "entry_price": 112.313212,
-    "highest_price": 121.75,
+    "highest_price": 121.99,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3233,7 +3233,7 @@
   },
   "ALPACA_PAPER_QQQ_623.0_2026-01-06_C": {
     "entry_price": 0.59,
-    "highest_price": 0.5,
+    "highest_price": 0.62,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3251,7 +3251,7 @@
     "entry_price": 0.461111,
     "highest_price": 0.29,
     "trailing_activated": false,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -3278,5 +3278,21 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "created_at": "2026-01-06T15:09:12.135703"
+  },
+  "ALPACA_PAPER_NVO_60.0_2026-01-16_C": {
+    "entry_price": 0.89,
+    "highest_price": 0.88,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "NVO260116C00060000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-06T15:13:59.741926"
   }
 }
