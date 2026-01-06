@@ -3329,7 +3329,7 @@
   },
   "Webull_NFLX_91.0_01/09_C": {
     "entry_price": 0.78,
-    "highest_price": 0.905,
+    "highest_price": 1.025,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3409,7 +3409,7 @@
   },
   "ALPACA_PAPER_NFLX_91.0_2026-01-09_C": {
     "entry_price": 0.71,
-    "highest_price": 0.9,
+    "highest_price": 1.01,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,

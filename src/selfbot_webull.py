@@ -6580,23 +6580,33 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             print(f"[STARTUP] Warning: Could not start Trade Monitor: {e}", flush=True)
             traceback.print_exc()
         
-        # Start Conditional Order Service if enabled
+        # Start Conditional Order Service if enabled (using market-isolated router)
         try:
-            from src.services.conditional_order_service import conditional_order_service
+            from src.services.conditional_orders.router import conditional_order_router
             
-            if conditional_order_service.is_enabled():
-                # Register broker instances for price monitoring
+            if conditional_order_router.is_enabled():
+                # Register broker instances - router auto-routes to correct market service
+                # US Brokers
                 if self.broker:
-                    conditional_order_service.set_broker_instance('Webull', self.broker)
+                    conditional_order_router.set_broker_instance('Webull', self.broker)
+                    print("[STARTUP] ✓ Webull registered for US conditional order monitoring", flush=True)
                 if hasattr(self, 'paper_broker') and self.paper_broker:
-                    conditional_order_service.set_broker_instance('Alpaca', self.paper_broker)
-                # Register India brokers for conditional order monitoring
+                    conditional_order_router.set_broker_instance('Alpaca', self.paper_broker)
+                    print("[STARTUP] ✓ Alpaca registered for US conditional order monitoring", flush=True)
+                # India Brokers
                 if hasattr(self, 'upstox_broker') and self.upstox_broker:
-                    conditional_order_service.set_broker_instance('upstox', self.upstox_broker)
-                    print("[STARTUP] ✓ Upstox registered for conditional order monitoring", flush=True)
+                    conditional_order_router.set_broker_instance('upstox', self.upstox_broker)
+                    print("[STARTUP] ✓ Upstox registered for INDIA conditional order monitoring", flush=True)
                 if hasattr(self, 'dhanq_broker') and self.dhanq_broker:
-                    conditional_order_service.set_broker_instance('dhanq', self.dhanq_broker)
-                    print("[STARTUP] ✓ DhanQ registered for conditional order monitoring", flush=True)
+                    conditional_order_router.set_broker_instance('dhanq', self.dhanq_broker)
+                    print("[STARTUP] ✓ DhanQ registered for INDIA conditional order monitoring", flush=True)
+                if hasattr(self, 'zerodha_broker') and self.zerodha_broker:
+                    conditional_order_router.set_broker_instance('zerodha', self.zerodha_broker)
+                    print("[STARTUP] ✓ Zerodha registered for INDIA conditional order monitoring", flush=True)
+                # Canada Brokers  
+                if hasattr(self, 'questrade_broker') and self.questrade_broker:
+                    conditional_order_router.set_broker_instance('questrade', self.questrade_broker)
+                    print("[STARTUP] ✓ Questrade registered for CANADA conditional order monitoring", flush=True)
                 
                 # Use the global sync signal queue (same as Telegram) for thread-safe handoff
                 global _telegram_signal_queue
@@ -6750,10 +6760,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         traceback.print_exc()
                         return False
                 
-                conditional_order_service.set_execution_callback(execute_conditional_order)
-                print(f"[STARTUP] Calling conditional_order_service.start() is_running={conditional_order_service.is_running}", flush=True)
-                conditional_order_service.start()
-                print(f"[STARTUP] ✓ Conditional Order Service started is_running={conditional_order_service.is_running}", flush=True)
+                conditional_order_router.set_execution_callback(execute_conditional_order)
+                print(f"[STARTUP] Starting market-isolated conditional order services...", flush=True)
+                conditional_order_router.start()
+                status = conditional_order_router.get_market_status()
+                print(f"[STARTUP] ✓ Conditional Order Router started", flush=True)
+                for market, mstatus in status.items():
+                    print(f"[STARTUP]   {market}: running={mstatus['running']}, brokers={mstatus['registered_brokers']}", flush=True)
             else:
                 print("[STARTUP] Conditional Order Service disabled (enable in Settings)")
         except ImportError as e:
@@ -7307,9 +7320,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # Check for CONDITIONAL ORDER signals (e.g., "AAPL over 150 SL 5%")
                     try:
                         from src.signals.parser import is_conditional_order_signal, parse_conditional_order_signal
-                        from src.services.conditional_order_service import conditional_order_service
+                        from src.services.conditional_orders.router import conditional_order_router
                         
-                        if is_conditional_order_signal(message.content) and conditional_order_service.is_enabled():
+                        if is_conditional_order_signal(message.content) and conditional_order_router.is_enabled():
                             cond_channel_id = str(message.channel.id)
                             print(f"[COND ORDER] ✓ Detected conditional order signal in channel {cond_channel_id}")
                             parsed_cond = parse_conditional_order_signal(message.content)
@@ -7346,8 +7359,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     cond_broker = 'Webull'
                                     print(f"[COND ORDER] Using default live broker: {cond_broker}")
                                 
-                                # Submit to conditional order service
-                                order_id = conditional_order_service.create_order(cond_channel_id, parsed_cond, cond_broker)
+                                # Submit to conditional order router (market-isolated)
+                                order_id = conditional_order_router.create_order(cond_channel_id, parsed_cond, cond_broker)
                                 if order_id:
                                     trigger_type = parsed_cond.get('trigger_type', 'over')
                                     print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {trigger_type} ${parsed_cond['trigger_price']}")
@@ -7642,14 +7655,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             if not opt:
                 india_stock_signal = parse_india_stock_signal(normalized_content)
         
-        # Route Indian CONDITIONAL orders (with ABOVE/BELOW) to conditional order service
+        # Route Indian CONDITIONAL orders (with ABOVE/BELOW) to conditional order router
         if opt and opt.get('_conditional_order') and opt.get('market') == 'INDIA':
             print(f"[INDIA CONDITIONAL] ✓ Detected conditional order: {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt.get('trigger_type')} ₹{opt.get('trigger_price')}")
             
             try:
-                from src.services.conditional_order_service import conditional_order_service
+                from src.services.conditional_orders.router import conditional_order_router
                 
-                if conditional_order_service.is_enabled():
+                if conditional_order_router.is_enabled():
                     broker = channel_info.get('broker_override', 'Upstox') if channel_info else 'Upstox'
                     
                     conditional_signal = {
@@ -7671,7 +7684,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'author_name': str(message.author),
                     }
                     
-                    order_id = conditional_order_service.create_order(
+                    order_id = conditional_order_router.create_order(
                         channel_id=str(message.channel.id),
                         parsed_signal=conditional_signal,
                         broker=broker
@@ -7710,11 +7723,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             if conditional_signal:
                 print(f"[CONDITIONAL] ✓ Detected conditional order: {conditional_signal['symbol']} {conditional_signal['trigger_type']} ${conditional_signal['trigger_price']}")
                 
-                # Route to conditional order service if enabled
+                # Route to conditional order router if enabled (market-isolated)
                 try:
-                    from src.services.conditional_order_service import conditional_order_service
+                    from src.services.conditional_orders.router import conditional_order_router
                     
-                    if conditional_order_service.is_enabled():
+                    if conditional_order_router.is_enabled():
                         # Get broker from channel config - prefer live broker
                         broker = None
                         if channel_info:
@@ -7739,7 +7752,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             broker = 'Webull'
                         print(f"[CONDITIONAL] Using broker: {broker}")
                         
-                        order_id = conditional_order_service.create_order(
+                        order_id = conditional_order_router.create_order(
                             channel_id=str(message.channel.id),
                             parsed_signal=conditional_signal,
                             broker=broker
@@ -8655,10 +8668,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 await asyncio.sleep(1.0)
     
     async def _route_telegram_conditional_order(self, signal):
-        """Route Telegram conditional order to conditional order service."""
+        """Route Telegram conditional order to market-isolated conditional order router."""
         try:
-            from src.services.conditional_order_service import conditional_order_service
-            from gui_app.database import create_conditional_order
+            from src.services.conditional_orders.router import conditional_order_router
             
             symbol = signal.get('symbol')
             strike = signal.get('strike')
@@ -8671,7 +8683,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             _original_print(f"[TELEGRAM CONDITIONAL] ✓ Detected conditional order: {symbol} {strike}{opt_type} {trigger_type} ₹{trigger_price}", flush=True)
             
-            if not conditional_order_service.is_enabled():
+            if not conditional_order_router.is_enabled():
                 _original_print("[TELEGRAM CONDITIONAL] ⚠️ Conditional order service DISABLED - executing immediately", flush=True)
                 await self.order_queue.put(signal)
                 return
@@ -8705,37 +8717,31 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             broker_primary = signal.get('_broker_list', ['UPSTOX'])[0] if signal.get('_broker_list') else 'UPSTOX'
             quantity = signal.get('qty', 1)
             
-            order_id = create_conditional_order(
-                channel_id=channel_id,
-                symbol=symbol,
-                trigger_type=trigger_type,
-                trigger_price=float(trigger_price) if trigger_price else 0,
-                broker_primary=broker_primary,
-                stop_loss_type='fixed' if stop_loss else None,
-                stop_loss_value=float(stop_loss) if stop_loss else None,
-                take_profit_targets=','.join(str(t) for t in profit_targets) if profit_targets else None,
-                size_mode='fixed',
-                qty_value=float(quantity),
-                calculated_qty=int(quantity),
-                params_source='signal',
-                original_message=signal.get('raw_message', ''),
-                asset_type='option',
-                strike=float(strike) if strike else None,
-                opt_type=opt_type[0].upper() if opt_type else 'C',
-                expiry=expiry,
-                market='INDIA',
-            )
-            
-            order_data = {
+            conditional_signal = {
                 'symbol': symbol,
-                'trigger_price': float(trigger_price) if trigger_price else 0,
-                'trigger_type': trigger_type,
                 'strike': float(strike) if strike else None,
                 'opt_type': opt_type[0].upper() if opt_type else 'C',
+                'trigger_price': float(trigger_price) if trigger_price else 0,
+                'trigger_type': trigger_type,
                 'expiry': expiry,
-                'quantity': quantity,
-                'broker_primary': broker_primary,
+                'stop_loss': stop_loss,
+                'stop_loss_value': float(stop_loss) if stop_loss else None,
+                'stop_loss_type': 'fixed' if stop_loss else None,
+                'profit_targets': profit_targets or [],
+                'qty': quantity,
+                'lots': signal.get('lots', 1),
+                'lot_size': signal.get('lot_size'),
+                'market': 'INDIA',
+                'asset_type': 'option',
+                'original_message': signal.get('raw_message', ''),
+                'message_id': signal.get('message_id'),
             }
+            
+            order_id = conditional_order_router.create_order(
+                channel_id=channel_id,
+                parsed_signal=conditional_signal,
+                broker=broker_primary
+            )
             
             if order_id:
                 _original_print(f"[TELEGRAM CONDITIONAL] ✓ Created conditional order #{order_id}", flush=True)
@@ -8745,9 +8751,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     _original_print(f"[TELEGRAM CONDITIONAL]   SL: ₹{stop_loss}", flush=True)
                 if profit_targets:
                     _original_print(f"[TELEGRAM CONDITIONAL]   Targets: {profit_targets}", flush=True)
-                
-                conditional_order_service._schedule_monitoring(order_id)
-                _original_print(f"[TELEGRAM CONDITIONAL] ✓ Order #{order_id} monitoring started", flush=True)
+                _original_print(f"[TELEGRAM CONDITIONAL] ✓ Order #{order_id} routed to INDIA service", flush=True)
             else:
                 _original_print(f"[TELEGRAM CONDITIONAL] ❌ Failed to create conditional order", flush=True)
                 await self.order_queue.put(signal)
