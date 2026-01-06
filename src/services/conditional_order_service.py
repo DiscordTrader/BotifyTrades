@@ -832,6 +832,8 @@ class ConditionalOrderService:
             strike = order.get('strike', 0)
             opt_type = order.get('opt_type', 'C')
             expiry = order.get('expiry')
+            sys.stderr.write(f"[CONDITIONAL] INDIA market detected: strike={strike}, opt_type={opt_type}, expiry={expiry}\n")
+            sys.stderr.flush()
             
             india_brokers = ['upstox', 'zerodha', 'dhanq']
             india_broker_instance = None
@@ -841,9 +843,12 @@ class ConditionalOrderService:
                 if india_broker in self.broker_instances:
                     india_broker_instance = self.broker_instances[india_broker]
                     india_broker_name = india_broker
+                    sys.stderr.write(f"[CONDITIONAL] Found India broker: {india_broker_name}\n")
+                    sys.stderr.flush()
                     break
             
-            print(f"[CONDITIONAL] Using IndiaPriceMonitor for {symbol} {strike}{opt_type} expiry={expiry} (broker: {india_broker_name or 'fallback'})")
+            sys.stderr.write(f"[CONDITIONAL] Using IndiaPriceMonitor for {symbol} {strike}{opt_type} expiry={expiry} (broker: {india_broker_name or 'fallback'})\n")
+            sys.stderr.flush()
             monitor = IndiaPriceMonitor(
                 symbol,
                 strike,
@@ -944,8 +949,14 @@ class ConditionalOrderService:
     
     async def _on_price_update(self, order_id: int, symbol: str, price: float):
         """Handle price update from monitor."""
+        import sys
+        sys.stderr.write(f"[CONDITIONAL] Price update received: #{order_id} {symbol} @ ₹{price:.2f}\n")
+        sys.stderr.flush()
+        
         order = self.pending_orders.get(order_id)
         if not order:
+            sys.stderr.write(f"[CONDITIONAL] ⚠️ Order #{order_id} not in pending_orders!\n")
+            sys.stderr.flush()
             return
         
         # Reload adjusted_trigger_price from database to pick up GUI offset changes
@@ -958,6 +969,9 @@ class ConditionalOrderService:
             trigger_price = order.get('adjusted_trigger_price') or order.get('trigger_price')
         trigger_type = order.get('trigger_type', 'over')
         
+        sys.stderr.write(f"[CONDITIONAL] Checking trigger: {trigger_type} {trigger_price}, current={price:.2f}\n")
+        sys.stderr.flush()
+        
         triggered = False
         if trigger_type == 'over' and price >= trigger_price:
             triggered = True
@@ -965,7 +979,8 @@ class ConditionalOrderService:
             triggered = True
         
         if triggered:
-            print(f"[CONDITIONAL] TRIGGERED! {symbol} @ ${price:.2f} (target: ${trigger_price:.2f})")
+            sys.stderr.write(f"[CONDITIONAL] 🎯 TRIGGERED! {symbol} @ ₹{price:.2f} (target: ₹{trigger_price:.2f})\n")
+            sys.stderr.flush()
             await self._execute_order(order_id, price)
     
     async def _execute_order(self, order_id: int, triggered_price: float):

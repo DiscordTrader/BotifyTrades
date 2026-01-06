@@ -6510,12 +6510,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 # Set up async execution callback with thread-safe handoff
                 async def execute_conditional_order(order, triggered_price):
                     """Execute a triggered conditional order (called from service's event loop)."""
+                    import sys
+                    sys.stderr.write(f"[CONDITIONAL EXEC] Callback invoked for order #{order.get('id')}\n")
+                    sys.stderr.flush()
                     try:
                         symbol = order['symbol']
                         broker_name = order.get('broker_primary', 'Webull')
                         market = order.get('market', 'US')
                         currency = '₹' if market == 'INDIA' else '$'
                         option_info = f" {order.get('strike')}{order.get('opt_type')}" if order.get('strike') else ""
+                        sys.stderr.write(f"[CONDITIONAL EXEC] Preparing signal: {symbol}{option_info} @ {currency}{triggered_price:.2f}\n")
+                        sys.stderr.flush()
                         print(f"[CONDITIONAL] Executing order #{order['id']}: {symbol}{option_info} @ {currency}{triggered_price:.2f}")
                         
                         # Build a BTO signal from the conditional order
@@ -6619,6 +6624,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             await order_queue.put(signal)
                             return True
                         
+                        sys.stderr.write(f"[CONDITIONAL EXEC] Scheduling on discord_loop: running={discord_loop.is_running()}\n")
+                        sys.stderr.flush()
+                        
+                        if not discord_loop.is_running():
+                            sys.stderr.write(f"[CONDITIONAL EXEC] ❌ Discord loop not running!\n")
+                            sys.stderr.flush()
+                            return False
+                        
                         future = asyncio.run_coroutine_threadsafe(queue_signal(), discord_loop)
                         
                         # Add done callback for error handling (non-blocking)
@@ -6628,10 +6641,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 currency = '₹' if market == 'INDIA' else '$'
                                 option_info = f" {order.get('strike')}{order.get('opt_type')}" if order.get('strike') else ""
                                 print(f"[CONDITIONAL] ✓ Queued BTO {symbol}{option_info} @ {currency}{triggered_price:.2f}")
+                                sys.stderr.write(f"[CONDITIONAL EXEC] ✓ Successfully queued signal\n")
+                                sys.stderr.flush()
                             except Exception as e:
                                 print(f"[CONDITIONAL] ❌ Queue error: {e}")
+                                sys.stderr.write(f"[CONDITIONAL EXEC] ❌ Queue callback error: {e}\n")
+                                sys.stderr.flush()
                         
                         future.add_done_callback(on_done)
+                        sys.stderr.write(f"[CONDITIONAL EXEC] ✓ Returning True (async handoff scheduled)\n")
+                        sys.stderr.flush()
                         return True  # Return immediately, actual queue happens async
                         
                     except Exception as e:
