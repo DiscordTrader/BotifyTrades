@@ -76,6 +76,14 @@ a = Analysis(
         # Note: license/, services/, gui_app/, src/ modules are included via datas section
         # Only include imports for modules that exist as actual Python packages
         'certifi',
+        # Indian market broker APIs
+        'upstox_client',
+        'upstox_client.configuration',
+        'upstox_client.api_client',
+        'upstox_client.api',
+        'dhanhq',
+        'dhanhq.dhanhq',
+        'kiteconnect',
     ],
     hookspath=[],
     hooksconfig={},

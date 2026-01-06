@@ -111,6 +111,14 @@ a = Analysis(
         'src.setup_wizard',
         'setup_wizard',
         'certifi',  # SSL certificates
+        # Indian market broker APIs
+        'upstox_client',
+        'upstox_client.configuration',
+        'upstox_client.api_client',
+        'upstox_client.api',
+        'dhanhq',
+        'dhanhq.dhanhq',
+        'kiteconnect',
     ] + pyarmor_hidden + [  # PyArmor runtime (dynamically detected)
         # PySide6 for Setup Wizard GUI
         'PySide6',
