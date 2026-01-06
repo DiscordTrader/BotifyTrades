@@ -703,19 +703,33 @@
         </div>
 
         <div class="settings-section">
+            <h4><i class="fas fa-globe"></i> Market Region</h4>
+            <div class="settings-row single">
+                <div class="setting-item">
+                    <label>Market for signals from this channel</label>
+                    <select id="settingsMarket">
+                        <option value="US">🇺🇸 US Markets (NYSE/NASDAQ)</option>
+                        <option value="IN">🇮🇳 India Markets (NSE/BSE)</option>
+                        <option value="CA">🇨🇦 Canada Markets (TSX)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
             <h4><i class="fas fa-exchange-alt"></i> Broker Override</h4>
             <div class="settings-row single">
                 <div class="setting-item">
                     <label>Broker for this channel</label>
                     <select id="settingsBrokerOverride">
                         <option value="">Use Global Default</option>
-                        <option value="webull">Webull</option>
-                        <option value="alpaca">Alpaca</option>
-                        <option value="tastytrade">Tastytrade</option>
-                        <option value="ibkr">Interactive Brokers</option>
-                        <option value="robinhood">Robinhood</option>
-                        <option value="zerodha">Zerodha (India)</option>
+                        <option value="webull">Webull (US)</option>
+                        <option value="alpaca">Alpaca (US)</option>
+                        <option value="tastytrade">Tastytrade (US)</option>
+                        <option value="ibkr">Interactive Brokers (US)</option>
+                        <option value="robinhood">Robinhood (US)</option>
                         <option value="upstox">Upstox (India)</option>
+                        <option value="zerodha">Zerodha (India)</option>
                         <option value="dhanq">DhanQ (India)</option>
                     </select>
                 </div>
@@ -1102,6 +1116,7 @@
         }
 
         document.getElementById('settingsChannelId').value = channelId;
+        document.getElementById('settingsMarket').value = channel.market || 'US';
         document.getElementById('settingsPositionSize').value = channel.position_size_pct || '';
         document.getElementById('settingsDefaultQty').value = channel.default_quantity || '';
         document.getElementById('settingsBrokerOverride').value = channel.broker_override || '';
@@ -1132,6 +1147,7 @@
     async function saveChannelSettings() {
         const channelId = document.getElementById('settingsChannelId').value;
         
+        const market = document.getElementById('settingsMarket').value;
         const posSize = document.getElementById('settingsPositionSize').value;
         const defaultQty = document.getElementById('settingsDefaultQty').value;
         const brokerOverride = document.getElementById('settingsBrokerOverride').value;
@@ -1145,6 +1161,7 @@
         const trailingActivation = document.getElementById('settingsTrailingActivation').value;
 
         const payload = {
+            market: market,
             position_size_pct: posSize ? parseFloat(posSize) : null,
             default_quantity: defaultQty ? parseInt(defaultQty) : null,
             broker_override: brokerOverride || null,
