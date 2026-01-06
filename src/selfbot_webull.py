@@ -10199,6 +10199,13 @@ Environment Variables:
     if use_gui_mode:
         # GUI mode: Show splash screen with progress, then minimize to system tray
         try:
+            # Check for single instance FIRST (before any heavy imports)
+            from src.gui.single_instance import check_single_instance, show_already_running_dialog
+            if not check_single_instance("BotifyTrades"):
+                _original_print("[STARTUP] Another instance of BotifyTrades is already running!")
+                show_already_running_dialog()
+                sys.exit(0)
+            
             from PySide6.QtWidgets import QApplication, QSystemTrayIcon
             from PySide6.QtCore import QTimer, Signal, QObject
             from src.gui.splash_screen import SplashScreen, StartupProgress

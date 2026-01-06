@@ -1,21 +1,31 @@
 """
-BotifyTrades Splash Screen with Progress Bar
-Shows loading progress while the bot initializes
+BotifyTrades Premium Splash Screen
+Modern glassmorphism design with brand logo and progress tracking
 """
 import sys
 import os
-from typing import Optional, Callable
+from pathlib import Path
+from typing import Optional
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QLabel, 
-    QProgressBar, QGraphicsDropShadowEffect
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+    QProgressBar, QGraphicsDropShadowEffect, QGraphicsBlurEffect
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QObject
-from PySide6.QtGui import QPixmap, QFont, QColor, QPainter, QBrush, QPen
+from PySide6.QtCore import Qt, QTimer, Signal, QObject, QSize
+from PySide6.QtGui import QPixmap, QFont, QColor, QPainter, QBrush, QPen, QLinearGradient, QFontDatabase
 
 try:
     from upgrade.version import APP_VERSION
 except ImportError:
     APP_VERSION = "3.2.14"
+
+
+def get_resource_path(relative_path: str) -> str:
+    """Get absolute path to resource, works for dev and PyInstaller"""
+    if getattr(sys, 'frozen', False):
+        base_path = Path(getattr(sys, '_MEIPASS', '.'))
+    else:
+        base_path = Path(__file__).parent.parent.parent
+    return str(base_path / relative_path)
 
 
 class StartupProgress(QObject):
@@ -46,7 +56,7 @@ class StartupProgress(QObject):
 
 class SplashScreen(QWidget):
     """
-    Modern splash screen with progress bar for BotifyTrades startup
+    Premium splash screen with glassmorphism design and brand logo
     """
     
     def __init__(self, progress_reporter: Optional[StartupProgress] = None):
@@ -56,7 +66,7 @@ class SplashScreen(QWidget):
         self._connect_signals()
     
     def _setup_ui(self):
-        """Setup the splash screen UI"""
+        """Setup the splash screen UI with premium glassmorphism design"""
         self.setWindowFlags(
             Qt.FramelessWindowHint | 
             Qt.WindowStaysOnTopHint |
@@ -64,7 +74,7 @@ class SplashScreen(QWidget):
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         
-        self.setFixedSize(450, 280)
+        self.setFixedSize(520, 340)
         
         screen = QApplication.primaryScreen()
         if screen:
@@ -81,77 +91,157 @@ class SplashScreen(QWidget):
         container.setStyleSheet("""
             #splashContainer {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #1a1a2e, stop:0.5 #16213e, stop:1 #0f3460);
-                border-radius: 15px;
-                border: 2px solid #4a90d9;
+                    stop:0 rgba(10, 15, 30, 0.95), 
+                    stop:0.3 rgba(20, 30, 60, 0.92),
+                    stop:0.7 rgba(15, 25, 50, 0.92),
+                    stop:1 rgba(8, 12, 25, 0.95));
+                border-radius: 20px;
+                border: 1px solid rgba(79, 172, 254, 0.4);
             }
         """)
         
         shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(30)
-        shadow.setColor(QColor(0, 0, 0, 160))
-        shadow.setOffset(0, 5)
+        shadow.setBlurRadius(50)
+        shadow.setColor(QColor(79, 172, 254, 80))
+        shadow.setOffset(0, 8)
         container.setGraphicsEffect(shadow)
         
         container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(30, 25, 30, 25)
-        container_layout.setSpacing(15)
+        container_layout.setContentsMargins(40, 35, 40, 30)
+        container_layout.setSpacing(12)
+        
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(18)
+        header_layout.setAlignment(Qt.AlignCenter)
+        
+        self.logo_label = QLabel()
+        logo_path = get_resource_path("gui_app/static/images/logo-icon.png")
+        if os.path.exists(logo_path):
+            pixmap = QPixmap(logo_path)
+            scaled_pixmap = pixmap.scaled(
+                QSize(72, 72), 
+                Qt.KeepAspectRatio, 
+                Qt.SmoothTransformation
+            )
+            self.logo_label.setPixmap(scaled_pixmap)
+        else:
+            self.logo_label.setText("BT")
+            self.logo_label.setStyleSheet("""
+                color: #4facfe;
+                font-size: 32px;
+                font-weight: bold;
+                background: rgba(79, 172, 254, 0.15);
+                border-radius: 18px;
+                padding: 12px;
+            """)
+        
+        self.logo_label.setStyleSheet("""
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 rgba(79, 172, 254, 0.25),
+                stop:0.5 rgba(0, 242, 254, 0.15),
+                stop:1 rgba(79, 172, 254, 0.25));
+            border-radius: 18px;
+            padding: 8px;
+            border: 1px solid rgba(79, 172, 254, 0.3);
+        """)
+        
+        logo_shadow = QGraphicsDropShadowEffect()
+        logo_shadow.setBlurRadius(25)
+        logo_shadow.setColor(QColor(79, 172, 254, 100))
+        logo_shadow.setOffset(0, 4)
+        self.logo_label.setGraphicsEffect(logo_shadow)
+        
+        header_layout.addWidget(self.logo_label)
+        
+        title_container = QWidget()
+        title_layout = QVBoxLayout(title_container)
+        title_layout.setContentsMargins(0, 0, 0, 0)
+        title_layout.setSpacing(4)
         
         title_label = QLabel("BotifyTrades")
-        title_font = QFont("Segoe UI", 28, QFont.Bold)
-        title_label.setFont(title_font)
-        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setFont(QFont("Segoe UI", 32, QFont.Bold))
         title_label.setStyleSheet("""
             color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 #4facfe, stop:1 #00f2fe);
+                stop:0 #4facfe, stop:0.5 #00f2fe, stop:1 #4facfe);
             background: transparent;
+            letter-spacing: -1px;
         """)
-        title_label.setStyleSheet("color: #4facfe; background: transparent;")
-        container_layout.addWidget(title_label)
+        title_label.setStyleSheet("color: #4facfe; background: transparent; letter-spacing: -1px;")
+        title_layout.addWidget(title_label)
         
         subtitle_label = QLabel("Multi-Platform Trading Automation")
-        subtitle_font = QFont("Segoe UI", 11)
-        subtitle_label.setFont(subtitle_font)
-        subtitle_label.setAlignment(Qt.AlignCenter)
-        subtitle_label.setStyleSheet("color: #8892b0; background: transparent;")
-        container_layout.addWidget(subtitle_label)
+        subtitle_label.setFont(QFont("Segoe UI", 11, QFont.Normal))
+        subtitle_label.setStyleSheet("color: rgba(136, 146, 176, 0.9); background: transparent;")
+        title_layout.addWidget(subtitle_label)
         
-        container_layout.addSpacing(20)
+        header_layout.addWidget(title_container)
+        container_layout.addLayout(header_layout)
+        
+        container_layout.addSpacing(25)
+        
+        glass_panel = QWidget()
+        glass_panel.setObjectName("glassPanel")
+        glass_panel.setStyleSheet("""
+            #glassPanel {
+                background: rgba(255, 255, 255, 0.03);
+                border-radius: 12px;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+            }
+        """)
+        glass_layout = QVBoxLayout(glass_panel)
+        glass_layout.setContentsMargins(20, 18, 20, 18)
+        glass_layout.setSpacing(12)
+        
+        self.status_label = QLabel("Initializing...")
+        self.status_label.setFont(QFont("Segoe UI", 11))
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setStyleSheet("color: #e2e8f0; background: transparent;")
+        glass_layout.addWidget(self.status_label)
         
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(8)
+        self.progress_bar.setFixedHeight(6)
         self.progress_bar.setStyleSheet("""
             QProgressBar {
-                background: #2d3748;
-                border-radius: 4px;
+                background: rgba(45, 55, 72, 0.6);
+                border-radius: 3px;
                 border: none;
             }
             QProgressBar::chunk {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #4facfe, stop:1 #00f2fe);
-                border-radius: 4px;
+                    stop:0 #4facfe, stop:0.5 #00f2fe, stop:1 #4facfe);
+                border-radius: 3px;
             }
         """)
-        container_layout.addWidget(self.progress_bar)
+        glass_layout.addWidget(self.progress_bar)
         
-        self.status_label = QLabel("Initializing...")
-        status_font = QFont("Segoe UI", 10)
-        self.status_label.setFont(status_font)
-        self.status_label.setAlignment(Qt.AlignCenter)
-        self.status_label.setStyleSheet("color: #a0aec0; background: transparent;")
-        container_layout.addWidget(self.status_label)
+        container_layout.addWidget(glass_panel)
         
         container_layout.addStretch()
         
+        footer_layout = QHBoxLayout()
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        
+        copyright_label = QLabel("Automated Trading Platform")
+        copyright_label.setFont(QFont("Segoe UI", 9))
+        copyright_label.setStyleSheet("color: rgba(74, 85, 104, 0.7); background: transparent;")
+        footer_layout.addWidget(copyright_label)
+        
+        footer_layout.addStretch()
+        
         version_label = QLabel(f"v{APP_VERSION}")
-        version_font = QFont("Segoe UI", 9)
-        version_label.setFont(version_font)
-        version_label.setAlignment(Qt.AlignCenter)
-        version_label.setStyleSheet("color: #4a5568; background: transparent;")
-        container_layout.addWidget(version_label)
+        version_label.setFont(QFont("Segoe UI Semibold", 9))
+        version_label.setStyleSheet("""
+            color: rgba(79, 172, 254, 0.8);
+            background: rgba(79, 172, 254, 0.1);
+            padding: 4px 10px;
+            border-radius: 10px;
+        """)
+        footer_layout.addWidget(version_label)
+        
+        container_layout.addLayout(footer_layout)
         
         main_layout.addWidget(container)
     
@@ -171,7 +261,8 @@ class SplashScreen(QWidget):
         """Handle startup completion"""
         self.progress_bar.setValue(100)
         self.status_label.setText("Ready!")
-        QTimer.singleShot(500, self.close)
+        self.status_label.setStyleSheet("color: #48bb78; background: transparent;")
+        QTimer.singleShot(400, self.close)
     
     def _on_startup_failed(self, error: str):
         """Handle startup failure"""
@@ -186,7 +277,7 @@ class SplashScreen(QWidget):
             self.status_label.setText(message)
     
     def paintEvent(self, event):
-        """Custom paint for rounded corners"""
+        """Custom paint for additional effects"""
         super().paintEvent(event)
 
 
@@ -225,7 +316,7 @@ if __name__ == "__main__":
             if index < len(steps):
                 step, msg = steps[index]
                 progress.update(step, msg)
-                QTimer.singleShot(500, lambda: update_step(index + 1))
+                QTimer.singleShot(400, lambda: update_step(index + 1))
             else:
                 progress.complete()
         
