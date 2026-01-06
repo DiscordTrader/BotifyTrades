@@ -9320,7 +9320,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _original_print(f"[LIVE TRADE] Option order: ${signal['strike']}{signal['opt_type']} {signal['expiry']} @{price_str}", flush=True)
                             _original_print(f"[LIVE TRADE] Calling {broker_name_used}.place_option_order()...", flush=True)
                             
-                            # Build order kwargs - use lots for India brokers, qty for US brokers
+                            # Build order kwargs
                             order_kwargs = {
                                 'action': signal['action'],
                                 'symbol': signal['symbol'],
@@ -9330,12 +9330,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 'limit_price': signal.get('price')  # None for market orders
                             }
                             
-                            # For India brokers (Upstox, DhanQ, Zerodha), use lots instead of qty
+                            # For India brokers, pass lots if available, otherwise qty
+                            # The broker will fetch lot_size from API and calculate correct quantity
                             if broker_name_used in ('Upstox', 'DhanQ', 'Zerodha'):
-                                # Use lots from signal, default to 1 lot if not specified
-                                lots = signal.get('lots', 1)
-                                order_kwargs['lots'] = lots
-                                _original_print(f"[LIVE TRADE] India broker - using {lots} lot(s)")
+                                if signal.get('lots'):
+                                    order_kwargs['lots'] = signal['lots']
+                                    _original_print(f"[LIVE TRADE] India broker - using {signal['lots']} lot(s) from signal")
+                                else:
+                                    order_kwargs['qty'] = signal['qty']
+                                    _original_print(f"[LIVE TRADE] India broker - passing qty={signal['qty']}, broker will auto-calculate lots")
                             else:
                                 order_kwargs['qty'] = signal['qty']
                             

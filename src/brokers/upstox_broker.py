@@ -934,9 +934,19 @@ class UpstoxBroker(BrokerInterface):
                         if lots is not None:
                             order_qty = lots * api_lot_size
                             print(f"[UPSTOX] Quantity: {lots} lots x {api_lot_size} = {order_qty} units")
+                        elif quantity or qty:
+                            raw_qty = quantity or qty
+                            if raw_qty < api_lot_size:
+                                calculated_lots = 1
+                                order_qty = api_lot_size
+                                print(f"[UPSTOX] Quantity: {raw_qty} < lot_size({api_lot_size}), using 1 lot = {order_qty} units")
+                            else:
+                                calculated_lots = max(1, round(raw_qty / api_lot_size))
+                                order_qty = calculated_lots * api_lot_size
+                                print(f"[UPSTOX] Quantity: {raw_qty} → {calculated_lots} lots x {api_lot_size} = {order_qty} units")
                         else:
-                            order_qty = quantity or qty or api_lot_size
-                            print(f"[UPSTOX] Quantity: {order_qty} units (passed directly)")
+                            order_qty = api_lot_size
+                            print(f"[UPSTOX] Quantity: defaulting to 1 lot = {order_qty} units")
                         
                         symbol_display = f"{symbol.upper()} {int(strike)} {opt_suffix} {actual_expiry}"
                         print(f"[UPSTOX] Placing option: {action} {order_qty} {instrument_token} @ {actual_price}")
@@ -974,9 +984,19 @@ class UpstoxBroker(BrokerInterface):
         if lots is not None:
             order_qty = lots * api_lot_size
             print(f"[UPSTOX] Quantity: {lots} lots x {api_lot_size} = {order_qty} units")
+        elif quantity or qty:
+            raw_qty = quantity or qty
+            if raw_qty < api_lot_size:
+                calculated_lots = 1
+                order_qty = api_lot_size
+                print(f"[UPSTOX] Quantity: {raw_qty} < lot_size({api_lot_size}), using 1 lot = {order_qty} units")
+            else:
+                calculated_lots = max(1, round(raw_qty / api_lot_size))
+                order_qty = calculated_lots * api_lot_size
+                print(f"[UPSTOX] Quantity: {raw_qty} → {calculated_lots} lots x {api_lot_size} = {order_qty} units")
         else:
-            order_qty = quantity or qty or api_lot_size
-            print(f"[UPSTOX] Quantity: {order_qty} units (passed directly)")
+            order_qty = api_lot_size
+            print(f"[UPSTOX] Quantity: defaulting to 1 lot = {order_qty} units")
         
         symbol_display = f"{symbol.upper()} {int(strike)} {opt_suffix} {actual_expiry}"
         print(f"[UPSTOX] Placing option: {action} {order_qty} {instrument_token} @ {actual_price}")
