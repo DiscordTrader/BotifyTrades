@@ -3566,5 +3566,21 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "created_at": "2026-01-06T17:43:51.181532"
+  },
+  "ALPACA_PAPER_PLUG_2.5_2026-01-09_C": {
+    "entry_price": 0.06,
+    "highest_price": 0.05,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "PLUG260109C00002500",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-06T18:00:34.330895"
   }
 }

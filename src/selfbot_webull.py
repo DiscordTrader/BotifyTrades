@@ -7371,10 +7371,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         cond_broker = channel_info.get('broker_override')
                                         print(f"[COND ORDER] Using channel broker_override: {cond_broker}")
                                 
-                                # Fall back to Webull (live broker) if still not set - conditional orders should use live broker
+                                # Reject if no broker is configured - do NOT fallback to a default
                                 if not cond_broker:
-                                    cond_broker = 'Webull'
-                                    print(f"[COND ORDER] Using default live broker: {cond_broker}")
+                                    print(f"[COND ORDER] ❌ REJECTED: No broker configured for channel {cond_channel_id}")
+                                    print(f"[COND ORDER] Please configure 'enabled_brokers' in the Execution page for this channel")
+                                    try:
+                                        await message.add_reaction('❌')
+                                    except:
+                                        pass
+                                    return
                                 
                                 # Submit to conditional order router (market-isolated)
                                 order_id = conditional_order_router.create_order(cond_channel_id, parsed_cond, cond_broker)
