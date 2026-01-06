@@ -3201,7 +3201,7 @@
   },
   "ALPACA_PAPER_CLPT_stock": {
     "entry_price": 14.9,
-    "highest_price": 15.138,
+    "highest_price": 15.14,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
