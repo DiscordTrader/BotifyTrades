@@ -70,6 +70,7 @@ Y9gni8Qrg3UdNjwzTFUkmtA=
 DATABASE_PATH = "bot_data.db"
 DISCORD_TOKEN = "NDg5MjUxODk3ODIwMDUzNTA1.GsV18i.sA_S50Yw64ea_2AAKK03x1BHo9BYgaeFnztcRk"
 BUILD_TYPE = "ADMIN"
+LICENSE_KEY = "BT-9910-31EB-C294-433C"
 
 [userenv.production]
 BUILD_TARGET = "admin"
@@ -78,7 +79,6 @@ ADMIN_MODE = "true"
 
 [userenv.development]
 LICENSE_VALID = "true"
-LICENSE_KEY = "BT-8A09-B036-926E-421E"
 
 [deployment]
 deploymentTarget = "vm"
