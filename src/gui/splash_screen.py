@@ -1,31 +1,20 @@
 """
 BotifyTrades Premium Splash Screen
-Modern glassmorphism design with brand logo and progress tracking
+Modern glassmorphism design with BT brand logo and progress tracking
 """
 import sys
-import os
-from pathlib import Path
 from typing import Optional
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QProgressBar, QGraphicsDropShadowEffect, QGraphicsBlurEffect
+    QProgressBar, QGraphicsDropShadowEffect
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QObject, QSize
-from PySide6.QtGui import QPixmap, QFont, QColor, QPainter, QBrush, QPen, QLinearGradient, QFontDatabase
+from PySide6.QtCore import Qt, QTimer, Signal, QObject
+from PySide6.QtGui import QFont, QColor
 
 try:
     from upgrade.version import APP_VERSION
 except ImportError:
     APP_VERSION = "3.2.14"
-
-
-def get_resource_path(relative_path: str) -> str:
-    """Get absolute path to resource, works for dev and PyInstaller"""
-    if getattr(sys, 'frozen', False):
-        base_path = Path(getattr(sys, '_MEIPASS', '.'))
-    else:
-        base_path = Path(__file__).parent.parent.parent
-    return str(base_path / relative_path)
 
 
 class StartupProgress(QObject):
@@ -114,35 +103,19 @@ class SplashScreen(QWidget):
         header_layout.setSpacing(18)
         header_layout.setAlignment(Qt.AlignCenter)
         
-        self.logo_label = QLabel()
-        logo_path = get_resource_path("gui_app/static/images/logo-icon.png")
-        if os.path.exists(logo_path):
-            pixmap = QPixmap(logo_path)
-            scaled_pixmap = pixmap.scaled(
-                QSize(72, 72), 
-                Qt.KeepAspectRatio, 
-                Qt.SmoothTransformation
-            )
-            self.logo_label.setPixmap(scaled_pixmap)
-        else:
-            self.logo_label.setText("BT")
-            self.logo_label.setStyleSheet("""
-                color: #4facfe;
-                font-size: 32px;
-                font-weight: bold;
-                background: rgba(79, 172, 254, 0.15);
-                border-radius: 18px;
-                padding: 12px;
-            """)
-        
+        self.logo_label = QLabel("BT")
+        self.logo_label.setFixedSize(72, 72)
+        self.logo_label.setAlignment(Qt.AlignCenter)
+        logo_font = QFont("Segoe UI", 28, QFont.Bold)
+        self.logo_label.setFont(logo_font)
         self.logo_label.setStyleSheet("""
+            color: #4facfe;
             background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                 stop:0 rgba(79, 172, 254, 0.25),
                 stop:0.5 rgba(0, 242, 254, 0.15),
                 stop:1 rgba(79, 172, 254, 0.25));
             border-radius: 18px;
-            padding: 8px;
-            border: 1px solid rgba(79, 172, 254, 0.3);
+            border: 1px solid rgba(79, 172, 254, 0.4);
         """)
         
         logo_shadow = QGraphicsDropShadowEffect()
