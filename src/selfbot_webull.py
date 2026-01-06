@@ -6591,10 +6591,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         # Profit Targets: Signal values first, then channel settings
                         if has_signal_targets:
                             targets = json.loads(order['take_profit_targets']) if isinstance(order['take_profit_targets'], str) else order['take_profit_targets']
-                            if targets and len(targets) > 0:
-                                signal['profit_target_price'] = targets[0]
-                                signal['profit_targets'] = targets
-                                print(f"[CONDITIONAL] Using signal targets: {targets}", flush=True)
+                            # Ensure targets is a list
+                            if targets is not None:
+                                if not isinstance(targets, list):
+                                    targets = [targets]  # Convert single value to list
+                                if len(targets) > 0:
+                                    signal['profit_target_price'] = targets[0]
+                                    signal['profit_targets'] = targets
+                                    sys.stderr.write(f"[CONDITIONAL EXEC] Using signal targets: {targets}\n")
+                                    sys.stderr.flush()
                         elif channel_settings:
                             channel_targets = []
                             for i in range(1, 5):
