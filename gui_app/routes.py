@@ -13,7 +13,8 @@ from flask import render_template, jsonify, request, make_response, session, red
 from . import database as db
 
 # Admin password from environment (set via Replit Secrets)
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
+# SECURITY: No default password - must be set via environment variable or setup wizard
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD') or db.get_setting('admin_password_hash')
 
 # Build type check - controls admin-only features
 # Import from main module if available, otherwise default to ADMIN

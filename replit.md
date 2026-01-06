@@ -117,3 +117,38 @@ Implemented automatic conditional order monitoring and execution for India marke
 - Resolved logging visibility (stdout→stderr for workflow logs)
 - Fixed profit targets parsing for both JSON arrays and comma-separated strings
 - Corrected status update from TRACKING to EXECUTED on success
+
+## Architecture Review (January 6, 2026)
+
+### Database Architecture
+- **Primary Database**: `bot_data.db` (single source of truth)
+- **License Database**: `license_server.db` (license validation)
+- All modules correctly reference `bot_data.db` via `gui_app/database.py`
+
+### Cross-Market Support Status
+
+| Feature | US Markets | India Markets | Canada Markets |
+|---------|-----------|---------------|----------------|
+| Signal Parsing | ✅ BTO/STC regex | ✅ NSE/BSE F&O | ⚠️ Basic only |
+| Conditional Orders | ⚠️ Finnhub/yfinance | ✅ Upstox V3 LTP | ⚠️ Finnhub/yfinance |
+| Broker Integration | ✅ Webull, Alpaca | ✅ Upstox, Zerodha, DhanQ | ✅ Questrade |
+| Expiry Resolution | N/A | ✅ Auto-resolve | N/A |
+
+### Per-Channel Settings (Discord & Telegram)
+- ✅ Position sizing (`position_size_pct`)
+- ✅ Per-channel risk settings (profit targets, stop loss, trailing stops)
+- ✅ Broker override per channel (`broker_override`, `enabled_brokers`)
+- ✅ Exit strategy mode per channel
+- ✅ Conditional order settings per channel
+- ✅ Market assignment per channel (US/IN/CA)
+- ✅ Unified channel table supports both `discord_channel_id` and `telegram_chat_id`
+
+### Known Gaps (Future Work)
+1. **US/Canada Conditional Orders**: Currently use fallback price monitors (Finnhub/yfinance) rather than broker-native APIs
+2. **Canada Signal Parsing**: No dedicated `parse_canada_*` functions - uses US patterns
+3. **BrokerPriceMonitor**: Implemented but not integrated for Webull/Alpaca conditional orders
+
+### Security
+- ✅ Admin password no longer has hardcoded default (requires env var or setup wizard)
+- ✅ Rate limiting on login attempts
+- ✅ Session-based authentication with user database
