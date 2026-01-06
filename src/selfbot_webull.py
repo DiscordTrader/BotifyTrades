@@ -7335,14 +7335,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 parsed_cond['author_name'] = str(message.author)
                                 
                                 # Determine broker (use channel setting first, then default)
+                                # PRIORITY: enabled_brokers > broker_override (enabled_brokers is from Execution page, more specific)
                                 cond_broker = None
                                 if channel_info:
-                                    # Check broker_override first
-                                    if channel_info.get('broker_override'):
-                                        cond_broker = channel_info.get('broker_override')
-                                        print(f"[COND ORDER] Using channel broker_override: {cond_broker}")
-                                    # Then check enabled_brokers (JSON array from Execution page)
-                                    elif channel_info.get('enabled_brokers'):
+                                    # Check enabled_brokers FIRST (JSON array from Execution page - more specific)
+                                    if channel_info.get('enabled_brokers'):
                                         try:
                                             import json
                                             enabled = channel_info.get('enabled_brokers')
@@ -7350,11 +7347,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 enabled = json.loads(enabled)
                                             if enabled and len(enabled) > 0:
                                                 # Map uppercase names to proper broker names
-                                                broker_map = {'WEBULL': 'Webull', 'ALPACA': 'Alpaca', 'TASTYTRADE': 'Tastytrade', 'IBKR': 'IBKR', 'SCHWAB': 'Schwab'}
-                                                cond_broker = broker_map.get(enabled[0].upper(), enabled[0])
-                                                print(f"[COND ORDER] Using channel enabled_brokers[0]: {cond_broker}")
+                                                broker_map = {
+                                                    'WEBULL': 'Webull', 
+                                                    'ALPACA': 'Alpaca',
+                                                    'ALPACA_PAPER': 'Alpaca',
+                                                    'TASTYTRADE': 'Tastytrade',
+                                                    'TASTYTRADE_PAPER': 'Tastytrade',
+                                                    'IBKR': 'IBKR',
+                                                    'IBKR_PAPER': 'IBKR',
+                                                    'SCHWAB': 'Schwab',
+                                                    'UPSTOX': 'upstox',
+                                                    'ZERODHA': 'zerodha',
+                                                    'DHANQ': 'dhanq',
+                                                    'QUESTRADE': 'questrade'
+                                                }
+                                                first_broker = enabled[0].upper()
+                                                cond_broker = broker_map.get(first_broker, enabled[0])
+                                                print(f"[COND ORDER] Using channel enabled_brokers[0]: {enabled[0]} -> {cond_broker}")
                                         except Exception as e:
                                             print(f"[COND ORDER] Error parsing enabled_brokers: {e}")
+                                    # Fall back to broker_override if enabled_brokers not set
+                                    elif channel_info.get('broker_override'):
+                                        cond_broker = channel_info.get('broker_override')
+                                        print(f"[COND ORDER] Using channel broker_override: {cond_broker}")
                                 
                                 # Fall back to Webull (live broker) if still not set - conditional orders should use live broker
                                 if not cond_broker:
