@@ -1573,6 +1573,114 @@ def get_user_email(username: str) -> Optional[str]:
     return row['email'] if row else None
 
 
+def create_local_recovery_code(username: str) -> Optional[Dict[str, str]]:
+    """
+    Create a local recovery code for password reset (for user builds without email).
+    Generates a 6-digit code and saves it to a local file.
+    Returns dict with 'code' and 'file_path' or None if user not found.
+    """
+    import secrets
+    import os
+    from datetime import datetime, timedelta
+    from pathlib import Path
+    
+    user = get_user_by_username(username)
+    if not user:
+        return None
+    
+    code = f"{secrets.randbelow(1000000):06d}"
+    expires_at = (datetime.now() + timedelta(minutes=15)).isoformat()
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO password_reset_tokens (user_id, token, expires_at)
+        VALUES (?, ?, ?)
+    ''', (user['id'], f"LOCAL:{code}", expires_at))
+    conn.commit()
+    
+    import stat
+    import tempfile
+    
+    recovery_dir = Path(tempfile.gettempdir()) / 'botifytrades_recovery'
+    recovery_dir.mkdir(exist_ok=True, mode=0o700)
+    
+    recovery_file = recovery_dir / f'recovery_{secrets.token_hex(8)}.txt'
+    
+    with open(recovery_file, 'w') as f:
+        f.write("=" * 50 + "\n")
+        f.write("  BOTIFYTRADES PASSWORD RECOVERY CODE\n")
+        f.write("=" * 50 + "\n\n")
+        f.write(f"  Username: {username}\n")
+        f.write(f"  Recovery Code: {code}\n")
+        f.write(f"  Expires: 15 minutes\n\n")
+        f.write("  Enter this code on the password reset page.\n")
+        f.write("  This file will be deleted after use.\n")
+        f.write("=" * 50 + "\n")
+    
+    os.chmod(recovery_file, stat.S_IRUSR | stat.S_IWUSR)
+    
+    return {
+        'code': code,
+        'file_path': str(recovery_file),
+        'username': username
+    }
+
+
+def verify_local_recovery_code(username: str, code: str) -> Optional[int]:
+    """Verify local recovery code and return user_id if valid"""
+    from datetime import datetime
+    
+    user = get_user_by_username(username)
+    if not user:
+        return None
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT user_id FROM password_reset_tokens
+        WHERE user_id = ? AND token = ? AND expires_at > ?
+    ''', (user['id'], f"LOCAL:{code}", datetime.now().isoformat()))
+    row = cursor.fetchone()
+    return row['user_id'] if row else None
+
+
+def reset_password_with_local_code(username: str, code: str, new_password: str) -> bool:
+    """Reset password using local recovery code"""
+    import hashlib
+    import os
+    import glob
+    import tempfile
+    from pathlib import Path
+    
+    user_id = verify_local_recovery_code(username, code)
+    if not user_id:
+        return False
+    
+    salt = os.urandom(32)
+    pwd_hash = hashlib.pbkdf2_hmac('sha256', new_password.encode(), salt, 100000)
+    password_hash = (salt + pwd_hash).hex()
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE app_users SET password_hash = ? WHERE id = ?
+    ''', (password_hash, user_id))
+    cursor.execute('DELETE FROM password_reset_tokens WHERE user_id = ? AND token LIKE ?', 
+                   (user_id, 'LOCAL:%'))
+    conn.commit()
+    
+    recovery_dir = Path(tempfile.gettempdir()) / 'botifytrades_recovery'
+    if recovery_dir.exists():
+        try:
+            for f in recovery_dir.glob('recovery_*.txt'):
+                f.unlink()
+        except:
+            pass
+    
+    return True
+
+
 # Channel management functions
 def add_channel(discord_channel_id: str, name: str, category: str = None, execute_enabled: int = 0, track_enabled: int = 0, broker_override: Optional[str] = None, enabled_brokers = None, market: str = 'US'):
     """Add a new channel with dual-mode, multi-broker support, and market segmentation"""

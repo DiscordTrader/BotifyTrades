@@ -730,7 +730,7 @@ def register_routes(app):
         if request.path.startswith('/public'):
             return None
         # Allow public pages (setup wizard, login, forgot password, reset password, signup, google auth)
-        public_routes = ['/login', '/setup', '/forgot-password', '/architecture', '/signup', '/user/login', '/google_login', '/consent']
+        public_routes = ['/login', '/setup', '/forgot-password', '/local-reset', '/architecture', '/signup', '/user/login', '/google_login', '/consent']
         if any(request.path == route or request.path.startswith(route + '/') for route in public_routes):
             return None
         if request.path.startswith('/reset-password'):
@@ -956,36 +956,81 @@ def register_routes(app):
     
     @app.route('/forgot-password', methods=['GET', 'POST'])
     def forgot_password():
-        """Forgot password form - send reset link to email"""
+        """Forgot password form - send reset link to email or use local recovery"""
+        error = None
+        success = False
+        local_recovery = None
+        
+        from .email_service import get_email_service
+        email_service = get_email_service()
+        email_configured = email_service.is_configured()
+        
+        if request.method == 'POST':
+            username = request.form.get('username', '').strip()
+            recovery_method = request.form.get('method', 'email')
+            
+            user = db.get_user_by_username(username)
+            if recovery_method == 'local':
+                import secrets
+                import tempfile
+                from pathlib import Path
+                
+                if user:
+                    result = db.create_local_recovery_code(username)
+                    if result:
+                        local_recovery = result
+                    else:
+                        fake_code = f"{secrets.randbelow(1000000):06d}"
+                        fake_path = str(Path(tempfile.gettempdir()) / 'botifytrades_recovery' / f'recovery_{secrets.token_hex(8)}.txt')
+                        local_recovery = {'code': fake_code, 'file_path': fake_path, 'username': username}
+                        print(f"[AUTH] Local recovery generation failed for {username}")
+                else:
+                    fake_code = f"{secrets.randbelow(1000000):06d}"
+                    fake_path = str(Path(tempfile.gettempdir()) / 'botifytrades_recovery' / f'recovery_{secrets.token_hex(8)}.txt')
+                    local_recovery = {'code': fake_code, 'file_path': fake_path, 'username': username}
+                    print(f"[AUTH] Local recovery requested for non-existent user: {username}")
+            else:
+                if user:
+                    token = db.create_password_reset_token(user['id'])
+                    base_url = request.host_url.rstrip('/')
+                    result = email_service.send_password_reset_email(user['email'], username, token, base_url)
+                    
+                    if result['success']:
+                        success = True
+                    else:
+                        success = True
+                        print(f"[AUTH] Email service issue: {result['error']}")
+                else:
+                    success = True
+        
+        return render_template('forgot-password.html', error=error, success=success, 
+                             local_recovery=local_recovery, email_configured=email_configured)
+    
+    @app.route('/local-reset', methods=['GET', 'POST'])
+    def local_reset():
+        """Reset password using local recovery code"""
         error = None
         success = False
         
         if request.method == 'POST':
             username = request.form.get('username', '').strip()
+            code = request.form.get('code', '').strip()
+            password = request.form.get('password', '')
+            password_confirm = request.form.get('password_confirm', '')
             
-            user = db.get_user_by_username(username)
-            if user:
-                # Create reset token
-                token = db.create_password_reset_token(user['id'])
-                
-                # Send email
-                from .email_service import get_email_service
-                email_service = get_email_service()
-                
-                base_url = request.host_url.rstrip('/')
-                result = email_service.send_password_reset_email(user['email'], username, token, base_url)
-                
-                if result['success']:
+            if not username or not code:
+                error = 'Username and recovery code are required'
+            elif password != password_confirm:
+                error = 'Passwords do not match'
+            elif len(password) < 8:
+                error = 'Password must be at least 8 characters'
+            else:
+                if db.reset_password_with_local_code(username, code, password):
                     success = True
                 else:
-                    # Token created but email failed - still show success to user for security
-                    success = True
-                    print(f"[AUTH] Email service issue: {result['error']}")
-            else:
-                # Don't reveal if user exists (security best practice)
-                success = True
+                    error = 'Invalid or expired recovery code'
         
-        return render_template('forgot-password.html', error=error, success=success)
+        return render_template('local-reset.html', error=error, success=success)
     
     @app.route('/reset-password/<token>', methods=['GET', 'POST'])
     def reset_password(token):
