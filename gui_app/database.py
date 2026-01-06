@@ -2292,7 +2292,8 @@ def get_trades(status: Optional[str] = None, broker: Optional[str] = None, limit
         params.append(status)
     
     if broker:
-        query += ' AND t.broker = ?'
+        # Case-insensitive broker matching (Webull vs WEBULL, ALPACA_PAPER vs alpaca_paper)
+        query += ' AND LOWER(t.broker) = LOWER(?)'
         params.append(broker)
     
     query += ' ORDER BY t.executed_at DESC LIMIT ?'
