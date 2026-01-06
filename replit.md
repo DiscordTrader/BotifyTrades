@@ -46,6 +46,15 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 
 **Charles Schwab Integration** provides OAuth2-authenticated trading, managing token refresh and supporting Schwab's OCC Options Format.
 
+**License Validation System** (`src/gui/license_controller.py`, `src/gui/splash_screen.py`) provides industry-standard license activation integrated into the startup splash screen. Features include:
+- State machine controller with states: INIT, VALIDATING, ACTIVATED, REQUIRE_KEY, EXPIRED, OFFLINE_GRACE, FAILED
+- Background validation worker (QThread) for non-blocking UI during license checks
+- Stacked glassmorphism panels: License activation UI and startup progress display
+- Trial activation (7-day) and subscription key entry (BTF-XXXX format)
+- 48-hour offline grace period with cached license tokens
+- Admin mode bypass for development (BUILD_TARGET=admin from admin_server.py)
+- Startup flow gates bot initialization until license validated
+
 The system emphasizes user experience through an interactive setup wizard, GUI-based credential management, and automatic license renewal. The Discord bot runs in a dedicated thread with an isolated asyncio event loop. Broker credentials are loaded hierarchically. Discord channel IDs and all bot settings, including signal regex patterns and allowed author/guild IDs, are GUI-manageable and stored in SQLite. Per-channel risk management can override global defaults. The system employs a dual-build license architecture separating Admin and User deployments. Security features include admin password management, rate limiting on login attempts, session-based authentication, and local password recovery for user builds.
 
 ## External Dependencies

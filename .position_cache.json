@@ -3217,7 +3217,7 @@
   },
   "ALPACA_PAPER_ONDS_14.0_2026-06-18_C": {
     "entry_price": 2.94,
-    "highest_price": 3.4,
+    "highest_price": 3.45,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3265,7 +3265,7 @@
   },
   "ALPACA_PAPER_ZM_90.0_2026-01-09_C": {
     "entry_price": 0.27,
-    "highest_price": 0.18,
+    "highest_price": 0.19,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3329,7 +3329,7 @@
   },
   "Webull_NFLX_91.0_01/09_C": {
     "entry_price": 0.78,
-    "highest_price": 0.79,
+    "highest_price": 0.82,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3345,6 +3345,22 @@
   },
   "ALPACA_PAPER_QQQ_621.0_2026-01-06_P": {
     "entry_price": 0.71,
+    "highest_price": 0.96,
+    "trailing_activated": false,
+    "closing": true,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "QQQ260106P00621000",
+    "tier1_hit": true,
+    "tier2_hit": true,
+    "tier3_hit": true,
+    "tier4_hit": true,
+    "created_at": "2026-01-06T15:42:33.954289"
+  },
+  "ALPACA_PAPER_QQQ_621.0_2026-01-06_C": {
+    "entry_price": 0.95,
     "highest_price": 0.88,
     "trailing_activated": false,
     "closing": false,
@@ -3352,11 +3368,43 @@
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "ALPACA_PAPER",
-    "raw_symbol": "QQQ260106P00621000",
+    "raw_symbol": "QQQ260106C00621000",
     "tier1_hit": false,
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "created_at": "2026-01-06T15:42:33.954289"
+    "created_at": "2026-01-06T15:52:47.302463"
+  },
+  "ALPACA_PAPER_ZETA_25.0_2026-01-16_C": {
+    "entry_price": 0.7,
+    "highest_price": 0.77,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "ZETA260116C00025000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-06T15:56:05.724776"
+  },
+  "ALPACA_PAPER_ZETA_30.0_2026-02-20_C": {
+    "entry_price": 0.68,
+    "highest_price": 0.76,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "ZETA260220C00030000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-06T15:56:05.725063"
   }
 }
