@@ -11,7 +11,23 @@ import sys
 
 def create_app():
     """Create and configure Flask application"""
-    app = Flask(__name__)
+    # Determine template and static folders based on runtime environment
+    if getattr(sys, 'frozen', False):
+        # Running as compiled exe - use PyInstaller bundle path
+        base_path = Path(getattr(sys, '_MEIPASS', '.'))
+        template_folder = str(base_path / 'gui_app' / 'templates')
+        static_folder = str(base_path / 'gui_app' / 'static')
+    else:
+        # Running from source - use default relative paths
+        template_folder = None  # Flask default
+        static_folder = None  # Flask default
+    
+    # Create Flask app with correct folders from the start
+    if template_folder and static_folder:
+        app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
+    else:
+        app = Flask(__name__)
+    
     app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', secrets.token_hex(32))
     app.config['JSON_SORT_KEYS'] = False
     app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
@@ -20,14 +36,6 @@ def create_app():
     app.config['SESSION_COOKIE_SECURE'] = True  # Only send over HTTPS
     app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
-    
-    # Determine if running as PyInstaller bundle
-    if getattr(sys, 'frozen', False):
-        # Running as compiled exe
-        template_folder = Path(sys._MEIPASS) / 'gui_app' / 'templates'
-        static_folder = Path(sys._MEIPASS) / 'gui_app' / 'static'
-        app.template_folder = str(template_folder)
-        app.static_folder = str(static_folder)
     
     # Import database and config services
     from . import database
