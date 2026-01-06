@@ -285,6 +285,7 @@ class BaseConditionalOrderService(ABC):
         self.broker_instances: Dict[str, Any] = {}
         self.rate_limiters: Dict[str, RateLimitTracker] = {}
         self.execution_callback: Optional[Callable] = None
+        self.main_event_loop: Optional[asyncio.AbstractEventLoop] = None
         self.notification_callback: Optional[Callable] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
@@ -324,8 +325,9 @@ class BaseConditionalOrderService(ABC):
         else:
             self._log(f"Broker {broker_name} not supported for {self.MARKET} market")
     
-    def set_execution_callback(self, callback: Callable):
+    def set_execution_callback(self, callback: Callable, main_loop: Optional[asyncio.AbstractEventLoop] = None):
         self.execution_callback = callback
+        self.main_event_loop = main_loop
     
     def set_notification_callback(self, callback: Callable):
         self.notification_callback = callback
@@ -393,16 +395,20 @@ class BaseConditionalOrderService(ABC):
     
     async def _check_expirations(self):
         """Check and expire old orders."""
-        expired = expire_old_conditional_orders()
-        for order_id in expired:
-            if order_id in self.monitors:
-                await self.monitors[order_id].stop()
-                del self.monitors[order_id]
-            if order_id in self.monitor_tasks:
-                self.monitor_tasks[order_id].cancel()
-                del self.monitor_tasks[order_id]
-            if order_id in self.pending_orders:
-                del self.pending_orders[order_id]
+        expired_count = expire_old_conditional_orders()
+        if expired_count > 0:
+            self._log(f"Expired {expired_count} old orders")
+            for order_id in list(self.pending_orders.keys()):
+                order = get_conditional_order_by_id(order_id)
+                if order and order.get('status') == 'EXPIRED':
+                    if order_id in self.monitors:
+                        await self.monitors[order_id].stop()
+                        del self.monitors[order_id]
+                    if order_id in self.monitor_tasks:
+                        self.monitor_tasks[order_id].cancel()
+                        del self.monitor_tasks[order_id]
+                    if order_id in self.pending_orders:
+                        del self.pending_orders[order_id]
     
     def create_order(self, channel_id: str, parsed_signal: Dict[str, Any], broker: str) -> Optional[int]:
         """Create a new conditional order."""
@@ -605,14 +611,23 @@ class BaseConditionalOrderService(ABC):
             order_id,
             'TRIGGERED',
             triggered_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            triggered_price=trigger_price,
             event='CONDITION_MET',
             details=f"Price reached {trigger_price}"
         )
         
         if self.execution_callback:
             try:
-                self.execution_callback(order_id, order, trigger_price)
+                order['triggered_price'] = trigger_price
+                result = self.execution_callback(order, trigger_price)
+                if asyncio.iscoroutine(result):
+                    if self.main_event_loop and self.main_event_loop.is_running():
+                        future = asyncio.run_coroutine_threadsafe(result, self.main_event_loop)
+                        try:
+                            future.result(timeout=30)
+                        except Exception as e:
+                            self._log(f"Async execution error #{order_id}: {e}")
+                    else:
+                        self._log(f"Cannot execute async callback - no main event loop")
                 update_conditional_order_status(order_id, 'EXECUTING')
             except Exception as e:
                 self._log(f"Execution error #{order_id}: {e}")

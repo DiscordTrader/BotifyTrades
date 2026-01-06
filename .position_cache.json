@@ -3441,7 +3441,7 @@
   },
   "ALPACA_PAPER_DIS_115.0_2026-01-16_C": {
     "entry_price": 1.6,
-    "highest_price": 1.5,
+    "highest_price": 1.51,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3550,5 +3550,21 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "created_at": "2026-01-06T17:04:03.209436"
+  },
+  "ALPACA_PAPER_QQQ_622.0_2026-01-06_P": {
+    "entry_price": 0.48,
+    "highest_price": 0.64,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "QQQ260106P00622000",
+    "tier1_hit": true,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-06T17:43:51.181532"
   }
 }

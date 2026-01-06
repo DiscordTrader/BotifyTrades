@@ -6,6 +6,7 @@ Manages broker registration and lifecycle across all market services.
 """
 
 import sys
+import asyncio
 from typing import Dict, List, Optional, Any, Callable
 
 from .us_service import USConditionalOrderService
@@ -102,10 +103,10 @@ class ConditionalOrderRouter:
         service.set_broker_instance(broker_name, instance)
         self._log(f"Registered {broker_name} with {market} service")
     
-    def set_execution_callback(self, callback: Callable):
+    def set_execution_callback(self, callback: Callable, main_loop: Optional[asyncio.AbstractEventLoop] = None):
         """Set execution callback on all services."""
         for service in self._services.values():
-            service.set_execution_callback(callback)
+            service.set_execution_callback(callback, main_loop)
     
     def set_notification_callback(self, callback: Callable):
         """Set notification callback on all services."""

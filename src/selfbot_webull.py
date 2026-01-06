@@ -6760,7 +6760,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         traceback.print_exc()
                         return False
                 
-                conditional_order_router.set_execution_callback(execute_conditional_order)
+                import asyncio as aio_module
+                main_loop = aio_module.get_event_loop()
+                conditional_order_router.set_execution_callback(execute_conditional_order, main_loop)
                 print(f"[STARTUP] Starting market-isolated conditional order services...", flush=True)
                 conditional_order_router.start()
                 status = conditional_order_router.get_market_status()
