@@ -1031,7 +1031,7 @@ class ConditionalOrderService:
                 if success:
                     update_conditional_order_status(
                         order_id,
-                        'TRACKING',
+                        'EXECUTED',
                         event='EXECUTION_SUCCESS',
                         details='Order executed successfully'
                     )
