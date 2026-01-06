@@ -9240,12 +9240,49 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         # LIVE TRADING
                         _original_print(f"[LIVE TRADE] 🔥 Executing LIVE order: {signal['action']} {signal.get('qty')} {signal['symbol']}", flush=True)
                         
+                        # Select broker based on channel override
+                        broker_override = signal.get('_broker_override', '').lower() if signal.get('_broker_override') else ''
+                        live_broker = self.broker  # Default to Webull
+                        broker_name_used = 'Webull'
+                        
+                        if broker_override:
+                            if broker_override == 'upstox' and hasattr(self, 'upstox_broker') and self.upstox_broker and self.upstox_broker.connected:
+                                live_broker = self.upstox_broker
+                                broker_name_used = 'Upstox'
+                                _original_print(f"[LIVE TRADE] Using channel broker override: Upstox (India)")
+                            elif broker_override == 'dhanq' and hasattr(self, 'dhanq_broker') and self.dhanq_broker and self.dhanq_broker.connected:
+                                live_broker = self.dhanq_broker
+                                broker_name_used = 'DhanQ'
+                                _original_print(f"[LIVE TRADE] Using channel broker override: DhanQ (India)")
+                            elif broker_override == 'zerodha' and hasattr(self, 'zerodha_broker') and self.zerodha_broker and getattr(self.zerodha_broker, 'connected', False):
+                                live_broker = self.zerodha_broker
+                                broker_name_used = 'Zerodha'
+                                _original_print(f"[LIVE TRADE] Using channel broker override: Zerodha (India)")
+                            elif broker_override in ('tastytrade', 'tasty') and hasattr(self, 'tastytrade_broker') and self.tastytrade_broker and self.tastytrade_broker.connected:
+                                live_broker = self.tastytrade_broker
+                                broker_name_used = 'Tastytrade'
+                                _original_print(f"[LIVE TRADE] Using channel broker override: Tastytrade")
+                            elif broker_override in ('robinhood', 'rh') and hasattr(self, 'robinhood_broker') and self.robinhood_broker and self.robinhood_broker.connected:
+                                live_broker = self.robinhood_broker
+                                broker_name_used = 'Robinhood'
+                                _original_print(f"[LIVE TRADE] Using channel broker override: Robinhood")
+                            elif broker_override == 'ibkr' and hasattr(self, 'ibkr_broker') and self.ibkr_broker and self.ibkr_broker.connected:
+                                live_broker = self.ibkr_broker
+                                broker_name_used = 'IBKR'
+                                _original_print(f"[LIVE TRADE] Using channel broker override: Interactive Brokers")
+                            elif broker_override == 'alpaca' and hasattr(self, 'paper_broker') and self.paper_broker and self.paper_broker.connected:
+                                live_broker = self.paper_broker
+                                broker_name_used = 'Alpaca'
+                                _original_print(f"[LIVE TRADE] Using channel broker override: Alpaca")
+                            else:
+                                _original_print(f"[LIVE TRADE] ⚠️ Broker override '{broker_override}' not available, using default Webull")
+                        
                         # Check if we should use bracket orders (stocks with stop loss or profit target)
                         use_bracket = (
                             signal['asset'] == 'stock' and 
                             signal['action'] == 'BTO' and
                             (signal.get('stop_loss_price') or signal.get('profit_target_price')) and
-                            hasattr(self.broker, 'place_bracket_order')
+                            hasattr(live_broker, 'place_bracket_order')
                         )
                         
                         # Retry configuration for transient errors
@@ -9254,13 +9291,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         if use_bracket:
                             # Use bracket order (entry + stop + target all at once)
-                            _original_print(f"[LIVE TRADE] Using BRACKET order (entry + risk management)...")
+                            _original_print(f"[LIVE TRADE] Using BRACKET order (entry + risk management) via {broker_name_used}...")
                             if signal.get('stop_loss_price'):
                                 _original_print(f"[LIVE TRADE]   Stop Loss: ${signal['stop_loss_price']}")
                             if signal.get('profit_target_price'):
                                 _original_print(f"[LIVE TRADE]   Profit Target: ${signal['profit_target_price']}")
                             
-                            result = await self.broker.place_bracket_order(
+                            result = await live_broker.place_bracket_order(
                                 symbol=signal['symbol'],
                                 action=signal['action'],
                                 quantity=signal['qty'],
@@ -9281,11 +9318,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elif signal['asset'] == 'option':
                             price_str = f"${signal['price']}" if signal.get('price') is not None else "MARKET"
                             _original_print(f"[LIVE TRADE] Option order: ${signal['strike']}{signal['opt_type']} {signal['expiry']} @{price_str}", flush=True)
-                            _original_print(f"[LIVE TRADE] Calling broker.place_option_order()...", flush=True)
+                            _original_print(f"[LIVE TRADE] Calling {broker_name_used}.place_option_order()...", flush=True)
                             
                             # Retry loop for transient errors
                             for attempt in range(max_retries):
-                                resp = await self.broker.place_option_order(
+                                resp = await live_broker.place_option_order(
                                     action=signal['action'],
                                     qty=signal['qty'],
                                     symbol=signal['symbol'],
@@ -9310,8 +9347,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 # Success or non-transient error, break out
                                 break
                         else:
-                            _original_print(f"[LIVE TRADE] Calling broker.place_stock_order()...", flush=True)
-                            resp = await self.broker.place_stock_order(
+                            _original_print(f"[LIVE TRADE] Calling {broker_name_used}.place_stock_order()...", flush=True)
+                            resp = await live_broker.place_stock_order(
                                 symbol=signal['symbol'],
                                 action=signal['action'],
                                 quantity=signal['qty'],
