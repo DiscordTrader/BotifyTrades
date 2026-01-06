@@ -3601,7 +3601,7 @@
   },
   "ALPACA_PAPER_RBLX_80.0_2026-01-16_C": {
     "entry_price": 1.27,
-    "highest_price": 1.24,
+    "highest_price": 1.3,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
