@@ -315,6 +315,7 @@ class IndiaPriceMonitor(PriceMonitor):
         self._max_errors = 10
         self._instrument_key = None
         self._instrument_key_lookup_done = False
+        self._poll_count = 0  # Track polls for periodic logging
     
     def _get_underlying_key(self) -> str:
         """Get Upstox underlying key for NSE indices."""
@@ -449,12 +450,14 @@ class IndiaPriceMonitor(PriceMonitor):
         
         while self.is_running and self._error_count < self._max_errors:
             try:
+                self._poll_count += 1
                 price = await self._fetch_price()
-                if price and price != self.last_price:
+                if price:
+                    price_changed = price != self.last_price
                     self.last_price = price
                     self._error_count = 0
-                    _log(f"[INDIA] Price update: {self.symbol} {self.strike}{self.opt_type} = ₹{price:.2f}")
-                    await self.callback(self.symbol, price)
+                    if price_changed:
+                        await self.callback(self.symbol, price)
             except Exception as e:
                 self._error_count += 1
                 _log(f"[INDIA] Error fetching price for {self.symbol}: {e}")
@@ -471,8 +474,10 @@ class IndiaPriceMonitor(PriceMonitor):
                 if hasattr(self.broker_instance, 'get_ltp'):
                     ltp = await self.broker_instance.get_ltp(self._instrument_key)
                     if ltp:
-                        print(f"[INDIA] LTP for {self._instrument_key}: ₹{ltp:.2f}", flush=True)
+                        _log(f"[INDIA] Price: {self.symbol} {self.strike}{self.opt_type} = ₹{ltp:.2f}")
                         return float(ltp)
+                    else:
+                        _log(f"[INDIA] ⚠️ LTP returned None/0 for {self._instrument_key}")
                 
                 if hasattr(self.broker_instance, 'get_quote'):
                     quote = await self.broker_instance.get_quote(self._instrument_key)
