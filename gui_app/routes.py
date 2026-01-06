@@ -13439,6 +13439,97 @@ def register_routes(app):
                     db.update_broker_connection_status('upstox', False, result.get('message', 'Connection failed'))
                     return jsonify(result)
             
+            elif broker_name == 'zerodha':
+                try:
+                    from src.brokers.zerodha_broker import ZerodhaBroker
+                except ImportError:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Zerodha broker not available. Install kiteconnect: pip install kiteconnect'
+                    })
+                
+                stored = db.get_broker_credentials('zerodha')
+                if not stored or not stored.get('credentials'):
+                    return jsonify({
+                        'success': False,
+                        'message': 'No Zerodha credentials found. Please save credentials first.'
+                    })
+                
+                creds = stored.get('credentials', {})
+                api_key = creds.get('api_key', '')
+                api_secret = creds.get('api_secret', '')
+                access_token = creds.get('access_token', '')
+                request_token = creds.get('request_token', '')
+                
+                if not api_key:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Incomplete credentials. API key is required.'
+                    })
+                
+                if not access_token and not (request_token and api_secret):
+                    return jsonify({
+                        'success': False,
+                        'message': 'Incomplete credentials. Either access_token OR (request_token + api_secret) is required.'
+                    })
+                
+                result = ZerodhaBroker.test_connection(api_key, access_token, api_secret, request_token)
+                
+                if result.get('success'):
+                    fresh_access_token = result.get('access_token', access_token)
+                    
+                    if fresh_access_token and fresh_access_token != access_token:
+                        db.save_broker_credentials('zerodha', {
+                            'api_key': api_key,
+                            'api_secret': api_secret,
+                            'access_token': fresh_access_token
+                        })
+                        print(f"[ZERODHA] ✓ Fresh access token from test_connection persisted")
+                    
+                    db.update_broker_connection_status('zerodha', True, f"Connected - API Key: {api_key[:8]}...")
+                    
+                    if _bot_instance:
+                        import asyncio
+                        try:
+                            old_broker = getattr(_bot_instance, 'zerodha_broker', None)
+                            if old_broker:
+                                try:
+                                    loop = getattr(_bot_instance, 'loop', None)
+                                    if loop and loop.is_running():
+                                        disconnect_future = asyncio.run_coroutine_threadsafe(
+                                            old_broker.disconnect(), loop
+                                        )
+                                        disconnect_future.result(timeout=5)
+                                        print("[ZERODHA] ✓ Old broker disconnected")
+                                except Exception as disc_err:
+                                    print(f"[ZERODHA] ⚠️ Could not disconnect old broker: {disc_err}")
+                            
+                            new_broker = ZerodhaBroker({
+                                'api_key': api_key,
+                                'api_secret': api_secret,
+                                'access_token': fresh_access_token
+                            })
+                            loop = getattr(_bot_instance, 'loop', None)
+                            if loop and loop.is_running():
+                                future = asyncio.run_coroutine_threadsafe(new_broker.connect(), loop)
+                                connected = future.result(timeout=15)
+                                if connected:
+                                    _bot_instance.zerodha_broker = new_broker
+                                    print("[ZERODHA] ✓ Broker instance replaced with fresh credentials")
+                                else:
+                                    print("[ZERODHA] ⚠️ New broker failed to connect")
+                        except Exception as e:
+                            print(f"[ZERODHA] ⚠️ Could not replace broker instance: {e}")
+                    
+                    return jsonify({
+                        'success': True,
+                        'message': 'Zerodha reconnected successfully. For full sync service updates, a bot restart may be needed.',
+                        'account': result.get('account', {})
+                    })
+                else:
+                    db.update_broker_connection_status('zerodha', False, result.get('message', 'Connection failed'))
+                    return jsonify(result)
+            
             else:
                 return jsonify({
                     'success': False,

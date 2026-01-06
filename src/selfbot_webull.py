@@ -134,6 +134,14 @@ except ImportError as e:
     print(f"[WARNING] Could not import UpstoxBroker: {e}")
     UPSTOX_AVAILABLE = False
 
+# Import Zerodha broker (India - Kite Connect API)
+try:
+    from src.brokers.zerodha_broker import ZerodhaBroker
+    ZERODHA_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARNING] Could not import ZerodhaBroker: {e}")
+    ZERODHA_AVAILABLE = False
+
 # Import BrokerSyncService for real-time trade synchronization
 from src.services.broker_sync_service import BrokerSyncService
 
@@ -5361,6 +5369,83 @@ class SelfClient(discord.Client):
             traceback.print_exc()
             self.upstox_broker = None
 
+        # Initialize Zerodha broker (India - Kite Connect API - Always LIVE)
+        self.zerodha_broker = None
+        try:
+            if ZERODHA_AVAILABLE:
+                _original_print("[ZERODHA] Starting broker initialization...", flush=True)
+                _original_print("[ZERODHA] ⚠️ WARNING: Zerodha has NO paper trading mode - ALL trades are LIVE", flush=True)
+                
+                from gui_app.database import get_broker_credentials
+                zerodha_creds = get_broker_credentials('zerodha')
+                
+                if zerodha_creds and zerodha_creds.get('credentials'):
+                    creds = zerodha_creds.get('credentials', {})
+                    zerodha_api_key = creds.get('api_key', '')
+                    zerodha_api_secret = creds.get('api_secret', '')
+                    zerodha_access_token = creds.get('access_token', '')
+                    zerodha_request_token = creds.get('request_token', '')
+                    
+                    has_access_token = bool(zerodha_access_token)
+                    has_request_token_flow = bool(zerodha_request_token and zerodha_api_secret)
+                    
+                    if zerodha_api_key and (has_access_token or has_request_token_flow):
+                        _original_print(f"[ZERODHA] ✓ Loaded credentials from DATABASE", flush=True)
+                        if has_access_token:
+                            _original_print(f"[ZERODHA]   Using access_token flow", flush=True)
+                        else:
+                            _original_print(f"[ZERODHA]   Using request_token+api_secret flow", flush=True)
+                        _original_print(f"[ZERODHA] Creating ZerodhaBroker instance...", flush=True)
+                        
+                        self.zerodha_broker = ZerodhaBroker({
+                            'api_key': zerodha_api_key,
+                            'api_secret': zerodha_api_secret,
+                            'access_token': zerodha_access_token,
+                            'request_token': zerodha_request_token
+                        })
+                        
+                        connected = await self.zerodha_broker.connect()
+                        if connected:
+                            _original_print(f"[ZERODHA] ✓ Connected successfully (LIVE trading)", flush=True)
+                            try:
+                                from gui_app.database import update_broker_connection_status, save_broker_credentials
+                                update_broker_connection_status('zerodha', True, f"Connected - API Key: {zerodha_api_key[:8]}...")
+                                _original_print(f"[ZERODHA] ✓ Broker status updated in GUI", flush=True)
+                                
+                                if self.zerodha_broker.kite and hasattr(self.zerodha_broker.kite, 'access_token'):
+                                    new_access_token = self.zerodha_broker.kite.access_token
+                                    if new_access_token and new_access_token != zerodha_access_token:
+                                        updated_creds = {
+                                            'api_key': zerodha_api_key,
+                                            'api_secret': zerodha_api_secret,
+                                            'access_token': new_access_token
+                                        }
+                                        save_broker_credentials('zerodha', updated_creds)
+                                        _original_print(f"[ZERODHA] ✓ New access token persisted (request_token cleared - it's one-time use)", flush=True)
+                            except Exception as status_err:
+                                _original_print(f"[ZERODHA] ⚠️ Failed to update broker status: {status_err}", flush=True)
+                        else:
+                            _original_print("[ZERODHA] ⚠️ Connection failed - token may be expired", flush=True)
+                            _original_print("[ZERODHA]   Go to Settings → Brokers → Zerodha to update access token", flush=True)
+                            from gui_app.database import update_broker_connection_status
+                            update_broker_connection_status('zerodha', False, 'Connection failed - token may be expired')
+                            self.zerodha_broker = None
+                    else:
+                        _original_print("[ZERODHA] ⚠️ Incomplete credentials - need api_key + (access_token OR request_token+api_secret)", flush=True)
+                        from gui_app.database import update_broker_connection_status
+                        update_broker_connection_status('zerodha', False, 'Incomplete credentials - need api_key + (access_token OR request_token+api_secret)')
+                else:
+                    _original_print("[ZERODHA] No credentials configured - broker disabled", flush=True)
+            else:
+                _original_print("[ZERODHA] ZerodhaBroker not available (kiteconnect not installed)", flush=True)
+                from gui_app.database import update_broker_connection_status
+                update_broker_connection_status('zerodha', False, 'kiteconnect library not installed')
+        except Exception as e:
+            _original_print(f"[ZERODHA] ⚠️ Initialization failed: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            self.zerodha_broker = None
+
         # CRITICAL: Set broker_ready if ANY broker is available (not just Webull)
         # This fixes user builds where only Alpaca/Tastytrade are configured
         if not self.broker_ready.is_set():
@@ -5371,7 +5456,8 @@ class SelfClient(discord.Client):
                 self.robinhood_broker or
                 self.ibkr_broker or
                 self.dhanq_broker or
-                self.upstox_broker
+                self.upstox_broker or
+                self.zerodha_broker
             )
             if any_broker_available:
                 self.broker_ready.set()
@@ -5395,7 +5481,7 @@ class SelfClient(discord.Client):
                 
                 # Create simple broker manager for sync service
                 class BrokerManager:
-                    def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None, dhanq_broker=None, upstox_broker=None):
+                    def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None, dhanq_broker=None, upstox_broker=None, zerodha_broker=None):
                         self.webull_broker = webull_broker
                         self.alpaca_paper_broker = alpaca_paper_broker
                         self.tastytrade_broker = tastytrade_broker
@@ -5403,8 +5489,9 @@ class SelfClient(discord.Client):
                         self.ibkr_broker = ibkr_broker
                         self.dhanq_broker = dhanq_broker
                         self.upstox_broker = upstox_broker
+                        self.zerodha_broker = zerodha_broker
                 
-                broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker, self.upstox_broker)
+                broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker, self.upstox_broker, self.zerodha_broker)
                 
                 self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=30)
                 await self.sync_service.start()

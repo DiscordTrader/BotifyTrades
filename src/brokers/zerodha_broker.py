@@ -55,7 +55,7 @@ class ZerodhaBroker(BrokerInterface):
         return True
     
     async def connect(self) -> bool:
-        """Connect to Zerodha using API key and access token"""
+        """Connect to Zerodha using API key and access token, with fallback to request_token"""
         try:
             if not KITE_AVAILABLE:
                 print(f"[{self.name}] kiteconnect not installed")
@@ -64,6 +64,7 @@ class ZerodhaBroker(BrokerInterface):
             api_key = self.config.get('api_key')
             api_secret = self.config.get('api_secret')
             access_token = self.config.get('access_token')
+            request_token = self.config.get('request_token')
             
             if not api_key:
                 print(f"[{self.name}] No API key provided")
@@ -73,29 +74,44 @@ class ZerodhaBroker(BrokerInterface):
             
             self.kite = KiteConnect(api_key=api_key)
             
+            access_token_worked = False
             if access_token:
-                self.kite.set_access_token(access_token)
-            else:
-                request_token = self.config.get('request_token')
-                if request_token and api_secret:
-                    data = self.kite.generate_session(request_token, api_secret=api_secret)
-                    access_token = data["access_token"]
+                try:
+                    print(f"[{self.name}] Trying stored access_token...")
                     self.kite.set_access_token(access_token)
-                else:
-                    print(f"[{self.name}] No access token or request token provided")
-                    return False
+                    profile = await asyncio.to_thread(self.kite.profile)
+                    if profile:
+                        access_token_worked = True
+                        self.user_id = profile.get('user_id')
+                        print(f"[{self.name}] Connected! User: {self.user_id}")
+                        print(f"[{self.name}] Name: {profile.get('user_name', 'N/A')}")
+                        self.connected = True
+                        return True
+                except Exception as token_err:
+                    print(f"[{self.name}] Access token failed: {token_err}")
+                    print(f"[{self.name}] Will try request_token fallback...")
             
-            profile = await asyncio.to_thread(self.kite.profile)
+            if not access_token_worked and request_token and api_secret:
+                try:
+                    print(f"[{self.name}] Trying request_token + api_secret flow...")
+                    data = self.kite.generate_session(request_token, api_secret=api_secret)
+                    new_access_token = data["access_token"]
+                    self.kite.set_access_token(new_access_token)
+                    
+                    profile = await asyncio.to_thread(self.kite.profile)
+                    if profile:
+                        self.user_id = profile.get('user_id')
+                        print(f"[{self.name}] Connected via request_token! User: {self.user_id}")
+                        print(f"[{self.name}] Name: {profile.get('user_name', 'N/A')}")
+                        self.connected = True
+                        return True
+                except Exception as req_err:
+                    print(f"[{self.name}] Request token flow failed: {req_err}")
             
-            if profile:
-                self.user_id = profile.get('user_id')
-                print(f"[{self.name}] Connected! User: {self.user_id}")
-                print(f"[{self.name}] Name: {profile.get('user_name', 'N/A')}")
-                self.connected = True
-                return True
-            else:
-                print(f"[{self.name}] Failed to get profile")
-                return False
+            if not access_token and not (request_token and api_secret):
+                print(f"[{self.name}] No access token or request token provided")
+            
+            return False
                 
         except Exception as e:
             print(f"[{self.name}] Connection failed: {e}")
@@ -265,27 +281,62 @@ class ZerodhaBroker(BrokerInterface):
                 }
             
             kite = KiteConnect(api_key=api_key)
+            new_access_token = None
+            used_request_token_flow = False
             
             if access_token:
-                kite.set_access_token(access_token)
-            elif request_token and api_secret:
+                try:
+                    kite.set_access_token(access_token)
+                    profile = kite.profile()
+                    if profile:
+                        return {
+                            'success': True,
+                            'message': f"Connected! User: {profile.get('user_name', 'N/A')} ({profile.get('user_id', 'N/A')})",
+                            'user_id': profile.get('user_id'),
+                            'user_name': profile.get('user_name'),
+                            'access_token': access_token
+                        }
+                except Exception as token_err:
+                    if request_token and api_secret:
+                        pass
+                    else:
+                        error_msg = str(token_err)
+                        if 'TokenException' in error_msg or 'expired' in error_msg.lower():
+                            return {
+                                'success': False,
+                                'message': 'Access token expired. Tokens expire daily at 6 AM IST. Please provide a new request_token.'
+                            }
+                        raise
+            
+            if request_token and api_secret:
                 data = kite.generate_session(request_token, api_secret=api_secret)
-                kite.set_access_token(data["access_token"])
-            else:
+                new_access_token = data["access_token"]
+                kite.set_access_token(new_access_token)
+                used_request_token_flow = True
+            elif not access_token:
                 return {
                     'success': False,
                     'message': 'Access token or request_token + api_secret required'
+                }
+            else:
+                return {
+                    'success': False,
+                    'message': 'Access token expired and no request_token available. Please provide a new request_token.'
                 }
             
             profile = kite.profile()
             
             if profile:
-                return {
+                result = {
                     'success': True,
                     'message': f"Connected! User: {profile.get('user_name', 'N/A')} ({profile.get('user_id', 'N/A')})",
                     'user_id': profile.get('user_id'),
                     'user_name': profile.get('user_name')
                 }
+                if new_access_token:
+                    result['access_token'] = new_access_token
+                    result['used_request_token_flow'] = True
+                return result
             else:
                 return {
                     'success': False,
@@ -297,7 +348,7 @@ class ZerodhaBroker(BrokerInterface):
             if 'TokenException' in error_msg or 'expired' in error_msg.lower():
                 return {
                     'success': False,
-                    'message': 'Access token expired. Tokens expire daily at 6 AM IST. Re-login required.'
+                    'message': 'Access token expired. Tokens expire daily at 6 AM IST. Please provide a new request_token.'
                 }
             return {
                 'success': False,
