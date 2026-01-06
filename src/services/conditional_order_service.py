@@ -985,6 +985,8 @@ class ConditionalOrderService:
     
     async def _execute_order(self, order_id: int, triggered_price: float):
         """Execute a triggered conditional order."""
+        print(f"[CONDITIONAL] _execute_order called for #{order_id} @ {triggered_price}", flush=True)
+        
         if order_id in self.monitors:
             await self.monitors[order_id].stop()
             del self.monitors[order_id]
@@ -998,12 +1000,17 @@ class ConditionalOrderService:
         
         order = get_conditional_order_by_id(order_id)
         if not order:
+            print(f"[CONDITIONAL] ❌ Order #{order_id} not found in database!", flush=True)
             return
+        
+        print(f"[CONDITIONAL] Order #{order_id} retrieved, callback={self.execution_callback is not None}", flush=True)
         
         if self.execution_callback:
             try:
                 update_conditional_order_status(order_id, 'EXECUTING')
+                print(f"[CONDITIONAL] Calling execution callback for #{order_id}...", flush=True)
                 success = await self.execution_callback(order, triggered_price)
+                print(f"[CONDITIONAL] Callback returned: {success}", flush=True)
                 
                 if success:
                     update_conditional_order_status(
