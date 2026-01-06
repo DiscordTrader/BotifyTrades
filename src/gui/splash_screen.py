@@ -12,6 +12,11 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTimer, Signal, QObject
 from PySide6.QtGui import QPixmap, QFont, QColor, QPainter, QBrush, QPen
 
+try:
+    from upgrade.version import APP_VERSION
+except ImportError:
+    APP_VERSION = "3.2.14"
+
 
 class StartupProgress(QObject):
     """Thread-safe progress reporter for startup sequence"""
@@ -141,7 +146,7 @@ class SplashScreen(QWidget):
         
         container_layout.addStretch()
         
-        version_label = QLabel("v3.2.8")
+        version_label = QLabel(f"v{APP_VERSION}")
         version_font = QFont("Segoe UI", 9)
         version_label.setFont(version_font)
         version_label.setAlignment(Qt.AlignCenter)
