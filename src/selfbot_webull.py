@@ -9320,22 +9320,37 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _original_print(f"[LIVE TRADE] Option order: ${signal['strike']}{signal['opt_type']} {signal['expiry']} @{price_str}", flush=True)
                             _original_print(f"[LIVE TRADE] Calling {broker_name_used}.place_option_order()...", flush=True)
                             
+                            # Build order kwargs - use lots for India brokers, qty for US brokers
+                            order_kwargs = {
+                                'action': signal['action'],
+                                'symbol': signal['symbol'],
+                                'strike': signal['strike'],
+                                'opt_type': signal['opt_type'],
+                                'expiry_mmdd': signal['expiry'],
+                                'limit_price': signal.get('price')  # None for market orders
+                            }
+                            
+                            # For India brokers (Upstox, DhanQ, Zerodha), use lots instead of qty
+                            if broker_name_used in ('Upstox', 'DhanQ', 'Zerodha'):
+                                # Use lots from signal, default to 1 lot if not specified
+                                lots = signal.get('lots', 1)
+                                order_kwargs['lots'] = lots
+                                _original_print(f"[LIVE TRADE] India broker - using {lots} lot(s)")
+                            else:
+                                order_kwargs['qty'] = signal['qty']
+                            
                             # Retry loop for transient errors
                             for attempt in range(max_retries):
-                                resp = await live_broker.place_option_order(
-                                    action=signal['action'],
-                                    qty=signal['qty'],
-                                    symbol=signal['symbol'],
-                                    strike=signal['strike'],
-                                    opt_type=signal['opt_type'],
-                                    expiry_mmdd=signal['expiry'],
-                                    limit_price=signal.get('price')  # None for market orders
-                                )
+                                resp = await live_broker.place_option_order(**order_kwargs)
                                 _original_print(f"[LIVE TRADE] Broker response received: {resp}", flush=True)
                                 
                                 # Check if it's a transient error that should be retried
-                                if resp and not resp.get('success') and resp.get('msg'):
-                                    error_msg = str(resp.get('msg', '')).lower()
+                                # Handle both dict and OrderResult dataclass responses
+                                resp_success = resp.success if hasattr(resp, 'success') else resp.get('success') if isinstance(resp, dict) else False
+                                resp_msg = resp.message if hasattr(resp, 'message') else resp.get('msg', '') if isinstance(resp, dict) else ''
+                                
+                                if resp and not resp_success and resp_msg:
+                                    error_msg = str(resp_msg).lower()
                                     is_transient = 'system is busy' in error_msg or 'try again' in error_msg or 'timeout' in error_msg
                                     
                                     if is_transient and attempt < max_retries - 1:
