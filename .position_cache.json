@@ -49,7 +49,7 @@
   },
   "ALPACA_PAPER_SPY_stock": {
     "entry_price": 687.49,
-    "highest_price": 690.65,
+    "highest_price": 690.84,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3153,7 +3153,7 @@
   },
   "ALPACA_PAPER_HOOD_stock": {
     "entry_price": 112.313212,
-    "highest_price": 121.99,
+    "highest_price": 122.39,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3217,7 +3217,7 @@
   },
   "ALPACA_PAPER_ONDS_14.0_2026-06-18_C": {
     "entry_price": 2.94,
-    "highest_price": 3.25,
+    "highest_price": 3.35,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3233,7 +3233,7 @@
   },
   "ALPACA_PAPER_QQQ_623.0_2026-01-06_C": {
     "entry_price": 0.59,
-    "highest_price": 0.62,
+    "highest_price": 0.67,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3281,7 +3281,7 @@
   },
   "ALPACA_PAPER_NVO_60.0_2026-01-16_C": {
     "entry_price": 0.89,
-    "highest_price": 0.88,
+    "highest_price": 0.9,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3294,5 +3294,37 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "created_at": "2026-01-06T15:13:59.741926"
+  },
+  "ALPACA_PAPER_SPY_700.0_2026-01-23_C": {
+    "entry_price": 2.73,
+    "highest_price": 2.73,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "SPY260123C00700000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-06T15:29:16.780435"
+  },
+  "ALPACA_PAPER_XIFR_13.0_2026-04-17_C": {
+    "entry_price": 0.55,
+    "highest_price": 0.5,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "XIFR260417C00013000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-06T15:30:51.091059"
   }
 }
