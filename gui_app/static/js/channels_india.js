@@ -4,6 +4,44 @@
 let indiaChannelCategory = 'EXECUTE';
 const INDIA_BROKERS = ['DHANQ', 'UPSTOX', 'ZERODHA'];
 
+// IST Timezone formatting helpers for India market pages
+const IST_TIMEZONE = 'Asia/Kolkata';
+
+function formatDateTimeIST(dateStr) {
+    if (!dateStr) return 'N/A';
+    try {
+        const date = new Date(dateStr);
+        return date.toLocaleString('en-IN', { 
+            timeZone: IST_TIMEZONE,
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        }) + ' IST';
+    } catch (e) {
+        return dateStr;
+    }
+}
+
+function formatTimeIST(dateStr) {
+    if (!dateStr) return 'N/A';
+    try {
+        const date = new Date(dateStr);
+        return date.toLocaleTimeString('en-IN', { 
+            timeZone: IST_TIMEZONE,
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        }) + ' IST';
+    } catch (e) {
+        return dateStr;
+    }
+}
+
 function parseEnabledBrokers(enabledBrokers) {
     if (!enabledBrokers) return [];
     if (Array.isArray(enabledBrokers)) return enabledBrokers;
@@ -557,7 +595,7 @@ function renderUpstoxOrders(orders) {
         else if (isRejectedStatus(status)) statusColor = '#ff6b6b';
         
         const sideColor = o.transaction_type === 'BUY' ? '#00ff88' : '#ff6b6b';
-        const time = o.order_timestamp ? new Date(o.order_timestamp).toLocaleTimeString('en-IN') : 'N/A';
+        const time = formatTimeIST(o.order_timestamp);
         
         // Cancel button for open orders
         const cancelBtn = isOpen ? `
@@ -643,7 +681,7 @@ async function loadUpstoxTrades() {
         
         tbody.innerHTML = tradesData.trades.map(t => {
             const sideColor = t.transaction_type === 'BUY' ? '#00ff88' : '#ff6b6b';
-            const time = t.order_timestamp ? new Date(t.order_timestamp).toLocaleTimeString('en-IN') : 'N/A';
+            const time = formatTimeIST(t.order_timestamp);
             
             return `
                 <tr style="border-bottom: 1px solid rgba(0, 200, 83, 0.1);">
@@ -690,8 +728,8 @@ function renderExecutionTimeline(trades) {
         if (latencyMs > 30000) latencyColor = '#ff6b6b';
         
         const latencyWidth = Math.min(100, Math.max(5, (latencyMs || 100) / 100));
-        const detected = t.signal_detected_at ? new Date(t.signal_detected_at).toLocaleTimeString('en-IN') : 'N/A';
-        const executed = t.executed_at ? new Date(t.executed_at).toLocaleTimeString('en-IN') : 'N/A';
+        const detected = formatTimeIST(t.signal_detected_at);
+        const executed = formatTimeIST(t.executed_at);
         
         return `
             <div style="padding: 12px 16px; border-bottom: 1px solid rgba(0, 200, 83, 0.1); ${i % 2 === 0 ? 'background: rgba(0, 200, 83, 0.02);' : ''}">
@@ -799,7 +837,7 @@ async function loadUpstoxConditionalOrders() {
             const triggerType = o.trigger_type || o.trigger_condition || 'over';
             const triggerText = (triggerType === 'above' || triggerType === 'over') ? `Above ₹${o.trigger_price}` : `Below ₹${o.trigger_price}`;
             const slpt = `SL: ₹${o.stop_loss_value || 'N/A'} | PT: ${o.take_profit_targets || 'N/A'}`;
-            const created = o.created_at ? new Date(o.created_at).toLocaleString('en-IN') : 'N/A';
+            const created = formatDateTimeIST(o.created_at);
             
             return `
                 <tr style="border-bottom: 1px solid rgba(0, 200, 83, 0.1);">
@@ -995,7 +1033,7 @@ function renderAmoOrders(orders) {
     
     tbody.innerHTML = filteredOrders.map(o => {
         const statusColor = statusColors[o.status] || '#8E8E93';
-        const queuedAt = o.created_at ? new Date(o.created_at).toLocaleString('en-IN') : 'N/A';
+        const queuedAt = formatDateTimeIST(o.created_at);
         const sideColor = o.side === 'BUY' ? '#00ff88' : '#ff6b6b';
         
         return `
