@@ -1797,7 +1797,7 @@ def update_channel(channel_id: int, **kwargs):
                    'profit_target_4_pct', 'profit_target_qty_1', 'profit_target_qty_2', 'profit_target_qty_3', 'profit_target_qty_4',
                    'stop_loss_pct', 'trailing_stop_pct', 'trailing_activation_pct', 'enabled_brokers', 'position_size_pct', 'tracking_position_size_pct',
                    'default_quantity', 'risk_management_enabled', 'leave_runner_enabled', 'leave_runner_pct',
-                   'trim_order_mode', 'trim_limit_offset', 'exit_strategy_mode']:
+                   'trim_order_mode', 'trim_limit_offset', 'exit_strategy_mode', 'market']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))
