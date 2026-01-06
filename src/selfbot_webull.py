@@ -6509,14 +6509,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 # Set up async execution callback
                 async def execute_conditional_order(order, triggered_price):
                     """Execute a triggered conditional order using sync signal queue."""
+                    import sys
                     global _telegram_signal_queue
                     try:
+                        sys.stderr.write(f"[CONDITIONAL EXEC] Starting execution for order: {order.get('id')}\n")
+                        sys.stderr.flush()
                         symbol = order['symbol']
                         broker_name = order.get('broker_primary', 'Webull')
                         market = order.get('market', 'US')
                         currency = '₹' if market == 'INDIA' else '$'
                         option_info = f" {order.get('strike')}{order.get('opt_type')}" if order.get('strike') else ""
-                        print(f"[CONDITIONAL] Executing order #{order['id']}: {symbol}{option_info} @ {currency}{triggered_price:.2f}", flush=True)
+                        sys.stderr.write(f"[CONDITIONAL EXEC] Executing order #{order['id']}: {symbol}{option_info} @ {currency}{triggered_price:.2f}\n")
+                        sys.stderr.flush()
                         
                         # Build a BTO signal from the conditional order
                         signal = {
@@ -6614,16 +6618,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 signal['leave_runner_pct'] = channel_settings.get('leave_runner_pct', 25)
                         
                         # Use sync signal queue (thread-safe, same as Telegram)
+                        sys.stderr.write(f"[CONDITIONAL EXEC] Checking sync queue: {_telegram_signal_queue is not None}\n")
+                        sys.stderr.flush()
                         if _telegram_signal_queue is not None:
                             _telegram_signal_queue.put_nowait(signal)
-                            print(f"[CONDITIONAL] ✓ Signal queued via sync queue: {symbol}{option_info} @ {currency}{triggered_price:.2f}", flush=True)
+                            sys.stderr.write(f"[CONDITIONAL EXEC] ✓ Signal queued via sync queue: {symbol}{option_info} @ {currency}{triggered_price:.2f}\n")
+                            sys.stderr.flush()
                             return True
                         else:
-                            print(f"[CONDITIONAL] ❌ Sync signal queue not available!", flush=True)
+                            sys.stderr.write(f"[CONDITIONAL EXEC] ❌ Sync signal queue not available!\n")
+                            sys.stderr.flush()
                             return False
                         
                     except Exception as e:
-                        print(f"[CONDITIONAL] ❌ Execution error: {e}", flush=True)
+                        sys.stderr.write(f"[CONDITIONAL EXEC] ❌ Execution error: {e}\n")
+                        sys.stderr.flush()
                         import traceback
                         traceback.print_exc()
                         return False
