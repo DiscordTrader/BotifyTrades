@@ -15,6 +15,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 from collections import deque
 
+try:
+    import pytz
+    IST = pytz.timezone('Asia/Kolkata')
+except ImportError:
+    IST = None
+
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -383,7 +389,7 @@ class IndiaPriceMonitor(PriceMonitor):
             return None
     
     def _format_expiry_to_date(self, expiry: str) -> str:
-        """Convert expiry to YYYY-MM-DD format."""
+        """Convert expiry to YYYY-MM-DD format. Uses IST timezone."""
         from datetime import datetime
         import re
         
@@ -393,7 +399,10 @@ class IndiaPriceMonitor(PriceMonitor):
         try:
             if re.match(r'^\d{1,2}/\d{1,2}$', expiry):
                 month, day = expiry.split('/')
-                year = datetime.now().year
+                if IST:
+                    year = datetime.now(IST).year
+                else:
+                    year = datetime.now().year
                 return f"{year}-{int(month):02d}-{int(day):02d}"
             elif re.match(r'^\d{4}-\d{2}-\d{2}$', expiry):
                 return expiry
@@ -403,10 +412,16 @@ class IndiaPriceMonitor(PriceMonitor):
         return self._get_next_expiry()
     
     def _get_next_expiry(self) -> str:
-        """Get next Tuesday expiry for NSE weekly options (effective Sept 2025)."""
+        """Get next Tuesday expiry for NSE weekly options (effective Sept 2025).
+        Uses IST timezone for correct expiry calculation.
+        """
         from datetime import datetime, timedelta
         
-        now = datetime.now()
+        if IST:
+            now = datetime.now(IST)
+        else:
+            now = datetime.now()
+        
         days_ahead = 1 - now.weekday()
         if days_ahead < 0:
             days_ahead += 7
@@ -416,8 +431,8 @@ class IndiaPriceMonitor(PriceMonitor):
         next_tuesday = now + timedelta(days=days_ahead)
         return next_tuesday.strftime("%Y-%m-%d")
     
-    async def start(self):
-        """Start polling for price updates."""
+    async def start(self) -> bool:
+        """Start polling for price updates. Returns False if contract lookup failed."""
         self.is_running = True
         _log(f"[INDIA] Starting price monitor for {self.symbol} {self.strike}{self.opt_type}")
         
@@ -426,7 +441,8 @@ class IndiaPriceMonitor(PriceMonitor):
             _log(f"[INDIA] Monitoring option premium via {instrument_key}")
         else:
             _log(f"[INDIA] ❌ No instrument key - cannot monitor option premium")
-            return
+            self.is_running = False
+            return False
         
         while self.is_running and self._error_count < self._max_errors:
             try:
@@ -896,7 +912,19 @@ class ConditionalOrderService:
         self.monitors[order_id] = monitor
         
         try:
-            await monitor.start()
+            result = await monitor.start()
+            if result is False:
+                print(f"[CONDITIONAL] ❌ Order #{order_id}: Contract lookup failed - cannot monitor")
+                update_conditional_order_status(
+                    order_id,
+                    'ERROR',
+                    event='CONTRACT_LOOKUP_FAILED',
+                    error_message='No matching contract found for this expiry/strike. Check if the contract exists.'
+                )
+                if order_id in self.monitors:
+                    del self.monitors[order_id]
+                if order_id in self.pending_orders:
+                    del self.pending_orders[order_id]
         except Exception as e:
             print(f"[CONDITIONAL] Monitor error for order #{order_id}: {e}")
             update_conditional_order_status(
