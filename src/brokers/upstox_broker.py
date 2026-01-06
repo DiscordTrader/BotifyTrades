@@ -6,6 +6,13 @@ Includes automatic token refresh functionality
 
 import sys
 import os
+
+# Handle PyInstaller GUI mode where stdout/stderr may be None
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, 'w', encoding='utf-8', errors='replace')
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, 'w', encoding='utf-8', errors='replace')
+
 import asyncio
 import requests
 import threading

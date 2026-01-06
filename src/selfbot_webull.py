@@ -12,10 +12,11 @@ import builtins
 _early_print = builtins.print  # Save original print before any override
 
 # Handle PyInstaller GUI mode where stdout/stderr may be None
+# Use UTF-8 encoding to support Unicode characters (checkmarks, etc.)
 if sys.stdout is None:
-    sys.stdout = open(os.devnull, 'w')
+    sys.stdout = open(os.devnull, 'w', encoding='utf-8', errors='replace')
 if sys.stderr is None:
-    sys.stderr = open(os.devnull, 'w')
+    sys.stderr = open(os.devnull, 'w', encoding='utf-8', errors='replace')
 
 # Import version dynamically to show actual release version
 try:
