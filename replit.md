@@ -83,6 +83,14 @@ The system emphasizes user experience through an interactive setup wizard, GUI-b
 
 ## Recent Changes (January 2026)
 
+### Network Connectivity Monitor for License Validation
+- Added `NetworkMonitor` class (`src/license/network_monitor.py`) that monitors internet connectivity every 10 seconds
+- Automatically validates license when internet connection is restored after being offline
+- Shows popup message "License expired. Please get a new license key to continue using the bot." and shuts down bot if license is expired/revoked
+- Multi-source license key resolution: checks LICENSE_DATA dict, LICENSE_KEY environment variable, and cached license data
+- Integrated into both GUI and console startup modes
+- Prevents users from bypassing license expiry by going offline
+
 ### Risk Management Broker Filter Fix
 - Fixed critical bug where `get_channel_risk_settings` could return wrong channel settings when multiple brokers have same symbol
 - Both options and stocks SQL queries now filter by broker: `WHERE ... AND LOWER(t.broker) = LOWER(?)`
