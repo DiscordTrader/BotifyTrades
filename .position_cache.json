@@ -3521,7 +3521,7 @@
   },
   "ALPACA_PAPER_GOOGL_320.0_2026-01-09_C": {
     "entry_price": 1.0,
-    "highest_price": 0.97,
+    "highest_price": 0.99,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
