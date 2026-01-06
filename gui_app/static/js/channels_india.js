@@ -793,9 +793,9 @@ async function loadConditionalMonitorStatus() {
         const statusColor = data.thread_alive ? '#00ff88' : '#ff6b6b';
         const statusText = data.thread_alive ? 'RUNNING' : 'STOPPED';
         
-        const logsHtml = (data.recent_logs || []).slice(-10).map(log => {
+        const logsHtml = (data.recent_logs || []).slice(-10).reverse().map(log => {
             let color = '#8E8E93';
-            if (log.includes('Price update')) color = '#00d4ff';
+            if (log.includes('Price:') || log.includes('Price update')) color = '#00d4ff';
             if (log.includes('Error') || log.includes('❌')) color = '#ff6b6b';
             if (log.includes('✓') || log.includes('Monitoring')) color = '#00ff88';
             if (log.includes('Starting')) color = '#ffc107';
