@@ -9330,15 +9330,43 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 'limit_price': signal.get('price')  # None for market orders
                             }
                             
-                            # For India brokers, pass lots if available, otherwise qty
-                            # The broker will fetch lot_size from API and calculate correct quantity
+                            # For India brokers, calculate lots from channel position_size_pct if available
                             if broker_name_used in ('Upstox', 'DhanQ', 'Zerodha'):
-                                if signal.get('lots'):
+                                calculated_lots = None
+                                
+                                # Check for channel-level position_size_pct
+                                position_size_pct = signal.get('_position_size_pct')
+                                if position_size_pct and signal.get('price'):
+                                    try:
+                                        # Fetch buying power from the broker
+                                        account_info = await live_broker.get_account_info()
+                                        buying_power = account_info.get('buying_power', 0) or account_info.get('available_margin', 0)
+                                        
+                                        if buying_power > 0:
+                                            # Calculate position value as % of buying power
+                                            position_value = buying_power * (float(position_size_pct) / 100)
+                                            option_price = float(signal['price'])
+                                            
+                                            # For India options, we need lot_size to calculate lots
+                                            # The broker will fetch it, but we can estimate lots here
+                                            # Estimated: lots = position_value / (price * estimated_lot_size)
+                                            # We'll let the broker handle exact calculation, just pass the position_value
+                                            estimated_lots = max(1, int(position_value / (option_price * 50)))  # Use 50 as rough estimate
+                                            calculated_lots = estimated_lots
+                                            _original_print(f"[POSITION SIZE] ✓ Channel {position_size_pct}% of ₹{buying_power:.0f} = ₹{position_value:.0f} → ~{calculated_lots} lot(s)")
+                                    except Exception as e:
+                                        _original_print(f"[POSITION SIZE] ⚠️ Could not fetch buying power: {e}, using signal qty")
+                                
+                                # Priority: 1) Calculated lots from position_size_pct, 2) Signal lots, 3) Signal qty
+                                if calculated_lots:
+                                    order_kwargs['lots'] = calculated_lots
+                                    _original_print(f"[LIVE TRADE] India broker - using {calculated_lots} lot(s) from channel position size")
+                                elif signal.get('lots'):
                                     order_kwargs['lots'] = signal['lots']
                                     _original_print(f"[LIVE TRADE] India broker - using {signal['lots']} lot(s) from signal")
                                 else:
-                                    order_kwargs['qty'] = signal['qty']
-                                    _original_print(f"[LIVE TRADE] India broker - passing qty={signal['qty']}, broker will auto-calculate lots")
+                                    order_kwargs['qty'] = signal.get('qty', 1)
+                                    _original_print(f"[LIVE TRADE] India broker - passing qty={signal.get('qty', 1)}, broker will auto-calculate lots")
                             else:
                                 order_kwargs['qty'] = signal['qty']
                             

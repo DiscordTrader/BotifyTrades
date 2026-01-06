@@ -475,6 +475,8 @@ class TelegramListener:
             position_size_pct = chat_config.get('position_size_pct')
             if position_size_pct:
                 signal['_position_size_pct'] = position_size_pct
+                signal['_calculate_qty'] = True
+                print(f"[TELEGRAM] Position sizing: {position_size_pct}% of portfolio")
             
             if chat_config.get('risk_management_enabled'):
                 signal['_risk_management'] = {
