@@ -6624,15 +6624,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             await order_queue.put(signal)
                             return True
                         
-                        sys.stderr.write(f"[CONDITIONAL EXEC] Scheduling on discord_loop: running={discord_loop.is_running()}\n")
-                        sys.stderr.flush()
+                        print(f"[CONDITIONAL EXEC] Signal built: {signal.keys()}", flush=True)
+                        print(f"[CONDITIONAL EXEC] discord_loop exists: {discord_loop is not None}", flush=True)
+                        print(f"[CONDITIONAL EXEC] discord_loop running: {discord_loop.is_running()}", flush=True)
                         
                         if not discord_loop.is_running():
-                            sys.stderr.write(f"[CONDITIONAL EXEC] ❌ Discord loop not running!\n")
-                            sys.stderr.flush()
+                            print(f"[CONDITIONAL EXEC] ❌ Discord loop not running!", flush=True)
                             return False
                         
                         future = asyncio.run_coroutine_threadsafe(queue_signal(), discord_loop)
+                        print(f"[CONDITIONAL EXEC] ✓ Future created", flush=True)
                         
                         # Add done callback for error handling (non-blocking)
                         def on_done(fut):
@@ -6640,17 +6641,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 fut.result()
                                 currency = '₹' if market == 'INDIA' else '$'
                                 option_info = f" {order.get('strike')}{order.get('opt_type')}" if order.get('strike') else ""
-                                print(f"[CONDITIONAL] ✓ Queued BTO {symbol}{option_info} @ {currency}{triggered_price:.2f}")
-                                sys.stderr.write(f"[CONDITIONAL EXEC] ✓ Successfully queued signal\n")
-                                sys.stderr.flush()
+                                print(f"[CONDITIONAL] ✓ Queued BTO {symbol}{option_info} @ {currency}{triggered_price:.2f}", flush=True)
                             except Exception as e:
-                                print(f"[CONDITIONAL] ❌ Queue error: {e}")
-                                sys.stderr.write(f"[CONDITIONAL EXEC] ❌ Queue callback error: {e}\n")
-                                sys.stderr.flush()
+                                print(f"[CONDITIONAL] ❌ Queue error: {e}", flush=True)
+                                import traceback
+                                traceback.print_exc()
                         
                         future.add_done_callback(on_done)
-                        sys.stderr.write(f"[CONDITIONAL EXEC] ✓ Returning True (async handoff scheduled)\n")
-                        sys.stderr.flush()
+                        print(f"[CONDITIONAL EXEC] ✓ Returning True (async handoff scheduled)", flush=True)
                         return True  # Return immediately, actual queue happens async
                         
                     except Exception as e:
