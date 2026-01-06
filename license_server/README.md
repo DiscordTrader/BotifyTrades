@@ -1,98 +1,171 @@
-# License Validation Server
+# BotifyTrades License Server
 
-## Strong Protection Architecture
+## Overview
 
-This server handles license validation for your Discord trading bot, ensuring **SECRET_KEY never leaves the server**.
+FastAPI-based license validation service for BotifyTrades. This server handles all license operations and should be deployed separately from the bot application.
 
-### Security Features
+## Features
 
-- ✅ **Server-Side Validation** - All license checks happen on your server
-- ✅ **Machine Binding** - Licenses tied to specific hardware
-- ✅ **Remote Revocation** - Block pirated copies instantly
-- ✅ **Offline Grace Period** - 24hr JWT tokens for offline use
-- ✅ **Audit Logging** - Track all validation attempts
-- ✅ **HMAC Signing** - Cryptographically secure license keys
+- **Trial Licenses** - 7-day trials bound to machine ID
+- **Subscription Licenses** - Configurable duration with machine binding
+- **Offline Grace Period** - 48-hour JWT tokens for offline validation
+- **Machine Binding** - Licenses tied to specific hardware
+- **Remote Revocation** - Instantly revoke pirated copies
+- **Admin CLI** - Command-line license management
 
 ---
 
 ## Quick Start
 
-### 1. Local Development
+### 1. Install Dependencies
 
 ```bash
-# Install dependencies
-cd license_server
 pip install -r requirements.txt
-
-# Set environment variables
-export LICENSE_SECRET_KEY="your_secret_key_here"
-export JWT_SECRET="your_jwt_secret_here"
-export ADMIN_API_KEY="your_admin_api_key_here"
-export DATABASE_URL="postgresql://user:password@localhost/licenses"
-
-# Run server
-python main.py
 ```
 
-Server runs at: `http://localhost:8000`
-
-### 2. Production Deployment
-
-#### Option A: DigitalOcean App Platform ($7/month)
-
-1. Create new App on DigitalOcean
-2. Connect your GitHub repo (`license_server/` folder)
-3. Add PostgreSQL database ($7/mo)
-4. Set environment variables in App settings
-5. Deploy!
-
-#### Option B: Heroku ($7/month)
+### 2. Set Environment Variables
 
 ```bash
-heroku create your-license-server
-heroku addons:create heroku-postgresql:mini
-heroku config:set LICENSE_SECRET_KEY="..."
-heroku config:set JWT_SECRET="..."
-heroku config:set ADMIN_API_KEY="..."
-git push heroku main
+export DATABASE_URL="postgresql://user:password@localhost/licenses"
+export LICENSE_SECRET_KEY="your_64_char_secret_key"
+export JWT_SECRET="your_64_char_jwt_secret"
+export ADMIN_API_KEY="your_32_char_admin_key"
+export TRIAL_DAYS="7"
 ```
 
-#### Option C: AWS/Render/Railway (Similar process)
+Generate secure keys:
+```python
+import secrets
+print(f"LICENSE_SECRET_KEY={secrets.token_hex(32)}")
+print(f"JWT_SECRET={secrets.token_hex(32)}")
+print(f"ADMIN_API_KEY={secrets.token_hex(16)}")
+```
+
+### 3. Run Server
+
+```bash
+# Development
+python main.py
+
+# Production
+gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:5000
+```
+
+Server runs at: `http://localhost:5000`
 
 ---
 
-## API Endpoints
+## API Reference
 
-### Public Endpoints
+### Client Endpoints
 
-#### `POST /api/v1/licenses/validate`
-Validate a license key and get 24hr validation token
+Used by the bot application for license validation.
+
+#### `GET /api/v1/license/status`
+
+Check server health.
+
+**Response:**
+```json
+{
+  "status": "online",
+  "version": "2.0.0",
+  "timestamp": "2026-01-06T12:00:00"
+}
+```
+
+#### `POST /api/v1/license/trial`
+
+Request a trial license.
 
 **Request:**
 ```json
 {
-  "license_key": "customer_id:1234567890:abc123:signature",
   "machine_id": "abc123def456",
-  "client_version": "1.0.0"
+  "machine_info": {"os": "Windows", "hostname": "PC-001"}
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "license_key": "BTT-A1B2-C3D4-E5F6",
+  "expires_at": "2026-01-13T12:00:00",
+  "days_remaining": 7,
+  "license_type": "trial",
+  "signed_token": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+#### `POST /api/v1/license/activate`
+
+Activate a license on a machine.
+
+**Request:**
+```json
+{
+  "license_key": "BTF-XXXX-XXXX-XXXX",
+  "machine_id": "abc123def456",
+  "machine_info": {"os": "Windows", "hostname": "PC-001"}
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "is_valid": true,
+  "customer_id": "john@email.com",
+  "expires_at": "2026-02-06T12:00:00",
+  "days_remaining": 30,
+  "license_type": "subscription",
+  "signed_token": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+#### `POST /api/v1/license/validate`
+
+Validate a license (periodic check).
+
+**Request:**
+```json
+{
+  "license_key": "BTF-XXXX-XXXX-XXXX",
+  "machine_id": "abc123def456"
 }
 ```
 
 **Response (Success):**
 ```json
 {
-  "valid": true,
-  "customer_id": "john_doe",
-  "expires_at": "2025-12-15T00:00:00",
+  "is_valid": true,
+  "success": true,
+  "customer_id": "john@email.com",
+  "expires_at": "2026-02-06T12:00:00",
   "days_remaining": 30,
-  "validation_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_expires_hours": 24
+  "license_type": "subscription",
+  "signed_token": "eyJhbGciOiJIUzI1NiIs..."
 }
 ```
 
 **Response (Error):**
 ```json
 {
-  "detail": "License expired"
+  "is_valid": false,
+  "error": "License revoked"
+}
+```
+
+#### `POST /api/v1/license/deactivate`
+
+Deactivate license from machine (allows transfer).
+
+**Request:**
+```json
+{
+  "license_key": "BTF-XXXX-XXXX-XXXX",
+  "machine_id": "abc123def456"
 }
 ```
 
@@ -100,17 +173,19 @@ Validate a license key and get 24hr validation token
 
 ### Admin Endpoints
 
-**Authentication:** Include header `X-API-Key: your_admin_api_key`
+Require `X-API-Key` header with `ADMIN_API_KEY` value.
 
 #### `POST /api/v1/admin/licenses`
-Create new license
+
+Create new license.
 
 **Request:**
 ```json
 {
-  "customer_id": "john_doe",
+  "customer_id": "john@email.com",
   "days": 30,
   "max_activations": 1,
+  "license_type": "subscription",
   "notes": "Monthly subscription"
 }
 ```
@@ -118,63 +193,38 @@ Create new license
 **Response:**
 ```json
 {
-  "license_key": "john_doe:1702598400:8a7f2c:signature",
-  "customer_id": "john_doe",
-  "expires_at": "2025-12-15T00:00:00",
-  "days": 30
-}
-```
-
-#### `POST /api/v1/admin/licenses/{license_key}/revoke`
-Revoke a license (blocks immediately)
-
-**Response:**
-```json
-{
-  "revoked": true,
-  "license_key": "..."
+  "success": true,
+  "license_key": "BTF-A1B2-C3D4-E5F6",
+  "customer_id": "john@email.com",
+  "expires_at": "2026-02-06T12:00:00",
+  "days": 30,
+  "license_type": "subscription"
 }
 ```
 
 #### `GET /api/v1/admin/licenses`
-List all licenses
 
-**Response:**
-```json
-{
-  "total": 5,
-  "licenses": [
-    {
-      "customer_id": "john_doe",
-      "status": "active",
-      "issued_at": "2025-11-15T00:00:00",
-      "expires_at": "2025-12-15T00:00:00",
-      "machine_id": "abc123def456",
-      "activation_count": 1,
-      "last_validated": "2025-11-15T12:30:00"
-    }
-  ]
-}
-```
+List all licenses.
 
----
+#### `GET /api/v1/admin/licenses/{license_key}`
 
-## Environment Variables
+Get license details.
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `LICENSE_SECRET_KEY` | HMAC signing key (NEVER share!) | `abc123...` (64 chars) |
-| `JWT_SECRET` | JWT token signing key | `def456...` (64 chars) |
-| `ADMIN_API_KEY` | API key for admin endpoints | `ghi789...` (32 chars) |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host/db` |
+#### `POST /api/v1/admin/licenses/{license_key}/revoke`
 
-**Generate secure keys:**
-```python
-import secrets
-print(f"LICENSE_SECRET_KEY={secrets.token_hex(32)}")
-print(f"JWT_SECRET={secrets.token_hex(32)}")
-print(f"ADMIN_API_KEY={secrets.token_hex(16)}")
-```
+Revoke a license (immediate block).
+
+#### `POST /api/v1/admin/licenses/{license_key}/extend?days=30`
+
+Extend license expiration.
+
+#### `POST /api/v1/admin/licenses/{license_key}/clear-activation`
+
+Clear machine binding (allows re-activation).
+
+#### `POST /api/v1/admin/licenses/{license_key}/set-device-limit?limit=2`
+
+Set max device limit.
 
 ---
 
@@ -185,7 +235,9 @@ CREATE TABLE licenses (
     id SERIAL PRIMARY KEY,
     license_key VARCHAR UNIQUE NOT NULL,
     customer_id VARCHAR NOT NULL,
+    license_type VARCHAR DEFAULT 'subscription',
     machine_id VARCHAR,
+    machine_info TEXT,
     max_activations INTEGER DEFAULT 1,
     activation_count INTEGER DEFAULT 0,
     status VARCHAR DEFAULT 'active',
@@ -198,78 +250,73 @@ CREATE TABLE licenses (
 CREATE INDEX idx_license_key ON licenses(license_key);
 CREATE INDEX idx_customer_id ON licenses(customer_id);
 CREATE INDEX idx_status ON licenses(status);
+CREATE INDEX idx_machine_id ON licenses(machine_id);
 ```
 
 ---
 
-## Security Best Practices
+## License Key Formats
 
-1. **HTTPS Only** - Use TLS certificate (Let's Encrypt free)
-2. **Rate Limiting** - Add nginx/Cloudflare rate limiting
-3. **Firewall** - Restrict database access
-4. **Backups** - Daily PostgreSQL backups
-5. **Monitoring** - Set up uptime monitoring (UptimeRobot free)
-6. **Secrets Rotation** - Rotate keys every 6-12 months
+| Prefix | Type | Example |
+|--------|------|---------|
+| `BTF-` | Subscription | `BTF-A1B2-C3D4-E5F6` |
+| `BTT-` | Trial | `BTT-A1B2-C3D4-E5F6` |
 
 ---
 
-## Testing
+## Security Features
 
-```bash
-# Test validation endpoint
-curl -X POST http://localhost:8000/api/v1/licenses/validate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "license_key": "test_customer:1234567890:abc:signature",
-    "machine_id": "test_machine_123"
-  }'
-
-# Test admin create license
-curl -X POST http://localhost:8000/api/v1/admin/licenses \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: your_admin_key" \
-  -d '{
-    "customer_id": "test_user",
-    "days": 7
-  }'
-```
+- **HMAC Signing** - All responses cryptographically signed
+- **JWT Tokens** - 48-hour offline grace period tokens
+- **Machine Binding** - License tied to hardware ID
+- **Rate Limiting** - Add nginx/Cloudflare for protection
+- **HTTPS Required** - TLS encryption for all traffic
 
 ---
 
-## Monitoring & Logs
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `LICENSE_SECRET_KEY` | Yes | 64-char HMAC signing key |
+| `JWT_SECRET` | Yes | 64-char JWT signing key |
+| `ADMIN_API_KEY` | Yes | 32-char admin access key |
+| `TRIAL_DAYS` | No | Trial duration (default: 7) |
+| `PORT` | No | Server port (default: 5000) |
+
+---
+
+## Deployment Options
+
+### Replit (Recommended for simplicity)
+
+1. Create new private Python repl
+2. Copy files and set secrets
+3. Run: `uvicorn main:app --host 0.0.0.0 --port 5000`
+
+### VPS (For maximum control)
+
+See `SETUP_NEW_PROJECT.md` for detailed VPS deployment guide.
+
+### Cloud Platforms
+
+- **DigitalOcean App Platform** - $7/mo
+- **Render** - Free tier available
+- **Railway** - Usage-based pricing
+- **Heroku** - $7/mo
+
+---
+
+## Monitoring
 
 The server logs all validation attempts. Monitor for:
-- Multiple failed validation attempts (potential cracking)
-- Same license on multiple machines (sharing/piracy)
+
+- Multiple failed validations (potential cracking)
+- Same license on multiple machines (sharing)
 - Unusual validation patterns
 
 Consider adding:
 - Sentry/Rollbar for error tracking
-- DataDog/New Relic for performance
-- Custom analytics dashboard
-
----
-
-## Cost Breakdown
-
-| Service | Provider | Monthly Cost |
-|---------|----------|--------------|
-| **API Server** | DigitalOcean Apps | $7 |
-| **PostgreSQL** | DigitalOcean Managed | $7 |
-| **Domain + SSL** | Cloudflare | Free |
-| **Monitoring** | UptimeRobot | Free |
-| **Total** | | **$14/month** |
-
-Scale up as needed (100+ concurrent users ~ $20-30/mo)
-
----
-
-## Next Steps
-
-1. Deploy server to DigitalOcean/Heroku
-2. Update client `license_manager.py` to call this API
-3. Test end-to-end validation flow
-4. Add PyArmor obfuscation to client
-5. Distribute exe to customers
-
-Your SECRET_KEY never leaves the server! 🔒
+- UptimeRobot for availability monitoring
+- DataDog for performance metrics
