@@ -100,8 +100,32 @@ class LicenseController(QObject):
     def check_existing_license(self) -> bool:
         """
         Check for existing valid license.
+        Priority: 1) Database, 2) Cache file, 3) Environment variable
         Returns True if license is valid, False if input needed.
         """
+        # Priority 1: Check database for stored license
+        db_license = self._load_license_from_database()
+        if db_license and db_license.get('license_key'):
+            license_key = db_license['license_key']
+            print(f"[LICENSE] Found license in database: {license_key[:12]}...")
+            self._set_state(LicenseState.VALIDATING, "Validating license...")
+            if self._client:
+                self._start_validation(license_key, 'validate')
+                return True
+            else:
+                # No client - use cached data
+                days = db_license.get('days_remaining', 0)
+                if days > 0:
+                    self._license_data = {
+                        'is_valid': True,
+                        'license_type': db_license.get('license_type', 'subscription'),
+                        'days_remaining': days,
+                        'license_key': license_key
+                    }
+                    self._set_state(LicenseState.ACTIVATED, "License activated")
+                    self.license_activated.emit(self._license_data)
+                    return True
+        
         if not self._client:
             # No client available - check environment variable
             license_key = os.getenv('LICENSE_KEY', '').strip()
@@ -123,7 +147,7 @@ class LicenseController(QObject):
         
         self._set_state(LicenseState.VALIDATING, "Checking license...")
         
-        # Check cached license first
+        # Priority 2: Check cache file
         cached = None
         try:
             if hasattr(self._client, '_load_cache'):
@@ -140,7 +164,7 @@ class LicenseController(QObject):
                 self._start_validation(license_key, 'validate')
                 return True
         
-        # Check environment variable
+        # Priority 3: Check environment variable
         license_key = os.getenv('LICENSE_KEY', '').strip()
         if license_key:
             self._start_validation(license_key, 'validate')
@@ -150,6 +174,17 @@ class LicenseController(QObject):
         self._set_state(LicenseState.REQUIRE_KEY, "Please enter your license key")
         self.require_input.emit("No license found. Please activate.")
         return False
+    
+    def _load_license_from_database(self) -> Optional[Dict]:
+        """Load stored license from database"""
+        try:
+            from gui_app.database import get_local_license
+            return get_local_license()
+        except ImportError:
+            return None
+        except Exception as e:
+            print(f"[LICENSE] Error loading from database: {e}")
+            return None
     
     def _start_validation(self, license_key: str, action: str):
         """Start background validation"""

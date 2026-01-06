@@ -1062,6 +1062,23 @@ def init_db():
         )
     ''')
     
+    # ==================== CLIENT-SIDE LICENSE STORAGE ====================
+    # Local storage for activated license (persists across restarts)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS local_license (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            license_key TEXT NOT NULL,
+            machine_id TEXT NOT NULL,
+            license_type TEXT DEFAULT 'subscription',
+            days_remaining INTEGER DEFAULT 0,
+            expires_at TIMESTAMP,
+            signed_token TEXT,
+            last_validated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            activated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     # ==================== SERVER-SIDE LICENSE TABLES ====================
     # These tables are used when running as a license server (LICENSE_SERVER_MODE=true)
     
@@ -6170,6 +6187,125 @@ def log_license_action(license_key: str, machine_id: str, action: str, result: s
         conn.commit()
     except Exception as e:
         print(f"[DATABASE] Error logging license action: {e}")
+
+
+# ==================== CLIENT-SIDE LICENSE STORAGE FUNCTIONS ====================
+
+def save_local_license(license_key: str, machine_id: str, license_data: Dict) -> bool:
+    """
+    Save activated license to local database for persistence across restarts.
+    This replaces any existing license (single-row table).
+    
+    Args:
+        license_key: The activated license key
+        machine_id: The machine ID this license is bound to
+        license_data: Dict containing license_type, days_remaining, expires_at, signed_token
+        
+    Returns:
+        True if saved successfully, False otherwise
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        now = datetime.now().isoformat()
+        
+        cursor.execute('''
+            INSERT OR REPLACE INTO local_license 
+            (id, license_key, machine_id, license_type, days_remaining, expires_at, 
+             signed_token, last_validated_at, activated_at, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, 
+                    COALESCE((SELECT activated_at FROM local_license WHERE id = 1), ?), ?)
+        ''', (
+            license_key,
+            machine_id,
+            license_data.get('license_type', 'subscription'),
+            license_data.get('days_remaining', 0),
+            license_data.get('expires_at') or license_data.get('expires'),
+            license_data.get('signed_token'),
+            now,
+            now,
+            now
+        ))
+        conn.commit()
+        print(f"[DATABASE] ✓ License saved to database: {license_key[:12]}...")
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error saving local license: {e}")
+        return False
+
+
+def get_local_license() -> Optional[Dict]:
+    """
+    Get the locally stored license from database.
+    
+    Returns:
+        Dict with license data or None if no license stored
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT * FROM local_license WHERE id = 1')
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+    except Exception as e:
+        print(f"[DATABASE] Error loading local license: {e}")
+        return None
+
+
+def clear_local_license() -> bool:
+    """Clear the locally stored license (for logout/deactivation)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('DELETE FROM local_license WHERE id = 1')
+        conn.commit()
+        print("[DATABASE] ✓ Local license cleared")
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error clearing local license: {e}")
+        return False
+
+
+def update_local_license_validation(days_remaining: int = None, signed_token: str = None) -> bool:
+    """
+    Update the last_validated_at timestamp and optionally days_remaining for the local license.
+    Called after successful server validation to keep cache fresh.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        now = datetime.now().isoformat()
+        
+        if days_remaining is not None and signed_token is not None:
+            cursor.execute('''
+                UPDATE local_license 
+                SET last_validated_at = ?, days_remaining = ?, signed_token = ?, updated_at = ?
+                WHERE id = 1
+            ''', (now, days_remaining, signed_token, now))
+        elif days_remaining is not None:
+            cursor.execute('''
+                UPDATE local_license 
+                SET last_validated_at = ?, days_remaining = ?, updated_at = ?
+                WHERE id = 1
+            ''', (now, days_remaining, now))
+        else:
+            cursor.execute('''
+                UPDATE local_license 
+                SET last_validated_at = ?, updated_at = ?
+                WHERE id = 1
+            ''', (now, now))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error updating local license validation: {e}")
+        return False
 
 
 def get_license_stats() -> Dict:

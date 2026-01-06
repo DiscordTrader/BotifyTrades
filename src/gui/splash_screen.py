@@ -484,10 +484,48 @@ class SplashScreen(QWidget):
         days = license_data.get('days_remaining', 0)
         license_type = license_data.get('license_type', 'subscription').title()
         
+        # Save license to database for persistence
+        self._save_license_to_database(license_data)
+        
         self.license_info.setText(f"{license_type} License - {days} days remaining")
         self._show_progress_panel()
         self.license_validated.emit(license_data)
         self.startup_ready.emit()
+    
+    def _save_license_to_database(self, license_data: dict):
+        """Save the activated license to database for persistence across restarts"""
+        try:
+            # Get license key from controller or data
+            license_key = license_data.get('license_key', '')
+            if not license_key and self.license_controller and hasattr(self.license_controller, '_client'):
+                # Try to get from cache
+                cache = self.license_controller._client._load_cache() if self.license_controller._client else None
+                if cache:
+                    license_key = cache.get('license_key', '')
+            
+            if not license_key:
+                license_key = os.getenv('LICENSE_KEY', '')
+            
+            if not license_key:
+                print("[SPLASH] Warning: No license key to save to database")
+                return
+            
+            # Get machine_id from controller client
+            machine_id = ''
+            if self.license_controller and hasattr(self.license_controller, '_client') and self.license_controller._client:
+                machine_id = self.license_controller._client.machine_id
+            
+            # Import database function
+            try:
+                from gui_app.database import save_local_license
+                save_local_license(license_key, machine_id, license_data)
+                print(f"[SPLASH] ✓ License saved to database")
+            except ImportError:
+                print("[SPLASH] Warning: Database not available for license storage")
+            except Exception as e:
+                print(f"[SPLASH] Warning: Could not save license to database: {e}")
+        except Exception as e:
+            print(f"[SPLASH] Error saving license: {e}")
     
     def _on_license_failed(self, error: str):
         """Handle license validation failure"""
