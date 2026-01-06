@@ -865,7 +865,11 @@ if not LICENSE_VALID:
         print("[LICENSE] ❌ No LICENSE_KEY found")
 
 # Step 3: If no valid license, try setup wizard (for EXE) or block startup (for Replit)
-if not LICENSE_VALID:
+# IMPORTANT: In GUI/frozen mode, skip console prompts - let splash screen handle license
+IS_GUI_MODE = getattr(sys, 'frozen', False)  # PyInstaller frozen EXE = GUI mode
+DEFER_TO_SPLASH_SCREEN = IS_GUI_MODE  # GUI mode defers license handling to splash screen
+
+if not LICENSE_VALID and not DEFER_TO_SPLASH_SCREEN:
     import sys
     print("[LICENSE] ❌ No valid license found")
     
@@ -1139,6 +1143,10 @@ if not LICENSE_VALID:
             input("Press Enter to exit...")
         
         raise SystemExit("ERROR: Valid license required to run this bot.")
+elif not LICENSE_VALID and DEFER_TO_SPLASH_SCREEN:
+    # GUI mode - defer license check to splash screen instead of console prompts
+    print("[LICENSE] ⚠️  License validation deferred to GUI splash screen")
+    print("[LICENSE]    The splash screen will handle license activation")
 
 # Set API keys as environment variables if present in wizard credentials
 for api_key in ['OPENAI_API_KEY', 'ALPHA_VANTAGE_API_KEY', 'FINNHUB_API_KEY']:
@@ -10223,7 +10231,9 @@ Environment Variables:
             
             progress = StartupProgress()
             
-            license_bypass = LICENSE_VALID or os.getenv('LICENSE_KEY', '').strip()
+            # Only bypass license panel if license is already validated
+            # Don't bypass just because LICENSE_KEY exists - it might be expired
+            license_bypass = LICENSE_VALID
             splash = SplashScreen(progress, skip_license=license_bypass)
             splash.show()
             app.processEvents()
