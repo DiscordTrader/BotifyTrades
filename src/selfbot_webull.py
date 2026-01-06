@@ -6521,8 +6521,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         option_info = f" {order.get('strike')}{order.get('opt_type')}" if order.get('strike') else ""
                         sys.stderr.write(f"[CONDITIONAL EXEC] Preparing signal: {symbol}{option_info} @ {currency}{triggered_price:.2f}\n")
                         sys.stderr.flush()
-                        print(f"[CONDITIONAL] Executing order #{order['id']}: {symbol}{option_info} @ {currency}{triggered_price:.2f}")
+                        print(f"[CONDITIONAL] Executing order #{order['id']}: {symbol}{option_info} @ {currency}{triggered_price:.2f}", flush=True)
                         
+                        print(f"[CONDITIONAL EXEC] Step 1: Building signal dict...", flush=True)
                         # Build a BTO signal from the conditional order
                         signal = {
                             'asset': order.get('asset_type', 'stock'),
@@ -6533,6 +6534,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             '_conditional_order_id': order['id'],
                             '_broker_override': broker_name,
                         }
+                        print(f"[CONDITIONAL EXEC] Step 2: Base signal built", flush=True)
                         
                         # Handle Indian options orders
                         if market == 'INDIA':
