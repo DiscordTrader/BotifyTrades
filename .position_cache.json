@@ -49,7 +49,7 @@
   },
   "ALPACA_PAPER_SPY_stock": {
     "entry_price": 687.49,
-    "highest_price": 691.65,
+    "highest_price": 692.14,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3297,7 +3297,7 @@
   },
   "ALPACA_PAPER_SPY_700.0_2026-01-23_C": {
     "entry_price": 2.73,
-    "highest_price": 3.05,
+    "highest_price": 3.25,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3361,7 +3361,7 @@
   },
   "ALPACA_PAPER_QQQ_621.0_2026-01-06_C": {
     "entry_price": 0.95,
-    "highest_price": 2.25,
+    "highest_price": 2.59,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3425,7 +3425,7 @@
   },
   "ALPACA_PAPER_SPY_690.0_2026-01-06_C": {
     "entry_price": 0.29,
-    "highest_price": 1.71,
+    "highest_price": 2.17,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3521,7 +3521,7 @@
   },
   "ALPACA_PAPER_GOOGL_320.0_2026-01-09_C": {
     "entry_price": 1.0,
-    "highest_price": 1.34,
+    "highest_price": 1.4,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3569,7 +3569,7 @@
   },
   "ALPACA_PAPER_PLUG_2.5_2026-01-09_C": {
     "entry_price": 0.06,
-    "highest_price": 0.05,
+    "highest_price": 0.06,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3585,7 +3585,7 @@
   },
   "ALPACA_PAPER_TSLA_440.0_2026-01-09_C": {
     "entry_price": 3.8,
-    "highest_price": 3.7,
+    "highest_price": 4.75,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3598,5 +3598,21 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "created_at": "2026-01-06T18:55:38.351803"
+  },
+  "ALPACA_PAPER_RBLX_80.0_2026-01-16_C": {
+    "entry_price": 1.27,
+    "highest_price": 1.24,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "RBLX260116C00080000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-06T18:59:56.144148"
   }
 }
