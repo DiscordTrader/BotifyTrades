@@ -10,7 +10,15 @@ const IST_TIMEZONE = 'Asia/Kolkata';
 function formatDateTimeIST(dateStr) {
     if (!dateStr) return 'N/A';
     try {
-        const date = new Date(dateStr);
+        // Database stores UTC - append Z if no timezone indicator present
+        let normalizedStr = dateStr;
+        if (!dateStr.includes('Z') && !dateStr.includes('+') && !dateStr.includes('T')) {
+            // Format like "2026-01-06 08:04:21" - convert to ISO format with UTC
+            normalizedStr = dateStr.replace(' ', 'T') + 'Z';
+        } else if (dateStr.includes('T') && !dateStr.includes('Z') && !dateStr.includes('+')) {
+            normalizedStr = dateStr + 'Z';
+        }
+        const date = new Date(normalizedStr);
         return date.toLocaleString('en-IN', { 
             timeZone: IST_TIMEZONE,
             year: 'numeric',
@@ -29,7 +37,14 @@ function formatDateTimeIST(dateStr) {
 function formatTimeIST(dateStr) {
     if (!dateStr) return 'N/A';
     try {
-        const date = new Date(dateStr);
+        // Database stores UTC - append Z if no timezone indicator present
+        let normalizedStr = dateStr;
+        if (!dateStr.includes('Z') && !dateStr.includes('+') && !dateStr.includes('T')) {
+            normalizedStr = dateStr.replace(' ', 'T') + 'Z';
+        } else if (dateStr.includes('T') && !dateStr.includes('Z') && !dateStr.includes('+')) {
+            normalizedStr = dateStr + 'Z';
+        }
+        const date = new Date(normalizedStr);
         return date.toLocaleTimeString('en-IN', { 
             timeZone: IST_TIMEZONE,
             hour: '2-digit',
@@ -888,7 +903,7 @@ function switchUpstoxTab(tabName) {
     }
     if (tabName === 'conditional') {
         loadConditionalMonitorStatus();
-        conditionalStatusInterval = setInterval(loadConditionalMonitorStatus, 5000);
+        conditionalStatusInterval = setInterval(loadConditionalMonitorStatus, 2000);
     }
 }
 
