@@ -6590,7 +6590,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         # Profit Targets: Signal values first, then channel settings
                         if has_signal_targets:
-                            targets = json.loads(order['take_profit_targets']) if isinstance(order['take_profit_targets'], str) else order['take_profit_targets']
+                            raw_targets = order['take_profit_targets']
+                            targets = None
+                            if isinstance(raw_targets, str):
+                                # Try JSON first, then comma-separated
+                                try:
+                                    targets = json.loads(raw_targets)
+                                except json.JSONDecodeError:
+                                    # Parse comma-separated string: "172.0,190.0,220.0"
+                                    targets = [float(t.strip()) for t in raw_targets.split(',') if t.strip()]
+                            elif isinstance(raw_targets, list):
+                                targets = raw_targets
+                            elif raw_targets is not None:
+                                targets = [float(raw_targets)]
+                            
                             # Ensure targets is a list
                             if targets is not None:
                                 if not isinstance(targets, list):
