@@ -6503,27 +6503,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     conditional_order_service.set_broker_instance('dhanq', self.dhanq_broker)
                     print("[STARTUP] ✓ DhanQ registered for conditional order monitoring", flush=True)
                 
-                # Capture the Discord event loop for thread-safe queue operations
-                discord_loop = asyncio.get_running_loop()
-                order_queue = self.order_queue
+                # Use the global sync signal queue (same as Telegram) for thread-safe handoff
+                global _telegram_signal_queue
                 
-                # Set up async execution callback with thread-safe handoff
+                # Set up async execution callback
                 async def execute_conditional_order(order, triggered_price):
-                    """Execute a triggered conditional order (called from service's event loop)."""
-                    import sys
-                    sys.stderr.write(f"[CONDITIONAL EXEC] Callback invoked for order #{order.get('id')}\n")
-                    sys.stderr.flush()
+                    """Execute a triggered conditional order using sync signal queue."""
+                    global _telegram_signal_queue
                     try:
                         symbol = order['symbol']
                         broker_name = order.get('broker_primary', 'Webull')
                         market = order.get('market', 'US')
                         currency = '₹' if market == 'INDIA' else '$'
                         option_info = f" {order.get('strike')}{order.get('opt_type')}" if order.get('strike') else ""
-                        sys.stderr.write(f"[CONDITIONAL EXEC] Preparing signal: {symbol}{option_info} @ {currency}{triggered_price:.2f}\n")
-                        sys.stderr.flush()
                         print(f"[CONDITIONAL] Executing order #{order['id']}: {symbol}{option_info} @ {currency}{triggered_price:.2f}", flush=True)
                         
-                        print(f"[CONDITIONAL EXEC] Step 1: Building signal dict...", flush=True)
                         # Build a BTO signal from the conditional order
                         signal = {
                             'asset': order.get('asset_type', 'stock'),
@@ -6534,7 +6528,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             '_conditional_order_id': order['id'],
                             '_broker_override': broker_name,
                         }
-                        print(f"[CONDITIONAL EXEC] Step 2: Base signal built", flush=True)
                         
                         # Handle Indian options orders
                         if market == 'INDIA':
@@ -6569,7 +6562,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 signal['qty'] = 1
                         
                         # Add stop loss and profit targets
-                        # Priority: 1) Signal values, 2) Channel settings
                         import json
                         from gui_app.database import get_channel_by_discord_id
                         
@@ -6587,10 +6579,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 signal['stop_loss_pct'] = order['stop_loss_value']
                             else:
                                 signal['stop_loss_price'] = order['stop_loss_value']
-                            print(f"[CONDITIONAL] Using signal SL: {order['stop_loss_value']}")
+                            print(f"[CONDITIONAL] Using signal SL: {order['stop_loss_value']}", flush=True)
                         elif channel_settings and channel_settings.get('stop_loss_pct'):
                             signal['stop_loss_pct'] = channel_settings['stop_loss_pct']
-                            print(f"[CONDITIONAL] Using channel SL: {channel_settings['stop_loss_pct']}%")
+                            print(f"[CONDITIONAL] Using channel SL: {channel_settings['stop_loss_pct']}%", flush=True)
                         
                         # Profit Targets: Signal values first, then channel settings
                         if has_signal_targets:
@@ -6598,7 +6590,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             if targets and len(targets) > 0:
                                 signal['profit_target_price'] = targets[0]
                                 signal['profit_targets'] = targets
-                                print(f"[CONDITIONAL] Using signal targets: {targets}")
+                                print(f"[CONDITIONAL] Using signal targets: {targets}", flush=True)
                         elif channel_settings:
                             channel_targets = []
                             for i in range(1, 5):
@@ -6608,53 +6600,30 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             if channel_targets:
                                 signal['profit_target_pct'] = channel_targets[0]
                                 signal['profit_targets_pct'] = channel_targets
-                                print(f"[CONDITIONAL] Using channel targets: {channel_targets}%")
+                                print(f"[CONDITIONAL] Using channel targets: {channel_targets}%", flush=True)
                         
                         # Trailing Stop: Always from channel settings
                         if channel_settings:
                             if channel_settings.get('trailing_stop_pct'):
                                 signal['trailing_stop_pct'] = channel_settings['trailing_stop_pct']
-                                print(f"[CONDITIONAL] Trailing stop: {channel_settings['trailing_stop_pct']}%")
+                                print(f"[CONDITIONAL] Trailing stop: {channel_settings['trailing_stop_pct']}%", flush=True)
                             if channel_settings.get('trailing_activation_pct'):
                                 signal['trailing_activation_pct'] = channel_settings['trailing_activation_pct']
                             if channel_settings.get('leave_runner_enabled'):
                                 signal['leave_runner'] = True
                                 signal['leave_runner_pct'] = channel_settings.get('leave_runner_pct', 25)
                         
-                        # Thread-safe handoff to Discord's event loop (non-blocking)
-                        async def queue_signal():
-                            await order_queue.put(signal)
+                        # Use sync signal queue (thread-safe, same as Telegram)
+                        if _telegram_signal_queue is not None:
+                            _telegram_signal_queue.put_nowait(signal)
+                            print(f"[CONDITIONAL] ✓ Signal queued via sync queue: {symbol}{option_info} @ {currency}{triggered_price:.2f}", flush=True)
                             return True
-                        
-                        print(f"[CONDITIONAL EXEC] Signal built: {signal.keys()}", flush=True)
-                        print(f"[CONDITIONAL EXEC] discord_loop exists: {discord_loop is not None}", flush=True)
-                        print(f"[CONDITIONAL EXEC] discord_loop running: {discord_loop.is_running()}", flush=True)
-                        
-                        if not discord_loop.is_running():
-                            print(f"[CONDITIONAL EXEC] ❌ Discord loop not running!", flush=True)
+                        else:
+                            print(f"[CONDITIONAL] ❌ Sync signal queue not available!", flush=True)
                             return False
                         
-                        future = asyncio.run_coroutine_threadsafe(queue_signal(), discord_loop)
-                        print(f"[CONDITIONAL EXEC] ✓ Future created", flush=True)
-                        
-                        # Add done callback for error handling (non-blocking)
-                        def on_done(fut):
-                            try:
-                                fut.result()
-                                currency = '₹' if market == 'INDIA' else '$'
-                                option_info = f" {order.get('strike')}{order.get('opt_type')}" if order.get('strike') else ""
-                                print(f"[CONDITIONAL] ✓ Queued BTO {symbol}{option_info} @ {currency}{triggered_price:.2f}", flush=True)
-                            except Exception as e:
-                                print(f"[CONDITIONAL] ❌ Queue error: {e}", flush=True)
-                                import traceback
-                                traceback.print_exc()
-                        
-                        future.add_done_callback(on_done)
-                        print(f"[CONDITIONAL EXEC] ✓ Returning True (async handoff scheduled)", flush=True)
-                        return True  # Return immediately, actual queue happens async
-                        
                     except Exception as e:
-                        print(f"[CONDITIONAL] ❌ Execution error: {e}")
+                        print(f"[CONDITIONAL] ❌ Execution error: {e}", flush=True)
                         import traceback
                         traceback.print_exc()
                         return False
