@@ -92,3 +92,4 @@ upstox-python-sdk
 telethon
 schwab-py
 dhanhq
+kiteconnect
