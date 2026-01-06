@@ -7,8 +7,15 @@
 
 # BUILD VERSION MARKER - This MUST print if the code is current
 import sys
+import os
 import builtins
 _early_print = builtins.print  # Save original print before any override
+
+# Handle PyInstaller GUI mode where stdout/stderr may be None
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, 'w')
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, 'w')
 
 # Import version dynamically to show actual release version
 try:
@@ -17,19 +24,18 @@ try:
 except ImportError:
     _build_version = "DEV"
 
-_early_print("=" * 60, flush=True)
-_early_print(f"BUILD VERSION: {_build_version}", flush=True)
-_early_print("=" * 60, flush=True)
-sys.stdout.flush()
+_early_print("=" * 60)
+_early_print(f"BUILD VERSION: {_build_version}")
+_early_print("=" * 60)
+if sys.stdout and hasattr(sys.stdout, 'flush'):
+    sys.stdout.flush()
 
 import re
 import json
 import asyncio
 import configparser
-import os
 import time
 import hashlib
-import sys
 import ssl
 
 # BUILD TYPE: Controls feature visibility
