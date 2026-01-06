@@ -981,7 +981,14 @@ class ConditionalOrderService:
         if triggered:
             sys.stderr.write(f"[CONDITIONAL] 🎯 TRIGGERED! {symbol} @ ₹{price:.2f} (target: ₹{trigger_price:.2f})\n")
             sys.stderr.flush()
-            await self._execute_order(order_id, price)
+            print(f"[CONDITIONAL] About to call _execute_order for #{order_id}", flush=True)
+            try:
+                await self._execute_order(order_id, price)
+                print(f"[CONDITIONAL] _execute_order completed for #{order_id}", flush=True)
+            except Exception as e:
+                print(f"[CONDITIONAL] ❌ _execute_order EXCEPTION for #{order_id}: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
     
     async def _execute_order(self, order_id: int, triggered_price: float):
         """Execute a triggered conditional order."""
