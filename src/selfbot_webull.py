@@ -10222,9 +10222,14 @@ Environment Variables:
             app.setApplicationName("BotifyTrades")
             
             progress = StartupProgress()
-            splash = SplashScreen(progress)
+            
+            license_bypass = LICENSE_VALID or os.getenv('LICENSE_KEY', '').strip()
+            splash = SplashScreen(progress, skip_license=license_bypass)
             splash.show()
             app.processEvents()
+            
+            if not license_bypass:
+                splash.start_license_check()
             
             worker = StartupWorker()
             worker.progress_signal.connect(lambda step, msg: progress.update(step, msg))
@@ -10235,7 +10240,9 @@ Environment Variables:
                 'discord_thread': None,
                 'telegram_thread': None,
                 'gui_port': 5000,
-                'error': None
+                'error': None,
+                'license_ready': license_bypass,
+                'startup_thread': None
             }
             
             def do_startup():
@@ -10252,11 +10259,26 @@ Environment Variables:
                     startup_state['error'] = str(e)
                     worker.error_signal.emit(str(e))
             
-            startup_thread = threading.Thread(target=do_startup, daemon=True)
-            startup_thread.start()
+            def on_license_ready():
+                startup_state['license_ready'] = True
+                _original_print("[LICENSE] License validated, starting bot...")
+                startup_thread = threading.Thread(target=do_startup, daemon=True)
+                startup_state['startup_thread'] = startup_thread
+                startup_thread.start()
+            
+            splash.startup_ready.connect(on_license_ready)
+            
+            if license_bypass:
+                startup_thread = threading.Thread(target=do_startup, daemon=True)
+                startup_state['startup_thread'] = startup_thread
+                startup_thread.start()
             
             def check_startup():
-                if startup_thread.is_alive():
+                thread = startup_state.get('startup_thread')
+                if thread is None:
+                    QTimer.singleShot(100, check_startup)
+                    return
+                if thread.is_alive():
                     QTimer.singleShot(100, check_startup)
                 else:
                     splash.close()
