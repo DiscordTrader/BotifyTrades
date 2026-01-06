@@ -15,6 +15,31 @@ openai_imports = collect_submodules('openai')
 ta_imports = collect_submodules('ta')
 crypto_imports = collect_submodules('cryptography')
 
+# Collect broker library submodules (handles all submodules automatically)
+try:
+    tastytrade_imports = collect_submodules('tastytrade')
+except Exception:
+    tastytrade_imports = []
+    print("[BUILD] Warning: tastytrade not installed, skipping submodule collection")
+
+try:
+    upstox_imports = collect_submodules('upstox_client')
+except Exception:
+    upstox_imports = []
+    print("[BUILD] Warning: upstox_client not installed, skipping submodule collection")
+
+try:
+    dhanhq_imports = collect_submodules('dhanhq')
+except Exception:
+    dhanhq_imports = []
+    print("[BUILD] Warning: dhanhq not installed, skipping submodule collection")
+
+try:
+    kiteconnect_imports = collect_submodules('kiteconnect')
+except Exception:
+    kiteconnect_imports = []
+    print("[BUILD] Warning: kiteconnect not installed, skipping submodule collection")
+
 # Get the project root directory (parent of build/)
 import sys
 SPEC_DIR = os.path.dirname(os.path.abspath(SPEC))
@@ -48,7 +73,7 @@ a = Analysis(
         # Include GUI app (Flask web control panel)
         (os.path.join(PROJECT_ROOT, 'gui_app'), 'gui_app'),
     ] + pyarmor_runtime_data,
-    hiddenimports=discord_imports + webull_imports + openai_imports + ta_imports + crypto_imports + pyarmor_hidden + [
+    hiddenimports=discord_imports + webull_imports + openai_imports + ta_imports + crypto_imports + tastytrade_imports + upstox_imports + dhanhq_imports + kiteconnect_imports + pyarmor_hidden + [
         # Market Data
         'yfinance',
         'pandas',
@@ -108,19 +133,12 @@ a = Analysis(
         'alpaca.data',
         'ib_insync',
         
-        # Indian Market Brokers
+        # Indian Market Brokers (submodules collected automatically above)
+        # Fallback entries in case collect_submodules fails
         'upstox_client',
-        'upstox_client.api',
-        'upstox_client.rest',
-        'upstox_client.models',
-        'upstox_client.configuration',
         'dhanhq',
-        'dhanhq.dhanhq',
         'kiteconnect',
-        
-        # Tastytrade
         'tastytrade',
-        'tastytrade.instruments',
         
         # Other dependencies
         'dotenv',
