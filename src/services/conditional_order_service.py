@@ -239,17 +239,25 @@ class BrokerPriceMonitor(PriceMonitor):
     
     async def start(self):
         """Start polling broker for price updates."""
+        import sys
         self.is_running = True
-        print(f"[{self.broker_name.upper()}] Starting price monitor for {self.symbol}")
+        sys.stderr.write(f"[{self.broker_name.upper()}] Starting price monitor for {self.symbol}\n")
+        sys.stderr.flush()
         
+        poll_count = 0
         while self.is_running:
             try:
                 price = await self._fetch_price()
+                poll_count += 1
+                if poll_count <= 3 or poll_count % 10 == 0:
+                    sys.stderr.write(f"[{self.broker_name.upper()}] Poll #{poll_count} for {self.symbol}: price={price}\n")
+                    sys.stderr.flush()
                 if price and price != self.last_price:
                     self.last_price = price
                     await self.callback(self.symbol, price)
             except Exception as e:
-                print(f"[{self.broker_name.upper()}] Error fetching price for {self.symbol}: {e}")
+                sys.stderr.write(f"[{self.broker_name.upper()}] Error fetching price for {self.symbol}: {e}\n")
+                sys.stderr.flush()
             
             await asyncio.sleep(self.poll_interval)
     
@@ -512,6 +520,7 @@ class ConditionalOrderService:
     def __init__(self):
         self.is_running = False
         self.monitors: Dict[int, PriceMonitor] = {}
+        self.monitor_tasks: Dict[int, asyncio.Task] = {}  # Track background monitoring tasks
         self.rate_limiters: Dict[str, RateLimitTracker] = {}
         self.pending_orders: Dict[int, Dict] = {}
         self.finnhub_api_key = os.getenv('FINNHUB_API_KEY', '')
@@ -924,28 +933,40 @@ class ConditionalOrderService:
         
         self.monitors[order_id] = monitor
         
-        try:
-            result = await monitor.start()
-            if result is False:
-                print(f"[CONDITIONAL] ❌ Order #{order_id}: Contract lookup failed - cannot monitor")
+        def _on_monitor_done(task: asyncio.Task, oid: int = order_id):
+            """Callback when monitor task completes (success, error, or cancelled)."""
+            try:
+                result = task.result()
+                if result is False:
+                    print(f"[CONDITIONAL] ❌ Order #{oid}: Contract lookup failed - cannot monitor")
+                    update_conditional_order_status(
+                        oid,
+                        'ERROR',
+                        event='CONTRACT_LOOKUP_FAILED',
+                        error_message='No matching contract found for this expiry/strike. Check if the contract exists.'
+                    )
+                    if oid in self.monitors:
+                        del self.monitors[oid]
+                    if oid in self.pending_orders:
+                        del self.pending_orders[oid]
+                    if oid in self.monitor_tasks:
+                        del self.monitor_tasks[oid]
+            except asyncio.CancelledError:
+                print(f"[CONDITIONAL] Monitor #{oid} cancelled")
+            except Exception as e:
+                print(f"[CONDITIONAL] Monitor error for order #{oid}: {e}")
                 update_conditional_order_status(
-                    order_id,
+                    oid,
                     'ERROR',
-                    event='CONTRACT_LOOKUP_FAILED',
-                    error_message='No matching contract found for this expiry/strike. Check if the contract exists.'
+                    event='MONITOR_ERROR',
+                    error_message=str(e)
                 )
-                if order_id in self.monitors:
-                    del self.monitors[order_id]
-                if order_id in self.pending_orders:
-                    del self.pending_orders[order_id]
-        except Exception as e:
-            print(f"[CONDITIONAL] Monitor error for order #{order_id}: {e}")
-            update_conditional_order_status(
-                order_id,
-                'ERROR',
-                event='MONITOR_ERROR',
-                error_message=str(e)
-            )
+        
+        task = asyncio.create_task(monitor.start())
+        task.add_done_callback(lambda t: _on_monitor_done(t, order_id))
+        self.monitor_tasks[order_id] = task
+        sys.stderr.write(f"[CONDITIONAL] ✓ Started background monitor task for order #{order_id}\n")
+        sys.stderr.flush()
     
     async def _on_price_update(self, order_id: int, symbol: str, price: float):
         """Handle price update from monitor."""
@@ -1002,6 +1023,12 @@ class ConditionalOrderService:
         if order_id in self.monitors:
             await self.monitors[order_id].stop()
             del self.monitors[order_id]
+        
+        if order_id in self.monitor_tasks:
+            task = self.monitor_tasks[order_id]
+            if not task.done():
+                task.cancel()
+            del self.monitor_tasks[order_id]
         
         update_conditional_order_status(
             order_id,
@@ -1066,6 +1093,12 @@ class ConditionalOrderService:
                 self._loop
             )
             del self.monitors[order_id]
+        
+        if order_id in self.monitor_tasks:
+            task = self.monitor_tasks[order_id]
+            if not task.done():
+                task.cancel()
+            del self.monitor_tasks[order_id]
         
         if order_id in self.pending_orders:
             del self.pending_orders[order_id]
