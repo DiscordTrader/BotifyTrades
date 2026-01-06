@@ -426,7 +426,10 @@ class TelegramListener:
         track_enabled = chat_config.get('track_enabled', 0)
         
         if not execute_enabled and not track_enabled:
+            print(f"[TELEGRAM] ⚠️ Channel {msg.chat_id} not configured for execution/tracking (config_key={config_key}, execute={execute_enabled}, track={track_enabled})")
             return
+        
+        print(f"[TELEGRAM] ✓ Processing signal from {msg.chat_name} (execute={execute_enabled}, track={track_enabled})")
         
         signal = None
         

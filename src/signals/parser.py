@@ -1228,6 +1228,8 @@ def parse_india_option_signal(text: str) -> Optional[Dict[str, Any]]:
     text_clean = re.sub(r'__(.+?)__', r'\1', text_clean, flags=re.DOTALL)
     text_clean = re.sub(r'_(.+?)_', r'\1', text_clean, flags=re.DOTALL)
     text_clean = re.sub(r'~~(.+?)~~', r'\1', text_clean, flags=re.DOTALL)
+    text_clean = re.sub(r'`(.+?)`', r'\1', text_clean, flags=re.DOTALL)
+    text_clean = re.sub(r'```(.+?)```', r'\1', text_clean, flags=re.DOTALL)
     
     text_clean = re.sub(r'[\r\n]+', ' ', text_clean)
     text_clean = re.sub(r'\s+', ' ', text_clean).strip()
