@@ -108,6 +108,20 @@ a = Analysis(
         'alpaca.data',
         'ib_insync',
         
+        # Indian Market Brokers
+        'upstox_client',
+        'upstox_client.api',
+        'upstox_client.rest',
+        'upstox_client.models',
+        'upstox_client.configuration',
+        'dhanhq',
+        'dhanhq.dhanhq',
+        'kiteconnect',
+        
+        # Tastytrade
+        'tastytrade',
+        'tastytrade.instruments',
+        
         # Other dependencies
         'dotenv',
         'configparser',
@@ -147,7 +161,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,  # Show console for logs
+    console=False,  # Hide console for GUI mode (hardened build)
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,
