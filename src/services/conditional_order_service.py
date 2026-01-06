@@ -28,7 +28,10 @@ _thread_logs = deque(maxlen=100)
 
 def _log(msg: str, flush: bool = True):
     """Thread-safe logging that captures to both stdout and internal buffer."""
-    timestamp = datetime.now().strftime('%H:%M:%S')
+    if IST:
+        timestamp = datetime.now(IST).strftime('%H:%M:%S')
+    else:
+        timestamp = datetime.now().strftime('%H:%M:%S')
     full_msg = f"[{timestamp}] {msg}"
     _thread_logs.append(full_msg)
     print(msg, flush=flush)
@@ -307,7 +310,7 @@ class IndiaPriceMonitor(PriceMonitor):
         self.opt_type = opt_type
         self.broker_instance = broker_instance
         self.expiry = expiry
-        self.poll_interval = 5
+        self.poll_interval = 2  # Upstox allows 25 req/sec, 250/min - 2s is safe and fast
         self._error_count = 0
         self._max_errors = 10
         self._instrument_key = None
