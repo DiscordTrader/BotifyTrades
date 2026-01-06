@@ -1058,15 +1058,30 @@ class UpstoxBroker(BrokerInterface):
             expiry_contracts = [c for c in contracts if c.get('expiry') == formatted_expiry]
             print(f"[UPSTOX] Filtered to {len(expiry_contracts)} contracts for expiry {formatted_expiry}")
             
+            strike_int = int(float(strike)) if strike else 0
+            opt_type_normalized = opt_type.upper()
+            if opt_type_normalized == 'C':
+                opt_type_normalized = 'CE'
+            elif opt_type_normalized == 'P':
+                opt_type_normalized = 'PE'
+            
+            print(f"[UPSTOX] Looking for strike={strike_int}, opt_type={opt_type_normalized}")
+            
+            if expiry_contracts:
+                sample_types = list(set([c.get('instrument_type', '') for c in expiry_contracts[:20]]))
+                sample_strikes = sorted(list(set([int(float(c.get('strike_price', 0))) for c in expiry_contracts[:20]])))
+                print(f"[UPSTOX] Sample types: {sample_types}, Sample strikes: {sample_strikes[:10]}...")
+            
             for contract in expiry_contracts:
-                if (contract.get('strike_price') == strike and 
-                    contract.get('instrument_type') == opt_type):
+                contract_strike = int(float(contract.get('strike_price', 0)))
+                contract_type = contract.get('instrument_type', '')
+                if contract_strike == strike_int and contract_type == opt_type_normalized:
                     instrument_key = contract.get('instrument_key')
                     lot_size = contract.get('lot_size', 1)
                     print(f"[UPSTOX] ✓ Found instrument key: {instrument_key} (lot_size={lot_size})")
                     return instrument_key, lot_size
             
-            matching_type = [c for c in expiry_contracts if c.get('instrument_type') == opt_type]
+            matching_type = [c for c in expiry_contracts if c.get('instrument_type') == opt_type_normalized]
             if matching_type:
                 closest = min(matching_type, key=lambda c: abs(c.get('strike_price', 0) - strike))
                 closest_strike = closest.get('strike_price')
