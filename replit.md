@@ -80,3 +80,20 @@ The system emphasizes user experience through an interactive setup wizard, GUI-b
 - **FINNHUB_API_KEY**: Market data
 - **GMAIL_APP_PASSWORD**: For Gmail SMTP
 - **SMTP_PASSWORD**: For custom SMTP
+
+## Recent Changes (January 2026)
+
+### Risk Management Broker Filter Fix
+- Fixed critical bug where `get_channel_risk_settings` could return wrong channel settings when multiple brokers have same symbol
+- Both options and stocks SQL queries now filter by broker: `WHERE ... AND LOWER(t.broker) = LOWER(?)`
+- Prevents cross-channel conflicts when same symbol is traded on different brokers
+
+### Conditional Order Broker Selection Priority
+- Conditional orders now prioritize `enabled_brokers` (first element) from Execution page over legacy `broker_override`
+- Orders are rejected if neither `enabled_brokers` nor `broker_override` is configured for the channel
+- Thread-safe async execution using `asyncio.run_coroutine_threadsafe` for cross-thread communication
+
+### Market-Isolated Conditional Order Architecture
+- Each market (US/INDIA/CANADA) has dedicated ConditionalOrderService in isolated thread/event loop
+- Broker-market mapping: Webull/Alpaca/Tastytrade/IBKR/Robinhood/Schwab → US, Upstox/Zerodha/DhanQ → INDIA, Questrade → CANADA
+- Exit mode must be 'hybrid' or 'risk' for automated SL/PT triggers; 'signal' mode disables them

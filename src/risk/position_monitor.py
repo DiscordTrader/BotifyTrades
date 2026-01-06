@@ -109,9 +109,51 @@ class RiskDBAdapter:
                         year = datetime.now().year
                         expiry_variants.append(f"{year}-{parts[0].zfill(2)}-{parts[1].zfill(2)}")
                 
-                # Try each expiry variant
+                # Try each expiry variant - filter by broker to get correct channel settings
                 row = None
                 for exp_try in expiry_variants:
+                    if broker_name:
+                        cursor.execute('''
+                            SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
+                                   c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
+                                   c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
+                                   c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
+                                   c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
+                                   c.exit_strategy_mode
+                            FROM trades t
+                            LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
+                                OR t.channel_id = CAST(c.id AS TEXT)
+                                OR t.channel_id = c.telegram_chat_id)
+                            WHERE t.symbol = ? AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
+                            AND LOWER(t.broker) = LOWER(?)
+                            AND t.status = 'OPEN' AND t.direction = 'BTO'
+                            ORDER BY t.id DESC LIMIT 1
+                        ''', (symbol, strike, exp_try, call_put, broker_name))
+                    else:
+                        cursor.execute('''
+                            SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
+                                   c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
+                                   c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
+                                   c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
+                                   c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
+                                   c.exit_strategy_mode
+                            FROM trades t
+                            LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
+                                OR t.channel_id = CAST(c.id AS TEXT)
+                                OR t.channel_id = c.telegram_chat_id)
+                            WHERE t.symbol = ? AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
+                            AND t.status = 'OPEN' AND t.direction = 'BTO'
+                            ORDER BY t.id DESC LIMIT 1
+                        ''', (symbol, strike, exp_try, call_put))
+                    row = cursor.fetchone()
+                    if row:
+                        break
+                
+                if not row:
+                    return None
+            else:
+                # For stocks, also filter by broker to get correct channel settings
+                if broker_name:
                     cursor.execute('''
                         SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
                                c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
@@ -120,35 +162,30 @@ class RiskDBAdapter:
                                c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
                                c.exit_strategy_mode
                         FROM trades t
-                        LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
+                        LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
                             OR t.channel_id = c.telegram_chat_id)
-                        WHERE t.symbol = ? AND t.asset_type = 'option' AND t.strike = ? AND t.expiry = ? AND t.call_put = ?
+                        WHERE t.symbol = ? AND t.asset_type = 'stock'
+                        AND LOWER(t.broker) = LOWER(?)
                         AND t.status = 'OPEN' AND t.direction = 'BTO'
                         ORDER BY t.id DESC LIMIT 1
-                    ''', (symbol, strike, exp_try, call_put))
-                    row = cursor.fetchone()
-                    if row:
-                        break
-                
-                if not row:
-                    return None
-            else:
-                cursor.execute('''
-                    SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
-                           c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
-                           c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
-                           c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
-                           c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
-                           c.exit_strategy_mode
-                    FROM trades t
-                    LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
-                        OR t.channel_id = CAST(c.id AS TEXT)
-                        OR t.channel_id = c.telegram_chat_id)
-                    WHERE t.symbol = ? AND t.asset_type = 'stock'
-                    AND t.status = 'OPEN' AND t.direction = 'BTO'
-                    ORDER BY t.id DESC LIMIT 1
-                ''', (symbol,))
+                    ''', (symbol, broker_name))
+                else:
+                    cursor.execute('''
+                        SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
+                               c.stop_loss_pct, c.trailing_stop_pct, c.trailing_activation_pct, c.name,
+                               c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
+                               c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
+                               c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
+                               c.exit_strategy_mode
+                        FROM trades t
+                        LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
+                            OR t.channel_id = CAST(c.id AS TEXT)
+                            OR t.channel_id = c.telegram_chat_id)
+                        WHERE t.symbol = ? AND t.asset_type = 'stock'
+                        AND t.status = 'OPEN' AND t.direction = 'BTO'
+                        ORDER BY t.id DESC LIMIT 1
+                    ''', (symbol,))
                 row = cursor.fetchone()
                 if not row:
                     return None
@@ -511,6 +548,7 @@ class RiskManager:
         """Evaluate a single position for risk triggers."""
         pos_key = position.position_key
         broker_position_keys.add(pos_key)
+        
         
         cache = self.cache.get_or_create(
             position, 
