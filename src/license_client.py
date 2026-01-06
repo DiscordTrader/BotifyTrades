@@ -39,6 +39,12 @@ from src.license import (
     LicenseHeartbeat,
     start_license_heartbeat,
     stop_license_heartbeat,
+    
+    # Network Monitor
+    NetworkMonitor,
+    start_network_monitor,
+    stop_network_monitor,
+    show_license_expired_popup,
 )
 
 # Backward compatibility alias
@@ -66,4 +72,8 @@ __all__ = [
     'LicenseHeartbeat',
     'start_license_heartbeat',
     'stop_license_heartbeat',
+    'NetworkMonitor',
+    'start_network_monitor',
+    'stop_network_monitor',
+    'show_license_expired_popup',
 ]

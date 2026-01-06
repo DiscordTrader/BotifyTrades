@@ -49,6 +49,13 @@ from .heartbeat import (
     stop_license_heartbeat,
 )
 
+from .network_monitor import (
+    NetworkMonitor,
+    start_network_monitor,
+    stop_network_monitor,
+    show_license_expired_popup,
+)
+
 # For backward compatibility with old imports
 _verify_signed_token = verify_signed_token
 
@@ -83,4 +90,10 @@ __all__ = [
     'LicenseHeartbeat',
     'start_license_heartbeat',
     'stop_license_heartbeat',
+    
+    # Network Monitor
+    'NetworkMonitor',
+    'start_network_monitor',
+    'stop_network_monitor',
+    'show_license_expired_popup',
 ]

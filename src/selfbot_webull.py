@@ -10298,6 +10298,36 @@ Environment Variables:
             def on_license_ready():
                 startup_state['license_ready'] = True
                 _original_print("[LICENSE] License validated, starting bot...")
+                
+                try:
+                    from src.license import start_network_monitor, show_license_expired_popup
+                    license_key = None
+                    if LICENSE_DATA and LICENSE_DATA.get('license_key'):
+                        license_key = LICENSE_DATA.get('license_key')
+                    elif os.getenv('LICENSE_KEY'):
+                        license_key = os.getenv('LICENSE_KEY')
+                    else:
+                        try:
+                            from src.license_client import LicenseClient
+                            temp_client = LicenseClient()
+                            cache = temp_client._load_cache()
+                            if cache and cache.get('license_key'):
+                                license_key = cache.get('license_key')
+                        except Exception:
+                            pass
+                    
+                    if license_key:
+                        _original_print("[LICENSE] Starting network connectivity monitor...")
+                        start_network_monitor(
+                            license_key=license_key,
+                            check_interval=10,
+                            show_message_callback=show_license_expired_popup
+                        )
+                    else:
+                        _original_print("[LICENSE] Warning: No license key found for network monitor")
+                except Exception as nm_err:
+                    _original_print(f"[LICENSE] Network monitor init error: {nm_err}")
+                
                 startup_thread = threading.Thread(target=do_startup, daemon=True)
                 startup_state['startup_thread'] = startup_thread
                 startup_thread.start()
@@ -10365,6 +10395,35 @@ Environment Variables:
     
     if not use_gui_mode:
         # Console mode: Run without splash screen
+        try:
+            from src.license import start_network_monitor, show_license_expired_popup
+            license_key = None
+            if LICENSE_DATA and LICENSE_DATA.get('license_key'):
+                license_key = LICENSE_DATA.get('license_key')
+            elif os.getenv('LICENSE_KEY'):
+                license_key = os.getenv('LICENSE_KEY')
+            else:
+                try:
+                    from src.license_client import LicenseClient
+                    temp_client = LicenseClient()
+                    cache = temp_client._load_cache()
+                    if cache and cache.get('license_key'):
+                        license_key = cache.get('license_key')
+                except Exception:
+                    pass
+            
+            if license_key:
+                print("[LICENSE] Starting network connectivity monitor...")
+                start_network_monitor(
+                    license_key=license_key,
+                    check_interval=10,
+                    show_message_callback=show_license_expired_popup
+                )
+            else:
+                print("[LICENSE] Warning: No license key found for network monitor")
+        except Exception as nm_err:
+            print(f"[LICENSE] Network monitor init error: {nm_err}")
+        
         discord_thread, telegram_thread, gui_port = run_bot_startup()
         run_main_loop(discord_thread, telegram_thread, gui_port)
         sys.exit(0)
