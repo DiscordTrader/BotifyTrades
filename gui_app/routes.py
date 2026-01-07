@@ -11,6 +11,7 @@ from typing import Optional, Any, Dict, Callable
 from functools import wraps
 from flask import render_template, jsonify, request, make_response, session, redirect, url_for, send_from_directory
 from . import database as db
+from .webhook_service import get_db_connection
 
 # Admin password from environment (set via Replit Secrets)
 # SECURITY: No default password - must be set via environment variable or setup wizard

@@ -14,15 +14,18 @@ logger = logging.getLogger(__name__)
 def get_trading_settings_via_service() -> Dict[str, Any]:
     """
     Get trading settings through database directly.
-    Includes max_position_size_enabled and global_default_quantity.
+    Includes position_sizing_enabled and global_default_quantity.
     """
     try:
         from gui_app import database as db
         settings = db.get_trading_settings()
+        enabled = settings.get('max_position_size_enabled', True)
         return {
             'max_position_size': settings.get('max_position_size', 600),
-            'max_position_size_enabled': settings.get('max_position_size_enabled', True),
+            'max_position_size_enabled': enabled,
+            'position_sizing_enabled': enabled,
             'global_default_quantity': settings.get('global_default_quantity'),
+            'paper_trade': settings.get('paper_trade', False),
         }
     except Exception as e:
         logger.warning(f"[SETTINGS] Could not load via service, using direct DB: {e}")
@@ -109,16 +112,21 @@ def _fallback_trading_settings() -> Dict[str, Any]:
     try:
         from gui_app import database as db
         settings = db.get_trading_settings()
+        enabled = settings.get('max_position_size_enabled', True)
         return {
             'max_position_size': settings.get('max_position_size', 600),
-            'max_position_size_enabled': settings.get('max_position_size_enabled', True),
+            'max_position_size_enabled': enabled,
+            'position_sizing_enabled': enabled,
             'global_default_quantity': settings.get('global_default_quantity'),
+            'paper_trade': settings.get('paper_trade', False),
         }
     except Exception:
         return {
             'max_position_size': 600,
             'max_position_size_enabled': True,
-            'global_default_quantity': None
+            'position_sizing_enabled': True,
+            'global_default_quantity': None,
+            'paper_trade': False,
         }
 
 
