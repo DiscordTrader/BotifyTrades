@@ -5649,6 +5649,25 @@ def register_routes(app):
             print(f"[API] Error fetching conditional order audit: {e}")
             return jsonify({'error': str(e)}), 500
     
+    @app.route('/api/conditional_orders/purge', methods=['POST'])
+    def api_purge_conditional_orders():
+        """Purge completed/cancelled/error conditional orders"""
+        try:
+            data = request.json or {}
+            market = data.get('market', None)
+            keep_active = data.get('keep_active', True)
+            
+            deleted_count = db.purge_conditional_orders(market=market, keep_active=keep_active)
+            
+            return jsonify({
+                'success': True,
+                'deleted_count': deleted_count,
+                'message': f'Purged {deleted_count} conditional order(s)'
+            })
+        except Exception as e:
+            print(f"[API] Error purging conditional orders: {e}")
+            return jsonify({'error': str(e)}), 500
+    
     @app.route('/api/conditional_orders/status', methods=['GET'])
     def api_get_conditional_order_service_status():
         """Get diagnostic status of the conditional order service (router-based)"""

@@ -186,11 +186,16 @@
     <div id="conditional-orders-container" style="display: none;">
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px;">
             <div>
-                <span style="font-size: 0.875rem; color: var(--text-secondary);">Monitoring price conditions for automated execution</span>
+                <span style="font-size: 0.875rem; color: var(--text-secondary);">Monitoring price conditions for automated execution (US/Canada only)</span>
             </div>
-            <button onclick="loadConditionalOrders()" class="btn btn-small" style="background: linear-gradient(135deg, #10b981, #059669);">
-                🔄 Refresh
-            </button>
+            <div style="display: flex; gap: 8px;">
+                <button onclick="purgeConditionalOrders()" class="btn btn-small" style="background: linear-gradient(135deg, #ef4444, #dc2626);" title="Remove executed/cancelled orders">
+                    🗑️ Purge
+                </button>
+                <button onclick="loadConditionalOrders()" class="btn btn-small" style="background: linear-gradient(135deg, #10b981, #059669);">
+                    🔄 Refresh
+                </button>
+            </div>
         </div>
         <div id="conditional-orders-table">
             <div style="text-align: center; padding: 60px 20px;">
@@ -1515,9 +1520,15 @@ async function loadConditionalOrders() {
     try {
         const response = await fetch('/api/conditional_orders');
         const data = await response.json();
-        const orders = data.orders || [];
+        let orders = data.orders || [];
         
-        console.log('[loadConditionalOrders] Orders:', orders);
+        // Filter out India market orders - they have their own page
+        orders = orders.filter(o => {
+            const market = (o.market || 'US').toUpperCase();
+            return market !== 'INDIA' && market !== 'IN';
+        });
+        
+        console.log('[loadConditionalOrders] Orders (excluding India):', orders);
         
         // Update summary
         const summaryEl = document.getElementById('summary-text');
@@ -1739,6 +1750,28 @@ async function cancelConditionalOrder(orderId) {
             loadConditionalOrders();
         } else {
             alert('Failed to cancel: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+async function purgeConditionalOrders() {
+    if (!confirm('Remove all executed, cancelled, and error conditional orders? Active orders will be kept.')) return;
+    
+    try {
+        const response = await fetch('/api/conditional_orders/purge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keep_active: true })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            alert(`Purged ${result.deleted_count} order(s)`);
+            loadConditionalOrders();
+        } else {
+            alert('Failed to purge: ' + (result.error || 'Unknown error'));
         }
     } catch (error) {
         alert('Error: ' + error.message);

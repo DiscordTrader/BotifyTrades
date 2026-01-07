@@ -8127,6 +8127,49 @@ def cancel_conditional_order(order_id: int, reason: str = 'User cancelled') -> b
     )
 
 
+def purge_conditional_orders(market: str = None, keep_active: bool = True) -> int:
+    """Purge completed/cancelled/error conditional orders, optionally filtered by market.
+    
+    Args:
+        market: Optional market filter ('US', 'INDIA', 'CANADA'). If None, purges all markets.
+        keep_active: If True, only delete orders that are not actively monitoring
+        
+    Returns:
+        Number of orders deleted
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        non_active_statuses = ('EXECUTED', 'CANCELED', 'CANCELLED', 'ERROR', 'EXPIRED', 'FAILED')
+        
+        if market:
+            if keep_active:
+                cursor.execute('''
+                    DELETE FROM conditional_orders
+                    WHERE market = ? AND status IN (?, ?, ?, ?, ?, ?)
+                ''', (market, *non_active_statuses))
+            else:
+                cursor.execute('DELETE FROM conditional_orders WHERE market = ?', (market,))
+        else:
+            if keep_active:
+                cursor.execute('''
+                    DELETE FROM conditional_orders
+                    WHERE status IN (?, ?, ?, ?, ?, ?)
+                ''', non_active_statuses)
+            else:
+                cursor.execute('DELETE FROM conditional_orders')
+        
+        deleted_count = cursor.rowcount
+        conn.commit()
+        print(f"[DATABASE] Purged {deleted_count} conditional orders (market={market}, keep_active={keep_active})")
+        return deleted_count
+    except Exception as e:
+        print(f"[DATABASE] Error purging conditional orders: {e}")
+        conn.rollback()
+        return 0
+
+
 def update_conditional_order_trigger_offset(order_id: int, offset_percent: float) -> bool:
     """Update the trigger offset for a conditional order and recalculate adjusted price"""
     conn = get_connection()
