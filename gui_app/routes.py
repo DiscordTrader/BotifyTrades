@@ -5650,27 +5650,44 @@ def register_routes(app):
     
     @app.route('/api/conditional_orders/status', methods=['GET'])
     def api_get_conditional_order_service_status():
-        """Get diagnostic status of the conditional order service"""
+        """Get diagnostic status of the conditional order service (router-based)"""
         try:
-            from src.services.conditional_order_service import conditional_order_service, get_thread_logs
+            from src.services.conditional_orders.router import conditional_order_router
             
-            thread_alive = False
-            thread_id = None
-            if conditional_order_service._thread:
-                thread_alive = conditional_order_service._thread.is_alive()
-                thread_id = conditional_order_service._thread.ident
+            all_brokers = []
+            total_monitors = 0
+            any_running = False
+            market_status = {}
+            
+            for market, service in conditional_order_router.market_services.items():
+                is_running = service.is_running
+                brokers = list(service.broker_instances.keys())
+                monitors = len(service.monitors)
+                
+                market_status[market] = {
+                    'running': is_running,
+                    'brokers': brokers,
+                    'monitors': monitors,
+                    'active_order_ids': list(service.monitors.keys())
+                }
+                
+                all_brokers.extend(brokers)
+                total_monitors += monitors
+                if is_running:
+                    any_running = True
             
             return jsonify({
                 'success': True,
-                'service_running': conditional_order_service.is_running,
-                'thread_alive': thread_alive,
-                'thread_id': thread_id,
-                'monitors_count': len(conditional_order_service.monitors),
-                'pending_orders_count': len(conditional_order_service.pending_orders),
-                'registered_brokers': list(conditional_order_service.broker_instances.keys()),
-                'loop_running': conditional_order_service._loop is not None and conditional_order_service._loop.is_running() if conditional_order_service._loop else False,
-                'active_monitor_ids': list(conditional_order_service.monitors.keys()),
-                'recent_logs': get_thread_logs()[-20:],
+                'service_running': any_running,
+                'thread_alive': any_running,
+                'thread_id': None,
+                'monitors_count': total_monitors,
+                'pending_orders_count': 0,
+                'registered_brokers': all_brokers,
+                'loop_running': any_running,
+                'active_monitor_ids': [],
+                'recent_logs': [],
+                'market_services': market_status
             })
         except Exception as e:
             import traceback
