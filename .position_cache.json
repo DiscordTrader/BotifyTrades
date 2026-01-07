@@ -3806,5 +3806,21 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "created_at": "2026-01-07T15:07:14.814745"
+  },
+  "ALPACA_PAPER_SMX_stock": {
+    "entry_price": 30.47,
+    "highest_price": 30.64,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-07T15:34:22.984072"
   }
 }

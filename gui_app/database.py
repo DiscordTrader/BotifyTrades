@@ -486,6 +486,14 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added market column for regional segmentation (US, IN, CA)")
     
+    # Migrate: Add trade_summary_enabled column for per-channel P/L posting toggle
+    try:
+        cursor.execute('SELECT trade_summary_enabled FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN trade_summary_enabled INTEGER DEFAULT 1')
+        conn.commit()
+        print("[DATABASE] ✓ Added trade_summary_enabled column for per-channel P/L posting")
+    
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -912,6 +920,14 @@ def init_db():
         cursor.execute('ALTER TABLE trading_settings ADD COLUMN max_position_size_enabled INTEGER DEFAULT 1')
         conn.commit()
         print("[DATABASE] ✓ Added max_position_size_enabled column to trading_settings")
+    
+    # Migrate: Add trade_summary_enabled column to trading_settings (global toggle)
+    try:
+        cursor.execute('SELECT trade_summary_enabled FROM trading_settings LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE trading_settings ADD COLUMN trade_summary_enabled INTEGER DEFAULT 1')
+        conn.commit()
+        print("[DATABASE] ✓ Added trade_summary_enabled column to trading_settings (global toggle)")
     
     # Discord settings (moved from config.ini to GUI)
     cursor.execute('''
