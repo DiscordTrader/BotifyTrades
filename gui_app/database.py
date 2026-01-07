@@ -4223,7 +4223,7 @@ def get_trading_settings() -> Dict[str, Any]:
     cursor = conn.cursor()
     
     cursor.execute('''
-        SELECT max_position_size, updated_at, global_default_quantity, max_position_size_enabled
+        SELECT max_position_size, updated_at, global_default_quantity, max_position_size_enabled, trade_summary_enabled
         FROM trading_settings
         WHERE id = 1
     ''')
@@ -4234,18 +4234,20 @@ def get_trading_settings() -> Dict[str, Any]:
             'max_position_size': int(row['max_position_size']),
             'updated_at': row['updated_at'],
             'global_default_quantity': row['global_default_quantity'],
-            'max_position_size_enabled': bool(row['max_position_size_enabled']) if row['max_position_size_enabled'] is not None else True
+            'max_position_size_enabled': bool(row['max_position_size_enabled']) if row['max_position_size_enabled'] is not None else True,
+            'trade_summary_enabled': bool(row['trade_summary_enabled']) if row['trade_summary_enabled'] is not None else True
         }
     
     return {
         'max_position_size': 600,
         'updated_at': None,
         'global_default_quantity': None,
-        'max_position_size_enabled': True
+        'max_position_size_enabled': True,
+        'trade_summary_enabled': True
     }
 
 
-def update_trading_settings(max_position_size: int, global_default_quantity: int = None, max_position_size_enabled: bool = True) -> bool:
+def update_trading_settings(max_position_size: int, global_default_quantity: int = None, max_position_size_enabled: bool = True, trade_summary_enabled: bool = True) -> bool:
     """Update trading settings"""
     conn = get_connection()
     cursor = conn.cursor()
@@ -4256,15 +4258,59 @@ def update_trading_settings(max_position_size: int, global_default_quantity: int
             SET max_position_size = ?,
                 global_default_quantity = ?,
                 max_position_size_enabled = ?,
+                trade_summary_enabled = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = 1
-        ''', (int(max_position_size), global_default_quantity, 1 if max_position_size_enabled else 0))
+        ''', (int(max_position_size), global_default_quantity, 1 if max_position_size_enabled else 0, 1 if trade_summary_enabled else 0))
         
         conn.commit()
         return True
     except Exception as e:
         print(f"[DATABASE] Error updating trading settings: {e}")
         return False
+
+
+def is_trade_summary_enabled(channel_id: str = None) -> bool:
+    """Check if trade summary posting is enabled.
+    
+    Checks both global setting and per-channel setting (if channel_id provided).
+    Returns True only if both global AND channel settings allow it.
+    
+    Args:
+        channel_id: Optional Discord channel ID to check per-channel setting
+        
+    Returns:
+        True if trade summary should be posted, False otherwise
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Check global setting first
+    try:
+        cursor.execute('SELECT trade_summary_enabled FROM trading_settings WHERE id = 1')
+        row = cursor.fetchone()
+        global_enabled = bool(row['trade_summary_enabled']) if row and row['trade_summary_enabled'] is not None else True
+        
+        if not global_enabled:
+            return False  # Global disabled, skip channel check
+    except Exception as e:
+        print(f"[DATABASE] Error checking global trade_summary_enabled: {e}")
+        global_enabled = True  # Default to enabled on error
+    
+    # If no channel_id, return global setting
+    if not channel_id:
+        return global_enabled
+    
+    # Check per-channel setting
+    try:
+        cursor.execute('SELECT trade_summary_enabled FROM channels WHERE discord_channel_id = ?', (str(channel_id),))
+        row = cursor.fetchone()
+        if row and row['trade_summary_enabled'] is not None:
+            return bool(row['trade_summary_enabled'])
+        return True  # Default to enabled if not set
+    except Exception as e:
+        print(f"[DATABASE] Error checking channel trade_summary_enabled: {e}")
+        return True  # Default to enabled on error
 
 
 # ============ DISCORD SETTINGS ============

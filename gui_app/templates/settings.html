@@ -1162,6 +1162,16 @@ input:checked + .slider:before {
             <input type="number" id="global-default-quantity" min="1" max="1000" step="1" placeholder="1">
             <p class="help-text">Default contracts/shares when signal has no qty (required when max position size is disabled)</p>
         </div>
+        <div class="form-group" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <label class="toggle-label">
+                <span>Post Trade Summary (P/L)</span>
+                <label class="switch">
+                    <input type="checkbox" id="trade-summary-enabled" checked>
+                    <span class="slider"></span>
+                </label>
+            </label>
+            <p class="help-text">Automatically post P/L summary messages when closing positions. Can also be controlled per-channel in Execution settings.</p>
+        </div>
         <div class="btn-group">
             <button id="save-trading" class="btn btn-success">💾 Save Settings</button>
             <span id="trading-save-message" style="margin-left: 12px; font-weight: 600;"></span>
@@ -2527,6 +2537,12 @@ async function loadTradingSettings() {
         const enabledCheckbox = document.getElementById('max-position-size-enabled');
         enabledCheckbox.checked = settings.max_position_size_enabled !== false;
         toggleMaxPositionSize(enabledCheckbox.checked);
+        
+        // Trade Summary setting
+        const tradeSummaryCheckbox = document.getElementById('trade-summary-enabled');
+        if (tradeSummaryCheckbox) {
+            tradeSummaryCheckbox.checked = settings.trade_summary_enabled !== false;
+        }
     } catch (error) {
         console.error('Error loading trading settings:', error);
     }
@@ -2535,6 +2551,7 @@ async function loadTradingSettings() {
 document.getElementById('save-trading').addEventListener('click', async () => {
     const globalDefaultQtyValue = document.getElementById('global-default-quantity').value;
     const maxPositionSizeEnabled = document.getElementById('max-position-size-enabled').checked;
+    const tradeSummaryEnabled = document.getElementById('trade-summary-enabled')?.checked ?? true;
     
     // Validate: if max position size is disabled, global default quantity is required
     if (!maxPositionSizeEnabled && (!globalDefaultQtyValue || globalDefaultQtyValue === '')) {
@@ -2548,7 +2565,8 @@ document.getElementById('save-trading').addEventListener('click', async () => {
     const data = {
         max_position_size: parseInt(document.getElementById('max-position-size').value),
         global_default_quantity: globalDefaultQtyValue === '' ? null : parseInt(globalDefaultQtyValue),
-        max_position_size_enabled: maxPositionSizeEnabled
+        max_position_size_enabled: maxPositionSizeEnabled,
+        trade_summary_enabled: tradeSummaryEnabled
     };
     
     try {

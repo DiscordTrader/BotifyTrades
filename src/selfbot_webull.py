@@ -7949,20 +7949,30 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             self._save_signal_to_db(opt, message.channel.id, message.id, author_name)
             print(f"[DATABASE] ✓ Signal saved to database with option details")
             
-            # Post Trade Summary for STC signals with PNL data
+            # Post Trade Summary for STC signals with PNL data (if enabled)
             if opt['action'] == 'STC' and opt.get('_pnl_result'):
-                pnl = opt['_pnl_result']
-                pnl_emoji = "🟢" if pnl['total_pnl'] >= 0 else "🔴"
-                summary_msg = (
-                    f"**Trade Summary - {opt['symbol']}**\n"
-                    f"{pnl_emoji} P/L: **${pnl['total_pnl']:+,.2f}** ({pnl['pnl_pct']:+.1f}%)\n"
-                    f"📊 {pnl['total_qty']} contracts @ ${pnl['avg_entry']:.2f} → ${pnl['exit_price']:.2f}"
-                )
+                # Check if trade summary is enabled (global + per-channel)
                 try:
-                    await message.channel.send(summary_msg)
-                    print(f"[PNL_TRACKER] ✓ Posted Trade Summary to channel {message.channel.id}")
+                    trade_summary_enabled = db.is_trade_summary_enabled(str(message.channel.id))
                 except Exception as e:
-                    print(f"[PNL_TRACKER] ❌ Failed to post Trade Summary: {e}")
+                    print(f"[PNL_TRACKER] Error checking trade_summary_enabled: {e}")
+                    trade_summary_enabled = True  # Default to enabled on error
+                
+                if trade_summary_enabled:
+                    pnl = opt['_pnl_result']
+                    pnl_emoji = "🟢" if pnl['total_pnl'] >= 0 else "🔴"
+                    summary_msg = (
+                        f"**Trade Summary - {opt['symbol']}**\n"
+                        f"{pnl_emoji} P/L: **${pnl['total_pnl']:+,.2f}** ({pnl['pnl_pct']:+.1f}%)\n"
+                        f"📊 {pnl['total_qty']} contracts @ ${pnl['avg_entry']:.2f} → ${pnl['exit_price']:.2f}"
+                    )
+                    try:
+                        await message.channel.send(summary_msg)
+                        print(f"[PNL_TRACKER] ✓ Posted Trade Summary to channel {message.channel.id}")
+                    except Exception as e:
+                        print(f"[PNL_TRACKER] ❌ Failed to post Trade Summary: {e}")
+                else:
+                    print(f"[PNL_TRACKER] ⏭️ Trade Summary disabled for channel {message.channel.id}")
             
             # Execute if execute_enabled flag is True (category is for UI organization only)
             if execute_enabled:
