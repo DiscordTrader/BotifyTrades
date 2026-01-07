@@ -3729,7 +3729,7 @@
   },
   "ALPACA_PAPER_ZETA_stock": {
     "entry_price": 23.45,
-    "highest_price": 23.605,
+    "highest_price": 23.61,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
