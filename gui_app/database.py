@@ -1826,7 +1826,7 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
                stop_loss_pct, trailing_stop_pct, trailing_activation_pct, position_size_pct,
                created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct,
                profit_target_4_pct, profit_target_qty_1, profit_target_qty_2, profit_target_qty_3,
-               profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode
+               profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode, trade_summary_enabled
         FROM channels WHERE id = ?
     ''', (channel_id,))
     
@@ -1865,7 +1865,8 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
         'profit_target_qty_4': row[27],
         'trim_order_mode': row[28] if row[28] else 'market',
         'trim_limit_offset': row[29] if row[29] is not None else 0.01,
-        'exit_strategy_mode': row[30] if row[30] else 'signal'
+        'exit_strategy_mode': row[30] if row[30] else 'signal',
+        'trade_summary_enabled': bool(row[31]) if len(row) > 31 and row[31] is not None else True
     }
 
 
@@ -1881,7 +1882,7 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
                stop_loss_pct, trailing_stop_pct, trailing_activation_pct, position_size_pct,
                created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct,
                profit_target_4_pct, profit_target_qty_1, profit_target_qty_2, profit_target_qty_3,
-               profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode
+               profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode, trade_summary_enabled
         FROM channels WHERE discord_channel_id = ?
     ''', (str(discord_channel_id),))
     
@@ -1920,7 +1921,8 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
         'profit_target_qty_4': row[27],
         'trim_order_mode': row[28] if row[28] else 'market',
         'trim_limit_offset': row[29] if row[29] is not None else 0.01,
-        'exit_strategy_mode': row[30] if len(row) > 30 and row[30] else 'signal'
+        'exit_strategy_mode': row[30] if len(row) > 30 and row[30] else 'signal',
+        'trade_summary_enabled': bool(row[31]) if len(row) > 31 and row[31] is not None else True
     }
 
 

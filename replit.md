@@ -115,3 +115,11 @@ The system emphasizes user experience through an interactive setup wizard, GUI-b
 - Each market (US/INDIA/CANADA) has dedicated ConditionalOrderService in isolated thread/event loop
 - Broker-market mapping: Webull/Alpaca/Tastytrade/IBKR/Robinhood/Schwab → US, Upstox/Zerodha/DhanQ → INDIA, Questrade → CANADA
 - Exit mode must be 'hybrid' or 'risk' for automated SL/PT triggers; 'signal' mode disables them
+
+### Trade Summary (P/L Posting) Controls
+- Added dual-level Trade Summary controls: global toggle in Settings page + per-channel toggle in Execution page
+- Global setting (`trade_summary_enabled` in trading_settings table) - enables/disables P/L posting across all channels
+- Per-channel setting (`trade_summary_enabled` in channels table) - allows individual channel control
+- System checks both levels before posting: global must be ON and channel must be ON (defaults to enabled)
+- Per-channel toggle located in Risk Management expandable section on Execution page alongside Leave Runner
+- Saved via "Save Risk Settings" button with other channel risk management settings
