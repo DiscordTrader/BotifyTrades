@@ -3617,7 +3617,7 @@
   },
   "ALPACA_PAPER_NFLX_stock": {
     "entry_price": 90.61,
-    "highest_price": 90.69,
+    "highest_price": 91.31,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
