@@ -68,6 +68,7 @@ class SplashScreen(QWidget):
         self.progress_reporter = progress_reporter
         self.skip_license = skip_license
         self.license_controller = LicenseController() if LicenseController else None
+        self._license_check_started = False
         self._setup_ui()
         self._connect_signals()
     
@@ -168,6 +169,9 @@ class SplashScreen(QWidget):
         
         self._create_license_panel()
         self._create_progress_panel()
+        
+        # Default to progress panel (index 1) - will switch to license panel if needed
+        self.stacked_widget.setCurrentIndex(1)
         
         container_layout.addWidget(self.stacked_widget)
         
@@ -401,6 +405,42 @@ class SplashScreen(QWidget):
             self.progress_reporter.startup_complete.connect(self._on_startup_complete)
             self.progress_reporter.startup_failed.connect(self._on_startup_failed)
     
+    def showEvent(self, event):
+        """Called when splash screen is shown - trigger license check immediately"""
+        super().showEvent(event)
+        
+        # Use QTimer to allow splash to paint first, then start license check
+        if not self._license_check_started:
+            self._license_check_started = True
+            QTimer.singleShot(50, self._auto_license_check)
+    
+    def _auto_license_check(self):
+        """Automatically check for existing license when splash is shown"""
+        if self.skip_license:
+            # License already validated externally - defer emission to next event loop cycle
+            # to ensure caller has connected the signal before we emit
+            self.status_label.setText("License verified - starting...")
+            QTimer.singleShot(0, self.startup_ready.emit)
+            return
+        
+        # Show "Checking license..." in progress panel
+        self.status_label.setText("Checking license...")
+        QApplication.processEvents()
+        
+        if self.license_controller:
+            # This will emit signals - if valid, goes to ACTIVATED
+            # If invalid/missing, goes to REQUIRE_KEY which triggers _on_require_input
+            self.license_controller.check_existing_license()
+        else:
+            # No controller - check environment variable
+            license_key = os.getenv('LICENSE_KEY', '').strip()
+            if license_key:
+                self.license_info.setText("License: Active")
+                self.status_label.setText("Starting...")
+                QTimer.singleShot(0, self.startup_ready.emit)
+            else:
+                self._show_license_panel()
+    
     def start_license_check(self):
         """Start the license validation process"""
         if self.skip_license:
@@ -462,7 +502,11 @@ class SplashScreen(QWidget):
     def _on_license_state_changed(self, state: 'LicenseState', message: str):
         """Handle license state changes"""
         if state == LicenseState.VALIDATING:
-            self._show_validating()
+            self.status_label.setText("Validating license...")
+        elif state == LicenseState.ACTIVATED or state == LicenseState.OFFLINE_GRACE:
+            # License is valid - stay on progress panel and emit startup_ready
+            # The license_activated signal will also be emitted separately
+            self.status_label.setText("License valid - starting...")
         elif state == LicenseState.REQUIRE_KEY:
             self._show_license_panel()
             self.license_input.setEnabled(True)

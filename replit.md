@@ -83,6 +83,14 @@ The system emphasizes user experience through an interactive setup wizard, GUI-b
 
 ## Recent Changes (January 2026)
 
+### Splash Screen License Flow Fix
+- Fixed bug where splash screen would re-prompt for license key after activation on restart
+- Splash screen now defaults to progress panel (index 1) instead of license panel
+- Added showEvent handler that triggers cached license check automatically via QTimer
+- License check now properly loads from database cache before prompting user
+- Fixed race condition where startup_ready signal was emitted before caller connected - now deferred via QTimer.singleShot(0)
+- Hidden all license server URLs, machine IDs, and server responses from console logs for security
+
 ### Network Connectivity Monitor for License Validation
 - Added `NetworkMonitor` class (`src/license/network_monitor.py`) that monitors internet connectivity every 10 seconds
 - Automatically validates license when internet connection is restored after being offline

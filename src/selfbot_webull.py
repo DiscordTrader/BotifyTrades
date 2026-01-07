@@ -10260,9 +10260,7 @@ Environment Variables:
             splash = SplashScreen(progress, skip_license=license_bypass)
             splash.show()
             app.processEvents()
-            
-            if not license_bypass:
-                splash.start_license_check()
+            # License check is now triggered automatically in showEvent
             
             worker = StartupWorker()
             worker.progress_signal.connect(lambda step, msg: progress.update(step, msg))
