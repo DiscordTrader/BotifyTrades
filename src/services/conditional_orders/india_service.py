@@ -60,8 +60,27 @@ class IndiaPriceMonitor(PriceMonitor):
         if not self.broker_instance:
             return None
         
-        if hasattr(self.broker_instance, 'get_option_instrument_key'):
-            try:
+        try:
+            # Try Upstox _lookup_instrument_key method first
+            if hasattr(self.broker_instance, '_lookup_instrument_key'):
+                result = await self.broker_instance._lookup_instrument_key(
+                    self.symbol,
+                    float(self.strike) if self.strike else 0,
+                    self.opt_type[0].upper() if self.opt_type else 'C',
+                    self.expiry
+                )
+                # Result can be tuple (key, lot_size) or just key
+                if isinstance(result, tuple):
+                    key = result[0]
+                else:
+                    key = result
+                if key:
+                    sys.stderr.write(f"[INDIA] ✓ Found instrument key for {self.symbol} {self.strike}{self.opt_type}: {key}\n")
+                    sys.stderr.flush()
+                    return key
+            
+            # Fallback to get_option_instrument_key
+            elif hasattr(self.broker_instance, 'get_option_instrument_key'):
                 key = await self.broker_instance.get_option_instrument_key(
                     self.symbol,
                     self.strike,
@@ -69,12 +88,12 @@ class IndiaPriceMonitor(PriceMonitor):
                     self.expiry
                 )
                 if key:
-                    sys.stderr.write(f"[INDIA] Found instrument key for {self.symbol} {self.strike}{self.opt_type}: {key}\n")
+                    sys.stderr.write(f"[INDIA] ✓ Found instrument key for {self.symbol} {self.strike}{self.opt_type}: {key}\n")
                     sys.stderr.flush()
                     return key
-            except Exception as e:
-                sys.stderr.write(f"[INDIA] Instrument lookup error: {e}\n")
-                sys.stderr.flush()
+        except Exception as e:
+            sys.stderr.write(f"[INDIA] Instrument lookup error: {e}\n")
+            sys.stderr.flush()
         
         return None
     
