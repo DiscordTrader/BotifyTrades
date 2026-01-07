@@ -49,7 +49,7 @@
   },
   "ALPACA_PAPER_SPY_stock": {
     "entry_price": 687.49,
-    "highest_price": 692.98,
+    "highest_price": 693.93,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3201,7 +3201,7 @@
   },
   "ALPACA_PAPER_CLPT_stock": {
     "entry_price": 14.9,
-    "highest_price": 15.39,
+    "highest_price": 15.755,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3521,7 +3521,7 @@
   },
   "ALPACA_PAPER_GOOGL_320.0_2026-01-09_C": {
     "entry_price": 1.0,
-    "highest_price": 4.55,
+    "highest_price": 5.45,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3601,7 +3601,7 @@
   },
   "ALPACA_PAPER_RBLX_80.0_2026-01-16_C": {
     "entry_price": 1.27,
-    "highest_price": 1.3,
+    "highest_price": 1.38,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3729,7 +3729,7 @@
   },
   "ALPACA_PAPER_ZETA_stock": {
     "entry_price": 23.45,
-    "highest_price": 23.554,
+    "highest_price": 23.575,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3745,7 +3745,7 @@
   },
   "ALPACA_PAPER_SLRX_stock": {
     "entry_price": 0.7993,
-    "highest_price": 0.79,
+    "highest_price": 0.8358,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3809,7 +3809,7 @@
   },
   "ALPACA_PAPER_SMX_stock": {
     "entry_price": 30.47,
-    "highest_price": 34.5,
+    "highest_price": 36.71,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
