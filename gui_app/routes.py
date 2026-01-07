@@ -5659,7 +5659,7 @@ def register_routes(app):
             any_running = False
             market_status = {}
             
-            for market, service in conditional_order_router.market_services.items():
+            for market, service in conditional_order_router._services.items():
                 is_running = service.is_running
                 brokers = list(service.broker_instances.keys())
                 monitors = len(service.monitors)
