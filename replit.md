@@ -39,6 +39,18 @@ The **Portfolio Simulation Engine** projects portfolio growth using various posi
 
 **Signal Tracking System** provides comprehensive lifecycle tracking for all signals from detection through broker execution with full audit trails. Features include full signal lifecycle states, immutable audit trail, filtering by various parameters, market-specific signal history pages and API endpoints, P&L tracking, broker response and error logging, and specific parsing for Indian and US signals.
 
+**Connection Health Monitoring System** provides industrial-grade real-time monitoring for all services:
+- Real-time connection status widget on Dashboard with color-coded indicators (green=connected, red=disconnected, yellow=reconnecting, gray=not configured)
+- Specific disconnect reasons detected: token_invalid (Discord 4004), token_expired, rate_limited (429), network_timeout, auth_failed, websocket_closed, session_expired
+- Toast popup alerts when services disconnect with detailed reasons
+- Toast notifications when services reconnect successfully
+- API endpoint `/api/connection-status` returns all service states and alerts
+- Event history stored in `connection_health_events` database table
+- ConnectionMonitor singleton service in `src/connection_monitor.py`
+- Integrated with Discord on_ready, on_disconnect, on_resumed, and error handlers
+- 15-second polling interval for status updates on dashboard
+- Exponential backoff reconnection policy with configurable max attempts
+
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ.
 
