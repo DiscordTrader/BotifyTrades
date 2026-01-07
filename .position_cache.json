@@ -3521,7 +3521,7 @@
   },
   "ALPACA_PAPER_GOOGL_320.0_2026-01-09_C": {
     "entry_price": 1.0,
-    "highest_price": 5.55,
+    "highest_price": 6.0,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3729,7 +3729,7 @@
   },
   "ALPACA_PAPER_ZETA_stock": {
     "entry_price": 23.45,
-    "highest_price": 23.575,
+    "highest_price": 23.605,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,

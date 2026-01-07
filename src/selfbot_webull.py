@@ -6993,18 +6993,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         
         print(f"[DEBUG] target_execution_channel_id={target_execution_channel_id}")
         
+        # Support for multiple conversion channel IDs (comma-separated)
+        conversion_channel_ids = set()
+        if CONVERSION_CHANNEL_ID:
+            conversion_channel_ids.add(CONVERSION_CHANNEL_ID)
+        
         if not is_mapped_source_channel and DATABASE_MODULE_AVAILABLE:
             from gui_app import database as db
-            # Fall back to single conversion channel settings
+            # Fall back to conversion channel settings (supports multiple comma-separated IDs)
             conversion_settings = db.get_signal_conversion_settings()
-            db_conversion_channel_id = conversion_settings.get('conversion_channel_id', '').strip()
-            if db_conversion_channel_id:
-                active_conversion_channel_id = int(db_conversion_channel_id)
+            db_conversion_channel_ids = conversion_settings.get('conversion_channel_id', '').strip()
+            if db_conversion_channel_ids:
+                # Parse comma-separated channel IDs
+                for channel_id_str in db_conversion_channel_ids.split(','):
+                    channel_id_str = channel_id_str.strip()
+                    if channel_id_str.isdigit():
+                        conversion_channel_ids.add(int(channel_id_str))
+                        active_conversion_channel_id = int(channel_id_str)  # Keep for backward compat
             target_execution_channel_id = conversion_settings.get('target_execution_channel_id', '').strip()
         
-        # Check if this is a mapped source channel OR the single conversion channel
+        # Check if this is a mapped source channel OR one of the conversion channels
+        is_in_conversion_channels = message.channel.id in conversion_channel_ids
         should_convert = (is_mapped_source_channel or 
-                         (ENABLE_SIGNAL_CONVERSION and active_conversion_channel_id and message.channel.id == active_conversion_channel_id))
+                         (ENABLE_SIGNAL_CONVERSION and conversion_channel_ids and is_in_conversion_channels))
         
         print(f"[DEBUG] should_convert={should_convert}, starts_with_bang={message.content.strip().startswith('!')}")
         
