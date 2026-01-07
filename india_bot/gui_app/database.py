@@ -93,19 +93,27 @@ def init_database():
                 expiry TEXT,
                 opt_type TEXT,
                 trigger_type TEXT NOT NULL,
+                trigger_direction TEXT DEFAULT 'OVER',
                 trigger_price REAL NOT NULL,
                 current_price REAL,
                 status TEXT DEFAULT 'PENDING',
                 broker TEXT,
                 channel_id TEXT,
+                channel_name TEXT,
                 lots INTEGER DEFAULT 1,
+                quantity INTEGER,
                 stop_loss REAL,
                 targets TEXT,
+                action TEXT DEFAULT 'BTO',
                 order_id TEXT,
                 error_message TEXT,
+                signal_id INTEGER,
+                message_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 triggered_at TIMESTAMP,
-                executed_at TIMESTAMP
+                executed_at TIMESTAMP,
+                cancelled_at TIMESTAMP,
+                last_price_update TIMESTAMP
             )
         ''')
         
@@ -131,6 +139,32 @@ def init_database():
         
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS upstox_pending_orders (
+                pending_order_id TEXT PRIMARY KEY,
+                signal_data TEXT NOT NULL,
+                status TEXT DEFAULT 'PENDING',
+                reason TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP,
+                broker_order_id TEXT,
+                error_message TEXT
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS zerodha_pending_orders (
+                pending_order_id TEXT PRIMARY KEY,
+                signal_data TEXT NOT NULL,
+                status TEXT DEFAULT 'PENDING',
+                reason TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP,
+                broker_order_id TEXT,
+                error_message TEXT
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS dhanq_pending_orders (
                 pending_order_id TEXT PRIMARY KEY,
                 signal_data TEXT NOT NULL,
                 status TEXT DEFAULT 'PENDING',
@@ -234,25 +268,33 @@ def get_conditional_orders(status: str = None) -> List[Dict[str, Any]]:
         return [dict(row) for row in rows]
 
 def create_conditional_order(order: Dict[str, Any]) -> int:
-    """Create a conditional order"""
+    """Create a conditional order with full audit trail"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
             INSERT INTO india_conditional_orders 
-            (symbol, strike, expiry, opt_type, trigger_type, trigger_price, broker, channel_id, lots, stop_loss, targets)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (symbol, strike, expiry, opt_type, trigger_type, trigger_direction, trigger_price, 
+             broker, channel_id, channel_name, lots, quantity, stop_loss, targets, action,
+             signal_id, message_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             order.get('symbol'),
             order.get('strike'),
             order.get('expiry'),
             order.get('opt_type'),
             order.get('trigger_type'),
+            order.get('trigger_direction', 'OVER'),
             order.get('trigger_price'),
             order.get('broker'),
             order.get('channel_id'),
+            order.get('channel_name'),
             order.get('lots', 1),
+            order.get('quantity'),
             order.get('stop_loss'),
-            json.dumps(order.get('targets', []))
+            json.dumps(order.get('targets', [])),
+            order.get('action', 'BTO'),
+            order.get('signal_id'),
+            order.get('message_id')
         ))
         conn.commit()
         return cursor.lastrowid
@@ -317,5 +359,133 @@ def get_upstox_pending_orders(status: str = 'PENDING') -> List[Dict[str, Any]]:
         cursor.execute('SELECT * FROM upstox_pending_orders WHERE status = ?', (status,))
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
+
+def save_zerodha_pending_order(order: Dict[str, Any]) -> bool:
+    """Save a pending Zerodha order"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO zerodha_pending_orders 
+                (pending_order_id, signal_data, status, reason)
+                VALUES (?, ?, 'PENDING', ?)
+            ''', (
+                order.get('pending_order_id'),
+                json.dumps(order.get('signal_data', {})),
+                order.get('reason')
+            ))
+            conn.commit()
+            return True
+    except Exception as e:
+        print(f"[DATABASE] Error saving Zerodha pending order: {e}")
+        return False
+
+def get_zerodha_pending_orders(status: str = 'PENDING') -> List[Dict[str, Any]]:
+    """Get pending Zerodha orders"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM zerodha_pending_orders WHERE status = ?', (status,))
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+def update_zerodha_pending_order_status(pending_order_id: str, status: str, broker_order_id: str = None, error_message: str = None):
+    """Update a Zerodha pending order status"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        if broker_order_id:
+            cursor.execute('''
+                UPDATE zerodha_pending_orders 
+                SET status = ?, broker_order_id = ?, processed_at = CURRENT_TIMESTAMP
+                WHERE pending_order_id = ?
+            ''', (status, broker_order_id, pending_order_id))
+        elif error_message:
+            cursor.execute('''
+                UPDATE zerodha_pending_orders 
+                SET status = ?, error_message = ?, processed_at = CURRENT_TIMESTAMP
+                WHERE pending_order_id = ?
+            ''', (status, error_message, pending_order_id))
+        else:
+            cursor.execute('''
+                UPDATE zerodha_pending_orders 
+                SET status = ?, processed_at = CURRENT_TIMESTAMP
+                WHERE pending_order_id = ?
+            ''', (status, pending_order_id))
+        conn.commit()
+
+def save_dhanq_pending_order(order: Dict[str, Any]) -> bool:
+    """Save a pending DhanQ order"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO dhanq_pending_orders 
+                (pending_order_id, signal_data, status, reason)
+                VALUES (?, ?, 'PENDING', ?)
+            ''', (
+                order.get('pending_order_id'),
+                json.dumps(order.get('signal_data', {})),
+                order.get('reason')
+            ))
+            conn.commit()
+            return True
+    except Exception as e:
+        print(f"[DATABASE] Error saving DhanQ pending order: {e}")
+        return False
+
+def get_dhanq_pending_orders(status: str = 'PENDING') -> List[Dict[str, Any]]:
+    """Get pending DhanQ orders"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM dhanq_pending_orders WHERE status = ?', (status,))
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+def update_dhanq_pending_order_status(pending_order_id: str, status: str, broker_order_id: str = None, error_message: str = None):
+    """Update a DhanQ pending order status"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        if broker_order_id:
+            cursor.execute('''
+                UPDATE dhanq_pending_orders 
+                SET status = ?, broker_order_id = ?, processed_at = CURRENT_TIMESTAMP
+                WHERE pending_order_id = ?
+            ''', (status, broker_order_id, pending_order_id))
+        elif error_message:
+            cursor.execute('''
+                UPDATE dhanq_pending_orders 
+                SET status = ?, error_message = ?, processed_at = CURRENT_TIMESTAMP
+                WHERE pending_order_id = ?
+            ''', (status, error_message, pending_order_id))
+        else:
+            cursor.execute('''
+                UPDATE dhanq_pending_orders 
+                SET status = ?, processed_at = CURRENT_TIMESTAMP
+                WHERE pending_order_id = ?
+            ''', (status, pending_order_id))
+        conn.commit()
+
+def update_upstox_pending_order_status(pending_order_id: str, status: str, broker_order_id: str = None, error_message: str = None):
+    """Update an Upstox pending order status"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        if broker_order_id:
+            cursor.execute('''
+                UPDATE upstox_pending_orders 
+                SET status = ?, broker_order_id = ?, processed_at = CURRENT_TIMESTAMP
+                WHERE pending_order_id = ?
+            ''', (status, broker_order_id, pending_order_id))
+        elif error_message:
+            cursor.execute('''
+                UPDATE upstox_pending_orders 
+                SET status = ?, error_message = ?, processed_at = CURRENT_TIMESTAMP
+                WHERE pending_order_id = ?
+            ''', (status, error_message, pending_order_id))
+        else:
+            cursor.execute('''
+                UPDATE upstox_pending_orders 
+                SET status = ?, processed_at = CURRENT_TIMESTAMP
+                WHERE pending_order_id = ?
+            ''', (status, pending_order_id))
+        conn.commit()
 
 init_database()

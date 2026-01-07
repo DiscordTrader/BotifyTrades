@@ -62,6 +62,11 @@ class IndiaTradingBot:
         self.conditional_service = None
         self.running = False
         self.signal_queue = asyncio.Queue()
+        self.event_loop = None  # Store event loop for thread-safe async calls
+    
+    def get_event_loop(self):
+        """Get the bot's event loop for thread-safe async calls"""
+        return self.event_loop
     
     async def initialize_brokers(self):
         """Initialize all Indian brokers"""
@@ -155,16 +160,19 @@ class IndiaTradingBot:
             return
         
         try:
+            lots = signal.get('lots', 1)
             if signal.get('asset', 'option') == 'option':
+                # India brokers use different parameter names than US brokers
+                # UpstoxBroker: action, qty, symbol, strike, opt_type, expiry_mmdd, limit_price, lots
                 result = await broker.place_option_order(
+                    action=signal.get('action'),
+                    qty=signal.get('qty', 1),
                     symbol=signal['symbol'],
                     strike=signal.get('strike'),
-                    expiry=signal.get('expiry'),
-                    option_type=signal.get('opt_type'),
-                    action=signal.get('action'),
-                    quantity=signal.get('qty', 1),
-                    price=signal.get('price'),
-                    lots=signal.get('lots', 1)
+                    opt_type=signal.get('opt_type'),
+                    expiry_mmdd=signal.get('expiry'),
+                    limit_price=signal.get('price'),
+                    lots=lots
                 )
             else:
                 result = await broker.place_stock_order(
@@ -200,6 +208,8 @@ class IndiaTradingBot:
     async def run(self):
         """Main run loop"""
         self.running = True
+        self.event_loop = asyncio.get_running_loop()  # Store for thread-safe async calls
+        
         await self.initialize_brokers()
         await self.initialize_services()
         

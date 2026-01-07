@@ -126,6 +126,19 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    def run_async_in_bot_loop(coro):
+        """Run async coroutine in bot's event loop from Flask thread"""
+        import asyncio
+        import concurrent.futures
+        if _bot_instance and hasattr(_bot_instance, 'event_loop') and _bot_instance.event_loop:
+            loop = _bot_instance.event_loop
+            future = asyncio.run_coroutine_threadsafe(coro, loop)
+            try:
+                return future.result(timeout=10.0)
+            except concurrent.futures.TimeoutError:
+                return None
+        return None
+    
     @app.route('/api/upstox/orders', methods=['GET'])
     def api_upstox_orders():
         """Get Upstox order book"""
@@ -133,9 +146,10 @@ def register_routes(app):
             if _bot_instance and hasattr(_bot_instance, 'upstox_broker'):
                 broker = _bot_instance.upstox_broker
                 if broker and broker.connected:
-                    import asyncio
-                    orders = asyncio.run(broker.get_order_book())
-                    return jsonify({'success': True, 'orders': orders})
+                    orders = run_async_in_bot_loop(broker.get_order_book())
+                    if orders is not None:
+                        return jsonify({'success': True, 'orders': orders})
+                    return jsonify({'success': False, 'error': 'Timeout fetching orders'})
             return jsonify({'success': False, 'error': 'Upstox not connected'})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -147,9 +161,10 @@ def register_routes(app):
             if _bot_instance and hasattr(_bot_instance, 'upstox_broker'):
                 broker = _bot_instance.upstox_broker
                 if broker and broker.connected:
-                    import asyncio
-                    positions = asyncio.run(broker.get_positions())
-                    return jsonify({'success': True, 'positions': positions})
+                    positions = run_async_in_bot_loop(broker.get_positions())
+                    if positions is not None:
+                        return jsonify({'success': True, 'positions': positions})
+                    return jsonify({'success': False, 'error': 'Timeout fetching positions'})
             return jsonify({'success': False, 'error': 'Upstox not connected'})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
