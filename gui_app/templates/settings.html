@@ -1259,25 +1259,14 @@ input:checked + .slider:before {
         </div>
     </div>
 
-    <!-- Signal Conversion Settings -->
-    <div class="settings-card">
+    <!-- Signal Conversion - Moved to Channels page -->
+    <div class="settings-card" style="background: linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(15,240,179,0.05) 100%);">
         <h3>🔄 Signal Conversion</h3>
-        <p class="description">Automatically convert stock alerts to trading signals (zero AI cost - regex parsing)</p>
-        <div class="form-group">
-            <label>Conversion Channel IDs</label>
-            <input type="text" id="conversion-channel-id" placeholder="e.g., 1338406540494766110, 1178749711163859025">
-            <p class="help-text">Discord channel IDs where stock alerts are posted (comma-separated for multiple channels)</p>
-        </div>
-        <div class="form-group">
-            <label>Forward to Execution Channel</label>
-            <select id="target-execution-channel-id">
-                <option value="">-- Select Execution Channel --</option>
-            </select>
-            <p class="help-text">Choose which execution channel receives converted signals</p>
-        </div>
-        <div class="btn-group">
-            <button id="save-signal-conversion" class="btn btn-success">💾 Save Settings</button>
-        </div>
+        <p class="description" style="margin-bottom: 16px;">Signal conversion channel mappings have been moved to the <strong>Channels page</strong> for easier management.</p>
+        <a href="/channels" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none;">
+            <span>📋</span> Go to Channels Page
+        </a>
+        <p class="help-text" style="margin-top: 12px;">Configure source → destination channel mappings with individual enable/disable toggles.</p>
     </div>
 
     <!-- Trade Notification Settings -->

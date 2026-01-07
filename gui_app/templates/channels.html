@@ -954,9 +954,9 @@
     </div>
 
     <div class="add-channel-card" style="margin-top: 30px;" id="channelMappingsSection">
-        <h3><span>🔗</span> Channel Mappings</h3>
+        <h3><span>🔄</span> Signal Conversion Channels</h3>
         <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">
-            Map Discord source channels to webhook URLs for automatic signal forwarding
+            Map source channels to destination channels for automatic signal conversion and forwarding. Each mapping can be enabled/disabled individually.
         </p>
         
         <div id="mappingAddForm" style="display: none; margin-bottom: 20px; padding: 20px; background: rgba(15, 240, 179, 0.05); border-radius: 12px; border: 1px solid rgba(15, 240, 179, 0.2);">
@@ -1713,6 +1713,7 @@ function renderChannelMappings() {
     
     let html = '<table style="width: 100%; border-collapse: collapse;">';
     html += '<thead><tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">';
+    html += '<th style="text-align: center; padding: 12px; color: var(--text-secondary); font-weight: 500;">Enabled</th>';
     html += '<th style="text-align: left; padding: 12px; color: var(--text-secondary); font-weight: 500;">Source Channel</th>';
     html += '<th style="text-align: center; padding: 12px; color: var(--text-secondary);"></th>';
     html += '<th style="text-align: left; padding: 12px; color: var(--text-secondary); font-weight: 500;">Destination</th>';
@@ -1741,7 +1742,16 @@ function renderChannelMappings() {
             typeBadge = '<span style="background: rgba(15,240,179,0.2); color: var(--mint); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem;">Webhook</span>';
         }
         
-        html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">`;
+        const isActive = m.is_active !== 0;
+        const rowOpacity = isActive ? '1' : '0.5';
+        
+        html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05); opacity: ${rowOpacity};">`;
+        html += `<td style="padding: 12px; text-align: center;">`;
+        html += `<label class="mode-toggle" style="margin: 0;">`;
+        html += `<input type="checkbox" ${isActive ? 'checked' : ''} onchange="toggleMappingEnabled(${m.id}, this.checked)">`;
+        html += `<div class="toggle-box"></div>`;
+        html += `</label>`;
+        html += `</td>`;
         html += `<td style="padding: 12px; color: var(--text-primary);">${srcDisplay}</td>`;
         html += `<td style="padding: 12px; text-align: center; color: var(--mint); font-size: 1.2rem;">→</td>`;
         html += `<td style="padding: 12px; color: var(--text-primary);">${destDisplay}</td>`;
@@ -1926,6 +1936,29 @@ async function saveChannelMappingEdit() {
         }
     } catch (error) {
         showNotification('Failed to update mapping: ' + error.message, 'error');
+    }
+}
+
+async function toggleMappingEnabled(mappingId, enabled) {
+    try {
+        const response = await fetch(`/api/channel_mappings/${mappingId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_active: enabled ? 1 : 0 })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification(`Mapping ${enabled ? 'enabled' : 'disabled'}`);
+            loadChannelMappings();
+        } else {
+            showNotification(result.error || 'Failed to update mapping', 'error');
+            loadChannelMappings();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        loadChannelMappings();
     }
 }
 
