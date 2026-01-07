@@ -9603,6 +9603,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         error_type = 'ORDER_FAILED'
                     _original_print(f"[ORDER FAILED] ❌ {signal['action']} {signal['symbol']} - {error_msg}", flush=True)
                     
+                    # Update conditional order status to ERROR if this was a conditional order
+                    cond_order_id = signal.get('_conditional_order_id')
+                    if cond_order_id:
+                        try:
+                            from gui_app.database import update_conditional_order_status
+                            update_conditional_order_status(
+                                cond_order_id, 
+                                'ERROR', 
+                                event='BROKER_REJECTED',
+                                error_message=error_msg[:200]
+                            )
+                            _original_print(f"[CONDITIONAL] ❌ Order #{cond_order_id} marked as ERROR: {error_msg[:100]}")
+                        except Exception as e:
+                            _original_print(f"[CONDITIONAL] ⚠️ Could not update order status: {e}")
+                    
                     # Update signal execution status in database
                     if DATABASE_MODULE_AVAILABLE and signal.get('message_id'):
                         try:
@@ -9636,6 +9651,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 # Post-execution: Send Discord notification and save to database
                 if order_success:
+                    # Update conditional order status to EXECUTED if this was a conditional order
+                    cond_order_id = signal.get('_conditional_order_id')
+                    if cond_order_id:
+                        try:
+                            from gui_app.database import update_conditional_order_status
+                            update_conditional_order_status(cond_order_id, 'EXECUTED', event='BROKER_CONFIRMED')
+                            _original_print(f"[CONDITIONAL] ✓ Order #{cond_order_id} marked as EXECUTED")
+                        except Exception as e:
+                            _original_print(f"[CONDITIONAL] ⚠️ Could not update order status: {e}")
+                    
                     # Update signal execution status to EXECUTED
                     if DATABASE_MODULE_AVAILABLE and signal.get('message_id'):
                         try:
