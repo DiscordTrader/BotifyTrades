@@ -252,12 +252,8 @@ class SetupWizard:
                     # BTF-format licenses use server validation
                     if license_key.startswith('BTF-'):
                         print("[LICENSE] Activating with license server...")
-                        print(f"[LICENSE] Server URL: {client.server_url}")
-                        print(f"[LICENSE] Machine ID: {client.machine_id}")
                         
                         result = client.activate_license(license_key)
-                        
-                        print(f"[LICENSE] Server response: {result}")
                         
                         if result.get('success') or result.get('is_valid'):
                             print()

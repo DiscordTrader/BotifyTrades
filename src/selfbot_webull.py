@@ -949,12 +949,9 @@ if not LICENSE_VALID and not DEFER_TO_SPLASH_SCREEN:
                             raise SystemExit("Setup cancelled - license client missing")
                     
                     client = LicenseClient()
-                    print(f"[LICENSE] Machine ID: {client.machine_id}")
-                    print(f"[LICENSE] Server URL: {client.server_url}")
                     print(f"[LICENSE] Contacting license server...")
                     
                     result = client.request_trial()
-                    print(f"[LICENSE] Server response: {result}")
                     
                     if result.get('success'):
                         trial_license_key = result['license_key']

@@ -191,7 +191,7 @@ class LicenseClient:
     
     def request_trial(self) -> Dict:
         """Request a trial license from the server."""
-        print(f"[LICENSE] Requesting trial for machine: {self.machine_id[:8]}...")
+        print(f"[LICENSE] Requesting trial license...")
         
         # Try dict format first (new servers), fall back to string (legacy servers)
         result = self._make_request('trial', 'POST', {
@@ -224,12 +224,7 @@ class LicenseClient:
         """Activate a license key on this machine."""
         _print = getattr(builtins, '_original_print', builtins.print)
         
-        _print(f"[LICENSE] ========================================", flush=True)
-        _print(f"[LICENSE] ACTIVATING LICENSE", flush=True)
-        _print(f"[LICENSE] Server URL: {self.server_url}", flush=True)
-        _print(f"[LICENSE] Machine ID: {self.machine_id}", flush=True)
-        _print(f"[LICENSE] License: {license_key[:12]}...", flush=True)
-        _print(f"[LICENSE] ========================================", flush=True)
+        _print(f"[LICENSE] Activating license...", flush=True)
         sys.stdout.flush()
         
         # Try dict format first (new servers), fall back to string (legacy servers)
@@ -241,18 +236,13 @@ class LicenseClient:
         
         # If "Invalid request", retry with string format for legacy servers
         if result.get('error') == 'Invalid request':
-            _print(f"[LICENSE] Retrying with legacy format...", flush=True)
             result = self._make_request('activate', 'POST', {
                 'license_key': license_key,
                 'machine_id': self.machine_id,
                 'machine_info': get_machine_info_string()
             })
         
-        _print(f"[LICENSE] Server response: {result}", flush=True)
-        sys.stdout.flush()
-        
         if result.get('success'):
-            _print(f"[LICENSE] Activation successful - saving to cache...", flush=True)
             self._save_cache(license_key, result)
         else:
             _print(f"[LICENSE] Activation failed: {result.get('error')}", flush=True)
