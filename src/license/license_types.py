@@ -7,19 +7,26 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-# Primary license server URL (production)
+# License server URLs in priority order
+# New license server (primary)
 LICENSE_SERVER_URL_PRIMARY = "https://license-forge--uk15286.replit.app"
 
-# Fallback URL (backup server if primary is down)
-LICENSE_SERVER_URL_FALLBACK = "https://api.botifytrades.com"
+# Legacy servers (fallbacks for existing users during migration)
+LICENSE_SERVER_URL_LEGACY_1 = "https://discord-trader-botify-trades-releases--uk15286.replit.app"
+LICENSE_SERVER_URL_LEGACY_2 = "https://api.botifytrades.com"
+
+# Backwards compatibility alias
+LICENSE_SERVER_URL_FALLBACK = LICENSE_SERVER_URL_LEGACY_1
 
 # For backwards compatibility - defaults to primary
 LICENSE_SERVER_URL = LICENSE_SERVER_URL_PRIMARY
 
 # All server URLs to try in order (primary first, then fallbacks)
+# Once all users migrate to new server, remove legacy URLs
 LICENSE_SERVER_URLS = [
     LICENSE_SERVER_URL_PRIMARY,
-    LICENSE_SERVER_URL_FALLBACK,
+    LICENSE_SERVER_URL_LEGACY_1,
+    LICENSE_SERVER_URL_LEGACY_2,
 ]
 
 # RSA Public Key for verifying server-signed tokens

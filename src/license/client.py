@@ -15,7 +15,7 @@ from .license_types import (
     CACHE_FILE,
     get_ssl_cert_path
 )
-from .crypto import get_machine_id, get_machine_info
+from .crypto import get_machine_id, get_machine_info, get_machine_info_string
 from .cache import LicenseCache
 
 
@@ -193,10 +193,18 @@ class LicenseClient:
         """Request a trial license from the server."""
         print(f"[LICENSE] Requesting trial for machine: {self.machine_id[:8]}...")
         
+        # Try dict format first (new servers), fall back to string (legacy servers)
         result = self._make_request('trial', 'POST', {
             'machine_id': self.machine_id,
             'machine_info': get_machine_info()
         })
+        
+        # If "Invalid request", retry with string format for legacy servers
+        if result.get('error') == 'Invalid request':
+            result = self._make_request('trial', 'POST', {
+                'machine_id': self.machine_id,
+                'machine_info': get_machine_info_string()
+            })
         
         if result.get('success'):
             print(f"[LICENSE] Trial activated: {result['license_key']}")
@@ -224,11 +232,21 @@ class LicenseClient:
         _print(f"[LICENSE] ========================================", flush=True)
         sys.stdout.flush()
         
+        # Try dict format first (new servers), fall back to string (legacy servers)
         result = self._make_request('activate', 'POST', {
             'license_key': license_key,
             'machine_id': self.machine_id,
             'machine_info': get_machine_info()
         })
+        
+        # If "Invalid request", retry with string format for legacy servers
+        if result.get('error') == 'Invalid request':
+            _print(f"[LICENSE] Retrying with legacy format...", flush=True)
+            result = self._make_request('activate', 'POST', {
+                'license_key': license_key,
+                'machine_id': self.machine_id,
+                'machine_info': get_machine_info_string()
+            })
         
         _print(f"[LICENSE] Server response: {result}", flush=True)
         sys.stdout.flush()

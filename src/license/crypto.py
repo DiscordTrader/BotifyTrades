@@ -67,6 +67,11 @@ def get_machine_info() -> dict:
     }
 
 
+def get_machine_info_string() -> str:
+    """Get human-readable machine info as string (legacy format)."""
+    return f"{platform.node()} ({platform.system()} {platform.machine()})"
+
+
 def verify_signed_token(token_str: str, expected_machine_id: str) -> Tuple[bool, dict]:
     """
     Verify RSA-signed token from server.
