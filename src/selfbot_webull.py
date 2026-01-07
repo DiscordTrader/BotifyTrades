@@ -7682,7 +7682,42 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 from src.services.conditional_orders.router import conditional_order_router
                 
                 if conditional_order_router.is_enabled():
-                    broker = channel_info.get('broker_override', 'Upstox') if channel_info else 'Upstox'
+                    # Get broker from channel config - prioritize enabled_brokers over broker_override
+                    broker = None
+                    if channel_info:
+                        # Check enabled_brokers first (Execution page config)
+                        if channel_info.get('enabled_brokers'):
+                            try:
+                                import json
+                                enabled = channel_info.get('enabled_brokers')
+                                if isinstance(enabled, str):
+                                    enabled = json.loads(enabled)
+                                if enabled and len(enabled) > 0:
+                                    # Map to proper broker names for India market
+                                    broker_map = {
+                                        'UPSTOX': 'upstox',
+                                        'ZERODHA': 'zerodha', 
+                                        'DHANQ': 'dhanq',
+                                    }
+                                    first_broker = enabled[0].upper()
+                                    broker = broker_map.get(first_broker, enabled[0].lower())
+                                    print(f"[INDIA CONDITIONAL] Using channel enabled_brokers[0]: {enabled[0]} -> {broker}")
+                            except Exception as e:
+                                print(f"[INDIA CONDITIONAL] Error parsing enabled_brokers: {e}")
+                        # Fall back to broker_override if enabled_brokers not set
+                        if not broker and channel_info.get('broker_override'):
+                            broker = channel_info.get('broker_override').lower()
+                            print(f"[INDIA CONDITIONAL] Using channel broker_override: {broker}")
+                    
+                    # Reject if no broker is configured for India channels
+                    if not broker:
+                        print(f"[INDIA CONDITIONAL] ❌ REJECTED: No India broker configured for channel {message.channel.id}")
+                        print(f"[INDIA CONDITIONAL] Please configure 'enabled_brokers' (Upstox/Zerodha/DhanQ) in the Execution page for this channel")
+                        try:
+                            await message.add_reaction('❌')
+                        except:
+                            pass
+                        return
                     
                     conditional_signal = {
                         'symbol': opt['symbol'],

@@ -105,9 +105,11 @@ The system emphasizes user experience through an interactive setup wizard, GUI-b
 - Prevents cross-channel conflicts when same symbol is traded on different brokers
 
 ### Conditional Order Broker Selection Priority
-- Conditional orders now prioritize `enabled_brokers` (first element) from Execution page over legacy `broker_override`
+- Both US and India conditional orders now prioritize `enabled_brokers` (first element) from Execution page over legacy `broker_override`
+- India conditional orders properly check `enabled_brokers` for Upstox/Zerodha/DhanQ brokers with correct case mapping
 - Orders are rejected if neither `enabled_brokers` nor `broker_override` is configured for the channel
 - Thread-safe async execution using `asyncio.run_coroutine_threadsafe` for cross-thread communication
+- Telegram conditional orders use `_broker_list` from signal which is set based on channel configuration
 
 ### Market-Isolated Conditional Order Architecture
 - Each market (US/INDIA/CANADA) has dedicated ConditionalOrderService in isolated thread/event loop
