@@ -7719,6 +7719,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             pass
                         return
                     
+                    # For India markets, treat channel default_quantity as number of LOTS
+                    # If signal has explicit 'lots', use it; otherwise derive from qty or channel default
+                    signal_qty = opt.get('qty')
+                    signal_lots = opt.get('lots')
+                    
+                    # If lots not explicitly in signal but qty is set (from channel default), treat qty as lots
+                    if signal_lots is None and signal_qty is not None:
+                        signal_lots = int(signal_qty)
+                        print(f"[INDIA CONDITIONAL] Using qty={signal_qty} as lots for India market")
+                    elif signal_lots is None:
+                        # Check channel default_quantity - treat as lots for India
+                        channel_default_qty = channel_info.get('default_quantity') if channel_info else None
+                        if channel_default_qty:
+                            signal_lots = int(channel_default_qty)
+                            print(f"[INDIA CONDITIONAL] Using channel default_quantity={channel_default_qty} as lots")
+                        else:
+                            signal_lots = 1
+                    
                     conditional_signal = {
                         'symbol': opt['symbol'],
                         'strike': opt['strike'],
@@ -7727,8 +7745,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'trigger_type': opt.get('trigger_type', 'over'),
                         'stop_loss': opt.get('stop_loss'),
                         'profit_targets': opt.get('profit_targets', []),
-                        'qty': opt.get('qty'),
-                        'lots': opt.get('lots', 1),
+                        'qty': signal_qty,
+                        'lots': signal_lots,
                         'lot_size': opt.get('lot_size'),
                         'expiry': opt.get('expiry'),
                         'market': 'INDIA',
@@ -8769,7 +8787,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             channel_id = str(signal.get('channel_id', ''))
             broker_primary = signal.get('_broker_list', ['UPSTOX'])[0] if signal.get('_broker_list') else 'UPSTOX'
-            quantity = signal.get('qty', 1)
+            
+            # For India markets, treat channel default_quantity as number of LOTS
+            signal_qty = signal.get('qty')
+            signal_lots = signal.get('lots')
+            
+            # If lots not explicitly in signal but qty is set (from channel default), treat qty as lots
+            if signal_lots is None and signal_qty is not None:
+                signal_lots = int(signal_qty)
+                _original_print(f"[TELEGRAM CONDITIONAL] Using qty={signal_qty} as lots for India market", flush=True)
+            elif signal_lots is None:
+                # Check channel default_quantity - treat as lots for India
+                try:
+                    from gui_app.database import get_telegram_channel
+                    telegram_channel_info = get_telegram_channel(channel_id) if channel_id else None
+                    channel_default_qty = telegram_channel_info.get('default_quantity') if telegram_channel_info else None
+                    if channel_default_qty:
+                        signal_lots = int(channel_default_qty)
+                        _original_print(f"[TELEGRAM CONDITIONAL] Using channel default_quantity={channel_default_qty} as lots", flush=True)
+                    else:
+                        signal_lots = 1
+                except Exception as e:
+                    _original_print(f"[TELEGRAM CONDITIONAL] Could not get channel default_quantity: {e}", flush=True)
+                    signal_lots = 1
             
             conditional_signal = {
                 'symbol': symbol,
@@ -8782,8 +8822,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 'stop_loss_value': float(stop_loss) if stop_loss else None,
                 'stop_loss_type': 'fixed' if stop_loss else None,
                 'profit_targets': profit_targets or [],
-                'qty': quantity,
-                'lots': signal.get('lots', 1),
+                'qty': signal_qty,
+                'lots': signal_lots,
                 'lot_size': signal.get('lot_size'),
                 'market': 'INDIA',
                 'asset_type': 'option',
