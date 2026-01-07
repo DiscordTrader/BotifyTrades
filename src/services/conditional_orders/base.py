@@ -585,6 +585,12 @@ class BaseConditionalOrderService(ABC):
         trigger_price = order.get('trigger_price', 0)
         trigger_type = order.get('trigger_type', 'over')
         
+        try:
+            from gui_app.database import update_conditional_order_price
+            update_conditional_order_price(order_id, price)
+        except Exception:
+            pass
+        
         self._log(f"Price update #{order_id} {symbol} @ {price:.2f} (trigger: {trigger_type} {trigger_price})")
         
         triggered = False

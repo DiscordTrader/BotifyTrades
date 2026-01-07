@@ -7737,6 +7737,8 @@ def init_conditional_orders_table():
         ('expiry', 'TEXT'),
         ('lot_size', 'INTEGER'),
         ('lots', 'INTEGER DEFAULT 1'),
+        ('current_price', 'REAL'),
+        ('price_updated_at', 'TIMESTAMP'),
     ]
     for col_name, col_type in india_columns:
         try:
@@ -8018,6 +8020,23 @@ def update_conditional_order_status(
     except Exception as e:
         print(f"[DATABASE] Error updating conditional order status: {e}")
         conn.rollback()
+        return False
+
+
+def update_conditional_order_price(order_id: int, current_price: float) -> bool:
+    """Update the current price for a conditional order (called during monitoring)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            UPDATE conditional_orders
+            SET current_price = ?, price_updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND status IN ('PENDING', 'ACTIVE_MONITORING', 'FALLBACK_MONITORING')
+        ''', (current_price, order_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
         return False
 
 

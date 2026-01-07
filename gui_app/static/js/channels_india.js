@@ -831,7 +831,7 @@ async function loadUpstoxConditionalOrders() {
         const tbody = document.getElementById('upstox-conditional-body');
         
         if (!data.success || !data.orders || data.orders.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #8E8E93;">No conditional orders for India market</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: #8E8E93;">No conditional orders for India market</td></tr>';
             return;
         }
         
@@ -853,11 +853,14 @@ async function loadUpstoxConditionalOrders() {
             const triggerText = (triggerType === 'above' || triggerType === 'over') ? `Above ₹${o.trigger_price}` : `Below ₹${o.trigger_price}`;
             const slpt = `SL: ₹${o.stop_loss_value || 'N/A'} | PT: ${o.take_profit_targets || 'N/A'}`;
             const created = formatDateTimeIST(o.created_at);
+            const currentPrice = o.current_price ? `₹${parseFloat(o.current_price).toFixed(2)}` : '-';
+            const priceColor = o.current_price >= o.trigger_price ? '#00ff88' : '#00d4ff';
             
             return `
                 <tr style="border-bottom: 1px solid rgba(0, 200, 83, 0.1);">
                     <td style="padding: 12px; font-weight: 600; color: #ffffff;">${o.symbol || 'N/A'} ${o.strike || ''} ${o.opt_type || ''}</td>
                     <td style="padding: 12px; text-align: center; color: #ffc107;">${triggerText}</td>
+                    <td style="padding: 12px; text-align: center;"><span style="font-weight: 700; color: ${priceColor}; animation: ${o.status === 'ACTIVE_MONITORING' ? 'pulse 1s infinite' : 'none'};">${currentPrice}</span></td>
                     <td style="padding: 12px; text-align: center;"><span style="padding: 3px 8px; background: ${statusColor}22; border-radius: 4px; font-size: 11px; color: ${statusColor}; font-weight: 600;">${o.status}</span></td>
                     <td style="padding: 12px; text-align: center; font-size: 11px; color: #8E8E93;">${slpt}</td>
                     <td style="padding: 12px; text-align: center;"><span style="padding: 2px 6px; background: rgba(0, 200, 83, 0.15); border-radius: 4px; font-size: 10px; color: #00c853; font-weight: 600;">${o.broker_primary || o.broker || 'UPSTOX'}</span></td>
@@ -896,14 +899,14 @@ function switchUpstoxTab(tabName) {
     activeBtn.style.color = '#00c853';
     activeBtn.style.border = '1px solid rgba(0, 200, 83, 0.4)';
     
-    // Start/stop auto-refresh for conditional status
+    // Start/stop auto-refresh for conditional tab (status + orders every 2s)
     if (conditionalStatusInterval) {
         clearInterval(conditionalStatusInterval);
         conditionalStatusInterval = null;
     }
     if (tabName === 'conditional') {
-        loadConditionalMonitorStatus();
-        conditionalStatusInterval = setInterval(loadConditionalMonitorStatus, 2000);
+        loadUpstoxConditionalOrders();
+        conditionalStatusInterval = setInterval(loadUpstoxConditionalOrders, 2000);
     }
 }
 
