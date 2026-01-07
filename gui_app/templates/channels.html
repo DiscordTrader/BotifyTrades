@@ -900,6 +900,14 @@
                     </label>
                 </div>
                 <div class="form-group">
+                    <label>P/L Summary</label>
+                    <label class="mode-toggle">
+                        <input type="checkbox" id="newTradeSummaryEnabled" checked>
+                        <div class="toggle-box"></div>
+                        <span>Post</span>
+                    </label>
+                </div>
+                <div class="form-group">
                     <button type="submit" class="btn-add">
                         <span>✓</span> Add Channel
                     </button>
@@ -1274,6 +1282,18 @@ function renderChannels() {
                             <option value="hybrid" ${channel.exit_strategy_mode === 'hybrid' ? 'selected' : ''}>Hybrid (Both)</option>
                         </select>
                     </div>
+                    
+                    <div class="control-group" style="margin-top: 12px;">
+                        <label style="display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem; color: var(--text-secondary);">
+                            📊 P/L Summary
+                            <label class="toggle-switch">
+                                <input type="checkbox" ${channel.trade_summary_enabled !== 0 ? 'checked' : ''} 
+                                       onchange="toggleTradeSummary(${channel.id}, this.checked)"
+                                       title="Post P/L summary to Discord when positions are closed">
+                                <span class="slider"></span>
+                            </label>
+                        </label>
+                    </div>
                 </div>
                 
                 <div class="channel-footer">
@@ -1296,6 +1316,7 @@ async function addChannel() {
     const market = document.getElementById('newMarket').value;
     const executeEnabled = document.getElementById('newExecuteEnabled').checked ? 1 : 0;
     const trackEnabled = document.getElementById('newTrackEnabled').checked ? 1 : 0;
+    const tradeSummaryEnabled = document.getElementById('newTradeSummaryEnabled').checked ? 1 : 0;
     
     if (!channelId || !name) {
         showNotification('Please fill in all required fields', 'error');
@@ -1316,7 +1337,8 @@ async function addChannel() {
                 name: name,
                 market: market,
                 execute_enabled: executeEnabled,
-                track_enabled: trackEnabled
+                track_enabled: trackEnabled,
+                trade_summary_enabled: tradeSummaryEnabled
             })
         });
         
@@ -1454,6 +1476,26 @@ async function updateExitStrategy(channelId, mode) {
             showNotification(`Exit strategy set to ${modeLabels[mode] || mode}`);
         } else {
             showNotification('Error updating exit strategy', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function toggleTradeSummary(channelId, enabled) {
+    try {
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trade_summary_enabled: enabled ? 1 : 0 })
+        });
+        
+        if (response.ok) {
+            showNotification(`P/L Summary ${enabled ? 'enabled' : 'disabled'} for this channel`);
+        } else {
+            showNotification('Error updating P/L summary setting', 'error');
             await loadChannels();
         }
     } catch (error) {

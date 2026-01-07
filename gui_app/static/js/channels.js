@@ -248,19 +248,6 @@ async function loadChannels() {
                                         <span style="font-size: 12px; color: #8E8E93;">% of position</span>
                                     </div>
                                 </div>
-                                <div style="margin-top: 16px; padding: 12px; background: rgba(138, 43, 226, 0.05); border: 1px solid rgba(138, 43, 226, 0.2); border-radius: 8px;">
-                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <span style="font-size: 16px;">📊</span>
-                                            <label style="font-size: 13px; font-weight: 600; color: #a855f7;">Trade Summary</label>
-                                        </div>
-                                        <label class="toggle-switch" title="Post P/L summary to Discord when positions are closed">
-                                            <input type="checkbox" id="trade-summary-enabled-${channel.id}" ${channel.trade_summary_enabled !== 0 ? 'checked' : ''}>
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0;">Post a P/L summary message to Discord when STC signals close positions for this channel.</p>
-                                </div>
                                 <button onclick="saveRiskManagement(${channel.id})" style="margin-top: 12px; padding: 8px 16px; background: var(--accent-gradient); border: none; border-radius: 6px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">💾 Save Risk Settings</button>
                                 </div>
                             </td>
@@ -972,7 +959,6 @@ async function saveRiskManagement(channelId) {
         const leaveRunnerPct = document.getElementById(`risk-leave-runner-pct-${channelId}`).value;
         const trimOrderMode = document.querySelector(`input[name="trim-order-mode-${channelId}"]:checked`)?.value || 'market';
         const trimLimitOffset = document.getElementById(`risk-trim-offset-${channelId}`).value;
-        const tradeSummaryEnabled = document.getElementById(`trade-summary-enabled-${channelId}`)?.checked ? 1 : 0;
         
         const response = await fetch(`/api/channels/${channelId}`, {
             method: 'PUT',
@@ -993,8 +979,7 @@ async function saveRiskManagement(channelId) {
                 leave_runner_enabled: leaveRunnerEnabled,
                 leave_runner_pct: leaveRunnerPct ? parseFloat(leaveRunnerPct) : 25.0,
                 trim_order_mode: trimOrderMode,
-                trim_limit_offset: trimLimitOffset ? parseFloat(trimLimitOffset) : 0.01,
-                trade_summary_enabled: tradeSummaryEnabled
+                trim_limit_offset: trimLimitOffset ? parseFloat(trimLimitOffset) : 0.01
             })
         });
         

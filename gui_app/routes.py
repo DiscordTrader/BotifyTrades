@@ -1677,6 +1677,9 @@ def register_routes(app):
             )
         
         if channel_id:
+            # If trade_summary_enabled was provided, update it (defaults to True/1 in DB)
+            if 'trade_summary_enabled' in data:
+                db.update_channel(channel_id, trade_summary_enabled=data['trade_summary_enabled'])
             return jsonify({'success': True, 'id': channel_id})
         else:
             return jsonify({'success': False, 'error': 'Channel already exists or invalid configuration'}), 400
