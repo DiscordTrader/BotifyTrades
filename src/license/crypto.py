@@ -58,9 +58,13 @@ def get_machine_id() -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
-def get_machine_info() -> str:
-    """Get human-readable machine info."""
-    return f"{platform.node()} ({platform.system()} {platform.machine()})"
+def get_machine_info() -> dict:
+    """Get machine info as dict for server API."""
+    return {
+        "hostname": platform.node(),
+        "os": platform.system(),
+        "arch": platform.machine()
+    }
 
 
 def verify_signed_token(token_str: str, expected_machine_id: str) -> Tuple[bool, dict]:

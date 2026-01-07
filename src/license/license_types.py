@@ -7,13 +7,13 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-# Primary license server URL (production domain)
-LICENSE_SERVER_URL_PRIMARY = "https://api.botifytrades.com"
+# Primary license server URL (production)
+LICENSE_SERVER_URL_PRIMARY = "https://license-forge--uk15286.replit.app"
 
-# Fallback URL (Replit - used during migration or if primary is down)
-LICENSE_SERVER_URL_FALLBACK = "https://92ef2f8a-9447-4d91-8823-2ac83e184d7a-00-384f7fcagd1yw.janeway.replit.dev"
+# Fallback URL (backup server if primary is down)
+LICENSE_SERVER_URL_FALLBACK = "https://api.botifytrades.com"
 
-# For backwards compatibility - defaults to primary, falls back automatically
+# For backwards compatibility - defaults to primary
 LICENSE_SERVER_URL = LICENSE_SERVER_URL_PRIMARY
 
 # All server URLs to try in order (primary first, then fallbacks)
