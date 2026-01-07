@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}BotifyTrades{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}?v=2">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/quantum-theme.css') }}?v={{ range(1, 999999) | random }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/channel-badge.css') }}?v={{ range(1, 999999) | random }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <a href="https://botifytrades.com" class="nav-brand" target="_blank" rel="noopener">
+            <div class="botify-brand-block">
+                <div class="botify-logo-mark">
+                    <span class="logo-symbol">BT</span>
+                </div>
+                <div class="botify-brand-text">
+                    <span class="botify-brand-name">BotifyTrades</span>
+                    <span class="botify-brand-tagline">AUTOMATED TRADING</span>
+                </div>
+            </div>
+        </a>
+        
+        <div class="nav-menu">
+            <div class="nav-dropdown">
+                <button class="nav-dropdown-btn {% if request.path in ['/', '/channels', '/execution', '/pnl', '/trades'] %}active{% endif %}">
+                    Trading
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                <div class="nav-dropdown-content">
+                    <a href="/" class="dropdown-item {% if request.path == '/' %}active{% endif %}">
+                        <span class="dropdown-icon">📊</span>
+                        <span class="dropdown-text">Dashboard</span>
+                        <span class="dropdown-desc">Overview & stats</span>
+                    </a>
+                    <a href="/channels" class="dropdown-item {% if request.path == '/channels' %}active{% endif %}">
+                        <span class="dropdown-icon">📡</span>
+                        <span class="dropdown-text">Channels</span>
+                        <span class="dropdown-desc">Discord channels</span>
+                    </a>
+                    <a href="/execution" class="dropdown-item {% if request.path == '/execution' %}active{% endif %}">
+                        <span class="dropdown-icon">⚡</span>
+                        <span class="dropdown-text">Execution</span>
+                        <span class="dropdown-desc">Signal processing</span>
+                    </a>
+                    <a href="/channels/india" class="dropdown-item {% if request.path == '/channels/india' %}active{% endif %}">
+                        <span class="dropdown-icon">🇮🇳</span>
+                        <span class="dropdown-text">India Markets</span>
+                        <span class="dropdown-desc">NSE/BSE/MCX</span>
+                    </a>
+                    <a href="/channels/canada" class="dropdown-item {% if request.path == '/channels/canada' %}active{% endif %}">
+                        <span class="dropdown-icon">🇨🇦</span>
+                        <span class="dropdown-text">Canada Markets</span>
+                        <span class="dropdown-desc">TSX/CSE</span>
+                    </a>
+                    <a href="/pnl" class="dropdown-item {% if request.path == '/pnl' %}active{% endif %}">
+                        <span class="dropdown-icon">💰</span>
+                        <span class="dropdown-text">PNL</span>
+                        <span class="dropdown-desc">Profit & Loss</span>
+                    </a>
+                    <a href="/trades" class="dropdown-item {% if request.path == '/trades' %}active{% endif %}">
+                        <span class="dropdown-icon">📈</span>
+                        <span class="dropdown-text">Trades</span>
+                        <span class="dropdown-desc">Trade history</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="nav-dropdown">
+                <button class="nav-dropdown-btn {% if request.path in ['/options', '/leaderboard', '/simulation', '/performance', '/verification'] %}active{% endif %}">
+                    Analysis
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                <div class="nav-dropdown-content">
+                    <a href="/options" class="dropdown-item {% if request.path == '/options' %}active{% endif %}">
+                        <span class="dropdown-icon">🎯</span>
+                        <span class="dropdown-text">Options</span>
+                        <span class="dropdown-desc">Options chain viewer</span>
+                    </a>
+                    <a href="/performance" class="dropdown-item {% if request.path == '/performance' %}active{% endif %}">
+                        <span class="dropdown-icon">📈</span>
+                        <span class="dropdown-text">My Performance</span>
+                        <span class="dropdown-desc">Your trading analytics</span>
+                    </a>
+                    <a href="/leaderboard" class="dropdown-item {% if request.path == '/leaderboard' %}active{% endif %}">
+                        <span class="dropdown-icon">🏆</span>
+                        <span class="dropdown-text">Leaderboard</span>
+                        <span class="dropdown-desc">Top traders ranking</span>
+                    </a>
+                    <a href="/simulation" class="dropdown-item {% if request.path == '/simulation' %}active{% endif %}">
+                        <span class="dropdown-icon">🔮</span>
+                        <span class="dropdown-text">Simulate</span>
+                        <span class="dropdown-desc">Portfolio projections</span>
+                    </a>
+                    <a href="/verification" class="dropdown-item {% if request.path == '/verification' %}active{% endif %}">
+                        <span class="dropdown-icon">🔍</span>
+                        <span class="dropdown-text">Verify Signals</span>
+                        <span class="dropdown-desc">Detect paper trading</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="nav-dropdown">
+                <button class="nav-dropdown-btn {% if request.path.startswith('/analytics') %}active{% endif %}">
+                    Brokers
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                <div class="nav-dropdown-content">
+                    <a href="/analytics/webull_live" class="dropdown-item {% if request.path == '/analytics/webull_live' %}active{% endif %}">
+                        <span class="dropdown-icon">📊</span>
+                        <span class="dropdown-text">Webull Live</span>
+                        <span class="dropdown-desc">Live trading analytics</span>
+                    </a>
+                    <a href="/analytics/webull_paper" class="dropdown-item {% if request.path == '/analytics/webull_paper' %}active{% endif %}">
+                        <span class="dropdown-icon">📝</span>
+                        <span class="dropdown-text">Webull Paper</span>
+                        <span class="dropdown-desc">Paper trading analytics</span>
+                    </a>
+                    <a href="/analytics/alpaca_live" class="dropdown-item {% if request.path == '/analytics/alpaca_live' %}active{% endif %}">
+                        <span class="dropdown-icon">🦙</span>
+                        <span class="dropdown-text">Alpaca Live</span>
+                        <span class="dropdown-desc">Live trading analytics</span>
+                    </a>
+                    <a href="/analytics/alpaca_paper" class="dropdown-item {% if request.path == '/analytics/alpaca_paper' %}active{% endif %}">
+                        <span class="dropdown-icon">📋</span>
+                        <span class="dropdown-text">Alpaca Paper</span>
+                        <span class="dropdown-desc">Paper trading analytics</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="nav-dropdown">
+                <button class="nav-dropdown-btn {% if request.path in ['/settings', '/architecture', '/license', '/health', '/telegram', '/brokers'] %}active{% endif %}">
+                    Admin
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                <div class="nav-dropdown-content">
+                    <a href="/health" class="dropdown-item {% if request.path == '/health' %}active{% endif %}">
+                        <span class="dropdown-icon">🩺</span>
+                        <span class="dropdown-text">System Health</span>
+                        <span class="dropdown-desc">Validate settings</span>
+                    </a>
+                    <a href="/settings" class="dropdown-item {% if request.path == '/settings' %}active{% endif %}">
+                        <span class="dropdown-icon">⚙️</span>
+                        <span class="dropdown-text">Settings</span>
+                        <span class="dropdown-desc">Bot configuration</span>
+                    </a>
+                    <a href="/brokers" class="dropdown-item {% if request.path == '/brokers' %}active{% endif %}">
+                        <span class="dropdown-icon">🏦</span>
+                        <span class="dropdown-text">Broker Config</span>
+                        <span class="dropdown-desc">Multi-country brokers</span>
+                    </a>
+                    <a href="/telegram" class="dropdown-item {% if request.path == '/telegram' %}active{% endif %}">
+                        <span class="dropdown-icon">📱</span>
+                        <span class="dropdown-text">Telegram</span>
+                        <span class="dropdown-desc">Telegram integration</span>
+                    </a>
+                    <a href="/license" class="dropdown-item {% if request.path == '/license' %}active{% endif %}">
+                        <span class="dropdown-icon">🔐</span>
+                        <span class="dropdown-text">License</span>
+                        <span class="dropdown-desc">View license status</span>
+                    </a>
+                    <a href="/architecture" class="dropdown-item {% if request.path == '/architecture' %}active{% endif %}">
+                        <span class="dropdown-icon">📐</span>
+                        <span class="dropdown-text">Docs</span>
+                        <span class="dropdown-desc">Documentation</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="nav-status">
+            <a href="/license" class="license-badge" id="license-badge" title="License Status">
+                <span class="license-icon">🔐</span>
+                <span class="license-text" id="license-text">--</span>
+            </a>
+            <span class="status-indicator" id="bot-status"></span>
+            <span id="bot-user">Connecting...</span>
+            <a href="/logout" class="logout-btn">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- AI Chat Assistant Widget -->
+    <div id="chat-widget" class="chat-widget">
+        <button id="chat-toggle" class="chat-toggle" onclick="toggleChat()">
+            <span class="chat-icon">💬</span>
+            <span class="chat-close">✕</span>
+            <span id="error-badge" class="error-badge" style="display: none;">0</span>
+        </button>
+        <div id="chat-panel" class="chat-panel">
+            <div class="chat-header">
+                <div class="chat-header-title">
+                    <span class="chat-avatar">🤖</span>
+                    <div>
+                        <strong>BotifyTrades Assistant</strong>
+                        <span class="chat-status" id="chat-status-text">Ask me anything!</span>
+                    </div>
+                </div>
+                <div class="chat-header-controls">
+                    <button class="chat-control-btn" onclick="openChatPopout()" title="Open in new window">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                        </svg>
+                    </button>
+                    <button class="chat-control-btn" onclick="toggleMaximize()" title="Maximize">
+                        <svg id="maximize-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>
+                        </svg>
+                        <svg id="restore-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+                            <path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/>
+                        </svg>
+                    </button>
+                    <button class="chat-control-btn chat-minimize-btn" onclick="toggleChat()" title="Minimize">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div id="error-alert" class="error-alert" style="display: none;">
+                <div class="error-alert-content">
+                    <span class="error-alert-icon">⚠️</span>
+                    <span class="error-alert-text">Issues detected</span>
+                    <button class="error-alert-btn" onclick="askQuestion('What issues are happening?')">View</button>
+                </div>
+            </div>
+            <div id="chat-messages" class="chat-messages">
+                <div class="chat-message assistant">
+                    <div class="message-content">
+                        Hi! I'm your BotifyTrades assistant. Ask me about:
+                        <ul style="margin: 8px 0 0 16px; padding: 0;">
+                            <li>Getting started</li>
+                            <li>Channels & trading</li>
+                            <li>Broker setup</li>
+                            <li>Options trading</li>
+                            <li>P&L tracking</li>
+                            <li>Risk management</li>
+                            <li>Signal format learning</li>
+                        </ul>
+                        <em style="color: #00F5FF; font-size: 11px; display: block; margin-top: 8px;">I'll also alert you if I detect any issues!</em>
+                    </div>
+                </div>
+            </div>
+            <div class="chat-suggestions" id="chat-suggestions">
+                <button onclick="askQuestion('How do I get started?')">Getting Started</button>
+                <button onclick="askQuestion('How do I add a channel?')">Add Channel</button>
+                <button onclick="askQuestion('Show formats')">Formats</button>
+                <button onclick="askQuestion('Any issues?')">Check Issues</button>
+            </div>
+            <div class="chat-input-container">
+                <input type="text" id="chat-input" class="chat-input" placeholder="Type your question..." onkeypress="handleChatKeypress(event)">
+                <button id="chat-send" class="chat-send" onclick="sendChatMessage()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+    .chat-widget {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 9999;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .chat-toggle {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #00F5FF 0%, #8B5CF6 100%);
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 24px rgba(0, 245, 255, 0.4);
+        transition: all 0.3s ease;
+    }
+    .chat-toggle:hover {
+        transform: scale(1.1);
+        box-shadow: 0 6px 32px rgba(0, 245, 255, 0.5);
+    }
+    .chat-toggle .chat-icon {
+        font-size: 26px;
+    }
+    .chat-toggle .chat-close {
+        display: none;
+        font-size: 26px;
+        color: white;
+    }
+    .chat-widget.open .chat-toggle .chat-icon {
+        display: none;
+    }
+    .chat-widget.open .chat-toggle .chat-close {
+        display: block;
+    }
+    .chat-panel {
+        position: absolute;
+        bottom: 76px;
+        right: 0;
+        width: 420px;
+        height: 580px;
+        max-height: calc(100vh - 120px);
+        background: #0D1117;
+        border: 1px solid rgba(0, 245, 255, 0.2);
+        border-radius: 20px;
+        box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+        display: none;
+        flex-direction: column;
+        overflow: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .chat-widget.open .chat-panel {
+        display: flex;
+        animation: slideUp 0.3s ease;
+    }
+    .chat-widget.maximized .chat-panel {
+        position: fixed;
+        top: 80px;
+        left: 50%;
+        right: auto;
+        bottom: 24px;
+        transform: translateX(-50%);
+        width: 90%;
+        max-width: 800px;
+        height: auto;
+        max-height: calc(100vh - 104px);
+        border-radius: 24px;
+        animation: scaleIn 0.3s ease;
+    }
+    .chat-widget.maximized .chat-toggle {
+        display: none;
+    }
+    @keyframes slideUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes scaleIn {
+        from { opacity: 0; transform: translateX(-50%) scale(0.95); }
+        to { opacity: 1; transform: translateX(-50%) scale(1); }
+    }
+    .chat-header {
+        padding: 16px 20px;
+        background: linear-gradient(135deg, rgba(0, 245, 255, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+        border-bottom: 1px solid rgba(0, 245, 255, 0.15);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .chat-header-title {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+    .chat-avatar {
+        font-size: 32px;
+        width: 44px;
+        height: 44px;
+        background: linear-gradient(135deg, rgba(0, 245, 255, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .chat-header strong {
+        color: #fff;
+        font-size: 15px;
+        display: block;
+    }
+    .chat-status {
+        color: #00F5FF;
+        font-size: 12px;
+    }
+    .chat-header-controls {
+        display: flex;
+        gap: 6px;
+    }
+    .chat-control-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #888;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+    }
+    .chat-control-btn:hover {
+        background: rgba(0, 245, 255, 0.1);
+        border-color: rgba(0, 245, 255, 0.3);
+        color: #00F5FF;
+    }
+    .chat-control-btn.chat-minimize-btn:hover {
+        background: rgba(239, 68, 68, 0.1);
+        border-color: rgba(239, 68, 68, 0.3);
+        color: #ef4444;
+    }
+    .chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+    .chat-messages::-webkit-scrollbar {
+        width: 6px;
+    }
+    .chat-messages::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.2);
+    }
+    .chat-messages::-webkit-scrollbar-thumb {
+        background: rgba(0, 245, 255, 0.3);
+        border-radius: 3px;
+    }
+    .chat-message {
+        display: flex;
+        flex-direction: column;
+        animation: messageIn 0.25s ease;
+    }
+    @keyframes messageIn {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .chat-message.user {
+        align-items: flex-end;
+    }
+    .chat-message.assistant {
+        align-items: flex-start;
+    }
+    .message-content {
+        max-width: 85%;
+        padding: 14px 18px;
+        border-radius: 18px;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+    .chat-message.user .message-content {
+        background: linear-gradient(135deg, #00F5FF 0%, #8B5CF6 100%);
+        color: #000;
+        border-bottom-right-radius: 6px;
+        font-weight: 500;
+    }
+    .chat-message.assistant .message-content {
+        background: #1C2128;
+        color: #E6EDF3;
+        border-bottom-left-radius: 6px;
+        border: 1px solid rgba(0, 245, 255, 0.1);
+    }
+    .message-content strong {
+        color: #00F5FF;
+    }
+    .message-content code {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: 'SF Mono', 'Consolas', monospace;
+        font-size: 13px;
+    }
+    .message-content ul, .message-content li {
+        color: #E6EDF3;
+    }
+    .chat-suggestions {
+        padding: 12px 20px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        background: rgba(0, 0, 0, 0.2);
+    }
+    .chat-suggestions button {
+        background: rgba(0, 245, 255, 0.08);
+        border: 1px solid rgba(0, 245, 255, 0.2);
+        color: #00F5FF;
+        padding: 8px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .chat-suggestions button:hover {
+        background: rgba(0, 245, 255, 0.15);
+        border-color: #00F5FF;
+        transform: translateY(-1px);
+    }
+    .chat-input-container {
+        padding: 16px 20px;
+        border-top: 1px solid rgba(0, 245, 255, 0.1);
+        display: flex;
+        gap: 10px;
+        background: linear-gradient(180deg, rgba(22, 27, 34, 0.95) 0%, rgba(13, 17, 23, 1) 100%);
+    }
+    .chat-input {
+        flex: 1;
+        background: #0D1117;
+        border: 1px solid rgba(0, 245, 255, 0.2);
+        border-radius: 26px;
+        padding: 12px 20px;
+        color: #fff;
+        font-size: 14px;
+        outline: none;
+        transition: all 0.2s ease;
+    }
+    .chat-input:focus {
+        border-color: #00F5FF;
+        box-shadow: 0 0 0 3px rgba(0, 245, 255, 0.1);
+    }
+    .chat-input::placeholder {
+        color: #666;
+    }
+    .chat-send {
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #00F5FF 0%, #8B5CF6 100%);
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #000;
+        transition: all 0.2s ease;
+        box-shadow: 0 4px 16px rgba(0, 245, 255, 0.3);
+    }
+    .chat-send:hover {
+        transform: scale(1.05);
+        box-shadow: 0 6px 20px rgba(0, 245, 255, 0.4);
+    }
+    .chat-send:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+    }
+    .typing-indicator {
+        display: flex;
+        gap: 5px;
+        padding: 14px 18px;
+        align-items: center;
+    }
+    .typing-indicator span {
+        width: 9px;
+        height: 9px;
+        background: #00F5FF;
+        border-radius: 50%;
+        animation: typing 1.4s infinite;
+    }
+    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typing {
+        0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+        30% { transform: translateY(-5px); opacity: 1; }
+    }
+    @media (max-width: 480px) {
+        .chat-panel {
+            width: calc(100vw - 48px);
+            right: -12px;
+        }
+        .chat-widget.maximized .chat-panel {
+            width: calc(100vw - 24px);
+            top: 70px;
+            left: 12px;
+            right: 12px;
+            transform: none;
+        }
+    }
+    .error-badge {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        background: #ef4444;
+        color: white;
+        font-size: 11px;
+        font-weight: 700;
+        min-width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 6px;
+        animation: pulse-badge 2s infinite;
+    }
+    @keyframes pulse-badge {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+    }
+    .error-alert {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05));
+        border-bottom: 1px solid rgba(239, 68, 68, 0.3);
+        padding: 12px 20px;
+    }
+    .error-alert-content {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .error-alert-icon {
+        font-size: 18px;
+    }
+    .error-alert-text {
+        flex: 1;
+        font-size: 13px;
+        color: #fca5a5;
+    }
+    .error-alert-btn {
+        background: rgba(239, 68, 68, 0.2);
+        border: 1px solid rgba(239, 68, 68, 0.4);
+        color: #fca5a5;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .error-alert-btn:hover {
+        background: rgba(239, 68, 68, 0.3);
+        border-color: #ef4444;
+    }
+    .chat-maximize-backdrop {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        z-index: 9998;
+    }
+    .chat-widget.maximized .chat-maximize-backdrop {
+        display: block;
+    }
+    </style>
+
+    <script>
+    let lastErrorCount = 0;
+    let chatPopoutWindow = null;
+    const chatChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('botify-chat') : null;
+    
+    if (chatChannel) {
+        chatChannel.onmessage = (event) => {
+            if (event.data.type === 'popout-opened') {
+                document.getElementById('chat-input').disabled = true;
+                document.getElementById('chat-status-text').textContent = 'Using pop-out window';
+            } else if (event.data.type === 'popout-closed') {
+                document.getElementById('chat-input').disabled = false;
+                document.getElementById('chat-status-text').textContent = 'Ask me anything!';
+                chatPopoutWindow = null;
+            } else if (event.data.type === 'new-message') {
+                addMessageHTML(event.data.content, event.data.isUser);
+            }
+        };
+    }
+    
+    function toggleChat() {
+        const widget = document.getElementById('chat-widget');
+        
+        if (widget.classList.contains('maximized')) {
+            widget.classList.remove('maximized');
+            updateMaximizeIcon(false);
+        }
+        
+        widget.classList.toggle('open');
+        
+        if (widget.classList.contains('open')) {
+            setTimeout(() => {
+                document.getElementById('chat-input').focus();
+            }, 100);
+            markErrorsSeen();
+        }
+    }
+    
+    function toggleMaximize() {
+        const widget = document.getElementById('chat-widget');
+        const isMaximized = widget.classList.toggle('maximized');
+        updateMaximizeIcon(isMaximized);
+        
+        if (!widget.classList.contains('open')) {
+            widget.classList.add('open');
+        }
+        
+        setTimeout(() => {
+            document.getElementById('chat-input').focus();
+        }, 100);
+        
+        localStorage.setItem('chat-maximized', isMaximized ? 'true' : 'false');
+    }
+    
+    function updateMaximizeIcon(isMaximized) {
+        document.getElementById('maximize-icon').style.display = isMaximized ? 'none' : 'block';
+        document.getElementById('restore-icon').style.display = isMaximized ? 'block' : 'none';
+    }
+    
+    function openChatPopout() {
+        if (chatPopoutWindow && !chatPopoutWindow.closed) {
+            chatPopoutWindow.focus();
+            return;
+        }
+        
+        const width = 500;
+        const height = 700;
+        const left = (screen.width - width) / 2;
+        const top = (screen.height - height) / 2;
+        
+        chatPopoutWindow = window.open(
+            '/chat/popout',
+            'BotifyTradesAssistant',
+            `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no`
+        );
+        
+        if (chatPopoutWindow) {
+            const widget = document.getElementById('chat-widget');
+            widget.classList.remove('open', 'maximized');
+            updateMaximizeIcon(false);
+        }
+    }
+    
+    function handleChatKeypress(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendChatMessage();
+        }
+    }
+    
+    function askQuestion(question) {
+        if (!document.getElementById('chat-widget').classList.contains('open')) {
+            toggleChat();
+        }
+        document.getElementById('chat-input').value = question;
+        sendChatMessage();
+    }
+    
+    function addMessageHTML(content, isUser = false) {
+        const messagesDiv = document.getElementById('chat-messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${isUser ? 'user' : 'assistant'}`;
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        contentDiv.innerHTML = formatMessage(content);
+        messageDiv.appendChild(contentDiv);
+        messagesDiv.appendChild(messageDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+    
+    function addMessage(content, isUser = false) {
+        addMessageHTML(content, isUser);
+        if (chatChannel) {
+            chatChannel.postMessage({ type: 'new-message', content, isUser });
+        }
+    }
+    
+    function formatMessage(text) {
+        return text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/\n/g, '<br>')
+            .replace(/• /g, '&bull; ');
+    }
+    
+    function showTyping() {
+        const messagesDiv = document.getElementById('chat-messages');
+        const typingDiv = document.createElement('div');
+        typingDiv.id = 'typing-indicator';
+        typingDiv.className = 'chat-message assistant';
+        typingDiv.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+        messagesDiv.appendChild(typingDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+    
+    function hideTyping() {
+        const typing = document.getElementById('typing-indicator');
+        if (typing) typing.remove();
+    }
+    
+    async function sendChatMessage() {
+        const input = document.getElementById('chat-input');
+        const message = input.value.trim();
+        
+        if (!message) return;
+        
+        addMessage(message, true);
+        input.value = '';
+        input.disabled = true;
+        document.getElementById('chat-send').disabled = true;
+        
+        showTyping();
+        
+        try {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message })
+            });
+            
+            const data = await response.json();
+            hideTyping();
+            
+            if (data.success) {
+                addMessage(data.response);
+                if (data.has_errors) {
+                    updateErrorBadge(0);
+                }
+            } else {
+                addMessage('Sorry, I had trouble understanding that. Please try rephrasing your question.');
+            }
+        } catch (error) {
+            hideTyping();
+            addMessage('Sorry, there was an error. Please try again.');
+        }
+        
+        input.disabled = false;
+        document.getElementById('chat-send').disabled = false;
+        input.focus();
+    }
+    
+    function updateErrorBadge(count) {
+        const badge = document.getElementById('error-badge');
+        const alert = document.getElementById('error-alert');
+        const statusText = document.getElementById('chat-status-text');
+        
+        if (count > 0) {
+            badge.textContent = count > 9 ? '9+' : count;
+            badge.style.display = 'flex';
+            alert.style.display = 'block';
+            alert.querySelector('.error-alert-text').textContent = 
+                count === 1 ? '1 issue detected' : `${count} issues detected`;
+            statusText.textContent = 'Issues need attention';
+            statusText.style.color = '#fca5a5';
+        } else {
+            badge.style.display = 'none';
+            alert.style.display = 'none';
+            statusText.textContent = 'Ask me anything!';
+            statusText.style.color = '#00F5FF';
+        }
+    }
+    
+    async function checkForErrors() {
+        try {
+            const response = await fetch('/api/chat/status');
+            const data = await response.json();
+            
+            if (data.success && data.unnotified_count > 0) {
+                if (data.unnotified_count !== lastErrorCount) {
+                    lastErrorCount = data.unnotified_count;
+                    updateErrorBadge(data.unnotified_count);
+                }
+            } else {
+                if (lastErrorCount > 0) {
+                    lastErrorCount = 0;
+                    updateErrorBadge(0);
+                }
+            }
+        } catch (e) {
+            // Silent fail - don't spam console
+        }
+    }
+    
+    async function markErrorsSeen() {
+        try {
+            await fetch('/api/chat/errors/seen', { method: 'POST' });
+            updateErrorBadge(0);
+            lastErrorCount = 0;
+        } catch (e) {
+            // Silent fail
+        }
+    }
+    
+    // Check for errors every 30 seconds
+    setInterval(checkForErrors, 30000);
+    // Initial check after page load
+    setTimeout(checkForErrors, 2000);
+    </script>
+
+    <script src="{{ url_for('static', filename='js/broker-store.js') }}?v={{ range(1, 999999) | random }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v={{ range(1, 999999) | random }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
