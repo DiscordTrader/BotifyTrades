@@ -33,7 +33,12 @@ The **Portfolio Simulation Engine** projects portfolio growth using various posi
 
 **Market-Specific Channel Pages** provide dedicated management for regional markets: India Markets (NSE/BSE/MCX with DhanQ, Upstox, Zerodha), and Canada Markets (TSX/CSE/NEO with Questrade).
 
-**Conditional Order Monitoring System** monitors price conditions and executes orders when triggered, supporting signals with "over/above" and "under/below" triggers, SL/PT, and position sizing. It uses a three-tier price monitoring fallback (broker-native APIs → Finnhub API → yfinance). Indian market conditional orders are supported via Upstox/Zerodha APIs or yfinance.
+**Conditional Order Monitoring System** monitors price conditions and executes orders when triggered, supporting signals with "over/above" and "under/below" triggers, SL/PT, and position sizing. It uses a three-tier price monitoring fallback (broker-native APIs → Finnhub API → yfinance). Indian market conditional orders are supported via Upstox/Zerodha APIs or yfinance. Extended features include:
+- **Target Ranges**: Supports price ranges like "first target 16.60-17" with automatic mid-point calculation
+- **Partial Exit Signals**: Handles "selling 80% MLTX" or "leaving 10%" with proper position quantity calculation
+- **Cancellation Signals**: Processes "@Daytrades cancelling SYMBOL" to cancel active conditional orders
+- **Hybrid Stop Loss**: Supports "SL 8.15 or 6%" where whichever triggers first activates the stop
+- **Sequential Message Monitoring**: Correlates follow-up messages within a 5-minute window for delayed SL/PT updates via SignalConversationState manager
 
 **Expiry Resolver Service** (`src/services/expiry_resolver.py`) automatically picks the next valid expiry for Indian F&O signals when not specified, fetching instrument masters from broker APIs with TTL-based caching and supporting multiple date formats and symbol alias normalization.
 
