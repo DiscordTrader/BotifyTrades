@@ -9513,12 +9513,48 @@ def register_routes(app):
                 allowed_guilds=data.get('allowed_guilds', [])
             )
             
+            db.save_setting('discord_token', token)
+            
             return jsonify({
                 'success': True,
-                'message': 'Discord credentials saved. Use Connect button to connect.'
+                'message': 'Discord token saved! Restart the bot to connect with the new token.'
             })
         except Exception as e:
             print(f"[API] Error saving Discord credentials: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/connect/discord', methods=['POST'])
+    def api_connect_discord():
+        """Connect to Discord with saved credentials"""
+        try:
+            from .broker_credentials_service import get_discord_credentials
+            
+            creds = get_discord_credentials()
+            token = creds.get('token', '')
+            
+            if not token:
+                return jsonify({
+                    'success': False,
+                    'error': 'Discord token not configured. Please save your token first.'
+                }), 400
+            
+            global _bot_instance
+            if _bot_instance:
+                discord_connected = getattr(_bot_instance, 'discord_connected', False)
+                if discord_connected:
+                    return jsonify({
+                        'success': True,
+                        'message': 'Discord is already connected',
+                        'account': {'username': 'Connected'}
+                    })
+            
+            return jsonify({
+                'success': True,
+                'message': 'Discord token saved. Bot will reconnect automatically. Restart the bot to apply changes.',
+                'requires_restart': True
+            })
+        except Exception as e:
+            print(f"[API] Error connecting Discord: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/brokers/credentials/webull', methods=['GET'])
