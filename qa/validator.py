@@ -436,6 +436,217 @@ class QAValidator:
                 result.add_pass()
         
         return result
+    
+    # =========================================
+    # Workflow Pipeline Validation
+    # =========================================
+    
+    def validate_workflow(self, workflow_name: str) -> ValidationResult:
+        """
+        Validate a complete workflow pipeline - checks all stages have required components.
+        This ensures the full signal-to-execution pipeline is intact.
+        """
+        result = ValidationResult()
+        
+        # Load workflow registry
+        workflows = self.registry.get_workflows()
+        if not workflows or workflow_name not in workflows:
+            result.add_issue(ValidationIssue(
+                severity='warning',
+                category='workflow',
+                component=workflow_name,
+                field='registry',
+                message=f"Workflow '{workflow_name}' not found in registry"
+            ))
+            return result
+        
+        workflow = workflows[workflow_name]
+        stages = workflow.get('stages', {})
+        
+        # Validate each stage
+        for stage_id, stage in stages.items():
+            stage_result = self._validate_workflow_stage(workflow_name, stage_id, stage)
+            result.issues.extend(stage_result.issues)
+            result.passed_checks += stage_result.passed_checks
+            result.failed_checks += stage_result.failed_checks
+        
+        # Update counts
+        result.total_checks = result.passed_checks + result.failed_checks
+        result.critical_count = sum(1 for i in result.issues if i.severity == 'critical')
+        result.warning_count = sum(1 for i in result.issues if i.severity == 'warning')
+        result.is_valid = result.critical_count == 0
+        
+        return result
+    
+    def _validate_workflow_stage(self, workflow_name: str, stage_id: str, stage: Dict) -> ValidationResult:
+        """Validate a single workflow stage has all required components."""
+        result = ValidationResult()
+        stage_name = stage.get('name', stage_id)
+        
+        # Validate database requirements
+        db_requirements = stage.get('database_requirements', [])
+        for db_req in db_requirements:
+            table_name = db_req.get('table')
+            required_fields = db_req.get('required_fields', [])
+            
+            # Check table exists
+            conn = self._get_db_connection()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                    (table_name,)
+                )
+                if not cursor.fetchone():
+                    result.add_issue(ValidationIssue(
+                        severity='critical',
+                        category='workflow',
+                        component=f"{workflow_name}.{stage_id}",
+                        field=table_name,
+                        message=f"Stage '{stage_name}' requires table '{table_name}' which does not exist"
+                    ))
+                    continue
+                
+                result.add_pass()
+                
+                # Check required fields exist
+                cursor.execute(f"PRAGMA table_info({table_name})")
+                existing_columns = {row['name'] for row in cursor.fetchall()}
+                
+                for field_name in required_fields:
+                    if field_name in existing_columns:
+                        result.add_pass()
+                    else:
+                        result.add_issue(ValidationIssue(
+                            severity='critical',
+                            category='workflow',
+                            component=f"{workflow_name}.{stage_id}",
+                            field=f"{table_name}.{field_name}",
+                            message=f"Stage '{stage_name}' requires column '{field_name}' in table '{table_name}'"
+                        ))
+        
+        # Validate function requirements (check if modules exist)
+        func_requirements = stage.get('function_requirements', [])
+        for func_req in func_requirements:
+            module_name = func_req.get('module', '')
+            functions = func_req.get('functions', [])
+            
+            # Try to import the module
+            try:
+                import importlib
+                module_path = module_name.replace('/', '.').replace('\\', '.')
+                if module_path.startswith('src.'):
+                    # Check if file exists
+                    file_path = module_name.replace('.', '/') + '.py'
+                    if not Path(file_path).exists():
+                        result.add_issue(ValidationIssue(
+                            severity='warning',
+                            category='workflow',
+                            component=f"{workflow_name}.{stage_id}",
+                            field=module_name,
+                            message=f"Stage '{stage_name}' requires module '{module_name}' (file not found)"
+                        ))
+                    else:
+                        result.add_pass()
+                else:
+                    result.add_pass()
+            except Exception as e:
+                result.add_issue(ValidationIssue(
+                    severity='warning',
+                    category='workflow',
+                    component=f"{workflow_name}.{stage_id}",
+                    field=module_name,
+                    message=f"Could not validate module '{module_name}': {str(e)}"
+                ))
+        
+        return result
+    
+    def validate_all_workflows(self) -> ValidationResult:
+        """Validate all defined workflows."""
+        result = ValidationResult()
+        
+        workflows = self.registry.get_workflows()
+        if not workflows:
+            result.add_issue(ValidationIssue(
+                severity='info',
+                category='workflow',
+                component='registry',
+                field='workflows',
+                message='No workflows defined in registry'
+            ))
+            return result
+        
+        for workflow_name in workflows.keys():
+            wf_result = self.validate_workflow(workflow_name)
+            result.issues.extend(wf_result.issues)
+            result.passed_checks += wf_result.passed_checks
+            result.failed_checks += wf_result.failed_checks
+        
+        # Update counts
+        result.total_checks = result.passed_checks + result.failed_checks
+        result.critical_count = sum(1 for i in result.issues if i.severity == 'critical')
+        result.warning_count = sum(1 for i in result.issues if i.severity == 'warning')
+        result.is_valid = result.critical_count == 0
+        
+        return result
+    
+    def get_pipeline_status(self) -> Dict[str, Any]:
+        """
+        Get a visual status of each pipeline stage.
+        Returns a structured view showing which stages pass/fail.
+        """
+        status = {
+            'pipelines': {},
+            'overall_healthy': True,
+            'stages_passed': 0,
+            'stages_failed': 0
+        }
+        
+        workflows = self.registry.get_workflows()
+        if not workflows:
+            return status
+        
+        for workflow_name, workflow in workflows.items():
+            stages = workflow.get('stages', {})
+            pipeline_status = {
+                'name': workflow.get('name', workflow_name),
+                'description': workflow.get('description', ''),
+                'stages': [],
+                'is_healthy': True
+            }
+            
+            # Sort stages by order
+            sorted_stages = sorted(
+                stages.items(),
+                key=lambda x: x[1].get('order', 999)
+            )
+            
+            for stage_id, stage in sorted_stages:
+                stage_result = self._validate_workflow_stage(workflow_name, stage_id, stage)
+                stage_healthy = stage_result.critical_count == 0
+                
+                stage_status = {
+                    'id': stage_id,
+                    'name': stage.get('name', stage_id),
+                    'order': stage.get('order', 999),
+                    'healthy': stage_healthy,
+                    'passed': stage_result.passed_checks,
+                    'failed': stage_result.failed_checks,
+                    'issues': [i.to_dict() for i in stage_result.issues]
+                }
+                
+                pipeline_status['stages'].append(stage_status)
+                
+                if stage_healthy:
+                    status['stages_passed'] += 1
+                else:
+                    status['stages_failed'] += 1
+                    pipeline_status['is_healthy'] = False
+                    status['overall_healthy'] = False
+            
+            status['pipelines'][workflow_name] = pipeline_status
+        
+        return status
 
 
 # =========================================
@@ -474,5 +685,73 @@ def analyze_impact(changed_fields: List[str], db_path: str = None) -> Dict[str, 
     validator = QAValidator(db_path)
     try:
         return validator.analyze_change_impact(changed_fields)
+    finally:
+        validator.close()
+
+
+def run_workflow_validation(db_path: str = None) -> Dict[str, Any]:
+    """
+    Run workflow pipeline validation.
+    Validates all workflow stages have required components.
+    """
+    validator = QAValidator(db_path)
+    try:
+        result = validator.validate_all_workflows()
+        return result.to_dict()
+    finally:
+        validator.close()
+
+
+def get_pipeline_status(db_path: str = None) -> Dict[str, Any]:
+    """
+    Get visual pipeline status showing each stage's health.
+    Returns structured data for UI display.
+    """
+    validator = QAValidator(db_path)
+    try:
+        return validator.get_pipeline_status()
+    finally:
+        validator.close()
+
+
+def validate_trading_pipeline(db_path: str = None) -> Dict[str, Any]:
+    """
+    Validate the complete trading pipeline specifically.
+    This is the main signal-to-execution workflow.
+    """
+    validator = QAValidator(db_path)
+    try:
+        result = validator.validate_workflow('complete_trading_pipeline')
+        pipeline_status = validator.get_pipeline_status()
+        
+        # Get the specific pipeline
+        trading_pipeline = pipeline_status.get('pipelines', {}).get('complete_trading_pipeline', {})
+        
+        return {
+            'is_valid': result.is_valid,
+            'summary': {
+                'total_checks': result.total_checks,
+                'passed': result.passed_checks,
+                'failed': result.failed_checks,
+                'critical': result.critical_count,
+                'warnings': result.warning_count
+            },
+            'pipeline_name': 'Complete Trading Pipeline',
+            'stages': trading_pipeline.get('stages', []),
+            'issues': [i.to_dict() for i in result.issues],
+            'flow': [
+                'Signal Detection',
+                'Signal Parsing', 
+                'Region Detection',
+                'Broker Routing',
+                'Position Sizing',
+                'Risk Check',
+                'Conditional Check',
+                'Price Monitoring',
+                'Order Execution',
+                'Position Tracking',
+                'Risk Monitoring'
+            ]
+        }
     finally:
         validator.close()

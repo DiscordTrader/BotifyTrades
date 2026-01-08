@@ -247,6 +247,15 @@ class RegistryLoader:
     def get_critical_workflows(self) -> List[WorkflowDefinition]:
         """Get workflows marked as critical priority"""
         return [w for w in self.workflows.values() if w.priority == 'critical']
+    
+    def get_workflows(self) -> Dict[str, Any]:
+        """
+        Get raw workflow data including new stage-based pipelines.
+        Returns the raw YAML data for workflow validation.
+        """
+        if not self._loaded:
+            self.load_all()
+        return self._load_yaml('workflows.yaml').get('workflows', {})
 
 
 # Singleton instance
