@@ -9488,8 +9488,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         # LIVE TRADING
                         _original_print(f"[LIVE TRADE] 🔥 Executing LIVE order: {signal['action']} {signal.get('qty')} {signal['symbol']}", flush=True)
                         
-                        # Select broker based on channel override
-                        broker_override = signal.get('_broker_override', '').lower() if signal.get('_broker_override') else ''
+                        # Select broker based on channel override OR risk management broker routing
+                        # Risk management orders have 'broker' set directly (e.g., 'Webull' for risk exits)
+                        is_risk_order = signal.get('_risk_management_order', False)
+                        if is_risk_order and signal.get('broker'):
+                            broker_override = signal.get('broker', '').lower()
+                            _original_print(f"[LIVE TRADE] Risk order using broker: {broker_override}")
+                        else:
+                            broker_override = signal.get('_broker_override', '').lower() if signal.get('_broker_override') else ''
                         live_broker = None
                         broker_name_used = None
                         
@@ -9522,7 +9528,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 live_broker = self.paper_broker
                                 broker_name_used = 'Alpaca'
                                 _original_print(f"[LIVE TRADE] Using channel broker override: Alpaca")
-                            elif broker_override == 'webull' and hasattr(self, 'broker') and self.broker and self.broker.connected:
+                            elif broker_override == 'webull' and hasattr(self, 'broker') and self.broker and getattr(self.broker, 'connected', True):
                                 live_broker = self.broker
                                 broker_name_used = 'Webull'
                                 _original_print(f"[LIVE TRADE] Using channel broker override: Webull")
