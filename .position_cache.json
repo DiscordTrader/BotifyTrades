@@ -3969,7 +3969,7 @@
   },
   "ALPACA_PAPER_QQQ_618.0_2026-01-08_P": {
     "entry_price": 0.72,
-    "highest_price": 0.8,
+    "highest_price": 0.89,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3985,7 +3985,7 @@
   },
   "ALPACA_PAPER_SXTC_stock": {
     "entry_price": 4.22,
-    "highest_price": 4.7,
+    "highest_price": 5.89,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
