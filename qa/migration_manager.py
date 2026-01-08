@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from .validator import find_database_path
+
 MIGRATIONS_DIR = Path(__file__).parent / 'migrations' / 'versions'
 
 
@@ -46,9 +48,11 @@ class MigrationManager:
     """
     
     def __init__(self, db_path: str = None):
-        self.db_path = db_path or 'botify_trades.db'
+        self.db_path = db_path or find_database_path() or 'gui_app/trading_bot.db'
         self._conn = None
-        self._ensure_migration_table()
+        self._db_available = os.path.exists(self.db_path)
+        if self._db_available:
+            self._ensure_migration_table()
     
     def _get_connection(self) -> sqlite3.Connection:
         if self._conn is None:
