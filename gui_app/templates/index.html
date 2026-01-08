@@ -1648,7 +1648,7 @@ async function loadConditionalOrders() {
                             <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
                                 <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Current Price</div>
                                 <div style="font-size: 1rem; font-weight: 600; color: ${order.current_price ? (order.current_price >= triggerPrice ? '#22c55e' : '#ef4444') : 'var(--text-muted)'};">${order.current_price ? '$' + parseFloat(order.current_price).toFixed(2) : 'Loading...'}</div>
-                                <div style="font-size: 0.7rem; color: var(--text-muted);">${order.price_updated_at ? new Date(order.price_updated_at).toLocaleTimeString() : ''}</div>
+                                <div style="font-size: 0.7rem; color: var(--text-muted);">${order.price_updated_at ? new Date(order.price_updated_at).toLocaleString('en-US', {timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true}) + ' EST' : ''}</div>
                             </div>
                             
                             <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
