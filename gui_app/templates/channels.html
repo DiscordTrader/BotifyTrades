@@ -1006,6 +1006,56 @@
         <div id="channelMappingsList" style="background: rgba(0,0,0,0.2); border-radius: 12px; padding: 16px;">
             <p style="color: var(--text-muted); text-align: center; margin: 20px 0;">No channel mappings configured</p>
         </div>
+        
+        <!-- Trade Summary Settings -->
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <h4 style="color: var(--mint); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                <span>📊</span> Trade Summary
+            </h4>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 16px;">
+                Post P/L summary messages when positions are closed
+            </p>
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="globalTradeSummaryEnabled" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <span style="color: var(--text-primary);">Enable Trade Summary Posting</span>
+            </div>
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label>Trade Summary Channel</label>
+                <select class="form-input" id="globalTradeSummaryChannel">
+                    <option value="">Use source channel (default)</option>
+                </select>
+                <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px;">Select which channel to post trade summaries. Leave empty to post to source channel.</p>
+            </div>
+            <button class="btn-add" onclick="saveTradeSummarySettings()">💾 Save Trade Summary Settings</button>
+            <span id="tradeSummarySaveStatus" style="margin-left: 12px; font-size: 0.85rem;"></span>
+        </div>
+        
+        <!-- Signal Conversion Settings -->
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <h4 style="color: var(--mint); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                <span>🔄</span> Signal Conversion
+            </h4>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 16px;">
+                Automatically convert stock alerts to trading signals (zero AI cost - regex parsing)
+            </p>
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label>Conversion Channel ID</label>
+                <input type="text" class="form-input" id="conversionChannelId" placeholder="e.g., 1338406540494766110">
+                <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px;">Discord channel ID where stock alerts are posted (ENTRY/S.L/TARGET format)</p>
+            </div>
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label>Forward to Execution Channel</label>
+                <select class="form-input" id="targetExecutionChannelId">
+                    <option value="">-- Select Execution Channel --</option>
+                </select>
+                <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px;">Choose which execution channel receives converted signals</p>
+            </div>
+            <button class="btn-add" onclick="saveSignalConversionSettings()">💾 Save Conversion Settings</button>
+            <span id="conversionSaveStatus" style="margin-left: 12px; font-size: 0.85rem;"></span>
+        </div>
     </div>
     {% endif %}
 </div>
@@ -1937,9 +1987,152 @@ async function checkBuildTypeAndHideAdminFeatures() {
     }
 }
 
+// ========== TRADE SUMMARY SETTINGS ==========
+async function loadTradeSummarySettings() {
+    const tradeSummaryEl = document.getElementById('globalTradeSummaryEnabled');
+    const tradeSummaryChannelEl = document.getElementById('globalTradeSummaryChannel');
+    if (!tradeSummaryEl) return; // Not admin build
+    
+    try {
+        // Load trading settings
+        const response = await fetch('/api/settings/trading');
+        const settings = await response.json();
+        
+        tradeSummaryEl.checked = settings.trade_summary_enabled !== false;
+        
+        // Load channels for dropdown
+        const channelsResponse = await fetch('/api/channels');
+        if (channelsResponse.ok) {
+            const channels = await channelsResponse.json();
+            tradeSummaryChannelEl.innerHTML = '<option value="">Use source channel (default)</option>';
+            channels.forEach(ch => {
+                const option = document.createElement('option');
+                option.value = ch.discord_channel_id;
+                option.textContent = ch.name || ch.discord_channel_id;
+                if (settings.trade_summary_channel === ch.discord_channel_id) {
+                    option.selected = true;
+                }
+                tradeSummaryChannelEl.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading trade summary settings:', error);
+    }
+}
+
+async function saveTradeSummarySettings() {
+    const statusEl = document.getElementById('tradeSummarySaveStatus');
+    const enabled = document.getElementById('globalTradeSummaryEnabled').checked;
+    const channel = document.getElementById('globalTradeSummaryChannel').value;
+    
+    try {
+        // First get existing trading settings
+        const getResponse = await fetch('/api/settings/trading');
+        const existingSettings = await getResponse.json();
+        
+        // Merge with trade summary settings
+        const data = {
+            max_position_size: existingSettings.max_position_size || 600,
+            global_default_quantity: existingSettings.global_default_quantity,
+            max_position_size_enabled: existingSettings.max_position_size_enabled !== false,
+            trade_summary_enabled: enabled,
+            trade_summary_channel: channel
+        };
+        
+        const response = await fetch('/api/settings/trading', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            statusEl.textContent = '✅ Saved!';
+            statusEl.style.color = 'var(--mint)';
+        } else {
+            statusEl.textContent = '❌ ' + (result.error || 'Failed');
+            statusEl.style.color = '#ef4444';
+        }
+        setTimeout(() => statusEl.textContent = '', 3000);
+    } catch (error) {
+        console.error('Error saving trade summary settings:', error);
+        statusEl.textContent = '❌ Error';
+        statusEl.style.color = '#ef4444';
+        setTimeout(() => statusEl.textContent = '', 3000);
+    }
+}
+
+// ========== SIGNAL CONVERSION SETTINGS ==========
+async function loadSignalConversionSettings() {
+    const conversionChannelEl = document.getElementById('conversionChannelId');
+    const targetChannelEl = document.getElementById('targetExecutionChannelId');
+    if (!conversionChannelEl) return; // Not admin build
+    
+    try {
+        // Load signal conversion settings
+        const response = await fetch('/api/settings/signal_conversion');
+        if (response.ok) {
+            const settings = await response.json();
+            conversionChannelEl.value = settings.conversion_channel_id || '';
+            
+            // Load execution channels for dropdown
+            const channelsResponse = await fetch('/api/channels?category=EXECUTE');
+            if (channelsResponse.ok) {
+                const channels = await channelsResponse.json();
+                targetChannelEl.innerHTML = '<option value="">-- Select Execution Channel --</option>';
+                channels.forEach(ch => {
+                    const option = document.createElement('option');
+                    option.value = ch.discord_channel_id;
+                    option.textContent = ch.name || ch.discord_channel_id;
+                    if (settings.target_execution_channel_id === ch.discord_channel_id) {
+                        option.selected = true;
+                    }
+                    targetChannelEl.appendChild(option);
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error loading signal conversion settings:', error);
+    }
+}
+
+async function saveSignalConversionSettings() {
+    const statusEl = document.getElementById('conversionSaveStatus');
+    const conversionChannelId = document.getElementById('conversionChannelId').value.trim();
+    const targetChannelId = document.getElementById('targetExecutionChannelId').value;
+    
+    try {
+        const response = await fetch('/api/settings/signal_conversion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                conversion_channel_id: conversionChannelId,
+                target_execution_channel_id: targetChannelId
+            })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            statusEl.textContent = '✅ Saved!';
+            statusEl.style.color = 'var(--mint)';
+        } else {
+            statusEl.textContent = '❌ ' + (result.error || 'Failed');
+            statusEl.style.color = '#ef4444';
+        }
+        setTimeout(() => statusEl.textContent = '', 3000);
+    } catch (error) {
+        console.error('Error saving signal conversion settings:', error);
+        statusEl.textContent = '❌ Error';
+        statusEl.style.color = '#ef4444';
+        setTimeout(() => statusEl.textContent = '', 3000);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     checkBuildTypeAndHideAdminFeatures();
     loadChannelMappings();
+    loadTradeSummarySettings();
+    loadSignalConversionSettings();
 });
 </script>
 {% endblock %}
