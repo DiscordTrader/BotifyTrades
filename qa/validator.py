@@ -17,6 +17,7 @@ from .registry_loader import get_registry, RegistryLoader, FeatureDefinition
 
 # Default database paths to check (in order of priority)
 DEFAULT_DB_PATHS = [
+    'bot_data.db',  # Primary database used by the application
     'gui_app/trading_bot.db',
     'gui_app/botify_trades.db',
     'trading_bot.db',
