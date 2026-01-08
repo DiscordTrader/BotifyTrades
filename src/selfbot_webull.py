@@ -9823,20 +9823,38 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         except Exception as e:
                             _original_print(f"[DATABASE] ⚠️ Could not update signal status: {e}")
                     
-                    # Mark tier as hit AFTER successful risk order execution
+                    # Track pending risk order - tier will be marked after fill confirmation
                     if signal.get('_risk_management_order') and signal.get('_tier_to_mark'):
                         try:
                             tier_to_mark = signal['_tier_to_mark']
                             position_key = signal.get('_position_key')
                             is_partial = signal.get('_is_partial', True)
+                            qty = signal.get('qty', 1)
+                            
+                            # Extract order_id from response
+                            order_id = None
+                            if isinstance(resp, dict):
+                                order_id = resp.get('orderId')
+                            elif hasattr(resp, 'order_id'):
+                                order_id = resp.order_id
                             
                             if position_key and hasattr(self, 'risk_manager') and self.risk_manager:
-                                self.risk_manager.cache.mark_tier_hit(position_key, tier_to_mark)
-                                if tier_to_mark == 1 and not is_partial:
-                                    self.risk_manager.cache.set_all_tiers_hit(position_key)
-                                _original_print(f"[RISK] ✓ Tier {tier_to_mark} marked as hit for {position_key}")
+                                if order_id:
+                                    # Track as pending - tier marked after fill confirmation
+                                    self.risk_manager.cache.add_pending_order(
+                                        position_key, str(order_id), tier_to_mark, qty
+                                    )
+                                    _original_print(f"[RISK] 📋 Tier {tier_to_mark} order PENDING fill confirmation: {order_id}")
+                                    # Store order info for reconciliation
+                                    signal['_pending_order_id'] = str(order_id)
+                                else:
+                                    # No order_id means immediate fill (some brokers)
+                                    self.risk_manager.cache.mark_tier_hit(position_key, tier_to_mark)
+                                    if tier_to_mark == 1 and not is_partial:
+                                        self.risk_manager.cache.set_all_tiers_hit(position_key)
+                                    _original_print(f"[RISK] ✓ Tier {tier_to_mark} marked as hit (immediate fill)")
                         except Exception as e:
-                            _original_print(f"[RISK] ⚠️ Could not mark tier as hit: {e}")
+                            _original_print(f"[RISK] ⚠️ Could not track pending order: {e}")
                     
                     # 1. Send notification to Discord channel (check settings first)
                     try:

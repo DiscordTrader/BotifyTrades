@@ -115,8 +115,12 @@ def evaluate_tiered_targets(
     t3 = channel_settings.profit_target_3_pct
     t4 = channel_settings.profit_target_4_pct
     
-    # Tier 1 check
-    if not cache.tier1_hit and t1 > 0 and pct_change >= t1:
+    # Helper to check if tier has pending order awaiting fill
+    def has_pending(tier: int) -> bool:
+        return cache.has_pending_order_for_tier(tier)
+    
+    # Tier 1 check - skip if tier hit OR pending order exists
+    if not cache.tier1_hit and not has_pending(1) and t1 > 0 and pct_change >= t1:
         exit_qty, is_partial = calculate_tier_exit_qty(1, current_qty, channel_settings, cache)
         if exit_qty > 0:
             qty_info = f"{exit_qty}" if channel_settings.profit_target_qty_1 else f"{exit_qty} of {current_qty}"
@@ -129,8 +133,8 @@ def evaluate_tiered_targets(
                 tier_hit=1
             )
     
-    # Tier 2 check
-    elif cache.tier1_hit and not cache.tier2_hit and t2 > 0 and pct_change >= t2:
+    # Tier 2 check - skip if tier hit OR pending order exists
+    elif cache.tier1_hit and not cache.tier2_hit and not has_pending(2) and t2 > 0 and pct_change >= t2:
         exit_qty, is_partial = calculate_tier_exit_qty(2, current_qty, channel_settings, cache)
         if exit_qty > 0:
             qty_info = f"{exit_qty}" if channel_settings.profit_target_qty_2 else f"{exit_qty} of {current_qty}"
@@ -143,8 +147,8 @@ def evaluate_tiered_targets(
                 tier_hit=2
             )
     
-    # Tier 3 check
-    elif cache.tier2_hit and not cache.tier3_hit and t3 > 0 and pct_change >= t3:
+    # Tier 3 check - skip if tier hit OR pending order exists
+    elif cache.tier2_hit and not cache.tier3_hit and not has_pending(3) and t3 > 0 and pct_change >= t3:
         # If T4 is configured, T3 is not the final tier
         if t4 > 0:
             exit_qty, is_partial = calculate_tier_exit_qty(3, current_qty, channel_settings, cache)
@@ -175,8 +179,8 @@ def evaluate_tiered_targets(
                     tier_hit=3
                 )
     
-    # Tier 4 check (new)
-    elif cache.tier3_hit and not cache.tier4_hit and t4 > 0 and pct_change >= t4:
+    # Tier 4 check - skip if tier hit OR pending order exists
+    elif cache.tier3_hit and not cache.tier4_hit and not has_pending(4) and t4 > 0 and pct_change >= t4:
         exit_qty, is_partial = calculate_tier_exit_qty(4, current_qty, channel_settings, cache)
         if exit_qty > 0:
             runner_info = ""
