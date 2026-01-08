@@ -448,9 +448,9 @@ class QAValidator:
         """
         result = ValidationResult()
         
-        # Load workflow registry
-        workflows = self.registry.get_workflows()
-        if not workflows or workflow_name not in workflows:
+        # Use typed workflow from registry loader
+        workflow_def = self.registry.workflows.get(workflow_name)
+        if not workflow_def:
             result.add_issue(ValidationIssue(
                 severity='warning',
                 category='workflow',
@@ -460,8 +460,7 @@ class QAValidator:
             ))
             return result
         
-        workflow = workflows[workflow_name]
-        stages = workflow.get('stages', {})
+        stages = workflow_def.stages
         
         # Validate each stage
         for stage_id, stage in stages.items():
@@ -565,7 +564,7 @@ class QAValidator:
         """Validate all defined workflows."""
         result = ValidationResult()
         
-        workflows = self.registry.get_workflows()
+        workflows = self.registry.workflows
         if not workflows:
             result.add_issue(ValidationIssue(
                 severity='info',
@@ -602,15 +601,15 @@ class QAValidator:
             'stages_failed': 0
         }
         
-        workflows = self.registry.get_workflows()
+        workflows = self.registry.workflows
         if not workflows:
             return status
         
-        for workflow_name, workflow in workflows.items():
-            stages = workflow.get('stages', {})
+        for workflow_name, workflow_def in workflows.items():
+            stages = workflow_def.stages
             pipeline_status = {
-                'name': workflow.get('name', workflow_name),
-                'description': workflow.get('description', ''),
+                'name': workflow_def.name,
+                'description': workflow_def.description,
                 'stages': [],
                 'is_healthy': True
             }

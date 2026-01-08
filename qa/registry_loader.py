@@ -88,8 +88,13 @@ class WorkflowDefinition:
     name: str
     description: str
     priority: str
-    steps: Dict[str, Dict[str, Any]]
+    stages: Dict[str, Dict[str, Any]]
     test_scenarios: List[Dict[str, Any]] = field(default_factory=list)
+    
+    @property
+    def steps(self) -> Dict[str, Dict[str, Any]]:
+        """Alias for backwards compatibility"""
+        return self.stages
 
 
 class RegistryLoader:
@@ -173,11 +178,12 @@ class RegistryLoader:
         workflows = data.get('workflows', {})
         
         for name, workflow_data in workflows.items():
+            stages = workflow_data.get('stages', workflow_data.get('steps', {}))
             self._workflows[name] = WorkflowDefinition(
                 name=workflow_data.get('name', name),
                 description=workflow_data.get('description', ''),
                 priority=workflow_data.get('priority', 'normal'),
-                steps=workflow_data.get('steps', {}),
+                stages=stages,
                 test_scenarios=workflow_data.get('test_scenarios', [])
             )
     
