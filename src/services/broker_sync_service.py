@@ -844,6 +844,9 @@ class BrokerSyncService:
                 price = order.get('filled_price', 0)
                 total_cost = qty * price * (100 if order.get('asset_type') == 'option' else 1)
                 
+                # Ensure filled_at has a valid value (use current time as fallback)
+                filled_time = order.get('filled_time') or datetime.now().isoformat()
+                
                 result = insert_filled_order(
                     broker=broker_name,
                     broker_order_id=str(order.get('order_id', '')),
@@ -851,7 +854,7 @@ class BrokerSyncService:
                     side=side,
                     quantity=qty,
                     filled_price=price,
-                    filled_at=order.get('filled_time', ''),
+                    filled_at=filled_time,
                     asset_type=order.get('asset_type', 'stock'),
                     total_cost=total_cost,
                     strike=order.get('strike'),

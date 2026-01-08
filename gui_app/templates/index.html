@@ -1003,7 +1003,16 @@ async function loadFilledOrders() {
                 sideBadge = `<span style="background: var(--bg-tertiary); padding: 2px 8px; border-radius: 4px;">${side || 'N/A'}</span>`;
             }
             
-            const filledTime = order.filled_at ? new Date(order.filled_at + 'Z').toLocaleString() : 'N/A';
+            let filledTime = 'N/A';
+            if (order.filled_at && order.filled_at.trim()) {
+                try {
+                    const dateStr = order.filled_at.includes('Z') || order.filled_at.includes('+') ? order.filled_at : order.filled_at + 'Z';
+                    const parsed = new Date(dateStr);
+                    filledTime = isNaN(parsed.getTime()) ? 'N/A' : parsed.toLocaleString();
+                } catch (e) {
+                    filledTime = 'N/A';
+                }
+            }
             
             tableHTML += `<tr>
                 <td><span class="badge" style="background: var(--bg-tertiary);">${order.broker || 'Unknown'}</span></td>
