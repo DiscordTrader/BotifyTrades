@@ -9517,7 +9517,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 _original_print(f"[LIVE TRADE] Calculating position size ({position_size_pct}% of portfolio)...")
                                 
                                 if hasattr(live_broker, 'get_account_info'):
-                                    account_info = live_broker.get_account_info()
+                                    import inspect
+                                    account_info_result = live_broker.get_account_info()
+                                    # Handle both sync and async get_account_info methods
+                                    if inspect.iscoroutine(account_info_result):
+                                        account_info = await account_info_result
+                                    else:
+                                        account_info = account_info_result
+                                    
                                     if account_info:
                                         if signal['asset'] == 'option':
                                             buying_power = account_info.get('options_buying_power') or account_info.get('buying_power', 0)
@@ -9540,6 +9547,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 _original_print(f"[LIVE TRADE] Position size: ${budget:.2f} budget, ${actual_cost:.2f}/unit → {calculated_qty} qty (was {original_qty})")
                             except Exception as e:
                                 _original_print(f"[LIVE TRADE] ⚠️ Position sizing error: {e}, using qty={signal.get('qty', 1)}")
+                                import traceback
+                                traceback.print_exc()
                         
                         # Check if we should use bracket orders (stocks with stop loss or profit target)
                         use_bracket = (
