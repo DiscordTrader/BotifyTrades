@@ -1329,6 +1329,21 @@ function renderChannels() {
                             <option value="hybrid" ${channel.exit_strategy_mode === 'hybrid' ? 'selected' : ''}>Hybrid (Both)</option>
                         </select>
                     </div>
+                    
+                    <div class="control-group" style="margin-top: 12px;">
+                        <label style="font-size: 0.85rem; color: var(--text-secondary);">
+                            Conditional Order Timeout
+                        </label>
+                        <div class="position-size-input" style="margin-top: 4px;">
+                            <input type="number" 
+                                   value="${channel.conditional_order_timeout_minutes || ''}" 
+                                   placeholder="No Timeout"
+                                   min="1" max="1440" step="1"
+                                   onchange="updateConditionalTimeout(${channel.id}, this.value)"
+                                   title="Minutes until conditional orders expire (empty = no timeout)">
+                            <span>minutes</span>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="channel-footer">
@@ -1509,6 +1524,34 @@ async function updateExitStrategy(channelId, mode) {
             showNotification(`Exit strategy set to ${modeLabels[mode] || mode}`);
         } else {
             showNotification('Error updating exit strategy', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function updateConditionalTimeout(channelId, minutes) {
+    try {
+        const timeoutValue = minutes ? parseInt(minutes) : null;
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conditional_order_timeout_minutes: timeoutValue })
+        });
+        
+        if (response.ok) {
+            if (timeoutValue) {
+                const hours = Math.floor(timeoutValue / 60);
+                const mins = timeoutValue % 60;
+                const display = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+                showNotification(`Conditional order timeout set to ${display}`);
+            } else {
+                showNotification('Conditional order timeout disabled (no expiry)');
+            }
+        } else {
+            showNotification('Error updating conditional timeout', 'error');
             await loadChannels();
         }
     } catch (error) {
