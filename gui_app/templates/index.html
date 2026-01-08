@@ -182,6 +182,37 @@
         </div>
     </div>
     
+    <!-- Filled Orders Container -->
+    <div id="filled-orders-container" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px;">
+            <div>
+                <span style="font-size: 0.875rem; color: var(--text-secondary);">Broker-synced filled orders (updated every ~2.5 min)</span>
+            </div>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <select id="filled-filter-broker" onchange="loadFilledOrders()" class="form-select" style="min-width: 140px; background-color: #2C2C2E; color: #FFFFFF;">
+                    <option value="">All Brokers</option>
+                    <option value="Webull">Webull</option>
+                    <option value="ALPACA_PAPER">Alpaca Paper</option>
+                    <option value="ALPACA_LIVE">Alpaca Live</option>
+                </select>
+                <select id="filled-filter-days" onchange="loadFilledOrders()" class="form-select" style="min-width: 100px; background-color: #2C2C2E; color: #FFFFFF;">
+                    <option value="1">Today</option>
+                    <option value="7" selected>7 Days</option>
+                    <option value="30">30 Days</option>
+                </select>
+                <button onclick="loadFilledOrders()" class="btn btn-small" style="background: linear-gradient(135deg, #10b981, #059669);">
+                    🔄 Refresh
+                </button>
+            </div>
+        </div>
+        <div id="filled-orders-table">
+            <div style="text-align: center; padding: 60px 20px;">
+                <div class="spinner" style="margin: 0 auto 20px;"></div>
+                <div style="color: var(--text-secondary); font-size: 0.9375rem;">Loading filled orders...</div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Conditional Orders Container -->
     <div id="conditional-orders-container" style="display: none;">
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px;">
@@ -795,11 +826,13 @@ async function switchTab(tab) {
     const tradesContainer = document.getElementById('trades-table-container');
     const botTradesContainer = document.getElementById('bot-trades-container');
     const conditionalContainer = document.getElementById('conditional-orders-container');
+    const filledContainer = document.getElementById('filled-orders-container');
     
     // Hide all containers first
     tradesContainer.style.display = 'none';
     botTradesContainer.style.display = 'none';
     conditionalContainer.style.display = 'none';
+    filledContainer.style.display = 'none';
     
     if (tab === 'bot-trades') {
         botTradesContainer.style.display = 'block';
@@ -807,15 +840,12 @@ async function switchTab(tab) {
     } else if (tab === 'conditional') {
         conditionalContainer.style.display = 'block';
         await loadConditionalOrders();
+    } else if (tab === 'filled') {
+        filledContainer.style.display = 'block';
+        await loadFilledOrders();
     } else {
         tradesContainer.style.display = 'block';
-        
-        // Load trades - use order history API for filled orders
-        if (tab === 'filled') {
-            await loadFilledOrderHistory();
-        } else {
-            loadTrades();
-        }
+        loadTrades();
     }
 }
 
@@ -898,6 +928,100 @@ async function loadFilledOrderHistory() {
     } catch (error) {
         console.error('[loadFilledOrderHistory] Error:', error);
         container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load Webull order history</div>';
+    }
+}
+
+async function loadFilledOrders() {
+    console.log('[loadFilledOrders] Loading from broker sync...');
+    const container = document.getElementById('filled-orders-table');
+    if (!container) return;
+    
+    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading filled orders...</div></div>';
+    
+    try {
+        const broker = document.getElementById('filled-filter-broker')?.value || '';
+        const days = document.getElementById('filled-filter-days')?.value || '7';
+        
+        let url = `/api/filled-orders?days=${days}&limit=100`;
+        if (broker) url += `&broker=${encodeURIComponent(broker)}`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (!data.success) {
+            container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">${data.error || 'Failed to load'}</div>`;
+            return;
+        }
+        
+        const orders = data.orders || [];
+        console.log('[loadFilledOrders] Got', orders.length, 'orders');
+        
+        // Update summary
+        const summaryEl = document.getElementById('summary-text');
+        if (summaryEl) {
+            summaryEl.textContent = `${orders.length} filled order${orders.length !== 1 ? 's' : ''} (last ${days} days)`;
+        }
+        
+        if (orders.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 60px 20px;">
+                    <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">✅</div>
+                    <div style="color: var(--text-secondary); font-size: 1rem;">No filled orders from brokers</div>
+                    <div style="color: var(--text-muted); font-size: 0.85rem; margin-top: 8px;">Orders sync every ~2.5 minutes when brokers are connected</div>
+                </div>
+            `;
+            return;
+        }
+        
+        // Build table
+        let tableHTML = '<table class="data-table"><thead><tr>';
+        tableHTML += '<th>Broker</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>Total</th><th>Filled At</th>';
+        tableHTML += '</tr></thead><tbody>';
+        
+        orders.forEach(order => {
+            const qty = parseInt(order.quantity) || 0;
+            const price = parseFloat(order.filled_price) || 0;
+            const total = parseFloat(order.total_cost) || (price * qty);
+            
+            let symbolDisplay = order.symbol || '';
+            if (order.asset_type === 'option' && order.strike) {
+                const expiry = order.expiry ? order.expiry.slice(5) : '';
+                symbolDisplay += ` ${expiry} $${order.strike} ${order.option_type || ''}`;
+            }
+            
+            let sideBadge = '';
+            const side = (order.side || '').toUpperCase();
+            if (side === 'BTO' || side === 'BUY') {
+                sideBadge = '<span style="background: rgba(0,255,136,0.2); color: #0f8; padding: 2px 8px; border-radius: 4px; font-weight: 600;">BTO</span>';
+            } else if (side === 'STC' || side === 'SELL') {
+                sideBadge = '<span style="background: rgba(255,68,68,0.2); color: #f44; padding: 2px 8px; border-radius: 4px; font-weight: 600;">STC</span>';
+            } else if (side === 'STO') {
+                sideBadge = '<span style="background: rgba(255,165,0,0.2); color: #ffa500; padding: 2px 8px; border-radius: 4px; font-weight: 600;">STO</span>';
+            } else if (side === 'BTC') {
+                sideBadge = '<span style="background: rgba(100,149,237,0.2); color: #6495ed; padding: 2px 8px; border-radius: 4px; font-weight: 600;">BTC</span>';
+            } else {
+                sideBadge = `<span style="background: var(--bg-tertiary); padding: 2px 8px; border-radius: 4px;">${side || 'N/A'}</span>`;
+            }
+            
+            const filledTime = order.filled_at ? new Date(order.filled_at + 'Z').toLocaleString() : 'N/A';
+            
+            tableHTML += `<tr>
+                <td><span class="badge" style="background: var(--bg-tertiary);">${order.broker || 'Unknown'}</span></td>
+                <td><strong>${symbolDisplay}</strong></td>
+                <td>${sideBadge}</td>
+                <td>${qty}</td>
+                <td>$${price.toFixed(2)}</td>
+                <td>$${total.toFixed(2)}</td>
+                <td style="color: var(--text-secondary); font-size: 0.85rem;">${filledTime}</td>
+            </tr>`;
+        });
+        
+        tableHTML += '</tbody></table>';
+        container.innerHTML = tableHTML;
+        
+    } catch (error) {
+        console.error('[loadFilledOrders] Error:', error);
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load filled orders</div>';
     }
 }
 

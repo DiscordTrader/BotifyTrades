@@ -2149,7 +2149,7 @@ def register_routes(app):
             limit = int(request.args.get('limit', 100))
             
             orders = get_filled_orders(broker=broker, symbol=symbol, days=days, limit=limit)
-            count = get_filled_orders_count(broker=broker, days=days)
+            count = get_filled_orders_count(broker=broker, symbol=symbol, days=days)
             
             response = make_response(jsonify({
                 'success': True,

@@ -9146,22 +9146,28 @@ def update_broker_sync_state(broker: str, last_sync_at: str = None,
         print(f"[DATABASE] Error updating broker sync state: {e}")
 
 
-def get_filled_orders_count(broker: str = None, days: int = 1) -> int:
+def get_filled_orders_count(broker: str = None, symbol: str = None, days: int = 1) -> int:
     """Get count of filled orders for stats."""
     conn = get_connection()
     cursor = conn.cursor()
     
     try:
+        conditions = [f"filled_at >= datetime('now', '-{days} days')"]
+        params = []
+        
         if broker:
-            cursor.execute(f'''
-                SELECT COUNT(*) FROM filled_orders
-                WHERE broker = ? AND filled_at >= datetime('now', '-{days} days')
-            ''', (broker,))
-        else:
-            cursor.execute(f'''
-                SELECT COUNT(*) FROM filled_orders
-                WHERE filled_at >= datetime('now', '-{days} days')
-            ''')
+            conditions.append("broker = ?")
+            params.append(broker)
+        if symbol:
+            conditions.append("symbol LIKE ?")
+            params.append(f"%{symbol}%")
+        
+        where_clause = " AND ".join(conditions)
+        
+        cursor.execute(f'''
+            SELECT COUNT(*) FROM filled_orders
+            WHERE {where_clause}
+        ''', params)
         
         return cursor.fetchone()[0]
     except Exception as e:
