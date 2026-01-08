@@ -8225,21 +8225,22 @@ def purge_conditional_orders(market: str = None, keep_active: bool = True) -> in
     cursor = conn.cursor()
     
     try:
-        non_active_statuses = ('EXECUTED', 'CANCELED', 'CANCELLED', 'ERROR', 'EXPIRED', 'FAILED')
+        non_active_statuses = ('EXECUTED', 'CANCELED', 'CANCELLED', 'ERROR', 'EXPIRED', 'FAILED', 'EXECUTING', 'TRIGGERED')
+        placeholders = ','.join(['?' for _ in non_active_statuses])
         
         if market:
             if keep_active:
-                cursor.execute('''
+                cursor.execute(f'''
                     DELETE FROM conditional_orders
-                    WHERE market = ? AND status IN (?, ?, ?, ?, ?, ?)
+                    WHERE market = ? AND status IN ({placeholders})
                 ''', (market, *non_active_statuses))
             else:
                 cursor.execute('DELETE FROM conditional_orders WHERE market = ?', (market,))
         else:
             if keep_active:
-                cursor.execute('''
+                cursor.execute(f'''
                     DELETE FROM conditional_orders
-                    WHERE status IN (?, ?, ?, ?, ?, ?)
+                    WHERE status IN ({placeholders})
                 ''', non_active_statuses)
             else:
                 cursor.execute('DELETE FROM conditional_orders')
