@@ -208,13 +208,20 @@ class BrokerPriceMonitor(PriceMonitor):
         'schwab': 2,
     }
     
-    def __init__(self, symbol: str, callback: Callable[[str, float], None], broker_name: str, broker_instance: Any = None):
+    # Stale price detection threshold
+    STALE_THRESHOLD_POLLS = 10  # After 10 unchanged polls, check Finnhub
+    
+    def __init__(self, symbol: str, callback: Callable[[str, float], None], broker_name: str, broker_instance: Any = None, finnhub_api_key: str = None):
         super().__init__(symbol, callback)
         self.broker_name = broker_name
         self.broker_instance = broker_instance
+        self.finnhub_api_key = finnhub_api_key
         # Set poll interval based on broker API limits
         broker_lower = broker_name.lower()
         self.poll_interval = self.BROKER_POLL_INTERVALS.get(broker_lower, 2)  # Default 2 sec
+        # Stale price detection
+        self.unchanged_count = 0
+        self.using_finnhub_fallback = False
     
     async def start(self):
         self.is_running = True
@@ -226,8 +233,30 @@ class BrokerPriceMonitor(PriceMonitor):
             try:
                 price = await self._fetch_price()
                 poll_count += 1
+                
+                # Detect stale prices from broker
+                if price and price == self.last_price:
+                    self.unchanged_count += 1
+                    # If price hasn't changed in many polls, try Finnhub
+                    if self.unchanged_count >= self.STALE_THRESHOLD_POLLS and self.finnhub_api_key and not self.using_finnhub_fallback:
+                        finnhub_price = await self._fetch_finnhub_price()
+                        if finnhub_price and abs(finnhub_price - price) > 0.05:
+                            sys.stderr.write(f"[{self.broker_name.upper()}] STALE DATA DETECTED for {self.symbol}: broker=${price:.2f}, Finnhub=${finnhub_price:.2f}\n")
+                            sys.stderr.write(f"[{self.broker_name.upper()}] Switching to Finnhub for {self.symbol}\n")
+                            sys.stderr.flush()
+                            self.using_finnhub_fallback = True
+                            price = finnhub_price
+                            self.unchanged_count = 0
+                else:
+                    self.unchanged_count = 0
+                
+                # If using Finnhub fallback, fetch from Finnhub instead
+                if self.using_finnhub_fallback and self.finnhub_api_key:
+                    price = await self._fetch_finnhub_price() or price
+                
                 if poll_count <= 3 or poll_count % 10 == 0:
-                    sys.stderr.write(f"[{self.broker_name.upper()}] Poll #{poll_count} for {self.symbol}: price={price}\n")
+                    source = "FINNHUB" if self.using_finnhub_fallback else self.broker_name.upper()
+                    sys.stderr.write(f"[{source}] Poll #{poll_count} for {self.symbol}: price={price}\n")
                     sys.stderr.flush()
                 if price and price != self.last_price:
                     self.last_price = price
@@ -237,6 +266,23 @@ class BrokerPriceMonitor(PriceMonitor):
                 sys.stderr.flush()
             
             await asyncio.sleep(self.poll_interval)
+    
+    async def _fetch_finnhub_price(self) -> Optional[float]:
+        """Fetch price from Finnhub as fallback for stale broker data."""
+        if not self.finnhub_api_key:
+            return None
+        try:
+            url = f"https://finnhub.io/api/v1/quote?symbol={self.symbol}&token={self.finnhub_api_key}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        price = data.get('c')
+                        return float(price) if price else None
+        except Exception as e:
+            sys.stderr.write(f"[FINNHUB FALLBACK] Error for {self.symbol}: {e}\n")
+            sys.stderr.flush()
+        return None
     
     async def _fetch_price(self) -> Optional[float]:
         if not self.broker_instance:

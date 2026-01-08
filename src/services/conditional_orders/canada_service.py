@@ -63,8 +63,8 @@ class CanadaConditionalOrderService(BaseConditionalOrderService):
         
         if broker_instance and broker_rate_ok:
             data_source = broker_name.lower()
-            self._log(f"Using {broker_name} for {symbol} (real-time)")
-            monitor = BrokerPriceMonitor(symbol, price_callback, broker_name, broker_instance)
+            self._log(f"Using {broker_name} for {symbol} (real-time, Finnhub fallback available)")
+            monitor = BrokerPriceMonitor(symbol, price_callback, broker_name, broker_instance, finnhub_api_key=self.finnhub_api_key)
         
         elif self.finnhub_api_key:
             tsym = f"{symbol}.TO" if not symbol.endswith('.TO') else symbol
