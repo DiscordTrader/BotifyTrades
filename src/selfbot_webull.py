@@ -7384,7 +7384,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 if order_id:
                                     trigger_type = parsed_cond.get('trigger_type', 'over')
                                     print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {trigger_type} ${parsed_cond['trigger_price']}")
-                                    # Reactions disabled for conditional orders
+                                    
+                                    # Save to signals table for Execution tab display
+                                    try:
+                                        author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                                        cond_signal = {
+                                            'action': 'BTO',
+                                            'symbol': parsed_cond['symbol'],
+                                            'qty': parsed_cond.get('calculated_qty', 1),
+                                            'price': parsed_cond.get('trigger_price', 0),
+                                            'asset': parsed_cond.get('asset_type', 'stock'),
+                                            '_conditional_order_id': order_id
+                                        }
+                                        self._save_signal_to_db(cond_signal, message.channel.id, message.id, author_name)
+                                        print(f"[COND ORDER] ✓ Signal saved to database for Execution tab")
+                                    except Exception as save_err:
+                                        print(f"[COND ORDER] ⚠️ Failed to save signal to DB: {save_err}")
                                 else:
                                     print(f"[COND ORDER] ⚠️ Failed to create conditional order")
                             else:

@@ -3201,7 +3201,7 @@
   },
   "ALPACA_PAPER_CLPT_stock": {
     "entry_price": 14.9,
-    "highest_price": 15.5001,
+    "highest_price": 15.56,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3857,7 +3857,7 @@
   },
   "ALPACA_PAPER_APLD_stock": {
     "entry_price": 33.66,
-    "highest_price": 34.42,
+    "highest_price": 34.465,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3873,7 +3873,7 @@
   },
   "ALPACA_PAPER_JTAI_stock": {
     "entry_price": 0.758,
-    "highest_price": 1.08,
+    "highest_price": 1.0999,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3998,5 +3998,21 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "created_at": "2026-01-08T16:00:53.635517"
+  },
+  "ALPACA_PAPER_QQQ_619.0_2026-01-08_P": {
+    "entry_price": 0.76,
+    "highest_price": 0.98,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "QQQ260108P00619000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-08T16:45:46.517462"
   }
 }
