@@ -129,7 +129,7 @@
   },
   "ALPACA_PAPER_ONDS_stock": {
     "entry_price": 9.22,
-    "highest_price": 14.01,
+    "highest_price": 14.4041,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3841,9 +3841,9 @@
   },
   "ALPACA_PAPER_FLYX_stock": {
     "entry_price": 6.06,
-    "highest_price": 6.765,
+    "highest_price": 7.46,
     "trailing_activated": true,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -3857,7 +3857,7 @@
   },
   "ALPACA_PAPER_APLD_stock": {
     "entry_price": 33.66,
-    "highest_price": 34.24,
+    "highest_price": 34.415,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
