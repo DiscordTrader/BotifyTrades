@@ -512,6 +512,10 @@ class BaseConditionalOrderService(ABC):
             return None
         
         channel_settings = get_channel_conditional_settings(channel_id)
+        self._log(f"Channel settings for {channel_id}: position_size_pct={channel_settings.get('position_size_pct')}, "
+                  f"order_timeout={channel_settings.get('order_timeout_minutes')}, "
+                  f"conditional_order_timeout={channel_settings.get('conditional_order_timeout_minutes')}, "
+                  f"stop_loss_pct={channel_settings.get('stop_loss_pct')}")
         if not channel_settings.get('conditional_order_enabled', True):
             self._log(f"Disabled for channel {channel_id}")
             return None

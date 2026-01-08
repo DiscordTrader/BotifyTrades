@@ -3950,5 +3950,37 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "created_at": "2026-01-08T15:06:31.221126"
+  },
+  "ALPACA_PAPER_NVDA_192.5_2026-01-09_C": {
+    "entry_price": 0.16,
+    "highest_price": 0.15,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "NVDA260109C00192500",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-08T15:49:46.574363"
+  },
+  "ALPACA_PAPER_QQQ_618.0_2026-01-08_P": {
+    "entry_price": 0.72,
+    "highest_price": 0.64,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "QQQ260108P00618000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-08T15:58:19.629835"
   }
 }
