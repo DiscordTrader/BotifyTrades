@@ -75,6 +75,34 @@ class BrokerSyncService:
         if risk_manager:
             print("[SYNC] ✓ Risk manager linked for order reconciliation")
     
+    def _normalize_timestamp(self, timestamp_str: str) -> str:
+        """Convert various timestamp formats to ISO format.
+        
+        Handles formats like:
+        - '01/08/2026 14:11:41 EST' (Webull format)
+        - '2026-01-08T14:11:41' (already ISO)
+        - '2026-01-08 14:11:41' (ISO without T)
+        """
+        if not timestamp_str:
+            return datetime.now().isoformat()
+        
+        # Already ISO format
+        if 'T' in timestamp_str or timestamp_str.count('-') >= 2:
+            return timestamp_str.replace(' ', 'T').split('+')[0].split('Z')[0]
+        
+        # Webull format: MM/DD/YYYY HH:MM:SS EST/EDT
+        try:
+            # Remove timezone suffix
+            clean_ts = timestamp_str.replace(' EST', '').replace(' EDT', '').strip()
+            # Parse MM/DD/YYYY HH:MM:SS
+            dt = datetime.strptime(clean_ts, '%m/%d/%Y %H:%M:%S')
+            return dt.isoformat()
+        except ValueError:
+            pass
+        
+        # Fallback: return as-is or current time
+        return timestamp_str or datetime.now().isoformat()
+    
     async def start(self):
         """Start the background sync task"""
         try:
@@ -896,8 +924,9 @@ class BrokerSyncService:
                 price = order.get('filled_price', 0)
                 total_cost = qty * price * (100 if order.get('asset_type') == 'option' else 1)
                 
-                # Ensure filled_at has a valid value (use current time as fallback)
-                filled_time = order.get('filled_time') or datetime.now().isoformat()
+                # Ensure filled_at has a valid value and convert to ISO format
+                raw_time = order.get('filled_time') or ''
+                filled_time = self._normalize_timestamp(raw_time) if raw_time else datetime.now().isoformat()
                 
                 result = insert_filled_order(
                     broker=broker_name,
