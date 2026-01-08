@@ -900,14 +900,6 @@
                     </label>
                 </div>
                 <div class="form-group">
-                    <label>P/L Summary</label>
-                    <label class="mode-toggle">
-                        <input type="checkbox" id="newTradeSummaryEnabled" checked>
-                        <div class="toggle-box"></div>
-                        <span>Post</span>
-                    </label>
-                </div>
-                <div class="form-group">
                     <button type="submit" class="btn-add">
                         <span>✓</span> Add Channel
                     </button>
@@ -954,9 +946,9 @@
     </div>
 
     <div class="add-channel-card" style="margin-top: 30px;" id="channelMappingsSection">
-        <h3><span>🔄</span> Signal Conversion Channels</h3>
+        <h3><span>🔗</span> Channel Mappings</h3>
         <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">
-            Map source channels to destination channels for automatic signal conversion and forwarding. Each mapping can be enabled/disabled individually.
+            Map Discord source channels to webhook URLs for automatic signal forwarding
         </p>
         
         <div id="mappingAddForm" style="display: none; margin-bottom: 20px; padding: 20px; background: rgba(15, 240, 179, 0.05); border-radius: 12px; border: 1px solid rgba(15, 240, 179, 0.2);">
@@ -1282,18 +1274,6 @@ function renderChannels() {
                             <option value="hybrid" ${channel.exit_strategy_mode === 'hybrid' ? 'selected' : ''}>Hybrid (Both)</option>
                         </select>
                     </div>
-                    
-                    <div class="control-group" style="margin-top: 12px;">
-                        <label style="display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem; color: var(--text-secondary);">
-                            📊 P/L Summary
-                            <label class="toggle-switch">
-                                <input type="checkbox" ${channel.trade_summary_enabled !== 0 ? 'checked' : ''} 
-                                       onchange="toggleTradeSummary(${channel.id}, this.checked)"
-                                       title="Post P/L summary to Discord when positions are closed">
-                                <span class="slider"></span>
-                            </label>
-                        </label>
-                    </div>
                 </div>
                 
                 <div class="channel-footer">
@@ -1316,7 +1296,6 @@ async function addChannel() {
     const market = document.getElementById('newMarket').value;
     const executeEnabled = document.getElementById('newExecuteEnabled').checked ? 1 : 0;
     const trackEnabled = document.getElementById('newTrackEnabled').checked ? 1 : 0;
-    const tradeSummaryEnabled = document.getElementById('newTradeSummaryEnabled').checked ? 1 : 0;
     
     if (!channelId || !name) {
         showNotification('Please fill in all required fields', 'error');
@@ -1337,8 +1316,7 @@ async function addChannel() {
                 name: name,
                 market: market,
                 execute_enabled: executeEnabled,
-                track_enabled: trackEnabled,
-                trade_summary_enabled: tradeSummaryEnabled
+                track_enabled: trackEnabled
             })
         });
         
@@ -1476,26 +1454,6 @@ async function updateExitStrategy(channelId, mode) {
             showNotification(`Exit strategy set to ${modeLabels[mode] || mode}`);
         } else {
             showNotification('Error updating exit strategy', 'error');
-            await loadChannels();
-        }
-    } catch (error) {
-        showNotification('Error: ' + error.message, 'error');
-        await loadChannels();
-    }
-}
-
-async function toggleTradeSummary(channelId, enabled) {
-    try {
-        const response = await fetch(`/api/channels/${channelId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ trade_summary_enabled: enabled ? 1 : 0 })
-        });
-        
-        if (response.ok) {
-            showNotification(`P/L Summary ${enabled ? 'enabled' : 'disabled'} for this channel`);
-        } else {
-            showNotification('Error updating P/L summary setting', 'error');
             await loadChannels();
         }
     } catch (error) {
@@ -1713,7 +1671,6 @@ function renderChannelMappings() {
     
     let html = '<table style="width: 100%; border-collapse: collapse;">';
     html += '<thead><tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">';
-    html += '<th style="text-align: center; padding: 12px; color: var(--text-secondary); font-weight: 500;">Enabled</th>';
     html += '<th style="text-align: left; padding: 12px; color: var(--text-secondary); font-weight: 500;">Source Channel</th>';
     html += '<th style="text-align: center; padding: 12px; color: var(--text-secondary);"></th>';
     html += '<th style="text-align: left; padding: 12px; color: var(--text-secondary); font-weight: 500;">Destination</th>';
@@ -1742,16 +1699,7 @@ function renderChannelMappings() {
             typeBadge = '<span style="background: rgba(15,240,179,0.2); color: var(--mint); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem;">Webhook</span>';
         }
         
-        const isActive = m.is_active !== 0;
-        const rowOpacity = isActive ? '1' : '0.5';
-        
-        html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05); opacity: ${rowOpacity};">`;
-        html += `<td style="padding: 12px; text-align: center;">`;
-        html += `<label class="mode-toggle" style="margin: 0;">`;
-        html += `<input type="checkbox" ${isActive ? 'checked' : ''} onchange="toggleMappingEnabled(${m.id}, this.checked)">`;
-        html += `<div class="toggle-box"></div>`;
-        html += `</label>`;
-        html += `</td>`;
+        html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">`;
         html += `<td style="padding: 12px; color: var(--text-primary);">${srcDisplay}</td>`;
         html += `<td style="padding: 12px; text-align: center; color: var(--mint); font-size: 1.2rem;">→</td>`;
         html += `<td style="padding: 12px; color: var(--text-primary);">${destDisplay}</td>`;
@@ -1936,29 +1884,6 @@ async function saveChannelMappingEdit() {
         }
     } catch (error) {
         showNotification('Failed to update mapping: ' + error.message, 'error');
-    }
-}
-
-async function toggleMappingEnabled(mappingId, enabled) {
-    try {
-        const response = await fetch(`/api/channel_mappings/${mappingId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ is_active: enabled ? 1 : 0 })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showNotification(`Mapping ${enabled ? 'enabled' : 'disabled'}`);
-            loadChannelMappings();
-        } else {
-            showNotification(result.error || 'Failed to update mapping', 'error');
-            loadChannelMappings();
-        }
-    } catch (error) {
-        showNotification('Error: ' + error.message, 'error');
-        loadChannelMappings();
     }
 }
 

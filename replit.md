@@ -1,7 +1,7 @@
 # BotifyTrades - Multi-Platform Trading Bot
 
 ## Overview
-BotifyTrades is a cross-platform trading automation bot for Discord and Telegram, designed for automated stock and options trading across multiple brokers in a global environment (USA, Canada, India). It provides automated trade execution, advanced analytics, a dual-broker architecture for both paper and live trading, and comprehensive risk management. The bot monitors messaging platforms for trading signals, executes trades with pre-trade swing analysis, AI-powered post-trade analysis, and interactive commands, all managed via a Flask web control panel. The project aims to deliver a robust, automated trading solution that enhances user control and analytical capabilities within a messaging-centric workflow, focusing on comprehensive automation and analytical tools to provide a competitive edge in automated trading.
+BotifyTrades is a cross-platform trading automation bot for Discord and Telegram, designed for automated stock and options trading across multiple brokers in the USA, Canada, and India. It offers automated execution, advanced analytics, a dual-broker architecture for paper and live trading, and comprehensive risk management. The bot monitors messaging platforms for trading signals, executes trades with pre-trade swing analysis, AI-powered post-trade analysis, and interactive commands, all managed via a Flask web control panel. The project aims to provide a robust, automated trading solution, enhancing user control and analytical capabilities within a messaging-centric workflow, with a focus on comprehensive automation and analytical tools.
 
 ## User Preferences
 - **Security**: Always use environment variables (Replit Secrets) for credentials and license keys
@@ -18,7 +18,7 @@ BotifyTrades is a cross-platform trading automation bot for Discord and Telegram
 The bot features a Flask-based web control panel with a dark theme, real-time dashboards, dynamic channel management, live trade monitoring, and a System Health Page. Broker-specific Live Analytics pages emulate Webull/Thinkorswim-style dashboards. An integrated AI chat assistant provides smart FAQ and intent-based support. The options trading interface is optimized for performance, enabling strike-targeted lookup and displaying detailed order inputs with Greeks. A PySide6-based setup wizard guides first-time users through configuration, with a splash screen and system tray integration for professional desktop application behavior.
 
 ### Technical Implementations
-Core technologies include `discord.py-self` and `webull`. It employs a true dual-broker architecture for live and paper trading with platform-specific credential encryption. Order execution uses an asynchronous, queue-based system. Signal parsing follows a multi-layer approach: learned formats from a database (AI-taught), built-in regex patterns, and AI fallback, supporting various formats including Indian market signals, DTE notation, Bishop format, Discord Embed extraction, and EvaPanda format. Risk management includes automated profit targets, stop losses, trailing stops, intelligent price slippage protection, and auto-quantity calculation, all GUI-configurable and stored in SQLite. Pre-trade analysis uses technical indicators, and post-execution analysis leverages OpenAI GPT models. Real-time market data is integrated, and interactive Discord commands enable on-demand analysis. The Auto Signal Conversion system executes stock alerts as Alpaca BRACKET ORDERs. An error monitoring system provides automatic detection, logging, and AI assistant contextual help. A "teach once, use forever" feature allows users to teach new signal formats via a chatbot.
+Core technologies include `discord.py-self` and `webull`. It employs a true dual-broker architecture for live and paper trading, with platform-specific credential encryption. Order execution uses an asynchronous, queue-based system. Signal parsing follows a multi-layer approach: learned formats from a database (AI-taught), built-in regex patterns, and AI fallback, supporting various formats including Indian market signals, DTE notation, Bishop format, Discord Embed extraction, and EvaPanda format. Risk management includes automated profit targets, stop losses, trailing stops, intelligent price slippage protection, and auto-quantity calculation, all GUI-configurable and stored in SQLite. Pre-trade analysis uses technical indicators, and post-execution analysis leverages OpenAI GPT models. Real-time market data is integrated, and interactive Discord commands enable on-demand analysis. The Auto Signal Conversion system executes stock alerts as Alpaca BRACKET ORDERs. An error monitoring system provides automatic detection, logging, and AI assistant contextual help. A "teach once, use forever" feature allows users to teach new signal formats via a chatbot.
 
 The **Signal Verification Service** detects paper trading and impossible fills using real-time broker data (Webull, Tastytrade, Alpaca) prioritized over delayed sources (yfinance), historical quote capture, time-window tolerance (±30 seconds), and confidence scoring.
 
@@ -35,7 +35,7 @@ The **Portfolio Simulation Engine** projects portfolio growth using various posi
 
 **Conditional Order Monitoring System** monitors price conditions and executes orders when triggered, supporting signals with "over/above" and "under/below" triggers, SL/PT, and position sizing. It uses a three-tier price monitoring fallback (broker-native APIs → Finnhub API → yfinance). Indian market conditional orders are supported via Upstox/Zerodha APIs or yfinance.
 
-**Expiry Resolver Service** automatically picks the next valid expiry for Indian F&O signals when not specified, fetching instrument masters from broker APIs with TTL-based caching and supporting multiple date formats and symbol alias normalization.
+**Expiry Resolver Service** (`src/services/expiry_resolver.py`) automatically picks the next valid expiry for Indian F&O signals when not specified, fetching instrument masters from broker APIs with TTL-based caching and supporting multiple date formats and symbol alias normalization.
 
 **Signal Tracking System** provides comprehensive lifecycle tracking for all signals from detection through broker execution with full audit trails. Features include full signal lifecycle states, immutable audit trail, filtering by various parameters, market-specific signal history pages and API endpoints, P&L tracking, broker response and error logging, and specific parsing for Indian and US signals.
 
@@ -46,9 +46,9 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 
 **Charles Schwab Integration** provides OAuth2-authenticated trading, managing token refresh and supporting Schwab's OCC Options Format.
 
-**License Validation System** provides industry-standard license activation integrated into the startup splash screen. Features include:
+**License Validation System** (`src/gui/license_controller.py`, `src/gui/splash_screen.py`) provides industry-standard license activation integrated into the startup splash screen. Features include:
 - State machine controller with states: INIT, VALIDATING, ACTIVATED, REQUIRE_KEY, EXPIRED, OFFLINE_GRACE, FAILED
-- Background validation worker for non-blocking UI during license checks
+- Background validation worker (QThread) for non-blocking UI during license checks
 - Stacked glassmorphism panels: License activation UI and startup progress display
 - Trial activation (7-day) and subscription key entry (BTF-XXXX format)
 - 48-hour offline grace period with cached license tokens
@@ -80,3 +80,46 @@ The system emphasizes user experience through an interactive setup wizard, GUI-b
 - **FINNHUB_API_KEY**: Market data
 - **GMAIL_APP_PASSWORD**: For Gmail SMTP
 - **SMTP_PASSWORD**: For custom SMTP
+
+## Recent Changes (January 2026)
+
+### Splash Screen License Flow Fix
+- Fixed bug where splash screen would re-prompt for license key after activation on restart
+- Splash screen now defaults to progress panel (index 1) instead of license panel
+- Added showEvent handler that triggers cached license check automatically via QTimer
+- License check now properly loads from database cache before prompting user
+- Fixed race condition where startup_ready signal was emitted before caller connected - now deferred via QTimer.singleShot(0)
+- Hidden all license server URLs, machine IDs, and server responses from console logs for security
+
+### Network Connectivity Monitor for License Validation
+- Added `NetworkMonitor` class (`src/license/network_monitor.py`) that monitors internet connectivity every 10 seconds
+- Automatically validates license when internet connection is restored after being offline
+- Shows popup message "License expired. Please get a new license key to continue using the bot." and shuts down bot if license is expired/revoked
+- Multi-source license key resolution: checks LICENSE_DATA dict, LICENSE_KEY environment variable, and cached license data
+- Integrated into both GUI and console startup modes
+- Prevents users from bypassing license expiry by going offline
+
+### Risk Management Broker Filter Fix
+- Fixed critical bug where `get_channel_risk_settings` could return wrong channel settings when multiple brokers have same symbol
+- Both options and stocks SQL queries now filter by broker: `WHERE ... AND LOWER(t.broker) = LOWER(?)`
+- Prevents cross-channel conflicts when same symbol is traded on different brokers
+
+### Conditional Order Broker Selection Priority
+- Both US and India conditional orders now prioritize `enabled_brokers` (first element) from Execution page over legacy `broker_override`
+- India conditional orders properly check `enabled_brokers` for Upstox/Zerodha/DhanQ brokers with correct case mapping
+- Orders are rejected if neither `enabled_brokers` nor `broker_override` is configured for the channel
+- Thread-safe async execution using `asyncio.run_coroutine_threadsafe` for cross-thread communication
+- Telegram conditional orders use `_broker_list` from signal which is set based on channel configuration
+
+### Market-Isolated Conditional Order Architecture
+- Each market (US/INDIA/CANADA) has dedicated ConditionalOrderService in isolated thread/event loop
+- Broker-market mapping: Webull/Alpaca/Tastytrade/IBKR/Robinhood/Schwab → US, Upstox/Zerodha/DhanQ → INDIA, Questrade → CANADA
+- Exit mode must be 'hybrid' or 'risk' for automated SL/PT triggers; 'signal' mode disables them
+
+### Trade Summary (P/L Posting) Controls
+- Added dual-level Trade Summary controls: global toggle in Settings page + per-channel toggle in Execution page
+- Global setting (`trade_summary_enabled` in trading_settings table) - enables/disables P/L posting across all channels
+- Per-channel setting (`trade_summary_enabled` in channels table) - allows individual channel control
+- System checks both levels before posting: global must be ON and channel must be ON (defaults to enabled)
+- Per-channel toggle located in Risk Management expandable section on Execution page alongside Leave Runner
+- Saved via "Save Risk Settings" button with other channel risk management settings
