@@ -9086,7 +9086,8 @@ def get_filled_orders(broker: str = None, symbol: str = None,
     cursor = conn.cursor()
     
     try:
-        conditions = [f"filled_at >= datetime('now', '-{days} days')"]
+        # Use created_at for date filtering (ISO format), not filled_at (may have non-ISO format)
+        conditions = [f"created_at >= datetime('now', '-{days} days')"]
         params = []
         
         if broker:
@@ -9101,7 +9102,7 @@ def get_filled_orders(broker: str = None, symbol: str = None,
         cursor.execute(f'''
             SELECT * FROM filled_orders
             WHERE {where_clause}
-            ORDER BY filled_at DESC
+            ORDER BY id DESC
             LIMIT ?
         ''', params + [limit])
         
