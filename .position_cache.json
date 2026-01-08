@@ -3873,7 +3873,7 @@
   },
   "ALPACA_PAPER_JTAI_stock": {
     "entry_price": 0.758,
-    "highest_price": 1.06,
+    "highest_price": 1.08,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
