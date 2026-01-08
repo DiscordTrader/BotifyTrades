@@ -39,6 +39,13 @@ The **Portfolio Simulation Engine** projects portfolio growth using various posi
 
 **Signal Tracking System** provides comprehensive lifecycle tracking for all signals from detection through broker execution with full audit trails. Features include full signal lifecycle states, immutable audit trail, filtering by various parameters, market-specific signal history pages and API endpoints, P&L tracking, broker response and error logging, and specific parsing for Indian and US signals.
 
+**QA Workflow Validation System** (`qa/`) provides comprehensive registry-based validation ensuring the complete signal-to-execution pipeline remains intact when adding/modifying features. Features include:
+- **11-Stage Trading Pipeline**: Signal Detection → Signal Parsing → Region Detection → Broker Routing → Position Sizing → Risk Check → Conditional Check → Price Monitoring → Order Execution → Position Tracking → Risk Monitoring
+- **Registry Files**: `qa/registry/workflows.yaml` (pipeline definitions), `database_schema.yaml` (25+ tables), `features.yaml` (14 features)
+- **API Endpoints**: `/api/qa/validate`, `/api/qa/workflows`, `/api/qa/trading-pipeline`
+- **Validation Types**: Database schema (231 checks), workflow pipelines (96 checks), feature integrity
+- **Current Status**: QA Registry 100% (231/231), Workflow Pipeline 93% (89/96), 8/11 stages healthy
+
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ.
 
