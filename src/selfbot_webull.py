@@ -7376,10 +7376,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 if not cond_broker:
                                     print(f"[COND ORDER] ❌ REJECTED: No broker configured for channel {cond_channel_id}")
                                     print(f"[COND ORDER] Please configure 'enabled_brokers' in the Execution page for this channel")
-                                    try:
-                                        await message.add_reaction('❌')
-                                    except:
-                                        pass
+                                    # Reactions disabled for conditional orders
                                     return
                                 
                                 # Submit to conditional order router (market-isolated)
@@ -7387,11 +7384,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 if order_id:
                                     trigger_type = parsed_cond.get('trigger_type', 'over')
                                     print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {trigger_type} ${parsed_cond['trigger_price']}")
-                                    # Acknowledge in Discord with hourglass reaction
-                                    try:
-                                        await message.add_reaction('⏳')
-                                    except:
-                                        pass
+                                    # Reactions disabled for conditional orders
                                 else:
                                     print(f"[COND ORDER] ⚠️ Failed to create conditional order")
                             else:
@@ -7717,10 +7710,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     if not broker:
                         print(f"[INDIA CONDITIONAL] ❌ REJECTED: No India broker configured for channel {message.channel.id}")
                         print(f"[INDIA CONDITIONAL] Please configure 'enabled_brokers' (Upstox/Zerodha/DhanQ) in the Execution page for this channel")
-                        try:
-                            await message.add_reaction('❌')
-                        except:
-                            pass
+                        # Reactions disabled for conditional orders
                         return
                     
                     # For India markets, treat channel default_quantity as number of LOTS
@@ -7768,11 +7758,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     
                     if order_id:
                         print(f"[INDIA CONDITIONAL] ✓ Created conditional order #{order_id} - monitoring started")
-                        if execute_enabled:
-                            try:
-                                await message.add_reaction('⏳')
-                            except:
-                                pass
+                        # Reactions disabled for conditional orders
                     else:
                         print(f"[INDIA CONDITIONAL] ⚠️ Failed to create conditional order")
                 else:
@@ -7844,10 +7830,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         if not broker:
                             print(f"[CONDITIONAL] ❌ REJECTED: No broker configured for channel {message.channel.id}")
                             print(f"[CONDITIONAL] Please configure 'enabled_brokers' in the Execution page for this channel")
-                            try:
-                                await message.add_reaction('❌')
-                            except:
-                                pass
+                            # Reactions disabled for conditional orders
                             return
                         print(f"[CONDITIONAL] Using broker: {broker}")
                         
@@ -7859,12 +7842,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         if order_id:
                             print(f"[CONDITIONAL] ✓ Created conditional order #{order_id} - monitoring started")
-                            # Acknowledge in channel if this is an execute channel
-                            if execute_enabled:
-                                try:
-                                    await message.add_reaction('⏳')  # Hourglass to indicate pending
-                                except:
-                                    pass
+                            # Reactions disabled for conditional orders
                         else:
                             print(f"[CONDITIONAL] ⚠️ Failed to create conditional order")
                     else:
