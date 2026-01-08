@@ -65,8 +65,15 @@ class BrokerSyncService:
         self.sync_interval = sync_interval
         self.running = False
         self._task = None
+        self._risk_manager = None  # Set via set_risk_manager()
         
         print(f"[SYNC] BrokerSyncService initialized (interval={sync_interval}s)")
+    
+    def set_risk_manager(self, risk_manager):
+        """Set risk manager reference for pending order reconciliation."""
+        self._risk_manager = risk_manager
+        if risk_manager:
+            print("[SYNC] ✓ Risk manager linked for order reconciliation")
     
     async def start(self):
         """Start the background sync task"""
@@ -189,6 +196,9 @@ class BrokerSyncService:
         
         if self._fill_sync_counter[broker_name] >= 5:
             await self._sync_filled_orders(broker_name, broker_instance)
+            # Reconcile pending risk orders after fetching filled orders
+            if hasattr(self, '_risk_manager') and self._risk_manager:
+                await self.reconcile_risk_orders(self._risk_manager)
             self._fill_sync_counter[broker_name] = 0
         
         print(f"[SYNC] ✓ {broker_name} sync complete")
@@ -920,3 +930,106 @@ class BrokerSyncService:
             import traceback
             traceback.print_exc()
             update_broker_sync_state(broker=broker_name, error=str(e))
+    
+    async def reconcile_risk_orders(self, risk_manager):
+        """
+        Reconcile pending risk orders with broker order statuses.
+        Confirms fills and marks tiers, or clears failed/cancelled orders.
+        
+        Industry Standard: Only mark tiers as hit after confirmed fills.
+        """
+        if not risk_manager or not hasattr(risk_manager, 'cache'):
+            return
+        
+        try:
+            pending_orders = risk_manager.cache.get_all_pending_orders()
+            if not pending_orders:
+                return
+            
+            pending_count = sum(len(orders) for orders in pending_orders.values())
+            print(f"[SYNC] 🔍 Reconciling {pending_count} pending risk order(s)...")
+            
+            for position_key, orders in pending_orders.items():
+                for order_id, order_data in orders.items():
+                    if order_data.get('status') != 'pending':
+                        continue
+                    
+                    tier = order_data.get('tier', 0)
+                    qty_expected = order_data.get('qty_expected', 0)
+                    broker = order_data.get('broker') or self._extract_broker(position_key)
+                    
+                    # Check order status from broker
+                    order_status = await self._get_order_status(broker, order_id)
+                    
+                    if order_status:
+                        status = order_status.get('status', '').upper()
+                        filled_qty = order_status.get('filled_qty', 0)
+                        
+                        if status == 'FILLED':
+                            # Confirmed fill - mark tier as hit
+                            risk_manager.cache.confirm_order_fill(position_key, order_id, filled_qty)
+                            print(f"[SYNC] ✅ Risk order {order_id} FILLED - Tier {tier} confirmed")
+                        elif status in ('CANCELLED', 'REJECTED', 'EXPIRED'):
+                            # Order failed - clear pending so tier can retry
+                            risk_manager.cache.fail_pending_order(position_key, order_id)
+                            print(f"[SYNC] ❌ Risk order {order_id} {status} - Tier {tier} will retry")
+                        elif status == 'PARTIALLY_FILLED' and filled_qty > 0:
+                            # Partial fill - update tracking
+                            risk_manager.cache.cache.get(position_key).update_pending_order(
+                                order_id, 'partial', filled_qty
+                            )
+                            print(f"[SYNC] ⚠️ Risk order {order_id} partial: {filled_qty}/{qty_expected}")
+                        # PENDING/OPEN - leave as is, will check next cycle
+                    else:
+                        # Could not get order status - check age and timeout if stale
+                        created_at = order_data.get('created_at')
+                        if created_at:
+                            try:
+                                from datetime import datetime
+                                created = datetime.fromisoformat(created_at)
+                                age = (datetime.now() - created).total_seconds()
+                                if age > 300:  # 5 min timeout for stale pending orders
+                                    risk_manager.cache.fail_pending_order(position_key, order_id)
+                                    print(f"[SYNC] ⏰ Risk order {order_id} timed out after {age:.0f}s")
+                            except:
+                                pass
+            
+            # Save cache after reconciliation
+            risk_manager.cache.save()
+            
+        except Exception as e:
+            print(f"[SYNC] Error reconciling risk orders: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _extract_broker(self, position_key: str) -> str:
+        """Extract broker name from position key (format: Broker_SYMBOL_...)"""
+        if position_key.startswith('Webull_'):
+            return 'Webull'
+        elif position_key.startswith('ALPACA_'):
+            return 'Alpaca'
+        elif position_key.startswith('IBKR_'):
+            return 'IBKR'
+        return 'Unknown'
+    
+    async def _get_order_status(self, broker: str, order_id: str) -> Optional[Dict]:
+        """Get order status from broker API"""
+        try:
+            if broker == 'Webull':
+                wb = getattr(self.broker_manager, 'webull_broker', None)
+                if wb and hasattr(wb, 'get_order_status'):
+                    return await wb.get_order_status(order_id)
+            elif 'Alpaca' in broker:
+                alpaca = getattr(self.broker_manager, 'alpaca_paper_broker', None)
+                if alpaca and hasattr(alpaca, 'get_order'):
+                    order = alpaca.get_order(order_id)
+                    if order:
+                        status_str = str(order.status).replace('OrderStatus.', '').upper()
+                        return {
+                            'status': status_str,
+                            'filled_qty': int(float(order.filled_qty or 0))
+                        }
+        except Exception as e:
+            # Order may not exist or API error - return None
+            pass
+        return None

@@ -5559,6 +5559,10 @@ class SelfClient(discord.Client):
                 # Start monitoring as async task
                 self.loop.create_task(self.risk_manager.start_monitoring())
                 print("[RISK] ✓ RiskManager module initialized")
+                
+                # Link risk manager to sync service for pending order reconciliation
+                if hasattr(self, 'sync_service') and self.sync_service:
+                    self.sync_service.set_risk_manager(self.risk_manager)
             except Exception as e:
                 print(f"[RISK] ⚠️ Failed to start RiskManager: {e}")
                 import traceback
