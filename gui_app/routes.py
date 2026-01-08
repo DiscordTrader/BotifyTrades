@@ -672,7 +672,8 @@ def register_routes(app):
         return {
             'config': {
                 'LICENSE_SERVER_MODE': os.getenv('LICENSE_SERVER_MODE', 'false').lower() == 'true'
-            }
+            },
+            'is_admin_build': is_admin_build()
         }
     
     # ============ GLOBAL ERROR HANDLERS ============

@@ -106,11 +106,21 @@
             </div>
 
             <div class="nav-dropdown">
-                <button class="nav-dropdown-btn {% if request.path.startswith('/analytics') %}active{% endif %}">
-                    Brokers
+                <button class="nav-dropdown-btn {% if request.path in ['/settings', '/architecture', '/license', '/health', '/telegram', '/brokers'] or request.path.startswith('/analytics') %}active{% endif %}">
+                    Admin
                     <span class="dropdown-arrow">▼</span>
                 </button>
                 <div class="nav-dropdown-content">
+                    <a href="/health" class="dropdown-item {% if request.path == '/health' %}active{% endif %}">
+                        <span class="dropdown-icon">🩺</span>
+                        <span class="dropdown-text">System Health</span>
+                        <span class="dropdown-desc">Validate settings</span>
+                    </a>
+                    <a href="/settings" class="dropdown-item {% if request.path == '/settings' %}active{% endif %}">
+                        <span class="dropdown-icon">⚙️</span>
+                        <span class="dropdown-text">Settings</span>
+                        <span class="dropdown-desc">Bot configuration</span>
+                    </a>
                     <a href="/analytics/webull_live" class="dropdown-item {% if request.path == '/analytics/webull_live' %}active{% endif %}">
                         <span class="dropdown-icon">📊</span>
                         <span class="dropdown-text">Webull Live</span>
@@ -130,30 +140,6 @@
                         <span class="dropdown-icon">📋</span>
                         <span class="dropdown-text">Alpaca Paper</span>
                         <span class="dropdown-desc">Paper trading analytics</span>
-                    </a>
-                </div>
-            </div>
-
-            <div class="nav-dropdown">
-                <button class="nav-dropdown-btn {% if request.path in ['/settings', '/architecture', '/license', '/health', '/telegram', '/brokers'] %}active{% endif %}">
-                    Admin
-                    <span class="dropdown-arrow">▼</span>
-                </button>
-                <div class="nav-dropdown-content">
-                    <a href="/health" class="dropdown-item {% if request.path == '/health' %}active{% endif %}">
-                        <span class="dropdown-icon">🩺</span>
-                        <span class="dropdown-text">System Health</span>
-                        <span class="dropdown-desc">Validate settings</span>
-                    </a>
-                    <a href="/settings" class="dropdown-item {% if request.path == '/settings' %}active{% endif %}">
-                        <span class="dropdown-icon">⚙️</span>
-                        <span class="dropdown-text">Settings</span>
-                        <span class="dropdown-desc">Bot configuration</span>
-                    </a>
-                    <a href="/brokers" class="dropdown-item {% if request.path == '/brokers' %}active{% endif %}">
-                        <span class="dropdown-icon">🏦</span>
-                        <span class="dropdown-text">Broker Config</span>
-                        <span class="dropdown-desc">Multi-country brokers</span>
                     </a>
                     <a href="/telegram" class="dropdown-item {% if request.path == '/telegram' %}active{% endif %}">
                         <span class="dropdown-icon">📱</span>
