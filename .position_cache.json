@@ -3441,7 +3441,7 @@
   },
   "ALPACA_PAPER_DIS_115.0_2026-01-16_C": {
     "entry_price": 1.6,
-    "highest_price": 1.55,
+    "highest_price": 1.56,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3505,7 +3505,7 @@
   },
   "ALPACA_PAPER_PG_141.0_2026-01-09_C": {
     "entry_price": 0.95,
-    "highest_price": 0.99,
+    "highest_price": 1.1,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3795,7 +3795,7 @@
     "entry_price": 0.54,
     "highest_price": 0.9,
     "trailing_activated": true,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -3804,7 +3804,7 @@
     "tier1_hit": true,
     "tier2_hit": true,
     "tier3_hit": true,
-    "tier4_hit": false,
+    "tier4_hit": true,
     "created_at": "2026-01-07T15:07:14.814745"
   },
   "ALPACA_PAPER_SMX_stock": {

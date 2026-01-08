@@ -132,7 +132,7 @@ class PositionCache:
             self._cache[position_key].reset_closing()
     
     def mark_tier_hit(self, position_key: str, tier: int) -> None:
-        """Mark a profit tier as hit."""
+        """Mark a profit tier as hit (only call after confirmed fill)."""
         entry = self._cache.get(position_key)
         if entry:
             if tier == 1:
@@ -143,6 +143,68 @@ class PositionCache:
                 entry.tier3_hit = True
             elif tier == 4:
                 entry.tier4_hit = True
+    
+    def add_pending_order(self, position_key: str, order_id: str, tier: int, qty: int) -> bool:
+        """Track a pending risk order awaiting fill confirmation."""
+        entry = self._cache.get(position_key)
+        if entry:
+            entry.add_pending_order(order_id, tier, qty)
+            print(f"[RISK] 📋 Pending order tracked: {position_key} tier={tier} order={order_id} qty={qty}")
+            return True
+        return False
+    
+    def has_pending_order_for_tier(self, position_key: str, tier: int) -> bool:
+        """Check if there's already a pending order for this tier."""
+        entry = self._cache.get(position_key)
+        if entry:
+            return entry.has_pending_order_for_tier(tier)
+        return False
+    
+    def confirm_order_fill(self, position_key: str, order_id: str, qty_filled: int) -> bool:
+        """Confirm order fill and mark tier as hit. Returns True if tier marked."""
+        entry = self._cache.get(position_key)
+        if not entry:
+            return False
+        
+        order_data = entry.pending_orders.get(order_id)
+        if not order_data:
+            return False
+        
+        tier = order_data.get('tier', 0)
+        qty_expected = order_data.get('qty_expected', 0)
+        
+        if qty_filled >= qty_expected:
+            entry.update_pending_order(order_id, 'filled', qty_filled)
+            entry.remove_pending_order(order_id)
+            if tier > 0:
+                self.mark_tier_hit(position_key, tier)
+                print(f"[RISK] ✅ Order {order_id} FILLED - Tier {tier} marked as hit")
+            return True
+        elif qty_filled > 0:
+            entry.update_pending_order(order_id, 'partial', qty_filled)
+            print(f"[RISK] ⚠️ Order {order_id} PARTIAL fill: {qty_filled}/{qty_expected}")
+            return False
+        return False
+    
+    def fail_pending_order(self, position_key: str, order_id: str) -> int:
+        """Mark pending order as failed. Returns tier number if found."""
+        entry = self._cache.get(position_key)
+        if not entry:
+            return 0
+        
+        tier = entry.update_pending_order(order_id, 'failed', 0)
+        if tier:
+            entry.remove_pending_order(order_id)
+            print(f"[RISK] ❌ Order {order_id} FAILED - Tier {tier} NOT marked (will retry)")
+        return tier or 0
+    
+    def get_all_pending_orders(self) -> dict:
+        """Get all pending orders across all positions for reconciliation."""
+        all_pending = {}
+        for pos_key, entry in self._cache.items():
+            if entry.pending_orders:
+                all_pending[pos_key] = entry.pending_orders.copy()
+        return all_pending
     
     def set_all_tiers_hit(self, position_key: str) -> None:
         """Mark all tiers as hit (for small positions closing at T1)."""

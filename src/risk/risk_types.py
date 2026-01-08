@@ -145,6 +145,38 @@ class ExitDecision:
 
 
 @dataclass
+class PendingRiskOrder:
+    """Tracks a pending risk management order awaiting fill confirmation."""
+    order_id: str
+    tier: int  # 1, 2, 3, 4 or 0 for stop-loss/trailing
+    qty_expected: int
+    qty_filled: int = 0
+    status: str = 'pending'  # 'pending', 'filled', 'partial', 'cancelled', 'failed'
+    created_at: datetime = field(default_factory=datetime.now)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'order_id': self.order_id,
+            'tier': self.tier,
+            'qty_expected': self.qty_expected,
+            'qty_filled': self.qty_filled,
+            'status': self.status,
+            'created_at': self.created_at.isoformat()
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'PendingRiskOrder':
+        created_str = data.pop('created_at', None)
+        order = cls(**data)
+        if created_str:
+            try:
+                order.created_at = datetime.fromisoformat(created_str)
+            except:
+                pass
+        return order
+
+
+@dataclass
 class PositionCacheEntry:
     """Cached state for a position being monitored."""
     entry_price: float
@@ -162,6 +194,9 @@ class PositionCacheEntry:
     tier2_hit: bool = False
     tier3_hit: bool = False
     tier4_hit: bool = False
+    
+    # Pending risk orders awaiting fill confirmation
+    pending_orders: Dict[str, Any] = field(default_factory=dict)  # order_id -> PendingRiskOrder dict
     
     created_at: datetime = field(default_factory=datetime.now)
     
@@ -181,6 +216,7 @@ class PositionCacheEntry:
             'tier2_hit': self.tier2_hit,
             'tier3_hit': self.tier3_hit,
             'tier4_hit': self.tier4_hit,
+            'pending_orders': self.pending_orders,
             'created_at': self.created_at.isoformat()
         }
     
@@ -188,7 +224,9 @@ class PositionCacheEntry:
     def from_dict(cls, data: Dict[str, Any]) -> 'PositionCacheEntry':
         """Deserialize from JSON."""
         created_str = data.pop('created_at', None)
+        pending = data.pop('pending_orders', {})
         entry = cls(**{k: v for k, v in data.items() if k != 'channel_settings'})
+        entry.pending_orders = pending if isinstance(pending, dict) else {}
         if created_str:
             try:
                 entry.created_at = datetime.fromisoformat(created_str)
@@ -205,3 +243,50 @@ class PositionCacheEntry:
         """Track highest price for trailing stop."""
         if current_price > self.highest_price:
             self.highest_price = current_price
+    
+    def has_pending_order_for_tier(self, tier: int) -> bool:
+        """Check if there's already a pending order for this tier."""
+        for order_data in self.pending_orders.values():
+            if order_data.get('tier') == tier and order_data.get('status') == 'pending':
+                return True
+        return False
+    
+    def add_pending_order(self, order_id: str, tier: int, qty_expected: int) -> None:
+        """Track a new pending risk order."""
+        self.pending_orders[order_id] = {
+            'order_id': order_id,
+            'tier': tier,
+            'qty_expected': qty_expected,
+            'qty_filled': 0,
+            'status': 'pending',
+            'created_at': datetime.now().isoformat()
+        }
+    
+    def update_pending_order(self, order_id: str, status: str, qty_filled: int = 0) -> Optional[int]:
+        """Update pending order status. Returns tier number if order exists."""
+        if order_id in self.pending_orders:
+            self.pending_orders[order_id]['status'] = status
+            self.pending_orders[order_id]['qty_filled'] = qty_filled
+            return self.pending_orders[order_id].get('tier')
+        return None
+    
+    def remove_pending_order(self, order_id: str) -> Optional[Dict[str, Any]]:
+        """Remove a pending order and return its data."""
+        return self.pending_orders.pop(order_id, None)
+    
+    def get_pending_orders_for_tier(self, tier: int) -> list:
+        """Get all pending orders for a specific tier."""
+        return [o for o in self.pending_orders.values() 
+                if o.get('tier') == tier and o.get('status') == 'pending']
+    
+    def clear_failed_pending_orders(self) -> list:
+        """Remove failed/cancelled pending orders and return their tier numbers."""
+        failed_tiers = []
+        to_remove = []
+        for order_id, order_data in self.pending_orders.items():
+            if order_data.get('status') in ('failed', 'cancelled'):
+                failed_tiers.append(order_data.get('tier'))
+                to_remove.append(order_id)
+        for order_id in to_remove:
+            del self.pending_orders[order_id]
+        return failed_tiers
