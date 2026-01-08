@@ -7627,6 +7627,7 @@ def register_routes(app):
                     lc.pnl,
                     lc.pnl_percent,
                     lc.holding_days,
+                    lc.exit_reason,
                     
                     -- Channel info
                     c.name as channel_name,
@@ -7714,7 +7715,8 @@ def register_routes(app):
                         'closed_at': row['closed_at'],
                         'pnl': row['pnl'],
                         'pnl_percent': row['pnl_percent'],
-                        'holding_days': row['holding_days']
+                        'holding_days': row['holding_days'],
+                        'exit_reason': row['exit_reason']
                     })
                     positions[lot_id]['total_closed_qty'] += row['closed_qty']
                     positions[lot_id]['total_pnl'] += row['pnl']

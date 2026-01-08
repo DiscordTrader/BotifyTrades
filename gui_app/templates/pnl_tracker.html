@@ -544,6 +544,10 @@ function renderPNLData(positions) {
                         ${pos.closures.map((closure, cIndex) => {
                             const cProfitClass = closure.pnl > 0 ? 'profit-text' : (closure.pnl < 0 ? 'loss-text' : 'neutral-text');
                             const closedDate = new Date(closure.closed_at).toLocaleString();
+                            const exitReason = closure.exit_reason || 'MANUAL';
+                            const reasonColor = exitReason.includes('PT') ? '#30D158' : 
+                                               (exitReason.includes('STOP') ? '#FF453A' : 
+                                               (exitReason.includes('TRAIL') ? '#FF9F0A' : '#8E8E93'));
                             return `
                                 <div class="closure-row">
                                     <div><span class="stc-badge">STC #${cIndex + 1}</span></div>
@@ -551,6 +555,7 @@ function renderPNLData(positions) {
                                     <div style="color: #fff;">Exit: <strong>$${closure.exit_price.toFixed(2)}</strong></div>
                                     <div class="${cProfitClass}"><strong>$${closure.pnl.toFixed(2)}</strong></div>
                                     <div class="${cProfitClass}"><strong>${closure.pnl_percent.toFixed(1)}%</strong></div>
+                                    <div><span style="background: ${reasonColor}20; color: ${reasonColor}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${exitReason}</span></div>
                                     <div style="color: #8E8E93; font-size: 12px;">${closedDate}</div>
                                 </div>
                             `;
