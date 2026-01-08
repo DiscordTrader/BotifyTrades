@@ -2419,6 +2419,42 @@ class WebullBroker:
             print(f"[SLIPPAGE] Error fetching stock quote: {e}")
             return None
     
+    def get_quote(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """
+        Public method to get stock quote for conditional order monitoring.
+        Returns dict with 'close' key for compatibility with conditional order service.
+        """
+        try:
+            wb = self._client
+            if not wb:
+                return None
+            
+            quote = wb.get_quote(stock=symbol)
+            if not quote:
+                return None
+            
+            ask = float(quote.get('askPrice', 0) or 0)
+            bid = float(quote.get('bidPrice', 0) or 0)
+            last = float(quote.get('last', 0) or quote.get('close', 0) or 0)
+            
+            if ask > 0 and bid > 0:
+                mark_price = (ask + bid) / 2
+            elif last > 0:
+                mark_price = last
+            else:
+                mark_price = 0
+            
+            return {
+                'close': mark_price,
+                'bid': bid,
+                'ask': ask,
+                'last': last,
+                'symbol': symbol
+            }
+        except Exception as e:
+            print(f"[WEBULL] Error in get_quote for {symbol}: {e}")
+            return None
+    
     def _evaluate_slippage(self, signal_price: float, current_price: Optional[float], threshold_override: Optional[float] = None) -> Tuple[SlippageDecision, float]:
         """
         Evaluate price slippage and return decision
