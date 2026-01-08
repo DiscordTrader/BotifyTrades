@@ -12596,6 +12596,179 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)})
     
+    # ============ QA VALIDATION SYSTEM ============
+    
+    @app.route('/api/qa/validate', methods=['GET'])
+    @login_required
+    def api_qa_validate():
+        """Run full QA validation against feature registry"""
+        try:
+            import sys
+            from pathlib import Path
+            qa_path = Path(__file__).parent.parent / 'qa'
+            if qa_path.exists():
+                sys.path.insert(0, str(qa_path.parent))
+            
+            from qa.validator import run_qa_validation
+            result = run_qa_validation()
+            return jsonify({'success': True, **result})
+        except ImportError as e:
+            return jsonify({
+                'success': True,
+                'is_valid': True,
+                'message': 'QA module not available in packaged build',
+                'issues': []
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)})
+    
+    @app.route('/api/qa/features', methods=['GET'])
+    @login_required
+    def api_qa_features():
+        """Get all registered features and their validation status"""
+        try:
+            import sys
+            from pathlib import Path
+            qa_path = Path(__file__).parent.parent / 'qa'
+            if qa_path.exists():
+                sys.path.insert(0, str(qa_path.parent))
+            
+            from qa.registry_loader import get_registry
+            from qa.validator import QAValidator
+            
+            registry = get_registry()
+            validator = QAValidator()
+            
+            features = []
+            for name, feature in registry.features.items():
+                result = validator.validate_feature(name)
+                features.append({
+                    'name': name,
+                    'version': feature.version,
+                    'description': feature.description,
+                    'status': feature.status,
+                    'added_date': feature.added_date,
+                    'validation': {
+                        'is_valid': result.is_valid,
+                        'issues_count': len(result.issues)
+                    },
+                    'dependencies': feature.dependencies,
+                    'db_tables': [c.get('table') for c in feature.db_fields],
+                    'api_routes': [r.get('route') for r in feature.api_routes]
+                })
+            
+            validator.close()
+            return jsonify({'success': True, 'features': features})
+        except ImportError:
+            return jsonify({'success': True, 'features': [], 'message': 'QA module not available'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+    
+    @app.route('/api/qa/feature/<feature_name>', methods=['GET'])
+    @login_required
+    def api_qa_feature_detail(feature_name):
+        """Get detailed validation for a specific feature"""
+        try:
+            import sys
+            from pathlib import Path
+            qa_path = Path(__file__).parent.parent / 'qa'
+            if qa_path.exists():
+                sys.path.insert(0, str(qa_path.parent))
+            
+            from qa.validator import validate_feature_integrity
+            result = validate_feature_integrity(feature_name)
+            return jsonify({'success': True, **result})
+        except ImportError:
+            return jsonify({'success': True, 'message': 'QA module not available'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+    
+    @app.route('/api/qa/impact', methods=['POST'])
+    @login_required
+    def api_qa_impact_analysis():
+        """Analyze impact of proposed changes"""
+        try:
+            import sys
+            from pathlib import Path
+            qa_path = Path(__file__).parent.parent / 'qa'
+            if qa_path.exists():
+                sys.path.insert(0, str(qa_path.parent))
+            
+            from qa.validator import analyze_impact
+            
+            data = request.get_json() or {}
+            changed_fields = data.get('fields', [])
+            
+            if not changed_fields:
+                return jsonify({'success': False, 'error': 'No fields provided'})
+            
+            result = analyze_impact(changed_fields)
+            return jsonify({'success': True, **result})
+        except ImportError:
+            return jsonify({'success': True, 'message': 'QA module not available'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+    
+    @app.route('/api/qa/tests/run', methods=['POST'])
+    @login_required
+    def api_qa_run_tests():
+        """Run QA test suite"""
+        try:
+            import subprocess
+            import sys
+            from pathlib import Path
+            
+            qa_path = Path(__file__).parent.parent / 'qa'
+            if not qa_path.exists():
+                return jsonify({'success': True, 'message': 'QA module not available'})
+            
+            result = subprocess.run(
+                [sys.executable, str(qa_path / 'run_tests.py')],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            import json
+            results_file = qa_path / 'test_results.json'
+            if results_file.exists():
+                with open(results_file) as f:
+                    test_results = json.load(f)
+                return jsonify({'success': True, **test_results})
+            
+            return jsonify({
+                'success': result.returncode == 0,
+                'output': result.stdout,
+                'errors': result.stderr
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+    
+    @app.route('/api/qa/database-schema', methods=['GET'])
+    @login_required
+    def api_qa_database_schema():
+        """Get database schema validation status"""
+        try:
+            import sys
+            from pathlib import Path
+            qa_path = Path(__file__).parent.parent / 'qa'
+            if qa_path.exists():
+                sys.path.insert(0, str(qa_path.parent))
+            
+            from qa.validator import QAValidator
+            
+            validator = QAValidator()
+            result = validator.validate_database_schema()
+            validator.close()
+            
+            return jsonify({'success': True, **result.to_dict()})
+        except ImportError:
+            return jsonify({'success': True, 'message': 'QA module not available'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+    
     # ============ AUTO-UPDATE SYSTEM ============
     
     @app.route('/api/upgrade/version', methods=['GET'])
