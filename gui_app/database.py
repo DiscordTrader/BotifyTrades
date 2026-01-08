@@ -8227,7 +8227,11 @@ def update_conditional_order_sl_pt(
     
     Called when follow-up messages provide delayed SL/PT updates.
     For hybrid SL to work, we preserve BOTH legs - if a follow-up provides one leg,
-    we merge it with the existing leg so both remain populated.
+    we merge it with the existing SIGNAL-PROVIDED leg (not channel defaults).
+    
+    IMPORTANT: This function only updates values that are explicitly provided.
+    Channel-level defaults are applied at EXECUTION time, not during follow-up updates.
+    This preserves the Signal→Channel→Default priority hierarchy.
     """
     conn = get_connection()
     cursor = conn.cursor()
@@ -8235,7 +8239,7 @@ def update_conditional_order_sl_pt(
     try:
         # First, fetch existing SL values to preserve hybrid legs
         cursor.execute('''
-            SELECT stop_loss_value, stop_loss_type, stop_loss_fixed, stop_loss_pct
+            SELECT stop_loss_value, stop_loss_type, stop_loss_fixed, stop_loss_pct, params_source
             FROM conditional_orders WHERE id = ?
         ''', (order_id,))
         existing = cursor.fetchone()
@@ -8247,13 +8251,14 @@ def update_conditional_order_sl_pt(
         existing_sl_type = existing['stop_loss_type']
         existing_sl_fixed = existing['stop_loss_fixed']
         existing_sl_pct = existing['stop_loss_pct']
+        params_source = existing['params_source'] if 'params_source' in existing.keys() else None
         
         update_fields = []
         update_values = []
         
-        # Merge new values with existing values
-        # New value takes precedence, but we always preserve the other leg for hybrid
+        # Determine the existing signal-provided fixed leg
         # For legacy rows that only have stop_loss_value (not stop_loss_fixed), treat it as the fixed leg
+        # But ONLY if the params_source indicates it came from the signal, not channel defaults
         legacy_fixed_leg = None
         if existing_sl_fixed is not None:
             legacy_fixed_leg = existing_sl_fixed
@@ -8261,15 +8266,17 @@ def update_conditional_order_sl_pt(
             # Treat stop_loss_value as the fixed leg for legacy/pre-migration data
             legacy_fixed_leg = existing_sl_value
         
+        # Calculate final values - only merge with signal-provided values
         final_sl_fixed = stop_loss_fixed if stop_loss_fixed is not None else (
             stop_loss_value if stop_loss_value is not None else legacy_fixed_leg
         )
         final_sl_pct = stop_loss_pct if stop_loss_pct is not None else existing_sl_pct
         
-        # Determine if this results in a hybrid SL (both legs present)
+        # Determine if this results in a hybrid SL (both signal-provided legs present)
         is_hybrid = final_sl_fixed is not None and final_sl_pct is not None
         
-        # Always update both legs explicitly to ensure persistence
+        # Only update fields that are explicitly provided in this update
+        # This prevents overwriting signal/channel values with nulls
         if stop_loss_value is not None or stop_loss_fixed is not None:
             # Updating the fixed price leg
             new_fixed = stop_loss_fixed if stop_loss_fixed is not None else stop_loss_value
@@ -8279,28 +8286,29 @@ def update_conditional_order_sl_pt(
             update_values.append(new_fixed)
         
         if stop_loss_pct is not None:
-            # Updating the percent leg - preserve existing fixed leg for hybrid
+            # Updating the percent leg
             update_fields.append('stop_loss_pct = ?')
             update_values.append(stop_loss_pct)
-            # If we now have both legs (hybrid), ensure fixed leg is preserved
-            # Use legacy_fixed_leg to support pre-migration data
-            if is_hybrid and final_sl_fixed and stop_loss_value is None and stop_loss_fixed is None:
+            # If we now have both legs (hybrid), preserve the existing fixed leg
+            if is_hybrid and legacy_fixed_leg and stop_loss_value is None and stop_loss_fixed is None:
                 update_fields.append('stop_loss_fixed = ?')
-                update_values.append(final_sl_fixed)
+                update_values.append(legacy_fixed_leg)
                 update_fields.append('stop_loss_value = ?')
-                update_values.append(final_sl_fixed)
+                update_values.append(legacy_fixed_leg)
         
-        # Set stop_loss_type appropriately
+        # Set stop_loss_type appropriately based on what we have
         if is_hybrid:
             update_fields.append('stop_loss_type = ?')
             update_values.append('hybrid')
         elif stop_loss_type is not None:
             update_fields.append('stop_loss_type = ?')
             update_values.append(stop_loss_type)
-        elif final_sl_pct is not None and final_sl_fixed is None:
+        elif stop_loss_pct is not None and (stop_loss_value is None and stop_loss_fixed is None and legacy_fixed_leg is None):
+            # Only percent provided and no fixed leg exists
             update_fields.append('stop_loss_type = ?')
             update_values.append('percent')
-        elif final_sl_fixed is not None and final_sl_pct is None:
+        elif (stop_loss_value is not None or stop_loss_fixed is not None) and final_sl_pct is None:
+            # Only fixed provided and no percent leg exists
             update_fields.append('stop_loss_type = ?')
             update_values.append('fixed')
         

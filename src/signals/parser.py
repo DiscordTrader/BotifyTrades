@@ -818,7 +818,23 @@ def parse_follow_up_update(text: str, context_symbol: str = None) -> Optional[Di
 
 
 def is_partial_exit_signal(text: str) -> bool:
-    """Check if text is a partial exit signal."""
+    """
+    Check if text is a partial exit signal.
+    
+    IMPORTANT: This should NOT match standard STC signals like "STC 50% AAPL"
+    to avoid intercepting normal exit signals. Only match natural language
+    partial exit phrases like "selling 50%", "leaving 10%", etc.
+    """
+    text_upper = text.upper().strip()
+    
+    # Exclude standard STC signals - these should go through normal exit flow
+    if text_upper.startswith('STC ') or text_upper.startswith('STC@'):
+        return False
+    
+    # Exclude signals that look like option/stock trade formats
+    if re.match(r'^(?:BTO|STC|BTC|STO)\s+', text_upper):
+        return False
+    
     return PARTIAL_EXIT_PATTERN.search(text) is not None or LEAVING_RUNNER_PATTERN.search(text) is not None
 
 
