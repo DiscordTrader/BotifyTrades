@@ -1550,16 +1550,22 @@ async function loadConditionalOrders() {
         
         let html = '<div class="positions-grid">';
         for (const order of orders) {
-            const statusColor = order.status === 'active_monitoring' || order.status === 'ACTIVE_MONITORING' ? '#22c55e' : 
-                               order.status === 'pending' || order.status === 'PENDING' ? '#f59e0b' : 
-                               order.status === 'triggered' || order.status === 'TRIGGERED' ? '#3b82f6' : 
-                               order.status === 'executed' || order.status === 'EXECUTED' ? '#22c55e' : '#6b7280';
-            const statusIcon = order.status === 'active_monitoring' || order.status === 'ACTIVE_MONITORING' ? '📡' : 
-                              order.status === 'pending' || order.status === 'PENDING' ? '⏳' : 
-                              order.status === 'triggered' || order.status === 'TRIGGERED' ? '⚡' : 
-                              order.status === 'executed' || order.status === 'EXECUTED' ? '✅' : '⏸️';
             const statusLower = (order.status || '').toLowerCase();
+            const statusColor = statusLower === 'active_monitoring' || statusLower === 'fallback_monitoring' ? '#22c55e' : 
+                               statusLower === 'pending' ? '#f59e0b' : 
+                               statusLower === 'triggered' ? '#3b82f6' : 
+                               statusLower === 'executing' ? '#f59e0b' :
+                               statusLower === 'executed' ? '#22c55e' :
+                               statusLower === 'error' || statusLower === 'canceled' || statusLower === 'expired' ? '#ef4444' : '#6b7280';
+            const statusIcon = statusLower === 'active_monitoring' || statusLower === 'fallback_monitoring' ? '📡' : 
+                              statusLower === 'pending' ? '⏳' : 
+                              statusLower === 'triggered' ? '⚡' : 
+                              statusLower === 'executing' ? '🔄' :
+                              statusLower === 'executed' ? '✅' :
+                              statusLower === 'error' ? '❌' :
+                              statusLower === 'canceled' || statusLower === 'expired' ? '🚫' : '⏸️';
             const statusLabel = statusLower === 'active_monitoring' ? 'Monitoring' : 
+                               statusLower === 'fallback_monitoring' ? 'Fallback' :
                                statusLower.charAt(0).toUpperCase() + statusLower.slice(1).replace(/_/g, ' ');
             
             const triggerDirection = order.trigger_type === 'over' ? '↑' : '↓';
@@ -1637,6 +1643,12 @@ async function loadConditionalOrders() {
                                 <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Trigger</div>
                                 <div style="font-size: 1rem; font-weight: 600; color: var(--accent-teal);">${triggerDirection} $${triggerPrice.toFixed(2)}</div>
                                 <div style="font-size: 0.7rem; color: var(--text-muted);">${triggerText}</div>
+                            </div>
+                            
+                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Current Price</div>
+                                <div style="font-size: 1rem; font-weight: 600; color: ${order.current_price ? (order.current_price >= triggerPrice ? '#22c55e' : '#ef4444') : 'var(--text-muted)'};">${order.current_price ? '$' + parseFloat(order.current_price).toFixed(2) : 'Loading...'}</div>
+                                <div style="font-size: 0.7rem; color: var(--text-muted);">${order.price_updated_at ? new Date(order.price_updated_at).toLocaleTimeString() : ''}</div>
                             </div>
                             
                             <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
