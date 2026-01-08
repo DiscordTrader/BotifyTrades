@@ -3724,7 +3724,7 @@
   },
   "ALPACA_PAPER_PG_141.0_2026-01-09_C": {
     "entry_price": 0.95,
-    "highest_price": 1.1,
+    "highest_price": 1.13,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
