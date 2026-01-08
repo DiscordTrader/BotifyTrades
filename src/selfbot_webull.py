@@ -9483,8 +9483,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         # Select broker based on channel override
                         broker_override = signal.get('_broker_override', '').lower() if signal.get('_broker_override') else ''
-                        live_broker = self.broker  # Default to Webull
-                        broker_name_used = 'Webull'
+                        live_broker = None
+                        broker_name_used = None
                         
                         if broker_override:
                             if broker_override == 'upstox' and hasattr(self, 'upstox_broker') and self.upstox_broker and self.upstox_broker.connected:
@@ -9511,12 +9511,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 live_broker = self.ibkr_broker
                                 broker_name_used = 'IBKR'
                                 _original_print(f"[LIVE TRADE] Using channel broker override: Interactive Brokers")
-                            elif broker_override == 'alpaca' and hasattr(self, 'paper_broker') and self.paper_broker and self.paper_broker.connected:
+                            elif broker_override in ('alpaca', 'alpaca_paper') and hasattr(self, 'paper_broker') and self.paper_broker and self.paper_broker.connected:
                                 live_broker = self.paper_broker
                                 broker_name_used = 'Alpaca'
                                 _original_print(f"[LIVE TRADE] Using channel broker override: Alpaca")
+                            elif broker_override == 'webull' and hasattr(self, 'broker') and self.broker and self.broker.connected:
+                                live_broker = self.broker
+                                broker_name_used = 'Webull'
+                                _original_print(f"[LIVE TRADE] Using channel broker override: Webull")
                             else:
-                                _original_print(f"[LIVE TRADE] ⚠️ Broker override '{broker_override}' not available, using default Webull")
+                                _original_print(f"[LIVE TRADE] ❌ REJECTED: Broker override '{broker_override}' not available or not connected")
+                                _original_print(f"[LIVE TRADE] Please check broker configuration in Settings")
+                                continue
+                        else:
+                            _original_print(f"[LIVE TRADE] ❌ REJECTED: No broker configured for this channel")
+                            _original_print(f"[LIVE TRADE] Please configure 'enabled_brokers' in the Execution page")
+                            continue
                         
                         # Check if we should use bracket orders (stocks with stop loss or profit target)
                         use_bracket = (
