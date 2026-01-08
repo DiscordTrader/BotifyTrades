@@ -147,11 +147,14 @@ class PositionCache:
     def add_pending_order(self, position_key: str, order_id: str, tier: int, qty: int) -> bool:
         """Track a pending risk order awaiting fill confirmation."""
         entry = self._cache.get(position_key)
-        if entry:
-            entry.add_pending_order(order_id, tier, qty)
-            print(f"[RISK] 📋 Pending order tracked: {position_key} tier={tier} order={order_id} qty={qty}")
-            return True
-        return False
+        if not entry:
+            # Create minimal entry if position not in cache yet (edge case)
+            print(f"[RISK] ⚠️ Creating cache entry for pending order: {position_key}")
+            entry = PositionCacheEntry(entry_price=0, highest_price=0)
+            self._cache[position_key] = entry
+        entry.add_pending_order(order_id, tier, qty)
+        print(f"[RISK] 📋 Pending order tracked: {position_key} tier={tier} order={order_id} qty={qty}")
+        return True
     
     def has_pending_order_for_tier(self, position_key: str, tier: int) -> bool:
         """Check if there's already a pending order for this tier."""

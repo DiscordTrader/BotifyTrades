@@ -13,6 +13,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T05:09:27.768137"
   },
   "ALPACA_PAPER_SERV_13.5_2025-12-05_C": {
@@ -29,6 +30,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T05:09:27.768149"
   },
   "ALPACA_PAPER_TCRT_stock": {
@@ -45,6 +47,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T05:09:27.768154"
   },
   "ALPACA_PAPER_SPY_stock": {
@@ -61,6 +64,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T05:09:27.768159"
   },
   "ALPACA_PAPER_QQQ_stock": {
@@ -77,6 +81,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T05:09:27.768163"
   },
   "ALPACA_PAPER_INTC_stock": {
@@ -93,6 +98,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T05:09:27.768201"
   },
   "ALPACA_PAPER_ONDS_9.5_2025-12-05_C": {
@@ -109,6 +115,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T05:09:27.768204"
   },
   "Webull_ONDS_9.5_12/05_C": {
@@ -125,6 +132,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T05:09:27.768207"
   },
   "ALPACA_PAPER_ONDS_stock": {
@@ -141,6 +149,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T05:09:27.768209"
   },
   "Webull_SOFI_28.0_12/05_C": {
@@ -157,6 +166,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T05:09:27.768214"
   },
   "ALPACA_PAPER_SPC_stock": {
@@ -173,6 +183,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T05:09:27.768217"
   },
   "Webull_RKT_21.2_01/16/26_C": {
@@ -189,6 +200,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T05:09:28.396645"
   },
   "ALPACA_PAPER_NVDA_190.0_2025-12-12_C": {
@@ -205,6 +217,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T14:34:49.187328"
   },
   "ALPACA_PAPER_OKTA_90.0_2025-12-12_C": {
@@ -221,6 +234,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T14:34:49.187463"
   },
   "ALPACA_PAPER_QQQ_618.0_2025-12-10_P": {
@@ -237,6 +251,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T14:41:26.035449"
   },
   "ALPACA_PAPER_OKLO_110.0_2025-12-12_C": {
@@ -253,6 +268,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T14:52:37.705786"
   },
   "ALPACA_PAPER_ORCL_220.0_2025-12-12_C": {
@@ -269,6 +285,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T14:52:37.706072"
   },
   "ALPACA_PAPER_ONDS_9.0_2025-12-12_C": {
@@ -285,6 +302,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T14:54:39.734411"
   },
   "ALPACA_PAPER_BULL_stock": {
@@ -301,6 +319,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T14:56:41.680050"
   },
   "ALPACA_PAPER_TSLA_460.0_2025-12-12_C": {
@@ -317,6 +336,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T15:01:15.895371"
   },
   "ALPACA_PAPER_QQQ_627.0_2025-12-10_C": {
@@ -333,6 +353,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T15:02:16.796076"
   },
   "ALPACA_PAPER_IWM_253.0_2025-12-10_C": {
@@ -349,6 +370,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T15:04:20.069241"
   },
   "ALPACA_PAPER_TSLA_450.0_2025-12-12_C": {
@@ -365,6 +387,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T15:09:26.033019"
   },
   "ALPACA_PAPER_NFLX_93.0_2025-12-12_P": {
@@ -381,6 +404,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T15:14:02.377984"
   },
   "ALPACA_PAPER_CHWY_37.0_2025-12-19_C": {
@@ -397,6 +421,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T15:26:40.215960"
   },
   "ALPACA_PAPER_CHWY_36.0_2025-12-19_C": {
@@ -413,6 +438,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T15:32:44.520608"
   },
   "ALPACA_PAPER_TSLA_460.0_2025-12-19_C": {
@@ -429,6 +455,7 @@
     "tier2_hit": true,
     "tier3_hit": true,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T16:01:16.433353"
   },
   "ALPACA_PAPER_SPY_683.0_2025-12-10_C": {
@@ -445,6 +472,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T16:02:17.383879"
   },
   "ALPACA_PAPER_ENVB_stock": {
@@ -461,6 +489,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T16:15:47.715355"
   },
   "ALPACA_PAPER_SPY_681.0_2025-12-10_P": {
@@ -477,6 +506,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T16:51:37.551535"
   },
   "ALPACA_PAPER_HOOD_138.0_2025-12-12_C": {
@@ -493,6 +523,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T17:31:02.202199"
   },
   "ALPACA_PAPER_QQQ_619.0_2025-12-10_P": {
@@ -509,6 +540,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T17:51:18.655667"
   },
   "Webull_ORCL_280.0_12/12_C": {
@@ -525,6 +557,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T18:04:59.782276"
   },
   "Webull_ORCL_185.0_12/12_P": {
@@ -541,6 +574,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T18:05:30.504557"
   },
   "ALPACA_PAPER_ORCL_280.0_2025-12-12_C": {
@@ -557,6 +591,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T18:09:06.041209"
   },
   "ALPACA_PAPER_BEAT_stock": {
@@ -573,6 +608,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T18:21:17.037238"
   },
   "ALPACA_PAPER_META_660.0_2025-12-12_C": {
@@ -589,6 +625,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T18:23:50.871030"
   },
   "ALPACA_PAPER_SPY_687.0_2025-12-12_C": {
@@ -605,6 +642,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T18:27:57.184421"
   },
   "Webull_SPY_688.0_12/10_C": {
@@ -621,6 +659,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T18:59:45.361774"
   },
   "Webull_SPY_675.0_12/10_P": {
@@ -637,6 +676,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T19:00:17.862423"
   },
   "ALPACA_PAPER_ORCL_185.0_2025-12-12_P": {
@@ -653,6 +693,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T19:00:49.431854"
   },
   "Webull_ORCL_0.0__": {
@@ -669,6 +710,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T19:04:32.766467"
   },
   "ALPACA_PAPER_QQQ_630.0_2025-12-10_C": {
@@ -685,6 +727,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T19:41:15.931875"
   },
   "ALPACA_PAPER_META_630.0_2025-12-12_P": {
@@ -701,6 +744,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T19:43:20.082985"
   },
   "ALPACA_PAPER_ORCL_265.0_2025-12-12_C": {
@@ -717,6 +761,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T19:47:27.286124"
   },
   "ALPACA_PAPER_SPY_681.0_2025-12-12_P": {
@@ -733,6 +778,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T19:55:49.258576"
   },
   "ALPACA_PAPER_TSLA_435.0_2025-12-12_P": {
@@ -749,6 +795,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T20:03:31.391537"
   },
   "ALPACA_PAPER_TSLA_470.0_2025-12-19_C": {
@@ -765,6 +812,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T20:22:29.467347"
   },
   "Webull_QQQ_630.0_12/11_C": {
@@ -781,6 +829,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T20:28:39.343253"
   },
   "ALPACA_PAPER_QQQ_630.0_2025-12-11_C": {
@@ -797,6 +846,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T20:28:39.344520"
   },
   "Webull_QQQ_631.0_12/11_C": {
@@ -813,6 +863,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T20:30:12.348414"
   },
   "ALPACA_PAPER_QQQ_631.0_2025-12-11_C": {
@@ -829,6 +880,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T20:30:12.350091"
   },
   "ALPACA_PAPER_CLSK_15.0_2025-12-12_C": {
@@ -845,6 +897,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-10T20:57:20.715347"
   },
   "ALPACA_PAPER_COIN_280.0_2025-12-12_C": {
@@ -861,6 +914,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T14:31:02.837262"
   },
   "ALPACA_PAPER_QQQ_618.0_2025-12-11_P": {
@@ -877,6 +931,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T14:44:22.821898"
   },
   "ALPACA_PAPER_AAPL_280.0_2025-12-19_C": {
@@ -893,6 +948,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T14:45:55.361821"
   },
   "ALPACA_PAPER_QQQ_617.0_2025-12-11_P": {
@@ -909,6 +965,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T15:11:02.891917"
   },
   "ALPACA_PAPER_SPY_678.0_2025-12-12_P": {
@@ -925,6 +982,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T15:13:05.794130"
   },
   "Webull_ORCL_200.0_12/12_C": {
@@ -941,6 +999,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T15:19:46.579528"
   },
   "ALPACA_PAPER_ORCL_200.0_2025-12-12_C": {
@@ -957,6 +1016,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T15:19:46.580659"
   },
   "ALPACA_PAPER_META_662.5_2025-12-12_C": {
@@ -973,6 +1033,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T15:51:33.672666"
   },
   "ALPACA_PAPER_SPY_684.0_2025-12-11_C": {
@@ -989,6 +1050,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T15:52:04.582998"
   },
   "ALPACA_PAPER_SPY_685.0_2025-12-11_P": {
@@ -1005,6 +1067,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T15:56:12.308422"
   },
   "ALPACA_PAPER_IWM_256.0_2025-12-11_C": {
@@ -1021,6 +1084,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T16:00:50.804422"
   },
   "ALPACA_PAPER_HOOD_130.0_2025-12-12_C": {
@@ -1037,6 +1101,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T16:10:06.467384"
   },
   "ALPACA_PAPER_QQQ_614.0_2025-12-11_P": {
@@ -1053,6 +1118,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T16:35:23.835984"
   },
   "ALPACA_PAPER_RIVN_17.0_2025-12-12_C": {
@@ -1069,6 +1135,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T18:07:01.541117"
   },
   "Webull_QQQ_0.0__": {
@@ -1085,6 +1152,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T18:16:10.874506"
   },
   "ALPACA_PAPER_GOOGL_317.5_2025-12-12_C": {
@@ -1101,6 +1169,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T18:26:26.110297"
   },
   "ALPACA_PAPER_SPY_700.0_2025-12-19_C": {
@@ -1117,6 +1186,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T19:08:43.321253"
   },
   "ALPACA_PAPER_UROY_5.0_2025-12-19_C": {
@@ -1133,6 +1203,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T19:10:15.438185"
   },
   "Webull_UROY_7.5_12/19_C": {
@@ -1149,6 +1220,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T19:16:55.598194"
   },
   "ALPACA_PAPER_HOOD_130.0_2025-12-19_C": {
@@ -1165,6 +1237,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-11T20:18:29.276855"
   },
   "ALPACA_PAPER_IWM_stock": {
@@ -1181,6 +1254,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T02:00:10.734139"
   },
   "ALPACA_PAPER_PLTR_195.0_2025-12-12_C": {
@@ -1197,6 +1271,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T14:36:05.100093"
   },
   "ALPACA_PAPER_SOUN_13.0_2025-12-12_C": {
@@ -1213,6 +1288,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T14:36:05.100562"
   },
   "ALPACA_PAPER_HOOD_125.0_2025-12-12_C": {
@@ -1229,6 +1305,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T14:41:10.720396"
   },
   "ALPACA_PAPER_HOOD_126.0_2025-12-12_C": {
@@ -1245,6 +1322,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T14:41:41.241348"
   },
   "ALPACA_PAPER_TE_stock": {
@@ -1261,6 +1339,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T14:44:45.094573"
   },
   "Webull_AVGO_375.0_12/12_C": {
@@ -1277,6 +1356,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T14:51:23.864450"
   },
   "ALPACA_PAPER_SPY_685.0_2025-12-12_P": {
@@ -1293,6 +1373,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T14:52:25.556904"
   },
   "ALPACA_PAPER_TSLA_470.0_2025-12-12_C": {
@@ -1309,6 +1390,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T15:05:14.009351"
   },
   "ALPACA_PAPER_AVGO_375.0_2025-12-12_C": {
@@ -1325,6 +1407,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T15:06:15.510119"
   },
   "ALPACA_PAPER_TSLA_stock": {
@@ -1341,6 +1424,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T15:08:18.602305"
   },
   "ALPACA_PAPER_TDOC_8.0_2025-12-19_C": {
@@ -1357,6 +1441,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T15:32:24.120578"
   },
   "Webull_RH_170.0_12/19_P": {
@@ -1373,6 +1458,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T15:34:57.827460"
   },
   "ALPACA_PAPER_SPY_685.0_2025-12-12_C": {
@@ -1389,6 +1475,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T16:30:25.244054"
   },
   "ALPACA_PAPER_SPY_675.0_2025-12-12_P": {
@@ -1405,6 +1492,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T16:34:00.610316"
   },
   "ALPACA_PAPER_ORCL_192.5_2025-12-12_P": {
@@ -1421,6 +1509,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T18:21:42.162458"
   },
   "ALPACA_PAPER_AMZN_230.0_2025-12-19_C": {
@@ -1437,6 +1526,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T18:23:14.507371"
   },
   "Webull_ORCL_192.5_12/12_P": {
@@ -1453,6 +1543,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T18:36:05.716697"
   },
   "ALPACA_PAPER_RIVN_19.0_2025-12-12_P": {
@@ -1469,6 +1560,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T18:44:20.056836"
   },
   "Webull_TSLA_450.0_12/12_P": {
@@ -1485,6 +1577,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T19:45:00.175843"
   },
   "ALPACA_PAPER_TSLA_450.0_2025-12-12_P": {
@@ -1501,6 +1594,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T19:45:00.177615"
   },
   "ALPACA_PAPER_AMZN_227.5_2025-12-19_C": {
@@ -1517,6 +1611,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T20:32:09.731915"
   },
   "Webull_UROY_0.0__": {
@@ -1533,6 +1628,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-12T22:11:14.143933"
   },
   "ALPACA_PAPER_ENSC_stock": {
@@ -1549,6 +1645,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T14:31:22.286416"
   },
   "ALPACA_PAPER_COIN_270.0_2025-12-19_C": {
@@ -1565,6 +1662,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T14:34:03.707625"
   },
   "ALPACA_PAPER_TSLA_500.0_2025-12-19_C": {
@@ -1581,6 +1679,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T14:43:35.893056"
   },
   "ALPACA_PAPER_ONDS_8.5_2025-12-19_C": {
@@ -1597,6 +1696,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T14:44:06.546766"
   },
   "ALPACA_PAPER_AAPL_282.5_2025-12-26_C": {
@@ -1613,6 +1713,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T14:45:07.531105"
   },
   "ALPACA_PAPER_COIN_270.0_2025-12-26_C": {
@@ -1629,6 +1730,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T14:48:11.138376"
   },
   "ALPACA_PAPER_TSLA_470.0_2025-12-19_P": {
@@ -1645,6 +1747,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T14:48:41.712869"
   },
   "ALPACA_PAPER_NVDA_180.0_2025-12-19_C": {
@@ -1661,6 +1764,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T15:09:35.782589"
   },
   "ALPACA_PAPER_QQQ_614.0_2025-12-15_C": {
@@ -1677,6 +1781,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T15:23:27.238931"
   },
   "ALPACA_PAPER_QQQ_613.0_2025-12-15_C": {
@@ -1693,6 +1798,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T15:36:41.928955"
   },
   "ALPACA_PAPER_HIMS_38.0_2025-12-26_C": {
@@ -1709,6 +1815,7 @@
     "tier2_hit": true,
     "tier3_hit": true,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T16:02:56.957268"
   },
   "ALPACA_PAPER_QQQ_609.0_2025-12-15_P": {
@@ -1725,6 +1832,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T16:05:25.421403"
   },
   "ALPACA_PAPER_SPY_680.0_2025-12-15_P": {
@@ -1741,6 +1849,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T16:16:06.572196"
   },
   "ALPACA_PAPER_GOOG_315.0_2025-12-19_C": {
@@ -1757,6 +1866,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T16:26:47.504751"
   },
   "ALPACA_PAPER_GME_23.0_2025-12-19_C": {
@@ -1773,6 +1883,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T16:29:20.200923"
   },
   "ALPACA_PAPER_QQQ_615.0_2025-12-15_C": {
@@ -1789,6 +1900,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T16:30:51.831670"
   },
   "ALPACA_PAPER_QQQ_610.0_2025-12-15_P": {
@@ -1805,6 +1917,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-15T16:40:01.310596"
   },
   "Webull_RH_0.0__": {
@@ -1821,6 +1934,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-16T01:11:06.542116"
   },
   "ALPACA_PAPER_DAL_75.0_2025-12-19_C": {
@@ -1837,6 +1951,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-16T14:53:11.922915"
   },
   "ALPACA_PAPER_GOOGL_295.0_2025-12-26_P": {
@@ -1853,6 +1968,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-16T14:58:47.994178"
   },
   "ALPACA_PAPER_NOW_750.0_2025-12-19_P": {
@@ -1869,6 +1985,7 @@
     "tier2_hit": true,
     "tier3_hit": true,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-16T15:01:51.280975"
   },
   "ALPACA_PAPER_QQQ_615.0_2025-12-16_C": {
@@ -1885,6 +2002,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-16T15:01:51.283589"
   },
   "Webull_NOW_750.0_12/19_P": {
@@ -1901,6 +2019,7 @@
     "tier2_hit": true,
     "tier3_hit": true,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-16T15:11:43.822878"
   },
   "ALPACA_PAPER_PLTR_195.0_2025-12-19_C": {
@@ -1917,6 +2036,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-16T15:21:27.477532"
   },
   "ALPACA_PAPER_SPY_676.0_2025-12-17_P": {
@@ -1933,6 +2053,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-17T14:41:15.383970"
   },
   "ALPACA_PAPER_QQQ_606.0_2025-12-17_P": {
@@ -1949,6 +2070,7 @@
     "tier2_hit": true,
     "tier3_hit": true,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-17T14:44:18.751058"
   },
   "ALPACA_PAPER_QQQ_614.0_2025-12-17_C": {
@@ -1965,6 +2087,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-17T14:58:35.233275"
   },
   "ALPACA_PAPER_SPY_680.0_2025-12-17_C": {
@@ -1981,6 +2104,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-17T15:02:09.348317"
   },
   "Webull_NOW_775.0_12/19_P": {
@@ -1997,6 +2121,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-17T15:08:47.568276"
   },
   "ALPACA_PAPER_NOW_775.0_2025-12-19_P": {
@@ -2013,6 +2138,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-17T15:08:47.568608"
   },
   "ALPACA_PAPER_QQQ_613.0_2025-12-17_C": {
@@ -2029,6 +2155,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-17T15:29:35.183118"
   },
   "ALPACA_PAPER_TSLA_507.5_2025-12-26_C": {
@@ -2045,6 +2172,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-17T15:55:56.503363"
   },
   "ALPACA_PAPER_SPY_676.0_2025-12-17_C": {
@@ -2061,6 +2189,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-17T17:02:05.903182"
   },
   "Webull_NKE_70.0_12/19_C": {
@@ -2077,6 +2206,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-17T18:41:26.361900"
   },
   "ALPACA_PAPER_SPY_664.0_2025-12-18_P": {
@@ -2093,6 +2223,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-17T20:42:06.275938"
   },
   "ALPACA_PAPER_TSLA_490.0_2025-12-19_C": {
@@ -2109,6 +2240,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T14:31:49.642345"
   },
   "ALPACA_PAPER_NKE_70.0_2025-12-19_C": {
@@ -2125,6 +2257,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T14:34:23.603342"
   },
   "ALPACA_PAPER_NVDA_177.5_2025-12-19_C": {
@@ -2141,6 +2274,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T14:43:37.699344"
   },
   "ALPACA_PAPER_QQQ_611.0_2025-12-18_C": {
@@ -2157,6 +2291,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T14:46:41.819601"
   },
   "ALPACA_PAPER_SPY_674.0_2025-12-18_P": {
@@ -2173,6 +2308,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T14:54:51.643750"
   },
   "ALPACA_PAPER_QQQ_604.0_2025-12-18_P": {
@@ -2189,6 +2325,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T15:15:57.277936"
   },
   "ALPACA_PAPER_TSLA_502.5_2025-12-19_C": {
@@ -2205,6 +2342,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T15:17:28.659841"
   },
   "ALPACA_PAPER_SPY_679.0_2025-12-18_P": {
@@ -2221,6 +2359,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T15:46:58.586995"
   },
   "ALPACA_PAPER_SPY_678.0_2025-12-18_P": {
@@ -2237,6 +2376,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T15:51:34.043251"
   },
   "ALPACA_PAPER_SPY_682.0_2025-12-18_C": {
@@ -2253,6 +2393,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T16:12:58.913550"
   },
   "ALPACA_PAPER_SPY_680.0_2025-12-18_C": {
@@ -2269,6 +2410,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T16:22:58.227429"
   },
   "ALPACA_PAPER_UPS_102.0_2025-12-19_P": {
@@ -2285,6 +2427,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T16:36:43.800507"
   },
   "ALPACA_PAPER_EOSE_stock": {
@@ -2301,6 +2444,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T17:14:25.998645"
   },
   "ALPACA_PAPER_NKE_67.0_2025-12-19_C": {
@@ -2317,6 +2461,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T17:19:01.101807"
   },
   "Webull_FDX_260.0_12/26_P": {
@@ -2333,6 +2478,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T18:23:18.440579"
   },
   "ALPACA_PAPER_FDX_260.0_2025-12-26_P": {
@@ -2349,6 +2495,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T18:23:18.441293"
   },
   "Webull_PYPL_60.0_12/26_C": {
@@ -2365,6 +2512,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T18:35:11.281494"
   },
   "ALPACA_PAPER_PYPL_60.0_2025-12-26_C": {
@@ -2381,6 +2529,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-18T18:35:11.283086"
   },
   "ALPACA_PAPER_ORCL_192.5_2025-12-19_C": {
@@ -2397,6 +2546,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-19T14:37:52.709426"
   },
   "Webull_FDX_275.0_12/26_P": {
@@ -2413,6 +2563,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-19T14:42:00.436306"
   },
   "ALPACA_PAPER_FDX_275.0_2025-12-26_P": {
@@ -2429,6 +2580,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-19T14:43:02.528932"
   },
   "ALPACA_PAPER_RDDT_230.0_2025-12-19_P": {
@@ -2445,6 +2597,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-19T14:50:49.117855"
   },
   "ALPACA_PAPER_SPY_680.0_2025-12-19_C": {
@@ -2461,6 +2614,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-19T14:54:57.958644"
   },
   "ALPACA_PAPER_SPY_675.0_2025-12-19_P": {
@@ -2477,6 +2631,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-19T14:58:04.284322"
   },
   "ALPACA_PAPER_QQQ_620.0_2025-12-19_C": {
@@ -2493,6 +2648,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-19T15:04:17.562361"
   },
   "ALPACA_PAPER_SPY_677.0_2025-12-19_P": {
@@ -2509,6 +2665,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-19T15:21:53.353169"
   },
   "ALPACA_PAPER_BYND_1.5_2025-12-26_C": {
@@ -2525,6 +2682,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-19T16:16:19.747502"
   },
   "Webull_NKE_0.0__": {
@@ -2541,6 +2699,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-19T17:46:30.693181"
   },
   "Webull_SPX_6860.0_12/19_C": {
@@ -2557,6 +2716,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-19T18:58:46.601815"
   },
   "Webull_IREN_55.0_12/26_C": {
@@ -2573,6 +2733,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-19T20:24:56.317420"
   },
   "ALPACA_PAPER_IREN_42.0_2025-12-26_C": {
@@ -2589,6 +2750,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-19T20:50:31.143281"
   },
   "Webull_SPX_6840.0_12/19_C": {
@@ -2605,6 +2767,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-19T20:54:11.056756"
   },
   "ALPACA_PAPER_NOW_stock": {
@@ -2621,6 +2784,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-20T02:27:36.684194"
   },
   "ALPACA_PAPER_SPY_682.0_2025-12-22_P": {
@@ -2637,6 +2801,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-22T14:38:38.796008"
   },
   "ALPACA_PAPER_QQQ_621.0_2025-12-22_C": {
@@ -2653,6 +2818,7 @@
     "tier2_hit": true,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-22T14:47:15.702168"
   },
   "ALPACA_PAPER_TSLA_510.0_2025-12-26_C": {
@@ -2669,6 +2835,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-22T15:02:13.348599"
   },
   "ALPACA_PAPER_SPY_685.0_2025-12-22_C": {
@@ -2685,6 +2852,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-22T15:04:48.243687"
   },
   "ALPACA_PAPER_SPY_680.0_2025-12-22_P": {
@@ -2701,6 +2869,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-22T15:39:40.117374"
   },
   "ALPACA_PAPER_QQQ_619.0_2025-12-22_C": {
@@ -2717,6 +2886,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-22T15:51:00.451192"
   },
   "ALPACA_PAPER_QQQ_620.0_2025-12-22_C": {
@@ -2733,6 +2903,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-22T16:08:05.422059"
   },
   "Webull_NVO_48.5_12/26_C": {
@@ -2749,6 +2920,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-22T16:16:48.383831"
   },
   "ALPACA_PAPER_NVO_48.5_2025-12-26_C": {
@@ -2765,6 +2937,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-22T16:16:48.384411"
   },
   "Webull_FDX_0.0__": {
@@ -2781,6 +2954,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-23T05:01:01.828882"
   },
   "Webull_SPY_680.0_12/23_P": {
@@ -2797,6 +2971,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-23T15:10:55.514385"
   },
   "Webull_CAVA_57.0_12/26_P": {
@@ -2813,6 +2988,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-23T15:48:43.884726"
   },
   "ALPACA_PAPER_AAPL_277.5_2025-12-26_C": {
@@ -2829,6 +3005,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-25T05:21:07.460003"
   },
   "ALPACA_PAPER_NVDA_192.5_2025-12-26_C": {
@@ -2845,6 +3022,7 @@
     "tier2_hit": true,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-26T14:33:28.673147"
   },
   "ALPACA_PAPER_SPY_691.0_2025-12-26_C": {
@@ -2861,6 +3039,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-26T14:36:59.958095"
   },
   "ALPACA_PAPER_QQQ_625.0_2025-12-26_C": {
@@ -2877,6 +3056,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-26T14:56:48.502357"
   },
   "ALPACA_PAPER_NKE_61.0_2025-12-26_C": {
@@ -2893,6 +3073,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-26T14:57:18.873124"
   },
   "ALPACA_PAPER_TSLA_480.0_2025-12-26_P": {
@@ -2909,6 +3090,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-26T17:28:33.422645"
   },
   "ALPACA_PAPER_QQQ_624.0_2025-12-29_C": {
@@ -2925,6 +3107,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-29T14:41:37.895815"
   },
   "ALPACA_PAPER_SPY_686.0_2025-12-29_P": {
@@ -2941,6 +3124,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-29T15:01:14.431794"
   },
   "ALPACA_PAPER_QQQ_621.0_2025-12-29_C": {
@@ -2957,6 +3141,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-29T16:02:14.689884"
   },
   "ALPACA_PAPER_QQQ_622.0_2025-12-30_C": {
@@ -2973,6 +3158,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-30T15:03:28.096964"
   },
   "ALPACA_PAPER_QQQ_619.0_2025-12-30_P": {
@@ -2989,6 +3175,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-30T15:17:04.662111"
   },
   "ALPACA_PAPER_QQQ_621.0_2025-12-30_C": {
@@ -3005,6 +3192,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-30T17:21:08.520446"
   },
   "ALPACA_PAPER_QQQ_620.0_2025-12-30_C": {
@@ -3021,6 +3209,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-30T19:17:18.505273"
   },
   "ALPACA_PAPER_QQQ_619.0_2025-12-31_C": {
@@ -3037,6 +3226,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-31T15:27:32.401081"
   },
   "ALPACA_PAPER_QQQ_618.0_2025-12-31_C": {
@@ -3053,6 +3243,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-31T15:43:09.410687"
   },
   "Webull_SPY_686.0_12/31_C": {
@@ -3069,6 +3260,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-31T17:00:33.420019"
   },
   "Webull_ESHA_stock": {
@@ -3085,6 +3277,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-31T17:48:59.609177"
   },
   "Webull_SLS_stock": {
@@ -3101,6 +3294,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2025-12-31T18:01:27.030559"
   },
   "ALPACA_PAPER_SIDU_stock": {
@@ -3117,6 +3311,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-02T14:39:24.996156"
   },
   "ALPACA_PAPER_QQQ_621.0_2026-01-02_C": {
@@ -3133,6 +3328,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-02T15:10:40.395349"
   },
   "Webull_QQQ_617.0_01/02_C": {
@@ -3149,6 +3345,7 @@
     "tier2_hit": true,
     "tier3_hit": true,
     "tier4_hit": true,
+    "pending_orders": {},
     "created_at": "2026-01-02T15:38:34.688513"
   },
   "ALPACA_PAPER_HOOD_stock": {
@@ -3165,6 +3362,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-02T15:58:15.518124"
   },
   "ALPACA_PAPER_LVRO_stock": {
@@ -3181,6 +3379,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-02T18:09:20.799681"
   },
   "ALPACA_PAPER_DVLT_stock": {
@@ -3197,6 +3396,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-02T18:36:32.585195"
   },
   "ALPACA_PAPER_CLPT_stock": {
@@ -3213,6 +3413,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T15:09:12.133755"
   },
   "ALPACA_PAPER_ONDS_14.0_2026-06-18_C": {
@@ -3229,6 +3430,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T15:09:12.134466"
   },
   "ALPACA_PAPER_QQQ_623.0_2026-01-06_C": {
@@ -3245,6 +3447,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T15:09:12.134898"
   },
   "ALPACA_PAPER_QQQ_618.0_2026-01-06_P": {
@@ -3261,6 +3464,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T15:09:12.135309"
   },
   "ALPACA_PAPER_ZM_90.0_2026-01-09_C": {
@@ -3277,6 +3481,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T15:09:12.135703"
   },
   "ALPACA_PAPER_NVO_60.0_2026-01-16_C": {
@@ -3293,6 +3498,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T15:13:59.741926"
   },
   "ALPACA_PAPER_SPY_700.0_2026-01-23_C": {
@@ -3309,6 +3515,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T15:29:16.780435"
   },
   "ALPACA_PAPER_XIFR_13.0_2026-04-17_C": {
@@ -3325,6 +3532,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T15:30:51.091059"
   },
   "Webull_NFLX_91.0_01/09_C": {
@@ -3341,6 +3549,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T15:40:58.674393"
   },
   "ALPACA_PAPER_QQQ_621.0_2026-01-06_P": {
@@ -3357,6 +3566,7 @@
     "tier2_hit": true,
     "tier3_hit": true,
     "tier4_hit": true,
+    "pending_orders": {},
     "created_at": "2026-01-06T15:42:33.954289"
   },
   "ALPACA_PAPER_QQQ_621.0_2026-01-06_C": {
@@ -3373,6 +3583,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T15:52:47.302463"
   },
   "ALPACA_PAPER_ZETA_25.0_2026-01-16_C": {
@@ -3389,6 +3600,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T15:56:05.724776"
   },
   "ALPACA_PAPER_ZETA_30.0_2026-02-20_C": {
@@ -3405,6 +3617,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T15:56:05.725063"
   },
   "ALPACA_PAPER_NFLX_91.0_2026-01-09_C": {
@@ -3421,6 +3634,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T16:01:11.822905"
   },
   "ALPACA_PAPER_SPY_690.0_2026-01-06_C": {
@@ -3437,6 +3651,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T16:01:44.188235"
   },
   "ALPACA_PAPER_DIS_115.0_2026-01-16_C": {
@@ -3453,6 +3668,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T16:19:49.323827"
   },
   "ALPACA_PAPER_QQQ_620.0_2026-01-06_P": {
@@ -3469,6 +3685,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T16:19:49.324453"
   },
   "ALPACA_PAPER_NVDA_190.0_2026-01-09_C": {
@@ -3485,6 +3702,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T16:23:09.203025"
   },
   "ALPACA_PAPER_IWM_253.0_2026-01-09_P": {
@@ -3501,6 +3719,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T16:41:54.207862"
   },
   "ALPACA_PAPER_PG_141.0_2026-01-09_C": {
@@ -3517,6 +3736,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T16:46:48.016005"
   },
   "ALPACA_PAPER_GOOGL_320.0_2026-01-09_C": {
@@ -3533,6 +3753,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T16:49:01.324409"
   },
   "ALPACA_PAPER_BNAI_stock": {
@@ -3549,6 +3770,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T17:04:03.209436"
   },
   "ALPACA_PAPER_QQQ_622.0_2026-01-06_P": {
@@ -3565,6 +3787,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T17:43:51.181532"
   },
   "ALPACA_PAPER_PLUG_2.5_2026-01-09_C": {
@@ -3581,6 +3804,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T18:00:34.330895"
   },
   "ALPACA_PAPER_TSLA_440.0_2026-01-09_C": {
@@ -3597,6 +3821,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T18:55:38.351803"
   },
   "ALPACA_PAPER_RBLX_80.0_2026-01-16_C": {
@@ -3613,6 +3838,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T18:59:56.144148"
   },
   "ALPACA_PAPER_NFLX_stock": {
@@ -3629,6 +3855,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-06T20:56:28.770452"
   },
   "ALPACA_PAPER_CMG_stock": {
@@ -3645,6 +3872,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-07T14:30:47.154503"
   },
   "ALPACA_PAPER_GLUE_stock": {
@@ -3661,6 +3889,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-07T14:34:05.706927"
   },
   "ALPACA_PAPER_SPY_692.0_2026-01-07_P": {
@@ -3677,6 +3906,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-07T14:34:05.708076"
   },
   "ALPACA_PAPER_SKYQ_stock": {
@@ -3693,6 +3923,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-07T14:38:50.847185"
   },
   "ALPACA_PAPER_ASBP_stock": {
@@ -3709,6 +3940,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-07T14:39:53.125219"
   },
   "ALPACA_PAPER_NVVE_stock": {
@@ -3725,6 +3957,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-07T14:45:05.700836"
   },
   "ALPACA_PAPER_ZETA_stock": {
@@ -3741,6 +3974,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-07T14:48:49.135522"
   },
   "ALPACA_PAPER_SLRX_stock": {
@@ -3757,6 +3991,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-07T14:51:25.275765"
   },
   "ALPACA_PAPER_MNTS_stock": {
@@ -3773,6 +4008,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-07T14:57:43.522965"
   },
   "ALPACA_PAPER_AMOD_stock": {
@@ -3789,6 +4025,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-07T15:01:00.128007"
   },
   "Webull_CVX_160.0_01/09_C": {
@@ -3804,7 +4041,8 @@
     "tier1_hit": true,
     "tier2_hit": true,
     "tier3_hit": true,
-    "tier4_hit": true,
+    "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-07T15:07:14.814745"
   },
   "ALPACA_PAPER_SMX_stock": {
@@ -3821,6 +4059,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-07T15:34:22.984072"
   },
   "ALPACA_PAPER_DCOY_stock": {
@@ -3837,6 +4076,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-08T06:26:44.792376"
   },
   "ALPACA_PAPER_FLYX_stock": {
@@ -3853,6 +4093,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-08T14:30:25.301007"
   },
   "ALPACA_PAPER_APLD_stock": {
@@ -3869,6 +4110,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-08T14:43:33.327075"
   },
   "ALPACA_PAPER_JTAI_stock": {
@@ -3885,6 +4127,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-08T14:43:33.329804"
   },
   "ALPACA_PAPER_ACON_stock": {
@@ -3901,6 +4144,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-08T14:45:10.907323"
   },
   "ALPACA_PAPER_ONDS_20.0_2026-01-30_C": {
@@ -3917,6 +4161,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-08T14:57:21.529422"
   },
   "ALPACA_PAPER_QQQ_617.0_2026-01-08_P": {
@@ -3933,6 +4178,7 @@
     "tier2_hit": true,
     "tier3_hit": true,
     "tier4_hit": true,
+    "pending_orders": {},
     "created_at": "2026-01-08T14:58:24.852881"
   },
   "ALPACA_PAPER_GOOGL_320.0_2026-01-09_P": {
@@ -3949,6 +4195,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-08T15:06:31.221126"
   },
   "ALPACA_PAPER_NVDA_192.5_2026-01-09_C": {
@@ -3965,6 +4212,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-08T15:49:46.574363"
   },
   "ALPACA_PAPER_QQQ_618.0_2026-01-08_P": {
@@ -3981,6 +4229,7 @@
     "tier2_hit": true,
     "tier3_hit": true,
     "tier4_hit": true,
+    "pending_orders": {},
     "created_at": "2026-01-08T15:58:19.629835"
   },
   "ALPACA_PAPER_SXTC_stock": {
@@ -3997,6 +4246,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-08T16:00:53.635517"
   },
   "ALPACA_PAPER_QQQ_619.0_2026-01-08_P": {
@@ -4013,6 +4263,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-08T16:45:46.517462"
   },
   "ALPACA_PAPER_SPY_691.0_2026-01-08_C": {
@@ -4029,6 +4280,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
+    "pending_orders": {},
     "created_at": "2026-01-08T17:55:21.177124"
   }
 }

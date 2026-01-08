@@ -196,10 +196,11 @@ class BrokerSyncService:
         
         if self._fill_sync_counter[broker_name] >= 5:
             await self._sync_filled_orders(broker_name, broker_instance)
-            # Reconcile pending risk orders after fetching filled orders
-            if hasattr(self, '_risk_manager') and self._risk_manager:
-                await self.reconcile_risk_orders(self._risk_manager)
             self._fill_sync_counter[broker_name] = 0
+        
+        # Reconcile pending risk orders every sync cycle (not just every 5th)
+        if hasattr(self, '_risk_manager') and self._risk_manager:
+            await self.reconcile_risk_orders(self._risk_manager)
         
         print(f"[SYNC] ✓ {broker_name} sync complete")
     
@@ -974,10 +975,10 @@ class BrokerSyncService:
                             risk_manager.cache.fail_pending_order(position_key, order_id)
                             print(f"[SYNC] ❌ Risk order {order_id} {status} - Tier {tier} will retry")
                         elif status == 'PARTIALLY_FILLED' and filled_qty > 0:
-                            # Partial fill - update tracking
-                            risk_manager.cache.cache.get(position_key).update_pending_order(
-                                order_id, 'partial', filled_qty
-                            )
+                            # Partial fill - update tracking via cache entry
+                            entry = risk_manager.cache.get(position_key)
+                            if entry:
+                                entry.update_pending_order(order_id, 'partial', filled_qty)
                             print(f"[SYNC] ⚠️ Risk order {order_id} partial: {filled_qty}/{qty_expected}")
                         # PENDING/OPEN - leave as is, will check next cycle
                     else:
