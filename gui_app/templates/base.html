@@ -106,7 +106,7 @@
             </div>
 
             <div class="nav-dropdown">
-                <button class="nav-dropdown-btn {% if request.path in ['/settings', '/architecture', '/license', '/health', '/telegram', '/brokers'] or request.path.startswith('/analytics') %}active{% endif %}">
+                <button class="nav-dropdown-btn {% if request.path in ['/settings', '/architecture', '/license', '/health', '/telegram', '/brokers'] %}active{% endif %}">
                     Admin
                     <span class="dropdown-arrow">▼</span>
                 </button>
@@ -120,26 +120,6 @@
                         <span class="dropdown-icon">⚙️</span>
                         <span class="dropdown-text">Settings</span>
                         <span class="dropdown-desc">Bot configuration</span>
-                    </a>
-                    <a href="/analytics/webull_live" class="dropdown-item {% if request.path == '/analytics/webull_live' %}active{% endif %}">
-                        <span class="dropdown-icon">📊</span>
-                        <span class="dropdown-text">Webull Live</span>
-                        <span class="dropdown-desc">Live trading analytics</span>
-                    </a>
-                    <a href="/analytics/webull_paper" class="dropdown-item {% if request.path == '/analytics/webull_paper' %}active{% endif %}">
-                        <span class="dropdown-icon">📝</span>
-                        <span class="dropdown-text">Webull Paper</span>
-                        <span class="dropdown-desc">Paper trading analytics</span>
-                    </a>
-                    <a href="/analytics/alpaca_live" class="dropdown-item {% if request.path == '/analytics/alpaca_live' %}active{% endif %}">
-                        <span class="dropdown-icon">🦙</span>
-                        <span class="dropdown-text">Alpaca Live</span>
-                        <span class="dropdown-desc">Live trading analytics</span>
-                    </a>
-                    <a href="/analytics/alpaca_paper" class="dropdown-item {% if request.path == '/analytics/alpaca_paper' %}active{% endif %}">
-                        <span class="dropdown-icon">📋</span>
-                        <span class="dropdown-text">Alpaca Paper</span>
-                        <span class="dropdown-desc">Paper trading analytics</span>
                     </a>
                     <a href="/telegram" class="dropdown-item {% if request.path == '/telegram' %}active{% endif %}">
                         <span class="dropdown-icon">📱</span>
