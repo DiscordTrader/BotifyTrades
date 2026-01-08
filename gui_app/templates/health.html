@@ -454,6 +454,7 @@
             <div class="diag-tabs">
                 <button class="diag-tab active" onclick="showDiagTab('diagnostics')">Diagnostics</button>
                 <button class="diag-tab" onclick="showDiagTab('tests')">Unit Tests</button>
+                <button class="diag-tab" onclick="showDiagTab('qa')">QA Registry</button>
                 <button class="diag-tab" onclick="showDiagTab('migrations')">Database</button>
                 <button class="diag-tab" onclick="showDiagTab('upgrade')">Upgrade</button>
             </div>
@@ -481,6 +482,26 @@
                 </div>
                 <div id="testResults" class="diag-results">
                     <p class="diag-placeholder">Click "Run Unit Tests" to validate system integrity</p>
+                </div>
+            </div>
+            
+            <!-- QA Registry Tab -->
+            <div id="tab-qa" class="diag-tab-content">
+                <div class="diag-actions">
+                    <button class="diag-btn primary" onclick="runQAValidation()" id="qaBtn">
+                        <span id="qaIcon">&#9989;</span> Validate All Features
+                    </button>
+                    <button class="diag-btn" onclick="loadFeatureRegistry()" id="qaLoadBtn">
+                        <span>&#128203;</span> Load Registry
+                    </button>
+                    <span class="diag-status" id="qaStatus"></span>
+                </div>
+                <div id="qaResults" class="diag-results">
+                    <p class="diag-placeholder">Click "Validate All Features" to check feature integrity against the registry</p>
+                </div>
+                <div id="featureRegistry" class="feature-registry" style="display:none;">
+                    <h4 style="color:#fff;margin:16px 0 12px 0;">Feature Registry</h4>
+                    <div class="feature-list" id="featureList"></div>
                 </div>
             </div>
             
@@ -1362,6 +1383,127 @@ async function runTests() {
     } catch (error) {
         results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${error.message}</p>`;
         status.textContent = 'Error';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// QA Registry Functions
+async function runQAValidation() {
+    const btn = document.getElementById('qaBtn');
+    const status = document.getElementById('qaStatus');
+    const results = document.getElementById('qaResults');
+    
+    btn.disabled = true;
+    status.textContent = 'Validating features...';
+    results.innerHTML = '<p class="diag-placeholder">Running feature validation against registry...</p>';
+    
+    try {
+        const response = await fetch('/api/qa/validate');
+        const data = await response.json();
+        
+        if (data.success) {
+            const summary = data.summary || {};
+            let html = `
+                <div class="diag-summary">
+                    <span class="diag-stat pass">&#10003; ${summary.passed || 0} Passed</span>
+                    <span class="diag-stat warn">&#9888; ${summary.warnings || 0} Warnings</span>
+                    <span class="diag-stat fail">&#10007; ${summary.critical || 0} Critical</span>
+                </div>
+            `;
+            
+            if (data.features_validated) {
+                html += `<p style="color:#888;margin:12px 0;">Features validated: ${data.features_validated.join(', ')}</p>`;
+            }
+            
+            if (data.issues && data.issues.length > 0) {
+                html += '<div style="margin-top:16px;">';
+                for (const issue of data.issues) {
+                    const icon = issue.severity === 'critical' ? '&#10007;' : issue.severity === 'warning' ? '&#9888;' : '&#8505;';
+                    const iconClass = issue.severity === 'critical' ? 'fail' : issue.severity === 'warning' ? 'warn' : 'pass';
+                    html += `
+                        <div class="diag-item">
+                            <span class="diag-icon ${iconClass}">${icon}</span>
+                            <div class="diag-info">
+                                <div class="diag-name">${issue.component}: ${issue.field}</div>
+                                <div class="diag-message">${issue.message}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+                html += '</div>';
+            } else {
+                html += '<p style="color:#10b981;margin-top:12px;">&#10003; All feature components validated successfully</p>';
+            }
+            
+            results.innerHTML = html;
+            status.textContent = data.is_valid ? 'All Valid' : `${summary.critical || 0} Issues Found`;
+        } else if (data.message) {
+            results.innerHTML = `<p class="diag-placeholder">${data.message}</p>`;
+            status.textContent = 'N/A';
+        } else {
+            results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${data.error}</p>`;
+            status.textContent = 'Error';
+        }
+    } catch (error) {
+        results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${error.message}</p>`;
+        status.textContent = 'Error';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function loadFeatureRegistry() {
+    const btn = document.getElementById('qaLoadBtn');
+    const status = document.getElementById('qaStatus');
+    const registry = document.getElementById('featureRegistry');
+    const list = document.getElementById('featureList');
+    
+    btn.disabled = true;
+    status.textContent = 'Loading registry...';
+    
+    try {
+        const response = await fetch('/api/qa/features');
+        const data = await response.json();
+        
+        if (data.success && data.features) {
+            let html = '';
+            for (const feature of data.features) {
+                const valid = feature.validation?.is_valid;
+                const icon = valid ? '&#10003;' : '&#10007;';
+                const iconColor = valid ? '#10b981' : '#ef4444';
+                const deps = feature.dependencies?.length > 0 ? feature.dependencies.join(', ') : 'None';
+                
+                html += `
+                    <div class="feature-item" style="background:#2a2a3e;padding:12px;border-radius:8px;margin-bottom:8px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <div>
+                                <span style="color:${iconColor};margin-right:8px;">${icon}</span>
+                                <strong style="color:#fff;">${feature.name}</strong>
+                                <span style="color:#888;font-size:12px;margin-left:8px;">v${feature.version}</span>
+                            </div>
+                            <span class="status-badge ${feature.status === 'active' ? 'ok' : 'warning'}">${feature.status}</span>
+                        </div>
+                        <p style="color:#888;font-size:13px;margin:8px 0 0 24px;">${feature.description}</p>
+                        <div style="color:#666;font-size:12px;margin-left:24px;margin-top:4px;">
+                            Dependencies: ${deps} | Tables: ${(feature.db_tables || []).join(', ') || 'None'}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            list.innerHTML = html;
+            registry.style.display = 'block';
+            status.textContent = `${data.features.length} features loaded`;
+        } else if (data.message) {
+            list.innerHTML = `<p style="color:#888;">${data.message}</p>`;
+            registry.style.display = 'block';
+            status.textContent = 'N/A';
+        } else {
+            status.textContent = 'Failed to load';
+        }
+    } catch (error) {
+        status.textContent = 'Error: ' + error.message;
     } finally {
         btn.disabled = false;
     }
