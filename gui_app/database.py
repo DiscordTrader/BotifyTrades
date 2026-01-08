@@ -1234,6 +1234,7 @@ def init_db():
             signal_id INTEGER,
             channel_id INTEGER,
             user_id INTEGER,
+            author_name TEXT,
             ticker TEXT NOT NULL,
             asset_type TEXT DEFAULT 'option',
             strike REAL,
@@ -1263,9 +1264,18 @@ def init_db():
             FOREIGN KEY (channel_id) REFERENCES channels(id)
         )
     ''')
+    # Migration: Add author_name column if missing (must run BEFORE creating index)
+    try:
+        cursor.execute('SELECT author_name FROM signal_verifications LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE signal_verifications ADD COLUMN author_name TEXT')
+        conn.commit()
+        print("[DATABASE] ✓ Added author_name column to signal_verifications")
+    
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_ticker ON signal_verifications(ticker)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_channel ON signal_verifications(channel_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_user ON signal_verifications(user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_author ON signal_verifications(author_name)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_timestamp ON signal_verifications(signal_timestamp)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_status ON signal_verifications(verification_status)')
     
@@ -1487,6 +1497,7 @@ def ensure_signal_verification_tables():
             signal_id INTEGER,
             channel_id INTEGER,
             user_id INTEGER,
+            author_name TEXT,
             ticker TEXT NOT NULL,
             asset_type TEXT DEFAULT 'option',
             strike REAL,
@@ -1517,6 +1528,7 @@ def ensure_signal_verification_tables():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_ticker ON signal_verifications(ticker)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_channel ON signal_verifications(channel_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_user ON signal_verifications(user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_author ON signal_verifications(author_name)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_timestamp ON signal_verifications(signal_timestamp)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_verifications_status ON signal_verifications(verification_status)')
     
