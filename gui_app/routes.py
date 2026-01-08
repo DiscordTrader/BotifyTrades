@@ -3585,8 +3585,8 @@ def register_routes(app):
         """Get filled/executed order history from Webull"""
         print(f"[API] /api/webull/order-history called")
         if _bot_instance is None:
-            print("[API] Bot not initialized")
-            return jsonify({'error': 'Bot not initialized'}), 500
+            print("[API] Bot not initialized - using database fallback")
+            return _get_webull_orders_from_db()
         
         try:
             count = int(request.args.get('count', 50))
@@ -3598,14 +3598,54 @@ def register_routes(app):
             )
             orders_data = future.result(timeout=15)
             
-            if orders_data is not None:
+            if orders_data is not None and len(orders_data) > 0:
                 return jsonify({'orders': orders_data})
             else:
-                return jsonify({'error': 'Failed to fetch order history'}), 500
+                # Fallback to database filled_orders if Webull API returns empty
+                print("[API] Webull API returned empty, falling back to database")
+                return _get_webull_orders_from_db(count)
                 
         except Exception as e:
-            print(f"[API] Error fetching order history: {e}")
-            return jsonify({'error': str(e)}), 500
+            print(f"[API] Error fetching order history: {e} - using database fallback")
+            return _get_webull_orders_from_db()
+    
+    def _get_webull_orders_from_db(count=50):
+        """Fallback: Get Webull orders from synced filled_orders database table"""
+        try:
+            from gui_app.database import get_filled_orders
+            orders = get_filled_orders(broker='Webull', days=30, limit=count)
+            
+            # Format orders to match expected structure
+            formatted_orders = []
+            for order in orders:
+                formatted_orders.append({
+                    'order_id': order.get('broker_order_id', 'N/A'),
+                    'symbol': order.get('symbol', 'N/A'),
+                    'action': 'BUY' if order.get('side') == 'BTO' else 'SELL',
+                    'side': order.get('side', 'N/A'),
+                    'quantity': order.get('quantity', 0),
+                    'filled_quantity': order.get('quantity', 0),
+                    'limit_price': order.get('filled_price', 0),
+                    'avg_filled_price': order.get('filled_price', 0),
+                    'order_type': 'LIMIT',
+                    'status': 'Filled',
+                    'fill_status': 'Filled',
+                    'created_time': order.get('filled_at', ''),
+                    'filled_time': order.get('filled_at', ''),
+                    'asset_type': order.get('asset_type', 'option'),
+                    'broker': 'WEBULL',
+                    'source': 'database_sync',
+                    'strike': order.get('strike', ''),
+                    'expiry': order.get('expiry', ''),
+                    'option_type': order.get('option_type', '')
+                })
+            
+            print(f"[API] Returning {len(formatted_orders)} Webull orders from database")
+            return jsonify({'orders': formatted_orders, 'source': 'database'})
+            
+        except Exception as e:
+            print(f"[API] Database fallback also failed: {e}")
+            return jsonify({'error': str(e), 'orders': []}), 500
     
     async def _get_webull_order_history(status='Filled', count=50):
         """Helper to get Webull order history (filled/executed orders)"""
