@@ -137,9 +137,13 @@ class FinnhubPriceMonitor(PriceMonitor):
                             if poll_count <= 3 or poll_count % 20 == 0:
                                 sys.stderr.write(f"[FINNHUB] Poll #{poll_count} {self.symbol}: ${price}\n")
                                 sys.stderr.flush()
-                            if price and price != self.last_price:
-                                self.last_price = price
-                                await self.callback(self.symbol, float(price))
+                            if price:
+                                if price != self.last_price:
+                                    self.last_price = price
+                                    await self.callback(self.symbol, float(price))
+                                elif poll_count % 10 == 0:
+                                    # Heartbeat update - refreshes timestamp even if price unchanged
+                                    await self.callback(self.symbol, float(price))
                 except Exception as e:
                     sys.stderr.write(f"[FINNHUB] Error for {self.symbol}: {e}\n")
                     sys.stderr.flush()
@@ -167,9 +171,13 @@ class YFinancePriceMonitor(PriceMonitor):
                 if poll_count <= 3 or poll_count % 10 == 0:
                     sys.stderr.write(f"[YFINANCE] Poll #{poll_count} {self.symbol}: ${price}\n")
                     sys.stderr.flush()
-                if price and price != self.last_price:
-                    self.last_price = price
-                    await self.callback(self.symbol, float(price))
+                if price:
+                    if price != self.last_price:
+                        self.last_price = price
+                        await self.callback(self.symbol, float(price))
+                    elif poll_count % 10 == 0:
+                        # Heartbeat update - refreshes timestamp
+                        await self.callback(self.symbol, float(price))
             except Exception as e:
                 sys.stderr.write(f"[YFINANCE] Error for {self.symbol}: {e}\n")
                 sys.stderr.flush()
@@ -258,9 +266,15 @@ class BrokerPriceMonitor(PriceMonitor):
                     source = "FINNHUB" if self.using_finnhub_fallback else self.broker_name.upper()
                     sys.stderr.write(f"[{source}] Poll #{poll_count} for {self.symbol}: price={price}\n")
                     sys.stderr.flush()
-                if price and price != self.last_price:
-                    self.last_price = price
-                    await self.callback(self.symbol, price)
+                
+                # Call callback on price change OR every 10 polls as heartbeat
+                if price:
+                    if price != self.last_price:
+                        self.last_price = price
+                        await self.callback(self.symbol, price)
+                    elif poll_count % 10 == 0:
+                        # Heartbeat update - same price but refreshes timestamp
+                        await self.callback(self.symbol, price)
             except Exception as e:
                 sys.stderr.write(f"[{self.broker_name.upper()}] Error for {self.symbol}: {e}\n")
                 sys.stderr.flush()
