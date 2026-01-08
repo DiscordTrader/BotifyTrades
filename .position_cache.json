@@ -4282,5 +4282,22 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-08T17:55:21.177124"
+  },
+  "Webull_OPEN_stock": {
+    "entry_price": 6.45,
+    "highest_price": 6.45,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "Webull",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-08T20:53:35.489223"
   }
 }
