@@ -37,6 +37,13 @@ The **Portfolio Simulation Engine** projects portfolio growth using various posi
 
 **Expiry Resolver Service** (`src/services/expiry_resolver.py`) automatically picks the next valid expiry for Indian F&O signals when not specified, fetching instrument masters from broker APIs with TTL-based caching and supporting multiple date formats and symbol alias normalization.
 
+**Filled Orders Tracking** (`src/services/broker_sync_service.py`) syncs filled orders from broker APIs (Webull, Alpaca) into a local `filled_orders` database table. Features include:
+- Automatic sync every ~2.5 minutes (5 sync cycles) to respect API rate limits
+- Deduplication via UNIQUE(broker, broker_order_id) constraint
+- Multi-broker support with broker-specific adapters
+- API endpoint `/api/filled-orders` with filtering by broker, symbol, days
+- Dedicated UI tab with broker/days filters showing all filled orders
+
 **Signal Tracking System** provides comprehensive lifecycle tracking for all signals from detection through broker execution with full audit trails. Features include full signal lifecycle states, immutable audit trail, filtering by various parameters, market-specific signal history pages and API endpoints, P&L tracking, broker response and error logging, and specific parsing for Indian and US signals.
 
 **QA Workflow Validation System** (`qa/`) provides comprehensive registry-based validation ensuring the complete signal-to-execution pipeline remains intact when adding/modifying features. Features include:
