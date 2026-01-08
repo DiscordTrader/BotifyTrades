@@ -12797,6 +12797,51 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)})
     
+    @app.route('/api/qa/workflows', methods=['GET'])
+    @login_required
+    def api_qa_workflows():
+        """Get workflow pipeline validation status"""
+        try:
+            import sys
+            from pathlib import Path
+            qa_path = Path(__file__).parent.parent / 'qa'
+            if qa_path.exists():
+                sys.path.insert(0, str(qa_path.parent))
+            
+            from qa.validator import run_workflow_validation, get_pipeline_status
+            
+            result = run_workflow_validation()
+            pipeline_status = get_pipeline_status()
+            
+            return jsonify({
+                'success': True,
+                'validation': result,
+                'pipeline_status': pipeline_status
+            })
+        except ImportError:
+            return jsonify({'success': True, 'message': 'QA module not available'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+    
+    @app.route('/api/qa/trading-pipeline', methods=['GET'])
+    @login_required
+    def api_qa_trading_pipeline():
+        """Get trading pipeline validation specifically"""
+        try:
+            import sys
+            from pathlib import Path
+            qa_path = Path(__file__).parent.parent / 'qa'
+            if qa_path.exists():
+                sys.path.insert(0, str(qa_path.parent))
+            
+            from qa.validator import validate_trading_pipeline
+            result = validate_trading_pipeline()
+            return jsonify({'success': True, **result})
+        except ImportError:
+            return jsonify({'success': True, 'message': 'QA module not available'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+    
     # ============ AUTO-UPDATE SYSTEM ============
     
     @app.route('/api/upgrade/version', methods=['GET'])
