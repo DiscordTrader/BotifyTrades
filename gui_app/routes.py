@@ -8453,11 +8453,20 @@ def register_routes(app):
         """Get real-time connection status for all services (brokers, Discord, Telegram)"""
         try:
             from src.connection_monitor import get_connection_monitor
+            from gui_app.broker_credentials_service import get_enabled_brokers
             monitor = get_connection_monitor()
             
             all_status = monitor.get_all_status()
             active_services = monitor.get_active_services()
             disconnected = monitor.get_disconnected_services()
+            
+            configured_brokers = get_enabled_brokers()
+            
+            telegram_settings = db.get_telegram_settings()
+            telegram_configured = bool(telegram_settings.get('api_id') and telegram_settings.get('api_hash'))
+            
+            discord_token = db.get_setting('discord_token')
+            discord_configured = bool(discord_token)
             
             db_events = db.get_connection_events(limit=50)
             
@@ -8467,7 +8476,12 @@ def register_routes(app):
                 'active': active_services,
                 'disconnected': disconnected,
                 'alerts': disconnected,
-                'recent_events': db_events[:20]
+                'recent_events': db_events[:20],
+                'configured_services': {
+                    'discord': discord_configured,
+                    'telegram': telegram_configured,
+                    'brokers': configured_brokers
+                }
             })
         except ImportError:
             db_status = db.get_latest_connection_status()
@@ -8477,7 +8491,8 @@ def register_routes(app):
                 'active': db_status,
                 'disconnected': [],
                 'alerts': [],
-                'recent_events': []
+                'recent_events': [],
+                'configured_services': {}
             })
         except Exception as e:
             print(f"[API] Error getting connection status: {e}")

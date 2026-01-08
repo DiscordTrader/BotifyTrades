@@ -35,38 +35,8 @@
         </button>
     </div>
     <div id="connection-status-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; padding: 16px;">
-        <div class="connection-card" id="conn-discord">
-            <div class="conn-icon">💬</div>
-            <div class="conn-name">Discord</div>
-            <div class="conn-status" id="conn-discord-status">
-                <span class="status-dot checking"></span>
-                <span>Checking...</span>
-            </div>
-        </div>
-        <div class="connection-card" id="conn-telegram">
-            <div class="conn-icon">📱</div>
-            <div class="conn-name">Telegram</div>
-            <div class="conn-status" id="conn-telegram-status">
-                <span class="status-dot not-configured"></span>
-                <span>Not Configured</span>
-            </div>
-        </div>
-        <div class="connection-card" id="conn-webull">
-            <div class="conn-icon">📊</div>
-            <div class="conn-name">Webull</div>
-            <div class="conn-status" id="conn-webull-status">
-                <span class="status-dot checking"></span>
-                <span>Checking...</span>
-            </div>
-        </div>
-        <div class="connection-card" id="conn-alpaca_paper">
-            <div class="conn-icon">🦙</div>
-            <div class="conn-name">Alpaca Paper</div>
-            <div class="conn-status" id="conn-alpaca_paper-status">
-                <span class="status-dot checking"></span>
-                <span>Checking...</span>
-            </div>
-        </div>
+        <!-- Dynamically populated by JavaScript -->
+        <div style="color: var(--text-muted); padding: 8px;">Loading connection status...</div>
     </div>
     <div id="connection-alerts" style="padding: 0 16px 16px; display: none;">
         <div class="alert alert-danger" style="margin: 0;">
@@ -2263,66 +2233,52 @@ async function refreshConnectionStatus() {
         
         const status = data.status || {};
         const alerts = data.alerts || [];
+        const configuredServices = data.configured_services || {};
+        const configuredBrokers = configuredServices.brokers || {};
         
-        const serviceConfigs = {
-            'discord': { icon: '💬', name: 'Discord', cardId: 'conn-discord' },
-            'telegram': { icon: '📱', name: 'Telegram', cardId: 'conn-telegram' },
-            'webull': { icon: '📊', name: 'Webull', cardId: 'conn-webull' },
-            'alpaca_paper': { icon: '🦙', name: 'Alpaca Paper', cardId: 'conn-alpaca_paper' },
-            'alpaca_live': { icon: '🦙', name: 'Alpaca Live', cardId: 'conn-alpaca_live' }
+        const brokerConfigs = {
+            'webull': { icon: '📊', name: 'Webull' },
+            'alpaca': { icon: '🦙', name: 'Alpaca' },
+            'ibkr': { icon: '🏦', name: 'IBKR' },
+            'tastytrade': { icon: '🍬', name: 'Tastytrade' },
+            'robinhood': { icon: '🪶', name: 'Robinhood' },
+            'schwab': { icon: '💼', name: 'Schwab' }
         };
         
-        Object.entries(serviceConfigs).forEach(([service, config]) => {
-            const serviceStatus = status[service];
-            const card = document.getElementById(config.cardId);
-            const statusEl = document.getElementById(`${config.cardId}-status`);
-            
-            if (!card || !statusEl) return;
-            
-            let statusClass = 'not-configured';
-            let statusText = 'Not Configured';
-            
-            if (serviceStatus) {
-                const st = serviceStatus.status || 'not_configured';
-                
-                if (st === 'connected') {
-                    statusClass = 'connected';
-                    statusText = 'Connected';
-                    if (serviceStatus.latency_ms) {
-                        statusText += ` (${Math.round(serviceStatus.latency_ms)}ms)`;
-                    }
-                } else if (st === 'disconnected') {
-                    statusClass = 'disconnected';
-                    statusText = 'Disconnected';
-                    if (serviceStatus.disconnect_reason) {
-                        const reasons = {
-                            'token_invalid': 'Token Invalid',
-                            'token_expired': 'Token Expired',
-                            'rate_limited': 'Rate Limited',
-                            'network_timeout': 'Network Timeout',
-                            'auth_failed': 'Auth Failed',
-                            'websocket_closed': 'Connection Lost'
-                        };
-                        statusText = reasons[serviceStatus.disconnect_reason] || serviceStatus.disconnect_reason;
-                    }
-                } else if (st === 'reconnecting') {
-                    statusClass = 'reconnecting';
-                    statusText = `Reconnecting (${serviceStatus.reconnect_attempts || 1})`;
-                } else if (st === 'error') {
-                    statusClass = 'error';
-                    statusText = serviceStatus.error_message || 'Error';
-                }
+        const serviceConfigs = {
+            'discord': { icon: '💬', name: 'Discord' },
+            'telegram': { icon: '📱', name: 'Telegram' }
+        };
+        
+        Object.entries(configuredBrokers).forEach(([broker, isConfigured]) => {
+            if (isConfigured && brokerConfigs[broker]) {
+                serviceConfigs[broker] = brokerConfigs[broker];
             }
-            
-            card.classList.remove('connected', 'disconnected', 'reconnecting', 'error');
-            if (statusClass === 'disconnected' || statusClass === 'error') {
-                card.classList.add('disconnected');
-            } else if (statusClass === 'connected') {
-                card.classList.add('connected');
-            }
-            
-            statusEl.innerHTML = `<span class="status-dot ${statusClass}"></span><span>${statusText}</span>`;
         });
+        
+        const grid = document.getElementById('connection-status-grid');
+        if (!grid) return;
+        
+        let html = '';
+        
+        if (configuredServices.discord) {
+            html += renderConnectionCard('discord', serviceConfigs['discord'], status['discord']);
+        }
+        if (configuredServices.telegram) {
+            html += renderConnectionCard('telegram', serviceConfigs['telegram'], status['telegram']);
+        }
+        
+        Object.entries(configuredBrokers).forEach(([broker, isConfigured]) => {
+            if (isConfigured && brokerConfigs[broker]) {
+                html += renderConnectionCard(broker, brokerConfigs[broker], status[broker]);
+            }
+        });
+        
+        if (!html) {
+            html = '<div style="color: var(--text-muted); padding: 8px; grid-column: 1/-1;">No services configured. Set up Discord, Telegram, or brokers in Settings.</div>';
+        }
+        
+        grid.innerHTML = html;
         
         const alertsContainer = document.getElementById('connection-alerts');
         const alertMessage = document.getElementById('connection-alert-message');
@@ -2346,7 +2302,6 @@ async function refreshConnectionStatus() {
             
             if (prevStatus === 'connected' && currStatus === 'disconnected') {
                 const reason = serviceStatus.disconnect_reason || 'unknown';
-                const errorMsg = serviceStatus.error_message || '';
                 
                 const reasonLabels = {
                     'token_invalid': 'Token is invalid or revoked',
@@ -2373,6 +2328,61 @@ async function refreshConnectionStatus() {
     } catch (error) {
         console.error('[ConnectionStatus] Error:', error);
     }
+}
+
+function renderConnectionCard(service, config, serviceStatus) {
+    let statusClass = 'checking';
+    let statusText = 'Checking...';
+    let cardClass = '';
+    
+    if (serviceStatus) {
+        const st = serviceStatus.status || 'not_configured';
+        
+        if (st === 'connected') {
+            statusClass = 'connected';
+            statusText = 'Connected';
+            cardClass = 'connected';
+            if (serviceStatus.latency_ms) {
+                statusText += ` (${Math.round(serviceStatus.latency_ms)}ms)`;
+            }
+        } else if (st === 'disconnected') {
+            statusClass = 'disconnected';
+            cardClass = 'disconnected';
+            statusText = 'Disconnected';
+            if (serviceStatus.disconnect_reason) {
+                const reasons = {
+                    'token_invalid': 'Token Invalid',
+                    'token_expired': 'Token Expired',
+                    'rate_limited': 'Rate Limited',
+                    'network_timeout': 'Network Timeout',
+                    'auth_failed': 'Auth Failed',
+                    'websocket_closed': 'Connection Lost'
+                };
+                statusText = reasons[serviceStatus.disconnect_reason] || serviceStatus.disconnect_reason;
+            }
+        } else if (st === 'reconnecting') {
+            statusClass = 'reconnecting';
+            statusText = `Reconnecting (${serviceStatus.reconnect_attempts || 1})`;
+        } else if (st === 'error') {
+            statusClass = 'error';
+            cardClass = 'disconnected';
+            statusText = serviceStatus.error_message || 'Error';
+        } else if (st === 'not_configured') {
+            statusClass = 'not-configured';
+            statusText = 'Not Configured';
+        }
+    }
+    
+    return `
+        <div class="connection-card ${cardClass}" id="conn-${service}">
+            <div class="conn-icon">${config.icon}</div>
+            <div class="conn-name">${config.name}</div>
+            <div class="conn-status" id="conn-${service}-status">
+                <span class="status-dot ${statusClass}"></span>
+                <span>${statusText}</span>
+            </div>
+        </div>
+    `;
 }
 </script>
 {% endblock %}
