@@ -1,0 +1,206 @@
+# BotifyTrades Workflow Registry
+# Version: 1.0.0
+# Last Updated: 2026-01-08
+#
+# This registry defines critical workflows for validation testing.
+
+schema_version: "1.0"
+
+workflows:
+  # ============================================
+  # SIGNAL PROCESSING WORKFLOWS
+  # ============================================
+
+  discord_signal_to_execution:
+    name: "Discord Signal to Trade Execution"
+    description: "Complete flow from Discord message to broker execution"
+    priority: critical
+    steps:
+      1_receive:
+        component: discord_client
+        action: on_message
+        inputs: [channel_id, message_content, author_id]
+        outputs: [raw_signal]
+      2_filter:
+        component: channel_filter
+        action: check_channel_enabled
+        inputs: [channel_id]
+        outputs: [is_valid_channel]
+      3_parse:
+        component: signal_parser
+        action: parse_signal
+        inputs: [raw_signal]
+        outputs: [parsed_signal]
+      4_validate:
+        component: signal_validator
+        action: validate_signal
+        inputs: [parsed_signal]
+        outputs: [is_valid_signal]
+      5_queue:
+        component: order_queue
+        action: add_to_queue
+        inputs: [parsed_signal, channel_id]
+        outputs: [queue_position]
+      6_execute:
+        component: order_processor
+        action: execute_order
+        inputs: [parsed_signal]
+        outputs: [order_result]
+      7_record:
+        component: trade_recorder
+        action: save_trade
+        inputs: [order_result]
+        outputs: [trade_id]
+    test_scenarios:
+      - name: valid_option_bto
+        input: "BTO AAPL 185c 1/17 @ 2.50"
+        expected: trade_executed
+      - name: valid_stock_bto
+        input: "BTO TSLA @ 250"
+        expected: trade_executed
+      - name: invalid_format
+        input: "random message"
+        expected: ignored
+
+  telegram_signal_to_execution:
+    name: "Telegram Signal to Trade Execution"
+    description: "Complete flow from Telegram message to broker execution"
+    priority: critical
+    steps:
+      1_receive:
+        component: telegram_listener
+        action: on_message
+        inputs: [chat_id, message_content]
+        outputs: [raw_signal]
+      2_bridge:
+        component: telegram_bridge
+        action: forward_to_queue
+        inputs: [raw_signal, chat_id]
+        outputs: [queued]
+      3_process:
+        component: order_processor
+        action: process_signal
+        inputs: [raw_signal]
+        outputs: [order_result]
+
+  # ============================================
+  # RISK MANAGEMENT WORKFLOWS
+  # ============================================
+
+  risk_monitoring:
+    name: "Position Risk Monitoring"
+    description: "Monitor open positions and trigger risk actions"
+    priority: critical
+    steps:
+      1_load_positions:
+        component: broker_sync
+        action: get_all_positions
+        inputs: []
+        outputs: [positions]
+      2_check_risk:
+        component: risk_manager
+        action: evaluate_positions
+        inputs: [positions]
+        outputs: [risk_triggers]
+      3_execute_trim:
+        component: risk_manager
+        action: execute_risk_action
+        inputs: [risk_triggers]
+        outputs: [trim_results]
+    test_scenarios:
+      - name: profit_target_hit
+        setup: position_at_25_pct_gain
+        expected: trim_executed
+      - name: stop_loss_hit
+        setup: position_at_10_pct_loss
+        expected: position_closed
+
+  conditional_order_monitoring:
+    name: "Conditional Order Price Monitoring"
+    description: "Monitor prices and execute when conditions met"
+    priority: high
+    steps:
+      1_load_orders:
+        component: conditional_service
+        action: get_active_orders
+        inputs: [market]
+        outputs: [orders]
+      2_fetch_prices:
+        component: price_monitor
+        action: get_prices
+        inputs: [symbols]
+        outputs: [current_prices]
+      3_check_triggers:
+        component: conditional_service
+        action: check_triggers
+        inputs: [orders, current_prices]
+        outputs: [triggered_orders]
+      4_execute:
+        component: conditional_service
+        action: execute_orders
+        inputs: [triggered_orders]
+        outputs: [execution_results]
+
+  # ============================================
+  # SETTINGS WORKFLOWS
+  # ============================================
+
+  settings_save_load:
+    name: "Settings Save and Load Cycle"
+    description: "Validate settings persistence"
+    priority: high
+    steps:
+      1_save:
+        component: settings_api
+        action: save_setting
+        inputs: [setting_key, setting_value]
+        outputs: [save_result]
+      2_reload:
+        component: settings_loader
+        action: load_settings
+        inputs: []
+        outputs: [loaded_settings]
+      3_verify:
+        component: settings_validator
+        action: verify_value
+        inputs: [setting_key, expected_value]
+        outputs: [is_match]
+    test_scenarios:
+      - name: trading_settings
+        settings: [max_position_size, trade_summary_enabled]
+      - name: channel_settings
+        settings: [risk_management_enabled, leave_runner_enabled]
+
+  channel_configuration:
+    name: "Channel Configuration Flow"
+    description: "Complete channel setup and update flow"
+    priority: high
+    steps:
+      1_create:
+        component: channel_api
+        action: create_channel
+        inputs: [discord_channel_id, name, category]
+        outputs: [channel_id]
+      2_configure_brokers:
+        component: channel_api
+        action: update_channel
+        inputs: [channel_id, enabled_brokers]
+        outputs: [update_result]
+      3_configure_risk:
+        component: channel_api
+        action: update_channel
+        inputs: [channel_id, risk_settings]
+        outputs: [update_result]
+      4_verify:
+        component: channel_api
+        action: get_channel
+        inputs: [channel_id]
+        outputs: [channel_data]
+
+# Validation requirements
+validation:
+  critical_workflows:
+    - discord_signal_to_execution
+    - risk_monitoring
+  test_coverage_minimum: 80%
+  regression_on_change: true

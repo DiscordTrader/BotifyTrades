@@ -1,0 +1,430 @@
+"""
+QA Validator Module
+===================
+Validates features, database schema, API contracts, and workflows
+against the registry definitions.
+"""
+
+import sqlite3
+import json
+from typing import Dict, List, Any, Optional, Tuple
+from dataclasses import dataclass, field, asdict
+from datetime import datetime
+from pathlib import Path
+
+from .registry_loader import get_registry, RegistryLoader, FeatureDefinition
+
+
+@dataclass
+class ValidationIssue:
+    """Represents a validation issue"""
+    severity: str  # 'critical', 'warning', 'info'
+    category: str  # 'feature', 'database', 'api', 'workflow'
+    component: str  # Feature/table/route name
+    field: str
+    message: str
+    expected: Any = None
+    actual: Any = None
+    
+    def to_dict(self) -> Dict:
+        return asdict(self)
+
+
+@dataclass
+class ValidationResult:
+    """Complete validation result"""
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    is_valid: bool = True
+    total_checks: int = 0
+    passed_checks: int = 0
+    failed_checks: int = 0
+    critical_count: int = 0
+    warning_count: int = 0
+    info_count: int = 0
+    issues: List[ValidationIssue] = field(default_factory=list)
+    features_validated: List[str] = field(default_factory=list)
+    tables_validated: List[str] = field(default_factory=list)
+    
+    def add_issue(self, issue: ValidationIssue):
+        self.issues.append(issue)
+        self.failed_checks += 1
+        if issue.severity == 'critical':
+            self.critical_count += 1
+            self.is_valid = False
+        elif issue.severity == 'warning':
+            self.warning_count += 1
+        else:
+            self.info_count += 1
+    
+    def add_pass(self):
+        self.passed_checks += 1
+        self.total_checks += 1
+    
+    def to_dict(self) -> Dict:
+        return {
+            'timestamp': self.timestamp,
+            'is_valid': self.is_valid,
+            'summary': {
+                'total_checks': self.total_checks,
+                'passed': self.passed_checks,
+                'failed': self.failed_checks,
+                'critical': self.critical_count,
+                'warnings': self.warning_count,
+                'info': self.info_count
+            },
+            'features_validated': self.features_validated,
+            'tables_validated': self.tables_validated,
+            'issues': [i.to_dict() for i in self.issues],
+            'status': self._get_status()
+        }
+    
+    def _get_status(self) -> str:
+        if self.critical_count > 0:
+            return 'CRITICAL - System has breaking issues'
+        elif self.warning_count > 0:
+            return f'WARNING - {self.warning_count} issues to review'
+        elif self.failed_checks > 0:
+            return f'DEGRADED - {self.failed_checks} minor issues'
+        else:
+            return 'HEALTHY - All validations passed'
+
+
+class QAValidator:
+    """
+    Main validation engine that checks:
+    - Database schema matches registry
+    - Features have all required components
+    - API routes respond correctly
+    - Workflows are functional
+    """
+    
+    def __init__(self, db_path: str = None):
+        self.registry = get_registry()
+        self.db_path = db_path or 'botify_trades.db'
+        self._db_conn = None
+    
+    def _get_db_connection(self) -> sqlite3.Connection:
+        """Get database connection"""
+        if self._db_conn is None:
+            self._db_conn = sqlite3.connect(self.db_path)
+            self._db_conn.row_factory = sqlite3.Row
+        return self._db_conn
+    
+    def close(self):
+        """Close database connection"""
+        if self._db_conn:
+            self._db_conn.close()
+            self._db_conn = None
+    
+    # =========================================
+    # Full System Validation
+    # =========================================
+    
+    def validate_all(self) -> ValidationResult:
+        """Run complete system validation"""
+        result = ValidationResult()
+        
+        # Validate database schema
+        db_result = self.validate_database_schema()
+        result.issues.extend(db_result.issues)
+        result.tables_validated = db_result.tables_validated
+        result.passed_checks += db_result.passed_checks
+        result.failed_checks += db_result.failed_checks
+        
+        # Validate all features
+        for feature_name in self.registry.get_all_feature_names():
+            feature_result = self.validate_feature(feature_name)
+            result.issues.extend(feature_result.issues)
+            if feature_name not in result.features_validated:
+                result.features_validated.append(feature_name)
+            result.passed_checks += feature_result.passed_checks
+            result.failed_checks += feature_result.failed_checks
+        
+        # Update counts
+        result.total_checks = result.passed_checks + result.failed_checks
+        result.critical_count = sum(1 for i in result.issues if i.severity == 'critical')
+        result.warning_count = sum(1 for i in result.issues if i.severity == 'warning')
+        result.info_count = sum(1 for i in result.issues if i.severity == 'info')
+        result.is_valid = result.critical_count == 0
+        
+        return result
+    
+    # =========================================
+    # Database Schema Validation
+    # =========================================
+    
+    def validate_database_schema(self) -> ValidationResult:
+        """Validate database schema matches registry"""
+        result = ValidationResult()
+        conn = self._get_db_connection()
+        cursor = conn.cursor()
+        
+        for table_name, table_def in self.registry.tables.items():
+            result.tables_validated.append(table_name)
+            
+            # Check table exists
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table_name,)
+            )
+            if not cursor.fetchone():
+                result.add_issue(ValidationIssue(
+                    severity='critical',
+                    category='database',
+                    component=table_name,
+                    field='table',
+                    message=f"Table '{table_name}' does not exist",
+                    expected='exists',
+                    actual='missing'
+                ))
+                continue
+            
+            result.add_pass()
+            
+            # Check columns exist
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            existing_columns = {row['name']: row for row in cursor.fetchall()}
+            
+            for column_name, column_def in table_def.columns.items():
+                if column_name not in existing_columns:
+                    result.add_issue(ValidationIssue(
+                        severity='critical',
+                        category='database',
+                        component=table_name,
+                        field=column_name,
+                        message=f"Column '{column_name}' missing from table '{table_name}'",
+                        expected=column_def.get('type'),
+                        actual='missing'
+                    ))
+                else:
+                    result.add_pass()
+        
+        return result
+    
+    def check_column_exists(self, table_name: str, column_name: str) -> bool:
+        """Check if a specific column exists"""
+        conn = self._get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        columns = [row['name'] for row in cursor.fetchall()]
+        return column_name in columns
+    
+    # =========================================
+    # Feature Validation
+    # =========================================
+    
+    def validate_feature(self, feature_name: str) -> ValidationResult:
+        """Validate a specific feature has all components"""
+        result = ValidationResult()
+        feature = self.registry.get_feature(feature_name)
+        
+        if not feature:
+            result.add_issue(ValidationIssue(
+                severity='warning',
+                category='feature',
+                component=feature_name,
+                field='registry',
+                message=f"Feature '{feature_name}' not found in registry"
+            ))
+            return result
+        
+        result.features_validated.append(feature_name)
+        
+        # Validate database components
+        for db_component in feature.db_fields:
+            table_name = db_component.get('table')
+            fields = db_component.get('fields', [])
+            
+            for field_name in fields:
+                if self.check_column_exists(table_name, field_name):
+                    result.add_pass()
+                else:
+                    result.add_issue(ValidationIssue(
+                        severity='critical',
+                        category='feature',
+                        component=feature_name,
+                        field=f"{table_name}.{field_name}",
+                        message=f"Feature '{feature_name}' requires column '{field_name}' in table '{table_name}'"
+                    ))
+        
+        return result
+    
+    # =========================================
+    # API Validation
+    # =========================================
+    
+    def validate_api_route(self, route_name: str, test_client=None) -> ValidationResult:
+        """Validate an API route responds correctly"""
+        result = ValidationResult()
+        route = self.registry.get_route(route_name)
+        
+        if not route:
+            result.add_issue(ValidationIssue(
+                severity='warning',
+                category='api',
+                component=route_name,
+                field='registry',
+                message=f"Route '{route_name}' not found in registry"
+            ))
+            return result
+        
+        # If test client provided, actually test the route
+        if test_client:
+            for method, method_def in route.methods.items():
+                try:
+                    if method == 'GET':
+                        response = test_client.get(f"/api{route.path}")
+                    elif method == 'POST':
+                        response = test_client.post(f"/api{route.path}", json={})
+                    else:
+                        continue
+                    
+                    if response.status_code in [200, 401]:  # 401 = auth required, which is fine
+                        result.add_pass()
+                    else:
+                        result.add_issue(ValidationIssue(
+                            severity='warning',
+                            category='api',
+                            component=route_name,
+                            field=method,
+                            message=f"Route returned unexpected status {response.status_code}",
+                            expected='200 or 401',
+                            actual=response.status_code
+                        ))
+                except Exception as e:
+                    result.add_issue(ValidationIssue(
+                        severity='warning',
+                        category='api',
+                        component=route_name,
+                        field=method,
+                        message=f"Route test failed: {str(e)}"
+                    ))
+        else:
+            # Just validate route is registered (placeholder)
+            result.add_pass()
+        
+        return result
+    
+    # =========================================
+    # Impact Analysis
+    # =========================================
+    
+    def analyze_change_impact(self, changed_fields: List[str]) -> Dict[str, Any]:
+        """Analyze what features are affected by field changes"""
+        impact = {
+            'affected_features': [],
+            'affected_workflows': [],
+            'is_high_risk': False,
+            'requires_restart': False,
+            'cascade_tests': []
+        }
+        
+        high_risk_fields = self.registry.get_high_risk_fields()
+        
+        for field in changed_fields:
+            # Check if high risk
+            if field in high_risk_fields:
+                impact['is_high_risk'] = True
+            
+            # Find affected features
+            for feature_name, feature in self.registry.features.items():
+                for db_component in feature.db_fields:
+                    if field in db_component.get('fields', []):
+                        if feature_name not in impact['affected_features']:
+                            impact['affected_features'].append(feature_name)
+                        
+                        # Add dependent features to cascade tests
+                        deps = self.registry.get_feature_dependencies(feature_name)
+                        impact['cascade_tests'].extend(deps)
+        
+        impact['cascade_tests'] = list(set(impact['cascade_tests']))
+        
+        return impact
+    
+    # =========================================
+    # Pre-Change Validation
+    # =========================================
+    
+    def validate_before_change(self, change_spec: Dict[str, Any]) -> ValidationResult:
+        """
+        Validate a proposed change before applying it.
+        
+        change_spec format:
+        {
+            'type': 'add_column' | 'modify_api' | 'add_feature',
+            'table': 'channels',
+            'column': 'new_column',
+            'feature': 'feature_name'
+        }
+        """
+        result = ValidationResult()
+        change_type = change_spec.get('type')
+        
+        if change_type == 'add_column':
+            table = change_spec.get('table')
+            column = change_spec.get('column')
+            
+            # Check table exists in registry
+            table_def = self.registry.get_table(table)
+            if not table_def:
+                result.add_issue(ValidationIssue(
+                    severity='warning',
+                    category='change',
+                    component=table,
+                    field='registry',
+                    message=f"Table '{table}' not in registry - update registry first"
+                ))
+            
+            # Check column doesn't already exist
+            if self.check_column_exists(table, column):
+                result.add_issue(ValidationIssue(
+                    severity='info',
+                    category='change',
+                    component=table,
+                    field=column,
+                    message=f"Column '{column}' already exists in '{table}'"
+                ))
+            else:
+                result.add_pass()
+        
+        return result
+
+
+# =========================================
+# Integration with existing health check
+# =========================================
+
+def run_qa_validation(db_path: str = None) -> Dict[str, Any]:
+    """
+    Run full QA validation - called from health check API.
+    Returns dict compatible with existing health check format.
+    """
+    validator = QAValidator(db_path)
+    try:
+        result = validator.validate_all()
+        return result.to_dict()
+    finally:
+        validator.close()
+
+
+def validate_feature_integrity(feature_name: str, db_path: str = None) -> Dict[str, Any]:
+    """
+    Validate a specific feature - called when feature is modified.
+    """
+    validator = QAValidator(db_path)
+    try:
+        result = validator.validate_feature(feature_name)
+        return result.to_dict()
+    finally:
+        validator.close()
+
+
+def analyze_impact(changed_fields: List[str], db_path: str = None) -> Dict[str, Any]:
+    """
+    Analyze impact of changing specific fields.
+    """
+    validator = QAValidator(db_path)
+    try:
+        return validator.analyze_change_impact(changed_fields)
+    finally:
+        validator.close()

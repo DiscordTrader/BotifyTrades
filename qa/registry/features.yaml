@@ -1,0 +1,397 @@
+# BotifyTrades Feature Registry
+# Version: 1.0.0
+# Last Updated: 2026-01-08
+# 
+# This registry tracks all features with their components for validation.
+# Any change to a feature must update this file.
+
+schema_version: "1.0"
+
+features:
+  # ============================================
+  # CORE TRADING FEATURES
+  # ============================================
+  
+  signal_execution:
+    version: "2.0"
+    description: "Parse and execute trading signals from Discord/Telegram"
+    status: active
+    added_date: "2025-01-01"
+    components:
+      database:
+        - table: channels
+          fields: [execute_enabled, track_enabled, enabled_brokers, broker_override]
+        - table: trades
+          fields: [symbol, action, quantity, price, broker, status]
+        - table: signals
+          fields: [raw_message, parsed_data, channel_id]
+      api_routes:
+        - route: /api/channels
+          methods: [GET, POST]
+        - route: /api/channels/<id>
+          methods: [GET, PUT, DELETE]
+      selfbot_functions:
+        - process_signal
+        - execute_order
+        - parse_option_signal
+        - parse_stock_signal
+      js_files:
+        - channels.js
+    dependencies:
+      - webull_broker
+      - alpaca_broker
+      - signal_parsing
+
+  risk_management:
+    version: "2.0"
+    description: "Automated profit targets, stop losses, trailing stops"
+    status: active
+    added_date: "2025-06-01"
+    components:
+      database:
+        - table: channels
+          fields: 
+            - risk_management_enabled
+            - profit_target_1_pct
+            - profit_target_2_pct
+            - profit_target_3_pct
+            - profit_target_4_pct
+            - profit_target_qty_1
+            - profit_target_qty_2
+            - profit_target_qty_3
+            - profit_target_qty_4
+            - stop_loss_pct
+            - trailing_stop_pct
+            - trailing_activation_pct
+            - trim_order_mode
+            - trim_limit_offset
+        - table: trading_settings
+          fields: [risk_management_enabled]
+      api_routes:
+        - route: /api/settings/risk-management
+          methods: [GET, PUT]
+        - route: /api/channels/<id>
+          methods: [PUT]
+      selfbot_functions:
+        - RiskManager
+        - monitor_positions
+        - execute_trim
+      js_files:
+        - channels.js
+        - settings.js
+    dependencies:
+      - signal_execution
+
+  leave_runner:
+    version: "1.0"
+    description: "Keep percentage of position after profit targets"
+    status: active
+    added_date: "2025-12-15"
+    components:
+      database:
+        - table: channels
+          fields: [leave_runner_enabled, leave_runner_pct]
+      api_routes:
+        - route: /api/channels/<id>
+          methods: [PUT]
+      selfbot_functions:
+        - execute_leave_runner
+        - calculate_runner_qty
+      js_files:
+        - channels.js
+    dependencies:
+      - risk_management
+
+  trade_summary:
+    version: "1.0"
+    description: "Post P/L summary to Discord when positions close"
+    status: active
+    added_date: "2026-01-08"
+    components:
+      database:
+        - table: channels
+          fields: [trade_summary_enabled]
+        - table: trading_settings
+          fields: [trade_summary_enabled]
+      api_routes:
+        - route: /api/channels/<id>
+          methods: [PUT]
+        - route: /api/settings/trading
+          methods: [GET, PUT]
+      selfbot_functions:
+        - is_trade_summary_enabled
+        - post_trade_summary
+      js_files:
+        - channels.js
+        - settings.js
+    dependencies:
+      - signal_execution
+
+  exit_strategy_mode:
+    version: "1.0"
+    description: "Per-channel exit strategy (signal/risk/hybrid)"
+    status: active
+    added_date: "2025-12-20"
+    components:
+      database:
+        - table: channels
+          fields: [exit_strategy_mode]
+      api_routes:
+        - route: /api/channels/<id>
+          methods: [PUT]
+      selfbot_functions:
+        - get_exit_strategy_mode
+        - should_follow_signal_exit
+        - should_use_risk_exit
+      js_files:
+        - channels.js
+    dependencies:
+      - risk_management
+
+  conditional_orders:
+    version: "1.2"
+    description: "Monitor price conditions and execute when triggered"
+    status: active
+    added_date: "2025-11-01"
+    components:
+      database:
+        - table: conditional_orders
+          fields: [symbol, trigger_type, trigger_price, status, broker_primary]
+        - table: conditional_order_settings
+          fields: [enabled, auto_execute, default_expiry]
+      api_routes:
+        - route: /api/conditional-orders
+          methods: [GET]
+        - route: /api/conditional-orders/<id>
+          methods: [GET, DELETE]
+        - route: /api/conditional-orders/<id>/offset
+          methods: [PUT]
+        - route: /api/settings/conditional-orders
+          methods: [GET, PUT]
+      selfbot_functions:
+        - ConditionalOrderRouter
+        - ConditionalOrderService
+        - monitor_price_conditions
+      js_files:
+        - settings.js
+    dependencies:
+      - signal_execution
+      - webull_broker
+      - alpaca_broker
+
+  # ============================================
+  # BROKER INTEGRATIONS
+  # ============================================
+
+  webull_broker:
+    version: "2.0"
+    description: "Webull brokerage integration"
+    status: active
+    added_date: "2025-01-01"
+    components:
+      database:
+        - table: broker_credentials
+          fields: [broker_name, credentials_encrypted]
+      api_routes:
+        - route: /api/brokers/webull/balance
+          methods: [GET]
+        - route: /api/settings/webull
+          methods: [GET, PUT]
+      selfbot_functions:
+        - WebullBroker
+        - webull_login
+        - webull_place_order
+      js_files:
+        - settings.js
+    dependencies: []
+
+  alpaca_broker:
+    version: "1.5"
+    description: "Alpaca brokerage integration (paper + live)"
+    status: active
+    added_date: "2025-02-01"
+    components:
+      database:
+        - table: broker_credentials
+          fields: [broker_name, credentials_encrypted]
+      api_routes:
+        - route: /api/brokers/alpaca/balance
+          methods: [GET]
+        - route: /api/settings/alpaca
+          methods: [GET, PUT]
+        - route: /api/alpaca/positions/<symbol>/close
+          methods: [POST]
+        - route: /api/alpaca/orders/<id>/cancel
+          methods: [POST]
+      selfbot_functions:
+        - AlpacaBroker
+        - alpaca_connect
+        - alpaca_place_order
+      js_files:
+        - settings.js
+    dependencies: []
+
+  upstox_broker:
+    version: "1.0"
+    description: "Upstox V3 HFT API for Indian markets"
+    status: active
+    added_date: "2025-10-01"
+    components:
+      database:
+        - table: broker_credentials
+          fields: [broker_name, credentials_encrypted]
+        - table: upstox_pending_orders
+          fields: [order_data, status, created_at]
+      api_routes:
+        - route: /api/settings/upstox
+          methods: [GET, PUT]
+      selfbot_functions:
+        - UpstoxBroker
+        - upstox_connect
+        - upstox_place_order
+      js_files:
+        - settings.js
+    dependencies: []
+
+  # ============================================
+  # PLATFORM INTEGRATIONS
+  # ============================================
+
+  discord_integration:
+    version: "2.0"
+    description: "Discord selfbot for signal monitoring"
+    status: active
+    added_date: "2025-01-01"
+    components:
+      database:
+        - table: channels
+          fields: [discord_channel_id, name, platform]
+        - table: channel_allowed_users
+          fields: [channel_id, discord_user_id]
+      api_routes:
+        - route: /api/bot/status
+          methods: [GET]
+        - route: /api/settings/discord
+          methods: [GET, PUT]
+      selfbot_functions:
+        - DiscordClient
+        - on_message
+        - send_webhook
+      js_files:
+        - settings.js
+    dependencies: []
+
+  telegram_integration:
+    version: "1.0"
+    description: "Telegram user client for signal monitoring"
+    status: active
+    added_date: "2025-09-01"
+    components:
+      database:
+        - table: telegram_settings
+          fields: [api_id, api_hash, session_string]
+        - table: channels
+          fields: [platform, telegram_chat_id, telegram_chat_type]
+      api_routes:
+        - route: /api/settings/telegram
+          methods: [GET, PUT]
+        - route: /api/telegram/channels
+          methods: [GET, POST]
+        - route: /api/telegram/test-connection
+          methods: [POST]
+      selfbot_functions:
+        - TelegramListener
+        - process_telegram_signal
+      js_files:
+        - settings.js
+    dependencies: []
+
+  # ============================================
+  # ANALYTICS & MONITORING
+  # ============================================
+
+  pnl_tracking:
+    version: "1.5"
+    description: "FIFO-based P&L calculation and tracking"
+    status: active
+    added_date: "2025-03-01"
+    components:
+      database:
+        - table: signal_lots
+          fields: [signal_id, channel_id, entry_price, quantity]
+        - table: lot_closures
+          fields: [lot_id, exit_price, pnl_amount]
+        - table: trades
+          fields: [pnl, pnl_percent]
+      api_routes:
+        - route: /api/pnl
+          methods: [GET]
+        - route: /api/pnl/users
+          methods: [GET]
+        - route: /api/leaderboard
+          methods: [GET]
+      selfbot_functions:
+        - calculate_fifo_pnl
+        - update_lot_closures
+      js_files:
+        - pnl.js
+    dependencies:
+      - signal_execution
+
+  system_health:
+    version: "1.0"
+    description: "System health monitoring and diagnostics"
+    status: active
+    added_date: "2025-08-01"
+    components:
+      database: []
+      api_routes:
+        - route: /api/diagnostics
+          methods: [GET]
+        - route: /api/health/diagnostics
+          methods: [GET]
+        - route: /api/health/run-tests
+          methods: [POST]
+        - route: /api/system/consistency-check
+          methods: [GET]
+      selfbot_functions:
+        - run_all_checks
+        - DiagnosticsManager
+      js_files:
+        - health.js
+    dependencies: []
+
+  # ============================================
+  # SIGNAL PARSING
+  # ============================================
+
+  signal_parsing:
+    version: "2.0"
+    description: "Multi-format signal parsing (regex + AI fallback)"
+    status: active
+    added_date: "2025-01-01"
+    components:
+      database:
+        - table: signal_formats
+          fields: [name, pattern, example]
+      api_routes:
+        - route: /api/settings/patterns
+          methods: [GET, PUT]
+      selfbot_functions:
+        - parse_option_signal
+        - parse_stock_signal
+        - parse_india_signal
+        - SignalParser
+      js_files:
+        - settings.js
+    dependencies: []
+
+# Validation rules for features
+validation_rules:
+  required_components:
+    - database OR api_routes
+    - selfbot_functions
+  naming_conventions:
+    features: snake_case
+    api_routes: kebab-case
+    db_fields: snake_case

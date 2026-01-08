@@ -1,0 +1,451 @@
+# BotifyTrades Database Schema Registry
+# Version: 1.0.0
+# Last Updated: 2026-01-08
+#
+# This registry defines the complete database schema for validation.
+# Any schema change must update this file.
+
+schema_version: "1.0"
+database_version: "45"
+
+tables:
+  # ============================================
+  # CORE TABLES
+  # ============================================
+
+  channels:
+    description: "Discord/Telegram channels for signal monitoring"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      discord_channel_id:
+        type: TEXT
+        nullable: false
+        unique: true
+      name:
+        type: TEXT
+        nullable: false
+      category:
+        type: TEXT
+        nullable: true
+        default: "'EXECUTE'"
+      execute_enabled:
+        type: INTEGER
+        nullable: true
+        default: 0
+      track_enabled:
+        type: INTEGER
+        nullable: true
+        default: 0
+      broker_override:
+        type: TEXT
+        nullable: true
+      is_active:
+        type: INTEGER
+        nullable: true
+        default: 1
+      paper_trade_enabled:
+        type: INTEGER
+        nullable: true
+        default: 0
+      enabled_brokers:
+        type: TEXT
+        nullable: true
+        description: "JSON array of broker names"
+      profit_target_pct:
+        type: REAL
+        nullable: true
+      profit_target_1_pct:
+        type: REAL
+        nullable: true
+      profit_target_2_pct:
+        type: REAL
+        nullable: true
+      profit_target_3_pct:
+        type: REAL
+        nullable: true
+      profit_target_4_pct:
+        type: REAL
+        nullable: true
+      profit_target_qty_1:
+        type: INTEGER
+        nullable: true
+      profit_target_qty_2:
+        type: INTEGER
+        nullable: true
+      profit_target_qty_3:
+        type: INTEGER
+        nullable: true
+      profit_target_qty_4:
+        type: INTEGER
+        nullable: true
+      stop_loss_pct:
+        type: REAL
+        nullable: true
+      trailing_stop_pct:
+        type: REAL
+        nullable: true
+      trailing_activation_pct:
+        type: REAL
+        nullable: true
+      position_size_pct:
+        type: REAL
+        nullable: true
+      tracking_position_size_pct:
+        type: REAL
+        nullable: true
+      risk_management_enabled:
+        type: INTEGER
+        nullable: true
+        default: 0
+      default_quantity:
+        type: INTEGER
+        nullable: true
+      leave_runner_enabled:
+        type: INTEGER
+        nullable: true
+        default: 0
+      leave_runner_pct:
+        type: REAL
+        nullable: true
+        default: 25.0
+      trim_order_mode:
+        type: TEXT
+        nullable: true
+        default: "'market'"
+      trim_limit_offset:
+        type: REAL
+        nullable: true
+        default: 0.01
+      exit_strategy_mode:
+        type: TEXT
+        nullable: true
+        default: "'signal'"
+      platform:
+        type: TEXT
+        nullable: true
+        default: "'discord'"
+      telegram_chat_id:
+        type: TEXT
+        nullable: true
+      telegram_chat_type:
+        type: TEXT
+        nullable: true
+      telegram_username:
+        type: TEXT
+        nullable: true
+      market:
+        type: TEXT
+        nullable: true
+        default: "'US'"
+      trade_summary_enabled:
+        type: INTEGER
+        nullable: true
+        default: 1
+      created_at:
+        type: TEXT
+        nullable: true
+        default: "CURRENT_TIMESTAMP"
+      updated_at:
+        type: TEXT
+        nullable: true
+        default: "CURRENT_TIMESTAMP"
+    indexes:
+      - columns: [discord_channel_id]
+        unique: true
+      - columns: [platform, market]
+
+  trades:
+    description: "Executed trades and their status"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      channel_id:
+        type: INTEGER
+        nullable: true
+        foreign_key: channels.id
+      signal_id:
+        type: INTEGER
+        nullable: true
+        foreign_key: signals.id
+      symbol:
+        type: TEXT
+        nullable: false
+      action:
+        type: TEXT
+        nullable: false
+        description: "BTO, STC, etc."
+      quantity:
+        type: INTEGER
+        nullable: false
+      price:
+        type: REAL
+        nullable: true
+      broker:
+        type: TEXT
+        nullable: true
+      status:
+        type: TEXT
+        nullable: true
+        default: "'PENDING'"
+      order_id:
+        type: TEXT
+        nullable: true
+      executed_at:
+        type: TEXT
+        nullable: true
+      pnl:
+        type: REAL
+        nullable: true
+      pnl_percent:
+        type: REAL
+        nullable: true
+      stop_loss_price:
+        type: REAL
+        nullable: true
+      profit_target_price:
+        type: REAL
+        nullable: true
+      risk_trigger:
+        type: TEXT
+        nullable: true
+      origin_trade_id:
+        type: INTEGER
+        nullable: true
+      user_id:
+        type: INTEGER
+        nullable: true
+      source:
+        type: TEXT
+        nullable: true
+        default: "'discord'"
+      option_id:
+        type: TEXT
+        nullable: true
+      close_reason:
+        type: TEXT
+        nullable: true
+      market:
+        type: TEXT
+        nullable: true
+        default: "'US'"
+      currency:
+        type: TEXT
+        nullable: true
+        default: "'USD'"
+      lot_size:
+        type: INTEGER
+        nullable: true
+        default: 1
+      created_at:
+        type: TEXT
+        nullable: true
+        default: "CURRENT_TIMESTAMP"
+    indexes:
+      - columns: [channel_id]
+      - columns: [symbol, status]
+      - columns: [broker, status]
+
+  signals:
+    description: "Received trading signals"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      channel_id:
+        type: INTEGER
+        nullable: true
+        foreign_key: channels.id
+      raw_message:
+        type: TEXT
+        nullable: true
+      parsed_data:
+        type: TEXT
+        nullable: true
+        description: "JSON parsed signal data"
+      author_id:
+        type: TEXT
+        nullable: true
+      author_name:
+        type: TEXT
+        nullable: true
+      status:
+        type: TEXT
+        nullable: true
+      received_at:
+        type: TEXT
+        nullable: true
+        default: "CURRENT_TIMESTAMP"
+    indexes:
+      - columns: [channel_id, received_at]
+
+  trading_settings:
+    description: "Global trading configuration"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      max_position_size:
+        type: INTEGER
+        nullable: true
+        default: 600
+      max_position_size_enabled:
+        type: INTEGER
+        nullable: true
+        default: 1
+      global_default_quantity:
+        type: INTEGER
+        nullable: true
+        default: 1
+      trade_summary_enabled:
+        type: INTEGER
+        nullable: true
+        default: 1
+      created_at:
+        type: TEXT
+        nullable: true
+        default: "CURRENT_TIMESTAMP"
+      updated_at:
+        type: TEXT
+        nullable: true
+        default: "CURRENT_TIMESTAMP"
+
+  conditional_orders:
+    description: "Pending conditional orders"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      channel_id:
+        type: TEXT
+        nullable: true
+      symbol:
+        type: TEXT
+        nullable: false
+      trigger_type:
+        type: TEXT
+        nullable: false
+        description: "over, under"
+      trigger_price:
+        type: REAL
+        nullable: false
+      adjusted_trigger_price:
+        type: REAL
+        nullable: true
+      asset_type:
+        type: TEXT
+        nullable: true
+        default: "'stock'"
+      broker_primary:
+        type: TEXT
+        nullable: true
+      status:
+        type: TEXT
+        nullable: true
+        default: "'PENDING'"
+      market:
+        type: TEXT
+        nullable: true
+        default: "'US'"
+      created_at:
+        type: TEXT
+        nullable: true
+        default: "CURRENT_TIMESTAMP"
+      executed_at:
+        type: TEXT
+        nullable: true
+    indexes:
+      - columns: [status, market]
+      - columns: [symbol]
+
+  signal_lots:
+    description: "FIFO lot tracking for P&L"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      signal_id:
+        type: INTEGER
+        nullable: true
+      channel_id:
+        type: INTEGER
+        nullable: true
+      symbol:
+        type: TEXT
+        nullable: false
+      entry_price:
+        type: REAL
+        nullable: false
+      quantity:
+        type: INTEGER
+        nullable: false
+      remaining_qty:
+        type: INTEGER
+        nullable: true
+      broker:
+        type: TEXT
+        nullable: true
+      created_at:
+        type: TEXT
+        nullable: true
+        default: "CURRENT_TIMESTAMP"
+    indexes:
+      - columns: [channel_id, symbol]
+      - columns: [signal_id]
+
+  lot_closures:
+    description: "Closed lots with P&L"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      lot_id:
+        type: INTEGER
+        nullable: true
+        foreign_key: signal_lots.id
+      channel_id:
+        type: INTEGER
+        nullable: true
+      exit_price:
+        type: REAL
+        nullable: false
+      quantity:
+        type: INTEGER
+        nullable: false
+      pnl_amount:
+        type: REAL
+        nullable: true
+      pnl_percent:
+        type: REAL
+        nullable: true
+      closed_at:
+        type: TEXT
+        nullable: true
+        default: "CURRENT_TIMESTAMP"
+
+# Schema validation rules
+validation_rules:
+  required_columns:
+    - id (primary key)
+    - created_at (for audit)
+  naming_conventions:
+    tables: snake_case
+    columns: snake_case
+  data_types:
+    allowed: [INTEGER, REAL, TEXT, BLOB]

@@ -1,0 +1,144 @@
+# BotifyTrades Dependency Graph
+# Version: 1.0.0
+# Last Updated: 2026-01-08
+#
+# This registry maps dependencies between features for impact analysis.
+
+schema_version: "1.0"
+
+# Dependency graph: feature -> depends_on
+dependencies:
+  # Core features
+  signal_execution:
+    depends_on: []
+    required_by:
+      - risk_management
+      - pnl_tracking
+      - trade_summary
+      - conditional_orders
+
+  signal_parsing:
+    depends_on: []
+    required_by:
+      - signal_execution
+
+  # Risk features
+  risk_management:
+    depends_on:
+      - signal_execution
+    required_by:
+      - leave_runner
+      - exit_strategy_mode
+
+  leave_runner:
+    depends_on:
+      - risk_management
+    required_by: []
+
+  exit_strategy_mode:
+    depends_on:
+      - risk_management
+    required_by: []
+
+  trade_summary:
+    depends_on:
+      - signal_execution
+    required_by: []
+
+  conditional_orders:
+    depends_on:
+      - signal_execution
+      - webull_broker
+      - alpaca_broker
+    required_by: []
+
+  # Broker features
+  webull_broker:
+    depends_on: []
+    required_by:
+      - signal_execution
+      - conditional_orders
+
+  alpaca_broker:
+    depends_on: []
+    required_by:
+      - signal_execution
+      - conditional_orders
+
+  upstox_broker:
+    depends_on: []
+    required_by:
+      - india_signal_execution
+
+  # Platform features
+  discord_integration:
+    depends_on: []
+    required_by:
+      - signal_execution
+      - trade_summary
+
+  telegram_integration:
+    depends_on: []
+    required_by:
+      - telegram_signal_execution
+
+  # Analytics
+  pnl_tracking:
+    depends_on:
+      - signal_execution
+    required_by:
+      - trade_summary
+
+  system_health:
+    depends_on: []
+    required_by: []
+
+# Database field dependencies
+database_dependencies:
+  channels.trade_summary_enabled:
+    affects:
+      - trade_summary.post_trade_summary
+    checked_by:
+      - database.is_trade_summary_enabled
+
+  channels.risk_management_enabled:
+    affects:
+      - risk_management.monitor_positions
+      - risk_management.execute_trim
+    checked_by:
+      - database.get_channel_risk_settings
+
+  channels.leave_runner_enabled:
+    affects:
+      - leave_runner.calculate_runner_qty
+    checked_by:
+      - database.get_channel_by_id
+
+  channels.exit_strategy_mode:
+    affects:
+      - risk_management.should_execute_exit
+    checked_by:
+      - database.get_channel_by_id
+
+  trading_settings.trade_summary_enabled:
+    affects:
+      - trade_summary.post_trade_summary
+    checked_by:
+      - database.is_trade_summary_enabled
+      - database.get_trading_settings
+
+# Impact analysis rules
+impact_rules:
+  high_risk_changes:
+    - channels.execute_enabled
+    - channels.enabled_brokers
+    - trading_settings.max_position_size
+    
+  require_restart:
+    - discord_integration
+    - telegram_integration
+    - broker credentials
+
+  cascade_validation:
+    - When changing risk_management, also test leave_runner and exit_strategy_mode
+    - When changing signal_execution, also test all dependent features
