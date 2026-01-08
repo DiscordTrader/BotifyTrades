@@ -2927,7 +2927,17 @@ class WebullBroker:
                 'error': 'ORDER_FAILED'
             }
 
-    async def place_stock_order(self, action: str, qty: int, symbol: str, limit_price: float) -> Dict[str, Any]:
+    async def place_stock_order(self, action: str = None, qty: int = None, symbol: str = None, limit_price: float = None, **kwargs) -> Dict[str, Any]:
+        # Support both naming conventions: qty/quantity and limit_price/price
+        if qty is None:
+            qty = kwargs.get('quantity', 1)
+        if limit_price is None:
+            limit_price = kwargs.get('price')
+        if symbol is None:
+            symbol = kwargs.get('symbol')
+        if action is None:
+            action = kwargs.get('action', 'BTO')
+        
         await self._ensure_login()
         
         # Log if using paper trading account (actual Webull paper API will be called)
