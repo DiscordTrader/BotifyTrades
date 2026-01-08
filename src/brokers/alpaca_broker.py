@@ -205,6 +205,12 @@ class AlpacaBroker(BrokerInterface):
         try:
             side = OrderSide.BUY if action == 'BTO' else OrderSide.SELL
             
+            # Round prices to 2 decimal places (Alpaca doesn't allow sub-penny pricing for stocks > $1)
+            if price is not None:
+                price = round(price, 2)
+            if stop_price is not None:
+                stop_price = round(stop_price, 2)
+            
             # Create order request
             if stop_price is not None:
                 # Stop order (for stop loss)
@@ -329,6 +335,14 @@ class AlpacaBroker(BrokerInterface):
         """
         try:
             side = OrderSide.BUY if action == 'BTO' else OrderSide.SELL
+            
+            # Round prices to 2 decimal places (Alpaca doesn't allow sub-penny pricing for stocks > $1)
+            if entry_price is not None:
+                entry_price = round(entry_price, 2)
+            if stop_loss_price is not None:
+                stop_loss_price = round(stop_loss_price, 2)
+            if profit_target_price is not None:
+                profit_target_price = round(profit_target_price, 2)
             
             # Alpaca BRACKET orders require BOTH stop_loss AND take_profit
             # If only one is provided, fall back to simple order
