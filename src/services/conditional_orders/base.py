@@ -232,16 +232,26 @@ class BrokerPriceMonitor(PriceMonitor):
             loop = asyncio.get_event_loop()
             broker_lower = self.broker_name.lower()
             
+            # Normalize broker name: 'alpaca_paper' -> 'alpaca'
+            broker_normalized = broker_lower.replace('_paper', '').replace('_live', '')
+            
             # Handle Alpaca and Alpaca Paper
-            if broker_lower in ('alpaca', 'alpaca_paper'):
+            if broker_normalized == 'alpaca':
                 from alpaca.data import StockHistoricalDataClient
                 from alpaca.data.requests import StockLatestQuoteRequest
                 
-                if hasattr(self.broker_instance, 'api_key') and hasattr(self.broker_instance, 'secret_key'):
-                    client = StockHistoricalDataClient(
-                        self.broker_instance.api_key, 
-                        self.broker_instance.secret_key
-                    )
+                # AlpacaBroker stores credentials in config dict
+                api_key = None
+                api_secret = None
+                if hasattr(self.broker_instance, 'config'):
+                    api_key = self.broker_instance.config.get('api_key')
+                    api_secret = self.broker_instance.config.get('api_secret')
+                elif hasattr(self.broker_instance, 'api_key') and hasattr(self.broker_instance, 'secret_key'):
+                    api_key = self.broker_instance.api_key
+                    api_secret = self.broker_instance.secret_key
+                
+                if api_key and api_secret:
+                    client = StockHistoricalDataClient(api_key, api_secret)
                     request = StockLatestQuoteRequest(symbol_or_symbols=self.symbol)
                     quotes = await loop.run_in_executor(None, lambda: client.get_stock_latest_quote(request))
                     if self.symbol in quotes:
@@ -546,7 +556,14 @@ class BaseConditionalOrderService(ABC):
         
         self._log(f"Starting monitor for #{order_id} {symbol} broker={broker}")
         
-        broker_instance = self.broker_instances.get(broker.lower()) if broker else None
+        # Normalize broker name for lookup: 'alpaca_paper' -> 'alpaca', 'ALPACA_PAPER' -> 'alpaca'
+        broker_lower = broker.lower() if broker else ''
+        broker_key = broker_lower.replace('_paper', '').replace('_live', '')
+        broker_instance = self.broker_instances.get(broker_key) if broker_key else None
+        
+        if not broker_instance and broker_lower:
+            # Fallback: try direct lookup
+            broker_instance = self.broker_instances.get(broker_lower)
         
         monitor = await self.build_price_monitor(order, broker_instance, broker or '')
         

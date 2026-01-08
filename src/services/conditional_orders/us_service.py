@@ -57,7 +57,12 @@ class USConditionalOrderService(BaseConditionalOrderService):
         symbol = order['symbol']
         settings_threshold = 0.8
         
-        rate_limiter = self.rate_limiters.get(broker_name.lower()) if broker_name else None
+        # Normalize broker name for rate limiter lookup: 'alpaca_paper' -> 'alpaca'
+        broker_lower = broker_name.lower() if broker_name else ''
+        broker_key = broker_lower.replace('_paper', '').replace('_live', '')
+        rate_limiter = self.rate_limiters.get(broker_key) if broker_key else None
+        if not rate_limiter and broker_lower:
+            rate_limiter = self.rate_limiters.get(broker_lower)
         broker_rate_ok = rate_limiter and not rate_limiter.should_fallback(settings_threshold)
         
         data_source = None
