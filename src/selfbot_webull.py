@@ -6658,11 +6658,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         if size_mode == 'percent_account':
                             signal['_position_size_pct'] = order.get('qty_value')
                             signal['_calculate_qty'] = True
+                            signal['qty'] = 1  # Default qty, will be replaced by position sizing calculation
                         elif size_mode == 'fixed_qty':
                             signal['qty'] = int(order.get('qty_value', 1))
                         else:
-                            # For India, use lots; for US, use qty = 1
-                            if market == 'INDIA' and order.get('lots'):
+                            # Use calculated_qty from order if available
+                            calculated = order.get('calculated_qty')
+                            if calculated:
+                                signal['qty'] = int(calculated)
+                            elif market == 'INDIA' and order.get('lots'):
                                 signal['qty'] = int(order['lots'])
                             else:
                                 signal['qty'] = 1
