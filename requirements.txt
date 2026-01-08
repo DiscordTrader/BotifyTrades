@@ -93,3 +93,4 @@ telethon
 schwab-py
 dhanhq
 kiteconnect
+PyYAML
