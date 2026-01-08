@@ -7892,6 +7892,20 @@ def init_conditional_orders_table():
         except Exception:
             pass
     
+    extended_columns = [
+        ('stop_loss_fixed', 'REAL'),
+        ('stop_loss_pct', 'REAL'),
+        ('target_ranges', 'TEXT'),
+        ('partial_exit_plan', 'TEXT'),
+        ('linked_message_ids', 'TEXT'),
+    ]
+    for col_name, col_type in extended_columns:
+        try:
+            cursor.execute(f'ALTER TABLE conditional_orders ADD COLUMN {col_name} {col_type}')
+            print(f"[DATABASE] Added column {col_name} to conditional_orders")
+        except Exception:
+            pass
+    
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conditional_order_audit (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -8080,7 +8094,10 @@ def create_conditional_order(
     market: str = 'US',
     expiry: str = None,
     lot_size: int = None,
-    lots: int = None
+    lots: int = None,
+    stop_loss_fixed: float = None,
+    stop_loss_pct: float = None,
+    target_ranges: str = None
 ) -> Optional[int]:
     """Create a new conditional order"""
     conn = get_connection()
@@ -8092,23 +8109,32 @@ def create_conditional_order(
                 channel_id, symbol, trigger_type, trigger_price, adjusted_trigger_price,
                 broker_primary, stop_loss_type, stop_loss_value, take_profit_targets,
                 size_mode, qty_value, calculated_qty, params_source, expires_at,
-                original_message, asset_type, signal_id, strike, opt_type, market, expiry, lot_size, lots, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
+                original_message, asset_type, signal_id, strike, opt_type, market, expiry, lot_size, lots,
+                stop_loss_fixed, stop_loss_pct, target_ranges, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
         ''', (
             channel_id, symbol.upper(), trigger_type, trigger_price, adjusted_trigger_price,
             broker_primary, stop_loss_type, stop_loss_value, take_profit_targets,
             size_mode, qty_value, calculated_qty, params_source, expires_at,
-            original_message, asset_type, signal_id, strike, opt_type, market, expiry, lot_size, lots
+            original_message, asset_type, signal_id, strike, opt_type, market, expiry, lot_size, lots,
+            stop_loss_fixed, stop_loss_pct, target_ranges
         ))
         
         order_id = cursor.lastrowid
         
         market_info = f" [{market}]" if market != 'US' else ""
         option_info = f" {strike}{opt_type}" if strike and opt_type else ""
+        sl_info = ""
+        if stop_loss_type == 'hybrid' and stop_loss_fixed and stop_loss_pct:
+            sl_info = f", SL=${stop_loss_fixed} or {stop_loss_pct}%"
+        elif stop_loss_type == 'percent' and stop_loss_value:
+            sl_info = f", SL={stop_loss_value}%"
+        elif stop_loss_value:
+            sl_info = f", SL=${stop_loss_value}"
         cursor.execute('''
             INSERT INTO conditional_order_audit (order_id, previous_status, new_status, event, details)
             VALUES (?, NULL, 'PENDING', 'CREATED', ?)
-        ''', (order_id, f'Conditional order created for {symbol}{option_info} {trigger_type} {trigger_price}{market_info}'))
+        ''', (order_id, f'Conditional order created for {symbol}{option_info} {trigger_type} {trigger_price}{market_info}{sl_info}'))
         
         conn.commit()
         print(f"[DATABASE] ✓ Created conditional order #{order_id} for {symbol}{option_info}{market_info}")
@@ -8185,6 +8211,148 @@ def update_conditional_order_price(order_id: int, current_price: float) -> bool:
         conn.commit()
         return cursor.rowcount > 0
     except Exception as e:
+        return False
+
+
+def update_conditional_order_sl_pt(
+    order_id: int,
+    stop_loss_value: float = None,
+    stop_loss_type: str = None,
+    stop_loss_fixed: float = None,
+    stop_loss_pct: float = None,
+    take_profit_target: float = None
+) -> bool:
+    """
+    Update stop loss and/or profit target for a conditional order.
+    
+    Called when follow-up messages provide delayed SL/PT updates.
+    For hybrid SL to work, we preserve BOTH legs - if a follow-up provides one leg,
+    we merge it with the existing leg so both remain populated.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # First, fetch existing SL values to preserve hybrid legs
+        cursor.execute('''
+            SELECT stop_loss_value, stop_loss_type, stop_loss_fixed, stop_loss_pct
+            FROM conditional_orders WHERE id = ?
+        ''', (order_id,))
+        existing = cursor.fetchone()
+        
+        if not existing:
+            return False
+        
+        existing_sl_value = existing['stop_loss_value']
+        existing_sl_type = existing['stop_loss_type']
+        existing_sl_fixed = existing['stop_loss_fixed']
+        existing_sl_pct = existing['stop_loss_pct']
+        
+        update_fields = []
+        update_values = []
+        
+        # Merge new values with existing values
+        # New value takes precedence, but we always preserve the other leg for hybrid
+        # For legacy rows that only have stop_loss_value (not stop_loss_fixed), treat it as the fixed leg
+        legacy_fixed_leg = None
+        if existing_sl_fixed is not None:
+            legacy_fixed_leg = existing_sl_fixed
+        elif existing_sl_value is not None and existing_sl_type in ('fixed', 'hybrid', None):
+            # Treat stop_loss_value as the fixed leg for legacy/pre-migration data
+            legacy_fixed_leg = existing_sl_value
+        
+        final_sl_fixed = stop_loss_fixed if stop_loss_fixed is not None else (
+            stop_loss_value if stop_loss_value is not None else legacy_fixed_leg
+        )
+        final_sl_pct = stop_loss_pct if stop_loss_pct is not None else existing_sl_pct
+        
+        # Determine if this results in a hybrid SL (both legs present)
+        is_hybrid = final_sl_fixed is not None and final_sl_pct is not None
+        
+        # Always update both legs explicitly to ensure persistence
+        if stop_loss_value is not None or stop_loss_fixed is not None:
+            # Updating the fixed price leg
+            new_fixed = stop_loss_fixed if stop_loss_fixed is not None else stop_loss_value
+            update_fields.append('stop_loss_fixed = ?')
+            update_values.append(new_fixed)
+            update_fields.append('stop_loss_value = ?')
+            update_values.append(new_fixed)
+        
+        if stop_loss_pct is not None:
+            # Updating the percent leg - preserve existing fixed leg for hybrid
+            update_fields.append('stop_loss_pct = ?')
+            update_values.append(stop_loss_pct)
+            # If we now have both legs (hybrid), ensure fixed leg is preserved
+            # Use legacy_fixed_leg to support pre-migration data
+            if is_hybrid and final_sl_fixed and stop_loss_value is None and stop_loss_fixed is None:
+                update_fields.append('stop_loss_fixed = ?')
+                update_values.append(final_sl_fixed)
+                update_fields.append('stop_loss_value = ?')
+                update_values.append(final_sl_fixed)
+        
+        # Set stop_loss_type appropriately
+        if is_hybrid:
+            update_fields.append('stop_loss_type = ?')
+            update_values.append('hybrid')
+        elif stop_loss_type is not None:
+            update_fields.append('stop_loss_type = ?')
+            update_values.append(stop_loss_type)
+        elif final_sl_pct is not None and final_sl_fixed is None:
+            update_fields.append('stop_loss_type = ?')
+            update_values.append('percent')
+        elif final_sl_fixed is not None and final_sl_pct is None:
+            update_fields.append('stop_loss_type = ?')
+            update_values.append('fixed')
+        
+        if take_profit_target is not None:
+            cursor.execute('SELECT take_profit_targets FROM conditional_orders WHERE id = ?', (order_id,))
+            row = cursor.fetchone()
+            if row:
+                existing = row['take_profit_targets'] or ''
+                import json
+                try:
+                    targets = json.loads(existing) if existing else []
+                except:
+                    targets = [float(t) for t in existing.split(',') if t.strip()] if existing else []
+                
+                if take_profit_target not in targets:
+                    targets.append(take_profit_target)
+                    targets.sort()
+                
+                update_fields.append('take_profit_targets = ?')
+                update_values.append(json.dumps(targets))
+        
+        if not update_fields:
+            return False
+        
+        update_values.append(order_id)
+        
+        cursor.execute(f'''
+            UPDATE conditional_orders
+            SET {', '.join(update_fields)}
+            WHERE id = ? AND status IN ('PENDING', 'ACTIVE_MONITORING', 'FALLBACK_MONITORING')
+        ''', update_values)
+        
+        if cursor.rowcount > 0:
+            update_desc = []
+            if stop_loss_value is not None:
+                update_desc.append(f"SL=${stop_loss_value}")
+            if take_profit_target is not None:
+                update_desc.append(f"PT=${take_profit_target}")
+            
+            cursor.execute('''
+                INSERT INTO conditional_order_audit (order_id, previous_status, new_status, event, details)
+                VALUES (?, 'PENDING', 'PENDING', 'SL_PT_UPDATE', ?)
+            ''', (order_id, f'Updated: {", ".join(update_desc)}'))
+            
+            conn.commit()
+            print(f"[DATABASE] ✓ Updated conditional order #{order_id}: {', '.join(update_desc)}")
+            return True
+        
+        return False
+    except Exception as e:
+        print(f"[DATABASE] Error updating conditional order SL/PT: {e}")
+        conn.rollback()
         return False
 
 

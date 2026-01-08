@@ -6734,8 +6734,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             channel_settings = get_channel_by_discord_id(str(channel_id))
                         
                         # Stop Loss: Signal value first, then channel settings
-                        if has_signal_sl:
-                            if order.get('stop_loss_type') == 'percent':
+                        # Hybrid SL: Both fixed price AND percentage (whichever triggers first)
+                        sl_type = order.get('stop_loss_type')
+                        has_hybrid_sl = sl_type == 'hybrid' or (order.get('stop_loss_fixed') and order.get('stop_loss_pct'))
+                        
+                        if has_hybrid_sl:
+                            # Hybrid SL: set both price and percentage - risk manager uses whichever triggers first
+                            sl_fixed = order.get('stop_loss_fixed') or order.get('stop_loss_value')
+                            sl_pct = order.get('stop_loss_pct')
+                            if sl_fixed:
+                                signal['stop_loss_price'] = sl_fixed
+                            if sl_pct:
+                                signal['stop_loss_pct'] = sl_pct
+                            signal['_hybrid_sl'] = True
+                            print(f"[CONDITIONAL] Using HYBRID SL: ${sl_fixed} or {sl_pct}%", flush=True)
+                        elif has_signal_sl:
+                            if sl_type == 'percent':
                                 signal['stop_loss_pct'] = order['stop_loss_value']
                             else:
                                 signal['stop_loss_price'] = order['stop_loss_value']
@@ -7459,6 +7473,166 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         import traceback
                         print(f"[COND ORDER] ⚠️ Error checking conditional order: {e}")
                         traceback.print_exc()
+                    
+                    # Check for PARTIAL EXIT signals (e.g., "selling 80% MLTX", "leaving 10%")
+                    try:
+                        from src.signals.parser import is_partial_exit_signal, parse_partial_exit_signal
+                        
+                        if is_partial_exit_signal(message.content):
+                            parsed_partial = parse_partial_exit_signal(message.content)
+                            if parsed_partial:
+                                symbol = parsed_partial.get('symbol')
+                                exit_pct = parsed_partial.get('exit_percent', 0)
+                                action_type = parsed_partial.get('action', 'PARTIAL_EXIT')
+                                
+                                # If no symbol specified, try to find from context
+                                if not symbol:
+                                    try:
+                                        from src.services.signal_conversation_state import get_conversation_state_manager
+                                        manager = get_conversation_state_manager()
+                                        symbol = manager.get_recent_symbol_for_author(
+                                            int(message.channel.id),
+                                            int(message.author.id)
+                                        )
+                                        if symbol:
+                                            parsed_partial['symbol'] = symbol
+                                            print(f"[PARTIAL EXIT] Inferred symbol from context: {symbol}")
+                                    except Exception as e:
+                                        print(f"[PARTIAL EXIT] Could not get context symbol: {e}")
+                                
+                                if symbol:
+                                    print(f"[PARTIAL EXIT] Processing {exit_pct}% exit of {symbol}")
+                                    
+                                    # Execute partial exit via position cache (supports both stocks and options)
+                                    try:
+                                        from src.risk.position_cache import get_position_cache
+                                        cache = get_position_cache()
+                                        
+                                        # Try to find position - supports both stock and option positions
+                                        position = cache.get_position(symbol)
+                                        
+                                        if position and position.qty > 0:
+                                            exit_qty = int(position.qty * (exit_pct / 100.0))
+                                            if exit_qty > 0:
+                                                # Build STC signal preserving asset type from position
+                                                asset_type = getattr(position, 'asset_type', 'stock')
+                                                stc_signal = {
+                                                    'asset': asset_type,
+                                                    'action': 'STC',
+                                                    'symbol': symbol,
+                                                    'qty': exit_qty,
+                                                    'is_market_order': True,
+                                                    '_partial_exit': True,
+                                                    '_exit_percent': exit_pct,
+                                                    '_exit_reason': action_type,
+                                                }
+                                                
+                                                # Add option details if this is an option position
+                                                if hasattr(position, 'strike') and position.strike:
+                                                    stc_signal['strike'] = position.strike
+                                                if hasattr(position, 'opt_type') and position.opt_type:
+                                                    stc_signal['opt_type'] = position.opt_type
+                                                if hasattr(position, 'expiry') and position.expiry:
+                                                    stc_signal['expiry'] = position.expiry
+                                                
+                                                # Queue the partial exit
+                                                global _telegram_signal_queue
+                                                if _telegram_signal_queue is not None:
+                                                    _telegram_signal_queue.put_nowait(stc_signal)
+                                                    print(f"[PARTIAL EXIT] ✓ Queued STC for {exit_qty} {asset_type} of {symbol} ({exit_pct}%)")
+                                                else:
+                                                    print(f"[PARTIAL EXIT] ❌ Signal queue not available")
+                                            else:
+                                                print(f"[PARTIAL EXIT] ⚠️ Calculated exit qty is 0 (position: {position.qty})")
+                                        else:
+                                            print(f"[PARTIAL EXIT] ⚠️ No open position found for {symbol}")
+                                    except Exception as e:
+                                        print(f"[PARTIAL EXIT] ❌ Error executing partial exit: {e}")
+                                else:
+                                    print(f"[PARTIAL EXIT] ⚠️ Could not determine symbol for partial exit")
+                                return
+                    except Exception as e:
+                        import traceback
+                        print(f"[PARTIAL EXIT] ⚠️ Error checking partial exit: {e}")
+                        traceback.print_exc()
+                    
+                    # Check for CANCELLATION signals (e.g., "@Daytrades cancelling JTAI")
+                    try:
+                        from src.signals.parser import is_cancel_order_signal, parse_cancel_order_signal
+                        from src.services.conditional_orders.router import conditional_order_router
+                        
+                        if is_cancel_order_signal(message.content):
+                            parsed_cancel = parse_cancel_order_signal(message.content)
+                            if parsed_cancel:
+                                symbol = parsed_cancel.get('symbol')
+                                channel_id = str(message.channel.id)
+                                
+                                print(f"[CANCEL ORDER] Processing cancellation for {symbol}")
+                                
+                                # Cancel via conditional order router
+                                try:
+                                    cancelled = conditional_order_router.cancel_order_by_symbol(channel_id, symbol)
+                                    if cancelled:
+                                        print(f"[CANCEL ORDER] ✓ Cancelled conditional order for {symbol}")
+                                    else:
+                                        print(f"[CANCEL ORDER] ⚠️ No active conditional order found for {symbol}")
+                                    
+                                    # Also remove from conversation state
+                                    try:
+                                        from src.services.signal_conversation_state import cancel_signal_context
+                                        cancel_signal_context(
+                                            channel_id=int(message.channel.id),
+                                            author_id=int(message.author.id),
+                                            symbol=symbol
+                                        )
+                                    except Exception:
+                                        pass
+                                except Exception as e:
+                                    print(f"[CANCEL ORDER] ❌ Error cancelling order: {e}")
+                                return
+                    except Exception as e:
+                        import traceback
+                        print(f"[CANCEL ORDER] ⚠️ Error checking cancellation: {e}")
+                        traceback.print_exc()
+                    
+                    # Check for FOLLOW-UP updates (e.g., "SL now at 14.60", "PT raised to 17.50")
+                    try:
+                        from src.services.signal_conversation_state import process_follow_up_message
+                        
+                        update_result = process_follow_up_message(
+                            message_id=int(message.id),
+                            channel_id=int(message.channel.id),
+                            author_id=int(message.author.id),
+                            text=message.content
+                        )
+                        
+                        if update_result:
+                            order_id = update_result.get('order_id')
+                            symbol = update_result.get('symbol')
+                            sl_update = update_result.get('stop_loss_value')
+                            pt_update = update_result.get('profit_target_update')
+                            
+                            if order_id:
+                                # Update the conditional order in database
+                                try:
+                                    from gui_app.database import update_conditional_order_sl_pt
+                                    update_conditional_order_sl_pt(
+                                        order_id=order_id,
+                                        stop_loss_value=sl_update,
+                                        take_profit_target=pt_update
+                                    )
+                                    update_info = []
+                                    if sl_update:
+                                        update_info.append(f"SL=${sl_update}")
+                                    if pt_update:
+                                        update_info.append(f"PT=${pt_update}")
+                                    print(f"[FOLLOW-UP] ✓ Updated order #{order_id}: {', '.join(update_info)}")
+                                except Exception as e:
+                                    print(f"[FOLLOW-UP] ⚠️ Could not update order #{order_id}: {e}")
+                            else:
+                                print(f"[FOLLOW-UP] ✓ Context updated for {symbol} (no active order)")
+                    except Exception as e:
+                        pass  # Silently ignore follow-up parsing errors
                     
                     # Check if target is a webhook URL (for channel mappings)
                     if target_execution_channel_id and target_execution_channel_id.startswith('https://'):

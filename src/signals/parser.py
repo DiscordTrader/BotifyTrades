@@ -158,6 +158,63 @@ CONDITIONAL_QTY_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# ============ EXTENDED CONDITIONAL ORDER PATTERNS ============
+# Target ranges: "first target 16.60-17", "second target 35-35.50"
+CONDITIONAL_TARGET_RANGE_PATTERN = re.compile(
+    r'(?:(?P<tier>first|second|third|fourth|1st|2nd|3rd|4th)\s+)?'
+    r'(?:target|tgt|pt)\s*[:\s]*\$?(?P<min_price>[\d.]+)\s*[-–—to]+\s*\$?(?P<max_price>[\d.]+)',
+    re.IGNORECASE
+)
+
+# Partial exit patterns: "selling 80% MLTX", "selling 60%", "selling half"
+PARTIAL_EXIT_PATTERN = re.compile(
+    r'(?:selling|sold|trimm?(?:ing|ed)?|taking\s+(?:off|profit))\s+'
+    r'(?:(?P<percent>\d+(?:\.\d+)?)\s*%|(?P<fraction>half|quarter|third))\s*'
+    r'(?:of\s+)?(?:my\s+)?(?:position\s+)?(?:in\s+)?'
+    r'(?:\$?(?P<symbol>[A-Z]{1,5}))?',
+    re.IGNORECASE
+)
+
+# Leaving runner pattern: "leaving 10%", "leaving 20% MLTX"
+LEAVING_RUNNER_PATTERN = re.compile(
+    r'(?:leaving|keeping)\s+(?P<percent>\d+(?:\.\d+)?)\s*%\s*'
+    r'(?:of\s+)?(?:my\s+)?(?:position\s+)?(?:in\s+)?'
+    r'(?:\$?(?P<symbol>[A-Z]{1,5}))?',
+    re.IGNORECASE
+)
+
+# Cancellation pattern: "@Daytrades cancelling JTAI", "cancel JTAI"
+CANCEL_ORDER_PATTERN = re.compile(
+    r'(?:cancell?(?:ing|ed)?|cancel|stopped?\s+out|closing\s+watch)\s+'
+    r'(?:on\s+)?(?:the\s+)?(?:order\s+)?(?:for\s+)?'
+    r'\$?(?P<symbol>[A-Z]{1,5})',
+    re.IGNORECASE
+)
+
+# Hybrid stop loss pattern: "SL 8.15 or 6%", "stop loss 14.60 or 5%"
+HYBRID_SL_PATTERN = re.compile(
+    r'(?:SL|stop\s*loss|stop)\s*[:\s@]*'
+    r'(?:\$?(?P<fixed>[\d.]+)\s*(?:or|/)\s*(?P<pct>[\d.]+)\s*%|'
+    r'(?P<pct_first>[\d.]+)\s*%\s*(?:or|/)\s*\$?(?P<fixed_second>[\d.]+))',
+    re.IGNORECASE
+)
+
+# Follow-up message patterns for sequential monitoring
+# Detects delayed SL/PT updates: "SL now at 14.60", "PT raised to 17.50"
+FOLLOW_UP_SL_PATTERN = re.compile(
+    r'(?:SL|stop\s*loss|stop)\s*'
+    r'(?:now\s+)?(?:at|moved?\s+to|raised?\s+to|lowered?\s+to|changed?\s+to|updated?\s+to|set\s+(?:at|to))?\s*'
+    r'[:\s@]*\$?(?P<price>[\d.]+)(?:\s*%)?',
+    re.IGNORECASE
+)
+
+FOLLOW_UP_PT_PATTERN = re.compile(
+    r'(?:PT|target|profit\s*target|take\s*profit|TP)\s*'
+    r'(?:now\s+)?(?:at|moved?\s+to|raised?\s+to|changed?\s+to|updated?\s+to|set\s+(?:at|to))?\s*'
+    r'[:\s@]*\$?(?P<price>[\d.]+)',
+    re.IGNORECASE
+)
+
 # Z-Scalps format patterns (simple pipe format WITHOUT emojis)
 # Entry: TSLA | $460 C NEXT WEEK 7.15 @everyone
 # Entry: SPY | $680 P 1.82 @everyone (immediate price after C/P)
@@ -481,32 +538,62 @@ def parse_conditional_order_signal(text: str) -> Optional[Dict[str, Any]]:
     symbol = trigger_match.group(1).upper()
     trigger_price = float(trigger_match.group(2))
     
-    # Parse stop loss (percentage or fixed)
+    # Parse stop loss - check for hybrid first (e.g., "SL 8.15 or 6%")
     stop_loss_type = None
     stop_loss_value = None
+    stop_loss_fixed = None
+    stop_loss_pct = None
     
-    sl_pct_match = CONDITIONAL_SL_PERCENT_PATTERN.search(text)
-    if sl_pct_match:
-        stop_loss_type = 'percent'
-        stop_loss_value = float(sl_pct_match.group(1))
-    else:
-        sl_fixed_match = CONDITIONAL_SL_FIXED_PATTERN.search(text)
-        if sl_fixed_match:
-            stop_loss_type = 'fixed'
-            stop_loss_value = float(sl_fixed_match.group(1))
+    hybrid_sl_match = HYBRID_SL_PATTERN.search(text)
+    if hybrid_sl_match:
+        # Hybrid SL: both fixed and percent
+        fixed = hybrid_sl_match.group('fixed') or hybrid_sl_match.group('fixed_second')
+        pct = hybrid_sl_match.group('pct') or hybrid_sl_match.group('pct_first')
+        if fixed and pct:
+            stop_loss_type = 'hybrid'
+            stop_loss_fixed = float(fixed)
+            stop_loss_pct = float(pct)
+            stop_loss_value = stop_loss_fixed  # Primary value for backwards compatibility
     
-    # Parse profit targets (single or multiple)
+    if not stop_loss_type:
+        sl_pct_match = CONDITIONAL_SL_PERCENT_PATTERN.search(text)
+        if sl_pct_match:
+            stop_loss_type = 'percent'
+            stop_loss_value = float(sl_pct_match.group(1))
+            stop_loss_pct = stop_loss_value
+        else:
+            sl_fixed_match = CONDITIONAL_SL_FIXED_PATTERN.search(text)
+            if sl_fixed_match:
+                stop_loss_type = 'fixed'
+                stop_loss_value = float(sl_fixed_match.group(1))
+                stop_loss_fixed = stop_loss_value
+    
+    # Parse profit targets - check for ranges first (e.g., "first target 16.60-17")
     profit_targets = []
-    multi_pt_match = CONDITIONAL_MULTI_PT_PATTERN.search(text)
-    if multi_pt_match:
-        for i in range(1, 5):
-            pt_val = multi_pt_match.group(i)
-            if pt_val:
-                profit_targets.append(float(pt_val))
-    else:
-        pt_match = CONDITIONAL_PT_PATTERN.search(text)
-        if pt_match:
-            profit_targets.append(float(pt_match.group(1)))
+    target_ranges = []
+    
+    for range_match in CONDITIONAL_TARGET_RANGE_PATTERN.finditer(text):
+        tier_str = range_match.group('tier') or 'first'
+        tier_map = {'first': 1, '1st': 1, 'second': 2, '2nd': 2, 'third': 3, '3rd': 3, 'fourth': 4, '4th': 4}
+        tier = tier_map.get(tier_str.lower(), 1)
+        min_price = float(range_match.group('min_price'))
+        max_price = float(range_match.group('max_price'))
+        target_ranges.append({'tier': tier, 'min_price': min_price, 'max_price': max_price})
+        # Use midpoint for backwards compatibility
+        profit_targets.append((min_price + max_price) / 2)
+    
+    # If no ranges found, try regular target patterns
+    if not target_ranges:
+        multi_pt_match = CONDITIONAL_MULTI_PT_PATTERN.search(text)
+        if multi_pt_match:
+            for i in range(1, 5):
+                pt_val = multi_pt_match.group(i)
+                if pt_val:
+                    profit_targets.append(float(pt_val))
+        else:
+            pt_match = CONDITIONAL_PT_PATTERN.search(text)
+            if pt_match:
+                profit_targets.append(float(pt_match.group(1)))
     
     # Parse position sizing
     position_size_pct = None
@@ -533,7 +620,10 @@ def parse_conditional_order_signal(text: str) -> Optional[Dict[str, Any]]:
         'trigger_price': trigger_price,
         'stop_loss_type': stop_loss_type,
         'stop_loss_value': stop_loss_value,
+        'stop_loss_fixed': stop_loss_fixed,  # Fixed price SL (for hybrid)
+        'stop_loss_pct': stop_loss_pct,  # Percentage SL (for hybrid)
         'profit_targets': profit_targets,
+        'target_ranges': target_ranges,  # List of {tier, min_price, max_price}
         'position_size_pct': position_size_pct,
         'fixed_qty': fixed_qty,
         'size_mode': size_mode,
@@ -544,8 +634,22 @@ def parse_conditional_order_signal(text: str) -> Optional[Dict[str, Any]]:
     }
     
     # Log parsed conditional order
-    sl_str = f"{stop_loss_value}%" if stop_loss_type == 'percent' else f"${stop_loss_value}" if stop_loss_value else "None"
-    pt_str = ', '.join([f"${pt}" for pt in profit_targets]) if profit_targets else "None"
+    if stop_loss_type == 'hybrid':
+        sl_str = f"${stop_loss_fixed} or {stop_loss_pct}%"
+    elif stop_loss_type == 'percent':
+        sl_str = f"{stop_loss_value}%"
+    elif stop_loss_value:
+        sl_str = f"${stop_loss_value}"
+    else:
+        sl_str = "None"
+    
+    if target_ranges:
+        pt_str = ', '.join([f"T{r['tier']}: ${r['min_price']}-{r['max_price']}" for r in target_ranges])
+    elif profit_targets:
+        pt_str = ', '.join([f"${pt}" for pt in profit_targets])
+    else:
+        pt_str = "None"
+    
     size_str = f"{position_size_pct}% of account" if position_size_pct else f"{fixed_qty} shares" if fixed_qty else "channel default"
     
     print(f"[CONDITIONAL] ✓ Parsed: {symbol} {trigger_type} ${trigger_price}")
@@ -580,6 +684,147 @@ def format_conditional_for_display(parsed: Dict[str, Any]) -> str:
         lines.append(f"Profit Targets: {pt_str}")
     
     return '\n'.join(lines)
+
+
+def parse_partial_exit_signal(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse partial exit signals like "selling 80% MLTX", "selling 60%", "leaving 10%".
+    
+    Returns dict with:
+        - action: 'PARTIAL_EXIT' or 'LEAVE_RUNNER'
+        - exit_percent: percentage to sell (or leave for runner)
+        - symbol: optional ticker symbol
+    """
+    # Check for "leaving X%" pattern first (leave runner)
+    leave_match = LEAVING_RUNNER_PATTERN.search(text)
+    if leave_match:
+        leave_pct = float(leave_match.group('percent'))
+        symbol = leave_match.group('symbol')
+        sell_pct = 100.0 - leave_pct  # Sell everything except the runner
+        
+        result = {
+            'format': 'PARTIAL_EXIT',
+            'action': 'LEAVE_RUNNER',
+            'exit_percent': sell_pct,
+            'leave_percent': leave_pct,
+            'symbol': symbol.upper() if symbol else None,
+            '_original_message': text,
+        }
+        
+        print(f"[PARTIAL EXIT] Leave runner: {leave_pct}% (selling {sell_pct}%)"
+              f"{' of ' + symbol.upper() if symbol else ''}")
+        return result
+    
+    # Check for regular partial exit patterns
+    exit_match = PARTIAL_EXIT_PATTERN.search(text)
+    if exit_match:
+        percent = exit_match.group('percent')
+        fraction = exit_match.group('fraction')
+        symbol = exit_match.group('symbol')
+        
+        # Convert fractions to percentages
+        if fraction:
+            fraction_map = {'half': 50.0, 'quarter': 25.0, 'third': 33.33}
+            exit_pct = fraction_map.get(fraction.lower(), 50.0)
+        else:
+            exit_pct = float(percent)
+        
+        result = {
+            'format': 'PARTIAL_EXIT',
+            'action': 'PARTIAL_EXIT',
+            'exit_percent': exit_pct,
+            'symbol': symbol.upper() if symbol else None,
+            '_original_message': text,
+        }
+        
+        print(f"[PARTIAL EXIT] Selling {exit_pct}%"
+              f"{' of ' + symbol.upper() if symbol else ''}")
+        return result
+    
+    return None
+
+
+def parse_cancel_order_signal(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse cancellation signals like "@Daytrades cancelling JTAI".
+    
+    Returns dict with symbol to cancel.
+    """
+    cancel_match = CANCEL_ORDER_PATTERN.search(text)
+    if cancel_match:
+        symbol = cancel_match.group('symbol').upper()
+        
+        result = {
+            'format': 'CANCEL_ORDER',
+            'action': 'CANCEL',
+            'symbol': symbol,
+            '_original_message': text,
+        }
+        
+        print(f"[CANCEL] Order cancellation requested for {symbol}")
+        return result
+    
+    return None
+
+
+def parse_follow_up_update(text: str, context_symbol: str = None) -> Optional[Dict[str, Any]]:
+    """
+    Parse follow-up messages for SL/PT updates.
+    
+    These are messages that update an existing order's SL or PT.
+    Examples: "SL now at 14.60", "PT raised to 17.50"
+    
+    Args:
+        text: Message text
+        context_symbol: Symbol from context (previous messages)
+        
+    Returns:
+        Dict with update type and value, or None if not a follow-up update
+    """
+    updates = {}
+    
+    # Check for SL update
+    sl_match = FOLLOW_UP_SL_PATTERN.search(text)
+    if sl_match:
+        price_str = sl_match.group('price')
+        updates['stop_loss_update'] = float(price_str)
+    
+    # Check for PT update
+    pt_match = FOLLOW_UP_PT_PATTERN.search(text)
+    if pt_match:
+        price_str = pt_match.group('price')
+        updates['profit_target_update'] = float(price_str)
+    
+    if updates:
+        result = {
+            'format': 'FOLLOW_UP_UPDATE',
+            'action': 'UPDATE',
+            'symbol': context_symbol,
+            **updates,
+            '_original_message': text,
+        }
+        
+        update_strs = []
+        if 'stop_loss_update' in updates:
+            update_strs.append(f"SL=${updates['stop_loss_update']}")
+        if 'profit_target_update' in updates:
+            update_strs.append(f"PT=${updates['profit_target_update']}")
+        
+        print(f"[FOLLOW-UP] Update detected: {', '.join(update_strs)}"
+              f"{' for ' + context_symbol if context_symbol else ''}")
+        return result
+    
+    return None
+
+
+def is_partial_exit_signal(text: str) -> bool:
+    """Check if text is a partial exit signal."""
+    return PARTIAL_EXIT_PATTERN.search(text) is not None or LEAVING_RUNNER_PATTERN.search(text) is not None
+
+
+def is_cancel_order_signal(text: str) -> bool:
+    """Check if text is a cancellation signal."""
+    return CANCEL_ORDER_PATTERN.search(text) is not None
 
 
 def parse_bracket_order_signal(text: str) -> Optional[Dict[str, Any]]:

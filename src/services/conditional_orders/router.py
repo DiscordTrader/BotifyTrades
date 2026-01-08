@@ -163,6 +163,31 @@ class ConditionalOrderRouter:
         service = self._get_service_for_market(market)
         return service.cancel_order(order_id)
     
+    def cancel_order_by_symbol(self, channel_id: str, symbol: str) -> bool:
+        """
+        Cancel all pending orders for a symbol in a channel.
+        
+        Searches across all market services for matching orders.
+        Returns True if any orders were cancelled.
+        """
+        cancelled_any = False
+        active_orders = get_active_conditional_orders()
+        
+        for order in active_orders:
+            if (order.get('channel_id') == channel_id and 
+                order.get('symbol', '').upper() == symbol.upper() and
+                order.get('status') == 'PENDING'):
+                
+                order_id = order.get('id')
+                market = order.get('market', 'US')
+                service = self._get_service_for_market(market)
+                
+                if service.cancel_order(order_id):
+                    self._log(f"Cancelled order #{order_id} for {symbol}")
+                    cancelled_any = True
+        
+        return cancelled_any
+    
     def get_active_orders(self, market: Optional[str] = None) -> List[Dict]:
         """Get active orders, optionally filtered by market."""
         orders = get_active_conditional_orders()

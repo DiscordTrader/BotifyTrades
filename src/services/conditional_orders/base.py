@@ -572,9 +572,16 @@ class BaseConditionalOrderService(ABC):
         
         stop_loss_value = parsed_signal.get('stop_loss_value') or parsed_signal.get('stop_loss')
         stop_loss_type = parsed_signal.get('stop_loss_type')
+        stop_loss_fixed = parsed_signal.get('stop_loss_fixed')
+        stop_loss_pct = parsed_signal.get('stop_loss_pct')
+        
         if not stop_loss_value and channel_settings.get('stop_loss_pct'):
             stop_loss_type = 'percent'
             stop_loss_value = channel_settings.get('stop_loss_pct')
+            stop_loss_pct = stop_loss_value
+        
+        target_ranges = parsed_signal.get('target_ranges')
+        target_ranges_json = json.dumps(target_ranges) if target_ranges else None
         
         order_id = create_conditional_order(
             channel_id=channel_id,
@@ -585,7 +592,10 @@ class BaseConditionalOrderService(ABC):
             broker_primary=effective_broker,
             stop_loss_type=stop_loss_type,
             stop_loss_value=stop_loss_value,
+            stop_loss_fixed=stop_loss_fixed,
+            stop_loss_pct=stop_loss_pct,
             take_profit_targets=json.dumps(profit_targets) if profit_targets else None,
+            target_ranges=target_ranges_json,
             size_mode=size_mode,
             qty_value=qty_value,
             calculated_qty=parsed_signal.get('qty') or parsed_signal.get('quantity'),
@@ -603,6 +613,22 @@ class BaseConditionalOrderService(ABC):
         if order_id:
             self._log(f"Created order #{order_id} for {parsed_signal.get('symbol')}")
             self._schedule_monitoring(order_id)
+            
+            # Register signal context for follow-up message correlation
+            try:
+                from src.services.signal_conversation_state import get_conversation_state_manager
+                manager = get_conversation_state_manager()
+                author_id = parsed_signal.get('author_id') or parsed_signal.get('_author_id')
+                if channel_id and author_id:
+                    manager.register_signal_context(
+                        channel_id=int(channel_id),
+                        author_id=int(author_id),
+                        symbol=parsed_signal.get('symbol'),
+                        order_id=order_id
+                    )
+                    self._log(f"Registered context for follow-up tracking: channel={channel_id}, author={author_id}")
+            except Exception as e:
+                self._log(f"Could not register signal context: {e}")
         
         return order_id
     
