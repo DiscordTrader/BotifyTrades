@@ -2137,6 +2137,38 @@ def register_routes(app):
             'broker_filter': broker_filter or 'All'
         })
     
+    @app.route('/api/filled-orders', methods=['GET'])
+    def api_filled_orders():
+        """Get filled orders synced from brokers with filtering"""
+        from gui_app.database import get_filled_orders, get_filled_orders_count
+        
+        try:
+            broker = request.args.get('broker')
+            symbol = request.args.get('symbol')
+            days = int(request.args.get('days', 7))
+            limit = int(request.args.get('limit', 100))
+            
+            orders = get_filled_orders(broker=broker, symbol=symbol, days=days, limit=limit)
+            count = get_filled_orders_count(broker=broker, days=days)
+            
+            response = make_response(jsonify({
+                'success': True,
+                'orders': orders,
+                'total': count,
+                'filters': {
+                    'broker': broker,
+                    'symbol': symbol,
+                    'days': days
+                }
+            }))
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            return response
+        except Exception as e:
+            print(f"[API] Error in filled-orders: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     # Channel Leaderboard
     @app.route('/api/leaderboard', methods=['GET'])
     def api_get_leaderboard():
