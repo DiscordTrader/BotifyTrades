@@ -9823,6 +9823,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         except Exception as e:
                             _original_print(f"[DATABASE] ⚠️ Could not update signal status: {e}")
                     
+                    # Mark tier as hit AFTER successful risk order execution
+                    if signal.get('_risk_management_order') and signal.get('_tier_to_mark'):
+                        try:
+                            tier_to_mark = signal['_tier_to_mark']
+                            position_key = signal.get('_position_key')
+                            is_partial = signal.get('_is_partial', True)
+                            
+                            if position_key and hasattr(self, 'risk_manager') and self.risk_manager:
+                                self.risk_manager.cache.mark_tier_hit(position_key, tier_to_mark)
+                                if tier_to_mark == 1 and not is_partial:
+                                    self.risk_manager.cache.set_all_tiers_hit(position_key)
+                                _original_print(f"[RISK] ✓ Tier {tier_to_mark} marked as hit for {position_key}")
+                        except Exception as e:
+                            _original_print(f"[RISK] ⚠️ Could not mark tier as hit: {e}")
+                    
                     # 1. Send notification to Discord channel (check settings first)
                     try:
                         from gui_app import database as db

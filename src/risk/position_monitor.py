@@ -660,10 +660,8 @@ class RiskManager:
         if not decision.is_partial:
             self.cache.mark_closing(pos_key)
         
-        if decision.tier_hit:
-            self.cache.mark_tier_hit(pos_key, decision.tier_hit)
-            if decision.tier_hit == 1 and not decision.is_partial:
-                self.cache.set_all_tiers_hit(pos_key)
+        # Note: tier_hit is added to signal and marked AFTER successful execution
+        # This prevents re-trigger issues when orders fail
         
         try:
             stc_signal = self._build_stc_signal(position, decision)
@@ -714,7 +712,10 @@ class RiskManager:
             'raw_symbol': position.raw_symbol,
             'exit_reason': decision.reason,
             'risk_trigger': decision.risk_trigger,
-            '_risk_management_order': True
+            '_risk_management_order': True,
+            '_tier_to_mark': decision.tier_hit,
+            '_position_key': position.position_key,
+            '_is_partial': decision.is_partial
         }
         
         if position.asset == 'option':
