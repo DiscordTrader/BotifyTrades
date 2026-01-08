@@ -1332,15 +1332,15 @@ function renderChannels() {
                     
                     <div class="control-group" style="margin-top: 12px;">
                         <label style="font-size: 0.85rem; color: var(--text-secondary);">
-                            Conditional Order Timeout
+                            Order Timeout (All Orders)
                         </label>
                         <div class="position-size-input" style="margin-top: 4px;">
                             <input type="number" 
-                                   value="${channel.conditional_order_timeout_minutes || ''}" 
+                                   value="${channel.order_timeout_minutes || ''}" 
                                    placeholder="No Timeout"
                                    min="1" max="1440" step="1"
-                                   onchange="updateConditionalTimeout(${channel.id}, this.value)"
-                                   title="Minutes until conditional orders expire (empty = no timeout)">
+                                   onchange="updateOrderTimeout(${channel.id}, this.value)"
+                                   title="Minutes until unfilled orders are canceled (applies to ALL order types)">
                             <span>minutes</span>
                         </div>
                     </div>
@@ -1532,13 +1532,13 @@ async function updateExitStrategy(channelId, mode) {
     }
 }
 
-async function updateConditionalTimeout(channelId, minutes) {
+async function updateOrderTimeout(channelId, minutes) {
     try {
         const timeoutValue = minutes ? parseInt(minutes) : null;
         const response = await fetch(`/api/channels/${channelId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ conditional_order_timeout_minutes: timeoutValue })
+            body: JSON.stringify({ order_timeout_minutes: timeoutValue })
         });
         
         if (response.ok) {
@@ -1546,12 +1546,12 @@ async function updateConditionalTimeout(channelId, minutes) {
                 const hours = Math.floor(timeoutValue / 60);
                 const mins = timeoutValue % 60;
                 const display = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
-                showNotification(`Conditional order timeout set to ${display}`);
+                showNotification(`Order timeout set to ${display} (all orders)`);
             } else {
-                showNotification('Conditional order timeout disabled (no expiry)');
+                showNotification('Order timeout disabled (no auto-cancel)');
             }
         } else {
-            showNotification('Error updating conditional timeout', 'error');
+            showNotification('Error updating order timeout', 'error');
             await loadChannels();
         }
     } catch (error) {

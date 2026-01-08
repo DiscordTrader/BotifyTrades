@@ -652,11 +652,12 @@ class ConditionalOrderService:
             adjusted_price = trigger_price
         
         # Channel-level timeout in minutes takes priority (NULL = use legacy expiry setting)
-        timeout_minutes = channel_settings.get('conditional_order_timeout_minutes')
+        # order_timeout_minutes applies to ALL orders, conditional_order_timeout_minutes is legacy/specific
+        timeout_minutes = channel_settings.get('order_timeout_minutes') or channel_settings.get('conditional_order_timeout_minutes')
         if timeout_minutes:
             # Explicit timeout configured: X minutes from entry
             expires_at = self._calculate_expiry_minutes(timeout_minutes)
-            print(f"[CONDITIONAL] Using channel timeout: {timeout_minutes} min from entry")
+            print(f"[CONDITIONAL] Using channel timeout: {timeout_minutes} min from entry (applies to all orders)")
         else:
             # No timeout configured - use legacy expiry setting or no expiry
             expiry = channel_settings.get('conditional_order_expiry')

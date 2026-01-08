@@ -1941,7 +1941,7 @@ def update_channel(channel_id: int, **kwargs):
                    'stop_loss_pct', 'trailing_stop_pct', 'trailing_activation_pct', 'enabled_brokers', 'position_size_pct', 'tracking_position_size_pct',
                    'default_quantity', 'risk_management_enabled', 'leave_runner_enabled', 'leave_runner_pct',
                    'trim_order_mode', 'trim_limit_offset', 'exit_strategy_mode', 'market', 'trade_summary_enabled',
-                   'conditional_order_timeout_minutes', 'trigger_offset_percent']:
+                   'conditional_order_timeout_minutes', 'trigger_offset_percent', 'order_timeout_minutes']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))
@@ -7879,6 +7879,9 @@ def migrate_channels_for_conditional_orders():
         if 'conditional_order_timeout_minutes' not in columns:
             cursor.execute('ALTER TABLE channels ADD COLUMN conditional_order_timeout_minutes INTEGER DEFAULT NULL')
             print("[DATABASE] ✓ Added conditional_order_timeout_minutes column to channels")
+        if 'order_timeout_minutes' not in columns:
+            cursor.execute('ALTER TABLE channels ADD COLUMN order_timeout_minutes INTEGER DEFAULT NULL')
+            print("[DATABASE] ✓ Added order_timeout_minutes column to channels (applies to ALL orders)")
         
         conn.commit()
     except Exception as e:
@@ -8336,7 +8339,7 @@ def get_channel_conditional_settings(channel_id: str) -> Dict[str, Any]:
         cursor.execute('''
             SELECT conditional_order_enabled, trigger_offset_percent,
                    conditional_order_expiry, conditional_auto_execute,
-                   conditional_order_timeout_minutes,
+                   conditional_order_timeout_minutes, order_timeout_minutes,
                    broker_override, exit_strategy_mode, default_quantity,
                    position_size_pct, stop_loss_pct, profit_target_pct,
                    profit_target_1_pct, profit_target_2_pct, profit_target_3_pct,

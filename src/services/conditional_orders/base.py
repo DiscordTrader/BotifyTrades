@@ -475,7 +475,7 @@ class BaseConditionalOrderService(ABC):
         else:
             adjusted_price = trigger_price
         
-        timeout_minutes = channel_settings.get('conditional_order_timeout_minutes')
+        timeout_minutes = channel_settings.get('order_timeout_minutes') or channel_settings.get('conditional_order_timeout_minutes')
         if timeout_minutes:
             expires_at = (datetime.now() + timedelta(minutes=timeout_minutes)).strftime('%Y-%m-%d %H:%M:%S')
         else:
