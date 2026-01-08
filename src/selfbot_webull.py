@@ -8431,11 +8431,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     effective_bp = options_buying_power if options_buying_power else buying_power
                                     affordable_qty = max(0, int(effective_bp / actual_cost))
                                     
-                                    # Check if percentage came from signal text itself (should calculate, not just cap)
+                                    # Check if we should calculate qty from position sizing
+                                    # ALWAYS calculate if:
+                                    # 1. _calculate_qty is True (explicit calculation request)
+                                    # 2. Signal text has percentage (pct_from_signal)
+                                    # 3. Channel has position_size_pct configured (_pct_from_channel) - USE AS CALCULATION, NOT JUST CAP
                                     calculate_qty = signal.get('_calculate_qty', False)
                                     pct_from_signal = '_position_size_pct' in signal and not signal.get('_pct_from_channel', False)
+                                    pct_from_channel = signal.get('_pct_from_channel', False)  # Channel wants calculated sizing
                                     
-                                    if calculate_qty or pct_from_signal:
+                                    if calculate_qty or pct_from_signal or pct_from_channel:
                                         # Calculate qty from position sizing percentage
                                         new_qty = min(pct_qty, affordable_qty)
                                         if new_qty == 0:
@@ -8481,12 +8486,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     # Calculate max affordable qty based on actual buying power
                                     affordable_qty = max(0, int(buying_power / price))
                                     
-                                    # Check if signal requests qty calculation (TRADE IDEA format has no explicit qty)
-                                    # Also calculate if position_size_pct came from signal text itself (not channel config)
+                                    # Check if we should calculate qty from position sizing
+                                    # ALWAYS calculate if:
+                                    # 1. _calculate_qty is True (explicit calculation request)
+                                    # 2. Signal text has percentage (pct_from_signal)
+                                    # 3. Channel has position_size_pct configured (_pct_from_channel) - USE AS CALCULATION, NOT JUST CAP
                                     calculate_qty = signal.get('_calculate_qty', False)
                                     pct_from_signal = '_position_size_pct' in signal and not signal.get('_pct_from_channel', False)
+                                    pct_from_channel = signal.get('_pct_from_channel', False)  # Channel wants calculated sizing
                                     
-                                    if calculate_qty or pct_from_signal:
+                                    if calculate_qty or pct_from_signal or pct_from_channel:
                                         # TRADE IDEA: Calculate qty from position sizing, don't cap at signal default
                                         new_qty = min(pct_qty, affordable_qty)
                                         if new_qty == 0:
