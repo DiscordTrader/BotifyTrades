@@ -3857,7 +3857,7 @@
   },
   "ALPACA_PAPER_APLD_stock": {
     "entry_price": 33.66,
-    "highest_price": 34.19,
+    "highest_price": 34.24,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -3934,5 +3934,21 @@
     "tier3_hit": true,
     "tier4_hit": true,
     "created_at": "2026-01-08T14:58:24.852881"
+  },
+  "ALPACA_PAPER_GOOGL_320.0_2026-01-09_P": {
+    "entry_price": 1.35,
+    "highest_price": 1.31,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "GOOGL260109P00320000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "created_at": "2026-01-08T15:06:31.221126"
   }
 }
