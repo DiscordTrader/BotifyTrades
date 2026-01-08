@@ -117,7 +117,7 @@ class FinnhubPriceMonitor(PriceMonitor):
     def __init__(self, symbol: str, callback: Callable[[str, float], None], api_key: str):
         super().__init__(symbol, callback)
         self.api_key = api_key
-        self.poll_interval = 5
+        self.poll_interval = 1  # 60 req/min limit - can poll every 1 second
     
     async def start(self):
         self.is_running = True
@@ -196,15 +196,29 @@ class YFinancePriceMonitor(PriceMonitor):
 class BrokerPriceMonitor(PriceMonitor):
     """Price monitor using broker API (Webull, Alpaca, Questrade, etc.)."""
     
+    # Broker-specific poll intervals based on API rate limits
+    BROKER_POLL_INTERVALS = {
+        'alpaca': 1,      # 200 req/min limit - can poll every 1 second
+        'alpaca_paper': 1,
+        'alpaca_live': 1,
+        'webull': 3,      # 10 req/30 sec limit - minimum 3 seconds
+        'questrade': 2,   # Conservative default
+        'tastytrade': 2,
+        'ibkr': 1,        # No strict limit for TWS
+        'schwab': 2,
+    }
+    
     def __init__(self, symbol: str, callback: Callable[[str, float], None], broker_name: str, broker_instance: Any = None):
         super().__init__(symbol, callback)
         self.broker_name = broker_name
         self.broker_instance = broker_instance
-        self.poll_interval = 5
+        # Set poll interval based on broker API limits
+        broker_lower = broker_name.lower()
+        self.poll_interval = self.BROKER_POLL_INTERVALS.get(broker_lower, 2)  # Default 2 sec
     
     async def start(self):
         self.is_running = True
-        sys.stderr.write(f"[{self.broker_name.upper()}] Starting price monitor for {self.symbol}\n")
+        sys.stderr.write(f"[{self.broker_name.upper()}] Starting price monitor for {self.symbol} (poll interval: {self.poll_interval}s)\n")
         sys.stderr.flush()
         
         poll_count = 0
