@@ -612,20 +612,81 @@ class SignalVerificationService:
         else:
             result['volume_liquidity'] = 'HIGH'
         
+        # ORDER SIZE ANALYSIS - Check if signal quantity could realistically fill
+        signal_qty = signal_data.get('signal_quantity', 1)
+        if signal_qty and volume > 0:
+            qty_to_volume_ratio = signal_qty / volume
+            result['qty_to_volume_ratio'] = round(qty_to_volume_ratio, 4)
+            
+            if qty_to_volume_ratio > 0.5:
+                result['red_flags'].append('POSITION_SIZE_EXCEEDS_LIQUIDITY')
+                result['notes'].append(f'Position size ({signal_qty}) is {qty_to_volume_ratio*100:.1f}% of total volume - SUSPICIOUS')
+            elif qty_to_volume_ratio > 0.2:
+                result['red_flags'].append('LARGE_POSITION_RELATIVE_TO_VOLUME')
+                result['notes'].append(f'Large position relative to volume ({qty_to_volume_ratio*100:.1f}%)')
+        elif signal_qty and volume == 0:
+            result['red_flags'].append('FILL_IMPOSSIBLE_NO_VOLUME')
+            result['notes'].append(f'Cannot fill {signal_qty} contracts with ZERO volume')
+        
+        # PRICE MOVEMENT RED FLAGS
+        if last > 0 and signal_price > 0:
+            price_vs_last = abs(signal_price - last) / last * 100
+            if price_vs_last > 20:
+                result['red_flags'].append('EXTREME_PRICE_DEVIATION')
+                result['notes'].append(f'Signal price deviates {price_vs_last:.1f}% from last trade')
+        
+        # OPEN INTEREST CHECK (for options)
+        open_interest = market_data.get('open_interest', 0) or 0
+        if asset_type == 'option':
+            if open_interest == 0 and signal_qty > 0:
+                result['red_flags'].append('ZERO_OPEN_INTEREST')
+                result['notes'].append('Zero open interest - Very illiquid option')
+            elif open_interest > 0 and signal_qty > open_interest * 0.1:
+                result['red_flags'].append('POSITION_EXCEEDS_10PCT_OI')
+                result['notes'].append(f'Position is {signal_qty/open_interest*100:.1f}% of open interest')
+        
         confidence = 100
         
+        # CORE VERIFICATION CHECKS
         if not result['within_spread']:
             confidence -= 20
         if 'PRICE_BELOW_BID' in result['red_flags']:
-            confidence -= 40
+            confidence -= 40  # Critical: price below bid is highly suspicious
+        
+        # VOLUME/LIQUIDITY PENALTIES
         if 'ZERO_VOLUME' in result['red_flags']:
             confidence -= 30
         elif 'LOW_VOLUME' in result['red_flags']:
             confidence -= 15
         if 'WIDE_SPREAD' in result['red_flags']:
             confidence -= 15
-        if abs(result['slippage_pct']) > 5:
+        
+        # SLIPPAGE PENALTIES (tiered)
+        slippage = abs(result['slippage_pct'])
+        if slippage > 10:
+            confidence -= 20
+        elif slippage > 5:
             confidence -= 10
+        elif slippage > 2:
+            confidence -= 5
+        
+        # ORDER SIZE PENALTIES
+        if 'POSITION_SIZE_EXCEEDS_LIQUIDITY' in result['red_flags']:
+            confidence -= 35  # Very suspicious - position > 50% of volume
+        elif 'LARGE_POSITION_RELATIVE_TO_VOLUME' in result['red_flags']:
+            confidence -= 15
+        if 'FILL_IMPOSSIBLE_NO_VOLUME' in result['red_flags']:
+            confidence -= 40  # Critical: cannot fill with zero volume
+        
+        # OPEN INTEREST PENALTIES (options only)
+        if 'ZERO_OPEN_INTEREST' in result['red_flags']:
+            confidence -= 25
+        elif 'POSITION_EXCEEDS_10PCT_OI' in result['red_flags']:
+            confidence -= 15
+        
+        # PRICE DEVIATION PENALTY
+        if 'EXTREME_PRICE_DEVIATION' in result['red_flags']:
+            confidence -= 20
         
         # Time-window validation penalties
         if 'STALE_QUOTE' in result['red_flags']:
@@ -641,6 +702,11 @@ class SignalVerificationService:
         if result['data_source'] == 'yfinance_delayed':
             confidence -= 5
             result['notes'].append('Delayed data source penalty (-5)')
+        
+        # Bonus for real-time broker data
+        if result['data_source'] in ('webull_realtime', 'alpaca_realtime', 'tastytrade_realtime'):
+            confidence += 5
+            result['notes'].append('Real-time data bonus (+5)')
         
         result['confidence_score'] = max(0, min(100, confidence))
         
@@ -788,7 +854,20 @@ class SignalVerificationService:
         high_volume = row['high_volume'] or 0
         low_volume = row['low_volume'] or 0
         
-        trust_score = (verified / total * 50) + (within_spread / total * 30) + (high_volume / total * 20) if total > 0 else 0
+        # INDUSTRY-STANDARD TRUST SCORE CALCULATION
+        # Weights: Verified status (40%), Within spread (25%), High liquidity (20%), Low slippage (15%)
+        verified_component = (verified / total * 40) if total > 0 else 0
+        spread_component = (within_spread / total * 25) if total > 0 else 0
+        liquidity_component = (high_volume / total * 20) if total > 0 else 0
+        
+        # Slippage penalty: reduce score for high average slippage
+        avg_slippage = abs(row['avg_slippage'] or 0)
+        slippage_component = max(0, 15 - (avg_slippage * 2))  # 15 points max, lose 2 per % slippage
+        
+        # Suspicious trade penalty
+        suspicious_penalty = (suspicious / total * 10) if total > 0 else 0
+        
+        trust_score = verified_component + spread_component + liquidity_component + slippage_component - suspicious_penalty
         
         return {
             'total': total,
@@ -827,7 +906,9 @@ class SignalVerificationService:
             SELECT 
                 lc.id, sl.symbol as ticker, sl.asset_type, sl.open_price, lc.close_price,
                 lc.pnl_percent, lc.pnl as pnl_dollars, lc.closed_qty as quantity, lc.closed_at,
-                sl.strike, sl.expiry, sl.call_put as direction
+                sl.strike, sl.expiry, sl.call_put as direction,
+                sl.opened_at as entry_time,
+                sl.original_qty as signal_quantity
             FROM lot_closures lc
             LEFT JOIN signal_lots sl ON lc.lot_id = sl.id
             WHERE {where_clause} AND lc.closed_at >= ?
@@ -857,6 +938,10 @@ class SignalVerificationService:
                 reported_losses += 1
             reported_pnl += pnl_dollars
             
+            # CRITICAL FIX: Use entry_time (opened_at) instead of closed_at
+            # This ensures we verify against market conditions when signal was issued
+            entry_time = trade.get('entry_time') or trade.get('closed_at')
+            
             signal_data = {
                 'ticker': ticker,
                 'asset_type': trade.get('asset_type', 'option'),
@@ -864,7 +949,8 @@ class SignalVerificationService:
                 'expiry': trade.get('expiry'),
                 'direction': trade.get('direction', 'call'),
                 'signal_price': trade.get('open_price', 0),
-                'signal_time': trade.get('closed_at')
+                'signal_time': entry_time,
+                'signal_quantity': trade.get('signal_quantity', 1)
             }
             
             verification = self.verify_signal(signal_data)
