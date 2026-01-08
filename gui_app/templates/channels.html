@@ -945,6 +945,7 @@
         </div>
     </div>
 
+    {% if is_admin_build %}
     <div class="add-channel-card" style="margin-top: 30px;" id="channelMappingsSection">
         <h3><span>🔗</span> Channel Mappings</h3>
         <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">
@@ -1006,6 +1007,7 @@
             <p style="color: var(--text-muted); text-align: center; margin: 20px 0;">No channel mappings configured</p>
         </div>
     </div>
+    {% endif %}
 </div>
 
 <div class="modal-overlay" id="userModal">
@@ -1039,6 +1041,7 @@
     </div>
 </div>
 
+{% if is_admin_build %}
 <div class="modal-overlay" id="editMappingModal">
     <div class="modal-content" style="max-width: 600px;">
         <div class="modal-header">
@@ -1091,8 +1094,10 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <script>
+const IS_ADMIN_BUILD = {{ is_admin_build|tojson }};
 let allChannels = [];
 let currentChannelId = null;
 let currentChannelName = '';

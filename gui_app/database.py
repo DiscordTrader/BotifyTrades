@@ -4224,8 +4224,18 @@ def get_trading_settings() -> Dict[str, Any]:
     conn = get_connection()
     cursor = conn.cursor()
     
+    # Ensure trade_summary_channel column exists
+    try:
+        cursor.execute("PRAGMA table_info(trading_settings)")
+        columns = {row['name'] for row in cursor.fetchall()}
+        if 'trade_summary_channel' not in columns:
+            cursor.execute('ALTER TABLE trading_settings ADD COLUMN trade_summary_channel TEXT DEFAULT ""')
+            conn.commit()
+    except Exception as e:
+        print(f"[DATABASE] Error adding trade_summary_channel column: {e}")
+    
     cursor.execute('''
-        SELECT max_position_size, updated_at, global_default_quantity, max_position_size_enabled, trade_summary_enabled
+        SELECT max_position_size, updated_at, global_default_quantity, max_position_size_enabled, trade_summary_enabled, trade_summary_channel
         FROM trading_settings
         WHERE id = 1
     ''')
@@ -4237,7 +4247,8 @@ def get_trading_settings() -> Dict[str, Any]:
             'updated_at': row['updated_at'],
             'global_default_quantity': row['global_default_quantity'],
             'max_position_size_enabled': bool(row['max_position_size_enabled']) if row['max_position_size_enabled'] is not None else True,
-            'trade_summary_enabled': bool(row['trade_summary_enabled']) if row['trade_summary_enabled'] is not None else True
+            'trade_summary_enabled': bool(row['trade_summary_enabled']) if row['trade_summary_enabled'] is not None else True,
+            'trade_summary_channel': row['trade_summary_channel'] or ''
         }
     
     return {
@@ -4245,25 +4256,34 @@ def get_trading_settings() -> Dict[str, Any]:
         'updated_at': None,
         'global_default_quantity': None,
         'max_position_size_enabled': True,
-        'trade_summary_enabled': True
+        'trade_summary_enabled': True,
+        'trade_summary_channel': ''
     }
 
 
-def update_trading_settings(max_position_size: int, global_default_quantity: int = None, max_position_size_enabled: bool = True, trade_summary_enabled: bool = True) -> bool:
+def update_trading_settings(max_position_size: int, global_default_quantity: int = None, max_position_size_enabled: bool = True, trade_summary_enabled: bool = True, trade_summary_channel: str = '') -> bool:
     """Update trading settings"""
     conn = get_connection()
     cursor = conn.cursor()
     
     try:
+        # Ensure trade_summary_channel column exists
+        cursor.execute("PRAGMA table_info(trading_settings)")
+        columns = {row['name'] for row in cursor.fetchall()}
+        if 'trade_summary_channel' not in columns:
+            cursor.execute('ALTER TABLE trading_settings ADD COLUMN trade_summary_channel TEXT DEFAULT ""')
+            conn.commit()
+        
         cursor.execute('''
             UPDATE trading_settings
             SET max_position_size = ?,
                 global_default_quantity = ?,
                 max_position_size_enabled = ?,
                 trade_summary_enabled = ?,
+                trade_summary_channel = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = 1
-        ''', (int(max_position_size), global_default_quantity, 1 if max_position_size_enabled else 0, 1 if trade_summary_enabled else 0))
+        ''', (int(max_position_size), global_default_quantity, 1 if max_position_size_enabled else 0, 1 if trade_summary_enabled else 0, trade_summary_channel or ''))
         
         conn.commit()
         return True

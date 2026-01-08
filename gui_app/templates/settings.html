@@ -1162,6 +1162,7 @@ input:checked + .slider:before {
             <input type="number" id="global-default-quantity" min="1" max="1000" step="1" placeholder="1">
             <p class="help-text">Default contracts/shares when signal has no qty (required when max position size is disabled)</p>
         </div>
+        {% if is_admin_build %}
         <div class="form-group" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1);">
             <label class="toggle-label">
                 <span>Post Trade Summary (P/L)</span>
@@ -1170,8 +1171,16 @@ input:checked + .slider:before {
                     <span class="slider"></span>
                 </label>
             </label>
-            <p class="help-text">Automatically post P/L summary messages when closing positions. Can also be controlled per-channel in Execution settings.</p>
+            <p class="help-text">Automatically post P/L summary messages when closing positions. Toggle is enabled by default.</p>
+            <div class="form-group" style="margin-top: 12px;">
+                <label>Trade Summary Channel</label>
+                <select id="trade-summary-channel" class="form-control" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px 14px; color: #fff; width: 100%;">
+                    <option value="">Select channel for trade summaries...</option>
+                </select>
+                <p class="help-text" style="margin-top: 6px;">Select which channel to post trade summaries to. Leave empty to use source channel.</p>
+            </div>
         </div>
+        {% endif %}
         <div class="btn-group">
             <button id="save-trading" class="btn btn-success">💾 Save Settings</button>
             <span id="trading-save-message" style="margin-left: 12px; font-weight: 600;"></span>
@@ -2538,10 +2547,27 @@ async function loadTradingSettings() {
         enabledCheckbox.checked = settings.max_position_size_enabled !== false;
         toggleMaxPositionSize(enabledCheckbox.checked);
         
-        // Trade Summary setting
+        // Trade Summary setting (admin only)
         const tradeSummaryCheckbox = document.getElementById('trade-summary-enabled');
         if (tradeSummaryCheckbox) {
             tradeSummaryCheckbox.checked = settings.trade_summary_enabled !== false;
+        }
+        
+        // Load channels for trade summary channel dropdown (admin only)
+        const tradeSummaryChannelSelect = document.getElementById('trade-summary-channel');
+        if (tradeSummaryChannelSelect) {
+            const channelsResponse = await fetch('/api/channels');
+            const channels = await channelsResponse.json();
+            tradeSummaryChannelSelect.innerHTML = '<option value="">Use source channel (default)</option>';
+            channels.forEach(ch => {
+                const option = document.createElement('option');
+                option.value = ch.discord_channel_id;
+                option.textContent = ch.name || ch.discord_channel_id;
+                if (settings.trade_summary_channel === ch.discord_channel_id) {
+                    option.selected = true;
+                }
+                tradeSummaryChannelSelect.appendChild(option);
+            });
         }
     } catch (error) {
         console.error('Error loading trading settings:', error);
@@ -2562,11 +2588,14 @@ document.getElementById('save-trading').addEventListener('click', async () => {
         return;
     }
     
+    const tradeSummaryChannel = document.getElementById('trade-summary-channel')?.value || '';
+    
     const data = {
         max_position_size: parseInt(document.getElementById('max-position-size').value),
         global_default_quantity: globalDefaultQtyValue === '' ? null : parseInt(globalDefaultQtyValue),
         max_position_size_enabled: maxPositionSizeEnabled,
-        trade_summary_enabled: tradeSummaryEnabled
+        trade_summary_enabled: tradeSummaryEnabled,
+        trade_summary_channel: tradeSummaryChannel
     };
     
     try {
