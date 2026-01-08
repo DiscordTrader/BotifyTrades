@@ -230,8 +230,10 @@ class BrokerPriceMonitor(PriceMonitor):
         
         try:
             loop = asyncio.get_event_loop()
+            broker_lower = self.broker_name.lower()
             
-            if self.broker_name.lower() == 'alpaca':
+            # Handle Alpaca and Alpaca Paper
+            if broker_lower in ('alpaca', 'alpaca_paper'):
                 from alpaca.data import StockHistoricalDataClient
                 from alpaca.data.requests import StockLatestQuoteRequest
                 
@@ -243,15 +245,24 @@ class BrokerPriceMonitor(PriceMonitor):
                     request = StockLatestQuoteRequest(symbol_or_symbols=self.symbol)
                     quotes = await loop.run_in_executor(None, lambda: client.get_stock_latest_quote(request))
                     if self.symbol in quotes:
-                        return float(quotes[self.symbol].ask_price)
+                        quote = quotes[self.symbol]
+                        # Use midpoint of bid/ask for more accurate price
+                        bid = float(quote.bid_price) if quote.bid_price else 0
+                        ask = float(quote.ask_price) if quote.ask_price else 0
+                        if bid > 0 and ask > 0:
+                            return (bid + ask) / 2
+                        elif ask > 0:
+                            return ask
+                        elif bid > 0:
+                            return bid
             
-            elif self.broker_name.lower() == 'webull':
+            elif broker_lower == 'webull':
                 if hasattr(self.broker_instance, 'get_quote'):
                     quote = await loop.run_in_executor(None, lambda: self.broker_instance.get_quote(self.symbol))
                     if quote and 'close' in quote:
                         return float(quote['close'])
             
-            elif self.broker_name.lower() == 'questrade':
+            elif broker_lower == 'questrade':
                 if hasattr(self.broker_instance, 'get_quote'):
                     quote = await loop.run_in_executor(None, lambda: self.broker_instance.get_quote(self.symbol))
                     if quote and 'lastTradePrice' in quote:
@@ -421,10 +432,12 @@ class BaseConditionalOrderService(ABC):
             self._log(f"Disabled for channel {channel_id}")
             return None
         
-        effective_broker = channel_settings.get('broker_override') or broker
+        # Priority: passed broker (from enabled_brokers) > legacy broker_override setting
+        effective_broker = broker or channel_settings.get('broker_override')
         if not effective_broker:
             self._log(f"No broker for channel {channel_id}")
             return None
+        self._log(f"Using broker: {effective_broker} for channel {channel_id}")
         
         trigger_price = parsed_signal.get('trigger_price', 0)
         trigger_type = parsed_signal.get('trigger_type', 'over')
