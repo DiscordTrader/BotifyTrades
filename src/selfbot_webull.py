@@ -7800,28 +7800,51 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     from src.services.conditional_orders.router import conditional_order_router
                     
                     if conditional_order_router.is_enabled():
-                        # Get broker from channel config - prefer live broker
+                        # Get broker from channel config - use channel's configured broker
                         broker = None
                         if channel_info:
-                            # Check broker_override first
-                            if channel_info.get('broker_override'):
-                                broker = channel_info.get('broker_override')
-                            # Then check enabled_brokers
-                            elif channel_info.get('enabled_brokers'):
+                            # Check enabled_brokers FIRST (more specific - from Execution page)
+                            if channel_info.get('enabled_brokers'):
                                 try:
                                     import json
                                     enabled = channel_info.get('enabled_brokers')
                                     if isinstance(enabled, str):
                                         enabled = json.loads(enabled)
                                     if enabled and len(enabled) > 0:
-                                        # Map uppercase names and prefer live brokers
-                                        broker_map = {'WEBULL': 'Webull', 'ALPACA': 'Alpaca', 'TASTYTRADE': 'Tastytrade', 'IBKR': 'IBKR', 'SCHWAB': 'Schwab'}
-                                        broker = broker_map.get(enabled[0].upper(), enabled[0])
-                                except Exception:
-                                    pass
-                        # Default to Webull (live broker) for conditional orders
+                                        # Map uppercase names to proper broker names (including paper accounts)
+                                        broker_map = {
+                                            'WEBULL': 'Webull', 
+                                            'ALPACA': 'Alpaca',
+                                            'ALPACA_PAPER': 'Alpaca',
+                                            'TASTYTRADE': 'Tastytrade',
+                                            'TASTYTRADE_PAPER': 'Tastytrade',
+                                            'IBKR': 'IBKR',
+                                            'IBKR_PAPER': 'IBKR',
+                                            'SCHWAB': 'Schwab',
+                                            'UPSTOX': 'upstox',
+                                            'ZERODHA': 'zerodha',
+                                            'DHANQ': 'dhanq',
+                                            'QUESTRADE': 'questrade'
+                                        }
+                                        first_broker = enabled[0].upper()
+                                        broker = broker_map.get(first_broker, enabled[0])
+                                        print(f"[CONDITIONAL] Using channel enabled_brokers[0]: {enabled[0]} -> {broker}")
+                                except Exception as e:
+                                    print(f"[CONDITIONAL] Error parsing enabled_brokers: {e}")
+                            # Fall back to broker_override if enabled_brokers not set
+                            elif channel_info.get('broker_override'):
+                                broker = channel_info.get('broker_override')
+                                print(f"[CONDITIONAL] Using channel broker_override: {broker}")
+                        
+                        # Reject if no broker is configured - do NOT fallback to a default
                         if not broker:
-                            broker = 'Webull'
+                            print(f"[CONDITIONAL] ❌ REJECTED: No broker configured for channel {message.channel.id}")
+                            print(f"[CONDITIONAL] Please configure 'enabled_brokers' in the Execution page for this channel")
+                            try:
+                                await message.add_reaction('❌')
+                            except:
+                                pass
+                            return
                         print(f"[CONDITIONAL] Using broker: {broker}")
                         
                         order_id = conditional_order_router.create_order(
