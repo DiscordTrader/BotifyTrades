@@ -1619,10 +1619,15 @@ async function runRecoveryCalculator() {
 }
 
 function displayRecoveryResults(data) {
-    document.getElementById('results-placeholder').style.display = 'none';
-    document.getElementById('results-container').style.display = 'block';
-    document.getElementById('daily-breakdown-card').style.display = 'none';
-    document.getElementById('historical-breakdown-card').style.display = 'block';
+    const resultsPlaceholder = document.getElementById('results-placeholder');
+    const resultsContainer = document.getElementById('results-container');
+    const dailyBreakdownCard = document.getElementById('daily-breakdown-card');
+    const historicalBreakdownCard = document.getElementById('historical-breakdown-card');
+    
+    if (resultsPlaceholder) resultsPlaceholder.style.display = 'none';
+    if (resultsContainer) resultsContainer.style.display = 'block';
+    if (dailyBreakdownCard) dailyBreakdownCard.style.display = 'none';
+    if (historicalBreakdownCard) historicalBreakdownCard.style.display = 'block';
     
     const inputs = data.inputs;
     const recommended = data.recommended;
@@ -1703,27 +1708,39 @@ function displayRecoveryResults(data) {
         <th style="text-align: center;">Skipped</th>
     `;
     
-    document.getElementById('warnings-section').style.display = data.warning ? 'block' : 'none';
+    const warningsSection = document.getElementById('warnings-section');
+    if (warningsSection) warningsSection.style.display = data.warning ? 'block' : 'none';
     if (data.warning) {
-        document.getElementById('warnings-list').innerHTML = `
-            <div style="background: rgba(239, 68, 68, 0.1); border-radius: 6px; padding: 10px; border-left: 3px solid var(--danger);">
-                <div style="font-weight: 600; color: var(--danger);">Warning</div>
-                <div style="font-size: 0.75rem; color: var(--text-secondary);">${data.warning}</div>
-            </div>
-        `;
+        const warningsList = document.getElementById('warnings-list');
+        if (warningsList) {
+            warningsList.innerHTML = `
+                <div style="background: rgba(239, 68, 68, 0.1); border-radius: 6px; padding: 10px; border-left: 3px solid var(--danger);">
+                    <div style="font-weight: 600; color: var(--danger);">Warning</div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">${data.warning}</div>
+                </div>
+            `;
+        }
     }
-    document.getElementById('capital-requirements-section').style.display = 'none';
+    const capitalReqSection = document.getElementById('capital-requirements-section');
+    if (capitalReqSection) capitalReqSection.style.display = 'none';
 }
 
 function displayHistoricalResults(data) {
-    document.getElementById('results-placeholder').style.display = 'none';
-    document.getElementById('results-container').style.display = 'block';
+    const resultsPlaceholder = document.getElementById('results-placeholder');
+    const resultsContainer = document.getElementById('results-container');
+    const dailyBreakdownCard = document.getElementById('daily-breakdown-card');
+    const historicalBreakdownCard = document.getElementById('historical-breakdown-card');
+    const historicalBreakdown = document.getElementById('historical-breakdown');
+    const advancedMetricsCard = document.getElementById('advanced-metrics-card');
+    
+    if (resultsPlaceholder) resultsPlaceholder.style.display = 'none';
+    if (resultsContainer) resultsContainer.style.display = 'block';
     
     // Show historical table, hide daily table and advanced metrics
-    document.getElementById('daily-breakdown-card').style.display = 'none';
-    document.getElementById('historical-breakdown-card').style.display = 'block';
-    document.getElementById('historical-breakdown').style.display = 'block';
-    document.getElementById('advanced-metrics-card').style.display = 'none';
+    if (dailyBreakdownCard) dailyBreakdownCard.style.display = 'none';
+    if (historicalBreakdownCard) historicalBreakdownCard.style.display = 'block';
+    if (historicalBreakdown) historicalBreakdown.style.display = 'block';
+    if (advancedMetricsCard) advancedMetricsCard.style.display = 'none';
     
     // Reset heading for historical replay
     document.getElementById('historical-breakdown-title').innerHTML = `<span>📜</span> Trade-by-Trade Breakdown`;
@@ -1800,7 +1817,7 @@ function displayHistoricalResults(data) {
     const skipSection = document.getElementById('skip-stats-section');
     if (summary.skipped_trades_count > 0 && data.skipped_by_reason) {
         displaySkipStats(data.skipped_by_reason, summary.executed_trades, summary.total_trades, data.daily_stats);
-    } else {
+    } else if (skipSection) {
         skipSection.style.display = 'none';
         skipSection.innerHTML = '';
     }
@@ -1809,13 +1826,14 @@ function displayHistoricalResults(data) {
     const dailySection = document.getElementById('daily-stats-section');
     if (data.daily_stats && params) {
         displayDailyStats(data.daily_stats, params);
-    } else {
+    } else if (dailySection) {
         dailySection.style.display = 'none';
         dailySection.innerHTML = '';
     }
     
     // Hide warnings for historical
-    document.getElementById('warnings-section').style.display = 'none';
+    const warningsSection = document.getElementById('warnings-section');
+    if (warningsSection) warningsSection.style.display = 'none';
     
     // Display capital requirements if available
     if (data.capital_requirements) {
@@ -2477,12 +2495,17 @@ async function runSimulation() {
 }
 
 function displayResults(data) {
-    document.getElementById('results-placeholder').style.display = 'none';
-    document.getElementById('results-container').style.display = 'block';
+    const resultsPlaceholder = document.getElementById('results-placeholder');
+    const resultsContainer = document.getElementById('results-container');
+    const dailyBreakdownCard = document.getElementById('daily-breakdown-card');
+    const historicalBreakdownCard = document.getElementById('historical-breakdown-card');
+    
+    if (resultsPlaceholder) resultsPlaceholder.style.display = 'none';
+    if (resultsContainer) resultsContainer.style.display = 'block';
     
     // Show daily table, hide historical table
-    document.getElementById('daily-breakdown-card').style.display = 'block';
-    document.getElementById('historical-breakdown-card').style.display = 'none';
+    if (dailyBreakdownCard) dailyBreakdownCard.style.display = 'block';
+    if (historicalBreakdownCard) historicalBreakdownCard.style.display = 'none';
     
     const summary = data.summary;
     const params = data.params_used;
