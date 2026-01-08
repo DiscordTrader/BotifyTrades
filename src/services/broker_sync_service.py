@@ -182,6 +182,15 @@ class BrokerSyncService:
         # Step 2: Reconcile with database trades
         await self._reconcile_trades(broker_name, normalized_data)
         
+        # Step 3: Sync filled orders to database (runs every 5 sync cycles = ~2.5 min)
+        if not hasattr(self, '_fill_sync_counter'):
+            self._fill_sync_counter = {}
+        self._fill_sync_counter[broker_name] = self._fill_sync_counter.get(broker_name, 0) + 1
+        
+        if self._fill_sync_counter[broker_name] >= 5:
+            await self._sync_filled_orders(broker_name, broker_instance)
+            self._fill_sync_counter[broker_name] = 0
+        
         print(f"[SYNC] ✓ {broker_name} sync complete")
     
     async def _fetch_and_normalize(self, broker_name: str, broker_instance) -> Dict[str, Any]:
@@ -775,3 +784,95 @@ class BrokerSyncService:
             else:
                 # Position already tracked - skip import
                 pass
+
+    async def _sync_filled_orders(self, broker_name: str, broker_instance):
+        """Sync filled orders from broker to database"""
+        from gui_app.database import insert_filled_order, get_broker_sync_state, update_broker_sync_state
+        
+        try:
+            print(f"[SYNC] Syncing filled orders from {broker_name}...")
+            filled_orders = []
+            
+            # Fetch filled orders based on broker type
+            if broker_name == 'Webull':
+                if hasattr(broker_instance, 'get_order_history'):
+                    filled_orders = await broker_instance.get_order_history(count=50)
+            elif 'ALPACA' in broker_name.upper():
+                if hasattr(broker_instance, 'get_filled_orders'):
+                    filled_orders = await broker_instance.get_filled_orders(limit=50)
+                elif hasattr(broker_instance, 'get_orders'):
+                    # Fallback to get_orders with status filter
+                    try:
+                        orders = broker_instance.get_orders(status='closed')
+                        for order in orders:
+                            if hasattr(order, 'status') and str(order.status) == 'OrderStatus.FILLED':
+                                filled_time = order.filled_at.isoformat() if order.filled_at else None
+                                if filled_time:
+                                    # Parse OCC symbol for options
+                                    parsed = parse_occ_symbol(order.symbol)
+                                    filled_orders.append({
+                                        'order_id': str(order.id),
+                                        'symbol': parsed['symbol'] if parsed else order.symbol,
+                                        'quantity': int(float(order.filled_qty or order.qty)),
+                                        'filled_price': float(order.filled_avg_price or 0),
+                                        'action': 'BUY' if str(order.side) == 'OrderSide.BUY' else 'SELL',
+                                        'filled_time': filled_time,
+                                        'asset_type': 'option' if parsed else 'stock',
+                                        'strike': parsed.get('strike') if parsed else None,
+                                        'expiry': parsed.get('expiry') if parsed else None,
+                                        'direction': parsed.get('call_put') if parsed else None
+                                    })
+                    except Exception as e:
+                        print(f"[SYNC] Error getting Alpaca orders: {e}")
+            
+            if not filled_orders:
+                print(f"[SYNC] No filled orders from {broker_name}")
+                return
+            
+            # Insert filled orders into database (deduplication via UNIQUE constraint)
+            new_count = 0
+            for order in filled_orders:
+                # Normalize side to standard format
+                side = order.get('action', '')
+                if side.upper() in ['BUY']:
+                    side = 'BTO'
+                elif side.upper() in ['SELL']:
+                    side = 'STC'
+                
+                # Calculate total cost
+                qty = order.get('quantity', 0)
+                price = order.get('filled_price', 0)
+                total_cost = qty * price * (100 if order.get('asset_type') == 'option' else 1)
+                
+                result = insert_filled_order(
+                    broker=broker_name,
+                    broker_order_id=str(order.get('order_id', '')),
+                    symbol=order.get('symbol', ''),
+                    side=side,
+                    quantity=qty,
+                    filled_price=price,
+                    filled_at=order.get('filled_time', ''),
+                    asset_type=order.get('asset_type', 'stock'),
+                    total_cost=total_cost,
+                    strike=order.get('strike'),
+                    expiry=order.get('expiry'),
+                    option_type=order.get('direction')
+                )
+                
+                if result:
+                    new_count += 1
+            
+            if new_count > 0:
+                print(f"[SYNC] ✓ Synced {new_count} new filled orders from {broker_name}")
+            
+            # Update sync state
+            update_broker_sync_state(
+                broker=broker_name,
+                last_sync_at=datetime.now().isoformat()
+            )
+            
+        except Exception as e:
+            print(f"[SYNC] Error syncing filled orders from {broker_name}: {e}")
+            import traceback
+            traceback.print_exc()
+            update_broker_sync_state(broker=broker_name, error=str(e))
