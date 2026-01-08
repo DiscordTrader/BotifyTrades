@@ -86,19 +86,21 @@ class BrokerSyncService:
         if not timestamp_str:
             return datetime.now().isoformat()
         
-        # Already ISO format
-        if 'T' in timestamp_str or timestamp_str.count('-') >= 2:
-            return timestamp_str.replace(' ', 'T').split('+')[0].split('Z')[0]
+        # Webull format: MM/DD/YYYY HH:MM:SS EST/EDT (check first - has '/')
+        if '/' in timestamp_str:
+            try:
+                # Remove timezone suffix
+                clean_ts = timestamp_str.replace(' EST', '').replace(' EDT', '').strip()
+                # Parse MM/DD/YYYY HH:MM:SS
+                dt = datetime.strptime(clean_ts, '%m/%d/%Y %H:%M:%S')
+                return dt.isoformat()
+            except ValueError:
+                pass
         
-        # Webull format: MM/DD/YYYY HH:MM:SS EST/EDT
-        try:
-            # Remove timezone suffix
-            clean_ts = timestamp_str.replace(' EST', '').replace(' EDT', '').strip()
-            # Parse MM/DD/YYYY HH:MM:SS
-            dt = datetime.strptime(clean_ts, '%m/%d/%Y %H:%M:%S')
-            return dt.isoformat()
-        except ValueError:
-            pass
+        # Already ISO format (has T separator or dashes for date)
+        if timestamp_str.count('-') >= 2:
+            result = timestamp_str.replace(' ', 'T').split('+')[0].split('Z')[0]
+            return result
         
         # Fallback: return as-is or current time
         return timestamp_str or datetime.now().isoformat()
