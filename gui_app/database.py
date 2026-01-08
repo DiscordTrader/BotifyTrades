@@ -1331,6 +1331,52 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_license_log_key ON license_validation_log(license_key)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_license_log_time ON license_validation_log(created_at)')
     
+    # Filled Orders - Broker-synced filled order history
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS filled_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            broker TEXT NOT NULL,
+            broker_order_id TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            asset_type TEXT DEFAULT 'option' CHECK(asset_type IN ('option', 'stock')),
+            side TEXT NOT NULL CHECK(side IN ('BUY', 'SELL', 'BTO', 'STC')),
+            quantity INTEGER NOT NULL,
+            filled_price REAL NOT NULL,
+            total_cost REAL,
+            fees REAL DEFAULT 0,
+            filled_at TIMESTAMP NOT NULL,
+            strike REAL,
+            expiry TEXT,
+            option_type TEXT,
+            channel_id TEXT,
+            signal_id INTEGER,
+            trade_id INTEGER,
+            source TEXT DEFAULT 'broker_sync',
+            synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(broker, broker_order_id)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_filled_orders_broker ON filled_orders(broker)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_filled_orders_symbol ON filled_orders(symbol)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_filled_orders_filled_at ON filled_orders(filled_at)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_filled_orders_channel ON filled_orders(channel_id)')
+    
+    # Broker sync state - Track last sync timestamps per broker
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS broker_sync_state (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            broker TEXT UNIQUE NOT NULL,
+            last_sync_at TIMESTAMP,
+            last_order_id TEXT,
+            sync_cursor TEXT,
+            error_count INTEGER DEFAULT 0,
+            last_error TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     # Seed common known issues
     cursor.execute('''
         INSERT OR IGNORE INTO known_issues (id, error_pattern, issue_title, issue_description, solution, category, keywords)
@@ -8985,6 +9031,142 @@ def get_signal_by_id(signal_id: int) -> Optional[Dict]:
     except Exception as e:
         print(f"[DATABASE] Error getting signal by ID: {e}")
         return None
+
+
+# ==================== FILLED ORDERS ====================
+
+def insert_filled_order(broker: str, broker_order_id: str, symbol: str, side: str,
+                        quantity: int, filled_price: float, filled_at: str,
+                        asset_type: str = 'option', total_cost: float = None,
+                        fees: float = 0, strike: float = None, expiry: str = None,
+                        option_type: str = None, channel_id: str = None,
+                        signal_id: int = None, trade_id: int = None) -> Optional[int]:
+    """Insert a filled order from broker sync. Returns order ID or None if duplicate."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT OR IGNORE INTO filled_orders (
+                broker, broker_order_id, symbol, asset_type, side, quantity,
+                filled_price, total_cost, fees, filled_at, strike, expiry,
+                option_type, channel_id, signal_id, trade_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (broker, broker_order_id, symbol, asset_type, side, quantity,
+              filled_price, total_cost, fees, filled_at, strike, expiry,
+              option_type, channel_id, signal_id, trade_id))
+        conn.commit()
+        
+        if cursor.rowcount > 0:
+            return cursor.lastrowid
+        return None
+    except Exception as e:
+        print(f"[DATABASE] Error inserting filled order: {e}")
+        return None
+
+
+def get_filled_orders(broker: str = None, symbol: str = None, 
+                      days: int = 7, limit: int = 100) -> List[Dict[str, Any]]:
+    """Get filled orders with optional filters."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        conditions = [f"filled_at >= datetime('now', '-{days} days')"]
+        params = []
+        
+        if broker:
+            conditions.append("broker = ?")
+            params.append(broker)
+        if symbol:
+            conditions.append("symbol LIKE ?")
+            params.append(f"%{symbol}%")
+        
+        where_clause = " AND ".join(conditions)
+        
+        cursor.execute(f'''
+            SELECT * FROM filled_orders
+            WHERE {where_clause}
+            ORDER BY filled_at DESC
+            LIMIT ?
+        ''', params + [limit])
+        
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"[DATABASE] Error getting filled orders: {e}")
+        return []
+
+
+def get_broker_sync_state(broker: str) -> Optional[Dict[str, Any]]:
+    """Get the last sync state for a broker."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT * FROM broker_sync_state WHERE broker = ?', (broker,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    except Exception as e:
+        print(f"[DATABASE] Error getting broker sync state: {e}")
+        return None
+
+
+def update_broker_sync_state(broker: str, last_sync_at: str = None,
+                              last_order_id: str = None, sync_cursor: str = None,
+                              error: str = None):
+    """Update the sync state for a broker."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        if error:
+            cursor.execute('''
+                INSERT INTO broker_sync_state (broker, last_error, error_count, updated_at)
+                VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+                ON CONFLICT(broker) DO UPDATE SET
+                    last_error = ?,
+                    error_count = error_count + 1,
+                    updated_at = CURRENT_TIMESTAMP
+            ''', (broker, error, error))
+        else:
+            cursor.execute('''
+                INSERT INTO broker_sync_state (broker, last_sync_at, last_order_id, sync_cursor, error_count, updated_at)
+                VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+                ON CONFLICT(broker) DO UPDATE SET
+                    last_sync_at = COALESCE(?, last_sync_at),
+                    last_order_id = COALESCE(?, last_order_id),
+                    sync_cursor = COALESCE(?, sync_cursor),
+                    error_count = 0,
+                    last_error = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+            ''', (broker, last_sync_at, last_order_id, sync_cursor,
+                  last_sync_at, last_order_id, sync_cursor))
+        conn.commit()
+    except Exception as e:
+        print(f"[DATABASE] Error updating broker sync state: {e}")
+
+
+def get_filled_orders_count(broker: str = None, days: int = 1) -> int:
+    """Get count of filled orders for stats."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        if broker:
+            cursor.execute(f'''
+                SELECT COUNT(*) FROM filled_orders
+                WHERE broker = ? AND filled_at >= datetime('now', '-{days} days')
+            ''', (broker,))
+        else:
+            cursor.execute(f'''
+                SELECT COUNT(*) FROM filled_orders
+                WHERE filled_at >= datetime('now', '-{days} days')
+            ''')
+        
+        return cursor.fetchone()[0]
+    except Exception as e:
+        print(f"[DATABASE] Error getting filled orders count: {e}")
+        return 0
 
 
 # Initialize tables
