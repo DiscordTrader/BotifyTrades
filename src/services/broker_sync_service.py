@@ -660,6 +660,30 @@ class BrokerSyncService:
             if t.get('channel_id') and (t.get('source') == 'discord' or t.get('message_id'))
         ]
         
+        # Build broker_override lookup for Pass 3 fallback
+        # Maps broker_name -> [(channel_discord_id, channel_db_id), ...]
+        broker_to_channels = {}
+        try:
+            all_channels = self.db.get_channels()
+            for ch in all_channels:
+                ch_broker = (ch.get('broker_override') or '').lower().strip()
+                if ch_broker:
+                    # Normalize broker names for comparison
+                    if 'webull' in ch_broker:
+                        ch_broker = 'webull'
+                    elif 'alpaca' in ch_broker:
+                        ch_broker = 'alpaca_paper' if 'paper' in ch_broker else 'alpaca'
+                    
+                    if ch_broker not in broker_to_channels:
+                        broker_to_channels[ch_broker] = []
+                    broker_to_channels[ch_broker].append({
+                        'discord_id': ch.get('discord_channel_id'),
+                        'db_id': ch.get('id'),
+                        'name': ch.get('channel_name', 'Unknown')
+                    })
+        except Exception as e:
+            print(f"[SYNC] Warning: Could not load broker_override mappings: {e}")
+        
         def find_origin_channel(position: Dict) -> str:
             """Find the origin channel_id for a broker position using multi-pass matching"""
             pos_key = self._build_position_key(
@@ -700,6 +724,23 @@ class BrokerSyncService:
                 
                 # Fallback: most recent trade with matching key
                 return matching_trades[0].get('channel_id')
+            
+            # Pass 3: Auto-assign based on broker_override if ONLY ONE channel uses this broker
+            # This handles cases where Discord execution didn't save to database
+            current_broker = broker_name.lower()
+            if 'webull' in current_broker:
+                current_broker = 'webull'
+            elif 'alpaca' in current_broker:
+                current_broker = 'alpaca_paper' if 'paper' in current_broker else 'alpaca'
+            
+            channels_for_broker = broker_to_channels.get(current_broker, [])
+            if len(channels_for_broker) == 1:
+                # Only ONE channel uses this broker - safe to auto-assign
+                channel_info = channels_for_broker[0]
+                print(f"[SYNC] Auto-assigning {position['symbol']} to '{channel_info['name']}' (only channel using {broker_name})")
+                return channel_info['discord_id']
+            elif len(channels_for_broker) > 1:
+                print(f"[SYNC] Cannot auto-assign {position['symbol']} - {len(channels_for_broker)} channels use {broker_name}")
             
             return None  # No match found
         

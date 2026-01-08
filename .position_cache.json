@@ -3793,7 +3793,7 @@
   },
   "Webull_CVX_160.0_01/09_C": {
     "entry_price": 0.54,
-    "highest_price": 0.59,
+    "highest_price": 0.605,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
