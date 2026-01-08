@@ -3244,6 +3244,10 @@ def register_routes(app):
                     orders_raw = paper_broker.trading_client.get_orders(filter=request)
                     orders = []
                     for order in orders_raw:
+                        # Skip orders that are being canceled or already canceled
+                        order_status = order.status.value.lower() if hasattr(order.status, 'value') else str(order.status).lower()
+                        if order_status in ('pending_cancel', 'canceled', 'cancelled', 'expired', 'rejected'):
+                            continue
                         orders.append({
                             'order_id': order.id,
                             'symbol': order.symbol,

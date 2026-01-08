@@ -242,6 +242,11 @@ class BrokerSyncService:
                 if hasattr(broker_instance, 'get_orders'):
                     orders = broker_instance.get_orders(status='open') or []
                     for order in orders:
+                        # Skip orders that are being canceled or already canceled
+                        order_status = str(order.status.value if hasattr(order.status, 'value') else order.status).lower()
+                        if order_status in ('pending_cancel', 'canceled', 'cancelled', 'expired', 'rejected'):
+                            print(f"[SYNC] Skipping {order.symbol} order {order.id} - status: {order_status}")
+                            continue
                         result['pending_orders'].append({
                             'broker_order_id': str(order.id),
                             'symbol': order.symbol,
