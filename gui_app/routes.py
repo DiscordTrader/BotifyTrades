@@ -9970,12 +9970,40 @@ def register_routes(app):
                     set_broker_status(broker_id, False, 'error', 'No Discord token configured')
                     return jsonify({'success': False, 'error': 'No Discord token configured'}), 400
                 
-                set_broker_status(broker_id, True, 'connected', account_info={'note': 'Discord connection managed by bot runtime'})
-                return jsonify({
-                    'success': True,
-                    'message': 'Discord credentials validated. Bot will connect on next restart.',
-                    'status': 'connected'
-                })
+                # Actually validate the Discord token with Discord's API
+                import requests
+                token = creds.get('token')
+                try:
+                    headers = {'Authorization': token}
+                    response = requests.get('https://discord.com/api/v9/users/@me', headers=headers, timeout=10)
+                    
+                    if response.status_code == 200:
+                        user_data = response.json()
+                        username = user_data.get('username', 'Unknown')
+                        discriminator = user_data.get('discriminator', '0')
+                        user_display = f"{username}#{discriminator}" if discriminator != '0' else username
+                        
+                        set_broker_status(broker_id, True, 'connected', account_info={'user': user_display, 'id': user_data.get('id')})
+                        return jsonify({
+                            'success': True,
+                            'message': f'Discord token validated! Connected as {user_display}',
+                            'status': 'connected',
+                            'user': user_display
+                        })
+                    elif response.status_code == 401:
+                        set_broker_status(broker_id, False, 'error', 'Invalid or expired token')
+                        return jsonify({'success': False, 'error': 'Invalid or expired Discord token. Please get a fresh token.'}), 401
+                    else:
+                        error_msg = f'Discord API error: {response.status_code}'
+                        set_broker_status(broker_id, False, 'error', error_msg)
+                        return jsonify({'success': False, 'error': error_msg}), 400
+                except requests.exceptions.Timeout:
+                    set_broker_status(broker_id, False, 'error', 'Connection timeout')
+                    return jsonify({'success': False, 'error': 'Discord API timeout. Please try again.'}), 504
+                except Exception as e:
+                    error_msg = f'Connection error: {str(e)}'
+                    set_broker_status(broker_id, False, 'error', error_msg)
+                    return jsonify({'success': False, 'error': error_msg}), 500
             
             elif broker_id.startswith('webull'):
                 creds = get_webull_credentials()
