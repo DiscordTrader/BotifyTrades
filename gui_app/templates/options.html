@@ -1103,6 +1103,8 @@
                         <option value="Day">Day</option>
                         <option value="Scalp">Scalp</option>
                     </select>
+                    <button class="order-btn buy" onclick="placeOrder({{ i }}, 'BUY')" title="Execute BUY on Broker">BUY</button>
+                    <button class="order-btn sell" onclick="placeOrder({{ i }}, 'SELL')" title="Execute SELL on Broker">SELL</button>
                     <button class="order-btn webhook" onclick="postWebhookBTO({{ i }})" title="Post BTO to Webhook">BTO</button>
                     <button class="order-btn webhook-stc" onclick="postWebhookSTC({{ i }})" title="Post STC to Webhook">STC</button>
                     <button class="clear-row-btn" onclick="clearRow({{ i }})" title="Clear">✕</button>
