@@ -2556,18 +2556,24 @@ async function loadTradingSettings() {
         // Load channels for trade summary channel dropdown (admin only)
         const tradeSummaryChannelSelect = document.getElementById('trade-summary-channel');
         if (tradeSummaryChannelSelect) {
-            const channelsResponse = await fetch('/api/channels');
-            const channels = await channelsResponse.json();
-            tradeSummaryChannelSelect.innerHTML = '<option value="">Use source channel (default)</option>';
-            channels.forEach(ch => {
-                const option = document.createElement('option');
-                option.value = ch.discord_channel_id;
-                option.textContent = ch.name || ch.discord_channel_id;
-                if (settings.trade_summary_channel === ch.discord_channel_id) {
-                    option.selected = true;
+            try {
+                const channelsResponse = await fetch('/api/channels');
+                if (channelsResponse.ok) {
+                    const channels = await channelsResponse.json();
+                    tradeSummaryChannelSelect.innerHTML = '<option value="">Use source channel (default)</option>';
+                    channels.forEach(ch => {
+                        const option = document.createElement('option');
+                        option.value = ch.discord_channel_id;
+                        option.textContent = ch.name || ch.discord_channel_id;
+                        if (settings.trade_summary_channel === ch.discord_channel_id) {
+                            option.selected = true;
+                        }
+                        tradeSummaryChannelSelect.appendChild(option);
+                    });
                 }
-                tradeSummaryChannelSelect.appendChild(option);
-            });
+            } catch (e) {
+                console.error('Error loading channels for trade summary:', e);
+            }
         }
     } catch (error) {
         console.error('Error loading trading settings:', error);
