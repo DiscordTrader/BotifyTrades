@@ -24,7 +24,14 @@ from typing import Dict, List, Optional, Tuple, Any
 import pandas as pd
 import numpy as np
 
-DATABASE_PATH = os.path.join(os.path.dirname(__file__), '..', 'bot_data.db')
+# Use the main database from gui_app
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+try:
+    from gui_app import database as db
+    USE_GUI_DB = True
+except ImportError:
+    USE_GUI_DB = False
+    DATABASE_PATH = os.path.join(os.path.dirname(__file__), '..', 'bot_data.db')
 
 _webull_client = None
 _tastytrade_session = None
@@ -71,10 +78,14 @@ class SignalVerificationService:
         self.data_source = 'unknown'
     
     def get_db(self):
-        """Get database connection"""
-        conn = sqlite3.connect(DATABASE_PATH)
-        conn.row_factory = sqlite3.Row
-        return conn
+        """Get database connection from the main gui_app database"""
+        if USE_GUI_DB:
+            conn = db.get_connection()
+            return conn
+        else:
+            conn = sqlite3.connect(DATABASE_PATH)
+            conn.row_factory = sqlite3.Row
+            return conn
     
     def _get_webull_option_quote(self, ticker: str, strike: float, expiry: str, 
                                   direction: str) -> Optional[Dict]:
