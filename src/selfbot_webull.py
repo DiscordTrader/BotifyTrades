@@ -9510,6 +9510,37 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _original_print(f"[LIVE TRADE] Please configure 'enabled_brokers' in the Execution page")
                             continue
                         
+                        # Position sizing calculation for conditional orders with _calculate_qty flag
+                        position_size_pct = signal.get('_position_size_pct')
+                        if position_size_pct and signal.get('_calculate_qty') and signal['action'] == 'BTO':
+                            try:
+                                _original_print(f"[LIVE TRADE] Calculating position size ({position_size_pct}% of portfolio)...")
+                                
+                                if hasattr(live_broker, 'get_account_info'):
+                                    account_info = live_broker.get_account_info()
+                                    if account_info:
+                                        if signal['asset'] == 'option':
+                                            buying_power = account_info.get('options_buying_power') or account_info.get('buying_power', 0)
+                                        else:
+                                            buying_power = account_info.get('buying_power', 0)
+                                        
+                                        if buying_power > 0:
+                                            budget = buying_power * (position_size_pct / 100)
+                                            price = signal.get('price') or 1.0
+                                            
+                                            if signal['asset'] == 'option':
+                                                actual_cost = price * 100
+                                            else:
+                                                actual_cost = price
+                                            
+                                            if actual_cost > 0:
+                                                calculated_qty = max(1, int(budget / actual_cost))
+                                                original_qty = signal.get('qty', 1)
+                                                signal['qty'] = calculated_qty
+                                                _original_print(f"[LIVE TRADE] Position size: ${budget:.2f} budget, ${actual_cost:.2f}/unit → {calculated_qty} qty (was {original_qty})")
+                            except Exception as e:
+                                _original_print(f"[LIVE TRADE] ⚠️ Position sizing error: {e}, using qty={signal.get('qty', 1)}")
+                        
                         # Check if we should use bracket orders (stocks with stop loss or profit target)
                         use_bracket = (
                             signal['asset'] == 'stock' and 
