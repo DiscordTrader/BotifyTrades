@@ -1470,6 +1470,10 @@ def init_db():
         print("[DATABASE] ✓ Created GUI_EXEC channel for options page tracking")
     
     conn.commit()
+    
+    # Ensure signal verification tables exist
+    ensure_signal_verification_tables()
+    
     print("[DATABASE] ✓ Database initialized")
 
 def ensure_signal_verification_tables():
