@@ -6493,40 +6493,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # Guard against duplicate on_ready calls (Discord reconnects can trigger this multiple times)
         if self._on_ready_completed:
             print("[Discord] Reconnected - skipping duplicate on_ready initialization")
-            try:
-                from src.connection_monitor import get_connection_monitor
-                monitor = get_connection_monitor()
-                latency = self.latency * 1000 if self.latency else 0
-                monitor.set_connected("discord", latency_ms=latency)
-            except Exception:
-                pass
             return
         
         if self.user:
             print(f"\n[Discord] ✓ Logged in as {self.user} (id={self.user.id})")
         else:
             print(f"\n[Discord] ✓ Logged in (user info not available)")
-        
-        try:
-            from src.connection_monitor import get_connection_monitor
-            monitor = get_connection_monitor()
-            latency = self.latency * 1000 if self.latency else 0
-            monitor.set_connected("discord", latency_ms=latency, metadata={
-                'user_id': str(self.user.id) if self.user else None,
-                'username': str(self.user) if self.user else None
-            })
-            if DATABASE_MODULE_AVAILABLE:
-                from gui_app import database as db
-                db.save_connection_event(
-                    service_name="discord",
-                    service_type="messaging",
-                    event_type="connected",
-                    status="connected",
-                    latency_ms=latency
-                )
-            print("[Discord] ✓ Connection monitor: Discord marked as connected")
-        except Exception as e:
-            print(f"[Discord] Connection monitor error: {e}")
 
         print(f"[Discord] ✓ Monitoring {len(CHANNEL_IDS)} channels:")
         for cid in CHANNEL_IDS:
@@ -6821,64 +6793,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         print(error_info)
         print(f"[Discord ERROR] Args: {args}")
         print(f"[Discord ERROR] Kwargs: {kwargs}")
-        
-        try:
-            from src.connection_monitor import get_connection_monitor, DisconnectReason
-            monitor = get_connection_monitor()
-            monitor.set_error("discord", f"Event error: {event_name}", error_code=None)
-        except Exception:
-            pass
     
     async def on_disconnect(self):
         """Log when Discord websocket connection is lost"""
-        latency = self.latency * 1000 if self.latency else 0
         print(f"\n[Discord DISCONNECT] ⚠️  Websocket connection lost!")
-        print(f"[Discord DISCONNECT] Latency before disconnect: {latency:.2f}ms")
+        print(f"[Discord DISCONNECT] Latency before disconnect: {self.latency * 1000:.2f}ms")
         print(f"[Discord DISCONNECT] Will attempt automatic reconnection...")
-        
-        try:
-            from src.connection_monitor import get_connection_monitor, DisconnectReason
-            monitor = get_connection_monitor()
-            monitor.set_disconnected(
-                "discord",
-                reason=DisconnectReason.WEBSOCKET_CLOSED,
-                error_message="WebSocket connection lost"
-            )
-            if DATABASE_MODULE_AVAILABLE:
-                from gui_app import database as db
-                db.save_connection_event(
-                    service_name="discord",
-                    service_type="messaging",
-                    event_type="disconnected",
-                    status="disconnected",
-                    disconnect_reason="websocket_closed",
-                    error_message="WebSocket connection lost",
-                    latency_ms=latency
-                )
-        except Exception as e:
-            print(f"[Discord] Connection monitor error: {e}")
     
     async def on_resumed(self):
         """Log when Discord websocket reconnects after disconnect"""
-        latency = self.latency * 1000 if self.latency else 0
         print(f"\n[Discord RESUMED] ✓ Websocket connection restored!")
-        print(f"[Discord RESUMED] Current latency: {latency:.2f}ms")
-        
-        try:
-            from src.connection_monitor import get_connection_monitor
-            monitor = get_connection_monitor()
-            monitor.set_connected("discord", latency_ms=latency)
-            if DATABASE_MODULE_AVAILABLE:
-                from gui_app import database as db
-                db.save_connection_event(
-                    service_name="discord",
-                    service_type="messaging",
-                    event_type="connected",
-                    status="connected",
-                    latency_ms=latency
-                )
-        except Exception as e:
-            print(f"[Discord] Connection monitor error: {e}")
+        print(f"[Discord RESUMED] Current latency: {self.latency * 1000:.2f}ms")
 
     async def on_message(self, message: discord.Message):
         # FIRST: Deduplicate messages BEFORE any processing (Discord self-bot sometimes delivers duplicate events)
@@ -10059,67 +9984,15 @@ def run_discord_bot_thread():
             
         except Exception as e:
             error_msg = str(e)
-            is_token_error = 'expected token to be a str' in error_msg or 'NoneType' in error_msg or 'Improper token' in error_msg
-            
-            if is_token_error:
-                _original_print("[Discord Thread] Discord token not configured or invalid")
+            if 'expected token to be a str' in error_msg or 'NoneType' in error_msg:
+                _original_print("[Discord Thread] Discord token not configured - this is expected if you haven't set it up yet")
                 _original_print("[Discord Thread] Configure your Discord token in Settings > Discord to enable signal reading")
             else:
                 _original_print(f"[Discord Thread ERROR] Bot crashed: {e}")
+                log_error_to_db('discord_connection', f"Discord bot crashed: {str(e)}", 
+                               'DiscordClient', 'critical', 'Check Discord token and network connection')
                 import traceback
                 traceback.print_exc()
-            
-            log_error_to_db('discord_connection', f"Discord connection failed: {str(e)}", 
-                           'DiscordClient', 'critical', 'Check Discord token and network connection')
-            
-            try:
-                from src.connection_monitor import get_connection_monitor, classify_discord_error, DisconnectReason
-                monitor = get_connection_monitor()
-                
-                error_code = None
-                if 'closed with' in error_msg:
-                    import re
-                    match = re.search(r'closed with (\d+)', error_msg)
-                    if match:
-                        error_code = int(match.group(1))
-                
-                if is_token_error:
-                    reason = DisconnectReason.TOKEN_INVALID
-                else:
-                    reason = classify_discord_error(error_code=error_code, error_message=error_msg)
-                
-                reason_messages = {
-                    DisconnectReason.TOKEN_INVALID: "Discord token is invalid or not configured. Set token in Settings.",
-                    DisconnectReason.TOKEN_EXPIRED: "Discord token has expired. Please refresh your token.",
-                    DisconnectReason.RATE_LIMITED: "Discord rate limit hit. Wait before reconnecting.",
-                    DisconnectReason.SESSION_EXPIRED: "Discord session expired. Reconnecting...",
-                }
-                detailed_msg = reason_messages.get(reason, error_msg)
-                
-                monitor.set_disconnected(
-                    "discord",
-                    reason=reason,
-                    error_message=detailed_msg,
-                    error_code=str(error_code) if error_code else None
-                )
-                _original_print(f"[CONNECTION MONITOR] Discord set to disconnected: {reason.value}")
-                
-                if DATABASE_MODULE_AVAILABLE:
-                    from gui_app import database as db
-                    db.save_connection_event(
-                        service_name="discord",
-                        service_type="messaging",
-                        event_type="error",
-                        status="disconnected",
-                        disconnect_reason=reason.value,
-                        error_message=detailed_msg,
-                        error_code=str(error_code) if error_code else None
-                    )
-            except Exception as monitor_err:
-                _original_print(f"[Discord Thread] Connection monitor error: {monitor_err}")
-                import traceback
-                traceback.print_exc()
-                    
             _discord_error_queue.put(e)
             raise
     

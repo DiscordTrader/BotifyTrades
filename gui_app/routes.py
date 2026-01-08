@@ -8446,91 +8446,6 @@ def register_routes(app):
             print(f"[API] Error getting synced orders: {e}")
             return jsonify({'error': str(e)}), 500
 
-    # ============ CONNECTION HEALTH MONITORING API ============
-    
-    @app.route('/api/connection-status', methods=['GET'])
-    def api_get_connection_status():
-        """Get real-time connection status for all services (brokers, Discord, Telegram)"""
-        try:
-            from src.connection_monitor import get_connection_monitor
-            from gui_app.broker_credentials_service import get_enabled_brokers
-            monitor = get_connection_monitor()
-            
-            all_status = monitor.get_all_status()
-            active_services = monitor.get_active_services()
-            disconnected = monitor.get_disconnected_services()
-            
-            configured_brokers = get_enabled_brokers()
-            
-            telegram_settings = db.get_telegram_settings()
-            telegram_configured = bool(telegram_settings.get('api_id') and telegram_settings.get('api_hash'))
-            
-            discord_token = db.get_setting('discord_token')
-            discord_configured = bool(discord_token)
-            
-            db_events = db.get_connection_events(limit=50)
-            
-            return jsonify({
-                'success': True,
-                'status': all_status,
-                'active': active_services,
-                'disconnected': disconnected,
-                'alerts': disconnected,
-                'recent_events': db_events[:20],
-                'configured_services': {
-                    'discord': discord_configured,
-                    'telegram': telegram_configured,
-                    'brokers': configured_brokers
-                }
-            })
-        except ImportError:
-            db_status = db.get_latest_connection_status()
-            return jsonify({
-                'success': True,
-                'status': db_status,
-                'active': db_status,
-                'disconnected': [],
-                'alerts': [],
-                'recent_events': [],
-                'configured_services': {}
-            })
-        except Exception as e:
-            print(f"[API] Error getting connection status: {e}")
-            return jsonify({'error': str(e)}), 500
-    
-    @app.route('/api/connection-status/events', methods=['GET'])
-    def api_get_connection_events():
-        """Get connection health event history"""
-        try:
-            service = request.args.get('service', None)
-            limit = request.args.get('limit', 100, type=int)
-            events = db.get_connection_events(service_name=service, limit=limit)
-            return jsonify({'success': True, 'events': events})
-        except Exception as e:
-            print(f"[API] Error getting connection events: {e}")
-            return jsonify({'error': str(e)}), 500
-    
-    @app.route('/api/connection-status/test/<service_name>', methods=['POST'])
-    def api_test_connection(service_name):
-        """Manually trigger a connection test for a specific service"""
-        try:
-            from src.connection_monitor import get_connection_monitor, ConnectionStatus
-            monitor = get_connection_monitor()
-            
-            current = monitor.get_service_status(service_name)
-            if not current:
-                return jsonify({'success': False, 'error': f'Unknown service: {service_name}'}), 404
-            
-            return jsonify({
-                'success': True,
-                'service': service_name,
-                'current_status': current,
-                'message': 'Connection test initiated'
-            })
-        except Exception as e:
-            print(f"[API] Error testing connection for {service_name}: {e}")
-            return jsonify({'error': str(e)}), 500
-
     # ============ CHANNEL MAPPINGS API (ADMIN ONLY) ============
     
     @app.route('/api/channel_mappings', methods=['GET'])
@@ -9513,48 +9428,12 @@ def register_routes(app):
                 allowed_guilds=data.get('allowed_guilds', [])
             )
             
-            db.save_setting('discord_token', token)
-            
             return jsonify({
                 'success': True,
-                'message': 'Discord token saved! Restart the bot to connect with the new token.'
+                'message': 'Discord credentials saved. Use Connect button to connect.'
             })
         except Exception as e:
             print(f"[API] Error saving Discord credentials: {e}")
-            return jsonify({'success': False, 'error': str(e)}), 500
-    
-    @app.route('/api/brokers/connect/discord', methods=['POST'])
-    def api_connect_discord():
-        """Connect to Discord with saved credentials"""
-        try:
-            from .broker_credentials_service import get_discord_credentials
-            
-            creds = get_discord_credentials()
-            token = creds.get('token', '')
-            
-            if not token:
-                return jsonify({
-                    'success': False,
-                    'error': 'Discord token not configured. Please save your token first.'
-                }), 400
-            
-            global _bot_instance
-            if _bot_instance:
-                discord_connected = getattr(_bot_instance, 'discord_connected', False)
-                if discord_connected:
-                    return jsonify({
-                        'success': True,
-                        'message': 'Discord is already connected',
-                        'account': {'username': 'Connected'}
-                    })
-            
-            return jsonify({
-                'success': True,
-                'message': 'Discord token saved. Bot will reconnect automatically. Restart the bot to apply changes.',
-                'requires_restart': True
-            })
-        except Exception as e:
-            print(f"[API] Error connecting Discord: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/brokers/credentials/webull', methods=['GET'])

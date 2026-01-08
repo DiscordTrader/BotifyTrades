@@ -3100,8 +3100,6 @@ async function loadDiscordCredentials() {
 }
 
 document.getElementById('save-discord-creds').addEventListener('click', async () => {
-    console.log('[Discord Save] Button clicked');
-    const btn = document.getElementById('save-discord-creds');
     const token = document.getElementById('discord-token').value.trim();
     
     if (!token) {
@@ -3109,33 +3107,17 @@ document.getElementById('save-discord-creds').addEventListener('click', async ()
         return;
     }
     
-    btn.disabled = true;
-    btn.textContent = '⏳ Saving...';
-    
     try {
-        console.log('[Discord Save] Sending token...');
         const response = await fetch('/api/brokers/credentials/discord', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token })
         });
         
-        console.log('[Discord Save] Response status:', response.status);
         const result = await response.json();
-        console.log('[Discord Save] Result:', result);
         showMessage(result.success ? 'success' : 'error', result.message || result.error);
-        
-        if (result.success) {
-            document.getElementById('discord-token').value = '';
-            document.getElementById('discord-token').placeholder = token.substring(0, 20) + '...' + token.slice(-10);
-            updateConnectionStatus('discord-connection-status', 'disconnected', 'Token saved - restart bot to connect');
-        }
     } catch (error) {
-        console.error('[Discord Save] Error:', error);
-        showMessage('error', 'Failed to save: ' + error.message);
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '💾 Save';
+        showMessage('error', error.message);
     }
 });
 

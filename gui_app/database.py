@@ -1186,26 +1186,6 @@ def init_db():
         )
     ''')
     
-    # Connection health events - track connection/disconnection history
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS connection_health_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            service_name TEXT NOT NULL,
-            service_type TEXT NOT NULL,
-            event_type TEXT NOT NULL,
-            status TEXT,
-            disconnect_reason TEXT,
-            error_message TEXT,
-            error_code TEXT,
-            latency_ms REAL,
-            metadata TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_conn_health_service ON connection_health_events(service_name)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_conn_health_type ON connection_health_events(event_type)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_conn_health_created ON connection_health_events(created_at)')
-    
     # Trade monitor - track synced broker orders to prevent duplicate posts
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS synced_orders (
@@ -7085,103 +7065,6 @@ def get_recent_synced_orders(limit: int = 50) -> List[Dict]:
     except Exception as e:
         print(f"[DATABASE] Error getting synced orders: {e}")
         return []
-
-
-# ==================== CONNECTION HEALTH TRACKING ====================
-
-def save_connection_event(service_name: str, service_type: str, event_type: str,
-                         status: str = None, disconnect_reason: str = None,
-                         error_message: str = None, error_code: str = None,
-                         latency_ms: float = None, metadata: Dict = None) -> bool:
-    """Save a connection health event to the database."""
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    try:
-        import json
-        metadata_json = json.dumps(metadata) if metadata else None
-        cursor.execute('''
-            INSERT INTO connection_health_events 
-            (service_name, service_type, event_type, status, disconnect_reason,
-             error_message, error_code, latency_ms, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (service_name, service_type, event_type, status, disconnect_reason,
-              error_message, error_code, latency_ms, metadata_json))
-        conn.commit()
-        return True
-    except Exception as e:
-        print(f"[DATABASE] Error saving connection event: {e}")
-        return False
-
-
-def get_connection_events(service_name: str = None, limit: int = 100) -> List[Dict]:
-    """Get recent connection health events."""
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    try:
-        if service_name:
-            cursor.execute('''
-                SELECT * FROM connection_health_events 
-                WHERE service_name = ?
-                ORDER BY created_at DESC 
-                LIMIT ?
-            ''', (service_name, limit))
-        else:
-            cursor.execute('''
-                SELECT * FROM connection_health_events 
-                ORDER BY created_at DESC 
-                LIMIT ?
-            ''', (limit,))
-        return [dict(row) for row in cursor.fetchall()]
-    except Exception as e:
-        print(f"[DATABASE] Error getting connection events: {e}")
-        return []
-
-
-def get_latest_connection_status() -> Dict[str, Dict]:
-    """Get the latest status for each service."""
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute('''
-            SELECT DISTINCT service_name FROM connection_health_events
-        ''')
-        services = [row[0] for row in cursor.fetchall()]
-        
-        result = {}
-        for service in services:
-            cursor.execute('''
-                SELECT * FROM connection_health_events 
-                WHERE service_name = ?
-                ORDER BY created_at DESC 
-                LIMIT 1
-            ''', (service,))
-            row = cursor.fetchone()
-            if row:
-                result[service] = dict(row)
-        return result
-    except Exception as e:
-        print(f"[DATABASE] Error getting latest connection status: {e}")
-        return {}
-
-
-def cleanup_old_connection_events(days: int = 7) -> int:
-    """Delete connection events older than specified days."""
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute('''
-            DELETE FROM connection_health_events 
-            WHERE created_at < datetime('now', ?)
-        ''', (f'-{days} days',))
-        conn.commit()
-        return cursor.rowcount
-    except Exception as e:
-        print(f"[DATABASE] Error cleaning up connection events: {e}")
-        return 0
 
 
 # ==================== COUNTRY & BROKER MANAGEMENT ====================
