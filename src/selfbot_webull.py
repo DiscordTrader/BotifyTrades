@@ -9152,7 +9152,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                         'expiry': signal.get('expiry'),
                                                         'opt_type': signal.get('opt_type'),
                                                         'channel_id': signal['channel_id'],
-                                                        'received_at': datetime.now()
+                                                        'received_at': datetime.now(),
+                                                        'exit_reason': signal.get('exit_reason') or signal.get('risk_trigger', 'RISK_EXIT')
                                                     }
                                                     lot_result = matcher.process_signal(lot_signal)
                                                     if lot_result:
@@ -9987,7 +9988,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             'expiry': signal.get('expiry'),
                                             'opt_type': signal.get('opt_type'),
                                             'channel_id': signal['channel_id'],
-                                            'received_at': datetime.now()
+                                            'received_at': datetime.now(),
+                                            'exit_reason': signal.get('exit_reason') or signal.get('risk_trigger', 'RISK_EXIT')
                                         }
                                         lot_result = matcher.process_signal(lot_signal)
                                         if lot_result:

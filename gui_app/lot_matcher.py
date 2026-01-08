@@ -117,7 +117,8 @@ class LotMatcher:
                 signal_id=signal.get('signal_id'),
                 close_qty=close_qty,
                 close_price=signal['price'],
-                closed_at=closed_at
+                closed_at=closed_at,
+                exit_reason=signal.get('exit_reason', 'MANUAL')
             )
             
             if closure_id:

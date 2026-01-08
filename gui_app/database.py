@@ -804,6 +804,7 @@ def init_db():
             pnl_percent REAL NOT NULL,
             holding_days REAL,
             author_name TEXT,
+            exit_reason TEXT,
             FOREIGN KEY (lot_id) REFERENCES signal_lots(id),
             FOREIGN KEY (channel_id) REFERENCES channels(id),
             FOREIGN KEY (signal_id) REFERENCES signals(id),
@@ -1450,6 +1451,15 @@ def init_db():
         cursor.execute('ALTER TABLE lot_closures ADD COLUMN user_id INTEGER')
         conn.commit()
         print("[DATABASE] ✓ User ID tracking column added to lot_closures")
+    
+    # Migration: Add exit_reason to lot_closures for tracking WHY positions were closed
+    try:
+        cursor.execute('SELECT exit_reason FROM lot_closures LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding exit_reason column to lot_closures table...")
+        cursor.execute('ALTER TABLE lot_closures ADD COLUMN exit_reason TEXT')
+        conn.commit()
+        print("[DATABASE] ✓ Exit reason tracking column added to lot_closures")
     
     # Create GUI_EXEC channel for tracking GUI-originated trades (if not exists)
     cursor.execute("""
@@ -2919,8 +2929,12 @@ def get_all_open_lots_for_channel(channel_id: int):
     return cursor.fetchall()
 
 
-def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, close_price: float, closed_at):
-    """Close a lot (fully or partially) and record PNL"""
+def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, close_price: float, closed_at, exit_reason: str = None):
+    """Close a lot (fully or partially) and record PNL
+    
+    Args:
+        exit_reason: Why the position was closed (e.g., 'PT1', 'STOP_LOSS', 'TRAILING_STOP', 'MANUAL')
+    """
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -2962,9 +2976,9 @@ def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, clos
     cursor.execute('''
         INSERT INTO lot_closures (
             lot_id, channel_id, signal_id, closed_qty, close_price,
-            closed_at, pnl, pnl_percent, holding_days, author_name, user_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (lot_id, channel_id, signal_id, close_qty, close_price, closed_at, pnl, pnl_percent, holding_days, author_name, user_id))
+            closed_at, pnl, pnl_percent, holding_days, author_name, user_id, exit_reason
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (lot_id, channel_id, signal_id, close_qty, close_price, closed_at, pnl, pnl_percent, holding_days, author_name, user_id, exit_reason))
     
     # Update lot status
     new_remaining = lot['remaining_qty'] - close_qty
