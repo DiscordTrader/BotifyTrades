@@ -3745,7 +3745,7 @@
   },
   "ALPACA_PAPER_SLRX_stock": {
     "entry_price": 0.7993,
-    "highest_price": 0.835,
+    "highest_price": 0.84,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
