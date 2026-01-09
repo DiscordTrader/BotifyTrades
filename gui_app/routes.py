@@ -3912,12 +3912,17 @@ def register_routes(app):
         For options, requires option_id to match the correct position.
         user_limit_price: If provided, use this as the limit price. None = market/auto-calculated.
         """
+        import sys
+        print(f"[CLOSE] _close_webull_position ENTERED: symbol={symbol}, qty={quantity}, asset={asset_type}", flush=True)
+        sys.stdout.flush()
+        
         # Ensure we have a broker and client
         if not hasattr(_bot_instance, 'broker') or _bot_instance.broker is None:
             return {'success': False, 'error': 'Broker not initialized'}
 
         broker = _bot_instance.broker
         wb = getattr(broker, '_client', None) or getattr(broker, 'wb', None)
+        print(f"[CLOSE] Broker: {broker}, wb client: {wb is not None}", flush=True)
 
         if wb is None:
             return {'success': False, 'error': 'Webull client not available'}
