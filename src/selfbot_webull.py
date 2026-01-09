@@ -6683,6 +6683,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             'is_market_order': True,
                             '_conditional_order_id': order['id'],
                             '_broker_override': broker_name,
+                            'channel_id': order.get('channel_id'),  # Critical for RiskManager tracking
                         }
                         
                         # Handle Indian options orders
@@ -6750,13 +6751,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             print(f"[CONDITIONAL] Using HYBRID SL: ${sl_fixed} or {sl_pct}%", flush=True)
                         elif has_signal_sl:
                             if sl_type == 'percent':
-                                signal['stop_loss_pct'] = order['stop_loss_value']
+                                sl_pct = order['stop_loss_value']
+                                signal['stop_loss_pct'] = sl_pct
+                                # Calculate actual stop loss price from percentage
+                                sl_price = triggered_price * (1 - sl_pct / 100)
+                                signal['stop_loss_price'] = round(sl_price, 2)
+                                print(f"[CONDITIONAL] Using signal SL: {sl_pct}% = ${signal['stop_loss_price']:.2f} (entry: ${triggered_price:.2f})", flush=True)
                             else:
                                 signal['stop_loss_price'] = order['stop_loss_value']
-                            print(f"[CONDITIONAL] Using signal SL: {order['stop_loss_value']}", flush=True)
+                                print(f"[CONDITIONAL] Using signal SL: ${order['stop_loss_value']}", flush=True)
                         elif channel_settings and channel_settings.get('stop_loss_pct'):
-                            signal['stop_loss_pct'] = channel_settings['stop_loss_pct']
-                            print(f"[CONDITIONAL] Using channel SL: {channel_settings['stop_loss_pct']}%", flush=True)
+                            ch_sl_pct = channel_settings['stop_loss_pct']
+                            signal['stop_loss_pct'] = ch_sl_pct
+                            # Calculate actual stop loss price from channel percentage
+                            ch_sl_price = triggered_price * (1 - ch_sl_pct / 100)
+                            signal['stop_loss_price'] = round(ch_sl_price, 2)
+                            print(f"[CONDITIONAL] Using channel SL: {ch_sl_pct}% = ${signal['stop_loss_price']:.2f}", flush=True)
                         
                         # Profit Targets: Signal values first, then channel settings
                         if has_signal_targets:
@@ -6784,15 +6794,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     sys.stderr.write(f"[CONDITIONAL EXEC] Using signal targets: {targets}\n")
                                     sys.stderr.flush()
                         elif channel_settings:
-                            channel_targets = []
+                            channel_targets_pct = []
                             for i in range(1, 5):
                                 pct = channel_settings.get(f'profit_target_{i}_pct')
                                 if pct:
-                                    channel_targets.append(pct)
-                            if channel_targets:
-                                signal['profit_target_pct'] = channel_targets[0]
-                                signal['profit_targets_pct'] = channel_targets
-                                print(f"[CONDITIONAL] Using channel targets: {channel_targets}%", flush=True)
+                                    channel_targets_pct.append(pct)
+                            if channel_targets_pct:
+                                # Convert percentage targets to actual prices
+                                channel_targets_price = [round(triggered_price * (1 + pct / 100), 2) for pct in channel_targets_pct]
+                                signal['profit_target_pct'] = channel_targets_pct[0]
+                                signal['profit_targets_pct'] = channel_targets_pct
+                                signal['profit_target_price'] = channel_targets_price[0]
+                                signal['profit_targets'] = channel_targets_price
+                                print(f"[CONDITIONAL] Using channel targets: {channel_targets_pct}% = ${channel_targets_price}", flush=True)
                         
                         # Trailing Stop: Always from channel settings
                         if channel_settings:
