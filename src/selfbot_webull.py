@@ -7862,9 +7862,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     str(message.channel.id), ticker, entry_price, 'BTO'
                 )
                 
+                signal_type = trade_idea.get('signal_type', 'entry')
+                hit_levels = trade_idea.get('hit_levels', [])
+                pending_levels = trade_idea.get('pending_levels', [])
+                is_update = trade_idea.get('is_update', False)
+                
                 if existing_instance:
-                    # This is an update to an existing signal - log but don't execute
-                    print(f"[DEDUPE] ⚠️ Update detected for {ticker} @ {entry_price} (instance #{existing_instance['id']}, update #{existing_instance['update_count'] + 1})")
+                    # This is an update to an existing signal - log but don't execute new BTO
+                    update_reason = []
+                    if hit_levels:
+                        update_reason.append(f"HIT levels: {hit_levels}")
+                    if is_update:
+                        update_reason.append("SL/PT updated")
+                    reason_str = f" ({', '.join(update_reason)})" if update_reason else ""
+                    
+                    print(f"[DEDUPE] ⚠️ Update detected for {ticker} @ {entry_price} (instance #{existing_instance['id']}, update #{existing_instance['update_count'] + 1}){reason_str}")
                     update_signal_instance(
                         existing_instance['id'],
                         message_id=str(message.id),
@@ -7875,9 +7887,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # Check if this is an exit signal
                     if trade_idea.get('is_exit'):
                         close_signal_instance(instance_id=existing_instance['id'], close_reason='exit_signal')
-                        print(f"[DEDUPE] ✓ Closed signal instance for {ticker} - exit detected")
+                        print(f"[DEDUPE] ✓ Closed signal instance for {ticker} - exit detected ('all out')")
                     
                     return  # Skip execution, this is just an update
+                
+                # Check if signal itself indicates update (strikethrough levels) but no existing instance
+                if signal_type == 'update' and not existing_instance:
+                    print(f"[TRADE IDEA] ⚠️ Update signal for {ticker} but no open position tracked - skipping")
+                    return
                 
                 # New signal - create instance and proceed
                 instance_id = create_signal_instance(
