@@ -4557,7 +4557,7 @@
   },
   "ALPACA_PAPER_LXEO_11.0_2026-01-16_C": {
     "entry_price": 2.05,
-    "highest_price": 2.35,
+    "highest_price": 2.7,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
