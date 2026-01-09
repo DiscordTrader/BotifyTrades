@@ -4160,7 +4160,8 @@ def register_routes(app):
                     return {'success': False, 'error': f'Unsupported asset_type: {asset_type}'}
 
             except Exception as e:
-                print(f"[API] Error in _close_webull_position blocking call: {e}")
+                print(f"[DEBUG-X1] Error in blocking call: {e}", flush=True)
+                print(f"[DEBUG-X1] symbol={symbol}, asset_type={asset_type}, quantity={quantity}", flush=True)
                 import traceback
                 traceback.print_exc()
                 return {'success': False, 'error': str(e)}
