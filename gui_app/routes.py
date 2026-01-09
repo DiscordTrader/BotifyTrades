@@ -9337,6 +9337,150 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/simulate/monte-carlo', methods=['POST'])
+    def api_monte_carlo_simulation():
+        """Run Monte Carlo simulation with 1000+ iterations for probability distributions"""
+        try:
+            data = request.get_json()
+            
+            entity_type = data.get('entity_type', 'user')
+            entity_id = data.get('entity_id', '')
+            
+            if not entity_id:
+                return jsonify({'success': False, 'error': 'entity_id is required'}), 400
+            
+            portfolio_start = float(data.get('portfolio_start', 3000))
+            position_size_pct = float(data.get('position_size_pct', 5))
+            # Enforce iteration limits (100-10000) for performance and statistical validity
+            iterations = max(100, min(int(data.get('iterations', 1000)), 10000))
+            include_theta = data.get('include_theta', True)
+            include_correlation = data.get('include_correlation', True)
+            
+            from src.services.simulation import (
+                fetch_user_trade_history, 
+                fetch_channel_trade_history,
+                run_monte_carlo_simulation
+            )
+            
+            if entity_type == 'user':
+                trades = fetch_user_trade_history(entity_id, limit=500)
+            else:
+                trades = fetch_channel_trade_history(entity_id, limit=500)
+            
+            if not trades:
+                return jsonify({
+                    'success': False,
+                    'error': f'No trade history found for {entity_type}: {entity_id}'
+                }), 404
+            
+            result = run_monte_carlo_simulation(
+                trades=trades,
+                portfolio_start=portfolio_start,
+                position_size_pct=position_size_pct,
+                iterations=iterations,
+                include_theta=include_theta,
+                include_correlation_penalty=include_correlation
+            )
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            print(f"[API] Monte Carlo simulation error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/simulate/comprehensive', methods=['POST'])
+    def api_comprehensive_projection():
+        """Run comprehensive portfolio projection across all risk presets"""
+        try:
+            data = request.get_json()
+            
+            entity_type = data.get('entity_type', 'user')
+            entity_id = data.get('entity_id', '')
+            
+            if not entity_id:
+                return jsonify({'success': False, 'error': 'entity_id is required'}), 400
+            
+            user_profile = data.get('user_profile', {})
+            if 'cash_balance' not in user_profile:
+                user_profile['cash_balance'] = float(data.get('portfolio_start', 3000))
+            if 'risk_tolerance' not in user_profile:
+                user_profile['risk_tolerance'] = data.get('risk_tolerance', 'moderate')
+            
+            from src.services.simulation import run_comprehensive_portfolio_projection
+            
+            result = run_comprehensive_portfolio_projection(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                user_profile=user_profile
+            )
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            print(f"[API] Comprehensive projection error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/simulate/correlation', methods=['POST'])
+    def api_correlation_analysis():
+        """Analyze correlation and concentration risk in a trader's positions"""
+        try:
+            data = request.get_json()
+            
+            entity_type = data.get('entity_type', 'user')
+            entity_id = data.get('entity_id', '')
+            
+            if not entity_id:
+                return jsonify({'success': False, 'error': 'entity_id is required'}), 400
+            
+            from src.services.simulation import (
+                fetch_user_trade_history,
+                fetch_channel_trade_history,
+                analyze_correlation_risk
+            )
+            
+            if entity_type == 'user':
+                trades = fetch_user_trade_history(entity_id, limit=500)
+            else:
+                trades = fetch_channel_trade_history(entity_id, limit=500)
+            
+            if not trades:
+                return jsonify({
+                    'success': False,
+                    'error': f'No trade history found for {entity_type}: {entity_id}'
+                }), 404
+            
+            result = analyze_correlation_risk(trades)
+            result['success'] = True
+            result['entity_type'] = entity_type
+            result['entity_id'] = entity_id
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            print(f"[API] Correlation analysis error: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/simulate/risk-presets', methods=['GET'])
+    def api_get_risk_presets():
+        """Get available risk scenario presets"""
+        try:
+            from src.services.simulation import RISK_PRESETS
+            
+            return jsonify({
+                'success': True,
+                'presets': RISK_PRESETS
+            })
+            
+        except Exception as e:
+            print(f"[API] Risk presets error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     # ============ BROKER CONNECTION MANAGEMENT API ============
     
     @app.route('/api/brokers/status', methods=['GET'])

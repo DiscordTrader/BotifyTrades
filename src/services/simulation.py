@@ -2897,3 +2897,745 @@ def run_custom_trade_simulation(
         'trade_breakdown': trade_breakdown,
         'skipped_trades': skipped_trades
     }
+
+
+# =============================================================================
+# ENHANCED SIMULATION ENGINE - INDUSTRY-GRADE ACCURACY
+# =============================================================================
+# Version 2.0 - Monte Carlo, NBBO, Correlation, Theta Decay
+# =============================================================================
+
+@dataclass
+class UserPortfolioProfile:
+    """User portfolio metadata for personalized simulations."""
+    cash_balance: float
+    margin_available: float = 0.0
+    option_approval_level: int = 2  # 1-4 (1=covered only, 4=naked options)
+    max_single_position_pct: float = 0.25  # Max 25% of portfolio per trade
+    max_daily_trades: int = 10
+    risk_tolerance: str = "moderate"  # conservative, moderate, aggressive
+    margin_enabled: bool = False
+    pdt_restricted: bool = True  # Pattern Day Trader rule applies
+
+
+@dataclass 
+class NBBOSnapshot:
+    """National Best Bid and Offer snapshot at signal time."""
+    symbol: str
+    timestamp: str
+    bid: float
+    ask: float
+    spread: float
+    spread_pct: float
+    mid_price: float
+    volume: int = 0
+    source: str = "unknown"  # broker, finnhub, yfinance
+
+
+# Risk scenario presets
+RISK_PRESETS = {
+    'conservative': {
+        'name': 'Conservative',
+        'description': 'Low risk, steady growth. Suitable for capital preservation.',
+        'position_pct': 2,
+        'max_daily_risk_pct': 5,
+        'max_single_position_pct': 10,
+        'stop_loss_pct': 15,
+        'color': '#10b981',
+        'icon': '🛡️'
+    },
+    'moderate': {
+        'name': 'Moderate', 
+        'description': 'Balanced risk/reward. Standard position sizing.',
+        'position_pct': 5,
+        'max_daily_risk_pct': 15,
+        'max_single_position_pct': 20,
+        'stop_loss_pct': 25,
+        'color': '#3b82f6',
+        'icon': '⚖️'
+    },
+    'aggressive': {
+        'name': 'Aggressive',
+        'description': 'Higher risk for faster growth. Larger positions.',
+        'position_pct': 10,
+        'max_daily_risk_pct': 30,
+        'max_single_position_pct': 25,
+        'stop_loss_pct': 35,
+        'color': '#f59e0b',
+        'icon': '🚀'
+    },
+    'high_risk': {
+        'name': 'High Risk',
+        'description': 'Maximum growth potential. High drawdown risk.',
+        'position_pct': 15,
+        'max_daily_risk_pct': 50,
+        'max_single_position_pct': 30,
+        'stop_loss_pct': 50,
+        'color': '#ef4444',
+        'icon': '⚡'
+    }
+}
+
+
+# Sector mappings for correlation analysis
+SECTOR_MAPPINGS = {
+    'tech': ['AAPL', 'MSFT', 'GOOGL', 'GOOG', 'META', 'AMZN', 'NVDA', 'AMD', 'INTC', 'TSM', 'AVGO', 'QCOM', 'CRM', 'ADBE', 'ORCL', 'IBM', 'NOW', 'SNOW', 'NET', 'PLTR', 'MU', 'AMAT', 'LRCX', 'KLAC'],
+    'semiconductor': ['NVDA', 'AMD', 'INTC', 'TSM', 'AVGO', 'QCOM', 'MU', 'AMAT', 'LRCX', 'KLAC', 'MRVL', 'ON', 'MCHP', 'TXN', 'ADI', 'NXPI', 'ASML', 'SMCI', 'ARM'],
+    'ev_energy': ['TSLA', 'RIVN', 'LCID', 'NIO', 'XPEV', 'LI', 'F', 'GM', 'PLUG', 'FCEL', 'ENPH', 'SEDG', 'RUN', 'CHPT', 'BLNK', 'QS', 'CCIV'],
+    'finance': ['JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'USB', 'PNC', 'TFC', 'SCHW', 'BLK', 'SPGI', 'ICE', 'CME', 'V', 'MA', 'AXP', 'COF', 'DFS', 'SYF'],
+    'healthcare': ['JNJ', 'UNH', 'PFE', 'ABBV', 'MRK', 'LLY', 'TMO', 'ABT', 'DHR', 'BMY', 'AMGN', 'GILD', 'VRTX', 'REGN', 'ISRG', 'SYK', 'MDT', 'ZTS', 'DXCM', 'ILMN'],
+    'biotech': ['MRNA', 'BNTX', 'NVAX', 'REGN', 'VRTX', 'BIIB', 'GILD', 'AMGN', 'ILMN', 'SGEN', 'ALNY', 'BMRN', 'INCY', 'SRPT', 'EXEL', 'IONS'],
+    'retail': ['AMZN', 'WMT', 'TGT', 'COST', 'HD', 'LOW', 'TJX', 'ROST', 'DG', 'DLTR', 'BURL', 'BBY', 'ULTA', 'LULU', 'NKE', 'GPS', 'ANF', 'AEO'],
+    'energy': ['XOM', 'CVX', 'COP', 'EOG', 'SLB', 'MPC', 'PSX', 'VLO', 'OXY', 'PXD', 'DVN', 'FANG', 'HAL', 'BKR', 'KMI', 'WMB', 'ET', 'OKE'],
+    'meme': ['GME', 'AMC', 'BB', 'BBBY', 'KOSS', 'EXPR', 'NAKD', 'CLOV', 'WISH', 'WKHS', 'GOEV', 'SPCE', 'PLTR', 'SOFI', 'HOOD'],
+    'ai': ['NVDA', 'MSFT', 'GOOGL', 'META', 'AMD', 'PLTR', 'AI', 'PATH', 'SNOW', 'DDOG', 'MDB', 'CRWD', 'S', 'UPST', 'SOUN', 'BBAI']
+}
+
+
+def get_ticker_sectors(symbol: str) -> List[str]:
+    """Get all sectors a ticker belongs to."""
+    base_symbol = symbol.split()[0].upper()  # Handle "AAPL 150C 1/15" format
+    sectors = []
+    for sector, tickers in SECTOR_MAPPINGS.items():
+        if base_symbol in tickers:
+            sectors.append(sector)
+    return sectors if sectors else ['other']
+
+
+def calculate_theta_decay(
+    days_held: int,
+    days_to_expiry: int,
+    option_price: float,
+    asset_type: str = 'option'
+) -> float:
+    """
+    Calculate theta decay penalty for options held multiple days.
+    
+    Uses accelerating decay model: theta increases as expiration approaches.
+    
+    Args:
+        days_held: Number of days the option was held
+        days_to_expiry: Days to expiration at entry
+        option_price: Option premium at entry
+        asset_type: 'option' or 'stock'
+    
+    Returns:
+        Estimated theta decay as percentage of option value lost
+    """
+    if asset_type != 'option' or days_held <= 0 or days_to_expiry <= 0:
+        return 0.0
+    
+    # Theta decay accelerates as expiration approaches
+    # Weekly options (< 7 DTE): ~3-5% per day
+    # Monthly options (7-30 DTE): ~1-2% per day
+    # LEAPS (> 90 DTE): ~0.1-0.3% per day
+    
+    if days_to_expiry <= 7:
+        base_theta_pct = 0.04  # 4% per day for weeklies
+    elif days_to_expiry <= 14:
+        base_theta_pct = 0.025  # 2.5% per day
+    elif days_to_expiry <= 30:
+        base_theta_pct = 0.015  # 1.5% per day
+    elif days_to_expiry <= 60:
+        base_theta_pct = 0.008  # 0.8% per day
+    else:
+        base_theta_pct = 0.003  # 0.3% per day for LEAPS
+    
+    # Accelerating decay as we approach expiration
+    # Days remaining after hold
+    remaining_days = max(1, days_to_expiry - days_held)
+    acceleration_factor = min(2.0, days_to_expiry / remaining_days)
+    
+    # Calculate total theta decay
+    total_decay_pct = base_theta_pct * days_held * acceleration_factor
+    
+    # Cap at reasonable maximum (can't lose more than option value to theta alone)
+    return min(total_decay_pct * 100, 80.0)
+
+
+def analyze_correlation_risk(trades: List[TradeRecord]) -> Dict[str, Any]:
+    """
+    Analyze correlation and concentration risk in a set of trades.
+    
+    Flags when multiple positions are in correlated sectors.
+    
+    Args:
+        trades: List of trade records
+    
+    Returns:
+        Correlation analysis with sector breakdown and risk flags
+    """
+    if not trades:
+        return {
+            'has_risk': False,
+            'sector_breakdown': {},
+            'concentration_warnings': [],
+            'diversification_score': 100,
+            'analysis': 'No trades to analyze'
+        }
+    
+    # Count trades by sector
+    sector_counts: Dict[str, int] = {}
+    sector_exposure: Dict[str, float] = {}
+    ticker_to_sectors: Dict[str, List[str]] = {}
+    
+    for trade in trades:
+        base_symbol = trade.ticker.split()[0].upper() if trade.ticker else 'UNKNOWN'
+        sectors = get_ticker_sectors(base_symbol)
+        ticker_to_sectors[base_symbol] = sectors
+        
+        # Calculate position value
+        multiplier = 100 if trade.asset_type == 'option' else 1
+        position_value = (trade.open_price or 0) * (trade.quantity or 1) * multiplier
+        
+        for sector in sectors:
+            sector_counts[sector] = sector_counts.get(sector, 0) + 1
+            sector_exposure[sector] = sector_exposure.get(sector, 0) + position_value
+    
+    total_exposure = sum(sector_exposure.values())
+    
+    # Calculate sector percentages
+    sector_breakdown = {}
+    for sector, count in sector_counts.items():
+        pct = (sector_exposure[sector] / total_exposure * 100) if total_exposure > 0 else 0
+        sector_breakdown[sector] = {
+            'count': count,
+            'exposure': round(sector_exposure[sector], 2),
+            'percentage': round(pct, 1)
+        }
+    
+    # Generate concentration warnings
+    warnings = []
+    high_concentration_sectors = []
+    
+    for sector, data in sector_breakdown.items():
+        if sector == 'other':
+            continue
+        if data['percentage'] >= 50:
+            warnings.append({
+                'severity': 'critical',
+                'sector': sector,
+                'message': f"CRITICAL: {data['percentage']:.0f}% exposure to {sector} sector ({data['count']} positions). Highly correlated risk."
+            })
+            high_concentration_sectors.append(sector)
+        elif data['percentage'] >= 30:
+            warnings.append({
+                'severity': 'high',
+                'sector': sector,
+                'message': f"HIGH: {data['percentage']:.0f}% exposure to {sector} sector ({data['count']} positions). Consider diversifying."
+            })
+            high_concentration_sectors.append(sector)
+        elif data['count'] >= 3 and data['percentage'] >= 20:
+            warnings.append({
+                'severity': 'moderate',
+                'sector': sector,
+                'message': f"MODERATE: {data['count']} positions in {sector} sector ({data['percentage']:.0f}% exposure)."
+            })
+    
+    # Calculate diversification score (100 = well diversified, 0 = single sector)
+    if len(sector_breakdown) <= 1:
+        diversification_score = 10
+    else:
+        # Use Herfindahl-Hirschman Index (HHI) based scoring
+        hhi = sum((data['percentage'] / 100) ** 2 for data in sector_breakdown.values())
+        diversification_score = max(0, min(100, int((1 - hhi) * 100)))
+    
+    # Generate overall analysis
+    if len(warnings) == 0:
+        analysis = "Portfolio is well-diversified across sectors. No concentration risk detected."
+    elif any(w['severity'] == 'critical' for w in warnings):
+        analysis = f"CRITICAL concentration risk! {len(high_concentration_sectors)} sector(s) dominate the portfolio. A single sector event could cause significant losses."
+    elif any(w['severity'] == 'high' for w in warnings):
+        analysis = f"High sector concentration detected. Consider reducing exposure to {', '.join(high_concentration_sectors)}."
+    else:
+        analysis = "Moderate concentration in some sectors. Monitor for correlated moves."
+    
+    return {
+        'has_risk': len(warnings) > 0,
+        'sector_breakdown': sector_breakdown,
+        'concentration_warnings': warnings,
+        'diversification_score': diversification_score,
+        'high_concentration_sectors': high_concentration_sectors,
+        'analysis': analysis,
+        'total_exposure': round(total_exposure, 2),
+        'unique_tickers': len(set(t.ticker for t in trades if t.ticker)),
+        'unique_sectors': len([s for s in sector_breakdown if s != 'other'])
+    }
+
+
+def run_monte_carlo_simulation(
+    trades: List[TradeRecord],
+    portfolio_start: float,
+    position_size_pct: float,
+    iterations: int = MONTE_CARLO_ITERATIONS,
+    include_theta: bool = True,
+    include_correlation_penalty: bool = True
+) -> Dict[str, Any]:
+    """
+    Run Monte Carlo simulation with randomized trade sequences.
+    
+    Generates probability distributions instead of single deterministic outcomes.
+    
+    Args:
+        trades: Historical trade records
+        portfolio_start: Starting portfolio value
+        position_size_pct: Position size as percentage of portfolio
+        iterations: Number of simulation runs (default 1000)
+        include_theta: Apply theta decay to multi-day holds
+        include_correlation_penalty: Apply correlation risk penalties
+    
+    Returns:
+        Dict with percentile outcomes, probability distributions, risk metrics
+    """
+    import numpy as np
+    
+    if not trades:
+        return {
+            'success': False,
+            'error': 'No trades provided for Monte Carlo simulation'
+        }
+    
+    # Extract trade data with per-trade metadata
+    trade_data = []
+    
+    for trade in trades:
+        if trade.pnl_percent is None:
+            continue
+            
+        # Calculate holding period
+        hold_days = 1
+        try:
+            if trade.opened_at and trade.closed_at:
+                open_dt = datetime.fromisoformat(trade.opened_at[:10])
+                close_dt = datetime.fromisoformat(trade.closed_at[:10])
+                hold_days = max(1, (close_dt - open_dt).days)
+        except:
+            pass
+        
+        # Determine if option trade
+        is_option = trade.asset_type and trade.asset_type.lower() == 'option'
+        
+        trade_data.append({
+            'pnl_pct': trade.pnl_percent,
+            'hold_days': hold_days,
+            'is_option': is_option
+        })
+    
+    if not trade_data:
+        return {
+            'success': False,
+            'error': 'No valid P&L data in trades'
+        }
+    
+    num_trades = len(trade_data)
+    pnl_array = np.array([t['pnl_pct'] for t in trade_data])
+    hold_days_array = np.array([t['hold_days'] for t in trade_data])
+    is_option_array = np.array([t['is_option'] for t in trade_data])
+    
+    # Calculate per-trade theta decay penalties
+    theta_penalties = np.zeros(num_trades)
+    if include_theta:
+        for i in range(num_trades):
+            if is_option_array[i] and hold_days_array[i] > 1:
+                theta_penalties[i] = calculate_theta_decay(
+                    days_held=hold_days_array[i],
+                    days_to_expiry=14,  # Assume 14 DTE at entry
+                    option_price=1.0,
+                    asset_type='option'
+                )
+    
+    avg_theta_decay = float(np.mean(theta_penalties)) if include_theta else 0
+    
+    # Analyze correlation risk
+    correlation_analysis = analyze_correlation_risk(trades)
+    correlation_penalty = 0
+    if include_correlation_penalty and correlation_analysis['has_risk']:
+        # Apply penalty based on concentration level
+        if any(w['severity'] == 'critical' for w in correlation_analysis['concentration_warnings']):
+            correlation_penalty = 0.15  # 15% penalty for critical concentration
+        elif any(w['severity'] == 'high' for w in correlation_analysis['concentration_warnings']):
+            correlation_penalty = 0.08  # 8% penalty
+        else:
+            correlation_penalty = 0.03  # 3% penalty
+    
+    # Enforce minimum iterations for statistical validity
+    iterations = max(100, min(iterations, 10000))
+    
+    # Run Monte Carlo iterations
+    final_balances = []
+    max_drawdowns = []
+    wins_list = []
+    losses_list = []
+    ruin_count = 0
+    
+    # Pre-calculate slippage noise distribution parameters
+    base_slippage_mean = 0.5  # 0.5% average slippage
+    base_slippage_std = 0.3   # Standard deviation
+    
+    for iteration in range(iterations):
+        balance = portfolio_start
+        peak = portfolio_start
+        max_dd = 0
+        wins = 0
+        losses = 0
+        
+        # Randomly shuffle trade sequence for this iteration (true randomization)
+        shuffled_indices = np.random.permutation(num_trades)
+        
+        # Generate stochastic slippage for this iteration
+        slippage_noise = np.random.normal(base_slippage_mean, base_slippage_std, num_trades)
+        slippage_noise = np.clip(slippage_noise, 0, 2.0)  # Cap at 0-2%
+        
+        for i, idx in enumerate(shuffled_indices):
+            pnl_pct = pnl_array[idx]
+            
+            # Apply per-trade theta decay (not average)
+            if include_theta and theta_penalties[idx] > 0:
+                pnl_pct -= theta_penalties[idx]
+            
+            # Apply stochastic slippage (reduces all returns slightly)
+            pnl_pct -= slippage_noise[i]
+            
+            # Apply correlation penalty (reduces gains, increases losses)
+            if correlation_penalty > 0:
+                if pnl_pct > 0:
+                    pnl_pct *= (1 - correlation_penalty)
+                else:
+                    pnl_pct *= (1 + correlation_penalty)
+            
+            # Calculate position and P&L
+            position = balance * (position_size_pct / 100)
+            trade_pnl = position * (pnl_pct / 100)
+            balance += trade_pnl
+            
+            if trade_pnl > 0:
+                wins += 1
+            else:
+                losses += 1
+            
+            # Track drawdown
+            if balance > peak:
+                peak = balance
+            dd = (peak - balance) / peak if peak > 0 else 0
+            if dd > max_dd:
+                max_dd = dd
+            
+            # Check for ruin (50% loss)
+            if balance <= portfolio_start * 0.5:
+                ruin_count += 1
+                break
+        
+        final_balances.append(balance)
+        max_drawdowns.append(max_dd * 100)
+        wins_list.append(wins)
+        losses_list.append(losses)
+    
+    final_balances = np.array(final_balances)
+    max_drawdowns = np.array(max_drawdowns)
+    
+    # Calculate percentiles
+    percentiles = [5, 10, 25, 50, 75, 90, 95]
+    balance_percentiles = {p: round(float(np.percentile(final_balances, p)), 2) for p in percentiles}
+    drawdown_percentiles = {p: round(float(np.percentile(max_drawdowns, p)), 1) for p in percentiles}
+    
+    # Calculate returns
+    returns = ((final_balances - portfolio_start) / portfolio_start) * 100
+    return_percentiles = {p: round(float(np.percentile(returns, p)), 1) for p in percentiles}
+    
+    # Probability calculations
+    profit_probability = (final_balances > portfolio_start).sum() / iterations * 100
+    double_probability = (final_balances >= portfolio_start * 2).sum() / iterations * 100
+    loss_50_probability = (final_balances <= portfolio_start * 0.5).sum() / iterations * 100
+    
+    # Expected value
+    expected_final = float(np.mean(final_balances))
+    expected_return = ((expected_final - portfolio_start) / portfolio_start) * 100
+    
+    return {
+        'success': True,
+        'iterations': iterations,
+        'portfolio_start': portfolio_start,
+        'position_size_pct': position_size_pct,
+        
+        'expected_outcome': {
+            'expected_final_balance': round(expected_final, 2),
+            'expected_return_pct': round(expected_return, 1),
+            'expected_max_drawdown': round(float(np.mean(max_drawdowns)), 1),
+            'avg_wins': round(float(np.mean(wins_list)), 1),
+            'avg_losses': round(float(np.mean(losses_list)), 1)
+        },
+        
+        'probability_analysis': {
+            'profit_probability': round(profit_probability, 1),
+            'double_probability': round(double_probability, 1),
+            'loss_50_probability': round(loss_50_probability, 1),
+            'risk_of_ruin': round(ruin_count / iterations * 100, 1)
+        },
+        
+        'balance_distribution': {
+            'percentiles': balance_percentiles,
+            'worst_case_5pct': round(float(np.percentile(final_balances, 5)), 2),
+            'likely_range_25_75': [balance_percentiles[25], balance_percentiles[75]],
+            'best_case_95pct': round(float(np.percentile(final_balances, 95)), 2),
+            'median': balance_percentiles[50],
+            'std_dev': round(float(np.std(final_balances)), 2)
+        },
+        
+        'return_distribution': {
+            'percentiles': return_percentiles,
+            'worst_case_5pct': return_percentiles[5],
+            'likely_range_25_75': [return_percentiles[25], return_percentiles[75]],
+            'best_case_95pct': return_percentiles[95],
+            'median': return_percentiles[50]
+        },
+        
+        'drawdown_distribution': {
+            'percentiles': drawdown_percentiles,
+            'typical_max_drawdown': drawdown_percentiles[50],
+            'worst_case_max_drawdown': drawdown_percentiles[95]
+        },
+        
+        'adjustments_applied': {
+            'theta_decay': include_theta,
+            'avg_theta_penalty_pct': round(avg_theta_decay, 2) if include_theta else 0,
+            'correlation_penalty': include_correlation_penalty,
+            'correlation_penalty_pct': round(correlation_penalty * 100, 1) if correlation_penalty else 0,
+            'correlation_risk_level': 'critical' if correlation_penalty >= 0.15 else 'high' if correlation_penalty >= 0.08 else 'moderate' if correlation_penalty > 0 else 'low'
+        },
+        
+        'correlation_analysis': correlation_analysis
+    }
+
+
+def run_comprehensive_portfolio_projection(
+    entity_type: str,
+    entity_id: str,
+    user_profile: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Generate comprehensive portfolio projections across all risk presets.
+    
+    Compares 1:1 copy, conservative, moderate, aggressive, and Kelly-optimized strategies.
+    
+    Args:
+        entity_type: 'user' or 'channel'
+        entity_id: Username or channel name
+        user_profile: Optional user portfolio metadata (cash, margin, option level)
+    
+    Returns:
+        Comprehensive comparison with recommendations
+    """
+    # Fetch trade history
+    if entity_type == 'user':
+        trades = fetch_user_trade_history(entity_id, limit=500)
+    else:
+        trades = fetch_channel_trade_history(entity_id, limit=500)
+    
+    if not trades:
+        return {
+            'success': False,
+            'error': f'No trade history found for {entity_type}: {entity_id}'
+        }
+    
+    # Parse user profile
+    if user_profile is None:
+        user_profile = {}
+    
+    portfolio_start = user_profile.get('cash_balance', DEFAULT_PORTFOLIO)
+    margin_available = user_profile.get('margin_available', 0)
+    option_level = user_profile.get('option_approval_level', 2)
+    risk_tolerance = user_profile.get('risk_tolerance', 'moderate')
+    
+    total_buying_power = portfolio_start + margin_available
+    
+    # Validate trades have required data
+    valid_trades = [t for t in trades if t.pnl_percent is not None]
+    if not valid_trades:
+        return {
+            'success': False,
+            'error': 'No valid trades with P&L data found'
+        }
+    
+    # Calculate trader stats (with null-safe access)
+    wins = sum(1 for t in valid_trades if t.pnl and t.pnl > 0)
+    losses = len(valid_trades) - wins
+    win_rate = (wins / len(valid_trades) * 100) if valid_trades else 0
+    
+    avg_win_pct = 0
+    avg_loss_pct = 0
+    winning_trades = [t for t in valid_trades if t.pnl and t.pnl > 0 and t.pnl_percent is not None]
+    losing_trades = [t for t in valid_trades if t.pnl and t.pnl <= 0 and t.pnl_percent is not None]
+    
+    if winning_trades:
+        avg_win_pct = sum(t.pnl_percent for t in winning_trades) / len(winning_trades)
+    if losing_trades:
+        avg_loss_pct = abs(sum(t.pnl_percent for t in losing_trades) / len(losing_trades))
+    
+    # Calculate Kelly criterion
+    kelly_result = calculate_kelly_criterion(win_rate / 100, avg_win_pct, avg_loss_pct)
+    
+    # Run correlation analysis
+    correlation_analysis = analyze_correlation_risk(trades)
+    
+    # Calculate actual position values (with null-safe access)
+    actual_positions = []
+    has_options = False
+    for t in trades:
+        mult = 100 if t.asset_type == 'option' else 1
+        if t.asset_type == 'option':
+            has_options = True
+        position_val = (t.open_price or 1) * (t.quantity or 1) * mult
+        if position_val > 0:
+            actual_positions.append(position_val)
+    
+    # Check option level constraints
+    option_level_ok = not has_options or option_level >= 1
+    
+    # Generate projections for each risk preset
+    projections = []
+    
+    for preset_key, preset in RISK_PRESETS.items():
+        # Run Monte Carlo for this preset
+        mc_result = run_monte_carlo_simulation(
+            trades=trades,
+            portfolio_start=portfolio_start,
+            position_size_pct=preset['position_pct'],
+            iterations=1000,
+            include_theta=True,
+            include_correlation_penalty=True
+        )
+        
+        if not mc_result.get('success'):
+            continue
+        
+        max_position = max(actual_positions) if actual_positions else 1
+        max_single_pct = preset['max_single_position_pct'] if preset['max_single_position_pct'] > 0 else 25
+        min_capital_needed = max_position / (max_single_pct / 100)
+        
+        # Check if user can follow this preset
+        capital_ok = portfolio_start >= min_capital_needed * 0.75
+        can_follow = capital_ok and option_level_ok
+        
+        projections.append({
+            'preset_key': preset_key,
+            'preset': preset,
+            'can_follow': can_follow,
+            'min_capital_needed': round(min_capital_needed, 2),
+            'capital_gap': round(max(0, min_capital_needed - portfolio_start), 2),
+            'expected_outcome': mc_result['expected_outcome'],
+            'probability_analysis': mc_result['probability_analysis'],
+            'balance_distribution': mc_result['balance_distribution'],
+            'return_distribution': mc_result['return_distribution'],
+            'drawdown_distribution': mc_result['drawdown_distribution'],
+            'risk_of_ruin': mc_result['probability_analysis']['risk_of_ruin'],
+            'profit_probability': mc_result['probability_analysis']['profit_probability']
+        })
+    
+    # Add Kelly-optimized projection if valid
+    if kelly_result['is_valid'] and kelly_result['half_kelly'] > 0:
+        kelly_pct = kelly_result['half_kelly']
+        mc_kelly = run_monte_carlo_simulation(
+            trades=trades,
+            portfolio_start=portfolio_start,
+            position_size_pct=kelly_pct,
+            iterations=1000,
+            include_theta=True,
+            include_correlation_penalty=True
+        )
+        
+        if mc_kelly.get('success'):
+            projections.append({
+                'preset_key': 'kelly_optimized',
+                'preset': {
+                    'name': 'Kelly Optimized',
+                    'description': f'Mathematically optimal sizing based on edge ({kelly_pct:.1f}%)',
+                    'position_pct': kelly_pct,
+                    'color': '#8b5cf6',
+                    'icon': '🧮'
+                },
+                'can_follow': True,
+                'min_capital_needed': round(max(actual_positions) / 0.25, 2) if actual_positions else 0,
+                'expected_outcome': mc_kelly['expected_outcome'],
+                'probability_analysis': mc_kelly['probability_analysis'],
+                'balance_distribution': mc_kelly['balance_distribution'],
+                'return_distribution': mc_kelly['return_distribution'],
+                'drawdown_distribution': mc_kelly['drawdown_distribution'],
+                'risk_of_ruin': mc_kelly['probability_analysis']['risk_of_ruin'],
+                'profit_probability': mc_kelly['probability_analysis']['profit_probability']
+            })
+    
+    # Generate recommendation
+    followable = [p for p in projections if p['can_follow']]
+    
+    if not followable:
+        recommendation = {
+            'can_follow_trader': False,
+            'reason': f'Insufficient capital. Minimum needed: ${min(p["min_capital_needed"] for p in projections):,.0f}',
+            'suggested_capital': round(min(p['min_capital_needed'] for p in projections), 2),
+            'best_preset': None
+        }
+    else:
+        # Find best preset based on user's risk tolerance
+        tolerance_map = {
+            'conservative': 'conservative',
+            'moderate': 'moderate',
+            'aggressive': 'aggressive'
+        }
+        preferred = tolerance_map.get(risk_tolerance, 'moderate')
+        
+        best = None
+        for p in followable:
+            if p['preset_key'] == preferred:
+                best = p
+                break
+        
+        if not best:
+            # Fallback to highest profit probability with acceptable risk of ruin
+            acceptable = [p for p in followable if p['risk_of_ruin'] < 20]
+            if acceptable:
+                best = max(acceptable, key=lambda x: x['profit_probability'])
+            else:
+                best = min(followable, key=lambda x: x['risk_of_ruin'])
+        
+        recommendation = {
+            'can_follow_trader': True,
+            'best_preset': best['preset_key'],
+            'best_preset_name': best['preset']['name'],
+            'expected_return': best['expected_outcome']['expected_return_pct'],
+            'profit_probability': best['profit_probability'],
+            'risk_of_ruin': best['risk_of_ruin'],
+            'likely_outcome_range': best['return_distribution']['likely_range_25_75'],
+            'reason': f"Based on your ${portfolio_start:,.0f} portfolio and {risk_tolerance} risk tolerance"
+        }
+    
+    return {
+        'success': True,
+        'entity_type': entity_type,
+        'entity_id': entity_id,
+        
+        'user_profile': {
+            'cash_balance': portfolio_start,
+            'margin_available': margin_available,
+            'total_buying_power': total_buying_power,
+            'option_approval_level': option_level,
+            'risk_tolerance': risk_tolerance
+        },
+        
+        'trader_stats': {
+            'total_trades': len(trades),
+            'wins': wins,
+            'losses': losses,
+            'win_rate': round(win_rate, 1),
+            'avg_win_pct': round(avg_win_pct, 1),
+            'avg_loss_pct': round(avg_loss_pct, 1),
+            'kelly_criterion': kelly_result
+        },
+        
+        'correlation_analysis': correlation_analysis,
+        
+        'projections': projections,
+        
+        'recommendation': recommendation,
+        
+        'risk_presets_available': list(RISK_PRESETS.keys())
+    }
