@@ -32,6 +32,8 @@ The **Conditional Order Monitoring System** monitors price conditions and execut
 
 **Filled Orders Tracking** syncs filled orders from broker APIs (Webull, Alpaca) into a local database table, featuring automatic sync, deduplication, multi-broker support, and a dedicated UI tab. **Execution-Based P&L Tracking** provides professional-grade P&L calculation based on actual broker fills rather than theoretical signal prices, including slippage tracking, latency metrics, and race condition protection. The **Pending Order Metadata Bridge** (Jan 2026) captures signal context at order placement (channel_id, message_id, timestamps, analyst sizing, PositionSizingService outputs) and hydrates execution_lots when fills arrive via BrokerSyncService. Uses BEGIN IMMEDIATE atomic transactions for FIFO integrity in concurrent STC fills.
 
+The **Bot Lifecycle Manager** (Jan 2026) provides centralized control for bot stop/restart operations via system tray and web GUI. Features include REST API endpoints (`/api/bot/status`, `/api/bot/stop`, `/api/bot/restart`), dashboard control panel with gradient buttons and status indicators, graceful shutdown signaling, and packaged executable restart handling (Windows startfile, macOS open command, Linux exec).
+
 The **Signal Tracking System** provides comprehensive lifecycle tracking for all signals from detection through broker execution with full audit trails, supporting filtering, P&L tracking, and error logging. The **QA Workflow Validation System** provides comprehensive registry-based validation ensuring the complete signal-to-execution pipeline remains intact through 11 stages from Signal Detection to Risk Monitoring.
 
 ### System Design Choices
