@@ -4471,39 +4471,10 @@ def register_routes(app):
                 return jsonify({'success': False, 'error': f'Close failed: {str(close_err)}'}), 500
             
             if result.get('success'):
-                # Send STC webhook notification
-                try:
-                    from gui_app.discord_notifier import send_stc_notification
-                    
-                    # Get current price (use last traded price from result or fetch live price)
-                    current_price = 0.0
-                    if asset_type == 'option':
-                        # For options, try to get last price from position
-                        for pos in live_positions:
-                            if pos.get('asset') == 'option' and pos.get('option_id') == option_id:
-                                current_price = float(pos.get('current_price', 0) or pos.get('last_price', 0))
-                                break
-                    else:
-                        # For stocks, try to get last price from position
-                        for pos in live_positions:
-                            if pos.get('symbol') == symbol and pos.get('asset') == 'stock':
-                                current_price = float(pos.get('current_price', 0) or pos.get('last_price', 0))
-                                break
-                    
-                    # Send notification with option details if available
-                    send_stc_notification(
-                        symbol=symbol,
-                        quantity=quantity_to_close,
-                        price=current_price,
-                        entry_price=entry_price,
-                        strike=strike if asset_type == 'option' else None,
-                        expiry=expiry if asset_type == 'option' else None,
-                        call_put=call_put if asset_type == 'option' else None
-                    )
-                    print(f"[CLOSE] STC webhook notification sent for {symbol}")
-                except Exception as e:
-                    print(f"[CLOSE] Failed to send STC notification: {e}")
-                    # Don't fail the whole operation if notification fails
+                # NOTE: We intentionally do NOT send STC webhook notification for manual GUI closes
+                # because it would create a feedback loop - the webhook message gets picked up
+                # by the signal parser and re-executes the trade again.
+                # STC notifications are only sent for signal-based exits from Discord.
                 
                 return jsonify({
                     'success': True,

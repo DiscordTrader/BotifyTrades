@@ -4605,5 +4605,22 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-09T18:53:57.367691"
+  },
+  "ALPACA_PAPER_OPEN_stock": {
+    "entry_price": 7.41,
+    "highest_price": 7.425,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-09T19:20:45.731795"
   }
 }
