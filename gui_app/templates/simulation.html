@@ -1743,58 +1743,88 @@ function displayHistoricalResults(data) {
     if (advancedMetricsCard) advancedMetricsCard.style.display = 'none';
     
     // Reset heading for historical replay
-    document.getElementById('historical-breakdown-title').innerHTML = `<span>📜</span> Trade-by-Trade Breakdown`;
+    const histTitle = document.getElementById('historical-breakdown-title');
+    if (histTitle) histTitle.innerHTML = `<span>📜</span> Trade-by-Trade Breakdown`;
     
     // CRITICAL: Reset table headers for Trade-by-Trade view (they may have been changed by Risk Optimizer)
-    document.querySelector('#historical-breakdown thead tr').innerHTML = `
-        <th style="width: 40px;" title="Trade sequence number">#</th>
-        <th title="Stock or option ticker symbol">Ticker</th>
-        <th style="text-align: center;" title="Trade close date">Date</th>
-        <th style="text-align: right;" title="Cost per option contract ($) or share price">Contract $</th>
-        <th style="text-align: right;" title="Original trader's position size ($)">Actual Pos</th>
-        <th style="text-align: center;" title="Simulated quantity based on your portfolio">Sim Qty</th>
-        <th style="text-align: right;" title="Your simulated position size ($)">Sim Pos</th>
-        <th style="text-align: center;" title="Trade outcome">Result</th>
-        <th style="text-align: right;" title="Profit/loss percentage from actual trade">P&L %</th>
-        <th style="text-align: right;" title="Your simulated profit/loss in dollars">Sim P&L</th>
-        <th style="text-align: right;" title="Portfolio balance after this trade">Balance</th>
-    `;
+    const histTheadRow = document.querySelector('#historical-breakdown thead tr');
+    if (histTheadRow) {
+        histTheadRow.innerHTML = `
+            <th style="width: 40px;" title="Trade sequence number">#</th>
+            <th title="Stock or option ticker symbol">Ticker</th>
+            <th style="text-align: center;" title="Trade close date">Date</th>
+            <th style="text-align: right;" title="Cost per option contract ($) or share price">Contract $</th>
+            <th style="text-align: right;" title="Original trader's position size ($)">Actual Pos</th>
+            <th style="text-align: center;" title="Simulated quantity based on your portfolio">Sim Qty</th>
+            <th style="text-align: right;" title="Your simulated position size ($)">Sim Pos</th>
+            <th style="text-align: center;" title="Trade outcome">Result</th>
+            <th style="text-align: right;" title="Profit/loss percentage from actual trade">P&L %</th>
+            <th style="text-align: right;" title="Your simulated profit/loss in dollars">Sim P&L</th>
+            <th style="text-align: right;" title="Portfolio balance after this trade">Balance</th>
+        `;
+    }
     
     const summary = data.summary;
     const stats = data.stats_used;
     const params = data.params_used;
     
-    // Update summary stats
-    document.getElementById('result-final-balance').textContent = '$' + summary.final_balance.toLocaleString(undefined, {minimumFractionDigits: 2});
-    document.getElementById('result-final-balance').className = 'stat-value ' + (summary.total_profit >= 0 ? 'success' : 'danger');
+    // Update summary stats with null checks
+    const finalBalanceEl = document.getElementById('result-final-balance');
+    if (finalBalanceEl) {
+        finalBalanceEl.textContent = '$' + summary.final_balance.toLocaleString(undefined, {minimumFractionDigits: 2});
+        finalBalanceEl.className = 'stat-value ' + (summary.total_profit >= 0 ? 'success' : 'danger');
+    }
     
     const profitEl = document.getElementById('result-total-profit');
-    profitEl.textContent = (summary.total_profit >= 0 ? '+$' : '-$') + Math.abs(summary.total_profit).toLocaleString(undefined, {minimumFractionDigits: 2});
-    profitEl.className = 'stat-value ' + (summary.total_profit >= 0 ? 'success' : 'danger');
+    if (profitEl) {
+        profitEl.textContent = (summary.total_profit >= 0 ? '+$' : '-$') + Math.abs(summary.total_profit).toLocaleString(undefined, {minimumFractionDigits: 2});
+        profitEl.className = 'stat-value ' + (summary.total_profit >= 0 ? 'success' : 'danger');
+    }
     
-    document.getElementById('result-total-return').textContent = (summary.total_return_pct >= 0 ? '+' : '') + summary.total_return_pct.toFixed(1) + '%';
-    document.getElementById('result-total-return').className = 'stat-value ' + (summary.total_return_pct >= 0 ? 'success' : 'danger');
+    const totalReturnEl = document.getElementById('result-total-return');
+    if (totalReturnEl) {
+        totalReturnEl.textContent = (summary.total_return_pct >= 0 ? '+' : '') + summary.total_return_pct.toFixed(1) + '%';
+        totalReturnEl.className = 'stat-value ' + (summary.total_return_pct >= 0 ? 'success' : 'danger');
+    }
     
-    // Update labels for historical mode
-    document.querySelector('[for-stat="expected-trade"]').textContent = 'Wins';
-    document.getElementById('result-expected-trade').textContent = summary.wins + ' wins';
-    document.getElementById('result-expected-trade').className = 'stat-value success';
+    // Update labels for historical mode with null checks
+    const expectedTradeLabel = document.querySelector('[for-stat="expected-trade"]');
+    const expectedTradeEl = document.getElementById('result-expected-trade');
+    if (expectedTradeLabel) expectedTradeLabel.textContent = 'Wins';
+    if (expectedTradeEl) {
+        expectedTradeEl.textContent = summary.wins + ' wins';
+        expectedTradeEl.className = 'stat-value success';
+    }
     
-    document.querySelector('[for-stat="avg-daily"]').textContent = 'Losses';
-    document.getElementById('result-avg-daily').textContent = summary.losses + ' losses';
-    document.getElementById('result-avg-daily').className = 'stat-value danger';
+    const avgDailyLabel = document.querySelector('[for-stat="avg-daily"]');
+    const avgDailyEl = document.getElementById('result-avg-daily');
+    if (avgDailyLabel) avgDailyLabel.textContent = 'Losses';
+    if (avgDailyEl) {
+        avgDailyEl.textContent = summary.losses + ' losses';
+        avgDailyEl.className = 'stat-value danger';
+    }
     
-    document.querySelector('[for-stat="weekly"]').textContent = 'Total Trades';
-    document.getElementById('result-weekly').textContent = summary.total_trades + ' trades';
-    document.getElementById('result-weekly').className = 'stat-value info';
+    const weeklyLabel = document.querySelector('[for-stat="weekly"]');
+    const weeklyEl = document.getElementById('result-weekly');
+    if (weeklyLabel) weeklyLabel.textContent = 'Total Trades';
+    if (weeklyEl) {
+        weeklyEl.textContent = summary.total_trades + ' trades';
+        weeklyEl.className = 'stat-value info';
+    }
     
-    document.querySelector('[for-stat="monthly"]').textContent = 'Win Rate';
-    document.getElementById('result-monthly').textContent = stats.win_rate + '%';
-    document.getElementById('result-monthly').className = 'stat-value ' + (stats.win_rate >= 50 ? 'success' : 'warning');
+    const monthlyLabel = document.querySelector('[for-stat="monthly"]');
+    const monthlyEl = document.getElementById('result-monthly');
+    if (monthlyLabel) monthlyLabel.textContent = 'Win Rate';
+    if (monthlyEl) {
+        monthlyEl.textContent = stats.win_rate + '%';
+        monthlyEl.className = 'stat-value ' + (stats.win_rate >= 50 ? 'success' : 'warning');
+    }
     
     const edgeEl = document.getElementById('result-edge');
-    edgeEl.textContent = summary.is_profitable ? '✅ Profitable' : '⚠️ Loss';
-    edgeEl.className = 'stat-value ' + (summary.is_profitable ? 'success' : 'danger');
+    if (edgeEl) {
+        edgeEl.textContent = summary.is_profitable ? '✅ Profitable' : '⚠️ Loss';
+        edgeEl.className = 'stat-value ' + (summary.is_profitable ? 'success' : 'danger');
+    }
     
     // Strategy text with position size suggestion
     const suggestedSize = stats.suggested_position_size || stats.median_position_size || 0;
@@ -1802,16 +1832,19 @@ function displayHistoricalResults(data) {
     const avgSimPosition = summary.avg_simulated_position || 0;
     const maxDrawdown = summary.max_drawdown_pct || 0;
     
-    document.getElementById('strategy-text').textContent = 
-        `ACTUAL HISTORICAL TRADES REPLAY\n\nReplayed ${summary.total_trades} real trades from ${stats.first_trade_date} to ${stats.last_trade_date}:\n` +
-        `• ${summary.wins} wins totaling +$${summary.total_win_pnl.toLocaleString()}\n` +
-        `• ${summary.losses} losses totaling $${summary.total_loss_pnl.toLocaleString()}\n\n` +
-        `Each trade used its ACTUAL P&L % from the database.\n` +
-        `With $${params.portfolio_start.toLocaleString()} starting and ${positionSizeDisplay} per trade, ` +
-        `you would have ${summary.is_profitable ? 'made' : 'lost'} $${Math.abs(summary.total_profit).toLocaleString()}.\n\n` +
-        `📊 Avg Position Size: $${avgSimPosition.toLocaleString()}\n` +
-        `📉 Max Drawdown: ${maxDrawdown.toFixed(1)}%\n\n` +
-        `💡 Suggested Position Size: $${suggestedSize.toLocaleString()} (based on their median trade size)`;
+    const strategyTextEl = document.getElementById('strategy-text');
+    if (strategyTextEl) {
+        strategyTextEl.textContent = 
+            `ACTUAL HISTORICAL TRADES REPLAY\n\nReplayed ${summary.total_trades} real trades from ${stats.first_trade_date} to ${stats.last_trade_date}:\n` +
+            `• ${summary.wins} wins totaling +$${summary.total_win_pnl.toLocaleString()}\n` +
+            `• ${summary.losses} losses totaling $${summary.total_loss_pnl.toLocaleString()}\n\n` +
+            `Each trade used its ACTUAL P&L % from the database.\n` +
+            `With $${params.portfolio_start.toLocaleString()} starting and ${positionSizeDisplay} per trade, ` +
+            `you would have ${summary.is_profitable ? 'made' : 'lost'} $${Math.abs(summary.total_profit).toLocaleString()}.\n\n` +
+            `📊 Avg Position Size: $${avgSimPosition.toLocaleString()}\n` +
+            `📉 Max Drawdown: ${maxDrawdown.toFixed(1)}%\n\n` +
+            `💡 Suggested Position Size: $${suggestedSize.toLocaleString()} (based on their median trade size)`;
+    }
     
     // Display skip stats if trades were skipped
     const skipSection = document.getElementById('skip-stats-section');
