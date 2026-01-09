@@ -3923,6 +3923,7 @@ def register_routes(app):
             return {'success': False, 'error': 'Webull client not available'}
 
         def _blocking_call():
+            print(f"[CLOSE] _blocking_call started: symbol={symbol}, asset_type={asset_type}, quantity={quantity}")
             try:
                 # ---------- STOCK CLOSE: market or limit SELL ----------
                 if asset_type == 'stock':
