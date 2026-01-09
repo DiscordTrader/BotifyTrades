@@ -4098,7 +4098,7 @@
   },
   "ALPACA_PAPER_APLD_stock": {
     "entry_price": 33.66,
-    "highest_price": 38.005,
+    "highest_price": 38.27,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -4353,7 +4353,7 @@
   },
   "Webull_NFLX_90.0_01/16_C": {
     "entry_price": 1.16,
-    "highest_price": 1.165,
+    "highest_price": 1.195,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -4370,7 +4370,7 @@
   },
   "ALPACA_PAPER_NFLX_90.0_2026-01-16_C": {
     "entry_price": 1.16,
-    "highest_price": 1.14,
+    "highest_price": 1.17,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -4591,7 +4591,7 @@
   },
   "ALPACA_PAPER_EOSE_16.0_2026-02-20_C": {
     "entry_price": 1.65,
-    "highest_price": 1.75,
+    "highest_price": 1.79,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,

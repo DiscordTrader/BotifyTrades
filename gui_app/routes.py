@@ -4495,9 +4495,16 @@ def register_routes(app):
                 # by the signal parser and re-executes the trade again.
                 # STC notifications are only sent for signal-based exits from Discord.
                 
+                # Differentiate message based on order type
+                if order_type == 'MARKET':
+                    message = f"Position closed: {quantity_to_close} {symbol} @ MARKET"
+                else:
+                    # Limit order - pending fill
+                    message = f"Limit order submitted: SELL {quantity_to_close} {symbol} @ ${requested_limit_price}\n\nOrder is pending fill. Check 'Pending Orders' tab for status."
+                
                 return jsonify({
                     'success': True,
-                    'message': f"Position closed: {quantity_to_close} {symbol} @ {order_type}"
+                    'message': message
                 })
             else:
                 return jsonify({
