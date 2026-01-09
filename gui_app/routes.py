@@ -1574,6 +1574,11 @@ def register_routes(app):
         """Comprehensive PNL tracking page"""
         return render_template('pnl_tracker.html')
     
+    @app.route('/execution-pnl')
+    def execution_pnl():
+        """Execution-based PNL tracking with actual broker fills"""
+        return render_template('execution_pnl.html')
+    
     @app.route('/options')
     def options():
         """Option chain viewer and trading page"""

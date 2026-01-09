@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+
+{% block title %}Execution P&L - Ψ∿ BotifyTrades{% endblock %}
+
+{% block content %}
+<div class="pnl-source-tabs" style="margin-bottom: 24px; display: flex; gap: 8px;">
+    <button id="signal-pnl-tab" class="market-tab" onclick="window.location.href='/pnl'" style="padding: 12px 32px; background: #3A3A3C; color: #fff; border: none; border-radius: 12px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease;">
+        <span style="font-size: 18px;">📊</span> Signal P&L <span class="badge" style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 6px; font-size: 11px;">Theoretical</span>
+    </button>
+    <button id="execution-pnl-tab" class="market-tab active" style="padding: 12px 32px; background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%); color: #fff; border: none; border-radius: 12px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease;">
+        <span style="font-size: 18px;">🎯</span> Execution P&L <span class="badge" style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 6px; font-size: 11px;">Actual Fills</span>
+    </button>
+</div>
+
+<div class="stats-grid" style="margin-bottom: 32px;">
+    <div class="stat-card" style="background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%); border: 1px solid rgba(0, 212, 255, 0.3);">
+        <div class="stat-label">Total P&L</div>
+        <div class="stat-value" id="total-pnl" style="font-family: 'JetBrains Mono', monospace;">$0.00</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-label">Trades</div>
+        <div class="stat-value info" id="total-trades" style="font-family: 'JetBrains Mono', monospace;">0</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-label">Win Rate</div>
+        <div class="stat-value success" id="win-rate" style="font-family: 'JetBrains Mono', monospace;">0%</div>
+    </div>
+    
+    <div class="stat-card" style="background: rgba(255, 183, 0, 0.1); border: 1px solid rgba(255, 183, 0, 0.3);">
+        <div class="stat-label">Avg Latency</div>
+        <div class="stat-value" id="avg-latency" style="font-family: 'JetBrains Mono', monospace; color: #ffb700;">-</div>
+    </div>
+    
+    <div class="stat-card" style="background: rgba(255, 100, 100, 0.1); border: 1px solid rgba(255, 100, 100, 0.3);">
+        <div class="stat-label">Avg Entry Slip</div>
+        <div class="stat-value" id="avg-entry-slip" style="font-family: 'JetBrains Mono', monospace; color: #ff6464;">0.0%</div>
+    </div>
+    
+    <div class="stat-card" style="background: rgba(255, 100, 100, 0.1); border: 1px solid rgba(255, 100, 100, 0.3);">
+        <div class="stat-label">Avg Exit Slip</div>
+        <div class="stat-value" id="avg-exit-slip" style="font-family: 'JetBrains Mono', monospace; color: #ff6464;">0.0%</div>
+    </div>
+</div>
+
+<div class="table-container" style="margin-bottom: 24px;">
+    <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+        <h3 class="table-title" style="margin: 0; display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 20px;">🎯</span>
+            Execution History
+            <span style="font-size: 12px; background: linear-gradient(135deg, #00d4ff, #7c3aed); padding: 4px 12px; border-radius: 20px;">Actual Broker Fills</span>
+        </h3>
+        
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+            <select id="filter-broker" onchange="loadExecutionPnl()" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-darker); color: var(--text-primary); font-size: 13px;">
+                <option value="">All Brokers</option>
+                <option value="webull">Webull</option>
+                <option value="alpaca">Alpaca</option>
+                <option value="tastytrade">Tastytrade</option>
+                <option value="schwab">Schwab</option>
+                <option value="robinhood">Robinhood</option>
+                <option value="ibkr">IBKR</option>
+            </select>
+            
+            <select id="filter-days" onchange="loadExecutionPnl()" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-darker); color: var(--text-primary); font-size: 13px;">
+                <option value="7">Last 7 Days</option>
+                <option value="30" selected>Last 30 Days</option>
+                <option value="90">Last 90 Days</option>
+                <option value="">All Time</option>
+            </select>
+            
+            <button onclick="loadExecutionPnl()" class="btn btn-primary btn-small" style="padding: 8px 16px;">
+                🔄 Refresh
+            </button>
+        </div>
+    </div>
+    
+    <div id="execution-table" style="overflow-x: auto;">
+        <div style="text-align: center; padding: 60px 20px;">
+            <div class="spinner" style="margin: 0 auto 20px;"></div>
+            <div style="color: var(--text-secondary);">Loading execution data...</div>
+        </div>
+    </div>
+</div>
+
+<div class="table-container">
+    <div class="table-header">
+        <h3 class="table-title" style="margin: 0; display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 20px;">📂</span>
+            Open Positions
+            <span id="open-count" style="font-size: 12px; background: rgba(0, 255, 136, 0.2); padding: 4px 12px; border-radius: 20px; color: #00ff88;">0</span>
+        </h3>
+    </div>
+    
+    <div id="open-positions" style="overflow-x: auto;">
+        <div style="text-align: center; padding: 40px 20px;">
+            <div style="color: var(--text-secondary);">No open positions</div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .latency-timeline {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 10px;
+        font-family: 'JetBrains Mono', monospace;
+    }
+    .latency-segment {
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: rgba(255, 183, 0, 0.2);
+        color: #ffb700;
+    }
+    .latency-segment.fast { background: rgba(0, 255, 136, 0.2); color: #00ff88; }
+    .latency-segment.slow { background: rgba(255, 100, 100, 0.2); color: #ff6464; }
+    
+    .slippage-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-family: 'JetBrains Mono', monospace;
+    }
+    .slippage-badge.positive { background: rgba(255, 100, 100, 0.2); color: #ff6464; }
+    .slippage-badge.negative { background: rgba(0, 255, 136, 0.2); color: #00ff88; }
+    .slippage-badge.neutral { background: rgba(150, 150, 150, 0.2); color: #999; }
+    
+    .exit-source-badge {
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    .exit-source-badge.signal { background: rgba(0, 212, 255, 0.2); color: #00d4ff; }
+    .exit-source-badge.pt1, .exit-source-badge.pt2, .exit-source-badge.pt3, .exit-source-badge.pt4 { background: rgba(0, 255, 136, 0.2); color: #00ff88; }
+    .exit-source-badge.stop_loss { background: rgba(255, 100, 100, 0.2); color: #ff6464; }
+    .exit-source-badge.trailing { background: rgba(255, 183, 0, 0.2); color: #ffb700; }
+    .exit-source-badge.manual { background: rgba(150, 150, 150, 0.2); color: #999; }
+    
+    .pnl-cell {
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 600;
+    }
+    .pnl-cell.positive { color: #00ff88; }
+    .pnl-cell.negative { color: #ff6464; }
+    
+    .sizing-mode-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-size: 10px;
+        background: rgba(124, 58, 237, 0.2);
+        color: #a78bfa;
+    }
+</style>
+
+<script>
+let executionData = [];
+
+function loadExecutionPnl() {
+    const broker = document.getElementById('filter-broker').value;
+    const days = document.getElementById('filter-days').value;
+    
+    let url = '/api/execution-pnl?limit=200';
+    if (broker) url += '&broker=' + broker;
+    if (days) url += '&days=' + days;
+    
+    document.getElementById('execution-table').innerHTML = `
+        <div style="text-align: center; padding: 40px;">
+            <div class="spinner" style="margin: 0 auto 20px;"></div>
+            <div style="color: var(--text-secondary);">Loading...</div>
+        </div>
+    `;
+    
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                executionData = data.trades;
+                renderExecutionTable(data.trades, data.summary);
+            } else {
+                showError('execution-table', data.error || 'Failed to load data');
+            }
+        })
+        .catch(err => showError('execution-table', err.message));
+    
+    loadOpenPositions();
+}
+
+function renderExecutionTable(trades, summary) {
+    const totalPnl = summary.total_pnl || 0;
+    document.getElementById('total-pnl').textContent = '$' + totalPnl.toFixed(2);
+    document.getElementById('total-pnl').className = 'stat-value ' + (totalPnl >= 0 ? 'success' : 'error');
+    document.getElementById('total-trades').textContent = summary.total_trades || 0;
+    document.getElementById('win-rate').textContent = (summary.win_rate || 0).toFixed(1) + '%';
+    
+    let avgLatency = 0, avgEntrySlip = 0, avgExitSlip = 0, latencyCount = 0, slipCount = 0;
+    trades.forEach(t => {
+        if (t.latency && t.latency.total_ms) { avgLatency += t.latency.total_ms; latencyCount++; }
+        if (t.entry && t.entry.slippage_pct != null) { avgEntrySlip += Math.abs(t.entry.slippage_pct); slipCount++; }
+        if (t.exit && t.exit.slippage_pct != null) { avgExitSlip += Math.abs(t.exit.slippage_pct); }
+    });
+    
+    if (latencyCount > 0) {
+        document.getElementById('avg-latency').textContent = Math.round(avgLatency / latencyCount) + 'ms';
+    }
+    if (slipCount > 0) {
+        document.getElementById('avg-entry-slip').textContent = (avgEntrySlip / slipCount).toFixed(2) + '%';
+        document.getElementById('avg-exit-slip').textContent = (avgExitSlip / slipCount).toFixed(2) + '%';
+    }
+    
+    if (trades.length === 0) {
+        document.getElementById('execution-table').innerHTML = `
+            <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+                <div style="font-size: 48px; margin-bottom: 16px;">📭</div>
+                <div style="font-size: 16px; margin-bottom: 8px;">No execution data found</div>
+                <div style="font-size: 13px; opacity: 0.7;">Execution P&L tracks actual broker fills, not signal prices</div>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 120px;">Symbol</th>
+                    <th>Qty</th>
+                    <th>Entry</th>
+                    <th>Exit</th>
+                    <th>P&L</th>
+                    <th>Slippage</th>
+                    <th>Latency</th>
+                    <th>Exit Source</th>
+                    <th>Sizing</th>
+                    <th>Closed</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    trades.forEach(trade => {
+        const symbol = trade.symbol + (trade.asset_type === 'option' ? ` ${trade.strike}${trade.call_put?.charAt(0) || ''} ${trade.expiry || ''}` : '');
+        const entrySlip = trade.entry?.slippage_pct;
+        const exitSlip = trade.exit?.slippage_pct;
+        const latencyMs = trade.latency?.total_ms;
+        
+        const entrySlipClass = !entrySlip ? 'neutral' : (entrySlip > 0 ? 'positive' : 'negative');
+        const exitSlipClass = !exitSlip ? 'neutral' : (exitSlip > 0 ? 'negative' : 'positive');
+        const latencyClass = !latencyMs ? '' : (latencyMs < 500 ? 'fast' : (latencyMs > 2000 ? 'slow' : ''));
+        
+        html += `
+            <tr>
+                <td style="font-weight: 600;">${symbol}</td>
+                <td style="font-family: 'JetBrains Mono', monospace;">${trade.closed_qty}</td>
+                <td>
+                    <div style="font-family: 'JetBrains Mono', monospace;">$${trade.entry?.fill_price?.toFixed(2) || '-'}</div>
+                    <div style="font-size: 10px; color: var(--text-muted);">Signal: $${trade.entry?.signal_price?.toFixed(2) || '-'}</div>
+                </td>
+                <td>
+                    <div style="font-family: 'JetBrains Mono', monospace;">$${trade.exit?.fill_price?.toFixed(2) || '-'}</div>
+                    <div style="font-size: 10px; color: var(--text-muted);">Signal: $${trade.exit?.signal_price?.toFixed(2) || '-'}</div>
+                </td>
+                <td>
+                    <div class="pnl-cell ${trade.pnl >= 0 ? 'positive' : 'negative'}">
+                        ${trade.pnl >= 0 ? '+' : ''}$${trade.pnl?.toFixed(2) || '0.00'}
+                    </div>
+                    <div style="font-size: 10px; color: var(--text-muted);">${(trade.pnl_percent || 0).toFixed(1)}%</div>
+                </td>
+                <td>
+                    <span class="slippage-badge ${entrySlipClass}" title="Entry Slippage">E: ${entrySlip?.toFixed(2) || '0'}%</span>
+                    <span class="slippage-badge ${exitSlipClass}" title="Exit Slippage">X: ${exitSlip?.toFixed(2) || '0'}%</span>
+                </td>
+                <td>
+                    <span class="latency-segment ${latencyClass}">${latencyMs ? latencyMs + 'ms' : '-'}</span>
+                </td>
+                <td>
+                    <span class="exit-source-badge ${(trade.exit_source || 'signal').toLowerCase()}">${trade.exit_source || 'SIGNAL'}</span>
+                </td>
+                <td>
+                    <span class="sizing-mode-badge">${trade.sizing?.mode || '-'}</span>
+                    ${trade.sizing?.analyst_entry_qty ? `<div style="font-size: 10px; color: var(--text-muted);">Analyst: ${trade.sizing.analyst_entry_qty}</div>` : ''}
+                </td>
+                <td style="font-size: 12px; color: var(--text-secondary);">
+                    ${formatDate(trade.exit?.filled_at)}
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table>';
+    document.getElementById('execution-table').innerHTML = html;
+}
+
+function loadOpenPositions() {
+    fetch('/api/execution-lots?status=OPEN')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                renderOpenPositions(data.lots);
+            }
+        })
+        .catch(err => console.error('Error loading open positions:', err));
+}
+
+function renderOpenPositions(lots) {
+    document.getElementById('open-count').textContent = lots.length;
+    
+    if (lots.length === 0) {
+        document.getElementById('open-positions').innerHTML = `
+            <div style="text-align: center; padding: 40px 20px; color: var(--text-secondary);">
+                No open positions
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th>Broker</th>
+                    <th>Qty</th>
+                    <th>Entry Price</th>
+                    <th>Entry Slippage</th>
+                    <th>Latency</th>
+                    <th>Sizing</th>
+                    <th>Opened</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    lots.forEach(lot => {
+        const symbol = lot.symbol + (lot.asset_type === 'option' ? ` ${lot.strike}${lot.call_put?.charAt(0) || ''} ${lot.expiry || ''}` : '');
+        const slipClass = !lot.slippage_pct ? 'neutral' : (lot.slippage_pct > 0 ? 'positive' : 'negative');
+        const latencyClass = !lot.latency?.total_ms ? '' : (lot.latency.total_ms < 500 ? 'fast' : (lot.latency.total_ms > 2000 ? 'slow' : ''));
+        
+        html += `
+            <tr>
+                <td style="font-weight: 600;">${symbol}</td>
+                <td style="text-transform: capitalize;">${lot.broker}</td>
+                <td style="font-family: 'JetBrains Mono', monospace;">${lot.remaining_qty} / ${lot.original_qty}</td>
+                <td style="font-family: 'JetBrains Mono', monospace;">
+                    $${lot.fill_price?.toFixed(2) || '-'}
+                    <div style="font-size: 10px; color: var(--text-muted);">Signal: $${lot.signal_price?.toFixed(2) || '-'}</div>
+                </td>
+                <td>
+                    <span class="slippage-badge ${slipClass}">${lot.slippage_pct?.toFixed(2) || '0'}%</span>
+                </td>
+                <td>
+                    <div class="latency-timeline">
+                        <span class="latency-segment" title="Parse Time">${lot.latency?.parse_ms || '-'}ms</span>
+                        <span style="color: var(--text-muted);">→</span>
+                        <span class="latency-segment ${latencyClass}" title="Broker Fill">${lot.latency?.broker_ms || '-'}ms</span>
+                    </div>
+                </td>
+                <td>
+                    <span class="sizing-mode-badge">${lot.sizing?.mode || '-'}</span>
+                </td>
+                <td style="font-size: 12px; color: var(--text-secondary);">
+                    ${formatDate(lot.order_filled_at)}
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table>';
+    document.getElementById('open-positions').innerHTML = html;
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    try {
+        const d = new Date(dateStr);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + 
+               ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+        return dateStr;
+    }
+}
+
+function showError(elementId, message) {
+    document.getElementById(elementId).innerHTML = `
+        <div style="text-align: center; padding: 40px; color: #ff6464;">
+            <div style="font-size: 32px; margin-bottom: 12px;">⚠️</div>
+            <div>${message}</div>
+        </div>
+    `;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadExecutionPnl();
+});
+</script>
+{% endblock %}

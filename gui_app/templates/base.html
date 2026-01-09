@@ -59,9 +59,14 @@
                         <span class="dropdown-desc">TSX/CSE</span>
                     </a>
                     <a href="/pnl" class="dropdown-item {% if request.path == '/pnl' %}active{% endif %}">
-                        <span class="dropdown-icon">💰</span>
-                        <span class="dropdown-text">PNL</span>
-                        <span class="dropdown-desc">Profit & Loss</span>
+                        <span class="dropdown-icon">📊</span>
+                        <span class="dropdown-text">Signal PNL</span>
+                        <span class="dropdown-desc">Theoretical</span>
+                    </a>
+                    <a href="/execution-pnl" class="dropdown-item {% if request.path == '/execution-pnl' %}active{% endif %}">
+                        <span class="dropdown-icon">🎯</span>
+                        <span class="dropdown-text">Execution PNL</span>
+                        <span class="dropdown-desc">Actual Fills</span>
                     </a>
                     <a href="/trades" class="dropdown-item {% if request.path == '/trades' %}active{% endif %}">
                         <span class="dropdown-icon">📈</span>
