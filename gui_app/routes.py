@@ -18,12 +18,18 @@ from .webhook_service import get_db_connection
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD') or db.get_setting('admin_password_hash')
 
 # Build type check - controls admin-only features
-# Import from main module if available, otherwise default to ADMIN
-BUILD_TYPE = os.environ.get('BUILD_TYPE', 'ADMIN').upper()
+# Try to import from main module first (set by build process), else check env, else default to ADMIN
+try:
+    from src.selfbot_webull import BUILD_TYPE
+except ImportError:
+    try:
+        from selfbot_webull import BUILD_TYPE
+    except ImportError:
+        BUILD_TYPE = os.environ.get('BUILD_TYPE', 'ADMIN').upper()
 
 def is_admin_build():
     """Check if this is an admin build with full features"""
-    return BUILD_TYPE == 'ADMIN'
+    return str(BUILD_TYPE).upper() == 'ADMIN'
 
 def admin_feature_required(f):
     """Decorator to restrict endpoints to admin builds only"""
