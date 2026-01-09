@@ -152,6 +152,19 @@
             </a>
             <span class="status-indicator" id="bot-status"></span>
             <span id="bot-user">Connecting...</span>
+            
+            <!-- Bot Control Buttons -->
+            <div class="nav-bot-controls">
+                <button id="nav-restart-btn" class="nav-control-btn nav-restart" onclick="navRestartBot()" title="Restart Bot">
+                    <span class="control-icon">🔄</span>
+                    <span class="control-text">Restart</span>
+                </button>
+                <button id="nav-stop-btn" class="nav-control-btn nav-stop" onclick="navStopBot()" title="Stop Bot">
+                    <span class="control-icon">⏹️</span>
+                    <span class="control-text">Stop</span>
+                </button>
+            </div>
+            
             <a href="/logout" class="logout-btn">Logout</a>
         </div>
     </nav>
@@ -859,6 +872,67 @@
     setInterval(checkForErrors, 30000);
     // Initial check after page load
     setTimeout(checkForErrors, 2000);
+    
+    // Nav Bot Control Functions
+    async function navRestartBot() {
+        const btn = document.getElementById('nav-restart-btn');
+        const stopBtn = document.getElementById('nav-stop-btn');
+        
+        if (!confirm('Restart the trading bot? This will briefly interrupt signal processing.')) return;
+        
+        btn.disabled = true;
+        stopBtn.disabled = true;
+        btn.classList.add('processing');
+        btn.querySelector('.control-text').textContent = 'Restarting...';
+        
+        try {
+            const response = await fetch('/api/bot/restart', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.success) {
+                btn.querySelector('.control-text').textContent = 'Restarting...';
+            } else {
+                alert('Failed to restart: ' + (data.error || 'Unknown error'));
+                btn.disabled = false;
+                stopBtn.disabled = false;
+                btn.classList.remove('processing');
+                btn.querySelector('.control-text').textContent = 'Restart';
+            }
+        } catch (error) {
+            alert('Connection error. The bot may have already restarted.');
+            btn.disabled = false;
+            stopBtn.disabled = false;
+            btn.classList.remove('processing');
+            btn.querySelector('.control-text').textContent = 'Restart';
+        }
+    }
+    
+    async function navStopBot() {
+        const btn = document.getElementById('nav-stop-btn');
+        const restartBtn = document.getElementById('nav-restart-btn');
+        
+        if (!confirm('Stop the trading bot? You will need to manually restart it.')) return;
+        
+        btn.disabled = true;
+        restartBtn.disabled = true;
+        btn.querySelector('.control-text').textContent = 'Stopping...';
+        
+        try {
+            const response = await fetch('/api/bot/stop', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.success) {
+                btn.querySelector('.control-text').textContent = 'Stopped';
+            } else {
+                alert('Failed to stop: ' + (data.error || 'Unknown error'));
+                btn.disabled = false;
+                restartBtn.disabled = false;
+                btn.querySelector('.control-text').textContent = 'Stop';
+            }
+        } catch (error) {
+            alert('Connection error. The bot may have already stopped.');
+        }
+    }
     </script>
 
     <script src="{{ url_for('static', filename='js/broker-store.js') }}?v={{ range(1, 999999) | random }}"></script>

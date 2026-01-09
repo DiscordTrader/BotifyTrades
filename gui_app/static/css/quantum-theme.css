@@ -356,6 +356,108 @@ body {
     color: var(--text-primary);
 }
 
+/* Nav Bot Control Buttons */
+.nav-bot-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 8px;
+    padding-left: 12px;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nav-control-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.nav-control-btn .control-icon {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.nav-control-btn .control-text {
+    letter-spacing: 0.3px;
+}
+
+.nav-control-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+
+.nav-control-btn:hover::before {
+    opacity: 1;
+}
+
+/* Restart Button - Amber/Gold gradient */
+.nav-restart {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: #1a1a1a;
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+.nav-restart:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(245, 158, 11, 0.4), inset 0 1px 0 rgba(255,255,255,0.25);
+}
+
+.nav-restart:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 4px rgba(245, 158, 11, 0.3);
+}
+
+/* Stop Button - Red gradient */
+.nav-stop {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3), inset 0 1px 0 rgba(255,255,255,0.15);
+}
+
+.nav-stop:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+.nav-stop:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 4px rgba(239, 68, 68, 0.3);
+}
+
+/* Disabled state */
+.nav-control-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.nav-control-btn:disabled:hover {
+    box-shadow: none;
+}
+
+/* Processing state */
+.nav-control-btn.processing .control-icon {
+    animation: spin-control 1s linear infinite;
+}
+
+@keyframes spin-control {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .logout-btn {
     display: inline-flex;
     align-items: center;
