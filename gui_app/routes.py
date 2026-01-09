@@ -4371,7 +4371,7 @@ def register_routes(app):
                 traceback.print_exc()
                 return jsonify({'success': False, 'error': f'Failed to fetch positions: {str(pos_err)}'}), 500
             for i, pos in enumerate(live_positions):
-                print(f"[CLOSE] Position {i}: asset={pos.get('asset')}, symbol={pos.get('symbol')}, option_id={pos.get('option_id')}, qty={pos.get('quantity')}")
+                print(f"[API] Position {i}: asset={pos.get('asset')}, symbol={pos.get('symbol')}, qty={pos.get('quantity')}", flush=True)
             
             # Find matching live position
             live_quantity = None
@@ -4382,14 +4382,17 @@ def register_routes(app):
                     pos_option_id = pos.get('option_id')  # This is tickerId from Webull
                     
                     if pos_asset == 'option' and pos_option_id == option_id:
-                        print(f"[CLOSE] FOUND MATCH! option_id={option_id}")
+                        print(f"[API] FOUND MATCH! option_id={option_id}", flush=True)
                         live_quantity = int(pos.get('quantity', 0))
                         break
                 else:
                     # Stock - match by symbol only
                     if pos.get('symbol') == symbol and pos.get('asset') == 'stock':
+                        print(f"[API] FOUND STOCK MATCH! {symbol}, qty={pos.get('quantity')}", flush=True)
                         live_quantity = int(pos.get('quantity', 0))
                         break
+            
+            print(f"[API] After position search: live_quantity={live_quantity}", flush=True)
             
             if live_quantity is None or live_quantity <= 0:
                 return jsonify({
@@ -4413,11 +4416,11 @@ def register_routes(app):
                 except (ValueError, TypeError):
                     return jsonify({'success': False, 'error': 'Invalid quantity format'}), 400
             
-            print(f"[CLOSE] Closing {quantity_to_close} of {live_quantity} for {symbol} optionId={option_id}")
+            print(f"[API] Closing {quantity_to_close} of {live_quantity} for {symbol}", flush=True)
             
             # ========== CRITICAL: CHECK FOR EXISTING PENDING ORDERS ==========
             # This prevents duplicate SELL orders that accumulate at Webull
-            print(f"[CLOSE] Checking for existing pending SELL orders for {symbol}...")
+            print(f"[API] Checking for existing pending SELL orders for {symbol}...", flush=True)
             pending_orders_future = asyncio.run_coroutine_threadsafe(
                 _get_webull_open_orders(),
                 _bot_instance.loop
@@ -4443,21 +4446,30 @@ def register_routes(app):
                 # Found existing pending SELL orders - REJECT this request
                 order_count = len(matching_pending)
                 order_ids = [o.get('order_id', 'Unknown') for o in matching_pending]
-                print(f"[CLOSE] BLOCKED: Found {order_count} existing pending SELL order(s): {order_ids}")
+                print(f"[API] BLOCKED: Found {order_count} existing pending SELL order(s): {order_ids}", flush=True)
                 return jsonify({
                     'success': False,
                     'error': f'⚠️ Cannot close position - {order_count} pending SELL order(s) already exist.\n\nGo to "⏳ Pending Orders" tab and cancel existing orders first.\n\nOrder IDs: {", ".join(order_ids[:3])}'
                 }), 409  # 409 Conflict
             
-            print(f"[CLOSE] ✓ No pending orders found, proceeding with close...")
+            print(f"[API] ✓ No pending orders found, proceeding with Webull close...", flush=True)
             # ==================================================================
             
             # Call the close position helper with quantity, optionId, and limit price
-            future = asyncio.run_coroutine_threadsafe(
-                _close_webull_position(symbol, quantity_to_close, asset_type, option_id=option_id, user_limit_price=requested_limit_price),
-                _bot_instance.loop
-            )
-            result = future.result(timeout=20)
+            print(f"[API] Calling _close_webull_position(symbol={symbol}, qty={quantity_to_close}, asset_type={asset_type})...", flush=True)
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    _close_webull_position(symbol, quantity_to_close, asset_type, option_id=option_id, user_limit_price=requested_limit_price),
+                    _bot_instance.loop
+                )
+                print(f"[API] Waiting for close future (timeout=20s)...", flush=True)
+                result = future.result(timeout=20)
+                print(f"[API] Close result received: {result}", flush=True)
+            except Exception as close_err:
+                print(f"[API] ERROR in close call: {close_err}", flush=True)
+                import traceback
+                traceback.print_exc()
+                return jsonify({'success': False, 'error': f'Close failed: {str(close_err)}'}), 500
             
             if result.get('success'):
                 # Send STC webhook notification
