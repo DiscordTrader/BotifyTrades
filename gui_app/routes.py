@@ -4211,16 +4211,33 @@ def register_routes(app):
             entry_price = float(trade.get('executed_price') or trade.get('entry_price') or 0)
             broker = (trade.get('broker') or 'Webull').upper()
             
-            print(f"[DEBUG-X2] Extracted: symbol={symbol}, broker={broker}, asset_type={asset_type}", flush=True)
+            print(f"[API] Extracted: symbol={symbol}, broker={broker}, asset_type={asset_type}", flush=True)
             
             if not symbol:
                 return jsonify({'success': False, 'error': 'Invalid trade data - missing symbol'}), 400
             
-            print(f"[DEBUG-X3] Symbol check passed, continuing to broker routing...", flush=True)
+            print(f"[API] Symbol check passed, routing to {broker}...", flush=True)
+            
+            # Check event loop health BEFORE any async operations
+            if not hasattr(_bot_instance, 'loop') or _bot_instance.loop is None:
+                print(f"[API] ERROR: Bot event loop is None!", flush=True)
+                return jsonify({
+                    'success': False,
+                    'error': 'Bot event loop not available. Please restart the bot.'
+                }), 500
+            
+            if _bot_instance.loop.is_closed():
+                print(f"[API] ERROR: Bot event loop is CLOSED!", flush=True)
+                return jsonify({
+                    'success': False,
+                    'error': 'Bot event loop is closed. Please restart the bot from the System Tray or restart the workflow.'
+                }), 500
+            
+            print(f"[API] Event loop healthy, proceeding with close...", flush=True)
             
             # ========== ALPACA BROKER CLOSE ==========
             if 'ALPACA' in broker:
-                print(f"[CLOSE] Routing to Alpaca broker for close...")
+                print(f"[API] Routing to Alpaca broker for close...")
                 
                 # Get quantity from trade or request
                 trade_qty = int(trade.get('quantity') or 1)
@@ -4303,6 +4320,8 @@ def register_routes(app):
                         }), 500
             
             # ========== WEBULL BROKER CLOSE (original logic) ==========
+            print(f"[API] Entering Webull close section for {symbol}", flush=True)
+            
             # For options, we need the optionId to match positions
             # The trades table might not have option_id, so get it from live positions
             option_id = trade.get('option_id')
