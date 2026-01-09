@@ -10594,6 +10594,21 @@ def run_bot_startup(progress_callback=None):
     total_time = time.time() - startup_start
     report_progress(10, f"Ready! (startup took {total_time:.1f}s)")
     
+    # Register with lifecycle manager for proper stop/restart
+    try:
+        from src.services.lifecycle_manager import get_lifecycle_manager
+        lifecycle = get_lifecycle_manager()
+        lifecycle.register_threads(
+            discord_thread=discord_thread,
+            telegram_thread=telegram_thread,
+            discord_shutdown=_discord_shutdown_event,
+            telegram_shutdown=_telegram_shutdown_event,
+            gui_port=gui_port
+        )
+        _original_print("[LIFECYCLE] ✓ Bot registered with lifecycle manager")
+    except Exception as e:
+        _original_print(f"[LIFECYCLE] Warning: Could not register with lifecycle manager: {e}")
+    
     # Debug: Print startup timing breakdown
     if is_debug_mode() and len(step_times) > 1:
         _original_print("\n[STARTUP] ===== TIMING BREAKDOWN =====")

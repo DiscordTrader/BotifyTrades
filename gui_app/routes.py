@@ -12908,6 +12908,84 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/bot/status', methods=['GET'])
+    @login_required
+    def api_bot_lifecycle_status():
+        """Get current bot lifecycle status"""
+        try:
+            from src.services.lifecycle_manager import get_lifecycle_manager
+            lifecycle = get_lifecycle_manager()
+            return jsonify({
+                'success': True,
+                **lifecycle.get_status()
+            })
+        except ImportError:
+            return jsonify({
+                'success': True,
+                'state': 'running',
+                'discord_running': True,
+                'telegram_running': False,
+                'shutdown_in_progress': False
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/bot/stop', methods=['POST'])
+    @login_required
+    def api_bot_stop():
+        """Stop the bot gracefully"""
+        try:
+            from src.services.lifecycle_manager import get_lifecycle_manager
+            import threading
+            
+            lifecycle = get_lifecycle_manager()
+            
+            def do_stop():
+                import time
+                time.sleep(0.5)
+                lifecycle.exit(0)
+            
+            stop_thread = threading.Thread(target=do_stop, daemon=True)
+            stop_thread.start()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Bot stopping...',
+                'state': 'stopping'
+            })
+        except ImportError:
+            return jsonify({'success': False, 'error': 'Lifecycle manager not available'}), 500
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/bot/restart', methods=['POST'])
+    @login_required
+    def api_bot_restart():
+        """Restart the bot"""
+        try:
+            from src.services.lifecycle_manager import get_lifecycle_manager
+            import threading
+            
+            lifecycle = get_lifecycle_manager()
+            
+            def do_restart():
+                import time
+                time.sleep(0.5)
+                lifecycle.restart()
+            
+            restart_thread = threading.Thread(target=do_restart, daemon=True)
+            restart_thread.start()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Bot restarting...',
+                'state': 'restarting'
+            })
+        except ImportError:
+            return jsonify({'success': False, 'error': 'Lifecycle manager not available'}), 500
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/api/system/consistency-check', methods=['GET'])
     @login_required
     def api_system_consistency_check():

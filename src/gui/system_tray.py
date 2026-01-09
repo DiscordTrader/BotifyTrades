@@ -5,6 +5,7 @@ Provides background operation with tray-based control
 import sys
 import os
 import webbrowser
+import threading
 from typing import Optional, Callable
 from PySide6.QtWidgets import (
     QApplication, QSystemTrayIcon, QMenu, QWidget, QMessageBox
@@ -192,7 +193,25 @@ class TrayIconManager(QObject):
     
     def _on_restart(self):
         """Handle restart request"""
-        self.restart_requested.emit()
+        reply = QMessageBox.question(
+            None,
+            "Restart BotifyTrades",
+            "Are you sure you want to restart the bot?\n\nThis will briefly interrupt trading operations.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self.restart_requested.emit()
+            self.set_status("starting", "Restarting...")
+            try:
+                from src.services.lifecycle_manager import get_lifecycle_manager
+                lifecycle = get_lifecycle_manager()
+                def do_restart():
+                    lifecycle.restart()
+                restart_thread = threading.Thread(target=do_restart, daemon=True)
+                restart_thread.start()
+            except ImportError:
+                pass
     
     def _on_exit(self):
         """Handle exit request"""
@@ -207,7 +226,15 @@ class TrayIconManager(QObject):
             self.shutdown_requested.emit()
             if self.tray_icon:
                 self.tray_icon.hide()
-            QApplication.quit()
+            try:
+                from src.services.lifecycle_manager import get_lifecycle_manager
+                lifecycle = get_lifecycle_manager()
+                def do_exit():
+                    lifecycle.exit(0)
+                exit_thread = threading.Thread(target=do_exit, daemon=True)
+                exit_thread.start()
+            except ImportError:
+                QApplication.quit()
 
 
 _tray_manager: Optional[TrayIconManager] = None
