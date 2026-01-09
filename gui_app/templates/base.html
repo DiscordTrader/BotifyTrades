@@ -890,7 +890,9 @@
             const data = await response.json();
             
             if (data.success) {
-                btn.querySelector('.control-text').textContent = 'Restarting...';
+                btn.querySelector('.control-text').textContent = 'Reconnecting...';
+                // Wait for bot to restart then refresh page
+                setTimeout(() => waitForServerAndReload(), 3000);
             } else {
                 alert('Failed to restart: ' + (data.error || 'Unknown error'));
                 btn.disabled = false;
@@ -899,12 +901,32 @@
                 btn.querySelector('.control-text').textContent = 'Restart';
             }
         } catch (error) {
-            alert('Connection error. The bot may have already restarted.');
-            btn.disabled = false;
-            stopBtn.disabled = false;
-            btn.classList.remove('processing');
-            btn.querySelector('.control-text').textContent = 'Restart';
+            // Connection lost - bot is restarting, wait and reload
+            btn.querySelector('.control-text').textContent = 'Reconnecting...';
+            setTimeout(() => waitForServerAndReload(), 3000);
         }
+    }
+    
+    async function waitForServerAndReload(maxAttempts = 15) {
+        // Try to ping the server until it's back up, then reload
+        for (let i = 0; i < maxAttempts; i++) {
+            try {
+                const response = await fetch('/api/bot/status', { 
+                    method: 'GET',
+                    cache: 'no-store'
+                });
+                if (response.ok) {
+                    // Server is back, reload the page
+                    window.location.reload();
+                    return;
+                }
+            } catch (e) {
+                // Server not ready yet
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        // Max attempts reached, reload anyway
+        window.location.reload();
     }
     
     async function navStopBot() {

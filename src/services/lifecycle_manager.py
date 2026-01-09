@@ -202,6 +202,10 @@ class BotLifecycleManager:
         print(f"[LIFECYCLE] Terminating process with code {exit_code}")
         os._exit(exit_code)
     
+    def _is_replit_environment(self) -> bool:
+        """Check if running in Replit cloud environment"""
+        return os.environ.get('REPL_ID') is not None or os.environ.get('REPLIT_DEPLOYMENT') is not None
+    
     def restart(self) -> bool:
         """
         Restart the bot by launching a new process and exiting current one.
@@ -213,6 +217,16 @@ class BotLifecycleManager:
         print("[LIFECYCLE] Initiating restart...")
         
         try:
+            # In Replit environment, just exit cleanly - workflow will auto-restart
+            if self._is_replit_environment():
+                print("[LIFECYCLE] Replit environment detected - using clean exit (workflow will auto-restart)")
+                self.stop(force=True)
+                print("[LIFECYCLE] Exiting for workflow restart...")
+                time.sleep(0.5)
+                os._exit(0)
+                return True
+            
+            # For local/packaged environments, spawn new process
             self.stop(force=True)
             
             print("[LIFECYCLE] Launching new instance...")
