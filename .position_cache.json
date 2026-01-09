@@ -4285,7 +4285,7 @@
   },
   "Webull_OPEN_stock": {
     "entry_price": 6.45,
-    "highest_price": 7.72,
+    "highest_price": 7.799999999999999,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -4489,7 +4489,7 @@
   },
   "ALPACA_PAPER_IWM_264.0_2026-01-16_C": {
     "entry_price": 1.1,
-    "highest_price": 1.07,
+    "highest_price": 1.11,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,

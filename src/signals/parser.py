@@ -306,6 +306,10 @@ def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
     📈 Levels: 1.45 - 1.49 - 1.56 - 1.65 - 1.77+
     ⛔ SL: 1.22
     
+    Strikethrough Detection:
+    When levels have ~~strikethrough~~ (e.g., "Levels: ~~1.26~~ - 1.29"), 
+    those are marked as hit_levels indicating partial exits occurred.
+    
     Returns dict with parsed components or None if not a TRADE IDEA.
     """
     if 'TRADE IDEA' not in text.upper():
@@ -313,7 +317,6 @@ def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
     
     ticker_match = TRADE_IDEA_TICKER_PATTERN.search(text)
     entry_match = TRADE_IDEA_ENTRY_PATTERN.search(text)
-    levels_match = TRADE_IDEA_LEVELS_PATTERN.search(text)
     sl_match = TRADE_IDEA_SL_PATTERN.search(text)
     
     if not ticker_match or not entry_match:
@@ -325,18 +328,39 @@ def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
     stop_loss = float(sl_match.group(1)) if sl_match else None
     
     profit_targets = []
-    if levels_match:
-        levels_str = levels_match.group(1)
+    hit_levels = []
+    pending_levels = []
+    
+    levels_line_match = re.search(r'(?:📈\s*)?(?:Levels|Targets|PTs?):\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
+    if levels_line_match:
+        levels_str = levels_line_match.group(1)
         levels_str = re.sub(r'[+\s]+$', '', levels_str)
+        
         for level in re.split(r'\s*[-–]\s*', levels_str):
-            try:
-                level_clean = re.sub(r'[^\d.]', '', level.strip())
-                if level_clean:
-                    profit_targets.append(float(level_clean))
-            except ValueError:
-                pass
+            level = level.strip()
+            if not level:
+                continue
+            
+            is_struck = '~~' in level
+            level_clean = re.sub(r'~~', '', level)
+            level_clean = re.sub(r'[^\d.]', '', level_clean)
+            
+            if level_clean:
+                try:
+                    level_value = float(level_clean)
+                    profit_targets.append(level_value)
+                    
+                    if is_struck:
+                        hit_levels.append(level_value)
+                    else:
+                        pending_levels.append(level_value)
+                except ValueError:
+                    pass
     
     is_exit = 'all out' in text.lower() or 'closed' in text.lower() or 'exited' in text.lower()
+    is_update = len(hit_levels) > 0 or 'raised' in text.lower() or 'moved' in text.lower()
+    
+    signal_type = 'exit' if is_exit else ('update' if is_update else 'entry')
     
     result = {
         'format': 'TRADE_IDEA',
@@ -346,7 +370,11 @@ def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
         'price': entry_price,
         'stop_loss': stop_loss,
         'profit_targets': profit_targets,
+        'hit_levels': hit_levels,
+        'pending_levels': pending_levels,
         'is_exit': is_exit,
+        'is_update': is_update,
+        'signal_type': signal_type,
         'action': 'STC' if is_exit else 'BTO',
         'asset': 'stock',
         'asset_type': 'stock',
@@ -355,7 +383,10 @@ def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
         '_trade_idea': True,
     }
     
-    print(f"[TRADE IDEA] ✓ Parsed: {ticker} @ {entry_price}, SL={stop_loss}, PTs={profit_targets}")
+    hit_str = f", HIT={hit_levels}" if hit_levels else ""
+    pending_str = f", PENDING={pending_levels}" if pending_levels else ""
+    type_str = f" [{signal_type.upper()}]" if signal_type != 'entry' else ""
+    print(f"[TRADE IDEA] ✓ Parsed: {ticker} @ {entry_price}, SL={stop_loss}{hit_str}{pending_str}{type_str}")
     return result
 
 
