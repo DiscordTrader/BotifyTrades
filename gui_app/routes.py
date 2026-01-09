@@ -3957,10 +3957,10 @@ def register_routes(app):
                     print(f"[API] Using ticker_id={ticker_id} for {symbol}", flush=True)
                     
                     if user_limit_price:
-                        # Limit order
+                        # Limit order - use symbol string (ticker_id causes "Stock symbol is required" error)
                         print(f"[API] Placing LIMIT SELL: {quantity} {symbol} @ ${user_limit_price}", flush=True)
                         result = wb.place_order(
-                            stock=ticker_id,
+                            stock=symbol,
                             price=float(user_limit_price),
                             action='SELL',
                             orderType='LMT',
@@ -3968,33 +3968,17 @@ def register_routes(app):
                             quant=quantity
                         )
                     else:
-                        # Market order
-                        print(f"[API] Placing MARKET SELL: {quantity} {symbol} with ticker_id={ticker_id}", flush=True)
-                        try:
-                            result = wb.place_order(
-                                stock=ticker_id,
-                                price=0,            # market order
-                                action='SELL',
-                                orderType='MKT',
-                                enforce='GTC',
-                                quant=quantity
-                            )
-                            print(f"[API] Order result: {result}", flush=True)
-                        except Exception as order_err:
-                            print(f"[API] place_order EXCEPTION: {order_err}", flush=True)
-                            import traceback
-                            traceback.print_exc()
-                            # Try with symbol string instead of ticker_id
-                            print(f"[API] Retrying with symbol string '{symbol}' instead of ticker_id...", flush=True)
-                            result = wb.place_order(
-                                stock=symbol,
-                                price=0,
-                                action='SELL',
-                                orderType='MKT',
-                                enforce='GTC',
-                                quant=quantity
-                            )
-                            print(f"[API] Retry result: {result}", flush=True)
+                        # Market order - use symbol string and DAY enforcement (MKT doesn't support GTC)
+                        print(f"[API] Placing MARKET SELL: {quantity} {symbol}", flush=True)
+                        result = wb.place_order(
+                            stock=symbol,
+                            price=0,            # market order
+                            action='SELL',
+                            orderType='MKT',
+                            enforce='DAY',      # Market orders require DAY, not GTC
+                            quant=quantity
+                        )
+                        print(f"[API] Order result: {result}", flush=True)
                     
                     # Check if Webull returned an error
                     if isinstance(result, dict) and result.get('msg'):
