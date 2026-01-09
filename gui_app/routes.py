@@ -4329,24 +4329,43 @@ def register_routes(app):
             # If option_id is missing from database, get it from live broker positions
             if asset_type == 'option' and not option_id:
                 print(f"[API] option_id missing in database, fetching from live positions...", flush=True)
+                print(f"[API] Looking for: symbol={symbol}, strike={strike}, expiry={expiry}, call_put={call_put}", flush=True)
                 positions_future = asyncio.run_coroutine_threadsafe(
                     _get_webull_positions(),
                     _bot_instance.loop
                 )
                 live_positions = positions_future.result(timeout=10) or []
                 
-                # Find the position by symbol + strike + expiry + direction
+                # Normalize DB values for comparison
+                db_strike = float(strike) if strike else 0
+                db_call_put = str(call_put).upper()[0] if call_put else ''  # 'C' or 'P'
+                
+                # Find the position by symbol + strike + call/put (expiry format varies too much)
                 for pos in live_positions:
-                    if (pos.get('asset') == 'option' and 
-                        pos.get('symbol') == symbol and
-                        pos.get('strike') == strike and
-                        pos.get('expiry') == expiry and
-                        pos.get('direction') == call_put):
+                    pos_asset = (pos.get('asset') or '').lower()
+                    if pos_asset != 'option':
+                        continue
+                    if pos.get('symbol') != symbol:
+                        continue
+                    
+                    # Normalize position values
+                    pos_strike = float(pos.get('strike') or 0)
+                    pos_direction = str(pos.get('direction') or '').upper()
+                    if pos_direction in ['CALL', 'C']:
+                        pos_direction = 'C'
+                    elif pos_direction in ['PUT', 'P']:
+                        pos_direction = 'P'
+                    
+                    print(f"[API] Checking option: strike={pos_strike} vs {db_strike}, dir={pos_direction} vs {db_call_put}, option_id={pos.get('option_id')}", flush=True)
+                    
+                    # Match by symbol + strike + call/put
+                    if abs(pos_strike - db_strike) < 0.01 and pos_direction == db_call_put:
                         option_id = pos.get('option_id')
-                        print(f"[API] Found option_id={option_id} from live positions", flush=True)
+                        print(f"[API] FOUND option_id={option_id} from live positions!", flush=True)
                         break
                 
                 if not option_id:
+                    print(f"[API] No matching option found in {len(live_positions)} positions", flush=True)
                     return jsonify({
                         'success': False,
                         'error': f'Could not find option_id for {symbol} {strike}{call_put} {expiry}'
