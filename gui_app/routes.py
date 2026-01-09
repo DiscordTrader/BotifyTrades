@@ -12942,17 +12942,19 @@ def register_routes(app):
             
             def do_stop():
                 import time
-                time.sleep(0.5)
+                time.sleep(1.5)
                 lifecycle.exit(0)
             
             stop_thread = threading.Thread(target=do_stop, daemon=True)
             stop_thread.start()
             
-            return jsonify({
+            response = jsonify({
                 'success': True,
                 'message': 'Bot stopping...',
                 'state': 'stopping'
             })
+            response.headers['Connection'] = 'close'
+            return response
         except ImportError:
             return jsonify({'success': False, 'error': 'Lifecycle manager not available'}), 500
         except Exception as e:
@@ -12970,17 +12972,19 @@ def register_routes(app):
             
             def do_restart():
                 import time
-                time.sleep(0.5)
+                time.sleep(1.5)
                 lifecycle.restart()
             
             restart_thread = threading.Thread(target=do_restart, daemon=True)
             restart_thread.start()
             
-            return jsonify({
+            response = jsonify({
                 'success': True,
                 'message': 'Bot restarting...',
                 'state': 'restarting'
             })
+            response.headers['Connection'] = 'close'
+            return response
         except ImportError:
             return jsonify({'success': False, 'error': 'Lifecycle manager not available'}), 500
         except Exception as e:
