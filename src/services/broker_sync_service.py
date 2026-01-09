@@ -1102,51 +1102,73 @@ class BrokerSyncService:
                                      signal_detected_at: str = None, signal_parsed_at: str = None,
                                      order_submitted_at: str = None, analyst_entry_qty: int = None,
                                      sizing_mode: str = None, signal_lot_id: int = None):
-        """Record an entry fill as an execution_lot for Execution P&L tracking"""
+        """Record an entry fill as an execution_lot for Execution P&L tracking.
+        
+        First attempts to hydrate from pending_order_metadata for full signal context,
+        then falls back to provided parameters.
+        """
         try:
             def _insert_lot():
-                from gui_app.database import insert_execution_lot
+                from gui_app.database import insert_execution_lot, get_pending_order_metadata, update_pending_order_status
+                
+                # Try to hydrate from pending order metadata first
+                meta = get_pending_order_metadata(broker=broker, broker_order_id=broker_order_id)
+                
+                # Use metadata values if available, else fall back to params
+                final_channel_id = channel_id or (meta['channel_id'] if meta else None) or 'UNKNOWN'
+                final_signal_price = signal_price or (meta['signal_price'] if meta else None)
+                final_analyst_qty = analyst_entry_qty or (meta['analyst_qty'] if meta else None)
+                final_sizing_mode = sizing_mode or (meta['sizing_mode'] if meta else None)
+                final_signal_lot_id = signal_lot_id or (meta['signal_lot_id'] if meta else None)
+                final_signal_detected = signal_detected_at or (meta['signal_detected_at'] if meta else None)
+                final_signal_parsed = signal_parsed_at or (meta['signal_parsed_at'] if meta else None)
+                final_order_submitted = order_submitted_at or (meta['order_submitted_at'] if meta else None)
+                sizing_details = meta['sizing_details'] if meta else None
+                
+                # Mark pending metadata as filled
+                if meta:
+                    update_pending_order_status(broker, broker_order_id, 'FILLED')
                 
                 # Calculate slippage if signal_price available
                 slippage_pct = None
-                if signal_price and signal_price > 0:
-                    slippage_pct = ((fill_price - signal_price) / signal_price) * 100
+                if final_signal_price and final_signal_price > 0:
+                    slippage_pct = ((fill_price - final_signal_price) / final_signal_price) * 100
                 
                 # Calculate latency metrics
                 latency_parse_ms = None
                 latency_broker_ms = None
                 latency_total_ms = None
                 
-                if signal_detected_at and signal_parsed_at:
+                if final_signal_detected and final_signal_parsed:
                     try:
                         from datetime import datetime
-                        detected = datetime.fromisoformat(signal_detected_at.replace('Z', '+00:00'))
-                        parsed = datetime.fromisoformat(signal_parsed_at.replace('Z', '+00:00'))
+                        detected = datetime.fromisoformat(str(final_signal_detected).replace('Z', '+00:00'))
+                        parsed = datetime.fromisoformat(str(final_signal_parsed).replace('Z', '+00:00'))
                         latency_parse_ms = int((parsed - detected).total_seconds() * 1000)
                     except:
                         pass
                 
-                if order_submitted_at and filled_at:
+                if final_order_submitted and filled_at:
                     try:
                         from datetime import datetime
-                        submitted = datetime.fromisoformat(order_submitted_at.replace('Z', '+00:00'))
+                        submitted = datetime.fromisoformat(str(final_order_submitted).replace('Z', '+00:00'))
                         filled = datetime.fromisoformat(filled_at.replace('Z', '+00:00'))
                         latency_broker_ms = int((filled - submitted).total_seconds() * 1000)
                     except:
                         pass
                 
-                if signal_detected_at and filled_at:
+                if final_signal_detected and filled_at:
                     try:
                         from datetime import datetime
-                        detected = datetime.fromisoformat(signal_detected_at.replace('Z', '+00:00'))
+                        detected = datetime.fromisoformat(str(final_signal_detected).replace('Z', '+00:00'))
                         filled = datetime.fromisoformat(filled_at.replace('Z', '+00:00'))
                         latency_total_ms = int((filled - detected).total_seconds() * 1000)
                     except:
                         pass
                 
                 return insert_execution_lot(
-                    signal_lot_id=signal_lot_id,
-                    channel_id=channel_id or 'UNKNOWN',
+                    signal_lot_id=final_signal_lot_id,
+                    channel_id=final_channel_id,
                     broker=broker,
                     broker_order_id=broker_order_id,
                     symbol=symbol,
@@ -1157,17 +1179,18 @@ class BrokerSyncService:
                     original_qty=quantity,
                     remaining_qty=quantity,
                     fill_price=fill_price,
-                    signal_price=signal_price,
+                    signal_price=final_signal_price,
                     slippage_pct=slippage_pct,
-                    signal_detected_at=signal_detected_at,
-                    signal_parsed_at=signal_parsed_at,
-                    order_submitted_at=order_submitted_at,
+                    signal_detected_at=final_signal_detected,
+                    signal_parsed_at=final_signal_parsed,
+                    order_submitted_at=final_order_submitted,
                     order_filled_at=filled_at,
                     latency_parse_ms=latency_parse_ms,
                     latency_broker_ms=latency_broker_ms,
                     latency_total_ms=latency_total_ms,
-                    analyst_entry_qty=analyst_entry_qty,
-                    sizing_mode=sizing_mode
+                    analyst_entry_qty=final_analyst_qty,
+                    sizing_mode=final_sizing_mode,
+                    sizing_details=sizing_details
                 )
             
             result = await asyncio.to_thread(_insert_lot)
@@ -1183,96 +1206,39 @@ class BrokerSyncService:
                                          asset_type: str, strike: float, expiry: str, call_put: str,
                                          quantity: int, fill_price: float, filled_at: str,
                                          exit_source: str = 'SIGNAL', signal_exit_price: float = None,
-                                         order_submitted_at: str = None):
-        """Record an exit fill as an execution_closure with P&L calculation"""
+                                         order_submitted_at: str = None, channel_id: str = None):
+        """Record an exit fill as an execution_closure with P&L calculation.
+        
+        Uses atomic transaction (BEGIN IMMEDIATE) to prevent race conditions
+        when concurrent STC fills arrive for the same position.
+        """
         try:
             def _insert_closure():
-                from gui_app.database import find_matching_execution_lot, insert_execution_closure, update_execution_lot_remaining
-                import hashlib
+                from gui_app.database import record_execution_closure_atomic
                 
-                # Find matching open execution lot using FIFO
-                lot = find_matching_execution_lot(
+                # Use atomic function for transaction safety
+                closure_id, pnl = record_execution_closure_atomic(
                     broker=broker,
                     symbol=symbol,
                     asset_type=asset_type,
+                    closed_qty=quantity,
+                    fill_price=fill_price,
+                    filled_at=filled_at,
+                    exit_source=exit_source,
                     strike=strike,
                     expiry=expiry,
-                    call_put=call_put
-                )
-                
-                if not lot:
-                    print(f"[EXEC] ⚠️ No matching execution lot for {symbol} exit")
-                    return None
-                
-                # Calculate actual close quantity (min of exit qty and remaining)
-                close_qty = min(quantity, lot['remaining_qty'])
-                if close_qty <= 0:
-                    return None
-                
-                # Calculate P&L
-                entry_price = lot['fill_price']
-                multiplier = 100 if asset_type == 'option' else 1
-                pnl = (fill_price - entry_price) * close_qty * multiplier
-                pnl_percent = ((fill_price - entry_price) / entry_price) * 100 if entry_price > 0 else 0
-                
-                # Calculate exit slippage
-                slippage_pct = None
-                if signal_exit_price and signal_exit_price > 0:
-                    slippage_pct = ((fill_price - signal_exit_price) / signal_exit_price) * 100
-                
-                # Calculate holding days
-                holding_days = None
-                try:
-                    from datetime import datetime
-                    entry_dt = datetime.fromisoformat(lot['order_filled_at'].replace('Z', '+00:00'))
-                    exit_dt = datetime.fromisoformat(filled_at.replace('Z', '+00:00'))
-                    holding_days = (exit_dt - entry_dt).total_seconds() / 86400
-                except:
-                    pass
-                
-                # Calculate broker latency
-                latency_broker_ms = None
-                if order_submitted_at:
-                    try:
-                        from datetime import datetime
-                        submitted = datetime.fromisoformat(order_submitted_at.replace('Z', '+00:00'))
-                        filled = datetime.fromisoformat(filled_at.replace('Z', '+00:00'))
-                        latency_broker_ms = int((filled - submitted).total_seconds() * 1000)
-                    except:
-                        pass
-                
-                # Create idempotent closure hash to prevent duplicates
-                hash_input = f"{lot['id']}_{broker_order_id}_{close_qty}_{fill_price}"
-                closure_hash = hashlib.sha256(hash_input.encode()).hexdigest()[:32]
-                
-                # Insert closure
-                closure_id = insert_execution_closure(
-                    execution_lot_id=lot['id'],
-                    channel_id=lot['channel_id'],
-                    broker=broker,
+                    call_put=call_put,
                     broker_order_id=broker_order_id,
-                    closed_qty=close_qty,
-                    fill_price=fill_price,
                     signal_exit_price=signal_exit_price,
-                    slippage_pct=slippage_pct,
                     order_submitted_at=order_submitted_at,
-                    filled_at=filled_at,
-                    latency_broker_ms=latency_broker_ms,
-                    pnl=pnl,
-                    pnl_percent=pnl_percent,
-                    holding_days=holding_days,
-                    exit_source=exit_source,
-                    closure_hash=closure_hash
+                    channel_id=channel_id
                 )
                 
-                if closure_id:
-                    # Update lot remaining quantity
-                    new_remaining = lot['remaining_qty'] - close_qty
-                    new_status = 'CLOSED' if new_remaining <= 0 else 'PARTIAL'
-                    update_execution_lot_remaining(lot['id'], new_remaining, new_status)
-                    
+                if closure_id and pnl is not None:
                     pnl_sign = '+' if pnl >= 0 else ''
-                    print(f"[EXEC] ✓ Recorded closure: {symbol} {close_qty}x @${fill_price:.2f} = {pnl_sign}${pnl:.2f} ({pnl_percent:+.1f}%)")
+                    print(f"[EXEC] ✓ Recorded closure: {symbol} {quantity}x @${fill_price:.2f} = {pnl_sign}${pnl:.2f}")
+                elif closure_id is None:
+                    print(f"[EXEC] ⚠️ No matching execution lot for {symbol} exit (or duplicate closure)")
                 
                 return closure_id
             

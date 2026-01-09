@@ -1504,6 +1504,38 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_closures_channel ON execution_closures(channel_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_closures_source ON execution_closures(exit_source)')
     
+    # Pending Order Metadata - Bridge between order placement and BrokerSyncService
+    # Stores signal context when orders are submitted so fills can be linked back
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS pending_order_metadata (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            broker TEXT NOT NULL,
+            broker_order_id TEXT,
+            client_order_id TEXT,
+            channel_id TEXT NOT NULL,
+            message_id TEXT,
+            signal_lot_id INTEGER,
+            symbol TEXT NOT NULL,
+            asset_type TEXT NOT NULL CHECK(asset_type IN ('stock', 'option')),
+            action TEXT NOT NULL CHECK(action IN ('BTO', 'STC', 'BUY', 'SELL')),
+            quantity INTEGER NOT NULL,
+            signal_price REAL,
+            analyst_qty INTEGER,
+            sizing_mode TEXT,
+            sizing_details TEXT,
+            signal_detected_at TIMESTAMP,
+            signal_parsed_at TIMESTAMP,
+            order_submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            status TEXT DEFAULT 'PENDING' CHECK(status IN ('PENDING', 'FILLED', 'CANCELLED', 'EXPIRED')),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(broker, broker_order_id),
+            FOREIGN KEY (signal_lot_id) REFERENCES signal_lots(id)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_pending_meta_broker_order ON pending_order_metadata(broker, broker_order_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_pending_meta_status ON pending_order_metadata(status)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_pending_meta_channel ON pending_order_metadata(channel_id)')
+    
     print("[DATABASE] ✓ Execution tracking tables ready")
     
     # Seed common known issues
@@ -3534,6 +3566,195 @@ def get_execution_leaderboard(days: int = None):
     
     cursor.execute(query, params)
     return cursor.fetchall()
+
+
+# ============================================
+# PENDING ORDER METADATA FUNCTIONS
+# Bridge between order placement and BrokerSyncService
+# ============================================
+
+def save_pending_order_metadata(
+    broker: str, channel_id: str, symbol: str, asset_type: str, action: str, quantity: int,
+    broker_order_id: str = None, client_order_id: str = None, message_id: str = None,
+    signal_lot_id: int = None, signal_price: float = None, analyst_qty: int = None,
+    sizing_mode: str = None, sizing_details: str = None,
+    signal_detected_at = None, signal_parsed_at = None
+):
+    """Save signal context when order is placed for later hydration by BrokerSyncService"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO pending_order_metadata (
+                broker, broker_order_id, client_order_id, channel_id, message_id,
+                signal_lot_id, symbol, asset_type, action, quantity, signal_price,
+                analyst_qty, sizing_mode, sizing_details,
+                signal_detected_at, signal_parsed_at, order_submitted_at, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'PENDING')
+        ''', (
+            broker, broker_order_id, client_order_id, str(channel_id), message_id,
+            signal_lot_id, symbol, asset_type, action, quantity, signal_price,
+            analyst_qty, sizing_mode, sizing_details,
+            signal_detected_at, signal_parsed_at
+        ))
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        if 'UNIQUE constraint failed' not in str(e):
+            print(f"[DATABASE] Error saving pending order metadata: {e}")
+        return None
+
+
+def get_pending_order_metadata(broker: str, broker_order_id: str = None, client_order_id: str = None):
+    """Lookup pending order metadata by broker_order_id or client_order_id"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if broker_order_id:
+        cursor.execute('''
+            SELECT * FROM pending_order_metadata 
+            WHERE broker = ? AND broker_order_id = ? AND status = 'PENDING'
+        ''', (broker, broker_order_id))
+    elif client_order_id:
+        cursor.execute('''
+            SELECT * FROM pending_order_metadata 
+            WHERE broker = ? AND client_order_id = ? AND status = 'PENDING'
+        ''', (broker, client_order_id))
+    else:
+        return None
+    
+    return cursor.fetchone()
+
+
+def update_pending_order_status(broker: str, broker_order_id: str, status: str, filled_order_id: str = None):
+    """Mark pending order as filled/cancelled/expired"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            UPDATE pending_order_metadata 
+            SET status = ? 
+            WHERE broker = ? AND broker_order_id = ?
+        ''', (status, broker, broker_order_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error updating pending order status: {e}")
+        return False
+
+
+def record_execution_closure_atomic(
+    broker: str, symbol: str, asset_type: str, closed_qty: int, fill_price: float, filled_at,
+    exit_source: str = 'SIGNAL', strike: float = None, expiry: str = None, call_put: str = None,
+    broker_order_id: str = None, signal_exit_price: float = None,
+    order_submitted_at = None, channel_id: str = None
+):
+    """
+    Atomically find matching lot, insert closure, and update remaining quantity.
+    Uses BEGIN IMMEDIATE for transaction safety with concurrent fills.
+    Returns (closure_id, pnl) or (None, None) if failed.
+    """
+    import hashlib
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # BEGIN IMMEDIATE for exclusive write lock
+        cursor.execute('BEGIN IMMEDIATE')
+        
+        # Find matching execution lot (FIFO)
+        query = '''
+            SELECT * FROM execution_lots 
+            WHERE broker = ? AND symbol = ? AND asset_type = ? 
+            AND status IN ('OPEN', 'PARTIAL') AND remaining_qty > 0
+        '''
+        params = [broker, symbol, asset_type]
+        
+        if asset_type == 'option':
+            if strike is not None:
+                query += ' AND strike = ?'
+                params.append(strike)
+            if expiry:
+                query += ' AND expiry = ?'
+                params.append(expiry)
+            if call_put:
+                query += ' AND call_put = ?'
+                params.append(call_put)
+        
+        query += ' ORDER BY order_filled_at ASC LIMIT 1'
+        cursor.execute(query, params)
+        exec_lot = cursor.fetchone()
+        
+        if not exec_lot:
+            cursor.execute('ROLLBACK')
+            return None, None
+        
+        # Calculate P&L
+        entry_price = exec_lot['fill_price']
+        multiplier = 100 if asset_type == 'option' else 1
+        pnl = (fill_price - entry_price) * closed_qty * multiplier
+        pnl_percent = ((fill_price - entry_price) / entry_price * 100) if entry_price > 0 else 0
+        
+        # Calculate holding days
+        holding_days = None
+        if exec_lot['order_filled_at']:
+            try:
+                from datetime import datetime
+                if isinstance(filled_at, str):
+                    exit_dt = datetime.fromisoformat(filled_at.replace('Z', '+00:00'))
+                else:
+                    exit_dt = filled_at
+                entry_dt = datetime.fromisoformat(str(exec_lot['order_filled_at']).replace('Z', '+00:00'))
+                holding_days = (exit_dt - entry_dt).total_seconds() / 86400
+            except:
+                pass
+        
+        # Calculate slippage
+        slippage_pct = None
+        if signal_exit_price and signal_exit_price > 0:
+            slippage_pct = (fill_price - signal_exit_price) / signal_exit_price * 100
+        
+        # Generate closure hash for deduplication
+        closure_hash = hashlib.sha256(
+            f"{exec_lot['id']}:{broker}:{closed_qty}:{filled_at}".encode()
+        ).hexdigest()[:32]
+        
+        # Use provided channel_id or fallback to lot's channel_id
+        final_channel_id = channel_id or exec_lot['channel_id']
+        
+        # Insert closure
+        cursor.execute('''
+            INSERT INTO execution_closures (
+                execution_lot_id, channel_id, broker, broker_order_id,
+                closed_qty, fill_price, signal_exit_price, slippage_pct,
+                order_submitted_at, filled_at, pnl, pnl_percent, holding_days,
+                exit_source, closure_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            exec_lot['id'], final_channel_id, broker, broker_order_id,
+            closed_qty, fill_price, signal_exit_price, slippage_pct,
+            order_submitted_at, filled_at, pnl, pnl_percent, holding_days,
+            exit_source, closure_hash
+        ))
+        
+        # Update lot remaining quantity
+        new_remaining = exec_lot['remaining_qty'] - closed_qty
+        if new_remaining <= 0:
+            cursor.execute('UPDATE execution_lots SET remaining_qty = 0, status = "CLOSED" WHERE id = ?', (exec_lot['id'],))
+        else:
+            cursor.execute('UPDATE execution_lots SET remaining_qty = ?, status = "PARTIAL" WHERE id = ?', (new_remaining, exec_lot['id']))
+        
+        cursor.execute('COMMIT')
+        return cursor.lastrowid, pnl
+        
+    except Exception as e:
+        cursor.execute('ROLLBACK')
+        if 'UNIQUE constraint failed' in str(e):
+            return None, None  # Duplicate closure, already processed
+        print(f"[DATABASE] Error in atomic closure: {e}")
+        return None, None
 
 
 def get_performance_metrics(channel_id: int = None, period_start=None, period_end=None):

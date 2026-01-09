@@ -8906,6 +8906,33 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 else:
                     resp = {'broker': broker_name, 'result': result, 'executed_qty': signal['qty']}
             
+            # Save pending order metadata for execution tracking (only for BTO orders)
+            if resp.get('success') or resp.get('orderId'):
+                order_id = resp.get('orderId') or resp.get('order_id')
+                if order_id and signal.get('action', '').upper() in ('BTO', 'BUY'):
+                    try:
+                        from gui_app.database import save_pending_order_metadata
+                        from datetime import datetime
+                        save_pending_order_metadata(
+                            broker=broker_name,
+                            broker_order_id=str(order_id),
+                            channel_id=str(signal.get('channel_id', 'UNKNOWN')),
+                            message_id=str(signal.get('message_id', '')),
+                            symbol=signal.get('symbol', ''),
+                            asset_type=signal.get('asset', 'option'),
+                            action=signal.get('action', 'BTO'),
+                            quantity=signal.get('qty', 1),
+                            signal_price=signal.get('price'),
+                            analyst_qty=signal.get('original_qty') or signal.get('qty'),
+                            sizing_mode=signal.get('sizing_mode'),
+                            sizing_details=signal.get('sizing_details'),
+                            signal_detected_at=signal.get('detected_at'),
+                            signal_parsed_at=signal.get('parsed_at'),
+                            signal_lot_id=signal.get('lot_id')
+                        )
+                    except Exception as meta_err:
+                        _original_print(f"[EXEC] Warning: Could not save order metadata: {meta_err}")
+            
             return resp
         
         except Exception as e:
