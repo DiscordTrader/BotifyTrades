@@ -4098,7 +4098,7 @@
   },
   "ALPACA_PAPER_APLD_stock": {
     "entry_price": 33.66,
-    "highest_price": 37.91,
+    "highest_price": 38.005,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
