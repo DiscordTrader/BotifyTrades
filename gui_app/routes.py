@@ -3926,24 +3926,31 @@ def register_routes(app):
             try:
                 # ---------- STOCK CLOSE: market or limit SELL ----------
                 if asset_type == 'stock':
+                    print(f"[CLOSE] Looking up ticker for stock: {symbol}")
                     ticker = wb.get_ticker(symbol)
+                    print(f"[CLOSE] get_ticker({symbol}) returned: {ticker} (type: {type(ticker).__name__})")
+                    
                     if not ticker:
-                        return {'success': False, 'error': f'Symbol {symbol} not found'}
+                        return {'success': False, 'error': f'Symbol {symbol} not found at Webull'}
 
                     # get_ticker can return int or dict depending on webull version
                     if isinstance(ticker, int):
                         ticker_id = ticker
                     elif isinstance(ticker, dict):
-                        ticker_id = ticker.get('tickerId') or ticker.get('ticker_id')
+                        ticker_id = ticker.get('tickerId') or ticker.get('ticker_id') or ticker.get('id')
+                    elif isinstance(ticker, str) and ticker.isdigit():
+                        ticker_id = int(ticker)
                     else:
-                        return {'success': False, 'error': f'Unexpected ticker format for {symbol}: {ticker}'}
+                        return {'success': False, 'error': f'Unexpected ticker format for {symbol}: {type(ticker).__name__} = {ticker}'}
 
                     if not ticker_id:
-                        return {'success': False, 'error': f'Ticker ID not found for {symbol}'}
+                        return {'success': False, 'error': f'Ticker ID not found for {symbol} (raw: {ticker})'}
 
+                    print(f"[CLOSE] Using ticker_id={ticker_id} for {symbol}")
+                    
                     if user_limit_price:
                         # Limit order
-                        print(f"[DEBUG] Closing stock {symbol} with LIMIT @ ${user_limit_price}")
+                        print(f"[CLOSE] Placing LIMIT SELL: {quantity} {symbol} @ ${user_limit_price}")
                         result = wb.place_order(
                             stock=ticker_id,
                             price=float(user_limit_price),
@@ -3954,6 +3961,7 @@ def register_routes(app):
                         )
                     else:
                         # Market order
+                        print(f"[CLOSE] Placing MARKET SELL: {quantity} {symbol}")
                         result = wb.place_order(
                             stock=ticker_id,
                             price=0,            # market order
@@ -3962,6 +3970,13 @@ def register_routes(app):
                             enforce='GTC',
                             quant=quantity
                         )
+                    
+                    print(f"[CLOSE] Order result: {result}")
+                    
+                    # Check if Webull returned an error
+                    if isinstance(result, dict) and result.get('msg'):
+                        return {'success': False, 'error': f"Webull error: {result.get('msg')}"}
+                    
                     return {'success': True, 'result': result}
 
                 # ---------- OPTION CLOSE: limit SELL using optionId ----------
