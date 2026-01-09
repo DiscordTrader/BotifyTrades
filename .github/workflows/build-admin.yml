@@ -181,7 +181,7 @@ jobs:
 
   build-macos-intel:
     needs: set-build-type
-    runs-on: macos-13
+    runs-on: macos-15-intel  # Intel x86_64 runner (replaces retired macos-13, available until Aug 2027)
     
     steps:
       - name: Download modified source
@@ -234,6 +234,24 @@ jobs:
           
           pyinstaller build/build_exe.spec --clean --noconfirm
           rm -rf src && mv src_backup src
+      
+      - name: Fix permissions and sign
+        run: |
+          # Set executable permission
+          chmod +x dist/DiscordTradingBot
+          
+          # Verify it's a proper executable
+          file dist/DiscordTradingBot
+          
+          # Ad-hoc code sign (required for macOS to recognize as executable)
+          codesign --force --deep --sign - dist/DiscordTradingBot
+          
+          # Remove quarantine attribute
+          xattr -cr dist/DiscordTradingBot
+          
+          echo "=== Final executable check ==="
+          ls -la dist/DiscordTradingBot
+          file dist/DiscordTradingBot
       
       - name: Upload macOS Intel Admin
         uses: actions/upload-artifact@v4
@@ -297,6 +315,24 @@ jobs:
           
           pyinstaller build/build_exe.spec --clean --noconfirm
           rm -rf src && mv src_backup src
+      
+      - name: Fix permissions and sign
+        run: |
+          # Set executable permission
+          chmod +x dist/DiscordTradingBot
+          
+          # Verify it's a proper executable
+          file dist/DiscordTradingBot
+          
+          # Ad-hoc code sign (required for macOS to recognize as executable)
+          codesign --force --deep --sign - dist/DiscordTradingBot
+          
+          # Remove quarantine attribute
+          xattr -cr dist/DiscordTradingBot
+          
+          echo "=== Final executable check ==="
+          ls -la dist/DiscordTradingBot
+          file dist/DiscordTradingBot
       
       - name: Upload macOS Silicon Admin
         uses: actions/upload-artifact@v4
