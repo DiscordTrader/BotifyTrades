@@ -484,23 +484,33 @@ def format_jacob_for_webhook(parsed: Dict[str, Any]) -> str:
     return result
 
 
-def is_conditional_order_signal(text: str) -> bool:
+def is_conditional_order_signal(text: str, require_sl_pt: bool = False) -> bool:
     """
     Check if text is a conditional order signal (price-triggered entry).
     
     Conditional orders require explicit 'over/above' or 'under/below' keywords
     to distinguish from regular BTO/STC signals.
+    
+    Args:
+        text: The message text to check
+        require_sl_pt: If True, requires SL/PT/position size in the same message.
+                       If False (default), allows trigger-only signals.
+                       Trigger-only signals can receive SL/PT from follow-up messages.
     """
     text_upper = text.upper()
     
-    # Must have over/under trigger AND at least one of SL/PT
+    # Must have over/under trigger
     has_over_trigger = CONDITIONAL_TRIGGER_PATTERN.search(text) is not None
     has_under_trigger = CONDITIONAL_TRIGGER_UNDER_PATTERN.search(text) is not None
     
     if not (has_over_trigger or has_under_trigger):
         return False
     
-    # Must have SL or PT to be a valid conditional order (not just a price mention)
+    # If require_sl_pt is False, allow trigger-only signals (SL/PT can come in follow-up)
+    if not require_sl_pt:
+        return True
+    
+    # Check for SL/PT/position size in the same message
     has_sl = CONDITIONAL_SL_PERCENT_PATTERN.search(text) or CONDITIONAL_SL_FIXED_PATTERN.search(text)
     has_pt = CONDITIONAL_PT_PATTERN.search(text)
     has_position_size = CONDITIONAL_POSITION_SIZE_PATTERN.search(text)
