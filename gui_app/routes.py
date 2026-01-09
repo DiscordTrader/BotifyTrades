@@ -4198,7 +4198,7 @@ def register_routes(app):
             print(f"[API] Bot instance OK, fetching trade {trade_id} from database...")
             # Get trade from database
             trade = db.get_trade_by_id(trade_id)
-            print(f"[API] Trade data: {trade}")
+            print(f"[API] Trade data: {trade}", flush=True)
             if not trade:
                 return jsonify({'success': False, 'error': f'Trade {trade_id} not found'}), 404
             
@@ -4211,10 +4211,12 @@ def register_routes(app):
             entry_price = float(trade.get('executed_price') or trade.get('entry_price') or 0)
             broker = (trade.get('broker') or 'Webull').upper()
             
+            print(f"[DEBUG-X2] Extracted: symbol={symbol}, broker={broker}, asset_type={asset_type}", flush=True)
+            
             if not symbol:
                 return jsonify({'success': False, 'error': 'Invalid trade data - missing symbol'}), 400
             
-            print(f"[CLOSE] Trade broker: {broker}, asset_type: {asset_type}")
+            print(f"[DEBUG-X3] Symbol check passed, continuing to broker routing...", flush=True)
             
             # ========== ALPACA BROKER CLOSE ==========
             if 'ALPACA' in broker:
