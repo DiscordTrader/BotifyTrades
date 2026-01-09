@@ -947,6 +947,35 @@ class BrokerSyncService:
                 
                 if result:
                     new_count += 1
+                    
+                    # Also record in execution_lots for Execution P&L tracking
+                    if side == 'BTO':
+                        await self._record_execution_lot(
+                            broker=broker_name,
+                            broker_order_id=str(order.get('order_id', '')),
+                            symbol=order.get('symbol', ''),
+                            asset_type=order.get('asset_type', 'stock'),
+                            strike=order.get('strike'),
+                            expiry=order.get('expiry'),
+                            call_put=order.get('direction'),
+                            quantity=qty,
+                            fill_price=price,
+                            filled_at=filled_time
+                        )
+                    elif side == 'STC':
+                        # Record exit in execution_closures
+                        await self._record_execution_closure(
+                            broker=broker_name,
+                            broker_order_id=str(order.get('order_id', '')),
+                            symbol=order.get('symbol', ''),
+                            asset_type=order.get('asset_type', 'stock'),
+                            strike=order.get('strike'),
+                            expiry=order.get('expiry'),
+                            call_put=order.get('direction'),
+                            quantity=qty,
+                            fill_price=price,
+                            filled_at=filled_time
+                        )
             
             if new_count > 0:
                 print(f"[SYNC] ✓ Synced {new_count} new filled orders from {broker_name}")
@@ -1065,3 +1094,193 @@ class BrokerSyncService:
             # Order may not exist or API error - return None
             pass
         return None
+    
+    async def _record_execution_lot(self, broker: str, broker_order_id: str, symbol: str,
+                                     asset_type: str, strike: float, expiry: str, call_put: str,
+                                     quantity: int, fill_price: float, filled_at: str,
+                                     channel_id: str = None, signal_price: float = None,
+                                     signal_detected_at: str = None, signal_parsed_at: str = None,
+                                     order_submitted_at: str = None, analyst_entry_qty: int = None,
+                                     sizing_mode: str = None, signal_lot_id: int = None):
+        """Record an entry fill as an execution_lot for Execution P&L tracking"""
+        try:
+            def _insert_lot():
+                from gui_app.database import insert_execution_lot
+                
+                # Calculate slippage if signal_price available
+                slippage_pct = None
+                if signal_price and signal_price > 0:
+                    slippage_pct = ((fill_price - signal_price) / signal_price) * 100
+                
+                # Calculate latency metrics
+                latency_parse_ms = None
+                latency_broker_ms = None
+                latency_total_ms = None
+                
+                if signal_detected_at and signal_parsed_at:
+                    try:
+                        from datetime import datetime
+                        detected = datetime.fromisoformat(signal_detected_at.replace('Z', '+00:00'))
+                        parsed = datetime.fromisoformat(signal_parsed_at.replace('Z', '+00:00'))
+                        latency_parse_ms = int((parsed - detected).total_seconds() * 1000)
+                    except:
+                        pass
+                
+                if order_submitted_at and filled_at:
+                    try:
+                        from datetime import datetime
+                        submitted = datetime.fromisoformat(order_submitted_at.replace('Z', '+00:00'))
+                        filled = datetime.fromisoformat(filled_at.replace('Z', '+00:00'))
+                        latency_broker_ms = int((filled - submitted).total_seconds() * 1000)
+                    except:
+                        pass
+                
+                if signal_detected_at and filled_at:
+                    try:
+                        from datetime import datetime
+                        detected = datetime.fromisoformat(signal_detected_at.replace('Z', '+00:00'))
+                        filled = datetime.fromisoformat(filled_at.replace('Z', '+00:00'))
+                        latency_total_ms = int((filled - detected).total_seconds() * 1000)
+                    except:
+                        pass
+                
+                return insert_execution_lot(
+                    signal_lot_id=signal_lot_id,
+                    channel_id=channel_id or 'UNKNOWN',
+                    broker=broker,
+                    broker_order_id=broker_order_id,
+                    symbol=symbol,
+                    asset_type=asset_type,
+                    strike=strike,
+                    expiry=expiry,
+                    call_put=call_put,
+                    original_qty=quantity,
+                    remaining_qty=quantity,
+                    fill_price=fill_price,
+                    signal_price=signal_price,
+                    slippage_pct=slippage_pct,
+                    signal_detected_at=signal_detected_at,
+                    signal_parsed_at=signal_parsed_at,
+                    order_submitted_at=order_submitted_at,
+                    order_filled_at=filled_at,
+                    latency_parse_ms=latency_parse_ms,
+                    latency_broker_ms=latency_broker_ms,
+                    latency_total_ms=latency_total_ms,
+                    analyst_entry_qty=analyst_entry_qty,
+                    sizing_mode=sizing_mode
+                )
+            
+            result = await asyncio.to_thread(_insert_lot)
+            if result:
+                print(f"[EXEC] ✓ Recorded execution lot: {symbol} {quantity}x @${fill_price:.2f}")
+            return result
+            
+        except Exception as e:
+            print(f"[EXEC] Error recording execution lot: {e}")
+            return None
+    
+    async def _record_execution_closure(self, broker: str, broker_order_id: str, symbol: str,
+                                         asset_type: str, strike: float, expiry: str, call_put: str,
+                                         quantity: int, fill_price: float, filled_at: str,
+                                         exit_source: str = 'SIGNAL', signal_exit_price: float = None,
+                                         order_submitted_at: str = None):
+        """Record an exit fill as an execution_closure with P&L calculation"""
+        try:
+            def _insert_closure():
+                from gui_app.database import find_matching_execution_lot, insert_execution_closure, update_execution_lot_remaining
+                import hashlib
+                
+                # Find matching open execution lot using FIFO
+                lot = find_matching_execution_lot(
+                    broker=broker,
+                    symbol=symbol,
+                    asset_type=asset_type,
+                    strike=strike,
+                    expiry=expiry,
+                    call_put=call_put
+                )
+                
+                if not lot:
+                    print(f"[EXEC] ⚠️ No matching execution lot for {symbol} exit")
+                    return None
+                
+                # Calculate actual close quantity (min of exit qty and remaining)
+                close_qty = min(quantity, lot['remaining_qty'])
+                if close_qty <= 0:
+                    return None
+                
+                # Calculate P&L
+                entry_price = lot['fill_price']
+                multiplier = 100 if asset_type == 'option' else 1
+                pnl = (fill_price - entry_price) * close_qty * multiplier
+                pnl_percent = ((fill_price - entry_price) / entry_price) * 100 if entry_price > 0 else 0
+                
+                # Calculate exit slippage
+                slippage_pct = None
+                if signal_exit_price and signal_exit_price > 0:
+                    slippage_pct = ((fill_price - signal_exit_price) / signal_exit_price) * 100
+                
+                # Calculate holding days
+                holding_days = None
+                try:
+                    from datetime import datetime
+                    entry_dt = datetime.fromisoformat(lot['order_filled_at'].replace('Z', '+00:00'))
+                    exit_dt = datetime.fromisoformat(filled_at.replace('Z', '+00:00'))
+                    holding_days = (exit_dt - entry_dt).total_seconds() / 86400
+                except:
+                    pass
+                
+                # Calculate broker latency
+                latency_broker_ms = None
+                if order_submitted_at:
+                    try:
+                        from datetime import datetime
+                        submitted = datetime.fromisoformat(order_submitted_at.replace('Z', '+00:00'))
+                        filled = datetime.fromisoformat(filled_at.replace('Z', '+00:00'))
+                        latency_broker_ms = int((filled - submitted).total_seconds() * 1000)
+                    except:
+                        pass
+                
+                # Create idempotent closure hash to prevent duplicates
+                hash_input = f"{lot['id']}_{broker_order_id}_{close_qty}_{fill_price}"
+                closure_hash = hashlib.sha256(hash_input.encode()).hexdigest()[:32]
+                
+                # Insert closure
+                closure_id = insert_execution_closure(
+                    execution_lot_id=lot['id'],
+                    channel_id=lot['channel_id'],
+                    broker=broker,
+                    broker_order_id=broker_order_id,
+                    closed_qty=close_qty,
+                    fill_price=fill_price,
+                    signal_exit_price=signal_exit_price,
+                    slippage_pct=slippage_pct,
+                    order_submitted_at=order_submitted_at,
+                    filled_at=filled_at,
+                    latency_broker_ms=latency_broker_ms,
+                    pnl=pnl,
+                    pnl_percent=pnl_percent,
+                    holding_days=holding_days,
+                    exit_source=exit_source,
+                    closure_hash=closure_hash
+                )
+                
+                if closure_id:
+                    # Update lot remaining quantity
+                    new_remaining = lot['remaining_qty'] - close_qty
+                    new_status = 'CLOSED' if new_remaining <= 0 else 'PARTIAL'
+                    update_execution_lot_remaining(lot['id'], new_remaining, new_status)
+                    
+                    pnl_sign = '+' if pnl >= 0 else ''
+                    print(f"[EXEC] ✓ Recorded closure: {symbol} {close_qty}x @${fill_price:.2f} = {pnl_sign}${pnl:.2f} ({pnl_percent:+.1f}%)")
+                
+                return closure_id
+            
+            result = await asyncio.to_thread(_insert_closure)
+            return result
+            
+        except Exception as e:
+            print(f"[EXEC] Error recording execution closure: {e}")
+            import traceback
+            traceback.print_exc()
+            return None

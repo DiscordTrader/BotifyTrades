@@ -3335,6 +3335,129 @@ def create_execution_closure(
         return None
 
 
+def insert_execution_lot(
+    channel_id: str, broker: str, symbol: str, asset_type: str,
+    original_qty: int, remaining_qty: int, fill_price: float, order_filled_at,
+    signal_lot_id: int = None, broker_order_id: str = None,
+    strike: float = None, expiry: str = None, call_put: str = None,
+    signal_price: float = None, slippage_pct: float = None,
+    signal_detected_at = None, signal_parsed_at = None, order_submitted_at = None,
+    latency_parse_ms: int = None, latency_broker_ms: int = None, latency_total_ms: int = None,
+    analyst_entry_qty: int = None, sizing_mode: str = None, sizing_details: str = None
+):
+    """Insert an execution lot (entry fill) for Execution P&L tracking"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO execution_lots (
+                signal_lot_id, channel_id, broker, broker_order_id,
+                symbol, asset_type, strike, expiry, call_put,
+                original_qty, remaining_qty, fill_price, signal_price, slippage_pct,
+                signal_detected_at, signal_parsed_at, order_submitted_at, order_filled_at,
+                latency_parse_ms, latency_broker_ms, latency_total_ms,
+                analyst_entry_qty, sizing_mode, sizing_details, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')
+        ''', (
+            signal_lot_id, str(channel_id), broker, broker_order_id,
+            symbol, asset_type, strike, expiry, call_put,
+            original_qty, remaining_qty, fill_price, signal_price, slippage_pct,
+            signal_detected_at, signal_parsed_at, order_submitted_at, order_filled_at,
+            latency_parse_ms, latency_broker_ms, latency_total_ms,
+            analyst_entry_qty, sizing_mode, sizing_details
+        ))
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        if 'UNIQUE constraint failed' in str(e):
+            return None
+        print(f"[DATABASE] Error inserting execution lot: {e}")
+        return None
+
+
+def find_matching_execution_lot(broker: str, symbol: str, asset_type: str,
+                                  strike: float = None, expiry: str = None, call_put: str = None):
+    """Find oldest open execution lot matching position criteria (FIFO)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT * FROM execution_lots 
+        WHERE broker = ? AND symbol = ? AND asset_type = ? 
+        AND status IN ('OPEN', 'PARTIAL') AND remaining_qty > 0
+    '''
+    params = [broker, symbol, asset_type]
+    
+    if asset_type == 'option':
+        if strike is not None:
+            query += ' AND strike = ?'
+            params.append(strike)
+        if expiry:
+            query += ' AND expiry = ?'
+            params.append(expiry)
+        if call_put:
+            query += ' AND call_put = ?'
+            params.append(call_put)
+    
+    query += ' ORDER BY order_filled_at ASC LIMIT 1'
+    cursor.execute(query, params)
+    return cursor.fetchone()
+
+
+def insert_execution_closure(
+    execution_lot_id: int, channel_id: str, broker: str,
+    closed_qty: int, fill_price: float, filled_at,
+    pnl: float, pnl_percent: float, exit_source: str,
+    signal_lot_closure_id: int = None, broker_order_id: str = None,
+    signal_exit_price: float = None, slippage_pct: float = None,
+    order_submitted_at = None, latency_broker_ms: int = None,
+    holding_days: float = None, closure_hash: str = None
+):
+    """Insert an execution closure record"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO execution_closures (
+                execution_lot_id, signal_lot_closure_id, channel_id, broker,
+                broker_order_id, closed_qty, fill_price, signal_exit_price,
+                slippage_pct, order_submitted_at, filled_at, latency_broker_ms,
+                pnl, pnl_percent, holding_days, exit_source, closure_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            execution_lot_id, signal_lot_closure_id, str(channel_id), broker,
+            broker_order_id, closed_qty, fill_price, signal_exit_price,
+            slippage_pct, order_submitted_at, filled_at, latency_broker_ms,
+            pnl, pnl_percent, holding_days, exit_source, closure_hash
+        ))
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        if 'UNIQUE constraint failed' in str(e):
+            return None
+        print(f"[DATABASE] Error inserting execution closure: {e}")
+        return None
+
+
+def update_execution_lot_remaining(lot_id: int, remaining_qty: int, status: str):
+    """Update execution lot remaining quantity and status"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute(
+            'UPDATE execution_lots SET remaining_qty = ?, status = ? WHERE id = ?',
+            (remaining_qty, status, lot_id)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error updating execution lot: {e}")
+        return False
+
+
 def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = None, limit: int = 100):
     """Get execution-based P&L with optional filtering"""
     conn = get_connection()
