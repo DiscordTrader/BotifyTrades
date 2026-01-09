@@ -3923,13 +3923,15 @@ def register_routes(app):
             return {'success': False, 'error': 'Webull client not available'}
 
         def _blocking_call():
-            print(f"[CLOSE] _blocking_call started: symbol={symbol}, asset_type={asset_type}, quantity={quantity}")
+            import sys
+            print(f"[CLOSE] _blocking_call started: symbol={symbol}, asset_type={asset_type}, quantity={quantity}", flush=True)
+            sys.stdout.flush()
             try:
                 # ---------- STOCK CLOSE: market or limit SELL ----------
                 if asset_type == 'stock':
-                    print(f"[CLOSE] Looking up ticker for stock: {symbol}")
+                    print(f"[CLOSE] Looking up ticker for stock: {symbol}", flush=True)
                     ticker = wb.get_ticker(symbol)
-                    print(f"[CLOSE] get_ticker({symbol}) returned: {ticker} (type: {type(ticker).__name__})")
+                    print(f"[CLOSE] get_ticker({symbol}) returned: {ticker} (type: {type(ticker).__name__})", flush=True)
                     
                     if not ticker:
                         return {'success': False, 'error': f'Symbol {symbol} not found at Webull'}
