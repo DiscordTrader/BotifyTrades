@@ -60,7 +60,7 @@ workflows:
           - table: signal_formats
             required_fields: [name, regex_pattern, example_signal, field_mappings]
         function_requirements:
-          - module: src.signal_parser
+          - module: src.signals.parser
             functions: [parse_signal, parse_option_signal, parse_stock_signal]
         inputs:
           - type: raw_signal
@@ -143,8 +143,7 @@ workflows:
               - default_quantity
               - position_size_pct
               - tracking_position_size_pct
-          - table: trading_settings
-            required_fields: [paper_trade]
+              - paper_trade_enabled
         inputs:
           - type: routed_order
             from_stage: broker_routing
@@ -173,8 +172,7 @@ workflows:
               - risk_management_enabled
               - stop_loss_pct
               - profit_target_1_pct
-          - table: trading_settings
-            required_fields: [paper_trade]
+              - paper_trade_enabled
         inputs:
           - type: sized_order
             from_stage: position_sizing
@@ -221,7 +219,7 @@ workflows:
           - table: conditional_orders
             required_fields: [symbol, trigger_price, trigger_type, status]
         function_requirements:
-          - module: src.price_monitor
+          - module: src.services.conditional_orders.base
             functions: [get_current_price, check_trigger]
         price_sources:
           priority_order:
@@ -247,9 +245,9 @@ workflows:
           - table: trades
             required_fields: [symbol, direction, quantity, status, broker, executed_price, executed_at]
           - table: signals
-            required_fields: [symbol, direction, channel_id, status]
+            required_fields: [symbol, direction, channel_id, execution_status]
         function_requirements:
-          - module: src.order_executor
+          - module: src.selfbot_webull
             functions: [execute_order]
         inputs:
           - type: validated_order
@@ -298,9 +296,9 @@ workflows:
               - trailing_activation_pct
               - leave_runner_enabled
               - leave_runner_pct
-              - exit_strategy_mode
+              - conditional_order_enabled
         function_requirements:
-          - module: src.risk_manager
+          - module: src.risk.position_monitor
             functions: [monitor_positions, check_profit_targets, check_stop_loss]
         inputs:
           - type: tracked_position
