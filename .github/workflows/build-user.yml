@@ -177,7 +177,7 @@ jobs:
 
   build-macos-intel:
     needs: set-build-type
-    runs-on: macos-13  # Last Intel (x86_64) runner - macos-14/15 are Apple Silicon only!
+    runs-on: macos-15-intel  # Intel x86_64 runner (replaces retired macos-13, available until Aug 2027)
     
     steps:
       - name: Download modified source
@@ -231,6 +231,24 @@ jobs:
           pyinstaller build/build_exe.spec --clean --noconfirm
           rm -rf src && mv src_backup src
           mv dist/DiscordTradingBot dist/BotifyTrades-macOS-Intel
+      
+      - name: Fix permissions and sign
+        run: |
+          # Set executable permission
+          chmod +x dist/BotifyTrades-macOS-Intel
+          
+          # Verify it's a proper executable
+          file dist/BotifyTrades-macOS-Intel
+          
+          # Ad-hoc code sign (required for macOS to recognize as executable)
+          codesign --force --deep --sign - dist/BotifyTrades-macOS-Intel
+          
+          # Remove quarantine attribute
+          xattr -cr dist/BotifyTrades-macOS-Intel
+          
+          echo "=== Final executable check ==="
+          ls -la dist/BotifyTrades-macOS-Intel
+          file dist/BotifyTrades-macOS-Intel
       
       - name: Upload macOS Intel User
         uses: actions/upload-artifact@v4
@@ -295,6 +313,24 @@ jobs:
           pyinstaller build/build_exe.spec --clean --noconfirm
           rm -rf src && mv src_backup src
           mv dist/DiscordTradingBot dist/BotifyTrades-macOS-Silicon
+      
+      - name: Fix permissions and sign
+        run: |
+          # Set executable permission
+          chmod +x dist/BotifyTrades-macOS-Silicon
+          
+          # Verify it's a proper executable
+          file dist/BotifyTrades-macOS-Silicon
+          
+          # Ad-hoc code sign (required for macOS to recognize as executable)
+          codesign --force --deep --sign - dist/BotifyTrades-macOS-Silicon
+          
+          # Remove quarantine attribute
+          xattr -cr dist/BotifyTrades-macOS-Silicon
+          
+          echo "=== Final executable check ==="
+          ls -la dist/BotifyTrades-macOS-Silicon
+          file dist/BotifyTrades-macOS-Silicon
       
       - name: Upload macOS Silicon User
         uses: actions/upload-artifact@v4
