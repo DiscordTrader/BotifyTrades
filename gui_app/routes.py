@@ -8127,6 +8127,258 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
     
+    # ============================================
+    # EXECUTION P&L & SIZING SETTINGS API
+    # ============================================
+    
+    @app.route('/api/execution-pnl', methods=['GET'])
+    def api_get_execution_pnl():
+        """Get execution-based P&L with actual broker fills"""
+        try:
+            from gui_app.database import get_execution_pnl
+            
+            channel_id = request.args.get('channel_id')
+            broker = request.args.get('broker')
+            days = request.args.get('days', type=int)
+            limit = request.args.get('limit', 100, type=int)
+            
+            rows = get_execution_pnl(channel_id, broker, days, limit)
+            
+            results = []
+            for row in rows:
+                results.append({
+                    'id': row['id'],
+                    'execution_lot_id': row['execution_lot_id'],
+                    'channel_id': row['channel_id'],
+                    'broker': row['broker'],
+                    'symbol': row['symbol'],
+                    'asset_type': row['asset_type'],
+                    'strike': row['strike'],
+                    'expiry': row['expiry'],
+                    'call_put': row['call_put'],
+                    'closed_qty': row['closed_qty'],
+                    'entry': {
+                        'fill_price': row['entry_fill_price'],
+                        'signal_price': row['entry_signal_price'],
+                        'slippage_pct': row['entry_slippage_pct'],
+                        'filled_at': row['entry_filled_at']
+                    },
+                    'exit': {
+                        'fill_price': row['exit_fill_price'],
+                        'signal_price': row['signal_exit_price'],
+                        'slippage_pct': row['exit_slippage_pct'],
+                        'filled_at': row['exit_filled_at']
+                    },
+                    'pnl': row['pnl'],
+                    'pnl_percent': row['pnl_percent'],
+                    'holding_days': row['holding_days'],
+                    'exit_source': row['exit_source'],
+                    'latency': {
+                        'signal_detected_at': row['signal_detected_at'],
+                        'total_ms': row['latency_total_ms']
+                    },
+                    'sizing': {
+                        'analyst_entry_qty': row['analyst_entry_qty'],
+                        'mode': row['sizing_mode']
+                    }
+                })
+            
+            total_pnl = sum(r['pnl'] for r in results)
+            win_count = sum(1 for r in results if r['pnl'] > 0)
+            loss_count = sum(1 for r in results if r['pnl'] <= 0)
+            
+            return jsonify({
+                'success': True,
+                'trades': results,
+                'summary': {
+                    'total_trades': len(results),
+                    'total_pnl': round(total_pnl, 2),
+                    'win_count': win_count,
+                    'loss_count': loss_count,
+                    'win_rate': round(win_count / len(results) * 100, 1) if results else 0
+                }
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting execution P&L: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/execution-lots', methods=['GET'])
+    def api_get_execution_lots():
+        """Get open execution lots"""
+        try:
+            from gui_app.database import get_open_execution_lots
+            
+            channel_id = request.args.get('channel_id')
+            broker = request.args.get('broker')
+            symbol = request.args.get('symbol')
+            
+            rows = get_open_execution_lots(channel_id, broker, symbol)
+            
+            results = []
+            for row in rows:
+                results.append({
+                    'id': row['id'],
+                    'signal_lot_id': row['signal_lot_id'],
+                    'channel_id': row['channel_id'],
+                    'broker': row['broker'],
+                    'symbol': row['symbol'],
+                    'asset_type': row['asset_type'],
+                    'strike': row['strike'],
+                    'expiry': row['expiry'],
+                    'call_put': row['call_put'],
+                    'original_qty': row['original_qty'],
+                    'remaining_qty': row['remaining_qty'],
+                    'fill_price': row['fill_price'],
+                    'signal_price': row['signal_price'],
+                    'slippage_pct': row['slippage_pct'],
+                    'latency': {
+                        'signal_detected_at': row['signal_detected_at'],
+                        'parse_ms': row['latency_parse_ms'],
+                        'broker_ms': row['latency_broker_ms'],
+                        'total_ms': row['latency_total_ms']
+                    },
+                    'sizing': {
+                        'analyst_entry_qty': row['analyst_entry_qty'],
+                        'mode': row['sizing_mode']
+                    },
+                    'status': row['status'],
+                    'order_filled_at': row['order_filled_at']
+                })
+            
+            return jsonify({
+                'success': True,
+                'lots': results,
+                'count': len(results)
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting execution lots: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/leaderboard/execution', methods=['GET'])
+    def api_get_execution_leaderboard():
+        """Get channel leaderboard based on actual execution P&L"""
+        try:
+            from gui_app.database import get_execution_leaderboard
+            
+            days = request.args.get('days', type=int)
+            rows = get_execution_leaderboard(days)
+            
+            results = []
+            for i, row in enumerate(rows, 1):
+                results.append({
+                    'rank': i,
+                    'channel_id': row['channel_id'],
+                    'channel_name': row['channel_name'] or f"Channel {row['channel_id'][:8]}...",
+                    'total_trades': row['total_trades'],
+                    'win_count': row['win_count'],
+                    'loss_count': row['loss_count'],
+                    'win_rate': row['win_rate'],
+                    'total_pnl': row['total_pnl'],
+                    'avg_pnl': row['avg_pnl'],
+                    'avg_pnl_percent': row['avg_pnl_percent'],
+                    'avg_latency_ms': row['avg_latency_ms'],
+                    'avg_entry_slippage': row['avg_entry_slippage'],
+                    'avg_exit_slippage': row['avg_exit_slippage']
+                })
+            
+            return jsonify({
+                'success': True,
+                'channels': results,
+                'total_channels': len(results)
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting execution leaderboard: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/sizing-settings', methods=['GET'])
+    def api_get_sizing_settings():
+        """Get position sizing settings for a channel or global"""
+        try:
+            from src.services.position_sizing_service import PositionSizingService
+            
+            channel_id = request.args.get('channel_id')
+            
+            sizing_service = PositionSizingService(db)
+            settings = sizing_service.get_sizing_settings(channel_id) if channel_id else sizing_service.get_sizing_settings(None)
+            analyst_portfolio = sizing_service.get_analyst_portfolio(channel_id) if channel_id else None
+            
+            return jsonify({
+                'success': True,
+                'settings': settings,
+                'analyst_portfolio': analyst_portfolio
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting sizing settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/sizing-settings', methods=['POST'])
+    def api_save_sizing_settings():
+        """Save position sizing settings"""
+        try:
+            from src.services.position_sizing_service import PositionSizingService
+            
+            data = request.json
+            channel_id = data.get('channel_id')
+            sizing_mode = data.get('sizing_mode', 'fixed_contracts')
+            
+            sizing_service = PositionSizingService(db)
+            
+            success = sizing_service.save_sizing_settings(
+                channel_id=channel_id,
+                sizing_mode=sizing_mode,
+                fixed_dollar_amount=data.get('fixed_dollar_amount'),
+                fixed_contracts=data.get('fixed_contracts'),
+                max_position_pct=data.get('max_position_pct', 25.0),
+                min_contracts=data.get('min_contracts', 1),
+                max_contracts=data.get('max_contracts'),
+                user_portfolio_value=data.get('user_portfolio_value')
+            )
+            
+            if success:
+                return jsonify({'success': True, 'message': 'Sizing settings saved'})
+            else:
+                return jsonify({'error': 'Failed to save settings'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error saving sizing settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/analyst-portfolio', methods=['POST'])
+    def api_save_analyst_portfolio():
+        """Save analyst portfolio value for a channel"""
+        try:
+            from src.services.position_sizing_service import PositionSizingService
+            
+            data = request.json
+            channel_id = data.get('channel_id')
+            portfolio_value = data.get('portfolio_value')
+            
+            if not channel_id or portfolio_value is None:
+                return jsonify({'error': 'channel_id and portfolio_value required'}), 400
+            
+            sizing_service = PositionSizingService(db)
+            success = sizing_service.save_analyst_portfolio(
+                channel_id=str(channel_id),
+                portfolio_value=float(portfolio_value),
+                source=data.get('source', 'manual'),
+                notes=data.get('notes')
+            )
+            
+            if success:
+                return jsonify({'success': True, 'message': 'Analyst portfolio saved'})
+            else:
+                return jsonify({'error': 'Failed to save analyst portfolio'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error saving analyst portfolio: {e}")
+            return jsonify({'error': str(e)}), 500
+    
     @app.route('/api/reset/pnl', methods=['POST'])
     def api_reset_pnl_data():
         """Reset all PNL tracking data (signals, lots, closures)"""

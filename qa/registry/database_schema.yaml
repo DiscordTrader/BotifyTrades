@@ -585,6 +585,239 @@ tables:
         type: TEXT
         nullable: true
 
+  # ============================================
+  # EXECUTION TRACKING TABLES (v46)
+  # ============================================
+
+  analyst_portfolios:
+    description: "Analyst portfolio values per channel for proportional sizing"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      channel_id:
+        type: TEXT
+        nullable: false
+      portfolio_value:
+        type: REAL
+        nullable: false
+      currency:
+        type: TEXT
+        nullable: true
+        default: "'USD'"
+      source:
+        type: TEXT
+        nullable: true
+        default: "'manual'"
+      notes:
+        type: TEXT
+        nullable: true
+      last_updated:
+        type: TIMESTAMP
+        nullable: true
+      created_at:
+        type: TIMESTAMP
+        nullable: true
+
+  user_sizing_settings:
+    description: "User position sizing preferences per channel"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      channel_id:
+        type: TEXT
+        nullable: true
+      sizing_mode:
+        type: TEXT
+        nullable: false
+        default: "'fixed_contracts'"
+      fixed_dollar_amount:
+        type: REAL
+        nullable: true
+      fixed_contracts:
+        type: INTEGER
+        nullable: true
+      max_position_pct:
+        type: REAL
+        nullable: true
+        default: 25.0
+      min_contracts:
+        type: INTEGER
+        nullable: true
+        default: 1
+      max_contracts:
+        type: INTEGER
+        nullable: true
+      user_portfolio_value:
+        type: REAL
+        nullable: true
+      is_global:
+        type: INTEGER
+        nullable: true
+        default: 0
+      updated_at:
+        type: TIMESTAMP
+        nullable: true
+      created_at:
+        type: TIMESTAMP
+        nullable: true
+
+  execution_lots:
+    description: "Actual broker fills with timestamps and slippage tracking"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      signal_lot_id:
+        type: INTEGER
+        nullable: true
+      channel_id:
+        type: TEXT
+        nullable: false
+      broker:
+        type: TEXT
+        nullable: false
+      broker_order_id:
+        type: TEXT
+        nullable: true
+      symbol:
+        type: TEXT
+        nullable: false
+      asset_type:
+        type: TEXT
+        nullable: false
+      strike:
+        type: REAL
+        nullable: true
+      expiry:
+        type: TEXT
+        nullable: true
+      call_put:
+        type: TEXT
+        nullable: true
+      original_qty:
+        type: INTEGER
+        nullable: false
+      remaining_qty:
+        type: INTEGER
+        nullable: false
+      fill_price:
+        type: REAL
+        nullable: false
+      signal_price:
+        type: REAL
+        nullable: true
+      slippage_pct:
+        type: REAL
+        nullable: true
+      signal_detected_at:
+        type: TIMESTAMP
+        nullable: true
+      signal_parsed_at:
+        type: TIMESTAMP
+        nullable: true
+      order_submitted_at:
+        type: TIMESTAMP
+        nullable: true
+      order_filled_at:
+        type: TIMESTAMP
+        nullable: false
+      latency_parse_ms:
+        type: INTEGER
+        nullable: true
+      latency_broker_ms:
+        type: INTEGER
+        nullable: true
+      latency_total_ms:
+        type: INTEGER
+        nullable: true
+      analyst_entry_qty:
+        type: INTEGER
+        nullable: true
+      sizing_mode:
+        type: TEXT
+        nullable: true
+      sizing_details:
+        type: TEXT
+        nullable: true
+      status:
+        type: TEXT
+        nullable: true
+        default: "'OPEN'"
+      created_at:
+        type: TIMESTAMP
+        nullable: true
+
+  execution_closures:
+    description: "Actual exit fills with real P&L calculation"
+    primary_key: id
+    columns:
+      id:
+        type: INTEGER
+        nullable: false
+        auto_increment: true
+      execution_lot_id:
+        type: INTEGER
+        nullable: false
+      signal_lot_closure_id:
+        type: INTEGER
+        nullable: true
+      channel_id:
+        type: TEXT
+        nullable: false
+      broker:
+        type: TEXT
+        nullable: false
+      broker_order_id:
+        type: TEXT
+        nullable: true
+      closed_qty:
+        type: INTEGER
+        nullable: false
+      fill_price:
+        type: REAL
+        nullable: false
+      signal_exit_price:
+        type: REAL
+        nullable: true
+      slippage_pct:
+        type: REAL
+        nullable: true
+      order_submitted_at:
+        type: TIMESTAMP
+        nullable: true
+      filled_at:
+        type: TIMESTAMP
+        nullable: false
+      latency_broker_ms:
+        type: INTEGER
+        nullable: true
+      pnl:
+        type: REAL
+        nullable: false
+      pnl_percent:
+        type: REAL
+        nullable: false
+      holding_days:
+        type: REAL
+        nullable: true
+      exit_source:
+        type: TEXT
+        nullable: false
+      closure_hash:
+        type: TEXT
+        nullable: true
+      created_at:
+        type: TIMESTAMP
+        nullable: true
+
 # Schema validation rules
 validation_rules:
   required_columns:

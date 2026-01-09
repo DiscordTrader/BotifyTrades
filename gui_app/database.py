@@ -1388,6 +1388,124 @@ def init_db():
         )
     ''')
     
+    # ============================================
+    # PROPORTIONAL POSITION SIZING & EXECUTION TRACKING TABLES
+    # ============================================
+    
+    # Analyst Portfolios - Store analyst portfolio value per channel for proportional sizing
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS analyst_portfolios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            channel_id TEXT NOT NULL UNIQUE,
+            portfolio_value REAL NOT NULL,
+            currency TEXT DEFAULT 'USD',
+            source TEXT DEFAULT 'manual',
+            notes TEXT,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (channel_id) REFERENCES channels(discord_channel_id)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_analyst_portfolios_channel ON analyst_portfolios(channel_id)')
+    
+    # User Sizing Settings - User's position sizing preferences per channel
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_sizing_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            channel_id TEXT,
+            sizing_mode TEXT NOT NULL DEFAULT 'fixed_contracts' CHECK(sizing_mode IN ('mirror', 'fixed_dollar', 'fixed_contracts')),
+            fixed_dollar_amount REAL,
+            fixed_contracts INTEGER,
+            max_position_pct REAL DEFAULT 25.0,
+            min_contracts INTEGER DEFAULT 1,
+            max_contracts INTEGER,
+            user_portfolio_value REAL,
+            is_global INTEGER DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(channel_id)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_sizing_channel ON user_sizing_settings(channel_id)')
+    
+    # Insert default global sizing settings
+    cursor.execute('''
+        INSERT OR IGNORE INTO user_sizing_settings (id, channel_id, sizing_mode, is_global)
+        VALUES (1, NULL, 'fixed_contracts', 1)
+    ''')
+    
+    # Execution Lots - Actual broker fills with timestamps and slippage tracking
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS execution_lots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            signal_lot_id INTEGER,
+            channel_id TEXT NOT NULL,
+            broker TEXT NOT NULL,
+            broker_order_id TEXT,
+            symbol TEXT NOT NULL,
+            asset_type TEXT NOT NULL CHECK(asset_type IN ('stock', 'option')),
+            strike REAL,
+            expiry TEXT,
+            call_put TEXT,
+            original_qty INTEGER NOT NULL,
+            remaining_qty INTEGER NOT NULL,
+            fill_price REAL NOT NULL,
+            signal_price REAL,
+            slippage_pct REAL,
+            signal_detected_at TIMESTAMP,
+            signal_parsed_at TIMESTAMP,
+            order_submitted_at TIMESTAMP,
+            order_filled_at TIMESTAMP NOT NULL,
+            latency_parse_ms INTEGER,
+            latency_broker_ms INTEGER,
+            latency_total_ms INTEGER,
+            analyst_entry_qty INTEGER,
+            sizing_mode TEXT,
+            sizing_details TEXT,
+            status TEXT DEFAULT 'OPEN' CHECK(status IN ('OPEN', 'CLOSED', 'PARTIAL')),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (signal_lot_id) REFERENCES signal_lots(id),
+            UNIQUE(broker, broker_order_id)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_lots_channel_status ON execution_lots(channel_id, status)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_lots_broker_filled ON execution_lots(broker, order_filled_at)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_lots_signal_lot ON execution_lots(signal_lot_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_lots_symbol ON execution_lots(symbol)')
+    
+    # Execution Closures - Actual exit fills with real P&L
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS execution_closures (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_lot_id INTEGER NOT NULL,
+            signal_lot_closure_id INTEGER,
+            channel_id TEXT NOT NULL,
+            broker TEXT NOT NULL,
+            broker_order_id TEXT,
+            closed_qty INTEGER NOT NULL,
+            fill_price REAL NOT NULL,
+            signal_exit_price REAL,
+            slippage_pct REAL,
+            order_submitted_at TIMESTAMP,
+            filled_at TIMESTAMP NOT NULL,
+            latency_broker_ms INTEGER,
+            pnl REAL NOT NULL,
+            pnl_percent REAL NOT NULL,
+            holding_days REAL,
+            exit_source TEXT NOT NULL CHECK(exit_source IN ('SIGNAL', 'PT1', 'PT2', 'PT3', 'PT4', 'STOP_LOSS', 'TRAILING', 'MANUAL', 'RISK')),
+            closure_hash TEXT UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (execution_lot_id) REFERENCES execution_lots(id),
+            FOREIGN KEY (signal_lot_closure_id) REFERENCES lot_closures(id)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_closures_lot ON execution_closures(execution_lot_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_closures_filled ON execution_closures(filled_at)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_closures_channel ON execution_closures(channel_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_exec_closures_source ON execution_closures(exit_source)')
+    
+    print("[DATABASE] ✓ Execution tracking tables ready")
+    
     # Seed common known issues
     cursor.execute('''
         INSERT OR IGNORE INTO known_issues (id, error_pattern, issue_title, issue_description, solution, category, keywords)
@@ -3005,6 +3123,294 @@ def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, clos
     
     conn.commit()
     return cursor.lastrowid
+
+
+# ============================================
+# EXECUTION TRACKING FUNCTIONS
+# ============================================
+
+def create_execution_lot(
+    signal_lot_id: int,
+    channel_id: str,
+    broker: str,
+    broker_order_id: str,
+    symbol: str,
+    asset_type: str,
+    quantity: int,
+    fill_price: float,
+    order_filled_at,
+    signal_price: float = None,
+    strike: float = None,
+    expiry: str = None,
+    call_put: str = None,
+    signal_detected_at = None,
+    signal_parsed_at = None,
+    order_submitted_at = None,
+    analyst_entry_qty: int = None,
+    sizing_mode: str = None,
+    sizing_details: str = None
+):
+    """Create an execution lot record for actual broker fills"""
+    import hashlib
+    from datetime import datetime
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    slippage_pct = None
+    if signal_price and signal_price > 0:
+        slippage_pct = round(((fill_price - signal_price) / signal_price) * 100, 4)
+    
+    latency_parse_ms = None
+    latency_broker_ms = None
+    latency_total_ms = None
+    
+    def to_datetime(ts):
+        if ts is None:
+            return None
+        if isinstance(ts, datetime):
+            return ts
+        return datetime.fromisoformat(str(ts))
+    
+    detected_dt = to_datetime(signal_detected_at)
+    parsed_dt = to_datetime(signal_parsed_at)
+    submitted_dt = to_datetime(order_submitted_at)
+    filled_dt = to_datetime(order_filled_at)
+    
+    if detected_dt and parsed_dt:
+        latency_parse_ms = int((parsed_dt - detected_dt).total_seconds() * 1000)
+    if submitted_dt and filled_dt:
+        latency_broker_ms = int((filled_dt - submitted_dt).total_seconds() * 1000)
+    if detected_dt and filled_dt:
+        latency_total_ms = int((filled_dt - detected_dt).total_seconds() * 1000)
+    
+    try:
+        cursor.execute('''
+            INSERT INTO execution_lots (
+                signal_lot_id, channel_id, broker, broker_order_id, symbol, asset_type,
+                strike, expiry, call_put, original_qty, remaining_qty, fill_price,
+                signal_price, slippage_pct, signal_detected_at, signal_parsed_at,
+                order_submitted_at, order_filled_at, latency_parse_ms, latency_broker_ms,
+                latency_total_ms, analyst_entry_qty, sizing_mode, sizing_details, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')
+        ''', (
+            signal_lot_id, str(channel_id), broker, broker_order_id, symbol, asset_type,
+            strike, expiry, call_put, quantity, quantity, fill_price,
+            signal_price, slippage_pct, signal_detected_at, signal_parsed_at,
+            order_submitted_at, order_filled_at, latency_parse_ms, latency_broker_ms,
+            latency_total_ms, analyst_entry_qty, sizing_mode, sizing_details
+        ))
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"[DATABASE] Error creating execution lot: {e}")
+        return None
+
+
+def get_open_execution_lots(channel_id: str = None, broker: str = None, symbol: str = None):
+    """Get open execution lots with optional filtering"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    query = 'SELECT * FROM execution_lots WHERE status IN ("OPEN", "PARTIAL")'
+    params = []
+    
+    if channel_id:
+        query += ' AND channel_id = ?'
+        params.append(str(channel_id))
+    if broker:
+        query += ' AND broker = ?'
+        params.append(broker)
+    if symbol:
+        query += ' AND symbol = ?'
+        params.append(symbol)
+    
+    query += ' ORDER BY order_filled_at ASC'
+    cursor.execute(query, params)
+    return cursor.fetchall()
+
+
+def get_execution_lot_by_signal_lot(signal_lot_id: int, broker: str = None):
+    """Get execution lot linked to a signal lot"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if broker:
+        cursor.execute(
+            'SELECT * FROM execution_lots WHERE signal_lot_id = ? AND broker = ?',
+            (signal_lot_id, broker)
+        )
+    else:
+        cursor.execute(
+            'SELECT * FROM execution_lots WHERE signal_lot_id = ?',
+            (signal_lot_id,)
+        )
+    return cursor.fetchone()
+
+
+def create_execution_closure(
+    execution_lot_id: int,
+    channel_id: str,
+    broker: str,
+    closed_qty: int,
+    fill_price: float,
+    filled_at,
+    exit_source: str,
+    signal_lot_closure_id: int = None,
+    broker_order_id: str = None,
+    signal_exit_price: float = None,
+    order_submitted_at = None
+):
+    """Create an execution closure record with P&L calculation"""
+    import hashlib
+    from datetime import datetime
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT * FROM execution_lots WHERE id = ?', (execution_lot_id,))
+    exec_lot = cursor.fetchone()
+    
+    if not exec_lot:
+        print(f"[DATABASE] Execution lot {execution_lot_id} not found")
+        return None
+    
+    if exec_lot['remaining_qty'] <= 0:
+        print(f"[DATABASE] Execution lot {execution_lot_id} already fully closed")
+        return None
+    
+    multiplier = 100 if exec_lot['asset_type'] == 'option' else 1
+    cost_basis = exec_lot['fill_price'] * closed_qty * multiplier
+    proceeds = fill_price * closed_qty * multiplier
+    pnl = round(proceeds - cost_basis, 2)
+    pnl_percent = round((pnl / cost_basis * 100), 4) if cost_basis > 0 else 0
+    
+    slippage_pct = None
+    if signal_exit_price and signal_exit_price > 0:
+        slippage_pct = round(((fill_price - signal_exit_price) / signal_exit_price) * 100, 4)
+    
+    filled_dt = filled_at if isinstance(filled_at, datetime) else datetime.fromisoformat(str(filled_at))
+    opened_dt = exec_lot['order_filled_at']
+    if isinstance(opened_dt, str):
+        opened_dt = datetime.fromisoformat(opened_dt)
+    holding_days = (filled_dt - opened_dt).total_seconds() / 86400
+    
+    latency_broker_ms = None
+    if order_submitted_at:
+        submitted_dt = order_submitted_at if isinstance(order_submitted_at, datetime) else datetime.fromisoformat(str(order_submitted_at))
+        latency_broker_ms = int((filled_dt - submitted_dt).total_seconds() * 1000)
+    
+    closure_hash = hashlib.sha256(
+        f"{execution_lot_id}:{broker}:{closed_qty}:{filled_at}".encode()
+    ).hexdigest()[:32]
+    
+    try:
+        cursor.execute('''
+            INSERT INTO execution_closures (
+                execution_lot_id, signal_lot_closure_id, channel_id, broker,
+                broker_order_id, closed_qty, fill_price, signal_exit_price,
+                slippage_pct, order_submitted_at, filled_at, latency_broker_ms,
+                pnl, pnl_percent, holding_days, exit_source, closure_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            execution_lot_id, signal_lot_closure_id, str(channel_id), broker,
+            broker_order_id, closed_qty, fill_price, signal_exit_price,
+            slippage_pct, order_submitted_at, filled_at, latency_broker_ms,
+            pnl, pnl_percent, holding_days, exit_source, closure_hash
+        ))
+        
+        new_remaining = exec_lot['remaining_qty'] - closed_qty
+        if new_remaining <= 0:
+            cursor.execute('UPDATE execution_lots SET remaining_qty = 0, status = "CLOSED" WHERE id = ?', (execution_lot_id,))
+        else:
+            cursor.execute('UPDATE execution_lots SET remaining_qty = ?, status = "PARTIAL" WHERE id = ?', (new_remaining, execution_lot_id))
+        
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        if 'UNIQUE constraint failed' in str(e):
+            print(f"[DATABASE] Duplicate closure prevented: {closure_hash}")
+            return None
+        print(f"[DATABASE] Error creating execution closure: {e}")
+        return None
+
+
+def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = None, limit: int = 100):
+    """Get execution-based P&L with optional filtering"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT 
+            ec.id, ec.execution_lot_id, ec.channel_id, ec.broker,
+            ec.closed_qty, ec.fill_price as exit_fill_price, ec.signal_exit_price,
+            ec.slippage_pct as exit_slippage_pct, ec.filled_at as exit_filled_at,
+            ec.pnl, ec.pnl_percent, ec.holding_days, ec.exit_source,
+            el.symbol, el.asset_type, el.strike, el.expiry, el.call_put,
+            el.fill_price as entry_fill_price, el.signal_price as entry_signal_price,
+            el.slippage_pct as entry_slippage_pct, el.order_filled_at as entry_filled_at,
+            el.signal_detected_at, el.latency_total_ms,
+            el.analyst_entry_qty, el.sizing_mode
+        FROM execution_closures ec
+        JOIN execution_lots el ON ec.execution_lot_id = el.id
+        WHERE 1=1
+    '''
+    params = []
+    
+    if channel_id:
+        query += ' AND ec.channel_id = ?'
+        params.append(str(channel_id))
+    if broker:
+        query += ' AND ec.broker = ?'
+        params.append(broker)
+    if days:
+        query += ' AND ec.filled_at >= datetime("now", ?)'
+        params.append(f'-{days} days')
+    
+    query += ' ORDER BY ec.filled_at DESC LIMIT ?'
+    params.append(limit)
+    
+    cursor.execute(query, params)
+    return cursor.fetchall()
+
+
+def get_execution_leaderboard(days: int = None):
+    """Get channel leaderboard based on actual execution P&L"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT 
+            ec.channel_id,
+            c.name as channel_name,
+            COUNT(*) as total_trades,
+            COUNT(CASE WHEN ec.pnl > 0 THEN 1 END) as win_count,
+            COUNT(CASE WHEN ec.pnl <= 0 THEN 1 END) as loss_count,
+            ROUND(COUNT(CASE WHEN ec.pnl > 0 THEN 1 END) * 100.0 / COUNT(*), 2) as win_rate,
+            ROUND(SUM(ec.pnl), 2) as total_pnl,
+            ROUND(AVG(ec.pnl), 2) as avg_pnl,
+            ROUND(AVG(ec.pnl_percent), 2) as avg_pnl_percent,
+            ROUND(AVG(el.latency_total_ms), 0) as avg_latency_ms,
+            ROUND(AVG(el.slippage_pct), 4) as avg_entry_slippage,
+            ROUND(AVG(ec.slippage_pct), 4) as avg_exit_slippage
+        FROM execution_closures ec
+        JOIN execution_lots el ON ec.execution_lot_id = el.id
+        LEFT JOIN channels c ON ec.channel_id = c.discord_channel_id
+        WHERE 1=1
+    '''
+    params = []
+    
+    if days:
+        query += ' AND ec.filled_at >= datetime("now", ?)'
+        params.append(f'-{days} days')
+    
+    query += '''
+        GROUP BY ec.channel_id
+        ORDER BY total_pnl DESC
+    '''
+    
+    cursor.execute(query, params)
+    return cursor.fetchall()
 
 
 def get_performance_metrics(channel_id: int = None, period_start=None, period_end=None):
