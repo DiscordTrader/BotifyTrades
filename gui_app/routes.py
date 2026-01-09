@@ -3913,7 +3913,7 @@ def register_routes(app):
         user_limit_price: If provided, use this as the limit price. None = market/auto-calculated.
         """
         import sys
-        print(f"[CLOSE] _close_webull_position ENTERED: symbol={symbol}, qty={quantity}, asset={asset_type}", flush=True)
+        print(f"[API] _close_webull_position ENTERED: symbol={symbol}, qty={quantity}, asset={asset_type}", flush=True)
         sys.stdout.flush()
         
         # Ensure we have a broker and client
@@ -3922,21 +3922,21 @@ def register_routes(app):
 
         broker = _bot_instance.broker
         wb = getattr(broker, '_client', None) or getattr(broker, 'wb', None)
-        print(f"[CLOSE] Broker: {broker}, wb client: {wb is not None}", flush=True)
+        print(f"[API] Broker: {broker}, wb client: {wb is not None}", flush=True)
 
         if wb is None:
             return {'success': False, 'error': 'Webull client not available'}
 
         def _blocking_call():
             import sys
-            print(f"[CLOSE] _blocking_call started: symbol={symbol}, asset_type={asset_type}, quantity={quantity}", flush=True)
+            print(f"[API] _blocking_call started: symbol={symbol}, asset_type={asset_type}, quantity={quantity}", flush=True)
             sys.stdout.flush()
             try:
                 # ---------- STOCK CLOSE: market or limit SELL ----------
                 if asset_type == 'stock':
-                    print(f"[CLOSE] Looking up ticker for stock: {symbol}", flush=True)
+                    print(f"[API] Looking up ticker for stock: {symbol}", flush=True)
                     ticker = wb.get_ticker(symbol)
-                    print(f"[CLOSE] get_ticker({symbol}) returned: {ticker} (type: {type(ticker).__name__})", flush=True)
+                    print(f"[API] get_ticker({symbol}) returned: {ticker} (type: {type(ticker).__name__})", flush=True)
                     
                     if not ticker:
                         return {'success': False, 'error': f'Symbol {symbol} not found at Webull'}
@@ -3954,11 +3954,11 @@ def register_routes(app):
                     if not ticker_id:
                         return {'success': False, 'error': f'Ticker ID not found for {symbol} (raw: {ticker})'}
 
-                    print(f"[CLOSE] Using ticker_id={ticker_id} for {symbol}")
+                    print(f"[API] Using ticker_id={ticker_id} for {symbol}", flush=True)
                     
                     if user_limit_price:
                         # Limit order
-                        print(f"[CLOSE] Placing LIMIT SELL: {quantity} {symbol} @ ${user_limit_price}")
+                        print(f"[API] Placing LIMIT SELL: {quantity} {symbol} @ ${user_limit_price}", flush=True)
                         result = wb.place_order(
                             stock=ticker_id,
                             price=float(user_limit_price),
@@ -3969,7 +3969,7 @@ def register_routes(app):
                         )
                     else:
                         # Market order
-                        print(f"[CLOSE] Placing MARKET SELL: {quantity} {symbol}")
+                        print(f"[API] Placing MARKET SELL: {quantity} {symbol}", flush=True)
                         result = wb.place_order(
                             stock=ticker_id,
                             price=0,            # market order
@@ -3979,7 +3979,7 @@ def register_routes(app):
                             quant=quantity
                         )
                     
-                    print(f"[CLOSE] Order result: {result}")
+                    print(f"[API] Order result: {result}", flush=True)
                     
                     # Check if Webull returned an error
                     if isinstance(result, dict) and result.get('msg'):
