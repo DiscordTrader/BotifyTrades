@@ -4325,10 +4325,11 @@ def register_routes(app):
             # For options, we need the optionId to match positions
             # The trades table might not have option_id, so get it from live positions
             option_id = trade.get('option_id')
+            print(f"[API] option_id from trade: {option_id}, asset_type: {asset_type}", flush=True)
             
             # If option_id is missing from database, get it from live broker positions
             if asset_type == 'option' and not option_id:
-                print(f"[CLOSE] option_id missing in database, fetching from live positions...")
+                print(f"[API] option_id missing in database, fetching from live positions...", flush=True)
                 positions_future = asyncio.run_coroutine_threadsafe(
                     _get_webull_positions(),
                     _bot_instance.loop
@@ -4343,7 +4344,7 @@ def register_routes(app):
                         pos.get('expiry') == expiry and
                         pos.get('direction') == call_put):
                         option_id = pos.get('option_id')
-                        print(f"[CLOSE] Found option_id={option_id} from live positions")
+                        print(f"[API] Found option_id={option_id} from live positions", flush=True)
                         break
                 
                 if not option_id:
@@ -4352,17 +4353,23 @@ def register_routes(app):
                         'error': f'Could not find option_id for {symbol} {strike}{call_put} {expiry}'
                     }), 404
             
-            print(f"[CLOSE] Looking for option_id={option_id} in live positions")
+            print(f"[API] About to fetch live positions for quantity check...", flush=True)
             
             # Get LIVE broker position to get actual quantity
             # This prevents trying to close more contracts than exist
-            positions_future = asyncio.run_coroutine_threadsafe(
-                _get_webull_positions(),
-                _bot_instance.loop
-            )
-            live_positions = positions_future.result(timeout=10) or []
-            
-            print(f"[CLOSE] Got {len(live_positions)} live positions")
+            try:
+                positions_future = asyncio.run_coroutine_threadsafe(
+                    _get_webull_positions(),
+                    _bot_instance.loop
+                )
+                print(f"[API] Waiting for positions future (timeout=10s)...", flush=True)
+                live_positions = positions_future.result(timeout=10) or []
+                print(f"[API] Got {len(live_positions)} live positions", flush=True)
+            except Exception as pos_err:
+                print(f"[API] ERROR fetching positions: {pos_err}", flush=True)
+                import traceback
+                traceback.print_exc()
+                return jsonify({'success': False, 'error': f'Failed to fetch positions: {str(pos_err)}'}), 500
             for i, pos in enumerate(live_positions):
                 print(f"[CLOSE] Position {i}: asset={pos.get('asset')}, symbol={pos.get('symbol')}, option_id={pos.get('option_id')}, qty={pos.get('quantity')}")
             
