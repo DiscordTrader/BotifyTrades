@@ -4571,5 +4571,22 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-09T17:09:02.449968"
+  },
+  "ALPACA_PAPER_TSLA_445.0_2026-01-09_C": {
+    "entry_price": 3.1,
+    "highest_price": 4.2,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "TSLA260109C00445000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-09T17:59:55.328301"
   }
 }
