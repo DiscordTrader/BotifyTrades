@@ -3969,17 +3969,32 @@ def register_routes(app):
                         )
                     else:
                         # Market order
-                        print(f"[API] Placing MARKET SELL: {quantity} {symbol}", flush=True)
-                        result = wb.place_order(
-                            stock=ticker_id,
-                            price=0,            # market order
-                            action='SELL',
-                            orderType='MKT',
-                            enforce='GTC',
-                            quant=quantity
-                        )
-                    
-                    print(f"[API] Order result: {result}", flush=True)
+                        print(f"[API] Placing MARKET SELL: {quantity} {symbol} with ticker_id={ticker_id}", flush=True)
+                        try:
+                            result = wb.place_order(
+                                stock=ticker_id,
+                                price=0,            # market order
+                                action='SELL',
+                                orderType='MKT',
+                                enforce='GTC',
+                                quant=quantity
+                            )
+                            print(f"[API] Order result: {result}", flush=True)
+                        except Exception as order_err:
+                            print(f"[API] place_order EXCEPTION: {order_err}", flush=True)
+                            import traceback
+                            traceback.print_exc()
+                            # Try with symbol string instead of ticker_id
+                            print(f"[API] Retrying with symbol string '{symbol}' instead of ticker_id...", flush=True)
+                            result = wb.place_order(
+                                stock=symbol,
+                                price=0,
+                                action='SELL',
+                                orderType='MKT',
+                                enforce='GTC',
+                                quant=quantity
+                            )
+                            print(f"[API] Retry result: {result}", flush=True)
                     
                     # Check if Webull returned an error
                     if isinstance(result, dict) and result.get('msg'):
@@ -4160,8 +4175,8 @@ def register_routes(app):
                     return {'success': False, 'error': f'Unsupported asset_type: {asset_type}'}
 
             except Exception as e:
-                print(f"[DEBUG-X1] Error in blocking call: {e}", flush=True)
-                print(f"[DEBUG-X1] symbol={symbol}, asset_type={asset_type}, quantity={quantity}", flush=True)
+                print(f"[API] ERROR in _blocking_call: {e}", flush=True)
+                print(f"[API] symbol={symbol}, asset_type={asset_type}, quantity={quantity}", flush=True)
                 import traceback
                 traceback.print_exc()
                 return {'success': False, 'error': str(e)}

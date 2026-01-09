@@ -4421,7 +4421,7 @@
   },
   "ALPACA_PAPER_ARM_120.0_2026-01-16_C": {
     "entry_price": 0.4,
-    "highest_price": 0.55,
+    "highest_price": 0.57,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -4591,7 +4591,7 @@
   },
   "ALPACA_PAPER_EOSE_16.0_2026-02-20_C": {
     "entry_price": 1.65,
-    "highest_price": 1.7,
+    "highest_price": 1.75,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
