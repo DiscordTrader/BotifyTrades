@@ -177,7 +177,7 @@ jobs:
 
   build-macos-intel:
     needs: set-build-type
-    runs-on: macos-15
+    runs-on: macos-13  # Last Intel (x86_64) runner - macos-14/15 are Apple Silicon only!
     
     steps:
       - name: Download modified source
