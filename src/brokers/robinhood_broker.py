@@ -566,6 +566,76 @@ class RobinhoodBroker(BrokerInterface):
         except Exception as e:
             print(f"[{self.name}] Error cancelling order {order_id}: {e}")
             return False
+    
+    async def get_quote_detailed(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Get detailed quote with bid/ask/last for signal verification"""
+        if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
+            return None
+        
+        try:
+            def get_quote_data():
+                quotes = rh.stocks.get_quotes(symbol)
+                if quotes and len(quotes) > 0:
+                    return quotes[0]
+                return None
+            
+            quote = await asyncio.to_thread(get_quote_data)
+            
+            if quote:
+                return {
+                    'symbol': symbol,
+                    'bid': float(quote.get('bid_price') or 0),
+                    'ask': float(quote.get('ask_price') or 0),
+                    'last': float(quote.get('last_trade_price') or 0),
+                    'close': float(quote.get('previous_close') or 0),
+                    'volume': int(float(quote.get('volume') or 0)),
+                    'source': 'ROBINHOOD'
+                }
+            return None
+        except Exception as e:
+            print(f"[{self.name}] Error getting detailed quote for {symbol}: {e}")
+            return None
+    
+    async def get_option_quote(self, symbol: str, strike: float, expiry: str, option_type: str) -> Optional[Dict[str, Any]]:
+        """Get real-time option quote for signal verification"""
+        if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
+            return None
+        
+        try:
+            expiry_normalized = self._normalize_expiry(expiry)
+            opt_type = 'call' if option_type.upper() in ['C', 'CALL'] else 'put'
+            
+            def get_option_data():
+                options = rh.options.find_options_by_expiration_and_strike(
+                    inputSymbols=symbol,
+                    expirationDate=expiry_normalized,
+                    strikePrice=str(strike),
+                    optionType=opt_type
+                )
+                return options
+            
+            options = await asyncio.to_thread(get_option_data)
+            
+            if options and len(options) > 0:
+                option = options[0]
+                return {
+                    'symbol': symbol,
+                    'strike': strike,
+                    'expiry': expiry,
+                    'type': option_type,
+                    'bid': float(option.get('bid_price') or 0),
+                    'ask': float(option.get('ask_price') or 0),
+                    'last': float(option.get('adjusted_mark_price') or 0),
+                    'volume': int(float(option.get('volume') or 0)),
+                    'open_interest': int(float(option.get('open_interest') or 0)),
+                    'iv': float(option.get('implied_volatility') or 0),
+                    'delta': float(option.get('delta') or 0),
+                    'source': 'ROBINHOOD'
+                }
+            return None
+        except Exception as e:
+            print(f"[{self.name}] Error getting option quote for {symbol} {strike}{option_type} {expiry}: {e}")
+            return None
 
 
 BrokerFactory.register_broker('ROBINHOOD', RobinhoodBroker)

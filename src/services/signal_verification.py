@@ -37,17 +37,21 @@ _webull_client = None
 _tastytrade_session = None
 _alpaca_broker = None
 _schwab_broker = None
+_ibkr_broker = None
+_robinhood_broker = None
 
 # Time window tolerance for historical price verification (seconds)
 TIME_WINDOW_TOLERANCE = 30
 
-def set_broker_clients(webull_client=None, tastytrade_session=None, alpaca_broker=None, schwab_broker=None):
+def set_broker_clients(webull_client=None, tastytrade_session=None, alpaca_broker=None, schwab_broker=None, ibkr_broker=None, robinhood_broker=None):
     """Set broker clients for real-time data access"""
-    global _webull_client, _tastytrade_session, _alpaca_broker, _schwab_broker
+    global _webull_client, _tastytrade_session, _alpaca_broker, _schwab_broker, _ibkr_broker, _robinhood_broker
     _webull_client = webull_client
     _tastytrade_session = tastytrade_session
     _alpaca_broker = alpaca_broker
     _schwab_broker = schwab_broker
+    _ibkr_broker = ibkr_broker
+    _robinhood_broker = robinhood_broker
     sources = []
     if webull_client:
         sources.append('Webull')
@@ -57,6 +61,10 @@ def set_broker_clients(webull_client=None, tastytrade_session=None, alpaca_broke
         sources.append('Alpaca')
     if schwab_broker:
         sources.append('Schwab')
+    if ibkr_broker:
+        sources.append('IBKR')
+    if robinhood_broker:
+        sources.append('Robinhood')
     if sources:
         print(f"[VERIFY] ✓ Real-time data sources enabled: {', '.join(sources)}")
     else:
@@ -70,7 +78,9 @@ def get_broker_status() -> Dict[str, bool]:
         'tastytrade': _tastytrade_session is not None,
         'alpaca': _alpaca_broker is not None,
         'schwab': _schwab_broker is not None,
-        'any_realtime': any([_webull_client, _tastytrade_session, _alpaca_broker, _schwab_broker])
+        'ibkr': _ibkr_broker is not None,
+        'robinhood': _robinhood_broker is not None,
+        'any_realtime': any([_webull_client, _tastytrade_session, _alpaca_broker, _schwab_broker, _ibkr_broker, _robinhood_broker])
     }
 
 
@@ -358,19 +368,154 @@ class SignalVerificationService:
             print(f"[VERIFY] Schwab option quote error: {e}")
         return None
     
+    def _run_ibkr_async_safe(self, coro_func):
+        """Execute IBKR async coroutine safely from any context
+        
+        Uses a dedicated thread with its own event loop to avoid
+        deadlocks when called from existing async contexts.
+        
+        Args:
+            coro_func: A callable that returns a coroutine (not the coroutine itself)
+        """
+        import asyncio
+        import concurrent.futures
+        
+        def run_in_thread():
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                return new_loop.run_until_complete(coro_func())
+            finally:
+                new_loop.close()
+        
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run_in_thread)
+                return future.result(timeout=15)
+        except concurrent.futures.TimeoutError:
+            print("[VERIFY] IBKR quote timeout")
+            return None
+        except Exception as e:
+            print(f"[VERIFY] IBKR async execution error: {e}")
+            return None
+    
+    def _get_ibkr_option_quote(self, ticker: str, strike: float, expiry: str,
+                                direction: str) -> Optional[Dict]:
+        """Get real-time option quote from IBKR (requires TWS/Gateway)"""
+        global _ibkr_broker
+        if not _ibkr_broker or not hasattr(_ibkr_broker, 'ib'):
+            return None
+        
+        try:
+            if not _ibkr_broker.ib.isConnected():
+                return None
+            
+            quote = self._run_ibkr_async_safe(
+                lambda: _ibkr_broker.get_option_quote(ticker, strike, expiry, direction)
+            )
+            
+            if quote:
+                bid = float(quote.get('bid', 0) or 0)
+                ask = float(quote.get('ask', 0) or 0)
+                last = float(quote.get('last', 0) or quote.get('price', 0) or 0)
+                
+                if bid > 0 or ask > 0 or last > 0:
+                    self.data_source = 'ibkr_realtime'
+                    return {
+                        'bid': bid,
+                        'ask': ask,
+                        'last': last,
+                        'volume': int(quote.get('volume', 0) or 0),
+                        'open_interest': int(quote.get('open_interest', 0) or 0),
+                        'implied_volatility': float(quote.get('implied_volatility', 0) or 0),
+                        'strike': strike,
+                        'timestamp': datetime.now().isoformat(),
+                        'source': 'ibkr_realtime'
+                    }
+        except Exception as e:
+            print(f"[VERIFY] IBKR option quote error: {e}")
+        return None
+    
+    def _run_robinhood_async_safe(self, coro_func):
+        """Execute Robinhood async coroutine safely from any context
+        
+        Uses a dedicated thread with its own event loop to avoid
+        deadlocks when called from existing async contexts.
+        
+        Args:
+            coro_func: A callable that returns a coroutine (not the coroutine itself)
+        """
+        import asyncio
+        import concurrent.futures
+        
+        def run_in_thread():
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                return new_loop.run_until_complete(coro_func())
+            finally:
+                new_loop.close()
+        
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run_in_thread)
+                return future.result(timeout=15)
+        except concurrent.futures.TimeoutError:
+            print("[VERIFY] Robinhood quote timeout")
+            return None
+        except Exception as e:
+            print(f"[VERIFY] Robinhood async execution error: {e}")
+            return None
+    
+    def _get_robinhood_option_quote(self, ticker: str, strike: float, expiry: str,
+                                     direction: str) -> Optional[Dict]:
+        """Get option quote from Robinhood (WARNING: LIVE ONLY - no paper trading)"""
+        global _robinhood_broker
+        if not _robinhood_broker:
+            return None
+        
+        try:
+            quote = self._run_robinhood_async_safe(
+                lambda: _robinhood_broker.get_option_quote(ticker, strike, expiry, direction)
+            )
+            
+            if quote:
+                bid = float(quote.get('bid', 0) or 0)
+                ask = float(quote.get('ask', 0) or 0)
+                last = float(quote.get('last', 0) or quote.get('price', 0) or 0)
+                
+                if bid > 0 or ask > 0 or last > 0:
+                    self.data_source = 'robinhood_live'
+                    return {
+                        'bid': bid,
+                        'ask': ask,
+                        'last': last,
+                        'volume': int(quote.get('volume', 0) or 0),
+                        'open_interest': int(quote.get('open_interest', 0) or 0),
+                        'implied_volatility': float(quote.get('implied_volatility', 0) or 0),
+                        'strike': strike,
+                        'timestamp': datetime.now().isoformat(),
+                        'source': 'robinhood_live'
+                    }
+        except Exception as e:
+            print(f"[VERIFY] Robinhood option quote error: {e}")
+        return None
+    
     def get_option_market_data(self, ticker: str, strike: float, expiry: str, 
                                 direction: str, preferred_broker: str = 'auto') -> Optional[Dict]:
         """
         Fetch options data for verification - uses preferred broker or auto-selects
         
         Args:
-            preferred_broker: 'auto', 'webull', 'tastytrade', 'schwab', or 'yfinance'
+            preferred_broker: 'auto', 'webull', 'tastytrade', 'schwab', 'ibkr', 'robinhood', or 'yfinance'
         
         Priority when auto:
         1. Webull (real-time)
         2. Tastytrade (real-time)
         3. Schwab (real-time)
-        4. yfinance (delayed 15-30 min)
+        4. IBKR (real-time, requires TWS/Gateway)
+        5. Robinhood (live only - WARNING: no paper trading)
+        6. yfinance (delayed 15-30 min)
         """
         cache_key = f"{ticker}_{strike}_{expiry}_{direction}_{preferred_broker}"
         now = datetime.now()
@@ -394,6 +539,14 @@ class SignalVerificationService:
             data = self._get_schwab_option_quote(ticker, strike, expiry, direction)
             if not data:
                 print(f"[VERIFY] Schwab not available, no fallback (user selected Schwab only)")
+        elif preferred_broker == 'ibkr':
+            data = self._get_ibkr_option_quote(ticker, strike, expiry, direction)
+            if not data:
+                print(f"[VERIFY] IBKR not available, no fallback (user selected IBKR only)")
+        elif preferred_broker == 'robinhood':
+            data = self._get_robinhood_option_quote(ticker, strike, expiry, direction)
+            if not data:
+                print(f"[VERIFY] Robinhood not available, no fallback (user selected Robinhood only)")
         elif preferred_broker == 'yfinance':
             data = self._get_yfinance_option_quote(ticker, strike, expiry, direction)
         else:
@@ -402,6 +555,10 @@ class SignalVerificationService:
                 data = self._get_tastytrade_option_quote(ticker, strike, expiry, direction)
             if not data:
                 data = self._get_schwab_option_quote(ticker, strike, expiry, direction)
+            if not data:
+                data = self._get_ibkr_option_quote(ticker, strike, expiry, direction)
+            if not data:
+                data = self._get_robinhood_option_quote(ticker, strike, expiry, direction)
             if not data:
                 data = self._get_yfinance_option_quote(ticker, strike, expiry, direction)
         
@@ -465,9 +622,68 @@ class SignalVerificationService:
             print(f"[VERIFY] Schwab stock quote error: {e}")
         return None
     
+    def _get_ibkr_stock_quote(self, ticker: str) -> Optional[Dict]:
+        """Get real-time stock quote from IBKR (requires TWS/Gateway)"""
+        global _ibkr_broker
+        if not _ibkr_broker or not hasattr(_ibkr_broker, 'ib'):
+            return None
+        
+        try:
+            if not _ibkr_broker.ib.isConnected():
+                return None
+            
+            quote = self._run_ibkr_async_safe(lambda: _ibkr_broker.get_quote_detailed(ticker))
+            
+            if quote:
+                bid = float(quote.get('bid', 0) or 0)
+                ask = float(quote.get('ask', 0) or 0)
+                last = float(quote.get('last', 0) or quote.get('price', 0) or 0)
+                
+                if bid > 0 or ask > 0 or last > 0:
+                    self.data_source = 'ibkr_realtime'
+                    return {
+                        'bid': bid,
+                        'ask': ask,
+                        'last': last,
+                        'volume': int(quote.get('volume', 0) or 0),
+                        'timestamp': datetime.now().isoformat(),
+                        'source': 'ibkr_realtime'
+                    }
+        except Exception as e:
+            print(f"[VERIFY] IBKR stock quote error: {e}")
+        return None
+    
+    def _get_robinhood_stock_quote(self, ticker: str) -> Optional[Dict]:
+        """Get stock quote from Robinhood (WARNING: LIVE ONLY - no paper trading)"""
+        global _robinhood_broker
+        if not _robinhood_broker:
+            return None
+        
+        try:
+            quote = self._run_robinhood_async_safe(lambda: _robinhood_broker.get_quote_detailed(ticker))
+            
+            if quote:
+                bid = float(quote.get('bid', 0) or 0)
+                ask = float(quote.get('ask', 0) or 0)
+                last = float(quote.get('last', 0) or quote.get('price', 0) or 0)
+                
+                if bid > 0 or ask > 0 or last > 0:
+                    self.data_source = 'robinhood_live'
+                    return {
+                        'bid': bid,
+                        'ask': ask,
+                        'last': last,
+                        'volume': int(quote.get('volume', 0) or 0),
+                        'timestamp': datetime.now().isoformat(),
+                        'source': 'robinhood_live'
+                    }
+        except Exception as e:
+            print(f"[VERIFY] Robinhood stock quote error: {e}")
+        return None
+    
     def get_stock_market_data(self, ticker: str, preferred_broker: str = 'auto') -> Optional[Dict]:
         """Fetch stock quote - uses preferred broker or auto-selects"""
-        global _webull_client, _alpaca_broker, _schwab_broker
+        global _webull_client, _alpaca_broker, _schwab_broker, _ibkr_broker, _robinhood_broker
         
         if preferred_broker == 'yfinance':
             pass
@@ -505,6 +721,22 @@ class SignalVerificationService:
                 return data
         elif preferred_broker == 'auto' and _schwab_broker:
             data = self._get_schwab_stock_quote(ticker)
+            if data:
+                return data
+        elif preferred_broker == 'ibkr':
+            data = self._get_ibkr_stock_quote(ticker)
+            if data:
+                return data
+        elif preferred_broker == 'auto' and _ibkr_broker:
+            data = self._get_ibkr_stock_quote(ticker)
+            if data:
+                return data
+        elif preferred_broker == 'robinhood':
+            data = self._get_robinhood_stock_quote(ticker)
+            if data:
+                return data
+        elif preferred_broker == 'auto' and _robinhood_broker:
+            data = self._get_robinhood_stock_quote(ticker)
             if data:
                 return data
         

@@ -354,6 +354,9 @@ class RiskManager:
         db_adapter: Optional[RiskDBAdapter] = None,
         alpaca_broker=None,
         schwab_broker=None,
+        ibkr_broker=None,
+        tastytrade_broker=None,
+        robinhood_broker=None,
         monitoring_interval: int = DEFAULT_MONITORING_INTERVAL,
         trailing_activation_pct: float = DEFAULT_TRAILING_ACTIVATION,
         loop: Optional[asyncio.AbstractEventLoop] = None
@@ -368,6 +371,9 @@ class RiskManager:
             db_adapter: Database adapter (optional, for headless mode)
             alpaca_broker: Optional AlpacaBroker instance
             schwab_broker: Optional SchwabBroker instance
+            ibkr_broker: Optional IBKRBroker instance
+            tastytrade_broker: Optional TastytradeBroker instance
+            robinhood_broker: Optional RobinhoodBroker instance (WARNING: LIVE ONLY)
             monitoring_interval: Seconds between position checks
             trailing_activation_pct: Default trailing stop activation threshold
             loop: Event loop (optional)
@@ -378,6 +384,9 @@ class RiskManager:
         self.db_adapter = db_adapter or RiskDBAdapter()
         self.alpaca_broker = alpaca_broker
         self.schwab_broker = schwab_broker
+        self.ibkr_broker = ibkr_broker
+        self.tastytrade_broker = tastytrade_broker
+        self.robinhood_broker = robinhood_broker
         self.monitoring_interval = monitoring_interval
         self.trailing_activation_pct = trailing_activation_pct
         self.loop = loop or asyncio.get_event_loop()
@@ -402,7 +411,7 @@ class RiskManager:
         
         self._load_db_price_targets()
         
-        print(f"[RISK] ✓ Position monitoring started - Monitoring Webull + Alpaca + Schwab")
+        print(f"[RISK] ✓ Position monitoring started - Monitoring Webull + Alpaca + Schwab + IBKR + Tastytrade + Robinhood")
         self._running = True
         
         while self._running:
@@ -438,8 +447,12 @@ class RiskManager:
             webull_count = sum(1 for p in positions if p.broker == 'Webull')
             alpaca_count = sum(1 for p in positions if 'ALPACA' in p.broker)
             schwab_count = sum(1 for p in positions if 'SCHWAB' in p.broker.upper())
+            ibkr_count = sum(1 for p in positions if 'IBKR' in p.broker.upper())
+            tastytrade_count = sum(1 for p in positions if 'TASTYTRADE' in p.broker.upper())
+            robinhood_count = sum(1 for p in positions if 'ROBINHOOD' in p.broker.upper())
             print(f"\n[RISK] Monitoring {len(positions)} open positions "
-                  f"(Webull: {webull_count}, Alpaca: {alpaca_count}, Schwab: {schwab_count})...")
+                  f"(Webull: {webull_count}, Alpaca: {alpaca_count}, Schwab: {schwab_count}, "
+                  f"IBKR: {ibkr_count}, Tastytrade: {tastytrade_count}, Robinhood: {robinhood_count})...")
         
         broker_position_keys = set()
         
@@ -475,6 +488,27 @@ class RiskManager:
                     positions.extend(schwab_positions)
             except Exception as e:
                 print(f"[RISK] Warning: Could not fetch Schwab positions: {e}")
+        
+        if self.ibkr_broker and getattr(self.ibkr_broker, 'connected', False):
+            try:
+                ibkr_positions = await self._fetch_ibkr_positions()
+                positions.extend(ibkr_positions)
+            except Exception as e:
+                print(f"[RISK] Warning: Could not fetch IBKR positions: {e}")
+        
+        if self.tastytrade_broker and getattr(self.tastytrade_broker, 'connected', False):
+            try:
+                tastytrade_positions = await self._fetch_tastytrade_positions()
+                positions.extend(tastytrade_positions)
+            except Exception as e:
+                print(f"[RISK] Warning: Could not fetch Tastytrade positions: {e}")
+        
+        if self.robinhood_broker and getattr(self.robinhood_broker, 'connected', False):
+            try:
+                robinhood_positions = await self._fetch_robinhood_positions()
+                positions.extend(robinhood_positions)
+            except Exception as e:
+                print(f"[RISK] Warning: Could not fetch Robinhood positions: {e}")
         
         return positions
     
@@ -579,6 +613,127 @@ class RiskManager:
                 ))
         except Exception as e:
             print(f"[RISK] Error fetching Schwab positions: {e}")
+        
+        return positions
+    
+    async def _fetch_ibkr_positions(self) -> List[PositionSnapshot]:
+        """Fetch and parse IBKR positions (requires TWS/Gateway running)."""
+        positions = []
+        
+        if not self.ibkr_broker or not hasattr(self.ibkr_broker, 'ib'):
+            return positions
+        
+        try:
+            ib = self.ibkr_broker.ib
+            if not ib.isConnected():
+                return positions
+            
+            broker_label = 'IBKR_LIVE' if not getattr(self.ibkr_broker, 'paper_trade', True) else 'IBKR_PAPER'
+            raw_positions = await asyncio.to_thread(ib.positions)
+            
+            for pos in raw_positions:
+                contract = pos.contract
+                symbol = contract.symbol
+                quantity = abs(int(pos.position))
+                avg_cost = float(pos.avgCost) if pos.avgCost else 0
+                
+                if contract.secType == 'OPT':
+                    expiry_raw = contract.lastTradeDateOrContractMonth
+                    if len(expiry_raw) == 8:
+                        expiry = f"{expiry_raw[:4]}-{expiry_raw[4:6]}-{expiry_raw[6:8]}"
+                    else:
+                        expiry = expiry_raw
+                    
+                    positions.append(PositionSnapshot(
+                        symbol=symbol,
+                        quantity=quantity,
+                        avg_cost=avg_cost / 100 if avg_cost > 0 else 0,
+                        current_price=0,
+                        asset='option',
+                        broker=broker_label,
+                        strike=contract.strike,
+                        expiry=expiry,
+                        direction=contract.right
+                    ))
+                else:
+                    positions.append(PositionSnapshot(
+                        symbol=symbol,
+                        quantity=quantity,
+                        avg_cost=avg_cost,
+                        current_price=0,
+                        asset='stock',
+                        broker=broker_label
+                    ))
+        except Exception as e:
+            print(f"[RISK] Error fetching IBKR positions: {e}")
+        
+        return positions
+    
+    async def _fetch_tastytrade_positions(self) -> List[PositionSnapshot]:
+        """Fetch and parse Tastytrade positions."""
+        positions = []
+        
+        if not self.tastytrade_broker:
+            return positions
+        
+        try:
+            broker_label = 'TASTYTRADE_LIVE' if getattr(self.tastytrade_broker, 'is_live', False) else 'TASTYTRADE_PAPER'
+            
+            if hasattr(self.tastytrade_broker, 'get_all_positions'):
+                raw_positions = await asyncio.to_thread(self.tastytrade_broker.get_all_positions) or []
+                
+                for pos in raw_positions:
+                    asset_type = pos.get('asset_type', 'stock')
+                    
+                    positions.append(PositionSnapshot(
+                        symbol=pos.get('symbol', ''),
+                        quantity=abs(float(pos.get('quantity', 0))),
+                        avg_cost=float(pos.get('avg_price', 0)),
+                        current_price=float(pos.get('current_price', 0)),
+                        asset=asset_type,
+                        broker=broker_label,
+                        strike=pos.get('strike'),
+                        expiry=pos.get('expiry'),
+                        direction=pos.get('call_put')
+                    ))
+        except Exception as e:
+            print(f"[RISK] Error fetching Tastytrade positions: {e}")
+        
+        return positions
+    
+    async def _fetch_robinhood_positions(self) -> List[PositionSnapshot]:
+        """Fetch and parse Robinhood positions (WARNING: LIVE ONLY - no paper trading)."""
+        positions = []
+        
+        if not self.robinhood_broker:
+            return positions
+        
+        try:
+            if hasattr(self.robinhood_broker, 'get_all_positions'):
+                raw_positions = await asyncio.to_thread(self.robinhood_broker.get_all_positions) or []
+                
+                for pos in raw_positions:
+                    pos_type = pos.get('type', 'stock')
+                    
+                    call_put = None
+                    if pos.get('option_type') == 'call':
+                        call_put = 'C'
+                    elif pos.get('option_type') == 'put':
+                        call_put = 'P'
+                    
+                    positions.append(PositionSnapshot(
+                        symbol=pos.get('symbol', ''),
+                        quantity=abs(float(pos.get('quantity', 0))),
+                        avg_cost=float(pos.get('average_buy_price') or pos.get('average_price') or 0),
+                        current_price=0,
+                        asset=pos_type,
+                        broker='ROBINHOOD',
+                        strike=float(pos.get('strike_price')) if pos.get('strike_price') else None,
+                        expiry=pos.get('expiration_date'),
+                        direction=call_put
+                    ))
+        except Exception as e:
+            print(f"[RISK] Error fetching Robinhood positions: {e}")
         
         return positions
     

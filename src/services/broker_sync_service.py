@@ -198,6 +198,25 @@ class BrokerSyncService:
             except Exception:
                 pass
         
+        # Add IBKR if available (requires TWS/Gateway running)
+        if hasattr(self.broker_manager, 'ibkr_broker') and self.broker_manager.ibkr_broker:
+            ibkr_broker = self.broker_manager.ibkr_broker
+            try:
+                if getattr(ibkr_broker, 'connected', False):
+                    broker_label = 'IBKR_LIVE' if not getattr(ibkr_broker, 'paper_trade', True) else 'IBKR_PAPER'
+                    brokers_to_sync.append((broker_label, ibkr_broker))
+            except Exception:
+                pass
+        
+        # Add Robinhood if available (WARNING: LIVE ONLY - no paper trading)
+        if hasattr(self.broker_manager, 'robinhood_broker') and self.broker_manager.robinhood_broker:
+            rh_broker = self.broker_manager.robinhood_broker
+            try:
+                if getattr(rh_broker, 'connected', False):
+                    brokers_to_sync.append(('ROBINHOOD', rh_broker))
+            except Exception:
+                pass
+        
         if not brokers_to_sync:
             print("[SYNC] No brokers available for sync", flush=True)
             return
@@ -384,6 +403,130 @@ class BrokerSyncService:
                             'status': order.get('status')
                         })
             
+            elif broker_name.startswith('IBKR'):
+                # IBKR - Interactive Brokers via ib_insync (requires TWS/Gateway)
+                if hasattr(broker_instance, 'ib') and broker_instance.ib.isConnected():
+                    try:
+                        ib = broker_instance.ib
+                        raw_positions = await asyncio.to_thread(ib.positions)
+                        
+                        for pos in raw_positions:
+                            contract = pos.contract
+                            symbol = contract.symbol
+                            quantity = abs(int(pos.position))
+                            avg_cost = float(pos.avgCost) if pos.avgCost else 0
+                            
+                            if contract.secType == 'OPT':
+                                expiry_raw = contract.lastTradeDateOrContractMonth
+                                if len(expiry_raw) == 8:
+                                    expiry = f"{expiry_raw[:4]}-{expiry_raw[4:6]}-{expiry_raw[6:8]}"
+                                else:
+                                    expiry = expiry_raw
+                                
+                                result['positions'].append({
+                                    'symbol': symbol,
+                                    'quantity': quantity,
+                                    'avg_price': avg_cost / 100 if avg_cost > 0 else 0,
+                                    'current_price': 0,
+                                    'unrealized_pnl': 0,
+                                    'position_id': contract.conId,
+                                    'asset_type': 'option',
+                                    'strike': contract.strike,
+                                    'expiry': expiry,
+                                    'call_put': contract.right
+                                })
+                            else:
+                                result['positions'].append({
+                                    'symbol': symbol,
+                                    'quantity': quantity,
+                                    'avg_price': avg_cost,
+                                    'current_price': 0,
+                                    'unrealized_pnl': 0,
+                                    'position_id': contract.conId,
+                                    'asset_type': 'stock'
+                                })
+                        
+                        raw_orders = await asyncio.to_thread(ib.openOrders)
+                        for order in raw_orders:
+                            result['pending_orders'].append({
+                                'broker_order_id': str(order.orderId),
+                                'symbol': order.contract.symbol if hasattr(order, 'contract') else '',
+                                'quantity': order.totalQuantity if hasattr(order, 'totalQuantity') else 0,
+                                'limit_price': order.lmtPrice if hasattr(order, 'lmtPrice') else None,
+                                'order_type': order.action if hasattr(order, 'action') else '',
+                                'status': 'PENDING'
+                            })
+                    except Exception as e:
+                        print(f"[SYNC] IBKR fetch error: {e}")
+            
+            elif broker_name.startswith('TASTYTRADE'):
+                # Tastytrade - uses async session with OAuth2
+                if hasattr(broker_instance, 'session') and broker_instance.session:
+                    try:
+                        if hasattr(broker_instance, 'get_all_positions'):
+                            positions = await asyncio.to_thread(broker_instance.get_all_positions) or []
+                            for pos in positions:
+                                result['positions'].append({
+                                    'symbol': pos.get('symbol'),
+                                    'quantity': pos.get('quantity'),
+                                    'avg_price': pos.get('avg_price'),
+                                    'current_price': pos.get('current_price', 0),
+                                    'unrealized_pnl': pos.get('unrealized_pnl', 0),
+                                    'position_id': pos.get('position_id'),
+                                    'asset_type': pos.get('asset_type', 'stock'),
+                                    'strike': pos.get('strike'),
+                                    'expiry': pos.get('expiry'),
+                                    'call_put': pos.get('call_put')
+                                })
+                        
+                        if hasattr(broker_instance, 'get_pending_orders'):
+                            orders = await asyncio.to_thread(broker_instance.get_pending_orders) or []
+                            for order in orders:
+                                result['pending_orders'].append({
+                                    'broker_order_id': order.get('order_id'),
+                                    'symbol': order.get('symbol'),
+                                    'quantity': order.get('quantity'),
+                                    'limit_price': order.get('limit_price'),
+                                    'order_type': order.get('action'),
+                                    'status': order.get('status', 'PENDING')
+                                })
+                    except Exception as e:
+                        print(f"[SYNC] Tastytrade fetch error: {e}")
+            
+            elif broker_name == 'ROBINHOOD':
+                # Robinhood - WARNING: LIVE ONLY (no paper trading)
+                if hasattr(broker_instance, 'get_all_positions'):
+                    try:
+                        positions = await asyncio.to_thread(broker_instance.get_all_positions) or []
+                        for pos in positions:
+                            pos_type = pos.get('type', 'stock')
+                            result['positions'].append({
+                                'symbol': pos.get('symbol'),
+                                'quantity': pos.get('quantity'),
+                                'avg_price': pos.get('average_buy_price') or pos.get('average_price'),
+                                'current_price': pos.get('current_price', 0),
+                                'unrealized_pnl': 0,
+                                'position_id': None,
+                                'asset_type': pos_type,
+                                'strike': pos.get('strike_price'),
+                                'expiry': pos.get('expiration_date'),
+                                'call_put': 'C' if pos.get('option_type') == 'call' else 'P' if pos.get('option_type') == 'put' else None
+                            })
+                        
+                        if hasattr(broker_instance, 'get_pending_orders'):
+                            orders = await asyncio.to_thread(broker_instance.get_pending_orders) or []
+                            for order in orders:
+                                result['pending_orders'].append({
+                                    'broker_order_id': order.get('id'),
+                                    'symbol': order.get('symbol'),
+                                    'quantity': order.get('quantity'),
+                                    'limit_price': order.get('price'),
+                                    'order_type': order.get('side'),
+                                    'status': order.get('state', 'PENDING')
+                                })
+                    except Exception as e:
+                        print(f"[SYNC] Robinhood fetch error: {e}")
+            
             print(f"[SYNC] {broker_name}: {len(result['positions'])} positions, {len(result['pending_orders'])} pending orders")
             if result['positions']:
                 symbols = [p['symbol'] for p in result['positions']]
@@ -429,6 +572,12 @@ class BrokerSyncService:
             elif broker_lower == 'alpaca_paper' and 'alpaca' in trade_broker:
                 active_trades.append(t)
             elif broker_lower == 'schwab' and 'schwab' in trade_broker:
+                active_trades.append(t)
+            elif broker_lower.startswith('ibkr') and 'ibkr' in trade_broker:
+                active_trades.append(t)
+            elif broker_lower.startswith('tastytrade') and 'tastytrade' in trade_broker:
+                active_trades.append(t)
+            elif broker_lower == 'robinhood' and 'robinhood' in trade_broker:
                 active_trades.append(t)
             elif trade_broker == broker_lower:
                 active_trades.append(t)

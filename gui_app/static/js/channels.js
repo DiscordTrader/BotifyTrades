@@ -3,7 +3,7 @@
 let channelCategory = 'EXECUTE';
 
 // All available broker options
-const ALL_BROKERS = ['WEBULL', 'WEBULL_PAPER', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'IBKR_PAPER', 'SCHWAB', 'SCHWAB_PAPER'];
+const ALL_BROKERS = ['WEBULL', 'WEBULL_PAPER', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'IBKR_PAPER', 'SCHWAB', 'SCHWAB_PAPER', 'TASTYTRADE_LIVE', 'TASTYTRADE_PAPER', 'ROBINHOOD'];
 
 // Helper function to parse enabled_brokers (handles both JSON string and array)
 function parseEnabledBrokers(enabledBrokers) {
@@ -169,6 +169,27 @@ async function loadChannels() {
                                         <div>
                                             <div style="font-weight: 600; color: #ff6b6b; font-size: 13px;">🏦 Schwab LIVE</div>
                                             <div style="font-size: 11px; color: #8E8E93;">Real money trading</div>
+                                        </div>
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(0, 0, 0, 0.3); border: 1px solid #3A3A3C; border-radius: 8px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#00d4ff'" onmouseout="this.style.borderColor='#3A3A3C'">
+                                        <input type="checkbox" id="broker-TASTYTRADE_LIVE-${channel.id}" value="TASTYTRADE_LIVE" style="width: 18px; height: 18px; cursor: pointer;" ${getBrokerChecked(channel.enabled_brokers, 'TASTYTRADE_LIVE')}>
+                                        <div>
+                                            <div style="font-weight: 600; color: #ff6b6b; font-size: 13px;">🍒 Tastytrade LIVE</div>
+                                            <div style="font-size: 11px; color: #8E8E93;">Real money trading</div>
+                                        </div>
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(0, 0, 0, 0.3); border: 1px solid #3A3A3C; border-radius: 8px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#00d4ff'" onmouseout="this.style.borderColor='#3A3A3C'">
+                                        <input type="checkbox" id="broker-TASTYTRADE_PAPER-${channel.id}" value="TASTYTRADE_PAPER" style="width: 18px; height: 18px; cursor: pointer;" ${getBrokerChecked(channel.enabled_brokers, 'TASTYTRADE_PAPER')}>
+                                        <div>
+                                            <div style="font-weight: 600; color: #00ff88; font-size: 13px;">🍒 Tastytrade PAPER</div>
+                                            <div style="font-size: 11px; color: #8E8E93;">Sandbox testing</div>
+                                        </div>
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(26, 47, 26, 0.5); border: 1px solid rgba(0, 200, 83, 0.4); border-radius: 8px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#00c853'" onmouseout="this.style.borderColor='rgba(0, 200, 83, 0.4)'">
+                                        <input type="checkbox" id="broker-ROBINHOOD-${channel.id}" value="ROBINHOOD" style="width: 18px; height: 18px; cursor: pointer;" ${getBrokerChecked(channel.enabled_brokers, 'ROBINHOOD')}>
+                                        <div>
+                                            <div style="font-weight: 600; color: #00c853; font-size: 13px;">🪶 Robinhood (LIVE ONLY)</div>
+                                            <div style="font-size: 11px; color: #ff6b6b;">⚠️ No paper trading!</div>
                                         </div>
                                     </label>
                                 </div>

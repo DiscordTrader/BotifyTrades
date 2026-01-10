@@ -286,6 +286,71 @@ class IBKRBroker(BrokerInterface):
             print(f"[{self.name}] Error getting quote for {symbol}: {e}")
             return None
     
+    async def get_quote_detailed(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Get detailed quote with bid/ask/last for signal verification"""
+        try:
+            if not self.ib.isConnected():
+                return None
+            
+            contract = Stock(symbol, 'SMART', 'USD')
+            self.ib.qualifyContracts(contract)
+            
+            ticker = self.ib.reqMktData(contract, '', False, False)
+            await asyncio.sleep(2)
+            
+            result = {
+                'symbol': symbol,
+                'bid': float(ticker.bid) if ticker.bid and ticker.bid > 0 else 0,
+                'ask': float(ticker.ask) if ticker.ask and ticker.ask > 0 else 0,
+                'last': float(ticker.last) if ticker.last and ticker.last > 0 else 0,
+                'close': float(ticker.close) if ticker.close and ticker.close > 0 else 0,
+                'volume': int(ticker.volume) if ticker.volume else 0,
+                'source': 'IBKR'
+            }
+            
+            self.ib.cancelMktData(contract)
+            return result
+        except Exception as e:
+            print(f"[{self.name}] Error getting detailed quote for {symbol}: {e}")
+            return None
+    
+    async def get_option_quote(self, symbol: str, strike: float, expiry: str, option_type: str) -> Optional[Dict[str, Any]]:
+        """Get real-time option quote for signal verification"""
+        try:
+            if not self.ib.isConnected():
+                return None
+            
+            exp_ib = expiry.replace('-', '')
+            right = 'C' if option_type.upper() in ['C', 'CALL'] else 'P'
+            
+            contract = Option(symbol, exp_ib, strike, right, 'SMART')
+            qualified = self.ib.qualifyContracts(contract)
+            
+            if not qualified:
+                return None
+            
+            ticker = self.ib.reqMktData(contract, '', False, False)
+            await asyncio.sleep(2)
+            
+            result = {
+                'symbol': symbol,
+                'strike': strike,
+                'expiry': expiry,
+                'type': option_type,
+                'bid': float(ticker.bid) if ticker.bid and ticker.bid > 0 else 0,
+                'ask': float(ticker.ask) if ticker.ask and ticker.ask > 0 else 0,
+                'last': float(ticker.last) if ticker.last and ticker.last > 0 else 0,
+                'volume': int(ticker.volume) if ticker.volume else 0,
+                'open_interest': 0,
+                'source': 'IBKR'
+            }
+            
+            self.ib.cancelMktData(contract)
+            return result
+        except Exception as e:
+            print(f"[{self.name}] Error getting option quote for {symbol} {strike}{option_type} {expiry}: {e}")
+            return None
+    
     async def get_options_expiration_dates(self, symbol: str) -> list:
         """Get all available option expiration dates for a symbol"""
         try:

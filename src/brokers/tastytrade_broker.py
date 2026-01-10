@@ -966,6 +966,106 @@ class TastytradeBroker(BrokerInterface):
             import traceback
             traceback.print_exc()
             return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': f'Tastytrade Error: {str(e)}'}
+    
+    async def get_quote_detailed(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Get detailed quote with bid/ask/last for signal verification"""
+        if not TASTYTRADE_AVAILABLE or not self.session:
+            return None
+        
+        try:
+            def fetch_quote():
+                try:
+                    equity = Equity.get(self.session, symbol)
+                    if equity and hasattr(equity, 'streamer_symbol'):
+                        return equity.streamer_symbol
+                except Exception:
+                    pass
+                return None
+            
+            streamer_symbol = await asyncio.to_thread(fetch_quote)
+            
+            if streamer_symbol and DXLINK_AVAILABLE:
+                quotes = self._get_option_data_sync([streamer_symbol], timeout=5.0)
+                if quotes and streamer_symbol in quotes:
+                    q = quotes[streamer_symbol]
+                    return {
+                        'symbol': symbol,
+                        'bid': q.get('bid', 0),
+                        'ask': q.get('ask', 0),
+                        'last': (q.get('bid', 0) + q.get('ask', 0)) / 2 if q.get('bid', 0) > 0 else 0,
+                        'close': 0,
+                        'volume': 0,
+                        'source': 'TASTYTRADE'
+                    }
+            return None
+        except Exception as e:
+            print(f"[{self.name}] Error getting detailed quote for {symbol}: {e}")
+            return None
+    
+    async def get_option_quote(self, symbol: str, strike: float, expiry: str, option_type: str) -> Optional[Dict[str, Any]]:
+        """Get real-time option quote for signal verification"""
+        if not TASTYTRADE_AVAILABLE or not self.session:
+            return None
+        
+        try:
+            exp_date = datetime.strptime(expiry, '%Y-%m-%d').date()
+            opt_type = 'C' if option_type.upper() in ['C', 'CALL'] else 'P'
+            
+            def fetch_option():
+                try:
+                    if NESTED_CHAIN_AVAILABLE:
+                        chain = NestedOptionChain.get(self.session, symbol)
+                        if isinstance(chain, list) and chain:
+                            chain = chain[0]
+                        
+                        for exp in chain.expirations:
+                            if exp.expiration_date == exp_date:
+                                for strike_obj in exp.strikes:
+                                    if abs(float(strike_obj.strike_price) - strike) < 0.01:
+                                        if opt_type == 'C' and strike_obj.call:
+                                            return strike_obj.call
+                                        elif opt_type == 'P' and strike_obj.put:
+                                            return strike_obj.put
+                except Exception as e:
+                    print(f"[{self.name}] Option lookup error: {e}")
+                return None
+            
+            occ_symbol = await asyncio.to_thread(fetch_option)
+            
+            if occ_symbol:
+                def get_streamer():
+                    try:
+                        opts = Option.get_options(self.session, [occ_symbol])
+                        if opts and hasattr(opts[0], 'streamer_symbol'):
+                            return opts[0].streamer_symbol
+                    except Exception:
+                        pass
+                    return None
+                
+                streamer_symbol = await asyncio.to_thread(get_streamer)
+                
+                if streamer_symbol and DXLINK_AVAILABLE:
+                    quotes = self._get_option_data_sync([streamer_symbol], timeout=5.0)
+                    if quotes and streamer_symbol in quotes:
+                        q = quotes[streamer_symbol]
+                        return {
+                            'symbol': symbol,
+                            'strike': strike,
+                            'expiry': expiry,
+                            'type': option_type,
+                            'bid': q.get('bid', 0),
+                            'ask': q.get('ask', 0),
+                            'last': (q.get('bid', 0) + q.get('ask', 0)) / 2 if q.get('bid', 0) > 0 else 0,
+                            'volume': 0,
+                            'open_interest': 0,
+                            'iv': q.get('iv', 0),
+                            'delta': q.get('delta', 0),
+                            'source': 'TASTYTRADE'
+                        }
+            return None
+        except Exception as e:
+            print(f"[{self.name}] Error getting option quote for {symbol} {strike}{option_type} {expiry}: {e}")
+            return None
 
 
 BrokerFactory.register_broker('TASTYTRADE', TastytradeBroker)
