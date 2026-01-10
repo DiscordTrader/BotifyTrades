@@ -285,18 +285,92 @@ class SignalVerificationService:
             print(f"[VERIFY] yfinance error: {e}")
             return None
     
+    def _run_schwab_async_safe(self, coro_func):
+        """Execute Schwab async coroutine safely from any context
+        
+        Uses a dedicated thread with its own event loop to avoid
+        deadlocks when called from existing async contexts.
+        
+        Args:
+            coro_func: A callable that returns a coroutine (not the coroutine itself)
+        """
+        import asyncio
+        import concurrent.futures
+        
+        def run_in_thread():
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                return new_loop.run_until_complete(coro_func())
+            finally:
+                new_loop.close()
+        
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run_in_thread)
+                return future.result(timeout=15)
+        except concurrent.futures.TimeoutError:
+            print("[VERIFY] Schwab quote timeout")
+            return None
+        except Exception as e:
+            print(f"[VERIFY] Schwab async execution error: {e}")
+            return None
+    
+    def _get_schwab_option_quote(self, ticker: str, strike: float, expiry: str,
+                                  direction: str) -> Optional[Dict]:
+        """Get real-time option quote from Schwab"""
+        global _schwab_broker
+        if not _schwab_broker:
+            return None
+        
+        try:
+            try:
+                exp_date = datetime.strptime(expiry, "%Y-%m-%d")
+            except ValueError:
+                exp_date = datetime.strptime(expiry, "%m/%d/%Y")
+            
+            iso_exp = exp_date.strftime("%Y-%m-%d")
+            opt_type = 'CALL' if direction.lower() == 'call' else 'PUT'
+            
+            quote = self._run_schwab_async_safe(
+                lambda: _schwab_broker.get_option_quote(ticker, strike, iso_exp, opt_type)
+            )
+            
+            if quote:
+                bid = float(quote.get('bid', 0) or 0)
+                ask = float(quote.get('ask', 0) or 0)
+                last = float(quote.get('last', 0) or quote.get('price', 0) or 0)
+                
+                if bid > 0 or ask > 0 or last > 0:
+                    self.data_source = 'schwab_realtime'
+                    return {
+                        'bid': bid,
+                        'ask': ask,
+                        'last': last,
+                        'volume': int(quote.get('volume', 0) or 0),
+                        'open_interest': int(quote.get('open_interest', 0) or 0),
+                        'implied_volatility': float(quote.get('implied_volatility', 0) or 0),
+                        'strike': strike,
+                        'timestamp': datetime.now().isoformat(),
+                        'source': 'schwab_realtime'
+                    }
+        except Exception as e:
+            print(f"[VERIFY] Schwab option quote error: {e}")
+        return None
+    
     def get_option_market_data(self, ticker: str, strike: float, expiry: str, 
                                 direction: str, preferred_broker: str = 'auto') -> Optional[Dict]:
         """
         Fetch options data for verification - uses preferred broker or auto-selects
         
         Args:
-            preferred_broker: 'auto', 'webull', 'tastytrade', or 'yfinance'
+            preferred_broker: 'auto', 'webull', 'tastytrade', 'schwab', or 'yfinance'
         
         Priority when auto:
         1. Webull (real-time)
         2. Tastytrade (real-time)
-        3. yfinance (delayed 15-30 min)
+        3. Schwab (real-time)
+        4. yfinance (delayed 15-30 min)
         """
         cache_key = f"{ticker}_{strike}_{expiry}_{direction}_{preferred_broker}"
         now = datetime.now()
@@ -316,12 +390,18 @@ class SignalVerificationService:
             data = self._get_tastytrade_option_quote(ticker, strike, expiry, direction)
             if not data:
                 print(f"[VERIFY] Tastytrade not available, no fallback (user selected Tastytrade only)")
+        elif preferred_broker == 'schwab':
+            data = self._get_schwab_option_quote(ticker, strike, expiry, direction)
+            if not data:
+                print(f"[VERIFY] Schwab not available, no fallback (user selected Schwab only)")
         elif preferred_broker == 'yfinance':
             data = self._get_yfinance_option_quote(ticker, strike, expiry, direction)
         else:
             data = self._get_webull_option_quote(ticker, strike, expiry, direction)
             if not data:
                 data = self._get_tastytrade_option_quote(ticker, strike, expiry, direction)
+            if not data:
+                data = self._get_schwab_option_quote(ticker, strike, expiry, direction)
             if not data:
                 data = self._get_yfinance_option_quote(ticker, strike, expiry, direction)
         
@@ -364,27 +444,7 @@ class SignalVerificationService:
             return None
         
         try:
-            import asyncio
-            import concurrent.futures
-            
-            quote = None
-            
-            try:
-                loop = asyncio.get_running_loop()
-                future = asyncio.run_coroutine_threadsafe(_schwab_broker.get_quote(ticker), loop)
-                quote = future.result(timeout=5)
-            except RuntimeError:
-                def run_async():
-                    new_loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(new_loop)
-                    try:
-                        return new_loop.run_until_complete(_schwab_broker.get_quote(ticker))
-                    finally:
-                        new_loop.close()
-                
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(run_async)
-                    quote = future.result(timeout=5)
+            quote = self._run_schwab_async_safe(lambda: _schwab_broker.get_quote_detailed(ticker))
             
             if quote:
                 bid = float(quote.get('bid', 0) or 0)

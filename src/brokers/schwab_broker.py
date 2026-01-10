@@ -591,6 +591,84 @@ class SchwabBroker(BrokerInterface):
         
         return None
     
+    async def get_quote_detailed(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Get detailed quote data for signal verification (bid, ask, last, volume)"""
+        try:
+            if not await self._ensure_valid_token():
+                return None
+            
+            import httpx
+            
+            headers = {
+                'Authorization': f'Bearer {self.access_token}',
+                'Accept': 'application/json'
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"https://api.schwabapi.com/marketdata/v1/quotes",
+                    headers=headers,
+                    params={'symbols': symbol}
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if symbol in data:
+                        quote = data[symbol].get('quote', {})
+                        return {
+                            'bid': float(quote.get('bidPrice', 0) or 0),
+                            'ask': float(quote.get('askPrice', 0) or 0),
+                            'last': float(quote.get('lastPrice', 0) or 0),
+                            'price': float(quote.get('lastPrice', 0) or 0),
+                            'volume': int(quote.get('totalVolume', 0) or 0)
+                        }
+                        
+        except Exception as e:
+            print(f"[{self.name}] Error getting detailed quote for {symbol}: {e}")
+        
+        return None
+    
+    async def get_option_quote(self, underlying: str, strike: float, expiry: str, opt_type: str) -> Optional[Dict[str, Any]]:
+        """Get option quote for signal verification"""
+        try:
+            if not await self._ensure_valid_token():
+                return None
+            
+            option_symbol = self._build_option_symbol(underlying, expiry, strike, opt_type[0])
+            
+            import httpx
+            
+            headers = {
+                'Authorization': f'Bearer {self.access_token}',
+                'Accept': 'application/json'
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"https://api.schwabapi.com/marketdata/v1/quotes",
+                    headers=headers,
+                    params={'symbols': option_symbol}
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if option_symbol in data:
+                        quote = data[option_symbol].get('quote', {})
+                        return {
+                            'bid': float(quote.get('bidPrice', 0) or 0),
+                            'ask': float(quote.get('askPrice', 0) or 0),
+                            'last': float(quote.get('lastPrice', 0) or 0),
+                            'price': float(quote.get('lastPrice', 0) or 0),
+                            'volume': int(quote.get('totalVolume', 0) or 0),
+                            'open_interest': int(quote.get('openInterest', 0) or 0),
+                            'implied_volatility': float(quote.get('volatility', 0) or 0)
+                        }
+                        
+        except Exception as e:
+            print(f"[{self.name}] Error getting option quote: {e}")
+        
+        return None
+    
     def is_authenticated(self) -> bool:
         """Check if we have valid tokens"""
         return bool(self.access_token and self.refresh_token)
