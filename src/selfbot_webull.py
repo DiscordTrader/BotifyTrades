@@ -5497,6 +5497,51 @@ class SelfClient(discord.Client):
             traceback.print_exc()
             self.zerodha_broker = None
 
+        # Initialize Charles Schwab broker (OAuth2 API)
+        self.schwab_broker = None
+        try:
+            _original_print("[SCHWAB] Starting broker initialization...", flush=True)
+            
+            from gui_app.broker_credentials_service import get_schwab_credentials
+            from src.brokers.schwab_broker import SchwabBroker
+            
+            schwab_creds = get_schwab_credentials()
+            
+            if schwab_creds and schwab_creds.get('client_id') and schwab_creds.get('client_secret'):
+                _original_print(f"[SCHWAB] ✓ Loaded credentials from DATABASE", flush=True)
+                
+                self.schwab_broker = SchwabBroker({
+                    'client_id': schwab_creds.get('client_id'),
+                    'client_secret': schwab_creds.get('client_secret'),
+                    'redirect_uri': schwab_creds.get('redirect_uri', 'https://127.0.0.1'),
+                    'dry_run': schwab_creds.get('dry_run', True)
+                })
+                
+                connected = await self.schwab_broker.connect()
+                if connected:
+                    mode = "PAPER" if schwab_creds.get('dry_run', True) else "LIVE"
+                    _original_print(f"[SCHWAB] ✓ Connected successfully ({mode})", flush=True)
+                    try:
+                        from gui_app.database import update_broker_connection_status
+                        account_info = await self.schwab_broker.get_account_info()
+                        update_broker_connection_status('schwab', True, f"Connected - Account: {self.schwab_broker.account_number}")
+                        buying_power = account_info.get('buying_power', 0)
+                        if buying_power > 0:
+                            _original_print(f"[SCHWAB]   Buying Power: ${buying_power:,.2f}", flush=True)
+                        _original_print(f"[SCHWAB] ✓ Broker status updated in GUI", flush=True)
+                    except Exception as status_err:
+                        _original_print(f"[SCHWAB] ⚠️ Failed to update broker status: {status_err}", flush=True)
+                else:
+                    _original_print("[SCHWAB] ⚠️ Not authenticated - click 'Connect with Schwab' in Settings", flush=True)
+                    self.schwab_broker = None
+            else:
+                _original_print("[SCHWAB] No credentials configured - broker disabled", flush=True)
+        except Exception as e:
+            _original_print(f"[SCHWAB] ⚠️ Initialization failed: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            self.schwab_broker = None
+
         # CRITICAL: Set broker_ready if ANY broker is available (not just Webull)
         # This fixes user builds where only Alpaca/Tastytrade are configured
         if not self.broker_ready.is_set():
@@ -5508,7 +5553,8 @@ class SelfClient(discord.Client):
                 self.ibkr_broker or
                 self.dhanq_broker or
                 self.upstox_broker or
-                self.zerodha_broker
+                self.zerodha_broker or
+                self.schwab_broker
             )
             if any_broker_available:
                 self.broker_ready.set()
@@ -5532,7 +5578,7 @@ class SelfClient(discord.Client):
                 
                 # Create simple broker manager for sync service
                 class BrokerManager:
-                    def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None, dhanq_broker=None, upstox_broker=None, zerodha_broker=None):
+                    def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None, dhanq_broker=None, upstox_broker=None, zerodha_broker=None, schwab_broker=None):
                         self.webull_broker = webull_broker
                         self.alpaca_paper_broker = alpaca_paper_broker
                         self.tastytrade_broker = tastytrade_broker
@@ -5541,8 +5587,9 @@ class SelfClient(discord.Client):
                         self.dhanq_broker = dhanq_broker
                         self.upstox_broker = upstox_broker
                         self.zerodha_broker = zerodha_broker
+                        self.schwab_broker = schwab_broker
                 
-                broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker, self.upstox_broker, self.zerodha_broker)
+                broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker, self.upstox_broker, self.zerodha_broker, self.schwab_broker)
                 
                 self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=30)
                 await self.sync_service.start()

@@ -188,6 +188,12 @@ class BrokerSyncService:
             broker_label = 'TASTYTRADE_LIVE' if getattr(tt_broker, 'is_live', False) else 'TASTYTRADE_PAPER'
             brokers_to_sync.append((broker_label, tt_broker))
         
+        # Add Schwab if available
+        if hasattr(self.broker_manager, 'schwab_broker') and self.broker_manager.schwab_broker:
+            schwab_broker = self.broker_manager.schwab_broker
+            if schwab_broker.is_authenticated():
+                brokers_to_sync.append(('SCHWAB', schwab_broker))
+        
         if not brokers_to_sync:
             print("[SYNC] No brokers available for sync", flush=True)
             return
@@ -342,6 +348,38 @@ class BrokerSyncService:
                                 'asset_type': 'stock'
                             })
             
+            elif broker_name == 'SCHWAB':
+                # Get detailed positions from Schwab
+                if hasattr(broker_instance, 'get_positions_detailed'):
+                    positions = await broker_instance.get_positions_detailed() or []
+                    
+                    for pos in positions:
+                        result['positions'].append({
+                            'symbol': pos.get('symbol'),
+                            'quantity': pos.get('quantity'),
+                            'avg_price': pos.get('avg_cost'),
+                            'current_price': pos.get('current_price'),
+                            'unrealized_pnl': pos.get('unrealized_pl'),
+                            'position_id': pos.get('position_id'),
+                            'asset_type': pos.get('asset', 'stock'),
+                            'strike': pos.get('strike'),
+                            'expiry': pos.get('expiry'),
+                            'call_put': pos.get('direction')
+                        })
+                
+                # Get pending orders from Schwab
+                if hasattr(broker_instance, 'get_pending_orders'):
+                    orders = await broker_instance.get_pending_orders() or []
+                    for order in orders:
+                        result['pending_orders'].append({
+                            'broker_order_id': order.get('order_id'),
+                            'symbol': order.get('symbol'),
+                            'quantity': order.get('quantity'),
+                            'limit_price': order.get('limit_price'),
+                            'order_type': order.get('action'),  # BUY/SELL
+                            'status': order.get('status')
+                        })
+            
             print(f"[SYNC] {broker_name}: {len(result['positions'])} positions, {len(result['pending_orders'])} pending orders")
             if result['positions']:
                 symbols = [p['symbol'] for p in result['positions']]
@@ -385,6 +423,8 @@ class BrokerSyncService:
             if broker_lower == 'webull' and 'webull' in trade_broker:
                 active_trades.append(t)
             elif broker_lower == 'alpaca_paper' and 'alpaca' in trade_broker:
+                active_trades.append(t)
+            elif broker_lower == 'schwab' and 'schwab' in trade_broker:
                 active_trades.append(t)
             elif trade_broker == broker_lower:
                 active_trades.append(t)
@@ -906,6 +946,9 @@ class BrokerSyncService:
                                     })
                     except Exception as e:
                         print(f"[SYNC] Error getting Alpaca orders: {e}")
+            elif broker_name == 'SCHWAB':
+                if hasattr(broker_instance, 'get_order_history'):
+                    filled_orders = await broker_instance.get_order_history(count=50)
             
             if not filled_orders:
                 print(f"[SYNC] No filled orders from {broker_name}")

@@ -8,7 +8,7 @@ import sys
 import json
 import asyncio
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -594,6 +594,233 @@ class SchwabBroker(BrokerInterface):
     def is_authenticated(self) -> bool:
         """Check if we have valid tokens"""
         return bool(self.access_token and self.refresh_token)
+    
+    async def get_positions_detailed(self) -> List[Dict[str, Any]]:
+        """Get detailed positions for sync service"""
+        try:
+            if not await self._ensure_valid_token():
+                return []
+            
+            if not self.account_hash:
+                print(f"[{self.name}] No account_hash - cannot fetch positions")
+                return []
+            
+            import httpx
+            
+            headers = {
+                'Authorization': f'Bearer {self.access_token}',
+                'Accept': 'application/json'
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.BASE_URL}/accounts/{self.account_hash}",
+                    headers=headers,
+                    params={'fields': 'positions'}
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    account = data.get('securitiesAccount', {})
+                    positions = account.get('positions', [])
+                    
+                    result = []
+                    for pos in positions:
+                        instrument = pos.get('instrument', {})
+                        symbol = instrument.get('symbol', '')
+                        asset_type = instrument.get('assetType', 'EQUITY').lower()
+                        
+                        qty = pos.get('longQuantity', 0) - pos.get('shortQuantity', 0)
+                        if qty == 0:
+                            continue
+                        
+                        avg_price = pos.get('averagePrice', 0)
+                        current_price = pos.get('marketValue', 0) / qty if qty else 0
+                        unrealized_pnl = pos.get('longOpenProfitLoss', 0) + pos.get('shortOpenProfitLoss', 0)
+                        
+                        position_data = {
+                            'symbol': symbol,
+                            'quantity': int(qty),
+                            'avg_cost': float(avg_price),
+                            'current_price': float(current_price),
+                            'unrealized_pl': float(unrealized_pnl),
+                            'asset': 'option' if asset_type == 'option' else 'stock',
+                            'position_id': instrument.get('cusip', symbol)
+                        }
+                        
+                        # Parse option details if applicable
+                        if asset_type == 'option':
+                            position_data['strike'] = float(instrument.get('strikePrice', 0))
+                            position_data['expiry'] = instrument.get('expirationDate', '')[:10] if instrument.get('expirationDate') else ''
+                            position_data['direction'] = instrument.get('putCall', '')[0] if instrument.get('putCall') else ''
+                            position_data['symbol'] = instrument.get('underlyingSymbol', symbol)
+                        
+                        result.append(position_data)
+                    
+                    return result
+                    
+        except Exception as e:
+            print(f"[{self.name}] Error getting detailed positions: {e}")
+        
+        return []
+    
+    async def get_pending_orders(self) -> List[Dict[str, Any]]:
+        """Get open/pending orders"""
+        try:
+            if not await self._ensure_valid_token():
+                return []
+            
+            if not self.account_hash:
+                print(f"[{self.name}] No account_hash - cannot fetch pending orders")
+                return []
+            
+            import httpx
+            from datetime import datetime, timedelta
+            
+            headers = {
+                'Authorization': f'Bearer {self.access_token}',
+                'Accept': 'application/json'
+            }
+            
+            # Schwab requires date range for orders query
+            to_date = datetime.now()
+            from_date = to_date - timedelta(days=7)
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                    headers=headers,
+                    params={
+                        'fromEnteredTime': from_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                        'toEnteredTime': to_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                        'status': 'WORKING'  # Only get working/pending orders
+                    }
+                )
+                
+                if response.status_code == 200:
+                    orders = response.json()
+                    result = []
+                    
+                    for order in orders:
+                        order_legs = order.get('orderLegCollection', [])
+                        if not order_legs:
+                            continue
+                        
+                        leg = order_legs[0]
+                        instrument = leg.get('instrument', {})
+                        
+                        result.append({
+                            'order_id': str(order.get('orderId', '')),
+                            'symbol': instrument.get('symbol', ''),
+                            'quantity': int(leg.get('quantity', 0)),
+                            'limit_price': float(order.get('price', 0)) if order.get('price') else None,
+                            'action': leg.get('instruction', ''),  # BUY/SELL
+                            'status': order.get('status', ''),
+                            'order_type': order.get('orderType', ''),
+                            'entered_time': order.get('enteredTime', '')
+                        })
+                    
+                    return result
+                    
+        except Exception as e:
+            print(f"[{self.name}] Error getting pending orders: {e}")
+        
+        return []
+    
+    async def get_order_history(self, count: int = 50) -> List[Dict[str, Any]]:
+        """Get filled order history for sync"""
+        try:
+            if not await self._ensure_valid_token():
+                return []
+            
+            if not self.account_hash:
+                print(f"[{self.name}] No account_hash - cannot fetch order history")
+                return []
+            
+            import httpx
+            from datetime import datetime, timedelta
+            
+            headers = {
+                'Authorization': f'Bearer {self.access_token}',
+                'Accept': 'application/json'
+            }
+            
+            # Query last 30 days of orders
+            to_date = datetime.now()
+            from_date = to_date - timedelta(days=30)
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
+                    headers=headers,
+                    params={
+                        'fromEnteredTime': from_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                        'toEnteredTime': to_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                        'status': 'FILLED'
+                    }
+                )
+                
+                if response.status_code == 200:
+                    orders = response.json()
+                    result = []
+                    
+                    for order in orders[:count]:
+                        order_legs = order.get('orderLegCollection', [])
+                        if not order_legs:
+                            continue
+                        
+                        leg = order_legs[0]
+                        instrument = leg.get('instrument', {})
+                        asset_type = instrument.get('assetType', 'EQUITY').lower()
+                        
+                        # Get symbol - for options, extract underlying
+                        symbol = instrument.get('symbol', '')
+                        underlying = instrument.get('underlyingSymbol', symbol) if asset_type == 'option' else symbol
+                        
+                        # Get fill info from order activities
+                        activities = order.get('orderActivityCollection', [])
+                        filled_price = 0
+                        filled_qty = 0
+                        filled_time = order.get('closeTime', '') or order.get('enteredTime', '')
+                        
+                        for activity in activities:
+                            if activity.get('activityType') == 'EXECUTION':
+                                exec_legs = activity.get('executionLegs', [])
+                                for exec_leg in exec_legs:
+                                    filled_price = float(exec_leg.get('price', 0))
+                                    filled_qty = int(exec_leg.get('quantity', 0))
+                                    filled_time = exec_leg.get('time', filled_time)
+                        
+                        if filled_qty == 0:
+                            filled_qty = int(order.get('filledQuantity', leg.get('quantity', 0)))
+                        if filled_price == 0:
+                            filled_price = float(order.get('price', 0))
+                        
+                        order_data = {
+                            'order_id': str(order.get('orderId', '')),
+                            'symbol': underlying,
+                            'quantity': filled_qty,
+                            'filled_price': filled_price,
+                            'action': leg.get('instruction', ''),  # BUY/SELL
+                            'filled_time': filled_time,
+                            'asset_type': 'option' if asset_type == 'option' else 'stock',
+                            'order_type': order.get('orderType', '')
+                        }
+                        
+                        # Add option details
+                        if asset_type == 'option':
+                            order_data['strike'] = float(instrument.get('strikePrice', 0))
+                            order_data['expiry'] = instrument.get('expirationDate', '')[:10] if instrument.get('expirationDate') else ''
+                            order_data['direction'] = instrument.get('putCall', '')[0] if instrument.get('putCall') else ''
+                        
+                        result.append(order_data)
+                    
+                    return result
+                    
+        except Exception as e:
+            print(f"[{self.name}] Error getting order history: {e}")
+        
+        return []
 
 
 BrokerFactory.register_broker('SCHWAB', SchwabBroker)
