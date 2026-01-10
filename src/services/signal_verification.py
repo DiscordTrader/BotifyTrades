@@ -36,16 +36,18 @@ except ImportError:
 _webull_client = None
 _tastytrade_session = None
 _alpaca_broker = None
+_schwab_broker = None
 
 # Time window tolerance for historical price verification (seconds)
 TIME_WINDOW_TOLERANCE = 30
 
-def set_broker_clients(webull_client=None, tastytrade_session=None, alpaca_broker=None):
+def set_broker_clients(webull_client=None, tastytrade_session=None, alpaca_broker=None, schwab_broker=None):
     """Set broker clients for real-time data access"""
-    global _webull_client, _tastytrade_session, _alpaca_broker
+    global _webull_client, _tastytrade_session, _alpaca_broker, _schwab_broker
     _webull_client = webull_client
     _tastytrade_session = tastytrade_session
     _alpaca_broker = alpaca_broker
+    _schwab_broker = schwab_broker
     sources = []
     if webull_client:
         sources.append('Webull')
@@ -53,6 +55,8 @@ def set_broker_clients(webull_client=None, tastytrade_session=None, alpaca_broke
         sources.append('Tastytrade')
     if alpaca_broker:
         sources.append('Alpaca')
+    if schwab_broker:
+        sources.append('Schwab')
     if sources:
         print(f"[VERIFY] ✓ Real-time data sources enabled: {', '.join(sources)}")
     else:
@@ -65,7 +69,8 @@ def get_broker_status() -> Dict[str, bool]:
         'webull': _webull_client is not None,
         'tastytrade': _tastytrade_session is not None,
         'alpaca': _alpaca_broker is not None,
-        'any_realtime': any([_webull_client, _tastytrade_session, _alpaca_broker])
+        'schwab': _schwab_broker is not None,
+        'any_realtime': any([_webull_client, _tastytrade_session, _alpaca_broker, _schwab_broker])
     }
 
 

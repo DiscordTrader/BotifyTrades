@@ -10697,7 +10697,7 @@ def register_routes(app):
         try:
             from .broker_credentials_service import set_broker_status, get_discord_credentials, get_webull_credentials, get_alpaca_credentials, get_ibkr_credentials
             
-            valid_brokers = ['discord', 'webull_live', 'webull_paper', 'alpaca_live', 'alpaca_paper', 'ibkr_live', 'ibkr_paper', 'tastytrade_live', 'tastytrade_paper', 'robinhood']
+            valid_brokers = ['discord', 'webull_live', 'webull_paper', 'alpaca_live', 'alpaca_paper', 'ibkr_live', 'ibkr_paper', 'tastytrade_live', 'tastytrade_paper', 'robinhood', 'schwab_live', 'schwab_paper']
             
             if broker_id not in valid_brokers:
                 return jsonify({'success': False, 'error': f'Invalid broker ID: {broker_id}'}), 400
@@ -12648,6 +12648,52 @@ def register_routes(app):
                 'account_type': 'PAPER',
                 'buying_power': alpaca_buying_power,
                 'positions': alpaca_positions
+            }
+            
+            schwab_connected = False
+            schwab_buying_power = 0
+            schwab_positions = 0
+            schwab_token_expiry = None
+            if _bot_instance and hasattr(_bot_instance, 'schwab_broker') and _bot_instance.schwab_broker:
+                try:
+                    broker = _bot_instance.schwab_broker
+                    import asyncio
+                    loop = getattr(_bot_instance, 'loop', None)
+                    if loop and loop.is_running():
+                        if hasattr(broker, 'is_authenticated'):
+                            try:
+                                future = asyncio.run_coroutine_threadsafe(broker.is_authenticated(), loop)
+                                schwab_connected = future.result(timeout=5)
+                            except:
+                                schwab_connected = False
+                        if schwab_connected:
+                            try:
+                                future = asyncio.run_coroutine_threadsafe(broker.get_account_info(), loop)
+                                account = future.result(timeout=5)
+                                if account:
+                                    schwab_buying_power = float(account.get('buying_power', 0) or 0)
+                                future = asyncio.run_coroutine_threadsafe(broker.get_positions_detailed(), loop)
+                                positions = future.result(timeout=5)
+                                schwab_positions = len(positions) if positions else 0
+                            except:
+                                pass
+                    if hasattr(broker, 'token_expiry'):
+                        schwab_token_expiry = str(broker.token_expiry) if broker.token_expiry else None
+                except:
+                    pass
+            
+            from .broker_credentials_service import get_schwab_credentials
+            schwab_creds = get_schwab_credentials()
+            schwab_configured = bool(schwab_creds.get('client_id') and schwab_creds.get('client_secret'))
+            
+            broker_status['schwab'] = {
+                'connected': schwab_connected,
+                'status': 'connected' if schwab_connected else ('configured' if schwab_configured else 'not_configured'),
+                'account_type': 'PAPER' if schwab_creds.get('dry_run', True) else 'LIVE',
+                'buying_power': schwab_buying_power,
+                'positions': schwab_positions,
+                'token_expiry': schwab_token_expiry,
+                'configured': schwab_configured
             }
             
             health_data['brokers'] = broker_status

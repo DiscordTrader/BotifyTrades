@@ -5680,10 +5680,19 @@ class SelfClient(discord.Client):
             webull_client = getattr(self.broker, 'wb', None) if self.broker else None
             tastytrade_session = getattr(self.tastytrade_broker, 'session', None) if self.tastytrade_broker else None
             alpaca_broker = self.paper_broker if self.paper_broker and hasattr(self.paper_broker, 'connected') and self.paper_broker.connected else None
+            schwab_broker = None
+            if self.schwab_broker and hasattr(self.schwab_broker, 'is_authenticated'):
+                try:
+                    is_auth = await self.schwab_broker.is_authenticated()
+                    if is_auth:
+                        schwab_broker = self.schwab_broker
+                except Exception:
+                    pass
             set_broker_clients(
                 webull_client=webull_client, 
                 tastytrade_session=tastytrade_session,
-                alpaca_broker=alpaca_broker
+                alpaca_broker=alpaca_broker,
+                schwab_broker=schwab_broker
             )
         except Exception as e:
             print(f"[VERIFY] ⚠️ Could not initialize real-time verification: {e}")
