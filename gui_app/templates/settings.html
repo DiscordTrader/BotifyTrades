@@ -784,6 +784,20 @@ input:checked + .slider:before {
             <button id="connect-schwab" class="btn btn-connect" style="background: linear-gradient(135deg, #0078d7 0%, #005a9e 100%);">🔗 Connect with Schwab</button>
             <button id="disconnect-schwab" class="btn" style="background: linear-gradient(135deg, #ff5252 0%, #d32f2f 100%); display: none;">❌ Disconnect</button>
         </div>
+        
+        <!-- Manual Code Entry for Local Deployments -->
+        <div id="schwab-manual-code-section" class="form-group" style="margin-top: 20px; padding: 16px; background: rgba(0, 120, 215, 0.1); border-radius: 8px; border: 1px dashed rgba(0, 120, 215, 0.4);">
+            <label style="color: #0078d7; font-weight: 600;">📋 Manual Code Entry (Local Deployment)</label>
+            <p class="help-text" style="margin: 8px 0 12px 0;">
+                If the callback fails (127.0.0.1 error), paste the <strong>full URL</strong> from your browser's address bar after Schwab redirects you.
+            </p>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="schwab-manual-code" placeholder="Paste full URL: https://127.0.0.1/?code=C0.xxx..." style="flex: 1;">
+                <button id="submit-schwab-code" class="btn" style="background: linear-gradient(135deg, #00c853 0%, #00a844 100%); white-space: nowrap;">✅ Submit Code</button>
+            </div>
+            <p id="schwab-manual-code-msg" style="margin-top: 8px; font-size: 12px;"></p>
+        </div>
+        
         <div id="schwab-account-info" class="account-info" style="display: none;"></div>
     </div>
     
@@ -2177,6 +2191,45 @@ document.getElementById('disconnect-schwab').addEventListener('click', async () 
 
 document.addEventListener('DOMContentLoaded', loadSchwabStatus);
 document.addEventListener('DOMContentLoaded', loadSchwabCredentials);
+
+// Manual code entry for local deployments
+document.getElementById('submit-schwab-code').addEventListener('click', async () => {
+    const codeInput = document.getElementById('schwab-manual-code');
+    const msgEl = document.getElementById('schwab-manual-code-msg');
+    const code = codeInput.value.trim();
+    
+    if (!code) {
+        msgEl.textContent = '❌ Please paste the URL from your browser';
+        msgEl.style.color = '#ff5252';
+        return;
+    }
+    
+    msgEl.textContent = '⏳ Exchanging code for tokens...';
+    msgEl.style.color = '#00d4ff';
+    
+    try {
+        const response = await fetch('/schwab/manual-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: code })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            msgEl.textContent = '✅ ' + result.message;
+            msgEl.style.color = '#00c853';
+            codeInput.value = '';
+            loadSchwabStatus();
+        } else {
+            msgEl.textContent = '❌ ' + (result.error || 'Failed to connect');
+            msgEl.style.color = '#ff5252';
+        }
+    } catch (error) {
+        msgEl.textContent = '❌ Error: ' + error.message;
+        msgEl.style.color = '#ff5252';
+    }
+});
 
 // ========== AI & MARKET DATA API KEYS ==========
 

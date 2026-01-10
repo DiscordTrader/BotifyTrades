@@ -203,3 +203,58 @@ def schwab_disconnect():
         return jsonify({'success': True, 'message': 'Disconnected from Schwab'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+
+@schwab_auth.route("/schwab/manual-code", methods=['POST'])
+def schwab_manual_code():
+    """
+    Manual code entry for local deployments where callback URL doesn't work.
+    User copies the full redirect URL or just the code from their browser.
+    """
+    try:
+        data = request.get_json() or {}
+        code_or_url = data.get('code', '').strip()
+        
+        if not code_or_url:
+            return jsonify({'success': False, 'error': 'No code provided'})
+        
+        # Extract code from full URL if provided
+        import urllib.parse
+        if 'code=' in code_or_url:
+            # Parse the URL to extract the code parameter
+            if code_or_url.startswith('http'):
+                parsed = urllib.parse.urlparse(code_or_url)
+                params = urllib.parse.parse_qs(parsed.query)
+                code = params.get('code', [''])[0]
+            else:
+                # Just the query string portion
+                params = urllib.parse.parse_qs(code_or_url)
+                code = params.get('code', [''])[0]
+        else:
+            code = code_or_url
+        
+        if not code:
+            return jsonify({'success': False, 'error': 'Could not extract authorization code'})
+        
+        # URL decode the code (handles %40 -> @, etc.)
+        code = urllib.parse.unquote(code)
+        
+        print(f"[SCHWAB AUTH] Manual code entry - extracted code: {code[:20]}...")
+        
+        creds = get_schwab_credentials()
+        if not creds:
+            return jsonify({'success': False, 'error': 'Schwab credentials not configured'})
+        
+        success = exchange_code_for_tokens(code, creds)
+        
+        if success:
+            db.update_broker_connection_status('SCHWAB', True)
+            return jsonify({'success': True, 'message': 'Successfully connected to Schwab!'})
+        else:
+            return jsonify({'success': False, 'error': 'Failed to exchange code for tokens. Code may have expired.'})
+            
+    except Exception as e:
+        print(f"[SCHWAB AUTH] Manual code error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
