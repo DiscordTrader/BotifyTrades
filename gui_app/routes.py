@@ -10192,7 +10192,9 @@ def register_routes(app):
                     status['ibkr_live'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                 
                 # Robinhood broker (LIVE only - no paper mode)
-                if hasattr(_bot_instance, 'robinhood_broker') and _bot_instance.robinhood_broker:
+                rh_broker = getattr(_bot_instance, 'robinhood_broker', None)
+                rh_connected = rh_broker and getattr(rh_broker, 'connected', False)
+                if rh_connected:
                     set_broker_status('robinhood', True, 'connected')
                     status['robinhood'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': {'mode': 'LIVE'}}
                 else:

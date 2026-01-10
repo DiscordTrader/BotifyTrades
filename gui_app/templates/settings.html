@@ -1966,6 +1966,36 @@ async function loadRobinhoodSettings() {
         if (data.robinhood_totp_secret) {
             document.getElementById('robinhood-totp-secret').placeholder = '2FA configured ✓';
         }
+        
+        // Update connection status from broker status API
+        const statusResponse = await fetch('/api/brokers/status');
+        const statusData = await statusResponse.json();
+        
+        if (statusData.success && statusData.status.robinhood) {
+            const rhStatus = statusData.status.robinhood;
+            const statusEl = document.getElementById('robinhood-connection-status');
+            const statusText = document.getElementById('robinhood-status-text');
+            const accountInfo = document.getElementById('robinhood-account-info');
+            
+            if (rhStatus.connected) {
+                statusEl.className = 'connection-status connected';
+                statusText.textContent = 'Connected (LIVE)';
+                if (accountInfo) {
+                    accountInfo.style.display = 'block';
+                    accountInfo.innerHTML = `
+                        <div style="margin-top: 8px; padding: 8px; background: rgba(0, 200, 83, 0.1); border-radius: 4px; font-size: 11px; color: #00c853;">
+                            ✓ Robinhood is connected and ready for LIVE trading
+                        </div>
+                    `;
+                }
+            } else {
+                statusEl.className = 'connection-status disconnected';
+                statusText.textContent = 'Not connected';
+                if (accountInfo) {
+                    accountInfo.style.display = 'none';
+                }
+            }
+        }
     } catch (error) {
         console.error('Error loading Robinhood settings:', error);
     }
