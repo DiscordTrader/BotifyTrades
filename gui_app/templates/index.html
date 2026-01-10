@@ -1614,6 +1614,8 @@ async function loadStats() {
                 balanceUrl = `/api/tastytrade/balance?paper=${isPaper}`;
             } else if (brokerUpper === 'SCHWAB') {
                 balanceUrl = '/api/schwab/balance';
+            } else if (brokerUpper === 'ROBINHOOD') {
+                balanceUrl = '/api/robinhood/balance';
             }
             
             const balance = await fetch(balanceUrl).then(r => r.json());

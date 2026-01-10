@@ -18,7 +18,7 @@ BROKER_STATUS = {
     'ibkr_paper': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
     'tastytrade_live': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
     'tastytrade_paper': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
-    'robinhood_live': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'robinhood': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
 }
 
 
@@ -276,7 +276,7 @@ def clear_robinhood_credentials():
         'totp_secret': '',
         'device_token': ''
     })
-    set_broker_status('robinhood_live', False, 'disconnected')
+    set_broker_status('robinhood', False, 'disconnected')
 
 
 def save_schwab_credentials(

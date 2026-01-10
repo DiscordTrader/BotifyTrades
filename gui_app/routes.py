@@ -2933,6 +2933,92 @@ def register_routes(app):
             })
             return result
     
+    @app.route('/api/robinhood/balance', methods=['GET'])
+    def api_robinhood_balance() -> Any:
+        """Get Robinhood account balance for Dashboard"""
+        cache_key = 'robinhood_balance'
+        if cache_key in _api_cache:
+            cached_data, timestamp = _api_cache[cache_key]
+            if time.time() - timestamp < 5:
+                return jsonify(cached_data)
+        
+        try:
+            if _bot_instance and hasattr(_bot_instance, 'robinhood_broker') and _bot_instance.robinhood_broker:
+                broker = _bot_instance.robinhood_broker
+                if broker.connected:
+                    import asyncio
+                    
+                    # Use run_coroutine_threadsafe for proper async handling
+                    try:
+                        account_future = asyncio.run_coroutine_threadsafe(
+                            broker.get_account_info(),
+                            _bot_instance.loop
+                        )
+                        account_info = account_future.result(timeout=10)
+                    except Exception as e:
+                        print(f"[API] Robinhood account_info error: {e}")
+                        account_info = {}
+                    
+                    # get_all_positions is synchronous in RobinhoodBroker
+                    try:
+                        positions_raw = broker.get_all_positions()
+                    except Exception as e:
+                        print(f"[API] Robinhood positions error: {e}")
+                        positions_raw = []
+                    
+                    positions_list = []
+                    if positions_raw:
+                        for pos in positions_raw:
+                            if isinstance(pos, dict):
+                                positions_list.append({
+                                    'symbol': pos.get('symbol', 'Unknown'),
+                                    'qty': float(pos.get('quantity', 0)),
+                                    'market_value': float(pos.get('market_value', 0)),
+                                    'avg_price': float(pos.get('average_price', 0)),
+                                    'current_price': float(pos.get('current_price', 0)),
+                                    'unrealized_pnl': float(pos.get('unrealized_pnl', 0))
+                                })
+                    
+                    data = {
+                        'buying_power': float(account_info.get('buying_power', 0)) if account_info else 0,
+                        'cash_balance': float(account_info.get('cash', 0)) if account_info else 0,
+                        'net_liquidation': float(account_info.get('portfolio_value', 0)) if account_info else 0,
+                        'equity': float(account_info.get('equity', 0)) if account_info else 0,
+                        'unrealized_pnl': float(account_info.get('unrealized_pnl', 0)) if account_info else 0,
+                        'positions': positions_list,
+                        'status': 'ok',
+                        'mode': 'LIVE',
+                        'warning': 'Robinhood has NO paper trading - all trades are LIVE'
+                    }
+                    _api_cache[cache_key] = (data, time.time())
+                    return jsonify(data)
+            
+            return jsonify({
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'equity': 0,
+                'unrealized_pnl': 0,
+                'positions': [],
+                'status': 'not_connected',
+                'error': 'Robinhood not connected. Go to Settings to connect.'
+            })
+                
+        except Exception as e:
+            print(f"[API] Exception in Robinhood balance endpoint: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'equity': 0,
+                'unrealized_pnl': 0,
+                'positions': [],
+                'status': 'error',
+                'error': str(e)
+            })
+    
     @app.route('/api/schwab/positions/<symbol>/close', methods=['POST'])
     def api_schwab_close_position(symbol: str) -> Any:
         """Close a Schwab position by symbol"""
@@ -4812,13 +4898,30 @@ def register_routes(app):
             return jsonify({'prices': {}})
     
     async def _get_realtime_prices(positions):
-        """Helper to fetch real-time prices from Webull"""
-        if not hasattr(_bot_instance, 'broker') or _bot_instance.broker is None:
-            return {'prices': {}}
+        """Helper to fetch real-time prices from Webull or fallback sources"""
         
-        wb = _bot_instance.broker._client
-        if not wb:
-            return {'prices': {}}
+        def _get_yfinance_quote(symbol: str) -> dict:
+            """Fallback to yfinance for stock quotes (safe import)"""
+            try:
+                import yfinance as yf
+            except ImportError:
+                return None
+            try:
+                ticker = yf.Ticker(symbol)
+                info = ticker.info
+                if info:
+                    bid = float(info.get('bid', 0) or 0)
+                    ask = float(info.get('ask', 0) or 0)
+                    last = float(info.get('regularMarketPrice', 0) or info.get('previousClose', 0) or 0)
+                    mid = (bid + ask) / 2 if bid and ask else last
+                    return {'bid': bid, 'ask': ask, 'mid': mid, 'last': last}
+            except Exception as e:
+                print(f"[API] yfinance fallback error for {symbol}: {e}")
+            return None
+        
+        wb = None
+        if hasattr(_bot_instance, 'broker') and _bot_instance.broker:
+            wb = _bot_instance.broker._client
         
         def _blocking_call():
             prices = {}
@@ -4860,17 +4963,26 @@ def register_routes(app):
                                     'last': float(quote.get('lastPrice', 0) or quote.get('close', 0) or 0)
                                 }
                     else:
-                        # Get stock quote
-                        ticker_id = wb.get_ticker(symbol)
-                        if ticker_id:
-                            quote = wb.get_quote(ticker_id)
-                            if quote:
-                                prices[str(trade_id)] = {
-                                    'bid': float(quote.get('bidPrice', 0) or 0),
-                                    'ask': float(quote.get('askPrice', 0) or 0),
-                                    'mid': float((float(quote.get('bidPrice', 0) or 0) + float(quote.get('askPrice', 0) or 0)) / 2),
-                                    'last': float(quote.get('lastPrice', 0) or quote.get('close', 0) or 0)
-                                }
+                        # Get stock quote - try Webull first, then yfinance fallback
+                        quote_data = None
+                        if wb:
+                            ticker_id = wb.get_ticker(symbol)
+                            if ticker_id:
+                                quote = wb.get_quote(ticker_id)
+                                if quote:
+                                    quote_data = {
+                                        'bid': float(quote.get('bidPrice', 0) or 0),
+                                        'ask': float(quote.get('askPrice', 0) or 0),
+                                        'mid': float((float(quote.get('bidPrice', 0) or 0) + float(quote.get('askPrice', 0) or 0)) / 2),
+                                        'last': float(quote.get('lastPrice', 0) or quote.get('close', 0) or 0)
+                                    }
+                        
+                        # Fallback to yfinance for non-Webull positions (Robinhood, Alpaca, etc.)
+                        if not quote_data:
+                            quote_data = _get_yfinance_quote(symbol)
+                        
+                        if quote_data:
+                            prices[str(trade_id)] = quote_data
                 except Exception as e:
                     print(f"[API] Error fetching price for {pos.get('symbol')}: {e}")
                     continue
