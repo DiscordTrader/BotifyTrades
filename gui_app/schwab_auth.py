@@ -196,7 +196,8 @@ class SchwabTokenManager:
             
             data = {
                 'grant_type': 'refresh_token',
-                'refresh_token': self._token_data['refresh_token']
+                'refresh_token': self._token_data['refresh_token'],
+                'client_id': creds['client_id']
             }
             
             print("[SCHWAB TOKEN] Sending refresh token request...")
@@ -769,7 +770,8 @@ def exchange_code_for_tokens(
         data = {
             'grant_type': 'authorization_code',
             'code': code,
-            'redirect_uri': redirect_uri
+            'redirect_uri': redirect_uri,
+            'client_id': creds['client_id']
         }
         
         # Add PKCE verifier if present
