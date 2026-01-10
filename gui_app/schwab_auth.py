@@ -427,11 +427,19 @@ def schwab_callback():
         return redirect(url_for('settings_page'))
 
 
+_last_exchange_error = None
+
 def exchange_code_for_tokens(code: str, creds: dict) -> bool:
     """Exchange authorization code for access/refresh tokens using token manager"""
+    global _last_exchange_error
+    _last_exchange_error = None
+    
     try:
         import httpx
         import base64
+        
+        print(f"[SCHWAB AUTH] Exchanging code (first 20 chars): {code[:20]}...")
+        print(f"[SCHWAB AUTH] Redirect URI: {creds['redirect_uri']}")
         
         credentials = base64.b64encode(
             f"{creds['client_id']}:{creds['client_secret']}".encode()
@@ -448,7 +456,7 @@ def exchange_code_for_tokens(code: str, creds: dict) -> bool:
             'redirect_uri': creds['redirect_uri']
         }
         
-        with httpx.Client() as client:
+        with httpx.Client(timeout=30.0) as client:
             response = client.post(
                 'https://api.schwabapi.com/v1/oauth/token',
                 headers=headers,
@@ -472,15 +480,22 @@ def exchange_code_for_tokens(code: str, creds: dict) -> bool:
                 print(f"[SCHWAB AUTH] Tokens saved successfully, auto-refresh started")
                 return True
             else:
-                print(f"[SCHWAB AUTH] Token exchange failed: {response.status_code}")
-                print(f"[SCHWAB AUTH] Response: {response.text}")
+                error_msg = f"HTTP {response.status_code}: {response.text}"
+                print(f"[SCHWAB AUTH] Token exchange failed: {error_msg}")
+                _last_exchange_error = error_msg
                 return False
                 
     except Exception as e:
         print(f"[SCHWAB AUTH] Error exchanging code: {e}")
         import traceback
         traceback.print_exc()
+        _last_exchange_error = str(e)
         return False
+
+
+def get_last_exchange_error() -> str | None:
+    """Get the last token exchange error for debugging"""
+    return _last_exchange_error
 
 
 @schwab_auth.route("/schwab/status")
@@ -588,6 +603,10 @@ def schwab_manual_code():
             db.update_broker_connection_status('SCHWAB', True)
             return jsonify({'success': True, 'message': 'Successfully connected to Schwab!'})
         else:
+            # Get detailed error from Schwab
+            detailed_error = get_last_exchange_error()
+            if detailed_error:
+                return jsonify({'success': False, 'error': f'Schwab API error: {detailed_error}'})
             return jsonify({'success': False, 'error': 'Failed to exchange code for tokens. Code may have expired.'})
             
     except Exception as e:
