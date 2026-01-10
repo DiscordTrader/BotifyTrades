@@ -5365,6 +5365,9 @@ def update_alpaca_live_settings(api_key: str, secret_key: str) -> bool:
 def get_robinhood_settings() -> Dict[str, str]:
     """Get Robinhood credentials from database
     
+    Checks both settings table (legacy) and broker_credentials_service (new).
+    Falls back to broker_credentials_service if settings table is empty.
+    
     WARNING: Robinhood has NO paper trading mode.
     All trades are executed with REAL money.
     """
@@ -5377,7 +5380,23 @@ def get_robinhood_settings() -> Dict[str, str]:
         settings = {}
         for row in rows:
             settings[row['key']] = row['value'] or ''
-        return settings
+        
+        if settings.get('robinhood_username'):
+            return settings
+        
+        try:
+            from .broker_credentials_service import get_robinhood_credentials
+            creds = get_robinhood_credentials()
+            if creds.get('username'):
+                return {
+                    'robinhood_username': creds.get('username', ''),
+                    'robinhood_password': creds.get('password', ''),
+                    'robinhood_totp_secret': creds.get('totp_secret', '')
+                }
+        except Exception as e:
+            print(f"[DATABASE] Fallback to broker_credentials_service failed: {e}")
+        
+        return settings if settings else {'robinhood_username': '', 'robinhood_password': '', 'robinhood_totp_secret': ''}
     except Exception as e:
         print(f"[DATABASE] Error getting Robinhood settings: {e}")
         return {'robinhood_username': '', 'robinhood_password': '', 'robinhood_totp_secret': ''}

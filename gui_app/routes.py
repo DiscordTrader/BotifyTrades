@@ -7102,6 +7102,9 @@ def register_routes(app):
                 totp_secret=totp_secret,
                 device_token=device_token
             )
+            
+            db.update_robinhood_settings(username, password, totp_secret)
+            
             print(f"[API] ✓ Robinhood credentials saved successfully")
             return jsonify({
                 'success': True, 
