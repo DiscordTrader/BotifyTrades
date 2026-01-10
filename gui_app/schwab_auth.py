@@ -333,7 +333,13 @@ def get_default_redirect_uri():
     """Get the default redirect URI based on environment"""
     if os.environ.get("REPLIT_DEV_DOMAIN"):
         return f'https://{os.environ["REPLIT_DEV_DOMAIN"]}/schwab/callback'
-    return 'https://127.0.0.1'
+    # For local deployments, use the automatic callback server on port 8182
+    return 'https://127.0.0.1:8182/callback'
+
+
+def get_local_callback_uri():
+    """Get the local HTTPS callback URI for automatic OAuth."""
+    return 'https://127.0.0.1:8182/callback'
 
 
 def is_schwab_configured():
@@ -356,19 +362,59 @@ def is_schwab_authenticated():
 
 @schwab_auth.route("/schwab/login")
 def schwab_login():
-    """Initiate Schwab OAuth login flow"""
+    """Initiate Schwab OAuth login flow with automatic callback handling."""
     if not is_schwab_configured():
         flash("Schwab is not configured. Please add Client ID and Secret in Settings.", "error")
         return redirect(url_for('settings_page'))
     
     try:
         import urllib.parse
+        import webbrowser
         
         creds = get_schwab_credentials()
         if not creds:
             flash("Schwab credentials not found", "error")
             return redirect(url_for('settings_page'))
         
+        # Determine if we're running locally (can use automatic callback)
+        is_local = not os.environ.get("REPLIT_DEV_DOMAIN")
+        
+        if is_local:
+            # Use automatic OAuth callback server with PKCE
+            try:
+                from .schwab_oauth_server import get_oauth_server, start_oauth_flow
+                
+                # Get local callback URI
+                redirect_uri = get_local_callback_uri()
+                
+                # Start OAuth flow with PKCE
+                auth_url, oauth_server = start_oauth_flow(
+                    client_id=creds['client_id'],
+                    redirect_uri=redirect_uri,
+                    use_pkce=True
+                )
+                
+                if oauth_server:
+                    # Store PKCE verifier in session for token exchange
+                    from flask import session
+                    session['schwab_pkce_verifier'] = oauth_server.get_pkce_verifier()
+                    session['schwab_redirect_uri'] = redirect_uri
+                    
+                    print(f"[SCHWAB AUTH] Starting automatic OAuth flow with PKCE")
+                    print(f"[SCHWAB AUTH] Callback server on: {oauth_server.callback_url}")
+                    
+                    # Open browser to Schwab auth
+                    webbrowser.open(auth_url)
+                    
+                    # Return a waiting page that will poll for completion
+                    return _render_oauth_waiting_page(oauth_server.callback_url)
+                else:
+                    print("[SCHWAB AUTH] Callback server failed, using manual flow")
+                    
+            except ImportError as e:
+                print(f"[SCHWAB AUTH] OAuth server module not available: {e}")
+        
+        # Fallback: Standard redirect (for Replit or when callback server fails)
         params = {
             'response_type': 'code',
             'client_id': creds['client_id'],
@@ -385,13 +431,258 @@ def schwab_login():
         
     except Exception as e:
         print(f"[SCHWAB AUTH] Error initiating login: {e}")
+        import traceback
+        traceback.print_exc()
         flash(f"Failed to connect to Schwab: {str(e)}", "error")
         return redirect(url_for('settings_page'))
 
 
+def _render_oauth_waiting_page(callback_url: str) -> str:
+    """Render a page that waits for OAuth completion."""
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Schwab Authorization</title>
+        <style>
+            body {{ 
+                font-family: Arial, sans-serif; 
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); 
+                color: #e0e0e0; 
+                display: flex; 
+                justify-content: center; 
+                align-items: center; 
+                height: 100vh; 
+                margin: 0; 
+            }}
+            .container {{ 
+                text-align: center; 
+                padding: 40px 60px; 
+                background: rgba(22, 33, 62, 0.9); 
+                border-radius: 16px; 
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+                border: 1px solid rgba(0, 255, 163, 0.2);
+            }}
+            h1 {{ 
+                color: #00ffa3; 
+                margin-bottom: 20px; 
+            }}
+            .spinner {{ 
+                border: 4px solid rgba(0, 255, 163, 0.1);
+                border-top: 4px solid #00ffa3;
+                border-radius: 50%;
+                width: 50px;
+                height: 50px;
+                animation: spin 1s linear infinite;
+                margin: 30px auto;
+            }}
+            @keyframes spin {{
+                0% {{ transform: rotate(0deg); }}
+                100% {{ transform: rotate(360deg); }}
+            }}
+            .info {{ 
+                color: #a0a0a0; 
+                margin: 20px 0; 
+                line-height: 1.6;
+            }}
+            .callback-url {{
+                font-size: 12px;
+                color: #666;
+                word-break: break-all;
+                background: rgba(0,0,0,0.3);
+                padding: 10px;
+                border-radius: 4px;
+                margin-top: 20px;
+            }}
+            .manual-link {{
+                margin-top: 30px;
+                padding-top: 20px;
+                border-top: 1px solid rgba(255,255,255,0.1);
+            }}
+            .manual-link a {{
+                color: #00bcd4;
+                text-decoration: none;
+            }}
+            .manual-link a:hover {{
+                text-decoration: underline;
+            }}
+        </style>
+        <script>
+            let pollCount = 0;
+            const maxPolls = 60;  // 5 minutes max
+            
+            function checkStatus() {{
+                pollCount++;
+                if (pollCount > maxPolls) {{
+                    document.getElementById('status').innerHTML = 
+                        '<span style="color: #ff5555;">Timeout. Please try again or use manual code entry.</span>';
+                    return;
+                }}
+                
+                fetch('/schwab/oauth-status')
+                    .then(r => r.json())
+                    .then(data => {{
+                        if (data.completed) {{
+                            if (data.success) {{
+                                document.getElementById('status').innerHTML = 
+                                    '<span style="color: #00ffa3;">Connected! Redirecting...</span>';
+                                window.location.href = '/settings';
+                            }} else {{
+                                document.getElementById('status').innerHTML = 
+                                    '<span style="color: #ff5555;">Error: ' + data.error + '</span>';
+                            }}
+                        }} else {{
+                            setTimeout(checkStatus, 5000);  // Poll every 5 seconds
+                        }}
+                    }})
+                    .catch(() => setTimeout(checkStatus, 5000));
+            }}
+            
+            setTimeout(checkStatus, 3000);  // Start checking after 3 seconds
+        </script>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Authorizing with Schwab</h1>
+            <div class="spinner"></div>
+            <p class="info">
+                A browser window has opened for Schwab login.<br>
+                Please complete the authorization there.
+            </p>
+            <p id="status" class="info">Waiting for authorization...</p>
+            <div class="callback-url">
+                Callback URL: {callback_url}
+            </div>
+            <div class="manual-link">
+                <p>If the browser didn't open, <a href="/schwab/manual-entry">click here for manual code entry</a></p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
+
+def _get_session_oauth_state():
+    """Get session-scoped OAuth flow state."""
+    from flask import session
+    if 'schwab_oauth_state' not in session:
+        session['schwab_oauth_state'] = {
+            'completed': False,
+            'success': False,
+            'error': None,
+            'in_progress': False
+        }
+    return session['schwab_oauth_state']
+
+
+def _set_session_oauth_state(state: dict):
+    """Set session-scoped OAuth flow state."""
+    from flask import session
+    session['schwab_oauth_state'] = state
+
+
+@schwab_auth.route("/schwab/oauth-status")
+def schwab_oauth_status():
+    """Poll endpoint for checking OAuth flow completion status (session-scoped)."""
+    from flask import session
+    
+    # Get session-scoped state
+    flow_state = _get_session_oauth_state()
+    
+    # Check if callback server received a code
+    try:
+        from .schwab_oauth_server import get_oauth_server, OAuthCallbackHandler
+        
+        server = get_oauth_server()
+        
+        # Verify this is our session's OAuth flow using the stored verifier
+        session_verifier = session.get('schwab_pkce_verifier')
+        
+        if OAuthCallbackHandler.callback_received.is_set():
+            if OAuthCallbackHandler.auth_code and not flow_state['completed'] and session_verifier:
+                # Callback received, exchange for tokens
+                flow_state['in_progress'] = True
+                _set_session_oauth_state(flow_state)
+                
+                creds = get_schwab_credentials()
+                if creds:
+                    # Get redirect_uri from session - MUST match what was used in authorize
+                    redirect_uri = session.get('schwab_redirect_uri', get_local_callback_uri())
+                    
+                    success = exchange_code_for_tokens(
+                        code=OAuthCallbackHandler.auth_code,
+                        creds=creds,
+                        pkce_verifier=session_verifier,
+                        redirect_uri_override=redirect_uri
+                    )
+                    
+                    flow_state['completed'] = True
+                    flow_state['success'] = success
+                    flow_state['in_progress'] = False
+                    
+                    if success:
+                        db.update_broker_connection_status('SCHWAB', True)
+                    else:
+                        flow_state['error'] = get_last_exchange_error() or 'Token exchange failed'
+                    
+                    _set_session_oauth_state(flow_state)
+                    
+                    # Cleanup - clear server state for next attempt
+                    server.stop()
+                    OAuthCallbackHandler.callback_received.clear()
+                    OAuthCallbackHandler.auth_code = None
+                    session.pop('schwab_pkce_verifier', None)
+                    session.pop('schwab_redirect_uri', None)
+                else:
+                    flow_state['completed'] = True
+                    flow_state['success'] = False
+                    flow_state['error'] = 'Credentials not found'
+                    _set_session_oauth_state(flow_state)
+                    
+            elif OAuthCallbackHandler.error:
+                flow_state['completed'] = True
+                flow_state['success'] = False
+                flow_state['error'] = OAuthCallbackHandler.error
+                _set_session_oauth_state(flow_state)
+                server.stop()
+        
+        return jsonify(flow_state)
+        
+    except ImportError:
+        return jsonify({'completed': False, 'error': 'OAuth server not available'})
+
+
+@schwab_auth.route("/schwab/oauth-reset", methods=['POST'])
+def schwab_oauth_reset():
+    """Reset the OAuth flow state (session-scoped)."""
+    from flask import session
+    
+    # Reset session-scoped state
+    session['schwab_oauth_state'] = {
+        'completed': False,
+        'success': False,
+        'error': None,
+        'in_progress': False
+    }
+    session.pop('schwab_pkce_verifier', None)
+    session.pop('schwab_redirect_uri', None)
+    
+    try:
+        from .schwab_oauth_server import get_oauth_server, OAuthCallbackHandler
+        OAuthCallbackHandler.callback_received.clear()
+        OAuthCallbackHandler.auth_code = None
+        OAuthCallbackHandler.error = None
+        get_oauth_server().stop()
+    except Exception:
+        pass
+    
+    return jsonify({'success': True})
+
+
 @schwab_auth.route("/schwab/callback")
 def schwab_callback():
-    """Handle Schwab OAuth callback"""
+    """Handle Schwab OAuth callback (for Replit/web-based flow)."""
     try:
         code = request.args.get('code')
         error = request.args.get('error')
@@ -429,8 +720,28 @@ def schwab_callback():
 
 _last_exchange_error = None
 
-def exchange_code_for_tokens(code: str, creds: dict) -> bool:
-    """Exchange authorization code for access/refresh tokens using token manager"""
+from typing import Optional
+
+def exchange_code_for_tokens(
+    code: str, 
+    creds: dict, 
+    pkce_verifier: Optional[str] = None,
+    redirect_uri_override: Optional[str] = None,
+    account_id: str = ""
+) -> bool:
+    """
+    Exchange authorization code for access/refresh tokens using token manager.
+    
+    Args:
+        code: Authorization code from OAuth callback
+        creds: Schwab credentials dict with client_id, client_secret
+        pkce_verifier: PKCE code_verifier if PKCE was used in authorization
+        redirect_uri_override: Override redirect_uri (for automatic callback flow)
+        account_id: Optional account ID for multi-account support
+        
+    Returns:
+        True if tokens were successfully obtained and saved
+    """
     global _last_exchange_error
     _last_exchange_error = None
     
@@ -438,8 +749,13 @@ def exchange_code_for_tokens(code: str, creds: dict) -> bool:
         import httpx
         import base64
         
+        # Use override redirect_uri if provided (for automatic callback)
+        redirect_uri = redirect_uri_override or creds.get('redirect_uri')
+        
         print(f"[SCHWAB AUTH] Exchanging code (first 20 chars): {code[:20]}...")
-        print(f"[SCHWAB AUTH] Redirect URI: {creds['redirect_uri']}")
+        print(f"[SCHWAB AUTH] Redirect URI: {redirect_uri}")
+        if pkce_verifier:
+            print(f"[SCHWAB AUTH] Using PKCE (verifier length: {len(pkce_verifier)})")
         
         credentials = base64.b64encode(
             f"{creds['client_id']}:{creds['client_secret']}".encode()
@@ -453,8 +769,12 @@ def exchange_code_for_tokens(code: str, creds: dict) -> bool:
         data = {
             'grant_type': 'authorization_code',
             'code': code,
-            'redirect_uri': creds['redirect_uri']
+            'redirect_uri': redirect_uri
         }
+        
+        # Add PKCE verifier if present
+        if pkce_verifier:
+            data['code_verifier'] = pkce_verifier
         
         with httpx.Client(timeout=30.0) as client:
             response = client.post(
@@ -474,6 +794,21 @@ def exchange_code_for_tokens(code: str, creds: dict) -> bool:
                     expires_in=token_data.get('expires_in', 1800)
                 )
                 
+                # Also save to secure storage if available
+                try:
+                    from .schwab_token_storage import get_secure_storage
+                    storage = get_secure_storage()
+                    storage.save_refresh_token(
+                        refresh_token=token_data.get('refresh_token'),
+                        account_id=account_id,
+                        metadata={
+                            'scope': token_data.get('scope', 'readonly'),
+                            'expires_in': token_data.get('expires_in', 1800)
+                        }
+                    )
+                except ImportError:
+                    pass  # Secure storage not available
+                
                 # Start auto-refresh thread
                 token_manager.start_auto_refresh()
                 
@@ -483,6 +818,19 @@ def exchange_code_for_tokens(code: str, creds: dict) -> bool:
                 error_msg = f"HTTP {response.status_code}: {response.text}"
                 print(f"[SCHWAB AUTH] Token exchange failed: {error_msg}")
                 _last_exchange_error = error_msg
+                
+                # Parse specific error codes
+                if response.status_code == 400:
+                    try:
+                        error_data = response.json()
+                        error_code = error_data.get('error', '')
+                        if error_code == 'invalid_grant':
+                            _last_exchange_error = "Authorization code expired or already used. Please try again."
+                        elif error_code == 'invalid_request':
+                            _last_exchange_error = "Invalid request. Check redirect_uri matches exactly."
+                    except Exception:
+                        pass
+                
                 return False
                 
     except Exception as e:
