@@ -494,6 +494,15 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added trade_summary_enabled column for per-channel P/L posting")
     
+    # Migrate: Add per-channel slippage protection columns
+    try:
+        cursor.execute('SELECT slippage_protection_enabled FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN slippage_protection_enabled INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN slippage_max_pct REAL DEFAULT NULL')
+        conn.commit()
+        print("[DATABASE] ✓ Added per-channel slippage protection columns")
+    
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -2048,7 +2057,8 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
                stop_loss_pct, trailing_stop_pct, trailing_activation_pct, position_size_pct,
                created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct,
                profit_target_4_pct, profit_target_qty_1, profit_target_qty_2, profit_target_qty_3,
-               profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode, trade_summary_enabled
+               profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode, trade_summary_enabled,
+               slippage_protection_enabled, slippage_max_pct
         FROM channels WHERE id = ?
     ''', (channel_id,))
     
@@ -2088,7 +2098,9 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
         'trim_order_mode': row[28] if row[28] else 'market',
         'trim_limit_offset': row[29] if row[29] is not None else 0.01,
         'exit_strategy_mode': row[30] if row[30] else 'signal',
-        'trade_summary_enabled': bool(row[31]) if len(row) > 31 and row[31] is not None else True
+        'trade_summary_enabled': bool(row[31]) if len(row) > 31 and row[31] is not None else True,
+        'slippage_protection_enabled': bool(row[32]) if len(row) > 32 and row[32] is not None else False,
+        'slippage_max_pct': row[33] if len(row) > 33 else None
     }
 
 
@@ -2104,7 +2116,8 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
                stop_loss_pct, trailing_stop_pct, trailing_activation_pct, position_size_pct,
                created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct,
                profit_target_4_pct, profit_target_qty_1, profit_target_qty_2, profit_target_qty_3,
-               profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode, trade_summary_enabled
+               profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode, trade_summary_enabled,
+               slippage_protection_enabled, slippage_max_pct
         FROM channels WHERE discord_channel_id = ?
     ''', (str(discord_channel_id),))
     
@@ -2144,7 +2157,9 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
         'trim_order_mode': row[28] if row[28] else 'market',
         'trim_limit_offset': row[29] if row[29] is not None else 0.01,
         'exit_strategy_mode': row[30] if len(row) > 30 and row[30] else 'signal',
-        'trade_summary_enabled': bool(row[31]) if len(row) > 31 and row[31] is not None else True
+        'trade_summary_enabled': bool(row[31]) if len(row) > 31 and row[31] is not None else True,
+        'slippage_protection_enabled': bool(row[32]) if len(row) > 32 and row[32] is not None else False,
+        'slippage_max_pct': row[33] if len(row) > 33 else None
     }
 
 
@@ -2163,7 +2178,8 @@ def update_channel(channel_id: int, **kwargs):
                    'stop_loss_pct', 'trailing_stop_pct', 'trailing_activation_pct', 'enabled_brokers', 'position_size_pct', 'tracking_position_size_pct',
                    'default_quantity', 'risk_management_enabled', 'leave_runner_enabled', 'leave_runner_pct',
                    'trim_order_mode', 'trim_limit_offset', 'exit_strategy_mode', 'market', 'trade_summary_enabled',
-                   'conditional_order_timeout_minutes', 'trigger_offset_percent', 'order_timeout_minutes']:
+                   'conditional_order_timeout_minutes', 'trigger_offset_percent', 'order_timeout_minutes',
+                   'slippage_protection_enabled', 'slippage_max_pct']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))
