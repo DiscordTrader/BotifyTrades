@@ -250,11 +250,18 @@ jobs:
           ls -la dist/BotifyTrades-macOS-Intel
           file dist/BotifyTrades-macOS-Intel
       
+      - name: Create tar.gz archive (preserves permissions)
+        run: |
+          cd dist
+          tar -czvf BotifyTrades-macOS-Intel.tar.gz BotifyTrades-macOS-Intel
+          echo "=== Archive created ==="
+          ls -la BotifyTrades-macOS-Intel.tar.gz
+      
       - name: Upload macOS Intel User
         uses: actions/upload-artifact@v4
         with:
           name: BotifyTrades-macOS-Intel-v${{ env.VERSION }}
-          path: dist/BotifyTrades-macOS-Intel
+          path: dist/BotifyTrades-macOS-Intel.tar.gz
           retention-days: 90
 
   build-macos-silicon:
@@ -332,11 +339,18 @@ jobs:
           ls -la dist/BotifyTrades-macOS-Silicon
           file dist/BotifyTrades-macOS-Silicon
       
+      - name: Create tar.gz archive (preserves permissions)
+        run: |
+          cd dist
+          tar -czvf BotifyTrades-macOS-Silicon.tar.gz BotifyTrades-macOS-Silicon
+          echo "=== Archive created ==="
+          ls -la BotifyTrades-macOS-Silicon.tar.gz
+      
       - name: Upload macOS Silicon User
         uses: actions/upload-artifact@v4
         with:
           name: BotifyTrades-macOS-Silicon-v${{ env.VERSION }}
-          path: dist/BotifyTrades-macOS-Silicon
+          path: dist/BotifyTrades-macOS-Silicon.tar.gz
           retention-days: 90
 
   publish-to-public-repo:
@@ -363,13 +377,21 @@ jobs:
             ### Downloads
             - **Windows**: BotifyTrades-Windows.exe
             - **Linux**: BotifyTrades-Linux
-            - **macOS (Intel)**: BotifyTrades-macOS-Intel (for Intel-based Macs)
-            - **macOS (Apple Silicon)**: BotifyTrades-macOS-Silicon (for M1/M2/M3 Macs)
+            - **macOS (Intel)**: BotifyTrades-macOS-Intel.tar.gz (for Intel-based Macs)
+            - **macOS (Apple Silicon)**: BotifyTrades-macOS-Silicon.tar.gz (for M1/M2/M3 Macs)
             
             ### Installation
+            
+            **Windows/Linux:**
             1. Download the appropriate file for your OS
             2. Run the executable
             3. Follow the setup wizard
+            
+            **macOS:**
+            1. Download the .tar.gz file for your Mac (Intel or Apple Silicon)
+            2. Double-click to extract, or run: `tar -xzf BotifyTrades-macOS-*.tar.gz`
+            3. Run the extracted executable
+            4. If blocked, go to System Settings > Privacy & Security and click "Open Anyway"
             
             ### Requirements
             - Valid license key
