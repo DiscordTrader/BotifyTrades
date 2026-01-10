@@ -499,13 +499,16 @@ class BrokerSyncService:
                     try:
                         positions = await asyncio.to_thread(broker_instance.get_all_positions) or []
                         for pos in positions:
-                            pos_type = pos.get('type', 'stock')
+                            pos_type = pos.get('type', pos.get('asset_type', 'stock'))
+                            current_price = pos.get('current_price', 0) or 0
+                            unrealized_pnl = pos.get('unrealized_pnl', 0) or 0
                             result['positions'].append({
                                 'symbol': pos.get('symbol'),
                                 'quantity': pos.get('quantity'),
-                                'avg_price': pos.get('average_buy_price') or pos.get('average_price'),
-                                'current_price': pos.get('current_price', 0),
-                                'unrealized_pnl': 0,
+                                'avg_price': pos.get('avg_price') or pos.get('average_buy_price') or pos.get('average_price'),
+                                'current_price': current_price,
+                                'unrealized_pnl': unrealized_pnl,
+                                'market_value': pos.get('market_value') or pos.get('equity', 0),
                                 'position_id': None,
                                 'asset_type': pos_type,
                                 'strike': pos.get('strike_price'),

@@ -202,13 +202,24 @@ class RobinhoodBroker(BrokerInterface):
             
             if holdings:
                 for symbol, data in holdings.items():
+                    qty = float(data.get('quantity', 0))
+                    current_price = float(data.get('price', 0) or 0)
+                    avg_price = float(data.get('average_buy_price', 0))
+                    equity = float(data.get('equity', 0))
+                    unrealized_pnl = (current_price - avg_price) * qty if current_price and avg_price else 0
+                    
                     positions.append({
                         'symbol': symbol,
-                        'quantity': float(data.get('quantity', 0)),
-                        'average_buy_price': float(data.get('average_buy_price', 0)),
-                        'equity': float(data.get('equity', 0)),
+                        'quantity': qty,
+                        'average_buy_price': avg_price,
+                        'avg_price': avg_price,
+                        'current_price': current_price,
+                        'market_value': equity,
+                        'equity': equity,
+                        'unrealized_pnl': unrealized_pnl,
                         'percent_change': float(data.get('percent_change', 0)),
-                        'type': 'stock'
+                        'type': 'stock',
+                        'asset_type': 'stock'
                     })
             
             option_positions = rh.options.get_open_option_positions()

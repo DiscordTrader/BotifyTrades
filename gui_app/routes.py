@@ -4966,20 +4966,28 @@ def register_routes(app):
                         # Get stock quote - try Webull first, then yfinance fallback
                         quote_data = None
                         if wb:
-                            ticker_id = wb.get_ticker(symbol)
-                            if ticker_id:
-                                quote = wb.get_quote(ticker_id)
-                                if quote:
-                                    quote_data = {
-                                        'bid': float(quote.get('bidPrice', 0) or 0),
-                                        'ask': float(quote.get('askPrice', 0) or 0),
-                                        'mid': float((float(quote.get('bidPrice', 0) or 0) + float(quote.get('askPrice', 0) or 0)) / 2),
-                                        'last': float(quote.get('lastPrice', 0) or quote.get('close', 0) or 0)
-                                    }
+                            try:
+                                ticker_id = wb.get_ticker(symbol)
+                                if ticker_id:
+                                    quote = wb.get_quote(ticker_id)
+                                    if quote:
+                                        bid = float(quote.get('bidPrice', 0) or 0)
+                                        ask = float(quote.get('askPrice', 0) or 0)
+                                        last = float(quote.get('lastPrice', 0) or quote.get('close', 0) or 0)
+                                        # Only use Webull data if we have valid price
+                                        if last > 0 or (bid > 0 and ask > 0):
+                                            mid = (bid + ask) / 2 if bid and ask else last
+                                            quote_data = {'bid': bid, 'ask': ask, 'mid': mid, 'last': last}
+                                            print(f"[API] Webull quote for {symbol}: last=${last:.2f}")
+                            except Exception as e:
+                                print(f"[API] Webull quote error for {symbol}: {e}")
                         
                         # Fallback to yfinance for non-Webull positions (Robinhood, Alpaca, etc.)
                         if not quote_data:
+                            print(f"[API] Using yfinance fallback for {symbol}")
                             quote_data = _get_yfinance_quote(symbol)
+                            if quote_data:
+                                print(f"[API] yfinance quote for {symbol}: last=${quote_data.get('last', 0):.2f}")
                         
                         if quote_data:
                             prices[str(trade_id)] = quote_data
