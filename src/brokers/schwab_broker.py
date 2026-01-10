@@ -189,7 +189,8 @@ class SchwabBroker(BrokerInterface):
             
             data = {
                 'grant_type': 'refresh_token',
-                'refresh_token': self.refresh_token
+                'refresh_token': self.refresh_token,
+                'client_id': self.client_id
             }
             
             async with httpx.AsyncClient() as client:

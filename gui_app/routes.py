@@ -2834,10 +2834,12 @@ def register_routes(app):
                 return cached_value
         
         try:
+            print("[API] Fetching Schwab balance...")
             from src.brokers.schwab_broker import SchwabBroker
             from .broker_credentials_service import get_schwab_credentials
             
             creds = get_schwab_credentials()
+            print(f"[API] Schwab credentials found: client_id={bool(creds.get('client_id'))}, secret={bool(creds.get('client_secret'))}")
             
             if not creds.get('client_id') or not creds.get('client_secret'):
                 result = jsonify({
@@ -2863,16 +2865,20 @@ def register_routes(app):
             
             async def _fetch_schwab_data():
                 """Fetch all Schwab data in one async context"""
+                print("[API] Schwab connecting...")
                 connected = await broker.connect()
+                print(f"[API] Schwab connected: {connected}")
                 if not connected:
                     return None, None, False
                 account_info = await broker.get_account_info()
+                print(f"[API] Schwab account info: buying_power={account_info.get('buying_power', 0)}")
                 positions_raw = await broker.get_positions()
                 return account_info, positions_raw, True
             
             account_info, positions_raw, connected = asyncio.run(_fetch_schwab_data())
             
             if not connected:
+                print("[API] Schwab not authenticated")
                 result = jsonify({
                     'buying_power': 0,
                     'cash_balance': 0,
