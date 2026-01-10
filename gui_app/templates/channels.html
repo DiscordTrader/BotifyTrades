@@ -1344,6 +1344,30 @@ function renderChannels() {
                             <span>minutes</span>
                         </div>
                     </div>
+                    
+                    <div class="control-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 0.85rem; color: var(--text-secondary);">Slippage Protection</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" ${channel.slippage_protection_enabled ? 'checked' : ''} 
+                                       onchange="updateSlippageProtection(${channel.id}, this.checked, null)"
+                                       title="Reject orders when signal price differs too much from market price">
+                                <span class="slider"></span>
+                            </label>
+                        </label>
+                        <div class="position-size-input" style="margin-top: 6px;">
+                            <input type="number" 
+                                   id="slippage-max-${channel.id}"
+                                   value="${channel.slippage_max_pct || ''}" 
+                                   placeholder="50"
+                                   min="1" max="500" step="1"
+                                   class="exec-input"
+                                   ${channel.slippage_protection_enabled ? '' : 'disabled'}
+                                   onchange="updateSlippageProtection(${channel.id}, null, this.value)"
+                                   title="Maximum allowed price deviation from market (e.g., 50 = reject if signal price is 50% different from market)">
+                            <span>% max slippage</span>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="channel-footer">
@@ -1552,6 +1576,44 @@ async function updateOrderTimeout(channelId, minutes) {
             }
         } else {
             showNotification('Error updating order timeout', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function updateSlippageProtection(channelId, enabled, maxPct) {
+    try {
+        const updates = {};
+        
+        if (enabled !== null) {
+            updates.slippage_protection_enabled = enabled ? 1 : 0;
+            const slippageInput = document.getElementById(`slippage-max-${channelId}`);
+            if (slippageInput) {
+                slippageInput.disabled = !enabled;
+            }
+        }
+        
+        if (maxPct !== null) {
+            updates.slippage_max_pct = maxPct ? parseFloat(maxPct) : null;
+        }
+        
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+        
+        if (response.ok) {
+            if (enabled !== null) {
+                showNotification(enabled ? 'Slippage protection enabled' : 'Slippage protection disabled');
+            } else if (maxPct !== null) {
+                showNotification(`Max slippage set to ${maxPct}%`);
+            }
+        } else {
+            showNotification('Error updating slippage protection', 'error');
             await loadChannels();
         }
     } catch (error) {
