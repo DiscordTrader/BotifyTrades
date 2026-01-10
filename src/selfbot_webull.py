@@ -5646,6 +5646,7 @@ class SelfClient(discord.Client):
                     settings_provider=get_risk_management_settings,
                     db_adapter=risk_adapter,
                     alpaca_broker=self.paper_broker,
+                    schwab_broker=self.schwab_broker,
                     loop=self.loop
                 )
                 

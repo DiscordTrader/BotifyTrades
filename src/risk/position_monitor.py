@@ -353,6 +353,7 @@ class RiskManager:
         settings_provider: Callable[[], Dict],
         db_adapter: Optional[RiskDBAdapter] = None,
         alpaca_broker=None,
+        schwab_broker=None,
         monitoring_interval: int = DEFAULT_MONITORING_INTERVAL,
         trailing_activation_pct: float = DEFAULT_TRAILING_ACTIVATION,
         loop: Optional[asyncio.AbstractEventLoop] = None
@@ -366,6 +367,7 @@ class RiskManager:
             settings_provider: Callable returning RiskSettings dict
             db_adapter: Database adapter (optional, for headless mode)
             alpaca_broker: Optional AlpacaBroker instance
+            schwab_broker: Optional SchwabBroker instance
             monitoring_interval: Seconds between position checks
             trailing_activation_pct: Default trailing stop activation threshold
             loop: Event loop (optional)
@@ -375,6 +377,7 @@ class RiskManager:
         self.settings_provider = settings_provider
         self.db_adapter = db_adapter or RiskDBAdapter()
         self.alpaca_broker = alpaca_broker
+        self.schwab_broker = schwab_broker
         self.monitoring_interval = monitoring_interval
         self.trailing_activation_pct = trailing_activation_pct
         self.loop = loop or asyncio.get_event_loop()
@@ -399,7 +402,7 @@ class RiskManager:
         
         self._load_db_price_targets()
         
-        print(f"[RISK] ✓ Position monitoring started - Monitoring Webull + Alpaca")
+        print(f"[RISK] ✓ Position monitoring started - Monitoring Webull + Alpaca + Schwab")
         self._running = True
         
         while self._running:
@@ -434,8 +437,9 @@ class RiskManager:
         if positions:
             webull_count = sum(1 for p in positions if p.broker == 'Webull')
             alpaca_count = sum(1 for p in positions if 'ALPACA' in p.broker)
+            schwab_count = sum(1 for p in positions if 'SCHWAB' in p.broker.upper())
             print(f"\n[RISK] Monitoring {len(positions)} open positions "
-                  f"(Webull: {webull_count}, Alpaca: {alpaca_count})...")
+                  f"(Webull: {webull_count}, Alpaca: {alpaca_count}, Schwab: {schwab_count})...")
         
         broker_position_keys = set()
         
@@ -462,6 +466,15 @@ class RiskManager:
                 positions.extend(alpaca_positions)
             except Exception as e:
                 print(f"[RISK] Warning: Could not fetch Alpaca positions: {e}")
+        
+        if self.schwab_broker:
+            try:
+                is_auth = await self.schwab_broker.is_authenticated()
+                if is_auth:
+                    schwab_positions = await self._fetch_schwab_positions()
+                    positions.extend(schwab_positions)
+            except Exception as e:
+                print(f"[RISK] Warning: Could not fetch Schwab positions: {e}")
         
         return positions
     
@@ -538,6 +551,36 @@ class RiskManager:
         except Exception as e:
             print(f"[RISK] Warning: Could not parse Alpaca option symbol {symbol}: {e}")
             return None
+    
+    async def _fetch_schwab_positions(self) -> List[PositionSnapshot]:
+        """Fetch and parse Schwab positions."""
+        positions = []
+        
+        if not self.schwab_broker:
+            return positions
+        
+        try:
+            schwab_raw = await self.schwab_broker.get_positions_detailed() or []
+            
+            for pos in schwab_raw:
+                asset_type = pos.get('asset', 'stock')
+                
+                positions.append(PositionSnapshot(
+                    symbol=pos.get('symbol', ''),
+                    quantity=abs(float(pos.get('quantity', 0))),
+                    avg_cost=float(pos.get('avg_cost', 0)),
+                    current_price=float(pos.get('current_price', 0)),
+                    asset=asset_type,
+                    broker='SCHWAB',
+                    strike=pos.get('strike'),
+                    expiry=pos.get('expiry'),
+                    direction=pos.get('direction'),
+                    raw_symbol=pos.get('raw_symbol')
+                ))
+        except Exception as e:
+            print(f"[RISK] Error fetching Schwab positions: {e}")
+        
+        return positions
     
     async def _evaluate_position(
         self, 

@@ -357,12 +357,64 @@ class SignalVerificationService:
             print(f"[VERIFY] Alpaca stock quote error: {e}")
         return None
     
+    def _get_schwab_stock_quote(self, ticker: str) -> Optional[Dict]:
+        """Get real-time stock quote from Schwab"""
+        global _schwab_broker
+        if not _schwab_broker:
+            return None
+        
+        try:
+            import asyncio
+            import concurrent.futures
+            
+            quote = None
+            
+            try:
+                loop = asyncio.get_running_loop()
+                future = asyncio.run_coroutine_threadsafe(_schwab_broker.get_quote(ticker), loop)
+                quote = future.result(timeout=5)
+            except RuntimeError:
+                def run_async():
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        return new_loop.run_until_complete(_schwab_broker.get_quote(ticker))
+                    finally:
+                        new_loop.close()
+                
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(run_async)
+                    quote = future.result(timeout=5)
+            
+            if quote:
+                bid = float(quote.get('bid', 0) or 0)
+                ask = float(quote.get('ask', 0) or 0)
+                last = float(quote.get('last', 0) or quote.get('price', 0) or 0)
+                
+                if bid > 0 or ask > 0 or last > 0:
+                    self.data_source = 'schwab_realtime'
+                    return {
+                        'bid': bid,
+                        'ask': ask,
+                        'last': last,
+                        'volume': int(quote.get('volume', 0) or 0),
+                        'timestamp': datetime.now().isoformat(),
+                        'source': 'schwab_realtime'
+                    }
+        except Exception as e:
+            print(f"[VERIFY] Schwab stock quote error: {e}")
+        return None
+    
     def get_stock_market_data(self, ticker: str, preferred_broker: str = 'auto') -> Optional[Dict]:
         """Fetch stock quote - uses preferred broker or auto-selects"""
-        global _webull_client, _alpaca_broker
+        global _webull_client, _alpaca_broker, _schwab_broker
         
         if preferred_broker == 'yfinance':
             pass
+        elif preferred_broker == 'schwab':
+            data = self._get_schwab_stock_quote(ticker)
+            if data:
+                return data
         elif preferred_broker == 'alpaca':
             data = self._get_alpaca_stock_quote(ticker)
             if data:
@@ -389,6 +441,10 @@ class SignalVerificationService:
                 print(f"[VERIFY] Webull stock quote error: {e}")
         elif preferred_broker == 'auto' and _alpaca_broker:
             data = self._get_alpaca_stock_quote(ticker)
+            if data:
+                return data
+        elif preferred_broker == 'auto' and _schwab_broker:
+            data = self._get_schwab_stock_quote(ticker)
             if data:
                 return data
         

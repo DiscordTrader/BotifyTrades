@@ -3,7 +3,7 @@
 let channelCategory = 'EXECUTE';
 
 // All available broker options
-const ALL_BROKERS = ['WEBULL', 'WEBULL_PAPER', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'IBKR_PAPER', 'SCHWAB'];
+const ALL_BROKERS = ['WEBULL', 'WEBULL_PAPER', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'IBKR_PAPER', 'SCHWAB', 'SCHWAB_PAPER'];
 
 // Helper function to parse enabled_brokers (handles both JSON string and array)
 function parseEnabledBrokers(enabledBrokers) {

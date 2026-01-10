@@ -191,8 +191,12 @@ class BrokerSyncService:
         # Add Schwab if available
         if hasattr(self.broker_manager, 'schwab_broker') and self.broker_manager.schwab_broker:
             schwab_broker = self.broker_manager.schwab_broker
-            if schwab_broker.is_authenticated():
-                brokers_to_sync.append(('SCHWAB', schwab_broker))
+            try:
+                is_auth = await schwab_broker.is_authenticated()
+                if is_auth:
+                    brokers_to_sync.append(('SCHWAB', schwab_broker))
+            except Exception:
+                pass
         
         if not brokers_to_sync:
             print("[SYNC] No brokers available for sync", flush=True)
