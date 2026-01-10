@@ -57,6 +57,7 @@
                         <option value="IBKR_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">IBKR PAPER</option>
                         <option value="TASTYTRADE_LIVE" style="background-color: #2C2C2E; color: #FFFFFF;">Tastytrade LIVE</option>
                         <option value="TASTYTRADE_PAPER" style="background-color: #2C2C2E; color: #FFFFFF;">Tastytrade PAPER</option>
+                        <option value="SCHWAB" style="background-color: #0078d7; color: #FFFFFF;">Charles Schwab</option>
                         <option value="ROBINHOOD" style="background-color: #1a2f1a; color: #00c853;">Robinhood (LIVE)</option>
                     </optgroup>
                     <optgroup label="🇨🇦 Canada">
@@ -1422,7 +1423,9 @@ async function executeClose(tradeId, symbol, quantity, broker, limitPrice, order
     });
     
     const effectiveBroker = broker || currentBroker || '';
-    const isAlpaca = effectiveBroker.toLowerCase().includes('alpaca');
+    const brokerLower = effectiveBroker.toLowerCase();
+    const isAlpaca = brokerLower.includes('alpaca');
+    const isSchwab = brokerLower.includes('schwab');
     
     try {
         let url, body;
@@ -1436,6 +1439,13 @@ async function executeClose(tradeId, symbol, quantity, broker, limitPrice, order
                 expiry: expiry || null,
                 call_put: callPut || null
             });
+        } else if (isSchwab) {
+            // Schwab uses symbol-based close
+            url = `/api/schwab/positions/${encodeURIComponent(symbol)}/close`;
+            body = JSON.stringify({ 
+                quantity: quantity,
+                limit_price: limitPrice
+            });
         } else {
             // Webull uses trade ID-based close
             url = `/api/trades/${tradeId}/close`;
@@ -1445,7 +1455,8 @@ async function executeClose(tradeId, symbol, quantity, broker, limitPrice, order
             });
         }
         
-        console.log(`[CLOSE] ${isAlpaca ? 'ALPACA' : 'WEBULL'} ${orderType.toUpperCase()}: ${quantity} ${symbol} @ ${limitPrice ? '$' + limitPrice : 'MKT'}`);
+        const brokerLabel = isAlpaca ? 'ALPACA' : isSchwab ? 'SCHWAB' : 'WEBULL';
+        console.log(`[CLOSE] ${brokerLabel} ${orderType.toUpperCase()}: ${quantity} ${symbol} @ ${limitPrice ? '$' + limitPrice : 'MKT'}`);
         
         const response = await fetch(url, {
             method: 'POST',
@@ -1600,6 +1611,8 @@ async function loadStats() {
             } else if (brokerUpper.startsWith('TASTYTRADE')) {
                 const isPaper = brokerUpper === 'TASTYTRADE_PAPER';
                 balanceUrl = `/api/tastytrade/balance?paper=${isPaper}`;
+            } else if (brokerUpper === 'SCHWAB') {
+                balanceUrl = '/api/schwab/balance';
             }
             
             const balance = await fetch(balanceUrl).then(r => r.json());

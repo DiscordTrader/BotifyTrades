@@ -2196,7 +2196,7 @@ document.getElementById('save-schwab').addEventListener('click', async () => {
 });
 
 document.getElementById('connect-schwab').addEventListener('click', () => {
-    window.location.href = '/schwab/login';
+    window.open('/schwab/login', '_blank', 'noopener,noreferrer');
 });
 
 document.getElementById('disconnect-schwab').addEventListener('click', async () => {

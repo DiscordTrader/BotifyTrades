@@ -2822,6 +2822,195 @@ def register_routes(app):
             })
             return result
     
+    @app.route('/api/schwab/balance', methods=['GET'])
+    def api_schwab_balance() -> Any:
+        """Get Charles Schwab account balance for Dashboard"""
+        import asyncio
+        
+        cache_key = 'schwab_balance'
+        if cache_key in _api_cache:
+            cached_value, timestamp = _api_cache[cache_key]
+            if time.time() - timestamp < 5:
+                return cached_value
+        
+        try:
+            from src.brokers.schwab_broker import SchwabBroker
+            from .broker_credentials_service import get_schwab_credentials
+            
+            creds = get_schwab_credentials()
+            
+            if not creds.get('client_id') or not creds.get('client_secret'):
+                result = jsonify({
+                    'buying_power': 0,
+                    'cash_balance': 0,
+                    'net_liquidation': 0,
+                    'equity': 0,
+                    'unrealized_pnl': 0,
+                    'positions': [],
+                    'status': 'not_configured',
+                    'error': 'Schwab credentials not configured. Go to Settings to connect.'
+                })
+                return result
+            
+            config = {
+                'client_id': creds.get('client_id'),
+                'client_secret': creds.get('client_secret'),
+                'redirect_uri': creds.get('redirect_uri', 'https://127.0.0.1'),
+                'dry_run': creds.get('dry_run', True)
+            }
+            
+            broker = SchwabBroker(config)
+            
+            async def _fetch_schwab_data():
+                """Fetch all Schwab data in one async context"""
+                connected = await broker.connect()
+                if not connected:
+                    return None, None, False
+                account_info = await broker.get_account_info()
+                positions_raw = await broker.get_positions()
+                return account_info, positions_raw, True
+            
+            account_info, positions_raw, connected = asyncio.run(_fetch_schwab_data())
+            
+            if not connected:
+                result = jsonify({
+                    'buying_power': 0,
+                    'cash_balance': 0,
+                    'net_liquidation': 0,
+                    'equity': 0,
+                    'unrealized_pnl': 0,
+                    'positions': [],
+                    'status': 'not_authenticated',
+                    'error': 'Not authenticated with Schwab. Click "Connect with Schwab" in Settings.'
+                })
+                return result
+            
+            positions_list = []
+            for symbol, pos_data in (positions_raw or {}).items():
+                if isinstance(pos_data, dict):
+                    positions_list.append({
+                        'symbol': symbol,
+                        'qty': pos_data.get('quantity', 0),
+                        'market_value': pos_data.get('market_value', 0),
+                        'avg_price': pos_data.get('average_price', 0),
+                        'unrealized_pnl': pos_data.get('unrealized_pnl', 0)
+                    })
+                else:
+                    positions_list.append({
+                        'symbol': symbol,
+                        'qty': pos_data,
+                        'market_value': 0,
+                        'avg_price': 0,
+                        'unrealized_pnl': 0
+                    })
+            
+            result = jsonify({
+                'buying_power': account_info.get('buying_power', 0) if account_info else 0,
+                'cash_balance': account_info.get('cash', 0) if account_info else 0,
+                'net_liquidation': account_info.get('portfolio_value', 0) if account_info else 0,
+                'equity': account_info.get('portfolio_value', 0) if account_info else 0,
+                'unrealized_pnl': account_info.get('unrealized_pnl', 0) if account_info else 0,
+                'positions': positions_list,
+                'account_number': broker.account_number,
+                'status': 'ok'
+            })
+            _api_cache[cache_key] = (result, time.time())
+            return result
+                
+        except Exception as e:
+            print(f"[API] Exception in Schwab balance endpoint: {e}")
+            import traceback
+            traceback.print_exc()
+            result = jsonify({
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'equity': 0,
+                'unrealized_pnl': 0,
+                'positions': [],
+                'status': 'error',
+                'error': str(e)
+            })
+            return result
+    
+    @app.route('/api/schwab/positions/<symbol>/close', methods=['POST'])
+    def api_schwab_close_position(symbol: str) -> Any:
+        """Close a Schwab position by symbol"""
+        import asyncio
+        
+        try:
+            from src.brokers.schwab_broker import SchwabBroker
+            from .broker_credentials_service import get_schwab_credentials
+            
+            data = request.get_json(silent=True) or {}
+            quantity = data.get('quantity')
+            limit_price = data.get('limit_price')
+            
+            if not quantity:
+                return jsonify({'success': False, 'error': 'Quantity is required'}), 400
+            
+            try:
+                quantity = int(quantity)
+            except (ValueError, TypeError):
+                return jsonify({'success': False, 'error': 'Invalid quantity format'}), 400
+            
+            if limit_price is not None:
+                try:
+                    limit_price = float(limit_price)
+                    if limit_price <= 0:
+                        return jsonify({'success': False, 'error': 'Limit price must be positive'}), 400
+                except (ValueError, TypeError):
+                    return jsonify({'success': False, 'error': 'Invalid limit price format'}), 400
+            
+            creds = get_schwab_credentials()
+            
+            if not creds.get('client_id') or not creds.get('client_secret'):
+                return jsonify({'success': False, 'error': 'Schwab not configured'}), 400
+            
+            config = {
+                'client_id': creds.get('client_id'),
+                'client_secret': creds.get('client_secret'),
+                'redirect_uri': creds.get('redirect_uri', 'https://127.0.0.1'),
+                'dry_run': creds.get('dry_run', True)
+            }
+            
+            broker = SchwabBroker(config)
+            
+            async def _close_schwab_position():
+                """Execute close order in one async context"""
+                connected = await broker.connect()
+                if not connected:
+                    return None, False
+                order_result = await broker.place_stock_order(symbol, 'STC', quantity, limit_price)
+                return order_result, True
+            
+            order_type_str = f"LIMIT @ ${limit_price}" if limit_price else "MARKET"
+            print(f"[API] Closing Schwab position: {symbol}, qty={quantity}, {order_type_str}")
+            
+            order_result, connected = asyncio.run(_close_schwab_position())
+            
+            if not connected:
+                return jsonify({'success': False, 'error': 'Not authenticated with Schwab'}), 401
+            
+            if order_result and order_result.success:
+                _api_cache.pop('schwab_balance', None)
+                return jsonify({
+                    'success': True,
+                    'message': order_result.message,
+                    'order_id': order_result.order_id
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': order_result.message if order_result else 'Failed to close position'
+                }), 400
+                
+        except Exception as e:
+            print(f"[API] Exception closing Schwab position {symbol}: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/api/ibkr/balance', methods=['GET'])
     def api_ibkr_balance() -> Any:
         """Get Interactive Brokers account balance for Dashboard"""
@@ -14518,6 +14707,7 @@ def register_routes(app):
             ('tastytrade', 'tastytrade_broker', 'US', 'USD'),
             ('ibkr', 'ibkr_broker', 'US', 'USD'),
             ('robinhood', 'robinhood_broker', 'US', 'USD'),
+            ('schwab', 'schwab_broker', 'US', 'USD'),
             ('dhanq', 'dhanq_broker', 'IN', 'INR'),
         ]
         
@@ -14580,6 +14770,7 @@ def register_routes(app):
                 'tastytrade': {'country': 'US', 'currency': 'USD'},
                 'ibkr': {'country': 'US', 'currency': 'USD'},
                 'robinhood': {'country': 'US', 'currency': 'USD'},
+                'schwab': {'country': 'US', 'currency': 'USD'},
                 'questrade': {'country': 'CA', 'currency': 'CAD'},
                 'dhanq': {'country': 'IN', 'currency': 'INR'},
                 'upstox': {'country': 'IN', 'currency': 'INR'},
@@ -14610,6 +14801,7 @@ def register_routes(app):
                     'tastytrade': 'tastytrade_broker',
                     'ibkr': 'ibkr_broker',
                     'robinhood': 'robinhood_broker',
+                    'schwab': 'schwab_broker',
                     'dhanq': 'dhanq_broker',
                 }
                 
@@ -14655,7 +14847,7 @@ def register_routes(app):
         """Refresh all connected broker balances"""
         try:
             results = {}
-            brokers_to_refresh = ['webull', 'alpaca_paper', 'tastytrade', 'ibkr', 'dhanq']
+            brokers_to_refresh = ['webull', 'alpaca_paper', 'tastytrade', 'ibkr', 'schwab', 'dhanq']
             
             for broker_name in brokers_to_refresh:
                 try:

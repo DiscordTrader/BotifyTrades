@@ -279,6 +279,41 @@ def clear_robinhood_credentials():
     set_broker_status('robinhood_live', False, 'disconnected')
 
 
+def save_schwab_credentials(
+    client_id: str = '',
+    client_secret: str = '',
+    redirect_uri: str = 'https://127.0.0.1',
+    dry_run: bool = True
+):
+    """Save Charles Schwab broker credentials (OAuth2)"""
+    save_config('schwab_credentials', {
+        'client_id': client_id,
+        'client_secret': client_secret,
+        'redirect_uri': redirect_uri,
+        'dry_run': dry_run
+    })
+
+
+def get_schwab_credentials() -> Dict[str, Any]:
+    """Get Charles Schwab credentials"""
+    return load_config('schwab_credentials') or {
+        'client_id': '',
+        'client_secret': '',
+        'redirect_uri': 'https://127.0.0.1',
+        'dry_run': True
+    }
+
+
+def clear_schwab_credentials():
+    """Clear Charles Schwab credentials"""
+    save_config('schwab_credentials', {
+        'client_id': '',
+        'client_secret': '',
+        'redirect_uri': 'https://127.0.0.1',
+        'dry_run': True
+    })
+
+
 def save_api_keys_extended(
     openai: str = '',
     alpha_vantage: str = '',
