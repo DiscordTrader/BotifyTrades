@@ -7395,13 +7395,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             print(f"[PNL TRACK] ✓ PARTIAL EXIT: {symbol} @ ${exit_price:.2f}, {actual_exit_qty}/{original_qty} contracts, Remaining: {new_remaining}, PNL: ${pnl:+.2f} ({pnl_pct:+.1f}%)")
                                         
                                         # Post Trade Summary to webhook (if enabled)
-                                        try:
-                                            trade_summary_enabled_for_channel = db.is_trade_summary_enabled(str(channel_id))
-                                        except Exception as e:
-                                            print(f"[PNL TRACK] Error checking trade_summary_enabled: {e}")
-                                            trade_summary_enabled_for_channel = True
+                                        # DISABLED for USER builds - Trade Summary is admin-only feature
+                                        trade_summary_enabled_for_channel = False
+                                        if not is_admin_build():
+                                            print(f"[PNL TRACK] ⏭️ Trade Summary disabled for USER builds")
+                                        else:
+                                            try:
+                                                trade_summary_enabled_for_channel = db.is_trade_summary_enabled(str(channel_id))
+                                            except Exception as e:
+                                                print(f"[PNL TRACK] Error checking trade_summary_enabled: {e}")
+                                                trade_summary_enabled_for_channel = True
                                         
-                                        if webhook_url and trade_summary_enabled_for_channel:
+                                        if is_admin_build() and webhook_url and trade_summary_enabled_for_channel:
                                             exit_type = "FULL EXIT" if fully_closed else f"PARTIAL EXIT ({actual_exit_qty}/{original_qty})"
                                             summary_msg = (
                                                 f"**Trade Summary - {exit_type}**\n"
@@ -8290,7 +8295,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             print(f"[DATABASE] ✓ Signal saved to database with option details")
             
             # Post Trade Summary for STC signals with PNL data (if enabled)
-            if opt['action'] == 'STC' and opt.get('_pnl_result'):
+            # DISABLED for USER builds - Trade Summary is admin-only feature
+            if opt['action'] == 'STC' and opt.get('_pnl_result') and is_admin_build():
                 # Check if trade summary is enabled (global + per-channel)
                 try:
                     trade_summary_enabled = db.is_trade_summary_enabled(str(message.channel.id))
