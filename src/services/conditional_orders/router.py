@@ -43,15 +43,22 @@ class ConditionalOrderRouter:
     
     BROKER_MARKET_MAP = {
         'webull': 'US',
+        'webull_paper': 'US',
         'alpaca': 'US',
+        'alpaca_paper': 'US',
         'tastytrade': 'US',
+        'tastytrade_live': 'US',
+        'tastytrade_paper': 'US',
         'ibkr': 'US',
+        'ibkr_paper': 'US',
         'robinhood': 'US',
         'schwab': 'US',
+        'schwab_paper': 'US',
         'upstox': 'INDIA',
         'zerodha': 'INDIA',
         'dhanq': 'INDIA',
         'questrade': 'CANADA',
+        'questrade_paper': 'CANADA',
     }
     
     def __init__(self):
