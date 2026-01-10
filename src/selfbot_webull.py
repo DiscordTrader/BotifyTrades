@@ -1457,6 +1457,29 @@ BISHOP_TRIM_PATTERN = r'[Tt]rimming\s+(?:\?\w\s+)?([A-Za-z]+)\s+(\d+(?:\.\d+)?)\
 # Groups: (price)
 BISHOP_STOPPED_PATTERN = r'[Ss]topped\s+out\s+(?:at\s+)?\$?(\d+\.?\d*)'
 
+# STACK$-style patterns (combined strike+type, optional expiry for 0DTE)
+# Entry format: @everyone BTO 1 NVDA 185p 01/16 @ 4.50
+# Entry format: @everyone BTO 1 SPX 6925c @ 1.90 (no expiry = 0DTE)
+# Exit format: @everyone STC 1 RKLB 75p 01/16 @ 7.50
+# Exit format: @everyone STC 1 6935c @ 1.50 (no ticker = use current position)
+# Groups: (action, qty, symbol, strike, opt_type, month, day, price)
+# Note: Symbol is optional for STC (closing based on strike)
+STACK_OPT_PATTERN = r'(BTO|STC)\s+(\d+)\s+\$?([A-Za-z]+)\s+(\d+(?:\.\d+)?)([CPcp])\s+(\d{1,2})/(\d{1,2})\s*@\s*(\d+\.?\d*)'
+
+# STACK$ 0DTE pattern - no expiry date, assumes today for index options
+# Entry: BTO 1 SPX 6925c @ 1.90
+# Groups: (action, qty, symbol, strike, opt_type, price)
+STACK_0DTE_PATTERN = r'(BTO|STC)\s+(\d+)\s+\$?([A-Za-z]+)\s+(\d+(?:\.\d+)?)([CPcp])\s*@\s*(\d+\.?\d*)'
+
+# STACK$ ticker-less exit pattern - just strike+type for closing index positions
+# Exit: STC 1 6935c @ 1.50 (no ticker, infers SPX/NDX from strike)
+# Groups: (action, qty, strike, opt_type, price)
+STACK_TICKERLESS_PATTERN = r'(BTO|STC)\s+(\d+)\s+(\d{4,5})([CPcp])\s*@\s*(\d+\.?\d*)'
+
+# STACK$ strangle pattern: BTO SPX STRANGLE: followed by legs
+# Groups: (symbol)
+STACK_STRANGLE_PATTERN = r'BTO\s+([A-Za-z]+)\s+STRANGLE'
+
 # EvaPanda-style patterns (embed-based with Open/Close titles)
 # Embed Title: "Open" = BTO entry, "Close" = STC exit, "Update:" = skip
 # Format: BTO FSLR 01/16/26 300C @ 3.25 (Swing) or STC FSLR 01/16/26 300C @ 4.10
@@ -3787,6 +3810,10 @@ BISHOP_ENTRY_REGEX = re.compile(BISHOP_ENTRY_PATTERN, re.IGNORECASE)
 BISHOP_TRIM_REGEX = re.compile(BISHOP_TRIM_PATTERN, re.IGNORECASE)
 BISHOP_STOPPED_REGEX = re.compile(BISHOP_STOPPED_PATTERN, re.IGNORECASE)
 EVAPANDA_REGEX = re.compile(EVAPANDA_PATTERN, re.IGNORECASE)
+STACK_OPT_REGEX = re.compile(STACK_OPT_PATTERN, re.IGNORECASE)
+STACK_0DTE_REGEX = re.compile(STACK_0DTE_PATTERN, re.IGNORECASE)
+STACK_TICKERLESS_REGEX = re.compile(STACK_TICKERLESS_PATTERN, re.IGNORECASE)
+STACK_STRANGLE_REGEX = re.compile(STACK_STRANGLE_PATTERN, re.IGNORECASE)
 
 def parse_option_signal(text: str) -> Optional[dict]:
     learned_result = try_parse_with_learned_formats(text)
@@ -3826,6 +3853,80 @@ def parse_option_signal(text: str) -> Optional[dict]:
                 "is_market_order": False,
                 "_dte_format": True,
                 "_dte_days": int(dte_days)
+            }
+        
+        # Try STACK$ format with expiry: BTO 1 NVDA 185p 01/16 @ 4.50
+        stack_match = STACK_OPT_REGEX.search(text.strip())
+        if stack_match:
+            action, qty_str, symbol, strike, opt_type, month, day, price_str = stack_match.groups()
+            price = float(price_str)
+            expiry = f"{month}/{day}"
+            qty = int(qty_str) if qty_str else 1
+            print(f"[Discord] ✓ Matched STACK$ format: {action} {qty} {symbol} {strike}{opt_type} {expiry} @ ${price}")
+            return {
+                "asset": "option",
+                "action": action.upper(),
+                "qty": qty,
+                "qty_specified": True,
+                "symbol": symbol.upper(),
+                "strike": float(strike),
+                "opt_type": opt_type.upper(),
+                "expiry": expiry,
+                "price": price,
+                "is_market_order": False,
+                "_stack_format": True
+            }
+        
+        # Try STACK$ ticker-less exit: STC 1 6935c @ 1.50 (no ticker, 4-5 digit strike)
+        stack_tickerless_match = STACK_TICKERLESS_REGEX.search(text.strip())
+        if stack_tickerless_match:
+            action, qty_str, strike_str, opt_type, price_str = stack_tickerless_match.groups()
+            price = float(price_str)
+            qty = int(qty_str) if qty_str else 1
+            strike = float(strike_str)
+            # Infer symbol from strike (SPX if < 10000, NDX if >= 10000)
+            symbol = 'NDX' if strike >= 10000 else 'SPX'
+            # Use today's date for 0DTE
+            from datetime import datetime
+            expiry = datetime.now().strftime("%m/%d")
+            print(f"[Discord] ✓ Matched STACK$ ticker-less: {action} {qty} {symbol} {strike}{opt_type} (0DTE) @ ${price}")
+            return {
+                "asset": "option",
+                "action": action.upper(),
+                "qty": qty,
+                "qty_specified": True,
+                "symbol": symbol,
+                "strike": strike,
+                "opt_type": opt_type.upper(),
+                "expiry": expiry,
+                "price": price,
+                "is_market_order": False,
+                "_stack_tickerless": True
+            }
+        
+        # Try STACK$ 0DTE format (no expiry): BTO 1 SPX 6925c @ 1.90
+        stack_0dte_match = STACK_0DTE_REGEX.search(text.strip())
+        if stack_0dte_match:
+            action, qty_str, symbol, strike_str, opt_type, price_str = stack_0dte_match.groups()
+            price = float(price_str)
+            qty = int(qty_str) if qty_str else 1
+            strike = float(strike_str)
+            # Use today's date for 0DTE
+            from datetime import datetime
+            expiry = datetime.now().strftime("%m/%d")
+            print(f"[Discord] ✓ Matched STACK$ 0DTE format: {action} {qty} {symbol} {strike}{opt_type} (0DTE) @ ${price}")
+            return {
+                "asset": "option",
+                "action": action.upper(),
+                "qty": qty,
+                "qty_specified": True,
+                "symbol": symbol.upper(),
+                "strike": strike,
+                "opt_type": opt_type.upper(),
+                "expiry": expiry,
+                "price": price,
+                "is_market_order": False,
+                "_stack_0dte": True
             }
         
         # Try JC format: BTO $QQQ $627c 12/10 .77
