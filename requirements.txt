@@ -94,3 +94,5 @@ schwab-py
 dhanhq
 kiteconnect
 PyYAML
+pyotp
+robin-stocks
