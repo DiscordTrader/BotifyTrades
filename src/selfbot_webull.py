@@ -1577,6 +1577,28 @@ def get_slippage_settings():
         'threshold_percent': cfg.getfloat('price_slippage', 'high_slippage_threshold_percent', fallback=10.0)
     }
 
+def get_effective_slippage_settings(channel_id: str = None):
+    """Get effective slippage settings for a channel with fallback to global settings.
+    
+    Priority: Channel settings (if enabled) > Global settings
+    """
+    if channel_id and DATABASE_MODULE_AVAILABLE:
+        try:
+            channel = db.get_channel_by_discord_id(str(channel_id))
+            if channel and channel.get('slippage_protection_enabled'):
+                return {
+                    'enabled': True,
+                    'threshold_percent': channel.get('slippage_max_pct') or 50.0,
+                    'source': 'channel'
+                }
+        except Exception as e:
+            print(f"[SLIPPAGE] Warning: Could not load channel slippage settings: {e}")
+    
+    # Fallback to global settings
+    global_settings = get_slippage_settings()
+    global_settings['source'] = 'global'
+    return global_settings
+
 # Load initial slippage settings
 _slippage_settings = get_slippage_settings()
 ENABLE_SLIPPAGE_PROTECTION = _slippage_settings['enabled']
@@ -2560,7 +2582,8 @@ class WebullBroker:
     
     async def place_option_order(self, action: str, qty: int, symbol: str,
                                  strike: float, opt_type: str, expiry_mmdd: str,
-                                 limit_price: float, expiry_year: Optional[str] = None) -> Dict[str, Any]:
+                                 limit_price: float, expiry_year: Optional[str] = None,
+                                 channel_id: Optional[str] = None) -> Dict[str, Any]:
         await self._ensure_login()
         
         # Log if using paper trading account (actual Webull paper API will be called)
@@ -2568,10 +2591,12 @@ class WebullBroker:
             print(f"[PAPER TRADE] Placing {action} {qty} {symbol} {strike}{opt_type} {expiry_mmdd} @{limit_price} on Webull PAPER account")
         
         # Price slippage protection for BTO orders (reload settings from database in real-time)
-        _current_slippage_settings = get_slippage_settings()  # Reload from database
+        # Uses channel-specific settings if available, otherwise falls back to global
+        _current_slippage_settings = get_effective_slippage_settings(channel_id)  # Channel or global settings
         if _current_slippage_settings['enabled'] and action.upper() in ('BTO', 'BTC'):
+            source_label = _current_slippage_settings.get('source', 'global').upper()
             print(f"[SLIPPAGE] Checking price slippage for {action} {symbol} ${strike}{opt_type} {expiry_mmdd}")
-            print(f"[SLIPPAGE] Current threshold: {_current_slippage_settings['threshold_percent']}% (from {'DATABASE' if DATABASE_MODULE_AVAILABLE else 'config.ini'})")
+            print(f"[SLIPPAGE] Current threshold: {_current_slippage_settings['threshold_percent']}% (from {source_label})")
             
             # Get current option quote
             def get_quote():
@@ -2960,6 +2985,7 @@ class WebullBroker:
             symbol = kwargs.get('symbol')
         if action is None:
             action = kwargs.get('action', 'BTO')
+        channel_id = kwargs.get('channel_id')
         
         await self._ensure_login()
         
@@ -2968,10 +2994,12 @@ class WebullBroker:
             print(f"[PAPER TRADE] Placing {action} {qty} {symbol} @{limit_price} on Webull PAPER account")
         
         # Price slippage protection for BTO orders (reload settings from database in real-time)
-        _current_slippage_settings = get_slippage_settings()  # Reload from database
+        # Uses channel-specific settings if available, otherwise falls back to global
+        _current_slippage_settings = get_effective_slippage_settings(channel_id)  # Channel or global settings
         if _current_slippage_settings['enabled'] and action.upper() in ('BTO',):
+            source_label = _current_slippage_settings.get('source', 'global').upper()
             print(f"[SLIPPAGE] Checking price slippage for {action} {symbol}")
-            print(f"[SLIPPAGE] Current threshold: {_current_slippage_settings['threshold_percent']}% (from {'DATABASE' if DATABASE_MODULE_AVAILABLE else 'config.ini'})")
+            print(f"[SLIPPAGE] Current threshold: {_current_slippage_settings['threshold_percent']}% (from {source_label})")
             
             # Get current stock quote
             def get_quote():
@@ -9057,7 +9085,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             strike=signal['strike'],
                             opt_type=signal['opt_type'],
                             expiry_mmdd=signal['expiry'],
-                            limit_price=signal.get('price')
+                            limit_price=signal.get('price'),
+                            channel_id=signal.get('channel_id')
                         )
                     # Log the result for debugging
                     if hasattr(result, 'success'):
@@ -9096,7 +9125,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         symbol=signal['symbol'],
                         action=signal['action'],
                         quantity=signal['qty'],
-                        price=signal.get('price')  # None for market orders
+                        price=signal.get('price'),  # None for market orders
+                        channel_id=signal.get('channel_id')
                     )
                 else:
                     # Webull and other legacy brokers (uses qty, not quantity)
@@ -9104,7 +9134,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         action=signal['action'],
                         qty=signal['qty'],
                         symbol=signal['symbol'],
-                        limit_price=signal.get('price')  # None for market orders
+                        limit_price=signal.get('price'),  # None for market orders
+                        channel_id=signal.get('channel_id')
                     )
                 # Convert OrderResult to dict format for consistency
                 if hasattr(result, 'success'):
