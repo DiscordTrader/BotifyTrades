@@ -3821,6 +3821,19 @@ def parse_option_signal(text: str) -> Optional[dict]:
         print(f"[SIGNAL] Parsed using learned format: {learned_result.get('action')} {learned_result.get('symbol')} {learned_result.get('strike')}{learned_result.get('opt_type')}")
         return learned_result
     
+    # Try Signal Format Registry (industry-standard modular format pool)
+    try:
+        from services.signal_format_registry import parse_with_registry
+        registry_result = parse_with_registry(text)
+        if registry_result and registry_result.get('asset') == 'option':
+            # Skip tracking-only updates (not actionable)
+            if not registry_result.get('_tracking_only'):
+                return registry_result
+    except ImportError:
+        pass  # Registry not available, continue with legacy patterns
+    except Exception as e:
+        print(f"[SIGNAL] Registry error: {e}")
+    
     m = OPT_REGEX.search(text.strip())
     use_alt_format = False
     use_steel_format = False

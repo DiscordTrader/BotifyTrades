@@ -1,0 +1,481 @@
+"""
+Signal Format Registry - Industry-standard modular signal parsing system.
+
+This registry allows multiple trader signal formats to be registered with priorities.
+Each format handler is self-contained and can be added without modifying core code.
+
+Usage:
+    from services.signal_format_registry import SignalFormatRegistry
+    
+    registry = SignalFormatRegistry()
+    result = registry.parse(text)
+    if result:
+        print(f"Matched format: {result['_format_name']}")
+"""
+
+import re
+from typing import Optional, Dict, List, Callable, Any
+from datetime import datetime
+from dataclasses import dataclass
+
+
+@dataclass
+class SignalFormat:
+    """Represents a registered signal format handler."""
+    name: str
+    description: str
+    priority: int  # Lower = higher priority (tried first)
+    pattern: re.Pattern
+    parser: Callable[[re.Match, str], Optional[Dict[str, Any]]]
+    examples: List[str]
+    enabled: bool = True
+
+
+class SignalFormatRegistry:
+    """
+    Modular signal format registry with priority-based matching.
+    
+    Formats are tried in priority order (lowest number first).
+    First successful match wins.
+    """
+    
+    def __init__(self):
+        self._formats: Dict[str, SignalFormat] = {}
+        self._sorted_formats: List[SignalFormat] = []
+        self._register_builtin_formats()
+    
+    def register(self, 
+                 name: str,
+                 description: str,
+                 priority: int,
+                 pattern: str,
+                 parser: Callable[[re.Match, str], Optional[Dict[str, Any]]],
+                 examples: List[str],
+                 flags: int = re.IGNORECASE) -> None:
+        """
+        Register a new signal format handler.
+        
+        Args:
+            name: Unique identifier for this format
+            description: Human-readable description
+            priority: Lower = higher priority (0-100 recommended)
+            pattern: Regex pattern string
+            parser: Function that takes (match, original_text) and returns parsed dict or None
+            examples: Example signals this format handles
+            flags: Regex flags (default: IGNORECASE)
+        """
+        compiled = re.compile(pattern, flags)
+        fmt = SignalFormat(
+            name=name,
+            description=description,
+            priority=priority,
+            pattern=compiled,
+            parser=parser,
+            examples=examples
+        )
+        self._formats[name] = fmt
+        self._rebuild_sorted_list()
+    
+    def unregister(self, name: str) -> bool:
+        """Remove a format from the registry."""
+        if name in self._formats:
+            del self._formats[name]
+            self._rebuild_sorted_list()
+            return True
+        return False
+    
+    def set_enabled(self, name: str, enabled: bool) -> bool:
+        """Enable or disable a format without removing it."""
+        if name in self._formats:
+            self._formats[name].enabled = enabled
+            return True
+        return False
+    
+    def _rebuild_sorted_list(self) -> None:
+        """Rebuild sorted format list by priority."""
+        self._sorted_formats = sorted(
+            self._formats.values(),
+            key=lambda f: f.priority
+        )
+    
+    def parse(self, text: str) -> Optional[Dict[str, Any]]:
+        """
+        Parse text using registered formats in priority order.
+        
+        Returns:
+            Parsed signal dict with '_format_name' indicating which format matched,
+            or None if no format matched.
+        """
+        clean_text = text.strip()
+        
+        for fmt in self._sorted_formats:
+            if not fmt.enabled:
+                continue
+            
+            match = fmt.pattern.search(clean_text)
+            if match:
+                try:
+                    result = fmt.parser(match, clean_text)
+                    if result:
+                        result['_format_name'] = fmt.name
+                        print(f"[FORMAT REGISTRY] ✓ Matched '{fmt.name}': {result.get('action')} {result.get('symbol')} {result.get('strike')}{result.get('opt_type', '')}")
+                        return result
+                except Exception as e:
+                    print(f"[FORMAT REGISTRY] Error in {fmt.name} parser: {e}")
+                    continue
+        
+        return None
+    
+    def list_formats(self) -> List[Dict[str, Any]]:
+        """List all registered formats."""
+        return [
+            {
+                'name': f.name,
+                'description': f.description,
+                'priority': f.priority,
+                'enabled': f.enabled,
+                'examples': f.examples
+            }
+            for f in self._sorted_formats
+        ]
+    
+    def _register_builtin_formats(self) -> None:
+        """Register all built-in trader formats."""
+        
+        # =====================================================================
+        # JAKE / OPTIONEERING FORMAT
+        # =====================================================================
+        
+        # Jake +/- notation for options: +5 IWM @ lim0.08, -2 IWM @ lim0.16
+        self.register(
+            name="jake_plusminus_simple",
+            description="Jake's +/- qty notation for options (symbol only)",
+            priority=10,
+            pattern=r'^([+-])(\d+)\s+\$?([A-Za-z]+)\s*@\s*lim([0-9.]+)',
+            parser=self._parse_jake_plusminus_simple,
+            examples=["+5 IWM @ lim0.08", "-2 IWM @ lim0.16", "+1 GRAB @ lim0.65"]
+        )
+        
+        # Jake full format: +1 $GRAB $7c 17APR2026 @ lim0.65
+        self.register(
+            name="jake_full_option",
+            description="Jake's full option format with expiry",
+            priority=15,
+            pattern=r'^([+-])(\d+)\s+\$?([A-Za-z]+)\s+\$?(\d+(?:\.\d+)?)([CPcp])\s+(\d{1,2})([A-Za-z]{3})(\d{2,4})\s*@\s*lim([0-9.]+)',
+            parser=self._parse_jake_full_option,
+            examples=["+1 $GRAB $7c 17APR2026 @ lim0.65", "+2 $BBAI $8c 16JAN2026 @lim0.37"]
+        )
+        
+        # Jake alternate expiry: +1 $ONON $55c 20FEB2026 @lim0.75
+        self.register(
+            name="jake_option_exp",
+            description="Jake's option with DDMMMYYYY expiry",
+            priority=16,
+            pattern=r'^([+-])?(\d+)\s+\$?([A-Za-z]+)\s+\$?(\d+(?:\.\d+)?)([CPcp])\s+(\d{1,2})([A-Za-z]{3})(\d{2,4})\s*@?\s*(?:lim)?([0-9.]+)',
+            parser=self._parse_jake_option_exp,
+            examples=["+1 $ONON $55c 20FEB2026 @lim0.75", "$BBAI $8c 16JAN2026 @lim0.59"]
+        )
+        
+        # Jake Order Executed format: Bought 1 Single MSTR 12/12/2025 185 CALL @1.68
+        self.register(
+            name="jake_order_executed",
+            description="Jake's order execution notification",
+            priority=20,
+            pattern=r'(Bought|Sold)\s+(\d+)\s+Single\s+([A-Za-z]+)\s+(\d{1,2})/(\d{1,2})/(\d{2,4})\s+(\d+(?:\.\d+)?)\s+(CALL|PUT)\s*@\s*([0-9.]+)',
+            parser=self._parse_jake_order_executed,
+            examples=["Bought 1 Single MSTR 12/12/2025 185 CALL @1.68", "Sold -1 Single MSTR 1/2/2026 150 PUT @1.38"]
+        )
+        
+        # Jake price update: $ZS +44% @lim2.40
+        self.register(
+            name="jake_price_update",
+            description="Jake's price/gain update (not actionable, tracking only)",
+            priority=90,
+            pattern=r'\$([A-Za-z]+)\s+[+-]?\d+%\s*@\s*lim([0-9.]+)',
+            parser=self._parse_jake_price_update,
+            examples=["$ZS +44% @lim2.40", "$NBIS +86% @lim7.63"]
+        )
+        
+        # =====================================================================
+        # SLEM FORMAT
+        # =====================================================================
+        
+        # Slem format: $TSLA 445p 4.18 1/9 exp
+        self.register(
+            name="slem_option",
+            description="Slem's option format with exp suffix",
+            priority=25,
+            pattern=r'\$([A-Za-z]+)\s+(\d+(?:\.\d+)?)([CPcp])\s+([0-9.]+)\s+(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\s*(?:exp)?',
+            parser=self._parse_slem_option,
+            examples=["$TSLA 445p 4.18 1/9 exp", "$LITE 400c 2.25 1/9 exp", "$NVDA 187.5c 1.05 1/9 exp"]
+        )
+        
+        # Slem lotto format: $MDB 422.5c 2.20 1/9 @Lottos
+        self.register(
+            name="slem_lotto",
+            description="Slem's lotto format with @ tag",
+            priority=26,
+            pattern=r'\$([A-Za-z]+)\s+(\d+(?:\.\d+)?)([CPcp])\s+([0-9.]+)\s+(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\s*@',
+            parser=self._parse_slem_option,
+            examples=["$MDB 422.5c 2.20 1/9 @Lottos", "$IREN 60c 1.45 1/30 @Leaps"]
+        )
+        
+        # Slem gain update: $MDB 270% gain (not actionable)
+        self.register(
+            name="slem_gain_update",
+            description="Slem's gain update (tracking only)",
+            priority=91,
+            pattern=r'\$([A-Za-z]+)\s+(\d+)%\s+gain',
+            parser=self._parse_slem_gain_update,
+            examples=["$MDB 270% gain", "$LITE 600% gain"]
+        )
+        
+        # =====================================================================
+        # STACK$ FORMAT (already exists, registering for completeness)
+        # =====================================================================
+        
+        # STACK$ with expiry: BTO 1 NVDA 185p 01/16 @ 4.50
+        self.register(
+            name="stack_option",
+            description="STACK$ format with combined strike+type",
+            priority=30,
+            pattern=r'(BTO|STC)\s+(\d+)\s+\$?([A-Za-z]+)\s+(\d+(?:\.\d+)?)([CPcp])\s+(\d{1,2})/(\d{1,2})\s*@\s*([0-9.]+)',
+            parser=self._parse_stack_option,
+            examples=["BTO 1 NVDA 185p 01/16 @ 4.50", "STC 1 RKLB 75p 01/16 @ 7.50"]
+        )
+        
+        # STACK$ 0DTE: BTO 1 SPX 6925c @ 1.90
+        self.register(
+            name="stack_0dte",
+            description="STACK$ 0DTE format (no expiry)",
+            priority=31,
+            pattern=r'(BTO|STC)\s+(\d+)\s+\$?([A-Za-z]+)\s+(\d+(?:\.\d+)?)([CPcp])\s*@\s*([0-9.]+)',
+            parser=self._parse_stack_0dte,
+            examples=["BTO 1 SPX 6925c @ 1.90"]
+        )
+        
+        # STACK$ ticker-less: STC 1 6935c @ 1.50
+        self.register(
+            name="stack_tickerless",
+            description="STACK$ ticker-less exit (infers SPX/NDX)",
+            priority=32,
+            pattern=r'(BTO|STC)\s+(\d+)\s+(\d{4,5})([CPcp])\s*@\s*([0-9.]+)',
+            parser=self._parse_stack_tickerless,
+            examples=["STC 1 6935c @ 1.50"]
+        )
+    
+    # =========================================================================
+    # PARSER IMPLEMENTATIONS
+    # =========================================================================
+    
+    def _parse_jake_plusminus_simple(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Jake's +/- simple format: +5 IWM @ lim0.08"""
+        sign, qty, symbol, price = match.groups()
+        action = "BTO" if sign == "+" else "STC"
+        return {
+            "asset": "option",
+            "action": action,
+            "qty": int(qty),
+            "qty_specified": True,
+            "symbol": symbol.upper(),
+            "strike": None,  # Not specified in this format
+            "opt_type": None,
+            "expiry": None,
+            "price": float(price),
+            "is_market_order": False,
+            "_jake_simple": True,
+            "_needs_position_match": True  # Will match to existing position
+        }
+    
+    def _parse_jake_full_option(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Jake's full format: +1 $GRAB $7c 17APR2026 @ lim0.65"""
+        sign, qty, symbol, strike, opt_type, day, month_name, year, price = match.groups()
+        action = "BTO" if sign == "+" else "STC"
+        month = self._month_name_to_num(month_name)
+        expiry = f"{month}/{day}"
+        return {
+            "asset": "option",
+            "action": action,
+            "qty": int(qty),
+            "qty_specified": True,
+            "symbol": symbol.upper(),
+            "strike": float(strike),
+            "opt_type": opt_type.upper(),
+            "expiry": expiry,
+            "price": float(price),
+            "is_market_order": False,
+            "_jake_full": True
+        }
+    
+    def _parse_jake_option_exp(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Jake's option format: $BBAI $8c 16JAN2026 @lim0.59"""
+        sign, qty, symbol, strike, opt_type, day, month_name, year, price = match.groups()
+        action = "BTO" if sign == "+" or sign is None else "STC"
+        month = self._month_name_to_num(month_name)
+        expiry = f"{month}/{day}"
+        return {
+            "asset": "option",
+            "action": action,
+            "qty": int(qty) if qty else 1,
+            "qty_specified": bool(qty),
+            "symbol": symbol.upper(),
+            "strike": float(strike),
+            "opt_type": opt_type.upper(),
+            "expiry": expiry,
+            "price": float(price),
+            "is_market_order": False,
+            "_jake_exp": True
+        }
+    
+    def _parse_jake_order_executed(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Jake's order executed: Bought 1 Single MSTR 12/12/2025 185 CALL @1.68"""
+        bought_sold, qty, symbol, month, day, year, strike, opt_type, price = match.groups()
+        action = "BTO" if bought_sold.upper() == "BOUGHT" else "STC"
+        expiry = f"{month}/{day}"
+        return {
+            "asset": "option",
+            "action": action,
+            "qty": int(qty),
+            "qty_specified": True,
+            "symbol": symbol.upper(),
+            "strike": float(strike),
+            "opt_type": "C" if opt_type.upper() == "CALL" else "P",
+            "expiry": expiry,
+            "price": float(price),
+            "is_market_order": False,
+            "_jake_order_executed": True
+        }
+    
+    def _parse_jake_price_update(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Jake's price update (tracking only): $ZS +44% @lim2.40"""
+        symbol, price = match.groups()
+        return {
+            "asset": "option",
+            "action": "UPDATE",  # Not actionable
+            "symbol": symbol.upper(),
+            "price": float(price),
+            "_jake_price_update": True,
+            "_tracking_only": True
+        }
+    
+    def _parse_slem_option(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Slem's format: $TSLA 445p 4.18 1/9 exp"""
+        groups = match.groups()
+        symbol, strike, opt_type, price, month, day = groups[:6]
+        year = groups[6] if len(groups) > 6 and groups[6] else None
+        expiry = f"{month}/{day}"
+        return {
+            "asset": "option",
+            "action": "BTO",  # Slem's callouts are entries
+            "qty": 1,  # Default qty
+            "qty_specified": False,
+            "symbol": symbol.upper(),
+            "strike": float(strike),
+            "opt_type": opt_type.upper(),
+            "expiry": expiry,
+            "price": float(price),
+            "is_market_order": False,
+            "_slem_format": True
+        }
+    
+    def _parse_slem_gain_update(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Slem's gain update (tracking only): $MDB 270% gain"""
+        symbol, gain_pct = match.groups()
+        return {
+            "asset": "option",
+            "action": "UPDATE",
+            "symbol": symbol.upper(),
+            "gain_pct": int(gain_pct),
+            "_slem_gain_update": True,
+            "_tracking_only": True
+        }
+    
+    def _parse_stack_option(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse STACK$ format: BTO 1 NVDA 185p 01/16 @ 4.50"""
+        action, qty, symbol, strike, opt_type, month, day, price = match.groups()
+        expiry = f"{month}/{day}"
+        return {
+            "asset": "option",
+            "action": action.upper(),
+            "qty": int(qty),
+            "qty_specified": True,
+            "symbol": symbol.upper(),
+            "strike": float(strike),
+            "opt_type": opt_type.upper(),
+            "expiry": expiry,
+            "price": float(price),
+            "is_market_order": False,
+            "_stack_format": True
+        }
+    
+    def _parse_stack_0dte(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse STACK$ 0DTE: BTO 1 SPX 6925c @ 1.90"""
+        action, qty, symbol, strike, opt_type, price = match.groups()
+        expiry = datetime.now().strftime("%m/%d")
+        return {
+            "asset": "option",
+            "action": action.upper(),
+            "qty": int(qty),
+            "qty_specified": True,
+            "symbol": symbol.upper(),
+            "strike": float(strike),
+            "opt_type": opt_type.upper(),
+            "expiry": expiry,
+            "price": float(price),
+            "is_market_order": False,
+            "_stack_0dte": True
+        }
+    
+    def _parse_stack_tickerless(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse STACK$ ticker-less: STC 1 6935c @ 1.50"""
+        action, qty, strike, opt_type, price = match.groups()
+        strike_val = float(strike)
+        symbol = "NDX" if strike_val >= 10000 else "SPX"
+        expiry = datetime.now().strftime("%m/%d")
+        return {
+            "asset": "option",
+            "action": action.upper(),
+            "qty": int(qty),
+            "qty_specified": True,
+            "symbol": symbol,
+            "strike": strike_val,
+            "opt_type": opt_type.upper(),
+            "expiry": expiry,
+            "price": float(price),
+            "is_market_order": False,
+            "_stack_tickerless": True
+        }
+    
+    def _month_name_to_num(self, month_name: str) -> str:
+        """Convert month name to number."""
+        months = {
+            'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04',
+            'MAY': '05', 'JUN': '06', 'JUL': '07', 'AUG': '08',
+            'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
+        }
+        return months.get(month_name.upper(), '01')
+
+
+# Global singleton instance
+_registry_instance: Optional[SignalFormatRegistry] = None
+
+
+def get_signal_format_registry() -> SignalFormatRegistry:
+    """Get the global signal format registry instance."""
+    global _registry_instance
+    if _registry_instance is None:
+        _registry_instance = SignalFormatRegistry()
+    return _registry_instance
+
+
+def parse_with_registry(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Convenience function to parse text using the global registry.
+    
+    Args:
+        text: Signal text to parse
+        
+    Returns:
+        Parsed signal dict or None
+    """
+    return get_signal_format_registry().parse(text)
