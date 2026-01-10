@@ -782,7 +782,12 @@ input:checked + .slider:before {
         <div class="btn-group">
             <button id="save-schwab" class="btn btn-success">💾 Save Credentials</button>
             <button id="connect-schwab" class="btn btn-connect" style="background: linear-gradient(135deg, #0078d7 0%, #005a9e 100%);">🔗 Connect with Schwab</button>
+            <button id="refresh-schwab-token" class="btn" style="background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%); display: none;">🔄 Refresh Token</button>
             <button id="disconnect-schwab" class="btn" style="background: linear-gradient(135deg, #ff5252 0%, #d32f2f 100%); display: none;">❌ Disconnect</button>
+        </div>
+        
+        <!-- Token Status Display -->
+        <div id="schwab-token-status" style="display: none; margin-top: 12px; padding: 12px; background: rgba(0, 120, 215, 0.1); border-radius: 8px; font-size: 13px;">
         </div>
         
         <!-- Manual Code Entry for Local Deployments -->
@@ -2076,24 +2081,52 @@ async function loadSchwabStatus() {
         const statusText = document.getElementById('schwab-status-text');
         const connectBtn = document.getElementById('connect-schwab');
         const disconnectBtn = document.getElementById('disconnect-schwab');
+        const tokenStatusEl = document.getElementById('schwab-token-status');
+        const refreshBtn = document.getElementById('refresh-schwab-token');
         
         document.getElementById('schwab-redirect-uri').value = data.redirect_uri || '';
         
         if (data.authenticated) {
             statusEl.className = 'connection-status connected';
-            statusText.textContent = 'Connected';
             connectBtn.style.display = 'none';
             disconnectBtn.style.display = 'inline-block';
+            
+            // Show detailed token status
+            if (data.token_status) {
+                const ts = data.token_status;
+                tokenStatusEl.style.display = 'block';
+                refreshBtn.style.display = 'inline-block';
+                
+                if (ts.needs_reauth) {
+                    statusText.textContent = 'Re-auth Required';
+                    statusEl.className = 'connection-status disconnected';
+                    tokenStatusEl.innerHTML = `<span style="color: #ff5252;">${ts.message}</span>`;
+                } else if (ts.expires_in_minutes < 10) {
+                    statusText.textContent = `Token expires in ${ts.expires_in_minutes}m`;
+                    tokenStatusEl.innerHTML = `<span style="color: #ffc107;">${ts.message}</span>`;
+                } else {
+                    statusText.textContent = 'Connected (Auto-Refresh)';
+                    tokenStatusEl.innerHTML = `<span style="color: #4caf50;">${ts.message}</span>`;
+                }
+                
+                if (ts.last_refreshed && ts.last_refreshed !== 'Unknown') {
+                    tokenStatusEl.innerHTML += `<br><small style="color: var(--text-secondary);">Last refreshed: ${ts.last_refreshed}</small>`;
+                }
+            }
         } else if (data.configured) {
             statusEl.className = 'connection-status disconnected';
             statusText.textContent = 'Ready to connect';
             connectBtn.style.display = 'inline-block';
             disconnectBtn.style.display = 'none';
+            tokenStatusEl.style.display = 'none';
+            refreshBtn.style.display = 'none';
         } else {
             statusEl.className = 'connection-status disconnected';
             statusText.textContent = 'Not configured';
             connectBtn.style.display = 'none';
             disconnectBtn.style.display = 'none';
+            tokenStatusEl.style.display = 'none';
+            refreshBtn.style.display = 'none';
         }
     } catch (error) {
         console.error('Error loading Schwab status:', error);
@@ -2189,8 +2222,42 @@ document.getElementById('disconnect-schwab').addEventListener('click', async () 
     }
 });
 
+// Refresh Schwab token manually
+document.getElementById('refresh-schwab-token').addEventListener('click', async () => {
+    const btn = document.getElementById('refresh-schwab-token');
+    const originalText = btn.textContent;
+    btn.textContent = '⏳ Refreshing...';
+    btn.disabled = true;
+    
+    try {
+        const response = await fetch('/schwab/refresh', {
+            method: 'POST'
+        });
+        const result = await response.json();
+        
+        const msg = document.getElementById('save-message');
+        if (result.success) {
+            msg.textContent = '✅ Token refreshed successfully!';
+            msg.className = 'message success';
+        } else {
+            msg.textContent = '❌ ' + (result.error || 'Failed to refresh');
+            msg.className = 'message error';
+        }
+        setTimeout(() => msg.textContent = '', 5000);
+        loadSchwabStatus();
+    } catch (error) {
+        console.error('Error refreshing Schwab token:', error);
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
+});
+
 document.addEventListener('DOMContentLoaded', loadSchwabStatus);
 document.addEventListener('DOMContentLoaded', loadSchwabCredentials);
+
+// Refresh Schwab status every 5 minutes to show current token state
+setInterval(loadSchwabStatus, 5 * 60 * 1000);
 
 // Manual code entry for local deployments
 document.getElementById('submit-schwab-code').addEventListener('click', async () => {

@@ -70,8 +70,26 @@ class SchwabBroker(BrokerInterface):
             return False
     
     def _load_tokens(self) -> bool:
-        """Load tokens from file"""
+        """Load tokens from file, using token manager if available"""
         try:
+            # Try to use the centralized token manager first (handles auto-refresh)
+            try:
+                from gui_app.schwab_auth import get_token_manager
+                token_manager = get_token_manager()
+                access_token = token_manager.get_access_token()
+                if access_token:
+                    self.access_token = access_token
+                    self.refresh_token = token_manager.get_refresh_token()
+                    if token_manager._token_data:
+                        self.token_expiry = token_manager._token_data.get('token_expiry')
+                    print(f"[{self.name}] Tokens loaded via token manager (auto-refresh enabled)")
+                    return True
+            except (ImportError, Exception) as e:
+                # Token manager not available or error - fallback to file
+                if not isinstance(e, ImportError):
+                    print(f"[{self.name}] Token manager unavailable: {e}, using file fallback")
+            
+            # Fallback: load directly from file
             if os.path.exists(self.token_file):
                 with open(self.token_file, 'r') as f:
                     data = json.load(f)

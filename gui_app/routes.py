@@ -668,8 +668,11 @@ def register_routes(app):
     app.register_blueprint(google_auth)
     
     # Register Schwab OAuth blueprint
-    from .schwab_auth import schwab_auth
+    from .schwab_auth import schwab_auth, init_schwab_token_manager
     app.register_blueprint(schwab_auth)
+    
+    # Initialize Schwab token manager for auto-refresh
+    init_schwab_token_manager()
     
     # Inject config variables into all templates
     @app.context_processor
