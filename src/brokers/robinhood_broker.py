@@ -278,7 +278,11 @@ class RobinhoodBroker(BrokerInterface):
             price: Limit price (None for market order)
             stop_price: Stop price (for stop loss orders)
         """
+        print(f"[ROBINHOOD DEBUG] place_stock_order called: {symbol} {action} {quantity} @ {price}")
+        print(f"[ROBINHOOD DEBUG] ROBIN_STOCKS_AVAILABLE={ROBIN_STOCKS_AVAILABLE}, _logged_in={self._logged_in}")
+        
         if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
+            print(f"[ROBINHOOD DEBUG] Returning not connected")
             return OrderResult(
                 success=False,
                 message="Robinhood not connected",
@@ -335,6 +339,7 @@ class RobinhoodBroker(BrokerInterface):
                         )
             
             order = await asyncio.to_thread(execute_order)
+            print(f"[ROBINHOOD DEBUG] Order response: {order}")
             
             if order and order.get('id'):
                 order_type = "STOP" if stop_price else ("LIMIT" if price else "MARKET")
