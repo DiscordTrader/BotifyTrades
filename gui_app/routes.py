@@ -491,13 +491,62 @@ def get_cached_option_chain_tastytrade(symbol: str, expiry: str) -> dict:
         print(f"[OPTIONS] Tastytrade option chain error: {e}", flush=True)
         return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': f'Error: {str(e)}'}
 
+def get_cached_option_chain_schwab(symbol: str, expiry: str) -> dict:
+    """Get option chain from Schwab with caching.
+    Returns chain data with 'data_source' field indicating 'Schwab'
+    """
+    cache_key = f"SCHWAB_{symbol}_{expiry}"
+    now = time.time()
+    
+    print(f"[OPTIONS] get_cached_option_chain_schwab called for {symbol} {expiry}", flush=True)
+    
+    if cache_key in _option_chain_cache:
+        cached_data, cached_time = _option_chain_cache[cache_key]
+        if now - cached_time < _CHAIN_CACHE_TTL:
+            print(f"[OPTIONS] Using cached Schwab option chain for {cache_key}", flush=True)
+            return cached_data
+    
+    if not _bot_instance or not hasattr(_bot_instance, 'schwab_broker') or not _bot_instance.schwab_broker:
+        print(f"[OPTIONS] Schwab broker not available", flush=True)
+        return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Error: Schwab not configured'}
+    
+    try:
+        import asyncio
+        loop = getattr(_bot_instance, 'loop', None)
+        
+        if loop and loop.is_running():
+            future = asyncio.run_coroutine_threadsafe(
+                _bot_instance.schwab_broker.get_option_chain(symbol, expiry),
+                loop
+            )
+            chain = future.result(timeout=15)
+        else:
+            chain = asyncio.run(_bot_instance.schwab_broker.get_option_chain(symbol, expiry))
+        
+        if not chain:
+            print(f"[OPTIONS] Schwab returned empty chain for {symbol} {expiry}", flush=True)
+            return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Schwab (no data)'}
+        
+        # Fetch stock price if not in chain
+        if not chain.get('stock_price') or chain.get('stock_price', 0) <= 0:
+            stock_price = fetch_stock_price_reliable(symbol)
+            if stock_price > 0:
+                chain['stock_price'] = stock_price
+        
+        _option_chain_cache[cache_key] = (chain, now)
+        print(f"[OPTIONS] ✓ Using Schwab data for {symbol} {expiry} (stock_price={chain.get('stock_price')})", flush=True)
+        return chain
+    except Exception as e:
+        print(f"[OPTIONS] Schwab option chain error: {e}", flush=True)
+        return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': f'Error: {str(e)}'}
+
 def get_option_chain_for_broker(symbol: str, expiry: str, broker: str = 'WEBULL') -> dict:
     """Get option chain from the specified broker.
     
     Args:
         symbol: The stock symbol
         expiry: Expiration date (YYYY-MM-DD)
-        broker: One of 'WEBULL', 'ALPACA', 'ALPACA_PAPER', 'IBKR', 'TASTYTRADE', etc.
+        broker: One of 'WEBULL', 'ALPACA', 'IBKR', 'TASTYTRADE', 'SCHWAB', 'ROBINHOOD', etc.
     
     Returns:
         Chain data with 'data_source' field indicating the source
@@ -506,10 +555,18 @@ def get_option_chain_for_broker(symbol: str, expiry: str, broker: str = 'WEBULL'
     
     if 'ALPACA' in broker_upper:
         return get_cached_option_chain_alpaca(symbol, expiry)
-    elif 'IBKR' in broker_upper:
+    elif 'IBKR' in broker_upper or broker_upper == 'IB':
         return get_cached_option_chain_ibkr(symbol, expiry)
     elif 'TASTYTRADE' in broker_upper:
         return get_cached_option_chain_tastytrade(symbol, expiry)
+    elif 'SCHWAB' in broker_upper:
+        return get_cached_option_chain_schwab(symbol, expiry)
+    elif 'ROBINHOOD' in broker_upper:
+        # Robinhood doesn't have public option chain API - fallback to Webull
+        print(f"[OPTIONS] Robinhood has no option chain API, using Webull fallback", flush=True)
+        chain = get_cached_option_chain_webull(symbol, expiry)
+        chain['data_source'] = 'Webull (Robinhood fallback)'
+        return chain
     else:
         return get_cached_option_chain_webull(symbol, expiry)
 _cache_ttl: int = 5  # 5 second cache

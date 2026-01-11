@@ -674,6 +674,135 @@ class SchwabBroker(BrokerInterface):
         """Check if we have valid tokens"""
         return bool(self.access_token and self.refresh_token)
     
+    async def get_option_chain(self, symbol: str, expiry: str) -> Dict[str, Any]:
+        """Get option chain for a symbol and expiry date.
+        
+        Args:
+            symbol: Underlying stock symbol
+            expiry: Expiration date in YYYY-MM-DD format
+            
+        Returns:
+            Dict with 'calls', 'puts', 'stock_price', 'data_source' keys
+        """
+        try:
+            if not await self._ensure_valid_token():
+                return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Error: Not authenticated'}
+            
+            import httpx
+            
+            headers = {
+                'Authorization': f'Bearer {self.access_token}',
+                'Accept': 'application/json'
+            }
+            
+            # Convert expiry format if needed (YYYY-MM-DD to YYYY-MM-DD)
+            if "/" in expiry:
+                parts = expiry.split("/")
+                if len(parts) == 2:
+                    m, d = parts
+                    y = datetime.now().year
+                    expiry = f"{y:04d}-{int(m):02d}-{int(d):02d}"
+                elif len(parts) == 3:
+                    m, d, y = parts
+                    if len(y) == 2:
+                        y = f"20{y}"
+                    expiry = f"{y}-{int(m):02d}-{int(d):02d}"
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                # Get stock quote for current price
+                stock_price = None
+                try:
+                    quote_response = await client.get(
+                        f"https://api.schwabapi.com/marketdata/v1/quotes",
+                        headers=headers,
+                        params={'symbols': symbol}
+                    )
+                    if quote_response.status_code == 200:
+                        quote_data = quote_response.json()
+                        if symbol in quote_data:
+                            stock_price = float(quote_data[symbol].get('quote', {}).get('lastPrice', 0) or 0)
+                except:
+                    pass
+                
+                # Get option chain
+                response = await client.get(
+                    f"https://api.schwabapi.com/marketdata/v1/chains",
+                    headers=headers,
+                    params={
+                        'symbol': symbol,
+                        'contractType': 'ALL',
+                        'fromDate': expiry,
+                        'toDate': expiry,
+                        'includeUnderlyingQuote': 'true'
+                    }
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    # Get stock price from underlying quote if not fetched
+                    if not stock_price and data.get('underlyingPrice'):
+                        stock_price = float(data.get('underlyingPrice', 0))
+                    
+                    calls = []
+                    puts = []
+                    
+                    # Parse call options
+                    call_exp_map = data.get('callExpDateMap', {})
+                    for exp_date, strikes in call_exp_map.items():
+                        for strike_str, options in strikes.items():
+                            for opt in options:
+                                calls.append({
+                                    'strike': float(opt.get('strikePrice', 0)),
+                                    'bid': float(opt.get('bid', 0) or 0),
+                                    'ask': float(opt.get('ask', 0) or 0),
+                                    'last': float(opt.get('last', 0) or 0),
+                                    'volume': int(opt.get('totalVolume', 0) or 0),
+                                    'open_interest': int(opt.get('openInterest', 0) or 0),
+                                    'iv': float(opt.get('volatility', 0) or 0),
+                                    'delta': float(opt.get('delta', 0) or 0),
+                                    'gamma': float(opt.get('gamma', 0) or 0),
+                                    'theta': float(opt.get('theta', 0) or 0),
+                                    'vega': float(opt.get('vega', 0) or 0),
+                                })
+                    
+                    # Parse put options
+                    put_exp_map = data.get('putExpDateMap', {})
+                    for exp_date, strikes in put_exp_map.items():
+                        for strike_str, options in strikes.items():
+                            for opt in options:
+                                puts.append({
+                                    'strike': float(opt.get('strikePrice', 0)),
+                                    'bid': float(opt.get('bid', 0) or 0),
+                                    'ask': float(opt.get('ask', 0) or 0),
+                                    'last': float(opt.get('last', 0) or 0),
+                                    'volume': int(opt.get('totalVolume', 0) or 0),
+                                    'open_interest': int(opt.get('openInterest', 0) or 0),
+                                    'iv': float(opt.get('volatility', 0) or 0),
+                                    'delta': float(opt.get('delta', 0) or 0),
+                                    'gamma': float(opt.get('gamma', 0) or 0),
+                                    'theta': float(opt.get('theta', 0) or 0),
+                                    'vega': float(opt.get('vega', 0) or 0),
+                                })
+                    
+                    # Sort by strike
+                    calls.sort(key=lambda x: x['strike'])
+                    puts.sort(key=lambda x: x['strike'])
+                    
+                    return {
+                        'calls': calls,
+                        'puts': puts,
+                        'stock_price': stock_price,
+                        'data_source': 'Schwab'
+                    }
+                else:
+                    print(f"[{self.name}] Option chain error: {response.status_code} - {response.text}")
+                    return {'calls': [], 'puts': [], 'stock_price': stock_price, 'data_source': f'Error: {response.status_code}'}
+                    
+        except Exception as e:
+            print(f"[{self.name}] Error getting option chain: {e}")
+            return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': f'Error: {str(e)}'}
+    
     async def get_positions_detailed(self) -> List[Dict[str, Any]]:
         """Get detailed positions for sync service"""
         try:
