@@ -1803,9 +1803,10 @@ def register_routes(app):
         else:
             return jsonify({'success': False, 'error': 'Channel already exists or invalid configuration'}), 400
     
-    @app.route('/api/channels/<int:channel_id>', methods=['PUT'])
+    @app.route('/api/channels/<int:channel_id>', methods=['PUT', 'PATCH'])
     def api_update_channel(channel_id):
-        """Update a channel with save-and-verify for critical settings"""
+        """Update a channel with save-and-verify for critical settings.
+        Supports partial updates - only updates fields provided in request body."""
         data = request.json
         
         # Perform the update
