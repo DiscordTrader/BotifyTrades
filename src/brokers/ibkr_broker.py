@@ -72,6 +72,27 @@ class IBKRBroker(BrokerInterface):
         self.connected = False
         print(f"[{self.name}] Disconnected")
     
+    def _get_extended_hours_enabled(self) -> bool:
+        """Check if extended hours trading is enabled for IBKR.
+        
+        IBKR outsideRth parameter allows orders to execute during
+        pre-market (4:00 AM - 9:30 AM ET) and after-hours (4:00 PM - 8:00 PM ET).
+        
+        Returns:
+            True if extended hours is enabled
+        """
+        try:
+            from gui_app.database import get_broker_extended_hours
+            enabled = get_broker_extended_hours('ibkr')
+            if enabled:
+                print(f"[{self.name}] Extended hours ENABLED - outsideRth=True")
+            return enabled
+        except ImportError:
+            return False
+        except Exception as e:
+            print(f"[{self.name}] Error checking extended hours setting: {e}")
+            return False
+    
     async def get_account_info(self) -> Dict[str, Any]:
         """Get account information"""
         try:
@@ -130,6 +151,9 @@ class IBKRBroker(BrokerInterface):
             else:
                 # Limit order
                 order = LimitOrder(side, quantity, price)
+            
+            # Enable extended hours trading if configured
+            order.outsideRth = self._get_extended_hours_enabled()
             
             # Place order
             trade = self.ib.placeOrder(contract, order)
@@ -226,6 +250,9 @@ class IBKRBroker(BrokerInterface):
             else:
                 # Limit order
                 order = LimitOrder(side, quantity, price)
+            
+            # Enable extended hours trading if configured
+            order.outsideRth = self._get_extended_hours_enabled()
             
             # Place order
             trade = self.ib.placeOrder(contract, order)

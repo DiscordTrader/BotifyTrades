@@ -84,6 +84,28 @@ class WebullBroker(BrokerInterface):
         self.connected = False
         print(f"[{self.name}] Disconnected")
     
+    def _get_extended_hours_enabled(self) -> bool:
+        """Check if extended hours trading is enabled for Webull.
+        
+        Webull outsideRegularTradingHour parameter allows orders to execute during:
+        - Pre-market: 4:00 AM - 9:30 AM ET
+        - After-hours: 4:00 PM - 8:00 PM ET
+        
+        Returns:
+            True if extended hours is enabled
+        """
+        try:
+            from gui_app.database import get_broker_extended_hours
+            enabled = get_broker_extended_hours('webull')
+            if enabled:
+                print(f"[{self.name}] Extended hours ENABLED")
+            return enabled
+        except ImportError:
+            return False
+        except Exception as e:
+            print(f"[{self.name}] Error checking extended hours setting: {e}")
+            return False
+    
     async def get_account_info(self) -> Dict[str, Any]:
         """Get account information"""
         try:
@@ -389,6 +411,7 @@ class WebullBroker(BrokerInterface):
         """Place a stock order"""
         try:
             side = 'BUY' if action == 'BTO' else 'SELL'
+            extended_hours = self._get_extended_hours_enabled()
             
             def execute_order():
                 if price is None:
@@ -399,7 +422,8 @@ class WebullBroker(BrokerInterface):
                         action=side,
                         orderType='MKT',
                         enforce='GTC',
-                        quant=quantity
+                        quant=quantity,
+                        outsideRegularTradingHour=extended_hours
                     )
                 else:
                     # Limit order
@@ -409,7 +433,8 @@ class WebullBroker(BrokerInterface):
                         action=side,
                         orderType='LMT',
                         enforce='GTC',
-                        quant=quantity
+                        quant=quantity,
+                        outsideRegularTradingHour=extended_hours
                     )
             
             response = await asyncio.to_thread(execute_order)
@@ -657,6 +682,8 @@ class WebullBroker(BrokerInterface):
                     action=action
                 )
             
+            extended_hours = self._get_extended_hours_enabled()
+            
             def execute_order():
                 if price is None:
                     # Market order
@@ -667,7 +694,8 @@ class WebullBroker(BrokerInterface):
                         action=side,
                         orderType='MKT',
                         enforce='GTC',
-                        quant=quantity
+                        quant=quantity,
+                        outsideRegularTradingHour=extended_hours
                     )
                 else:
                     # Limit order
@@ -678,7 +706,8 @@ class WebullBroker(BrokerInterface):
                         action=side,
                         orderType='LMT',
                         enforce='GTC',
-                        quant=quantity
+                        quant=quantity,
+                        outsideRegularTradingHour=extended_hours
                     )
             
             response = await asyncio.to_thread(execute_order)

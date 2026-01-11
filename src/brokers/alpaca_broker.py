@@ -120,6 +120,30 @@ class AlpacaBroker(BrokerInterface):
         self.data_client = None
         print(f"[{self.name}] Disconnected")
     
+    def _get_extended_hours_enabled(self) -> bool:
+        """Check if extended hours trading is enabled for Alpaca.
+        
+        Alpaca extended_hours parameter allows orders to execute during:
+        - Pre-market: 4:00 AM - 9:30 AM ET
+        - After-hours: 4:00 PM - 8:00 PM ET
+        
+        Note: Extended hours only works with LIMIT orders (not MARKET)
+        
+        Returns:
+            True if extended hours is enabled
+        """
+        try:
+            from gui_app.database import get_broker_extended_hours
+            enabled = get_broker_extended_hours('alpaca')
+            if enabled:
+                print(f"[{self.name}] Extended hours ENABLED")
+            return enabled
+        except ImportError:
+            return False
+        except Exception as e:
+            print(f"[{self.name}] Error checking extended hours setting: {e}")
+            return False
+    
     async def get_account_info(self) -> Dict[str, Any]:
         """Get account information"""
         try:
@@ -371,8 +395,11 @@ class AlpacaBroker(BrokerInterface):
                 stop_loss = None
                 take_profit = None
             
+            # Check extended hours setting (only applies to LIMIT orders)
+            extended_hours = self._get_extended_hours_enabled() if entry_price is not None else False
+            
             if entry_price is None:
-                # Market order
+                # Market order (extended hours not supported for market orders)
                 order_data = MarketOrderRequest(
                     symbol=symbol,
                     qty=quantity,
@@ -383,7 +410,7 @@ class AlpacaBroker(BrokerInterface):
                     take_profit=take_profit
                 )
             else:
-                # Limit order
+                # Limit order - supports extended hours trading
                 order_data = LimitOrderRequest(
                     symbol=symbol,
                     qty=quantity,
@@ -392,7 +419,8 @@ class AlpacaBroker(BrokerInterface):
                     limit_price=entry_price,
                     order_class=order_class,
                     stop_loss=stop_loss,
-                    take_profit=take_profit
+                    take_profit=take_profit,
+                    extended_hours=extended_hours
                 )
             
             # Submit order
@@ -592,7 +620,11 @@ class AlpacaBroker(BrokerInterface):
                 # Default based on side
                 position_intent = PositionIntent.BUY_TO_OPEN if side == OrderSide.BUY else PositionIntent.SELL_TO_CLOSE
 
+            # Check extended hours setting (only applies to LIMIT orders)
+            extended_hours = self._get_extended_hours_enabled() if price is not None and price > 0 else False
+            
             if price is None or price <= 0:
+                # Market order (extended hours not supported for market orders)
                 order_req = MarketOrderRequest(
                     symbol=contract.symbol,
                     qty=quantity,
@@ -602,6 +634,7 @@ class AlpacaBroker(BrokerInterface):
                     position_intent=position_intent,
                 )
             else:
+                # Limit order - supports extended hours trading
                 order_req = LimitOrderRequest(
                     symbol=contract.symbol,
                     qty=quantity,
@@ -610,6 +643,7 @@ class AlpacaBroker(BrokerInterface):
                     limit_price=price,
                     type=OrderType.LIMIT,
                     position_intent=position_intent,
+                    extended_hours=extended_hours,
                 )
 
             print(f"[{self.name}] Submitting option order: {action} {quantity} {contract.symbol} @ ${price or 'MARKET'} [position_intent={position_intent}]", flush=True)
