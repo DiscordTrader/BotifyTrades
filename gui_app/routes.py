@@ -11291,26 +11291,53 @@ def register_routes(app):
                                 
                                 start_time = time.time()
                                 approved = False
-                                while time.time() - start_time < 60:
+                                poll_count = 0
+                                while time.time() - start_time < 90:
                                     time.sleep(5)
+                                    poll_count += 1
                                     
                                     inquiries_payload = {"sequence": 0, "user_input": {"status": "continue"}}
                                     inq_response = requests.post(inquiries_url, json=inquiries_payload)
                                     inq_data = inq_response.json()
                                     
-                                    # Check for approval
+                                    # Log full response for first few polls
+                                    if poll_count <= 3:
+                                        print(f"[API] Robinhood: Poll #{poll_count} response keys: {list(inq_data.keys())}")
+                                        if 'context' in inq_data:
+                                            print(f"[API] Robinhood: context keys: {list(inq_data.get('context', {}).keys())}")
+                                    
+                                    # Check multiple possible approval indicators
+                                    # Method 1: type_context.result
                                     if "type_context" in inq_data:
                                         result = inq_data["type_context"].get("result", "")
-                                        if result == "workflow_status_approved":
+                                        if "approved" in result.lower():
                                             approved = True
+                                            print(f"[API] Robinhood: Approved via type_context.result")
                                             break
                                     
-                                    vw_status = inq_data.get("verification_workflow", {}).get("workflow_status", "unknown")
-                                    print(f"[API] Robinhood: Device approval status: {vw_status}")
-                                    
-                                    if vw_status == "workflow_status_approved":
+                                    # Method 2: verification_workflow.workflow_status
+                                    vw_status = inq_data.get("verification_workflow", {}).get("workflow_status", "")
+                                    if "approved" in vw_status.lower():
                                         approved = True
+                                        print(f"[API] Robinhood: Approved via verification_workflow.workflow_status")
                                         break
+                                    
+                                    # Method 3: Check context.workflow_status
+                                    ctx_status = inq_data.get("context", {}).get("workflow_status", "")
+                                    if "approved" in ctx_status.lower():
+                                        approved = True
+                                        print(f"[API] Robinhood: Approved via context.workflow_status")
+                                        break
+                                    
+                                    # Method 4: Check if we have a successful state
+                                    state = inq_data.get("state", "")
+                                    if state == "completed" or state == "approved":
+                                        approved = True
+                                        print(f"[API] Robinhood: Approved via state={state}")
+                                        break
+                                    
+                                    status_display = vw_status or ctx_status or state or "unknown"
+                                    print(f"[API] Robinhood: Poll #{poll_count} status: {status_display}")
                                 
                                 if approved:
                                     print(f"[API] Robinhood: ✓ Device approved! Retrying login...")
