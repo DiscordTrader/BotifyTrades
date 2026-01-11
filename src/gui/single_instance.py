@@ -27,7 +27,11 @@ def check_single_instance(app_name: str = "BotifyTrades") -> bool:
 
 
 def _check_windows_mutex(app_name: str) -> bool:
-    """Windows: Use named mutex for single instance detection"""
+    """Windows: Use named mutex for single instance detection.
+    
+    Tries Global mutex first (cross-session), falls back to Local (per-session)
+    if access denied (common for non-admin users on Terminal Services).
+    """
     global _lock_handle
     
     try:
@@ -36,33 +40,49 @@ def _check_windows_mutex(app_name: str) -> bool:
         
         kernel32 = ctypes.windll.kernel32
         
-        mutex_name = f"Global\\{app_name}_SingleInstance_Mutex_V2"
-        
         ERROR_ALREADY_EXISTS = 183
+        ERROR_ACCESS_DENIED = 5
         
-        kernel32.SetLastError(0)
+        mutex_names = [
+            f"Global\\{app_name}_SingleInstance_Mutex_V2",
+            f"Local\\{app_name}_SingleInstance_Mutex_V2",
+        ]
         
-        _lock_handle = kernel32.CreateMutexW(
-            None,
-            ctypes.c_bool(True),
-            ctypes.c_wchar_p(mutex_name)
-        )
+        for mutex_name in mutex_names:
+            kernel32.SetLastError(0)
+            
+            _lock_handle = kernel32.CreateMutexW(
+                None,
+                ctypes.c_bool(True),
+                ctypes.c_wchar_p(mutex_name)
+            )
+            
+            last_error = kernel32.GetLastError()
+            
+            if last_error == ERROR_ACCESS_DENIED:
+                print(f"[SINGLE INSTANCE] Access denied for {mutex_name.split(chr(92))[0]} mutex, trying fallback...")
+                if _lock_handle:
+                    kernel32.CloseHandle(_lock_handle)
+                    _lock_handle = None
+                continue
+            
+            if _lock_handle is None or _lock_handle == 0:
+                print(f"[SINGLE INSTANCE] Failed to create mutex (error: {last_error})")
+                continue
+            
+            if last_error == ERROR_ALREADY_EXISTS:
+                print(f"[SINGLE INSTANCE] ⚠️ Another instance is already running!")
+                kernel32.CloseHandle(_lock_handle)
+                _lock_handle = None
+                return False
+            
+            scope = "Global" if "Global" in mutex_name else "Local"
+            print(f"[SINGLE INSTANCE] ✓ {scope} mutex acquired - single instance verified")
+            atexit.register(_cleanup_windows_mutex)
+            return True
         
-        last_error = kernel32.GetLastError()
-        
-        if _lock_handle is None or _lock_handle == 0:
-            print(f"[SINGLE INSTANCE] Failed to create mutex (error: {last_error})")
-            return False
-        
-        if last_error == ERROR_ALREADY_EXISTS:
-            print(f"[SINGLE INSTANCE] ⚠️ Another instance is already running!")
-            kernel32.CloseHandle(_lock_handle)
-            _lock_handle = None
-            return False
-        
-        print(f"[SINGLE INSTANCE] ✓ Mutex acquired - single instance verified")
-        atexit.register(_cleanup_windows_mutex)
-        return True
+        print(f"[SINGLE INSTANCE] Failed to acquire any mutex - cannot verify single instance")
+        return False
         
     except Exception as e:
         print(f"[SINGLE INSTANCE] Windows mutex check failed: {e}")
