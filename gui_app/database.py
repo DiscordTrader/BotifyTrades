@@ -5443,6 +5443,42 @@ def save_setting(key: str, value: str) -> bool:
         return False
 
 
+# ============ EXTENDED HOURS SETTINGS ============
+
+def get_broker_extended_hours(broker: str) -> bool:
+    """Get extended hours trading setting for a broker.
+    
+    Args:
+        broker: Broker name (schwab, alpaca, ibkr, robinhood, webull)
+        
+    Returns:
+        True if extended hours trading is enabled for this broker
+    """
+    key = f"{broker.lower()}_extended_hours"
+    value = get_setting(key, 'false')
+    return value.lower() == 'true'
+
+
+def set_broker_extended_hours(broker: str, enabled: bool) -> bool:
+    """Set extended hours trading setting for a broker.
+    
+    Args:
+        broker: Broker name (schwab, alpaca, ibkr, robinhood, webull)
+        enabled: True to enable extended hours trading
+        
+    Returns:
+        True if setting was saved successfully
+    """
+    key = f"{broker.lower()}_extended_hours"
+    return save_setting(key, 'true' if enabled else 'false')
+
+
+def get_all_extended_hours_settings() -> Dict[str, bool]:
+    """Get extended hours settings for all brokers"""
+    brokers = ['schwab', 'alpaca', 'ibkr', 'robinhood', 'webull']
+    return {broker: get_broker_extended_hours(broker) for broker in brokers}
+
+
 # ============ ALPACA SETTINGS ============
 
 def get_alpaca_settings() -> Dict[str, str]:

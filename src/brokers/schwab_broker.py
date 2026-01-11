@@ -254,6 +254,29 @@ class SchwabBroker(BrokerInterface):
             return await self._refresh_access_token()
         return bool(self.access_token)
     
+    def _get_session_type(self) -> str:
+        """Get order session type based on extended hours setting.
+        
+        Schwab session types:
+        - NORMAL: Regular market hours only (9:30 AM - 4:00 PM ET)
+        - SEAMLESS: Extended hours (pre-market + regular + after-hours)
+        - AM: Pre-market only
+        - PM: After-hours only
+        
+        Returns:
+            Session type string for order payload
+        """
+        try:
+            from gui_app.database import get_broker_extended_hours
+            if get_broker_extended_hours('schwab'):
+                print(f"[{self.name}] Extended hours ENABLED - using SEAMLESS session")
+                return "SEAMLESS"
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"[{self.name}] Error checking extended hours setting: {e}")
+        return "NORMAL"
+    
     async def disconnect(self):
         """Disconnect from Schwab"""
         self.connected = False
@@ -354,10 +377,12 @@ class SchwabBroker(BrokerInterface):
             instruction = "BUY" if action.upper() == "BTO" else "SELL"
             order_type = "LIMIT" if price else "MARKET"
             
+            session = self._get_session_type()
+            
             order_payload = {
                 "orderStrategyType": "SINGLE",
                 "orderType": order_type,
-                "session": "NORMAL",
+                "session": session,
                 "duration": "DAY",
                 "orderLegCollection": [{
                     "instruction": instruction,
@@ -470,10 +495,12 @@ class SchwabBroker(BrokerInterface):
             instruction = "BUY_TO_OPEN" if action.upper() == "BTO" else "SELL_TO_CLOSE"
             order_type = "LIMIT" if price else "MARKET"
             
+            session = self._get_session_type()
+            
             order_payload = {
                 "orderStrategyType": "SINGLE",
                 "orderType": order_type,
-                "session": "NORMAL",
+                "session": session,
                 "duration": "DAY",
                 "orderLegCollection": [{
                     "instruction": instruction,
