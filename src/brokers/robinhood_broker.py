@@ -340,7 +340,7 @@ class RobinhoodBroker(BrokerInterface):
             calls = []
             puts = []
             
-            # Get call options
+            # Get call options - just get the strikes first (fast)
             call_options = rh.options.find_tradable_options(
                 symbol,
                 expirationDate=expiry,
@@ -348,45 +348,43 @@ class RobinhoodBroker(BrokerInterface):
             )
             
             if call_options:
+                # Extract instrument URLs for batch market data fetch
+                instrument_urls = [opt.get('url') for opt in call_options if opt.get('url')]
+                
+                # Batch fetch market data for all calls at once
+                market_data_list = []
+                if instrument_urls:
+                    try:
+                        market_data_list = rh.options.get_option_market_data_by_id(instrument_urls) or []
+                    except:
+                        market_data_list = []
+                
+                # Create lookup by instrument URL
+                market_lookup = {}
+                for md in market_data_list:
+                    if md and isinstance(md, dict):
+                        instr_url = md.get('instrument')
+                        if instr_url:
+                            market_lookup[instr_url] = md
+                
                 for opt in call_options:
                     strike = float(opt.get('strike_price', 0))
-                    # Get market data for this option
-                    try:
-                        market_data = rh.options.get_option_market_data(
-                            symbol,
-                            expirationDate=expiry,
-                            strikePrice=str(strike),
-                            optionType='call'
-                        )
-                        if market_data and len(market_data) > 0:
-                            data = market_data[0]
-                            calls.append({
-                                'strike': strike,
-                                'bid': float(data.get('bid_price', 0) or 0),
-                                'ask': float(data.get('ask_price', 0) or 0),
-                                'last': float(data.get('mark_price', 0) or 0),
-                                'volume': int(data.get('volume', 0) or 0),
-                                'open_interest': int(data.get('open_interest', 0) or 0),
-                                'iv': float(data.get('implied_volatility', 0) or 0),
-                                'delta': float(data.get('delta', 0) or 0),
-                                'gamma': float(data.get('gamma', 0) or 0),
-                                'theta': float(data.get('theta', 0) or 0),
-                                'vega': float(data.get('vega', 0) or 0),
-                            })
-                        else:
-                            calls.append({
-                                'strike': strike,
-                                'bid': 0, 'ask': 0, 'last': 0,
-                                'volume': 0, 'open_interest': 0,
-                                'iv': 0, 'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0
-                            })
-                    except:
-                        calls.append({
-                            'strike': strike,
-                            'bid': 0, 'ask': 0, 'last': 0,
-                            'volume': 0, 'open_interest': 0,
-                            'iv': 0, 'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0
-                        })
+                    instr_url = opt.get('url', '')
+                    data = market_lookup.get(instr_url, {})
+                    
+                    calls.append({
+                        'strike': strike,
+                        'bid': float(data.get('bid_price', 0) or 0),
+                        'ask': float(data.get('ask_price', 0) or 0),
+                        'last': float(data.get('mark_price', 0) or data.get('last_trade_price', 0) or 0),
+                        'volume': int(data.get('volume', 0) or 0),
+                        'open_interest': int(data.get('open_interest', 0) or 0),
+                        'iv': float(data.get('implied_volatility', 0) or 0),
+                        'delta': float(data.get('delta', 0) or 0),
+                        'gamma': float(data.get('gamma', 0) or 0),
+                        'theta': float(data.get('theta', 0) or 0),
+                        'vega': float(data.get('vega', 0) or 0),
+                    })
             
             # Get put options
             put_options = rh.options.find_tradable_options(
@@ -396,44 +394,43 @@ class RobinhoodBroker(BrokerInterface):
             )
             
             if put_options:
+                # Extract instrument URLs for batch market data fetch
+                instrument_urls = [opt.get('url') for opt in put_options if opt.get('url')]
+                
+                # Batch fetch market data for all puts at once
+                market_data_list = []
+                if instrument_urls:
+                    try:
+                        market_data_list = rh.options.get_option_market_data_by_id(instrument_urls) or []
+                    except:
+                        market_data_list = []
+                
+                # Create lookup by instrument URL
+                market_lookup = {}
+                for md in market_data_list:
+                    if md and isinstance(md, dict):
+                        instr_url = md.get('instrument')
+                        if instr_url:
+                            market_lookup[instr_url] = md
+                
                 for opt in put_options:
                     strike = float(opt.get('strike_price', 0))
-                    try:
-                        market_data = rh.options.get_option_market_data(
-                            symbol,
-                            expirationDate=expiry,
-                            strikePrice=str(strike),
-                            optionType='put'
-                        )
-                        if market_data and len(market_data) > 0:
-                            data = market_data[0]
-                            puts.append({
-                                'strike': strike,
-                                'bid': float(data.get('bid_price', 0) or 0),
-                                'ask': float(data.get('ask_price', 0) or 0),
-                                'last': float(data.get('mark_price', 0) or 0),
-                                'volume': int(data.get('volume', 0) or 0),
-                                'open_interest': int(data.get('open_interest', 0) or 0),
-                                'iv': float(data.get('implied_volatility', 0) or 0),
-                                'delta': float(data.get('delta', 0) or 0),
-                                'gamma': float(data.get('gamma', 0) or 0),
-                                'theta': float(data.get('theta', 0) or 0),
-                                'vega': float(data.get('vega', 0) or 0),
-                            })
-                        else:
-                            puts.append({
-                                'strike': strike,
-                                'bid': 0, 'ask': 0, 'last': 0,
-                                'volume': 0, 'open_interest': 0,
-                                'iv': 0, 'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0
-                            })
-                    except:
-                        puts.append({
-                            'strike': strike,
-                            'bid': 0, 'ask': 0, 'last': 0,
-                            'volume': 0, 'open_interest': 0,
-                            'iv': 0, 'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0
-                        })
+                    instr_url = opt.get('url', '')
+                    data = market_lookup.get(instr_url, {})
+                    
+                    puts.append({
+                        'strike': strike,
+                        'bid': float(data.get('bid_price', 0) or 0),
+                        'ask': float(data.get('ask_price', 0) or 0),
+                        'last': float(data.get('mark_price', 0) or data.get('last_trade_price', 0) or 0),
+                        'volume': int(data.get('volume', 0) or 0),
+                        'open_interest': int(data.get('open_interest', 0) or 0),
+                        'iv': float(data.get('implied_volatility', 0) or 0),
+                        'delta': float(data.get('delta', 0) or 0),
+                        'gamma': float(data.get('gamma', 0) or 0),
+                        'theta': float(data.get('theta', 0) or 0),
+                        'vega': float(data.get('vega', 0) or 0),
+                    })
             
             # Sort by strike
             calls.sort(key=lambda x: x['strike'])

@@ -544,10 +544,13 @@ def get_cached_option_chain_robinhood(symbol: str, expiry: str) -> dict:
     """Get option chain from Robinhood with caching.
     Returns chain data with 'data_source' field indicating 'Robinhood'
     """
+    import sys
     cache_key = f"ROBINHOOD_{symbol}_{expiry}"
     now = time.time()
     
-    print(f"[OPTIONS] get_cached_option_chain_robinhood called for {symbol} {expiry}", flush=True)
+    print(f"[OPTIONS RH] >>> ENTERING get_cached_option_chain_robinhood for {symbol} {expiry}", flush=True)
+    sys.stdout.flush()
+    sys.stderr.flush()
     
     if cache_key in _option_chain_cache:
         cached_data, cached_time = _option_chain_cache[cache_key]
@@ -580,10 +583,13 @@ def get_cached_option_chain_robinhood(symbol: str, expiry: str) -> dict:
                 chain['stock_price'] = stock_price
         
         _option_chain_cache[cache_key] = (chain, now)
-        print(f"[OPTIONS] ✓ Using Robinhood data for {symbol} {expiry} (stock_price={chain.get('stock_price')})", flush=True)
+        num_calls = len(chain.get('calls', []))
+        num_puts = len(chain.get('puts', []))
+        print(f"[OPTIONS RH] ✓ SUCCESS: {num_calls} calls, {num_puts} puts, stock_price={chain.get('stock_price')}", flush=True)
+        chain['data_source'] = 'Robinhood'
         return chain
     except Exception as e:
-        print(f"[OPTIONS] Robinhood option chain error: {e}", flush=True)
+        print(f"[OPTIONS RH] ERROR: {e}", flush=True)
         import traceback
         traceback.print_exc()
         return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': f'Error: {str(e)}'}
