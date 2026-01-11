@@ -4,7 +4,7 @@
 
 {% block content %}
 <!-- Market Tabs -->
-<div class="market-tabs" style="margin-bottom: 24px; display: flex; gap: 8px;">
+<div class="market-tabs" style="margin-bottom: 16px; display: flex; gap: 8px;">
     <button id="usMarketTab" class="market-tab active" onclick="switchMarket('US')" style="padding: 12px 32px; background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%); color: #fff; border: none; border-radius: 12px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease;">
         <span style="font-size: 20px;">🇺🇸</span> US Market <span class="currency-badge" style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 6px; font-size: 12px;">USD</span>
     </button>
@@ -13,6 +13,18 @@
     </button>
 </div>
 
+<!-- P&L Type Tabs -->
+<div class="pnl-type-tabs" style="margin-bottom: 24px; display: flex; gap: 4px; background: #1C1C1E; padding: 4px; border-radius: 12px; width: fit-content;">
+    <button id="signalPnlTab" class="pnl-type-tab active" onclick="switchPnlType('signal')" style="padding: 10px 24px; background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%); color: #fff; border: none; border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.3s ease;">
+        <span>📊</span> Signal P&L <span style="font-size: 10px; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px;">Theoretical</span>
+    </button>
+    <button id="executionPnlTab" class="pnl-type-tab" onclick="switchPnlType('execution')" style="padding: 10px 24px; background: transparent; color: #8E8E93; border: none; border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.3s ease;">
+        <span>🎯</span> Execution P&L <span style="font-size: 10px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Broker Fills</span>
+    </button>
+</div>
+
+<!-- Signal P&L View -->
+<div id="signal-pnl-view">
 <div class="filters-bar" style="margin-bottom: 24px; display: flex; gap: 12px; align-items: center; background: #2C2C2E; padding: 16px; border-radius: 12px; flex-wrap: wrap;">
     <label style="color: #fff; font-weight: 500;">Date Range:</label>
     <select id="dateFilter" style="padding: 8px 16px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px; min-width: 140px;">
@@ -118,6 +130,80 @@
 </div>
 
 <div id="pnl-container"></div>
+</div>
+
+<!-- Execution P&L View -->
+<div id="execution-pnl-view" style="display: none;">
+<div class="filters-bar" style="margin-bottom: 24px; display: flex; gap: 12px; align-items: center; background: #2C2C2E; padding: 16px; border-radius: 12px; flex-wrap: wrap;">
+    <label style="color: #fff; font-weight: 500;">Broker:</label>
+    <select id="execBrokerFilter" onchange="loadExecutionData()" style="padding: 8px 16px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px; min-width: 140px;">
+        <option value="">All Brokers</option>
+    </select>
+    
+    <label style="color: #fff; font-weight: 500;">Channel:</label>
+    <select id="execChannelFilter" onchange="loadExecutionData()" style="padding: 8px 16px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px; min-width: 150px;">
+        <option value="">All Channels</option>
+    </select>
+    
+    <label style="color: #fff; font-weight: 500;">User:</label>
+    <select id="execUserFilter" onchange="loadExecutionData()" style="padding: 8px 16px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px; min-width: 130px;">
+        <option value="">All Users</option>
+    </select>
+    
+    <label style="color: #fff; font-weight: 500;">Exit Type:</label>
+    <select id="execExitFilter" onchange="loadExecutionData()" style="padding: 8px 16px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px; min-width: 120px;">
+        <option value="">All Exits</option>
+        <option value="SIGNAL">Signal</option>
+        <option value="PT1">PT1</option>
+        <option value="PT2">PT2</option>
+        <option value="PT3">PT3</option>
+        <option value="PT4">PT4</option>
+        <option value="STOP_LOSS">Stop Loss</option>
+        <option value="TRAILING">Trailing</option>
+        <option value="MANUAL">Manual</option>
+    </select>
+    
+    <label style="color: #fff; font-weight: 500;">Period:</label>
+    <select id="execDaysFilter" onchange="loadExecutionData()" style="padding: 8px 16px; border-radius: 8px; background: #1C1C1E; color: #fff; border: 1px solid #3A3A3C; font-size: 14px; min-width: 140px;">
+        <option value="7">Last 7 Days</option>
+        <option value="30" selected>Last 30 Days</option>
+        <option value="90">Last 90 Days</option>
+        <option value="">All Time</option>
+    </select>
+    
+    <button onclick="loadExecutionData()" style="padding: 8px 20px; background: linear-gradient(135deg, #7c3aed 0%, #e91e63 100%); color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-left: auto;">
+        🔄 Refresh
+    </button>
+</div>
+
+<div id="exec-summary-stats" style="display: flex; gap: 24px; margin-bottom: 24px; padding: 16px 20px; background: #2C2C2E; border-radius: 12px; font-size: 14px; flex-wrap: wrap;">
+    <div style="color: #00d4ff;">
+        <strong>Total Trades:</strong> <span id="execTotalTrades">0</span>
+    </div>
+    <div style="color: #00ff88;">
+        <strong>Total P/L:</strong> <span id="execTotalPNL">$0.00</span>
+    </div>
+    <div style="color: #ffaa00;">
+        <strong>Win Rate:</strong> <span id="execWinRate">0%</span>
+    </div>
+    <div style="color: #ff9500;">
+        <strong>Avg Latency:</strong> <span id="execAvgLatency">-</span>
+    </div>
+    <div style="color: #ff6464;">
+        <strong>Avg Entry Slip:</strong> <span id="execAvgEntrySlip">0%</span>
+    </div>
+    <div style="color: #ff6464;">
+        <strong>Avg Exit Slip:</strong> <span id="execAvgExitSlip">0%</span>
+    </div>
+</div>
+
+<div id="exec-loading" style="text-align: center; padding: 40px; color: #888; display: none;">
+    <div style="font-size: 48px;">⏳</div>
+    <p>Loading execution data...</p>
+</div>
+
+<div id="exec-container"></div>
+</div>
 
 <style>
 .position-card {
@@ -233,6 +319,24 @@
     font-size: 12px;
     display: inline-block;
 }
+
+.broker-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.broker-badge.webull { background: linear-gradient(135deg, #ff6b00, #ff9500); color: #fff; }
+.broker-badge.alpaca, .broker-badge.alpaca_paper, .broker-badge.alpaca_live { background: linear-gradient(135deg, #00c853, #00e676); color: #fff; }
+.broker-badge.robinhood { background: linear-gradient(135deg, #00c805, #21ce99); color: #fff; }
+.broker-badge.tastytrade, .broker-badge.tastytrade_live, .broker-badge.tastytrade_paper { background: linear-gradient(135deg, #e91e63, #ff5722); color: #fff; }
+.broker-badge.schwab { background: linear-gradient(135deg, #0070c9, #00a0dc); color: #fff; }
+.broker-badge.ibkr, .broker-badge.ibkr_paper { background: linear-gradient(135deg, #d41f2c, #ff4444); color: #fff; }
+.broker-badge.zerodha { background: linear-gradient(135deg, #387ed1, #5da5e8); color: #fff; }
+.broker-badge.upstox { background: linear-gradient(135deg, #7b1fa2, #9c27b0); color: #fff; }
+.broker-badge.dhanq { background: linear-gradient(135deg, #1565c0, #1976d2); color: #fff; }
 
 .status-badge {
     padding: 4px 10px;
@@ -758,6 +862,268 @@ async function purgeByAuthor() {
     } catch (error) {
         console.error('Error purging by author:', error);
         alert('❌ Error purging data. Check console for details.');
+    }
+}
+
+// ============================================
+// EXECUTION P&L FUNCTIONS
+// ============================================
+let currentPnlType = 'signal';  // 'signal' or 'execution'
+let executionData = [];
+
+function switchPnlType(type) {
+    currentPnlType = type;
+    const signalTab = document.getElementById('signalPnlTab');
+    const execTab = document.getElementById('executionPnlTab');
+    const signalView = document.getElementById('signal-pnl-view');
+    const execView = document.getElementById('execution-pnl-view');
+    
+    if (type === 'signal') {
+        signalTab.style.background = 'linear-gradient(135deg, #00d4ff 0%, #0080ff 100%)';
+        signalTab.style.color = '#fff';
+        execTab.style.background = 'transparent';
+        execTab.style.color = '#8E8E93';
+        signalView.style.display = 'block';
+        execView.style.display = 'none';
+    } else {
+        execTab.style.background = 'linear-gradient(135deg, #7c3aed 0%, #e91e63 100%)';
+        execTab.style.color = '#fff';
+        signalTab.style.background = 'transparent';
+        signalTab.style.color = '#8E8E93';
+        signalView.style.display = 'none';
+        execView.style.display = 'block';
+        loadExecutionFilters();
+        loadExecutionData();
+    }
+}
+
+async function loadExecutionFilters() {
+    try {
+        const response = await fetch('/api/execution-pnl/filters');
+        const data = await response.json();
+        
+        if (data.success) {
+            const brokerSelect = document.getElementById('execBrokerFilter');
+            const channelSelect = document.getElementById('execChannelFilter');
+            const userSelect = document.getElementById('execUserFilter');
+            
+            brokerSelect.innerHTML = '<option value="">All Brokers</option>';
+            data.brokers.forEach(b => {
+                brokerSelect.innerHTML += `<option value="${b}">${b}</option>`;
+            });
+            
+            channelSelect.innerHTML = '<option value="">All Channels</option>';
+            data.channels.forEach(c => {
+                channelSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+            });
+            
+            userSelect.innerHTML = '<option value="">All Users</option>';
+            data.users.forEach(u => {
+                userSelect.innerHTML += `<option value="${u}">${u}</option>`;
+            });
+        }
+    } catch (error) {
+        console.error('Error loading execution filters:', error);
+    }
+}
+
+async function loadExecutionData() {
+    const broker = document.getElementById('execBrokerFilter').value;
+    const channel = document.getElementById('execChannelFilter').value;
+    const user = document.getElementById('execUserFilter').value;
+    const exitSource = document.getElementById('execExitFilter').value;
+    const days = document.getElementById('execDaysFilter').value;
+    
+    let url = '/api/execution-pnl?limit=200';
+    if (broker) url += '&broker=' + encodeURIComponent(broker);
+    if (channel) url += '&channel_id=' + encodeURIComponent(channel);
+    if (user) url += '&user=' + encodeURIComponent(user);
+    if (exitSource) url += '&exit_source=' + encodeURIComponent(exitSource);
+    if (days) url += '&days=' + days;
+    
+    const loading = document.getElementById('exec-loading');
+    const container = document.getElementById('exec-container');
+    
+    loading.style.display = 'block';
+    container.innerHTML = '';
+    
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.success) {
+            executionData = data.trades;
+            updateExecutionSummary(data.summary);
+            renderExecutionData(data.trades);
+        } else {
+            container.innerHTML = `<div class="no-data"><div class="no-data-icon">⚠️</div><p>Error: ${data.error}</p></div>`;
+        }
+    } catch (error) {
+        console.error('Error loading execution data:', error);
+        container.innerHTML = `<div class="no-data"><div class="no-data-icon">⚠️</div><p>Error loading data: ${error.message}</p></div>`;
+    } finally {
+        loading.style.display = 'none';
+    }
+}
+
+function updateExecutionSummary(summary) {
+    summary = summary || {};
+    const totalPnl = summary.total_pnl || 0;
+    document.getElementById('execTotalTrades').textContent = summary.total_trades || 0;
+    document.getElementById('execTotalPNL').textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
+    document.getElementById('execTotalPNL').style.color = totalPnl >= 0 ? '#00ff88' : '#ff3b30';
+    document.getElementById('execWinRate').textContent = ((summary.win_rate || 0)).toFixed(1) + '%';
+    document.getElementById('execAvgLatency').textContent = (summary.avg_latency_ms || 0) + 'ms';
+    document.getElementById('execAvgEntrySlip').textContent = ((summary.avg_entry_slippage || 0)).toFixed(2) + '%';
+    document.getElementById('execAvgExitSlip').textContent = ((summary.avg_exit_slippage || 0)).toFixed(2) + '%';
+}
+
+function renderExecutionData(trades) {
+    const container = document.getElementById('exec-container');
+    
+    if (!trades || trades.length === 0) {
+        container.innerHTML = '<div class="no-data"><div class="no-data-icon">📊</div><p>No execution data found. Execution P&L tracks actual broker fills.</p></div>';
+        return;
+    }
+    
+    // Group trades by signal_lot_id + broker for position card view (same signal can have multiple broker executions)
+    const grouped = {};
+    trades.forEach(trade => {
+        const symbol = trade.symbol + (trade.asset_type === 'option' ? ` ${trade.strike || ''}${trade.call_put?.charAt(0) || ''} ${trade.expiry || ''}` : '');
+        // Use signal_lot_id + broker as unique key (or execution_lot_id if no signal_lot)
+        const key = trade.signal_lot_id ? `${trade.signal_lot_id}_${trade.broker}` : `exec_${trade.execution_lot_id || trade.id}`;
+        if (!grouped[key]) {
+            grouped[key] = {
+                key: key,
+                symbol: symbol,
+                broker: trade.broker,
+                channel_name: trade.channel_name,
+                author_name: trade.author_name,
+                entries: [],
+                exits: [],
+                total_pnl: 0,
+                total_qty: 0
+            };
+        }
+        grouped[key].entries.push(trade);
+        grouped[key].total_pnl += trade.pnl || 0;
+        grouped[key].total_qty += trade.closed_qty || 0;
+        grouped[key].exits.push(trade);
+    });
+    
+    container.innerHTML = Object.values(grouped).map((pos, index) => {
+        const profitClass = pos.total_pnl > 0 ? 'profit' : (pos.total_pnl < 0 ? 'loss' : '');
+        const profitTextClass = pos.total_pnl > 0 ? 'profit-text' : (pos.total_pnl < 0 ? 'loss-text' : 'neutral-text');
+        const brokerClass = (pos.broker || '').toLowerCase().replace(/[^a-z]/g, '_');
+        
+        return `
+            <div class="position-card ${profitClass}">
+                <div class="position-header" onclick="toggleExecClosures(${index})">
+                    <div class="col">
+                        <div class="label">Position</div>
+                        <div class="value">${pos.symbol}</div>
+                        <span class="broker-badge ${brokerClass}" style="margin-right: 4px;">${pos.broker}</span>
+                        ${pos.author_name ? `<span class="user-badge">${pos.author_name}</span>` : ''}
+                    </div>
+                    <div class="col">
+                        <div class="label">Channel</div>
+                        <div class="value" style="font-size: 12px;">${pos.channel_name || '-'}</div>
+                    </div>
+                    <div class="col">
+                        <div class="label">Qty Closed</div>
+                        <div class="value">${pos.total_qty}</div>
+                    </div>
+                    <div class="col">
+                        <div class="label">Exits</div>
+                        <div class="value">${pos.exits.length}</div>
+                    </div>
+                    <div class="col">
+                        <div class="label">Total P/L</div>
+                        <div class="value ${profitTextClass}">${pos.total_pnl >= 0 ? '+' : ''}$${pos.total_pnl.toFixed(2)}</div>
+                    </div>
+                    <div class="col">
+                        <span class="expand-icon" id="exec-expand-${index}">▶</span>
+                    </div>
+                </div>
+                
+                <div class="closures-detail" id="exec-closures-${index}">
+                    <div style="padding: 16px 20px; background: #2C2C2E; font-weight: 700; font-size: 13px; color: #8E8E93; text-transform: uppercase;">
+                        Entry/Exit Details (${pos.exits.length} closes)
+                    </div>
+                    ${pos.exits.map((exit, cIndex) => {
+                        const cProfitClass = (exit.pnl || 0) > 0 ? 'profit-text' : ((exit.pnl || 0) < 0 ? 'loss-text' : 'neutral-text');
+                        const exitObj = exit.exit || {};
+                        const entryObj = exit.entry || {};
+                        const latencyObj = exit.latency || {};
+                        const exitDate = exitObj.filled_at ? new Date(exitObj.filled_at).toLocaleString() : '-';
+                        const exitReason = exit.exit_source || 'SIGNAL';
+                        const reasonColor = exitReason.includes('PT') ? '#30D158' : 
+                                           (exitReason.includes('STOP') ? '#FF453A' : 
+                                           (exitReason.includes('TRAIL') ? '#FF9F0A' : '#00d4ff'));
+                        const entrySignalPrice = entryObj.signal_price != null ? entryObj.signal_price.toFixed(2) : '-';
+                        const entryFillPrice = entryObj.fill_price != null ? entryObj.fill_price.toFixed(2) : '-';
+                        const entrySlippage = entryObj.slippage_pct || 0;
+                        const exitFillPrice = exitObj.fill_price != null ? exitObj.fill_price.toFixed(2) : '-';
+                        
+                        return `
+                            <div class="closure-row" style="grid-template-columns: 0.5fr 1.5fr 1.5fr 1fr 1fr 1fr 1fr;">
+                                <div><span class="stc-badge">Exit #${cIndex + 1}</span></div>
+                                <div style="color: #fff;">
+                                    <div style="font-size: 10px; color: #8E8E93;">Bot Detected</div>
+                                    <strong>$${entrySignalPrice}</strong>
+                                </div>
+                                <div style="color: #fff;">
+                                    <div style="font-size: 10px; color: #8E8E93;">Broker Fill</div>
+                                    <strong>$${entryFillPrice}</strong>
+                                    <span style="font-size: 10px; color: ${entrySlippage > 0 ? '#ff6464' : '#00ff88'};">
+                                        (${entrySlippage > 0 ? '+' : ''}${entrySlippage.toFixed(2)}%)
+                                    </span>
+                                </div>
+                                <div style="color: #fff;">
+                                    <div style="font-size: 10px; color: #8E8E93;">Exit Fill</div>
+                                    <strong>$${exitFillPrice}</strong>
+                                </div>
+                                <div class="${cProfitClass}">
+                                    <div style="font-size: 10px; color: #8E8E93;">P&L</div>
+                                    <strong>${(exit.pnl || 0) >= 0 ? '+' : ''}$${(exit.pnl || 0).toFixed(2)}</strong>
+                                </div>
+                                <div>
+                                    <div style="font-size: 10px; color: #8E8E93;">Exit Type</div>
+                                    <span style="background: ${reasonColor}20; color: ${reasonColor}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${exitReason}</span>
+                                </div>
+                                <div style="color: #8E8E93; font-size: 11px;">
+                                    <div style="font-size: 10px;">Latency</div>
+                                    ${latencyObj.total_ms || '-'}ms
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                    
+                    <div class="aggregate-footer" style="grid-template-columns: 0.5fr 1.5fr 1.5fr 1fr 1fr 1fr 1fr;">
+                        <div style="color: #7c3aed;">TOTALS</div>
+                        <div></div>
+                        <div></div>
+                        <div style="color: #fff;">Qty: ${pos.total_qty}</div>
+                        <div class="${profitTextClass}">${pos.total_pnl >= 0 ? '+' : ''}$${pos.total_pnl.toFixed(2)}</div>
+                        <div></div>
+                        <div></div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function toggleExecClosures(index) {
+    const details = document.getElementById(`exec-closures-${index}`);
+    const icon = document.getElementById(`exec-expand-${index}`);
+    
+    if (details.classList.contains('expanded')) {
+        details.classList.remove('expanded');
+        icon.classList.remove('expanded');
+    } else {
+        details.classList.add('expanded');
+        icon.classList.add('expanded');
     }
 }
 
