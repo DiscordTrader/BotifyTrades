@@ -9511,6 +9511,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elif broker_name_lower == 'upstox' and self.upstox_broker and self.upstox_broker.connected:
                             broker_instance = self.upstox_broker
                             _original_print(f"[MULTI-BROKER] Using Upstox LIVE broker (India)")
+                        # Robinhood (LIVE ONLY - NO PAPER MODE): 'robinhood', 'ROBINHOOD', 'rh'
+                        elif broker_name_lower in ('robinhood', 'rh') and self.robinhood_broker and self.robinhood_broker.connected:
+                            broker_instance = self.robinhood_broker
+                            _original_print(f"[MULTI-BROKER] Using Robinhood LIVE broker (WARNING: NO PAPER MODE)")
                         else:
                             _original_print(f"[MULTI-BROKER] ⚠️  Broker '{broker_name}' not available or not connected")
                             _original_print(f"[DEBUG] Requested: '{broker_name_lower}', paper_broker: {getattr(self.paper_broker, 'name', None) if self.paper_broker else None}, broker: {getattr(self.broker, 'name', None) if self.broker else None}")
