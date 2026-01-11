@@ -9124,13 +9124,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE'])
                 
                 if uses_modern_signature:
-                    result = await broker_instance.place_stock_order(
-                        symbol=signal['symbol'],
-                        action=signal['action'],
-                        quantity=signal['qty'],
-                        price=signal.get('price'),  # None for market orders
-                        channel_id=signal.get('channel_id')
-                    )
+                    # Some brokers don't accept channel_id - only pass to those that do
+                    if 'ALPACA' in broker_upper:
+                        result = await broker_instance.place_stock_order(
+                            symbol=signal['symbol'],
+                            action=signal['action'],
+                            quantity=signal['qty'],
+                            price=signal.get('price'),  # None for market orders
+                            channel_id=signal.get('channel_id')
+                        )
+                    else:
+                        # Robinhood, Schwab, IBKR, Tastytrade don't accept channel_id
+                        result = await broker_instance.place_stock_order(
+                            symbol=signal['symbol'],
+                            action=signal['action'],
+                            quantity=signal['qty'],
+                            price=signal.get('price')  # None for market orders
+                        )
                 else:
                     # Webull and other legacy brokers (uses qty, not quantity)
                     result = await broker_instance.place_stock_order(
