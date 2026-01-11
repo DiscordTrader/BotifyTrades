@@ -260,6 +260,44 @@ class RobinhoodBroker(BrokerInterface):
             print(f"[{self.name}] Error getting orders: {e}")
             return []
     
+    def get_options_expiration_dates(self, symbol: str) -> list:
+        """Get available option expiration dates for a symbol.
+        
+        Uses robin-stocks library to fetch tradable options and extract unique expiration dates.
+        
+        Args:
+            symbol: Underlying stock symbol
+            
+        Returns:
+            List of expiration dates in YYYY-MM-DD format, sorted chronologically
+        """
+        if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
+            print(f"[{self.name}] Not connected, cannot fetch expirations")
+            return []
+        
+        try:
+            options = rh.options.find_tradable_options(symbol)
+            
+            if not options:
+                print(f"[{self.name}] No tradable options found for {symbol}")
+                return []
+            
+            expirations = set()
+            for opt in options:
+                exp = opt.get('expiration_date')
+                if exp:
+                    expirations.add(exp)
+            
+            sorted_expirations = sorted(list(expirations))
+            print(f"[{self.name}] Found {len(sorted_expirations)} expiration dates for {symbol}")
+            return sorted_expirations
+            
+        except Exception as e:
+            print(f"[{self.name}] Error fetching expiration dates for {symbol}: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
     def get_option_chain(self, symbol: str, expiry: str) -> Dict[str, Any]:
         """Get option chain for a symbol and expiry date.
         
