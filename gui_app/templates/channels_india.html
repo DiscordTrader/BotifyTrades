@@ -3,18 +3,290 @@
 {% block title %}India Markets - Ψ∿ BotifyTrades{% endblock %}
 
 {% block content %}
+<style>
+.broker-selector {
+    display: flex;
+    gap: 8px;
+    padding: 4px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 153, 0, 0.2);
+}
+.broker-selector-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: #8E8E93;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+.broker-selector-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+.broker-selector-btn.active {
+    background: var(--broker-color, #ff9900);
+    color: white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+.broker-selector-btn .broker-icon {
+    font-size: 18px;
+}
+.broker-selector-btn .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ff6b6b;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+}
+.broker-selector-btn .status-dot.connected {
+    background: #00ff88;
+    box-shadow: 0 0 8px #00ff88;
+}
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.broker-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+.broker-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--broker-color, #ff9900);
+}
+.status-badge {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.status-badge.connected {
+    background: rgba(0, 255, 136, 0.15);
+    color: #00ff88;
+    border: 1px solid rgba(0, 255, 136, 0.3);
+}
+.status-badge.disconnected {
+    background: rgba(255, 107, 107, 0.15);
+    color: #ff6b6b;
+    border: 1px solid rgba(255, 107, 107, 0.3);
+}
+.account-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+.stat-card {
+    background: linear-gradient(135deg, rgba(var(--broker-rgb, 255, 153, 0), 0.1), rgba(var(--broker-rgb, 255, 153, 0), 0.02));
+    border: 1px solid rgba(var(--broker-rgb, 255, 153, 0), 0.2);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+}
+.stat-card .label {
+    font-size: 11px;
+    color: #8E8E93;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+}
+.stat-card .value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--broker-color, #ff9900);
+}
+.stat-card .subtext {
+    font-size: 11px;
+    color: #8E8E93;
+    margin-top: 4px;
+}
+.dashboard-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 20px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.dashboard-tab {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #8E8E93;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.dashboard-tab:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+}
+.dashboard-tab.active {
+    background: var(--broker-color, #ff9900);
+    color: white;
+}
+.dashboard-tab .count {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+}
+.tab-content {
+    display: none;
+}
+.tab-content.active {
+    display: block;
+}
+.data-table-pro {
+    width: 100%;
+    border-collapse: collapse;
+}
+.data-table-pro thead tr {
+    background: rgba(var(--broker-rgb, 255, 153, 0), 0.08);
+}
+.data-table-pro th {
+    padding: 14px 16px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--broker-color, #ff9900);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    text-align: left;
+    border-bottom: 1px solid rgba(var(--broker-rgb, 255, 153, 0), 0.2);
+}
+.data-table-pro td {
+    padding: 14px 16px;
+    font-size: 13px;
+    color: #ffffff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.data-table-pro tbody tr:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #8E8E93;
+}
+.empty-state .icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+.empty-state .title {
+    font-size: 16px;
+    color: #ffffff;
+    margin-bottom: 8px;
+}
+.empty-state .description {
+    font-size: 13px;
+    max-width: 400px;
+    margin: 0 auto;
+}
+.btn-reconnect {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: 1px solid rgba(255, 193, 7, 0.4);
+    border-radius: 8px;
+    background: rgba(255, 193, 7, 0.1);
+    color: #ffc107;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.btn-reconnect:hover {
+    background: rgba(255, 193, 7, 0.2);
+    transform: translateY(-1px);
+}
+.btn-reconnect:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.btn-refresh {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: 1px solid rgba(var(--broker-rgb, 255, 153, 0), 0.4);
+    border-radius: 8px;
+    background: rgba(var(--broker-rgb, 255, 153, 0), 0.1);
+    color: var(--broker-color, #ff9900);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.btn-refresh:hover {
+    background: rgba(var(--broker-rgb, 255, 153, 0), 0.2);
+}
+.pnl-positive { color: #00ff88 !important; }
+.pnl-negative { color: #ff6b6b !important; }
+.side-buy { color: #00ff88; font-weight: 600; }
+.side-sell { color: #ff6b6b; font-weight: 600; }
+.status-pill {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+.status-open { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
+.status-filled { background: rgba(0, 255, 136, 0.2); color: #00ff88; }
+.status-cancelled, .status-rejected { background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }
+.status-pending { background: rgba(156, 39, 176, 0.2); color: #9c27b0; }
+.status-watching { background: rgba(0, 212, 255, 0.2); color: #00d4ff; }
+.loading-skeleton {
+    background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 4px;
+}
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+</style>
+
 <!-- India Market Header -->
 <div class="table-container" style="margin-bottom: 24px; background: linear-gradient(135deg, #1a0f2e 0%, #2d1f4a 50%, #1a2f1a 100%); border: 1px solid rgba(255, 153, 0, 0.3);">
     <div style="padding: 24px; display: flex; justify-content: space-between; align-items: center;">
         <div>
             <h1 style="margin: 0 0 8px 0; font-size: 28px; color: #ff9900; display: flex; align-items: center; gap: 12px;">
-                🇮🇳 India Market Channels
+                🇮🇳 India Markets
             </h1>
             <p style="margin: 0; color: #b4b8c5; font-size: 14px;">
                 NSE • BSE • MCX — Trade NIFTY, BANKNIFTY, and Indian equities
             </p>
         </div>
-        <div style="display: flex; gap: 12px; align-items: center;">
+        <div style="display: flex; gap: 24px; align-items: center;">
             <div style="text-align: right;">
                 <div style="font-size: 11px; color: #8E8E93; text-transform: uppercase; letter-spacing: 1px;">Trading Hours</div>
                 <div style="font-size: 14px; color: #00ff88; font-weight: 600;">9:15 AM - 3:30 PM IST</div>
@@ -28,284 +300,198 @@
     </div>
 </div>
 
-<!-- Broker Status Cards -->
-<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 32px;">
-    <!-- DhanQ -->
-    <div class="table-container" style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border: 1px solid rgba(138, 43, 226, 0.4);">
-        <div class="table-header" style="border-bottom: 1px solid rgba(138, 43, 226, 0.2); display: flex; justify-content: space-between; align-items: center;">
-            <h3 class="table-title" style="color: #8a2be2; margin: 0;">🔮 DhanQ</h3>
-            <span id="dhanq-status-badge" style="padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; background: rgba(142, 142, 147, 0.2); color: #8E8E93;">CHECKING...</span>
+<!-- Broker Selector -->
+<div class="table-container" style="margin-bottom: 24px; padding: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+        <div class="broker-selector" id="broker-selector">
+            <button class="broker-selector-btn" data-broker="zerodha" style="--broker-color: #ff5722;">
+                <span class="broker-icon">🔥</span>
+                <span>Zerodha</span>
+                <span class="status-dot" id="zerodha-dot"></span>
+            </button>
+            <button class="broker-selector-btn" data-broker="dhanq" style="--broker-color: #8a2be2;">
+                <span class="broker-icon">🔮</span>
+                <span>DhanQ</span>
+                <span class="status-dot" id="dhanq-dot"></span>
+            </button>
+            <button class="broker-selector-btn" data-broker="upstox" style="--broker-color: #00c853;">
+                <span class="broker-icon">📈</span>
+                <span>Upstox</span>
+                <span class="status-dot" id="upstox-dot"></span>
+            </button>
         </div>
-        <div style="padding: 20px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
-                <div style="background: rgba(138, 43, 226, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(138, 43, 226, 0.2);">
-                    <div style="color: #8E8E93; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Available</div>
-                    <div id="dhanq-balance" style="font-size: 18px; font-weight: bold; color: #8a2be2;">₹0.00</div>
-                </div>
-                <div style="background: rgba(138, 43, 226, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(138, 43, 226, 0.2);">
-                    <div style="color: #8E8E93; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Margin Used</div>
-                    <div id="dhanq-margin" style="font-size: 18px; font-weight: bold; color: #ff9900;">₹0.00</div>
-                </div>
-            </div>
-            <div style="padding: 10px; background: rgba(255, 165, 0, 0.1); border: 1px solid rgba(255, 165, 0, 0.3); border-radius: 6px; font-size: 11px; color: #ffb700;">
-                ⚠️ Requires static IP whitelisting
-            </div>
-        </div>
-    </div>
-    
-    <!-- Upstox -->
-    <div class="table-container" style="background: linear-gradient(135deg, #0f1f0f 0%, #1a2f1a 100%); border: 1px solid rgba(0, 200, 83, 0.4);">
-        <div class="table-header" style="border-bottom: 1px solid rgba(0, 200, 83, 0.2); display: flex; justify-content: space-between; align-items: center;">
-            <h3 class="table-title" style="color: #00c853; margin: 0;">📈 Upstox</h3>
-            <div style="display: flex; gap: 8px; align-items: center;">
-                <button id="upstox-reconnect-btn" onclick="reconnectUpstox()" style="display: none; background: rgba(255, 165, 0, 0.2); border: 1px solid rgba(255, 165, 0, 0.4); color: #ffb700; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 10px; font-weight: 600;">🔌 Reconnect</button>
-                <span id="upstox-status-badge" style="padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; background: rgba(142, 142, 147, 0.2); color: #8E8E93;">CHECKING...</span>
-            </div>
-        </div>
-        <div style="padding: 20px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
-                <div style="background: rgba(0, 200, 83, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(0, 200, 83, 0.2);">
-                    <div style="color: #8E8E93; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Available</div>
-                    <div id="upstox-balance" style="font-size: 18px; font-weight: bold; color: #00c853;">₹0.00</div>
-                </div>
-                <div style="background: rgba(0, 200, 83, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(0, 200, 83, 0.2);">
-                    <div style="color: #8E8E93; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Positions</div>
-                    <div id="upstox-positions" style="font-size: 18px; font-weight: bold; color: #00ff88;">0</div>
-                </div>
-            </div>
-            <div id="upstox-status-msg" style="font-size: 11px; color: #8E8E93; text-align: center;">
-                OAuth2 authentication required
-            </div>
-        </div>
-    </div>
-    
-    <!-- Zerodha -->
-    <div class="table-container" style="background: linear-gradient(135deg, #1f0f0f 0%, #2f1a1a 100%); border: 1px solid rgba(255, 87, 34, 0.4);">
-        <div class="table-header" style="border-bottom: 1px solid rgba(255, 87, 34, 0.2); display: flex; justify-content: space-between; align-items: center;">
-            <h3 class="table-title" style="color: #ff5722; margin: 0;">🔥 Zerodha</h3>
-            <span id="zerodha-status-badge" style="padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; background: rgba(142, 142, 147, 0.2); color: #8E8E93;">CHECKING...</span>
-        </div>
-        <div style="padding: 20px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
-                <div style="background: rgba(255, 87, 34, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(255, 87, 34, 0.2);">
-                    <div style="color: #8E8E93; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Available</div>
-                    <div id="zerodha-balance" style="font-size: 18px; font-weight: bold; color: #ff5722;">₹0.00</div>
-                </div>
-                <div style="background: rgba(255, 87, 34, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(255, 87, 34, 0.2);">
-                    <div style="color: #8E8E93; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Positions</div>
-                    <div id="zerodha-positions" style="font-size: 18px; font-weight: bold; color: #00ff88;">0</div>
-                </div>
-            </div>
-            <div style="font-size: 11px; color: #8E8E93; text-align: center;">
-                Kite Connect API
-            </div>
+        <div style="display: flex; align-items: center; gap: 8px; color: #8E8E93; font-size: 12px;">
+            <span style="color: #ff6b6b;">⚠️</span>
+            All India brokers are <strong style="color: #ff6b6b;">LIVE TRADING</strong> only - No paper trading
         </div>
     </div>
 </div>
 
-<!-- Upstox Dashboard Section -->
-<div id="upstox-dashboard" class="table-container" style="margin-bottom: 24px; background: linear-gradient(135deg, #0f1f0f 0%, #1a2f1a 100%); border: 1px solid rgba(0, 200, 83, 0.4);">
-    <div class="table-header" style="border-bottom: 1px solid rgba(0, 200, 83, 0.2); display: flex; justify-content: space-between; align-items: center;">
-        <h3 class="table-title" style="color: #00c853; margin: 0;">📈 Upstox Account Dashboard</h3>
-        <button onclick="refreshUpstoxData()" style="background: rgba(0, 200, 83, 0.2); border: 1px solid rgba(0, 200, 83, 0.4); color: #00c853; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">🔄 Refresh</button>
-    </div>
-    <div style="padding: 20px;">
-        <!-- Tabs for Orders -->
-        <div style="display: flex; gap: 8px; margin-bottom: 20px;">
-            <button id="tab-positions" onclick="switchUpstoxTab('positions')" class="upstox-tab active" style="padding: 10px 20px; border: 1px solid rgba(0, 200, 83, 0.4); background: rgba(0, 200, 83, 0.2); color: #00c853; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;">📊 Positions</button>
-            <button id="tab-orders" onclick="switchUpstoxTab('orders')" class="upstox-tab" style="padding: 10px 20px; border: 1px solid rgba(0, 200, 83, 0.2); background: transparent; color: #8E8E93; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;">📋 Orders</button>
-            <button id="tab-trades" onclick="switchUpstoxTab('trades')" class="upstox-tab" style="padding: 10px 20px; border: 1px solid rgba(0, 200, 83, 0.2); background: transparent; color: #8E8E93; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;">💹 Trades</button>
-            <button id="tab-conditional" onclick="switchUpstoxTab('conditional')" class="upstox-tab" style="padding: 10px 20px; border: 1px solid rgba(0, 200, 83, 0.2); background: transparent; color: #8E8E93; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;">⏰ Conditional</button>
-            <button id="tab-amo" onclick="switchUpstoxTab('amo')" class="upstox-tab" style="padding: 10px 20px; border: 1px solid rgba(0, 200, 83, 0.2); background: transparent; color: #8E8E93; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;">🌙 AMO</button>
+<!-- Broker Dashboard (Dynamic) -->
+<div id="broker-dashboard" class="table-container" style="margin-bottom: 24px; --broker-color: #ff5722; --broker-rgb: 255, 87, 34;">
+    <div style="padding: 24px;">
+        <!-- Dashboard Header -->
+        <div class="dashboard-header">
+            <div class="broker-info">
+                <div class="broker-title" id="dashboard-broker-title">
+                    <span id="dashboard-broker-icon">🔥</span>
+                    <span id="dashboard-broker-name">Zerodha</span>
+                </div>
+                <span class="status-badge disconnected" id="dashboard-status-badge">NOT CONNECTED</span>
+                <span id="dashboard-user-id" style="color: #8E8E93; font-size: 13px;"></span>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button class="btn-reconnect" id="btn-reconnect" onclick="reconnectBroker()">
+                    <span>🔌</span> Reconnect
+                </button>
+                <button class="btn-refresh" id="btn-refresh" onclick="refreshDashboard()">
+                    <span>🔄</span> Refresh
+                </button>
+            </div>
+        </div>
+        
+        <!-- Account Stats -->
+        <div class="account-stats" id="account-stats">
+            <div class="stat-card">
+                <div class="label">Available Balance</div>
+                <div class="value" id="stat-available">₹0.00</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Margin Used</div>
+                <div class="value" id="stat-margin">₹0.00</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Open Positions</div>
+                <div class="value" id="stat-positions">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Today's P&L</div>
+                <div class="value" id="stat-pnl">₹0.00</div>
+            </div>
+        </div>
+        
+        <!-- Dashboard Tabs -->
+        <div class="dashboard-tabs">
+            <button class="dashboard-tab active" data-tab="positions" onclick="switchDashboardTab('positions')">
+                📊 Positions <span class="count" id="tab-positions-count">0</span>
+            </button>
+            <button class="dashboard-tab" data-tab="orders" onclick="switchDashboardTab('orders')">
+                📋 Orders <span class="count" id="tab-orders-count">0</span>
+            </button>
+            <button class="dashboard-tab" data-tab="trades" onclick="switchDashboardTab('trades')">
+                💹 Trades <span class="count" id="tab-trades-count">0</span>
+            </button>
+            <button class="dashboard-tab" data-tab="conditional" onclick="switchDashboardTab('conditional')">
+                ⏰ Conditional <span class="count" id="tab-conditional-count">0</span>
+            </button>
+            <button class="dashboard-tab" data-tab="amo" onclick="switchDashboardTab('amo')">
+                🌙 AMO <span class="count" id="tab-amo-count">0</span>
+            </button>
         </div>
         
         <!-- Positions Tab -->
-        <div id="upstox-positions-tab" class="upstox-tab-content">
-            <table class="data-table" style="width: 100%; border-collapse: collapse;">
+        <div class="tab-content active" id="tab-positions">
+            <table class="data-table-pro">
                 <thead>
-                    <tr style="background: rgba(0, 200, 83, 0.05);">
-                        <th style="text-align: left; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Symbol</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Qty</th>
-                        <th style="text-align: right; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Avg Price</th>
-                        <th style="text-align: right; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">LTP</th>
-                        <th style="text-align: right; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">P&L</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Product</th>
+                    <tr>
+                        <th>Symbol</th>
+                        <th style="text-align: center;">Qty</th>
+                        <th style="text-align: right;">Avg Price</th>
+                        <th style="text-align: right;">LTP</th>
+                        <th style="text-align: right;">P&L</th>
+                        <th style="text-align: center;">Product</th>
                     </tr>
                 </thead>
-                <tbody id="upstox-positions-body">
-                    <tr><td colspan="6" style="text-align: center; padding: 40px; color: #8E8E93;">Loading positions...</td></tr>
+                <tbody id="positions-body">
+                    <tr><td colspan="6" class="empty-state"><div class="icon">📊</div><div class="title">No Positions</div><div class="description">Open positions will appear here</div></td></tr>
                 </tbody>
             </table>
         </div>
         
         <!-- Orders Tab -->
-        <div id="upstox-orders-tab" class="upstox-tab-content" style="display: none;">
-            <!-- Order Status Filter -->
-            <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-                <button onclick="filterUpstoxOrders('all')" class="order-filter active" style="padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; background: rgba(0, 200, 83, 0.2); border: 1px solid rgba(0, 200, 83, 0.4); color: #00c853;">All</button>
-                <button onclick="filterUpstoxOrders('open')" class="order-filter" style="padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; background: transparent; border: 1px solid rgba(255, 193, 7, 0.4); color: #ffc107;">Open</button>
-                <button onclick="filterUpstoxOrders('filled')" class="order-filter" style="padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; background: transparent; border: 1px solid rgba(0, 255, 136, 0.4); color: #00ff88;">Filled</button>
-                <button onclick="filterUpstoxOrders('rejected')" class="order-filter" style="padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; background: transparent; border: 1px solid rgba(255, 107, 107, 0.4); color: #ff6b6b;">Cancelled</button>
-            </div>
-            <table class="data-table" style="width: 100%; border-collapse: collapse;">
+        <div class="tab-content" id="tab-orders">
+            <table class="data-table-pro">
                 <thead>
-                    <tr style="background: rgba(0, 200, 83, 0.05);">
-                        <th style="text-align: left; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Order ID</th>
-                        <th style="text-align: left; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Symbol</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Type</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Qty</th>
-                        <th style="text-align: right; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Price</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Status</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Time</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Action</th>
+                    <tr>
+                        <th>Order ID</th>
+                        <th>Symbol</th>
+                        <th style="text-align: center;">Side</th>
+                        <th style="text-align: center;">Qty</th>
+                        <th style="text-align: right;">Price</th>
+                        <th style="text-align: center;">Status</th>
+                        <th style="text-align: center;">Time</th>
+                        <th style="text-align: center;">Action</th>
                     </tr>
                 </thead>
-                <tbody id="upstox-orders-body">
-                    <tr><td colspan="8" style="text-align: center; padding: 40px; color: #8E8E93;">Loading orders...</td></tr>
+                <tbody id="orders-body">
+                    <tr><td colspan="8" class="empty-state"><div class="icon">📋</div><div class="title">No Orders</div><div class="description">Orders will appear here</div></td></tr>
                 </tbody>
             </table>
         </div>
         
         <!-- Trades Tab -->
-        <div id="upstox-trades-tab" class="upstox-tab-content" style="display: none;">
-            <!-- Execution Timing Stats -->
-            <div id="execution-timing-stats" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
-                <div style="background: linear-gradient(135deg, rgba(0, 200, 83, 0.1), rgba(0, 200, 83, 0.05)); border: 1px solid rgba(0, 200, 83, 0.3); border-radius: 12px; padding: 16px; text-align: center;">
-                    <div style="font-size: 10px; color: #8E8E93; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Avg Latency</div>
-                    <div id="stat-avg-latency" style="font-size: 24px; font-weight: 700; color: #00c853;">--</div>
-                </div>
-                <div style="background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(0, 212, 255, 0.05)); border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 12px; padding: 16px; text-align: center;">
-                    <div style="font-size: 10px; color: #8E8E93; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Min Latency</div>
-                    <div id="stat-min-latency" style="font-size: 24px; font-weight: 700; color: #00d4ff;">--</div>
-                </div>
-                <div style="background: linear-gradient(135deg, rgba(255, 193, 7, 0.1), rgba(255, 193, 7, 0.05)); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 12px; padding: 16px; text-align: center;">
-                    <div style="font-size: 10px; color: #8E8E93; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Max Latency</div>
-                    <div id="stat-max-latency" style="font-size: 24px; font-weight: 700; color: #ffc107;">--</div>
-                </div>
-                <div style="background: linear-gradient(135deg, rgba(156, 39, 176, 0.1), rgba(156, 39, 176, 0.05)); border: 1px solid rgba(156, 39, 176, 0.3); border-radius: 12px; padding: 16px; text-align: center;">
-                    <div style="font-size: 10px; color: #8E8E93; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Total Trades</div>
-                    <div id="stat-total-trades" style="font-size: 24px; font-weight: 700; color: #9c27b0;">--</div>
-                </div>
-            </div>
-            
-            <!-- Trades Table -->
-            <table class="data-table" style="width: 100%; border-collapse: collapse;">
+        <div class="tab-content" id="tab-trades">
+            <table class="data-table-pro">
                 <thead>
-                    <tr style="background: rgba(0, 200, 83, 0.05);">
-                        <th style="text-align: left; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Trade ID</th>
-                        <th style="text-align: left; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Symbol</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Side</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Qty</th>
-                        <th style="text-align: right; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Price</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Executed</th>
+                    <tr>
+                        <th>Trade ID</th>
+                        <th>Symbol</th>
+                        <th style="text-align: center;">Side</th>
+                        <th style="text-align: center;">Qty</th>
+                        <th style="text-align: right;">Price</th>
+                        <th style="text-align: center;">Time</th>
                     </tr>
                 </thead>
-                <tbody id="upstox-trades-body">
-                    <tr><td colspan="6" style="text-align: center; padding: 40px; color: #8E8E93;">Loading trades...</td></tr>
+                <tbody id="trades-body">
+                    <tr><td colspan="6" class="empty-state"><div class="icon">💹</div><div class="title">No Trades</div><div class="description">Executed trades will appear here</div></td></tr>
                 </tbody>
             </table>
-            
-            <!-- Execution Timeline -->
-            <div id="execution-timeline" style="margin-top: 20px; display: none;">
-                <h4 style="color: #00c853; font-size: 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 18px;">⚡</span> Signal to Execution Timeline
-                </h4>
-                <div id="timeline-container" style="border: 1px solid rgba(0, 200, 83, 0.2); border-radius: 8px; overflow: hidden;"></div>
-            </div>
-            
-            <!-- Empty State for Timing -->
-            <div id="timing-empty-state" style="margin-top: 20px; padding: 24px; background: rgba(0, 200, 83, 0.03); border: 1px dashed rgba(0, 200, 83, 0.2); border-radius: 12px; text-align: center;">
-                <div style="font-size: 32px; margin-bottom: 12px;">⏱️</div>
-                <div style="font-size: 14px; color: #ffffff; margin-bottom: 8px;">Execution Timing Metrics</div>
-                <div style="font-size: 12px; color: #8E8E93; max-width: 400px; margin: 0 auto;">
-                    Once you execute trades through Upstox, this section will display signal-to-execution timing with channel names and latency comparisons.
-                </div>
-            </div>
         </div>
         
         <!-- Conditional Orders Tab -->
-        <div id="upstox-conditional-tab" class="upstox-tab-content" style="display: none;">
+        <div class="tab-content" id="tab-conditional">
             <div style="margin-bottom: 16px; padding: 12px; background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 8px;">
-                <div style="font-size: 12px; color: #ffc107;">⚡ Conditional orders monitor price conditions and execute when triggered. Supports India market signals like "BUY NIFTY 25900 CE ABOVE ₹190 SL ₹180"</div>
+                <div style="font-size: 12px; color: #ffc107;">⚡ Conditional orders monitor price conditions and execute when triggered</div>
             </div>
-            
-            <!-- Live Monitor Status -->
-            <div id="conditional-monitor-status" style="margin-bottom: 16px; padding: 12px; background: rgba(0, 200, 83, 0.05); border: 1px solid rgba(0, 200, 83, 0.2); border-radius: 8px;">
-                <div style="color: #8E8E93; font-size: 12px;">Loading monitor status...</div>
-            </div>
-            
-            <table class="data-table" style="width: 100%; border-collapse: collapse;">
+            <table class="data-table-pro">
                 <thead>
-                    <tr style="background: rgba(0, 200, 83, 0.05);">
-                        <th style="text-align: left; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Symbol</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Trigger</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">LTP</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Status</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">SL/PT</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Broker</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Created</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #00c853; text-transform: uppercase;">Actions</th>
+                    <tr>
+                        <th>Symbol</th>
+                        <th style="text-align: center;">Trigger</th>
+                        <th style="text-align: center;">LTP</th>
+                        <th style="text-align: center;">Status</th>
+                        <th style="text-align: center;">SL/PT</th>
+                        <th style="text-align: center;">Created</th>
+                        <th style="text-align: center;">Actions</th>
                     </tr>
                 </thead>
-                <tbody id="upstox-conditional-body">
-                    <tr><td colspan="8" style="text-align: center; padding: 40px; color: #8E8E93;">Loading conditional orders...</td></tr>
+                <tbody id="conditional-body">
+                    <tr><td colspan="7" class="empty-state"><div class="icon">⏰</div><div class="title">No Conditional Orders</div><div class="description">Price-triggered orders will appear here</div></td></tr>
                 </tbody>
             </table>
         </div>
         
-        <!-- AMO (After Market Orders) Tab -->
-        <div id="upstox-amo-tab" class="upstox-tab-content" style="display: none;">
-            <!-- AMO Toggle and Info -->
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 16px; background: linear-gradient(135deg, rgba(156, 39, 176, 0.1), rgba(156, 39, 176, 0.05)); border: 1px solid rgba(156, 39, 176, 0.3); border-radius: 12px;">
-                <div>
-                    <div style="font-size: 14px; font-weight: 600; color: #9c27b0; margin-bottom: 4px;">🌙 After Market Order Queue</div>
-                    <div style="font-size: 12px; color: #8E8E93;">Orders placed during blackout (12:00 AM - 5:30 AM IST) are queued and auto-submitted after market opens</div>
-                </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <span style="font-size: 12px; color: #8E8E93;">Accept AMO Orders:</span>
-                    <label class="toggle-switch" style="position: relative; display: inline-block; width: 50px; height: 26px;">
-                        <input type="checkbox" id="amo-queue-toggle" onchange="toggleAmoQueue(this.checked)" style="opacity: 0; width: 0; height: 0;">
-                        <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #3a3a3c; transition: .3s; border-radius: 26px;"></span>
-                    </label>
-                </div>
+        <!-- AMO Tab -->
+        <div class="tab-content" id="tab-amo">
+            <div style="margin-bottom: 16px; padding: 12px; background: rgba(156, 39, 176, 0.1); border: 1px solid rgba(156, 39, 176, 0.3); border-radius: 8px;">
+                <div style="font-size: 12px; color: #9c27b0;">🌙 After Market Orders - Queued during blackout hours and submitted at market open</div>
             </div>
-            
-            <!-- AMO Orders Status Filters -->
-            <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-                <button onclick="filterAmoOrders('all')" class="amo-filter active" style="padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; background: rgba(156, 39, 176, 0.2); border: 1px solid rgba(156, 39, 176, 0.4); color: #9c27b0;">All</button>
-                <button onclick="filterAmoOrders('PENDING')" class="amo-filter" style="padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; background: transparent; border: 1px solid rgba(255, 193, 7, 0.4); color: #ffc107;">Pending</button>
-                <button onclick="filterAmoOrders('SUBMITTED')" class="amo-filter" style="padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; background: transparent; border: 1px solid rgba(0, 255, 136, 0.4); color: #00ff88;">Submitted</button>
-                <button onclick="filterAmoOrders('CANCELLED')" class="amo-filter" style="padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; background: transparent; border: 1px solid rgba(255, 107, 107, 0.4); color: #ff6b6b;">Cancelled</button>
-                <button onclick="filterAmoOrders('FAILED')" class="amo-filter" style="padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; background: transparent; border: 1px solid rgba(255, 87, 34, 0.4); color: #ff5722;">Failed</button>
-            </div>
-            
-            <!-- AMO Orders Table -->
-            <table class="data-table" style="width: 100%; border-collapse: collapse;">
+            <table class="data-table-pro">
                 <thead>
-                    <tr style="background: rgba(156, 39, 176, 0.1);">
-                        <th style="text-align: left; padding: 12px; font-size: 11px; color: #9c27b0; text-transform: uppercase;">Symbol</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #9c27b0; text-transform: uppercase;">Side</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #9c27b0; text-transform: uppercase;">Qty</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #9c27b0; text-transform: uppercase;">Order Type</th>
-                        <th style="text-align: right; padding: 12px; font-size: 11px; color: #9c27b0; text-transform: uppercase;">Price</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #9c27b0; text-transform: uppercase;">Status</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #9c27b0; text-transform: uppercase;">Queued At</th>
-                        <th style="text-align: center; padding: 12px; font-size: 11px; color: #9c27b0; text-transform: uppercase;">Action</th>
+                    <tr>
+                        <th>Symbol</th>
+                        <th style="text-align: center;">Side</th>
+                        <th style="text-align: center;">Qty</th>
+                        <th style="text-align: right;">Price</th>
+                        <th style="text-align: center;">Status</th>
+                        <th style="text-align: center;">Queued At</th>
+                        <th style="text-align: center;">Action</th>
                     </tr>
                 </thead>
-                <tbody id="upstox-amo-body">
-                    <tr><td colspan="8" style="text-align: center; padding: 40px; color: #8E8E93;">Loading AMO orders...</td></tr>
+                <tbody id="amo-body">
+                    <tr><td colspan="7" class="empty-state"><div class="icon">🌙</div><div class="title">No AMO Orders</div><div class="description">After-market orders will appear here</div></td></tr>
                 </tbody>
             </table>
-            
-            <!-- AMO Empty State -->
-            <div id="amo-empty-state" style="display: none; margin-top: 20px; padding: 24px; background: rgba(156, 39, 176, 0.03); border: 1px dashed rgba(156, 39, 176, 0.2); border-radius: 12px; text-align: center;">
-                <div style="font-size: 32px; margin-bottom: 12px;">🌙</div>
-                <div style="font-size: 14px; color: #ffffff; margin-bottom: 8px;">No AMO Orders</div>
-                <div style="font-size: 12px; color: #8E8E93; max-width: 400px; margin: 0 auto;">
-                    Orders placed during Upstox blackout hours (12:00 AM - 5:30 AM IST) will appear here and be auto-submitted when market opens.
-                </div>
-            </div>
         </div>
     </div>
 </div>
@@ -406,6 +592,13 @@
             <div class="form-group">
                 <label class="form-label">Select India Brokers</label>
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 8px;">
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(255, 87, 34, 0.1); border: 1px solid rgba(255, 87, 34, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                        <input type="checkbox" id="new-broker-ZERODHA" value="ZERODHA" style="width: 16px; height: 16px; cursor: pointer;">
+                        <div>
+                            <div style="font-weight: 600; color: #ff5722; font-size: 12px;">🔥 Zerodha</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">Kite Connect</div>
+                        </div>
+                    </label>
                     <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(138, 43, 226, 0.1); border: 1px solid rgba(138, 43, 226, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
                         <input type="checkbox" id="new-broker-DHANQ" value="DHANQ" style="width: 16px; height: 16px; cursor: pointer;">
                         <div>
@@ -414,17 +607,10 @@
                         </div>
                     </label>
                     <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(0, 200, 83, 0.1); border: 1px solid rgba(0, 200, 83, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                        <input type="checkbox" id="new-broker-UPSTOX" value="UPSTOX" style="width: 16px; height: 16px; cursor: pointer;" checked>
+                        <input type="checkbox" id="new-broker-UPSTOX" value="UPSTOX" style="width: 16px; height: 16px; cursor: pointer;">
                         <div>
                             <div style="font-weight: 600; color: #00c853; font-size: 12px;">📈 Upstox</div>
                             <div style="font-size: 10px; color: var(--text-muted);">Upstox API</div>
-                        </div>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(255, 87, 34, 0.1); border: 1px solid rgba(255, 87, 34, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                        <input type="checkbox" id="new-broker-ZERODHA" value="ZERODHA" style="width: 16px; height: 16px; cursor: pointer;">
-                        <div>
-                            <div style="font-weight: 600; color: #ff5722; font-size: 12px;">🔥 Zerodha</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">Kite Connect</div>
                         </div>
                     </label>
                 </div>
@@ -486,6 +672,353 @@
 <script src="{{ url_for('static', filename='js/channels_india.js') }}"></script>
 <script>
 const MARKET = 'IN';
+const BROKER_CONFIG = {
+    zerodha: { name: 'Zerodha', icon: '🔥', color: '#ff5722', rgb: '255, 87, 34' },
+    dhanq: { name: 'DhanQ', icon: '🔮', color: '#8a2be2', rgb: '138, 43, 226' },
+    upstox: { name: 'Upstox', icon: '📈', color: '#00c853', rgb: '0, 200, 83' }
+};
+
+let selectedBroker = 'zerodha';
+let brokerStatuses = {};
+let dashboardData = { positions: [], orders: [], trades: [], conditional: [], amo: [] };
+let refreshInterval = null;
+
+function selectBroker(broker) {
+    selectedBroker = broker;
+    const config = BROKER_CONFIG[broker];
+    
+    document.querySelectorAll('.broker-selector-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.broker === broker) {
+            btn.classList.add('active');
+        }
+    });
+    
+    const dashboard = document.getElementById('broker-dashboard');
+    dashboard.style.setProperty('--broker-color', config.color);
+    dashboard.style.setProperty('--broker-rgb', config.rgb);
+    
+    document.getElementById('dashboard-broker-icon').textContent = config.icon;
+    document.getElementById('dashboard-broker-name').textContent = config.name;
+    
+    loadBrokerDashboard();
+}
+
+async function loadBrokerStatuses() {
+    try {
+        const response = await fetch('/api/india/brokers');
+        const data = await response.json();
+        if (data.success) {
+            data.brokers.forEach(broker => {
+                brokerStatuses[broker.id] = broker.connected;
+                const dot = document.getElementById(`${broker.id}-dot`);
+                if (dot) {
+                    dot.classList.toggle('connected', broker.connected);
+                }
+            });
+        }
+    } catch (e) {
+        console.error('Failed to load broker statuses:', e);
+    }
+}
+
+async function loadBrokerDashboard() {
+    const broker = selectedBroker;
+    const config = BROKER_CONFIG[broker];
+    
+    try {
+        const statusRes = await fetch(`/api/india/${broker}/status`);
+        const statusData = await statusRes.json();
+        
+        const badge = document.getElementById('dashboard-status-badge');
+        const userId = document.getElementById('dashboard-user-id');
+        
+        if (statusData.connected) {
+            badge.className = 'status-badge connected';
+            badge.textContent = 'CONNECTED';
+            userId.textContent = statusData.user_id ? `User: ${statusData.user_id}` : '';
+            
+            await Promise.all([
+                loadAccountData(),
+                loadPositions(),
+                loadOrders(),
+                loadTrades(),
+                loadConditional(),
+                loadAmo()
+            ]);
+        } else {
+            badge.className = 'status-badge disconnected';
+            badge.textContent = 'NOT CONNECTED';
+            userId.textContent = '';
+            
+            document.getElementById('stat-available').textContent = '₹0.00';
+            document.getElementById('stat-margin').textContent = '₹0.00';
+            document.getElementById('stat-positions').textContent = '0';
+            document.getElementById('stat-pnl').textContent = '₹0.00';
+            
+            showEmptyState('positions-body', '📊', 'Not Connected', `Connect to ${config.name} to view positions`);
+            showEmptyState('orders-body', '📋', 'Not Connected', `Connect to ${config.name} to view orders`);
+            showEmptyState('trades-body', '💹', 'Not Connected', `Connect to ${config.name} to view trades`);
+            showEmptyState('conditional-body', '⏰', 'Not Connected', `Connect to ${config.name} to view conditional orders`);
+            showEmptyState('amo-body', '🌙', 'Not Connected', `Connect to ${config.name} to view AMO orders`);
+        }
+    } catch (e) {
+        console.error('Failed to load dashboard:', e);
+    }
+}
+
+async function loadAccountData() {
+    try {
+        const res = await fetch(`/api/india/${selectedBroker}/account`);
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('stat-available').textContent = `₹${formatNumber(data.available || 0)}`;
+            document.getElementById('stat-margin').textContent = `₹${formatNumber(data.margin_used || 0)}`;
+        }
+    } catch (e) {
+        console.error('Failed to load account:', e);
+    }
+}
+
+async function loadPositions() {
+    try {
+        const res = await fetch(`/api/india/${selectedBroker}/positions`);
+        const data = await res.json();
+        dashboardData.positions = data.positions || [];
+        document.getElementById('tab-positions-count').textContent = dashboardData.positions.length;
+        document.getElementById('stat-positions').textContent = dashboardData.positions.length;
+        
+        let totalPnl = 0;
+        
+        if (dashboardData.positions.length === 0) {
+            showEmptyState('positions-body', '📊', 'No Positions', 'Open positions will appear here');
+        } else {
+            const tbody = document.getElementById('positions-body');
+            tbody.innerHTML = dashboardData.positions.map(pos => {
+                const pnl = parseFloat(pos.pnl || pos.unrealized_profit || 0);
+                totalPnl += pnl;
+                const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                return `<tr>
+                    <td><strong>${pos.symbol || pos.tradingsymbol || '-'}</strong></td>
+                    <td style="text-align: center;">${pos.quantity || pos.qty || 0}</td>
+                    <td style="text-align: right;">₹${formatNumber(pos.average_price || pos.buy_price || 0)}</td>
+                    <td style="text-align: right;">₹${formatNumber(pos.ltp || pos.last_price || 0)}</td>
+                    <td style="text-align: right;" class="${pnlClass}">₹${formatNumber(pnl)}</td>
+                    <td style="text-align: center;"><span class="status-pill">${pos.product || 'MIS'}</span></td>
+                </tr>`;
+            }).join('');
+        }
+        
+        const pnlEl = document.getElementById('stat-pnl');
+        pnlEl.textContent = `₹${formatNumber(totalPnl)}`;
+        pnlEl.className = totalPnl >= 0 ? 'value pnl-positive' : 'value pnl-negative';
+    } catch (e) {
+        console.error('Failed to load positions:', e);
+    }
+}
+
+async function loadOrders() {
+    try {
+        const res = await fetch(`/api/india/${selectedBroker}/orders`);
+        const data = await res.json();
+        dashboardData.orders = data.orders || [];
+        document.getElementById('tab-orders-count').textContent = dashboardData.orders.length;
+        
+        if (dashboardData.orders.length === 0) {
+            showEmptyState('orders-body', '📋', 'No Orders', 'Orders will appear here');
+        } else {
+            const tbody = document.getElementById('orders-body');
+            tbody.innerHTML = dashboardData.orders.map(order => {
+                const status = (order.status || 'PENDING').toUpperCase();
+                const statusClass = status === 'FILLED' || status === 'COMPLETE' ? 'status-filled' : 
+                                   status === 'OPEN' || status === 'PENDING' ? 'status-open' : 'status-cancelled';
+                const sideClass = (order.transaction_type || order.side || '').toUpperCase().includes('BUY') ? 'side-buy' : 'side-sell';
+                return `<tr>
+                    <td><code style="font-size: 11px;">${(order.order_id || order.id || '-').toString().slice(-8)}</code></td>
+                    <td><strong>${order.symbol || order.tradingsymbol || '-'}</strong></td>
+                    <td style="text-align: center;" class="${sideClass}">${order.transaction_type || order.side || '-'}</td>
+                    <td style="text-align: center;">${order.quantity || order.qty || 0}</td>
+                    <td style="text-align: right;">₹${formatNumber(order.price || order.average_price || 0)}</td>
+                    <td style="text-align: center;"><span class="status-pill ${statusClass}">${status}</span></td>
+                    <td style="text-align: center; font-size: 11px; color: #8E8E93;">${formatTime(order.order_timestamp || order.time)}</td>
+                    <td style="text-align: center;">${status === 'OPEN' || status === 'PENDING' ? `<button onclick="cancelOrder('${order.order_id || order.id}')" style="padding: 4px 8px; border: 1px solid rgba(255,107,107,0.4); background: transparent; color: #ff6b6b; border-radius: 4px; cursor: pointer; font-size: 10px;">Cancel</button>` : '-'}</td>
+                </tr>`;
+            }).join('');
+        }
+    } catch (e) {
+        console.error('Failed to load orders:', e);
+    }
+}
+
+async function loadTrades() {
+    try {
+        const res = await fetch(`/api/india/${selectedBroker}/trades`);
+        const data = await res.json();
+        dashboardData.trades = data.trades || [];
+        document.getElementById('tab-trades-count').textContent = dashboardData.trades.length;
+        
+        if (dashboardData.trades.length === 0) {
+            showEmptyState('trades-body', '💹', 'No Trades', 'Executed trades will appear here');
+        } else {
+            const tbody = document.getElementById('trades-body');
+            tbody.innerHTML = dashboardData.trades.map(trade => {
+                const sideClass = (trade.transaction_type || trade.side || '').toUpperCase().includes('BUY') ? 'side-buy' : 'side-sell';
+                return `<tr>
+                    <td><code style="font-size: 11px;">${(trade.trade_id || trade.id || '-').toString().slice(-8)}</code></td>
+                    <td><strong>${trade.symbol || trade.tradingsymbol || '-'}</strong></td>
+                    <td style="text-align: center;" class="${sideClass}">${trade.transaction_type || trade.side || '-'}</td>
+                    <td style="text-align: center;">${trade.quantity || trade.qty || 0}</td>
+                    <td style="text-align: right;">₹${formatNumber(trade.price || trade.average_price || 0)}</td>
+                    <td style="text-align: center; font-size: 11px; color: #8E8E93;">${formatTime(trade.fill_timestamp || trade.time)}</td>
+                </tr>`;
+            }).join('');
+        }
+    } catch (e) {
+        console.error('Failed to load trades:', e);
+    }
+}
+
+async function loadConditional() {
+    try {
+        const res = await fetch(`/api/india/${selectedBroker}/conditional`);
+        const data = await res.json();
+        dashboardData.conditional = data.orders || [];
+        document.getElementById('tab-conditional-count').textContent = dashboardData.conditional.length;
+        
+        if (dashboardData.conditional.length === 0) {
+            showEmptyState('conditional-body', '⏰', 'No Conditional Orders', 'Price-triggered orders will appear here');
+        } else {
+            const tbody = document.getElementById('conditional-body');
+            tbody.innerHTML = dashboardData.conditional.map(order => {
+                const status = (order.status || 'PENDING').toUpperCase();
+                const statusClass = status === 'WATCHING' ? 'status-watching' : status === 'TRIGGERED' ? 'status-filled' : 'status-pending';
+                return `<tr>
+                    <td><strong>${order.symbol || '-'}</strong></td>
+                    <td style="text-align: center;">${order.trigger_condition || '-'} ₹${order.trigger_price || '-'}</td>
+                    <td style="text-align: center;">₹${formatNumber(order.current_price || 0)}</td>
+                    <td style="text-align: center;"><span class="status-pill ${statusClass}">${status}</span></td>
+                    <td style="text-align: center; font-size: 11px;">SL: ₹${order.stop_loss || '-'} / PT: ₹${order.profit_target || '-'}</td>
+                    <td style="text-align: center; font-size: 11px; color: #8E8E93;">${formatTime(order.created_at)}</td>
+                    <td style="text-align: center;"><button onclick="cancelConditional('${order.id}')" style="padding: 4px 8px; border: 1px solid rgba(255,107,107,0.4); background: transparent; color: #ff6b6b; border-radius: 4px; cursor: pointer; font-size: 10px;">Cancel</button></td>
+                </tr>`;
+            }).join('');
+        }
+    } catch (e) {
+        console.error('Failed to load conditional:', e);
+    }
+}
+
+async function loadAmo() {
+    try {
+        const res = await fetch(`/api/india/${selectedBroker}/amo`);
+        const data = await res.json();
+        dashboardData.amo = data.orders || [];
+        document.getElementById('tab-amo-count').textContent = dashboardData.amo.length;
+        
+        if (dashboardData.amo.length === 0) {
+            showEmptyState('amo-body', '🌙', 'No AMO Orders', 'After-market orders will appear here');
+        } else {
+            const tbody = document.getElementById('amo-body');
+            tbody.innerHTML = dashboardData.amo.map(order => {
+                const status = (order.status || 'PENDING').toUpperCase();
+                const statusClass = status === 'SUBMITTED' ? 'status-filled' : status === 'PENDING' ? 'status-pending' : 'status-cancelled';
+                const sideClass = (order.side || '').toUpperCase().includes('BUY') ? 'side-buy' : 'side-sell';
+                return `<tr>
+                    <td><strong>${order.symbol || '-'}</strong></td>
+                    <td style="text-align: center;" class="${sideClass}">${order.side || '-'}</td>
+                    <td style="text-align: center;">${order.quantity || 0}</td>
+                    <td style="text-align: right;">₹${formatNumber(order.price || 0)}</td>
+                    <td style="text-align: center;"><span class="status-pill ${statusClass}">${status}</span></td>
+                    <td style="text-align: center; font-size: 11px; color: #8E8E93;">${formatTime(order.created_at)}</td>
+                    <td style="text-align: center;">${status === 'PENDING' ? `<button onclick="cancelAmo('${order.id}')" style="padding: 4px 8px; border: 1px solid rgba(255,107,107,0.4); background: transparent; color: #ff6b6b; border-radius: 4px; cursor: pointer; font-size: 10px;">Cancel</button>` : '-'}</td>
+                </tr>`;
+            }).join('');
+        }
+    } catch (e) {
+        console.error('Failed to load AMO:', e);
+    }
+}
+
+function showEmptyState(tbodyId, icon, title, description) {
+    document.getElementById(tbodyId).innerHTML = `<tr><td colspan="10" class="empty-state"><div class="icon">${icon}</div><div class="title">${title}</div><div class="description">${description}</div></td></tr>`;
+}
+
+function switchDashboardTab(tab) {
+    document.querySelectorAll('.dashboard-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector(`.dashboard-tab[data-tab="${tab}"]`).classList.add('active');
+    document.getElementById(`tab-${tab}`).classList.add('active');
+}
+
+async function reconnectBroker() {
+    const btn = document.getElementById('btn-reconnect');
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span> Connecting...';
+    
+    try {
+        const res = await fetch(`/api/india/${selectedBroker}/reconnect`, { method: 'POST' });
+        const data = await res.json();
+        
+        if (data.success && data.connected) {
+            showToast(`${BROKER_CONFIG[selectedBroker].name} connected successfully!`, 'success');
+            loadBrokerStatuses();
+            loadBrokerDashboard();
+        } else {
+            showToast(data.error || 'Failed to connect', 'error');
+        }
+    } catch (e) {
+        showToast('Connection failed: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>🔌</span> Reconnect';
+    }
+}
+
+async function refreshDashboard() {
+    const btn = document.getElementById('btn-refresh');
+    btn.innerHTML = '<span>⏳</span> Refreshing...';
+    await loadBrokerDashboard();
+    btn.innerHTML = '<span>🔄</span> Refresh';
+}
+
+async function cancelOrder(orderId) {
+    if (!confirm('Cancel this order?')) return;
+    try {
+        const res = await fetch(`/api/india/${selectedBroker}/cancel-order`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order_id: orderId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('Order cancelled', 'success');
+            loadOrders();
+        } else {
+            showToast(data.error || 'Failed to cancel', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+function formatNumber(num) {
+    return parseFloat(num || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatTime(timestamp) {
+    if (!timestamp) return '-';
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.style.cssText = `position: fixed; bottom: 20px; right: 20px; padding: 16px 24px; border-radius: 8px; color: white; font-weight: 600; z-index: 10000; animation: fadeIn 0.3s;`;
+    toast.style.background = type === 'success' ? '#00c853' : type === 'error' ? '#ff6b6b' : '#00d4ff';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
 
 function switchChannelType(type) {
     console.log('[India] Switching to category:', type);
@@ -500,12 +1033,26 @@ function switchChannelType(type) {
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('[India] Page loaded, initializing...');
+    
+    document.querySelectorAll('.broker-selector-btn').forEach(btn => {
+        btn.addEventListener('click', () => selectBroker(btn.dataset.broker));
+    });
+    
+    loadBrokerStatuses();
+    selectBroker('zerodha');
+    
     initIndiaChannelManagement('EXECUTE');
-    loadIndiaBrokerStatus();
     
     document.getElementById('channel-type-select').addEventListener('change', function() {
         switchChannelType(this.value);
     });
+    
+    refreshInterval = setInterval(() => {
+        loadBrokerStatuses();
+        if (brokerStatuses[selectedBroker]) {
+            loadBrokerDashboard();
+        }
+    }, 30000);
 });
 </script>
 {% endblock %}

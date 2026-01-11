@@ -16404,3 +16404,384 @@ def register_routes(app):
         except Exception as e:
             print(f"[API] Error fetching verifiable channels: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # ============ UNIFIED INDIA BROKER API ============
+    
+    INDIA_BROKERS = {
+        'zerodha': {'name': 'Zerodha', 'icon': '🔥', 'color': '#ff5722'},
+        'dhanq': {'name': 'DhanQ', 'icon': '🔮', 'color': '#8a2be2'},
+        'upstox': {'name': 'Upstox', 'icon': '📈', 'color': '#00c853'}
+    }
+    
+    def _get_india_broker(broker_name):
+        """Get India broker instance by name"""
+        if not _bot_instance:
+            return None, 'Bot not running'
+        
+        broker_name = broker_name.lower()
+        if broker_name == 'zerodha':
+            broker = getattr(_bot_instance, 'zerodha_broker', None)
+        elif broker_name == 'dhanq':
+            broker = getattr(_bot_instance, 'dhanq_broker', None)
+        elif broker_name == 'upstox':
+            broker = getattr(_bot_instance, 'upstox_broker', None)
+        else:
+            return None, f'Unknown broker: {broker_name}'
+        
+        return broker, None
+    
+    @app.route('/api/india/brokers', methods=['GET'])
+    @login_required
+    def api_india_brokers():
+        """Get list of available India brokers with status"""
+        try:
+            brokers = []
+            for broker_id, info in INDIA_BROKERS.items():
+                broker, _ = _get_india_broker(broker_id)
+                connected = broker and getattr(broker, 'connected', False)
+                
+                broker_data = {
+                    'id': broker_id,
+                    'name': info['name'],
+                    'icon': info['icon'],
+                    'color': info['color'],
+                    'connected': connected,
+                    'status': 'CONNECTED' if connected else 'NOT CONNECTED'
+                }
+                
+                if connected and hasattr(broker, 'user_id'):
+                    broker_data['user_id'] = broker.user_id
+                
+                brokers.append(broker_data)
+            
+            return jsonify({'success': True, 'brokers': brokers})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/india/<broker_name>/status', methods=['GET'])
+    @login_required
+    def api_india_broker_status(broker_name):
+        """Get status for a specific India broker"""
+        try:
+            broker, error = _get_india_broker(broker_name)
+            if error and not broker:
+                return jsonify({'success': False, 'connected': False, 'error': error})
+            
+            connected = broker and getattr(broker, 'connected', False)
+            
+            result = {
+                'success': True,
+                'broker': broker_name,
+                'connected': connected,
+                'status': 'CONNECTED' if connected else 'NOT CONNECTED'
+            }
+            
+            if connected:
+                if hasattr(broker, 'user_id'):
+                    result['user_id'] = broker.user_id
+                if hasattr(broker, 'user_name'):
+                    result['user_name'] = broker.user_name
+            
+            return jsonify(result)
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/india/<broker_name>/account', methods=['GET'])
+    @login_required
+    def api_india_broker_account(broker_name):
+        """Get account balance for a specific India broker"""
+        try:
+            broker, error = _get_india_broker(broker_name)
+            if error and not broker:
+                return jsonify({'success': False, 'connected': False, 'error': error})
+            
+            if not broker or not getattr(broker, 'connected', False):
+                return jsonify({
+                    'success': False,
+                    'connected': False,
+                    'error': f'{broker_name.title()} not connected'
+                })
+            
+            import asyncio
+            loop = getattr(_bot_instance, 'loop', None)
+            
+            if loop and loop.is_running():
+                if hasattr(broker, 'get_account_balance'):
+                    future = asyncio.run_coroutine_threadsafe(broker.get_account_balance(), loop)
+                    balance_data = future.result(timeout=15)
+                else:
+                    balance_data = {'available': 0, 'margin_used': 0}
+                
+                return jsonify({
+                    'success': True,
+                    'connected': True,
+                    'broker': broker_name,
+                    'available': balance_data.get('available', 0),
+                    'margin_used': balance_data.get('margin_used', 0),
+                    'currency': '₹'
+                })
+            else:
+                return jsonify({'success': False, 'error': 'Event loop not running'})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/india/<broker_name>/positions', methods=['GET'])
+    @login_required
+    def api_india_broker_positions(broker_name):
+        """Get positions for a specific India broker"""
+        try:
+            broker, error = _get_india_broker(broker_name)
+            if error and not broker:
+                return jsonify({'success': False, 'connected': False, 'error': error})
+            
+            if not broker or not getattr(broker, 'connected', False):
+                return jsonify({
+                    'success': False,
+                    'connected': False,
+                    'positions': [],
+                    'error': f'{broker_name.title()} not connected'
+                })
+            
+            import asyncio
+            loop = getattr(_bot_instance, 'loop', None)
+            
+            if loop and loop.is_running():
+                if hasattr(broker, 'get_positions'):
+                    future = asyncio.run_coroutine_threadsafe(broker.get_positions(), loop)
+                    positions = future.result(timeout=15)
+                else:
+                    positions = []
+                
+                return jsonify({
+                    'success': True,
+                    'connected': True,
+                    'broker': broker_name,
+                    'positions': positions if positions else [],
+                    'count': len(positions) if positions else 0
+                })
+            else:
+                return jsonify({'success': False, 'error': 'Event loop not running'})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'positions': [], 'error': str(e)}), 500
+    
+    @app.route('/api/india/<broker_name>/orders', methods=['GET'])
+    @login_required
+    def api_india_broker_orders(broker_name):
+        """Get orders for a specific India broker"""
+        try:
+            broker, error = _get_india_broker(broker_name)
+            if error and not broker:
+                return jsonify({'success': False, 'connected': False, 'error': error})
+            
+            if not broker or not getattr(broker, 'connected', False):
+                return jsonify({
+                    'success': False,
+                    'connected': False,
+                    'orders': [],
+                    'error': f'{broker_name.title()} not connected'
+                })
+            
+            import asyncio
+            loop = getattr(_bot_instance, 'loop', None)
+            
+            if loop and loop.is_running():
+                if hasattr(broker, 'get_orders'):
+                    future = asyncio.run_coroutine_threadsafe(broker.get_orders(), loop)
+                    orders = future.result(timeout=15)
+                else:
+                    orders = []
+                
+                return jsonify({
+                    'success': True,
+                    'connected': True,
+                    'broker': broker_name,
+                    'orders': orders if orders else [],
+                    'count': len(orders) if orders else 0
+                })
+            else:
+                return jsonify({'success': False, 'error': 'Event loop not running'})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'orders': [], 'error': str(e)}), 500
+    
+    @app.route('/api/india/<broker_name>/trades', methods=['GET'])
+    @login_required
+    def api_india_broker_trades(broker_name):
+        """Get trades/trade book for a specific India broker"""
+        try:
+            broker, error = _get_india_broker(broker_name)
+            if error and not broker:
+                return jsonify({'success': False, 'connected': False, 'error': error})
+            
+            if not broker or not getattr(broker, 'connected', False):
+                return jsonify({
+                    'success': False,
+                    'connected': False,
+                    'trades': [],
+                    'error': f'{broker_name.title()} not connected'
+                })
+            
+            import asyncio
+            loop = getattr(_bot_instance, 'loop', None)
+            
+            if loop and loop.is_running():
+                if hasattr(broker, 'get_trades'):
+                    future = asyncio.run_coroutine_threadsafe(broker.get_trades(), loop)
+                    trades = future.result(timeout=15)
+                else:
+                    trades = []
+                
+                return jsonify({
+                    'success': True,
+                    'connected': True,
+                    'broker': broker_name,
+                    'trades': trades if trades else [],
+                    'count': len(trades) if trades else 0
+                })
+            else:
+                return jsonify({'success': False, 'error': 'Event loop not running'})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'trades': [], 'error': str(e)}), 500
+    
+    @app.route('/api/india/<broker_name>/conditional', methods=['GET'])
+    @login_required
+    def api_india_broker_conditional(broker_name):
+        """Get conditional orders for a specific India broker"""
+        try:
+            from src.services.conditional_order_service import ConditionalOrderRouter
+            
+            router = getattr(_bot_instance, 'conditional_router', None) if _bot_instance else None
+            
+            if router and hasattr(router, 'india_service'):
+                orders = router.india_service.get_orders_by_broker(broker_name)
+            else:
+                conn = db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT * FROM conditional_orders 
+                    WHERE broker = ? AND status IN ('PENDING', 'WATCHING')
+                    ORDER BY created_at DESC
+                ''', (broker_name,))
+                rows = cursor.fetchall()
+                columns = [desc[0] for desc in cursor.description]
+                orders = [dict(zip(columns, row)) for row in rows]
+            
+            return jsonify({
+                'success': True,
+                'broker': broker_name,
+                'orders': orders if orders else [],
+                'count': len(orders) if orders else 0
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'orders': [], 'error': str(e)}), 500
+    
+    @app.route('/api/india/<broker_name>/amo', methods=['GET'])
+    @login_required
+    def api_india_broker_amo(broker_name):
+        """Get AMO (After Market Orders) for a specific India broker"""
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT * FROM upstox_pending_orders 
+                WHERE broker = ? OR (broker IS NULL AND ? = 'upstox')
+                ORDER BY created_at DESC
+            ''', (broker_name, broker_name))
+            rows = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+            orders = [dict(zip(columns, row)) for row in rows]
+            
+            return jsonify({
+                'success': True,
+                'broker': broker_name,
+                'orders': orders if orders else [],
+                'count': len(orders) if orders else 0
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'orders': [], 'error': str(e)}), 500
+    
+    @app.route('/api/india/<broker_name>/reconnect', methods=['POST'])
+    @login_required
+    def api_india_broker_reconnect(broker_name):
+        """Reconnect to a specific India broker"""
+        try:
+            broker, error = _get_india_broker(broker_name)
+            
+            if not broker:
+                return jsonify({
+                    'success': False,
+                    'error': error or f'{broker_name.title()} broker not initialized'
+                })
+            
+            import asyncio
+            loop = getattr(_bot_instance, 'loop', None)
+            
+            if loop and loop.is_running():
+                if hasattr(broker, 'reconnect'):
+                    future = asyncio.run_coroutine_threadsafe(broker.reconnect(), loop)
+                    result = future.result(timeout=30)
+                    connected = result if isinstance(result, bool) else result.get('success', False)
+                elif hasattr(broker, 'connect'):
+                    future = asyncio.run_coroutine_threadsafe(broker.connect(), loop)
+                    connected = future.result(timeout=30)
+                else:
+                    return jsonify({'success': False, 'error': 'Broker does not support reconnect'})
+                
+                return jsonify({
+                    'success': connected,
+                    'broker': broker_name,
+                    'connected': connected,
+                    'message': f'{broker_name.title()} {"connected" if connected else "failed to connect"}'
+                })
+            else:
+                return jsonify({'success': False, 'error': 'Event loop not running'})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/india/<broker_name>/cancel-order', methods=['POST'])
+    @login_required
+    def api_india_broker_cancel_order(broker_name):
+        """Cancel an order for a specific India broker"""
+        try:
+            broker, error = _get_india_broker(broker_name)
+            if error and not broker:
+                return jsonify({'success': False, 'error': error})
+            
+            if not broker or not getattr(broker, 'connected', False):
+                return jsonify({'success': False, 'error': f'{broker_name.title()} not connected'})
+            
+            data = request.get_json()
+            order_id = data.get('order_id')
+            
+            if not order_id:
+                return jsonify({'success': False, 'error': 'Order ID required'})
+            
+            import asyncio
+            loop = getattr(_bot_instance, 'loop', None)
+            
+            if loop and loop.is_running():
+                if hasattr(broker, 'cancel_order'):
+                    future = asyncio.run_coroutine_threadsafe(broker.cancel_order(order_id), loop)
+                    result = future.result(timeout=15)
+                    return jsonify(result if isinstance(result, dict) else {'success': result})
+                else:
+                    return jsonify({'success': False, 'error': 'Broker does not support order cancellation'})
+            else:
+                return jsonify({'success': False, 'error': 'Event loop not running'})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
