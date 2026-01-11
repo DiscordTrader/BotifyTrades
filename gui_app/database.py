@@ -5398,20 +5398,25 @@ def get_robinhood_settings() -> Dict[str, str]:
             settings[row['key']] = row['value'] or ''
         
         if settings.get('robinhood_username'):
+            print(f"[DATABASE] ✓ Robinhood credentials loaded from settings table")
             return settings
         
         try:
             from .broker_credentials_service import get_robinhood_credentials
             creds = get_robinhood_credentials()
+            print(f"[DATABASE] Robinhood broker_credentials_service returned: username={bool(creds.get('username'))}, password={bool(creds.get('password'))}")
             if creds.get('username'):
                 return {
                     'robinhood_username': creds.get('username', ''),
                     'robinhood_password': creds.get('password', ''),
                     'robinhood_totp_secret': creds.get('totp_secret', '')
                 }
+            else:
+                print(f"[DATABASE] ⚠️ Robinhood: broker_credentials_service returned empty credentials")
         except Exception as e:
             print(f"[DATABASE] Fallback to broker_credentials_service failed: {e}")
         
+        print(f"[DATABASE] ⚠️ Robinhood: No credentials found in either settings table or broker_credentials_service")
         return settings if settings else {'robinhood_username': '', 'robinhood_password': '', 'robinhood_totp_secret': ''}
     except Exception as e:
         print(f"[DATABASE] Error getting Robinhood settings: {e}")

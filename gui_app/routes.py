@@ -11191,11 +11191,13 @@ def register_routes(app):
                 print(f"[API] ⚠️  Robinhood connection - WARNING: NO PAPER MODE, ALL TRADES ARE LIVE")
                 
                 rh_settings = db.get_robinhood_settings()
+                print(f"[API] Robinhood settings retrieved: {list(rh_settings.keys())}, has_username={bool(rh_settings.get('robinhood_username'))}")
                 username = rh_settings.get('robinhood_username', '')
                 password = rh_settings.get('robinhood_password', '')
                 totp_secret = rh_settings.get('robinhood_totp_secret', '')
                 
                 if not username or not password:
+                    print(f"[API] ⚠️  Robinhood: credentials empty - username={bool(username)}, password={bool(password)}")
                     set_broker_status(broker_id, False, 'error', 'No Robinhood credentials configured')
                     return jsonify({'success': False, 'error': 'No Robinhood credentials configured. Please save username and password first.'}), 400
                 
