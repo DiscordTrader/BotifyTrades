@@ -9118,9 +9118,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     resp = {'broker': broker_name, 'result': result, 'executed_qty': signal['qty']}
             else:
                 # Handle different broker parameter names for stocks
-                # AlpacaBroker uses: symbol, action, quantity, price
-                # WebullBroker uses: action, qty, symbol, limit_price
-                if broker_name == 'ALPACA_PAPER' or 'ALPACA' in broker_name.upper():
+                # Modern brokers (Alpaca, Robinhood, Schwab, IBKR, Tastytrade) use: symbol, action, quantity, price
+                # Webull uses legacy signature: action, qty, symbol, limit_price
+                broker_upper = broker_name.upper()
+                uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE'])
+                
+                if uses_modern_signature:
                     result = await broker_instance.place_stock_order(
                         symbol=signal['symbol'],
                         action=signal['action'],
