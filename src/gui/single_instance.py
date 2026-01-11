@@ -10,6 +10,16 @@ import atexit
 _lock_handle = None
 _lock_file = None
 
+def _is_cloud_environment() -> bool:
+    """Check if running in a cloud environment that manages single instances"""
+    return (
+        os.environ.get('REPL_ID') is not None or 
+        os.environ.get('REPLIT_DEPLOYMENT') is not None or
+        os.environ.get('RAILWAY_ENVIRONMENT') is not None or
+        os.environ.get('RENDER') is not None
+    )
+
+
 def check_single_instance(app_name: str = "BotifyTrades") -> bool:
     """
     Check if another instance is already running.
@@ -19,6 +29,11 @@ def check_single_instance(app_name: str = "BotifyTrades") -> bool:
         False if another instance is already running
     """
     global _lock_handle, _lock_file
+    
+    # Skip check in cloud environments - they manage single instances via workflows
+    if _is_cloud_environment():
+        print("[SINGLE INSTANCE] Cloud environment detected - skipping check (managed by workflow)")
+        return True
     
     if sys.platform == 'win32':
         return _check_windows_mutex(app_name)

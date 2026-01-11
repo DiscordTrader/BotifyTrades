@@ -11185,8 +11185,14 @@ Environment Variables:
                 sys.exit(1)
         except Exception as si_err:
             _original_print(f"[STARTUP] Single instance check error: {si_err}")
-            _original_print("[STARTUP] ⚠️ Cannot verify single instance - refusing to start for safety.")
-            sys.exit(1)
+            # On Windows frozen builds, refuse to start for safety (prevent duplicate orders)
+            # On Linux/dev mode, continue with a warning (cloud environments manage this differently)
+            is_frozen_windows = getattr(sys, 'frozen', False) and sys.platform == 'win32'
+            if is_frozen_windows:
+                _original_print("[STARTUP] ⚠️ Cannot verify single instance - refusing to start for safety.")
+                sys.exit(1)
+            else:
+                _original_print("[STARTUP] ⚠️ Continuing without single instance verification (non-Windows mode)")
         
         try:
             from src.license import start_network_monitor, show_license_expired_popup
