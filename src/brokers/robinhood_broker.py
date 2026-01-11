@@ -260,6 +260,162 @@ class RobinhoodBroker(BrokerInterface):
             print(f"[{self.name}] Error getting orders: {e}")
             return []
     
+    def get_option_chain(self, symbol: str, expiry: str) -> Dict[str, Any]:
+        """Get option chain for a symbol and expiry date.
+        
+        Uses robin-stocks library to fetch options data.
+        
+        Args:
+            symbol: Underlying stock symbol
+            expiry: Expiration date in YYYY-MM-DD format
+            
+        Returns:
+            Dict with 'calls', 'puts', 'stock_price', 'data_source' keys
+        """
+        if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
+            return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Error: Robinhood not connected'}
+        
+        try:
+            # Get stock price
+            stock_price = None
+            try:
+                prices = rh.stocks.get_latest_price(symbol)
+                if prices and prices[0]:
+                    stock_price = float(prices[0])
+            except:
+                pass
+            
+            # Normalize expiry format to YYYY-MM-DD
+            if "/" in expiry:
+                parts = expiry.split("/")
+                if len(parts) == 2:
+                    m, d = parts
+                    from datetime import datetime
+                    y = datetime.now().year
+                    expiry = f"{y:04d}-{int(m):02d}-{int(d):02d}"
+                elif len(parts) == 3:
+                    m, d, y = parts
+                    if len(y) == 2:
+                        y = f"20{y}"
+                    expiry = f"{y}-{int(m):02d}-{int(d):02d}"
+            
+            calls = []
+            puts = []
+            
+            # Get call options
+            call_options = rh.options.find_tradable_options(
+                symbol,
+                expirationDate=expiry,
+                optionType='call'
+            )
+            
+            if call_options:
+                for opt in call_options:
+                    strike = float(opt.get('strike_price', 0))
+                    # Get market data for this option
+                    try:
+                        market_data = rh.options.get_option_market_data(
+                            symbol,
+                            expirationDate=expiry,
+                            strikePrice=str(strike),
+                            optionType='call'
+                        )
+                        if market_data and len(market_data) > 0:
+                            data = market_data[0]
+                            calls.append({
+                                'strike': strike,
+                                'bid': float(data.get('bid_price', 0) or 0),
+                                'ask': float(data.get('ask_price', 0) or 0),
+                                'last': float(data.get('mark_price', 0) or 0),
+                                'volume': int(data.get('volume', 0) or 0),
+                                'open_interest': int(data.get('open_interest', 0) or 0),
+                                'iv': float(data.get('implied_volatility', 0) or 0),
+                                'delta': float(data.get('delta', 0) or 0),
+                                'gamma': float(data.get('gamma', 0) or 0),
+                                'theta': float(data.get('theta', 0) or 0),
+                                'vega': float(data.get('vega', 0) or 0),
+                            })
+                        else:
+                            calls.append({
+                                'strike': strike,
+                                'bid': 0, 'ask': 0, 'last': 0,
+                                'volume': 0, 'open_interest': 0,
+                                'iv': 0, 'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0
+                            })
+                    except:
+                        calls.append({
+                            'strike': strike,
+                            'bid': 0, 'ask': 0, 'last': 0,
+                            'volume': 0, 'open_interest': 0,
+                            'iv': 0, 'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0
+                        })
+            
+            # Get put options
+            put_options = rh.options.find_tradable_options(
+                symbol,
+                expirationDate=expiry,
+                optionType='put'
+            )
+            
+            if put_options:
+                for opt in put_options:
+                    strike = float(opt.get('strike_price', 0))
+                    try:
+                        market_data = rh.options.get_option_market_data(
+                            symbol,
+                            expirationDate=expiry,
+                            strikePrice=str(strike),
+                            optionType='put'
+                        )
+                        if market_data and len(market_data) > 0:
+                            data = market_data[0]
+                            puts.append({
+                                'strike': strike,
+                                'bid': float(data.get('bid_price', 0) or 0),
+                                'ask': float(data.get('ask_price', 0) or 0),
+                                'last': float(data.get('mark_price', 0) or 0),
+                                'volume': int(data.get('volume', 0) or 0),
+                                'open_interest': int(data.get('open_interest', 0) or 0),
+                                'iv': float(data.get('implied_volatility', 0) or 0),
+                                'delta': float(data.get('delta', 0) or 0),
+                                'gamma': float(data.get('gamma', 0) or 0),
+                                'theta': float(data.get('theta', 0) or 0),
+                                'vega': float(data.get('vega', 0) or 0),
+                            })
+                        else:
+                            puts.append({
+                                'strike': strike,
+                                'bid': 0, 'ask': 0, 'last': 0,
+                                'volume': 0, 'open_interest': 0,
+                                'iv': 0, 'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0
+                            })
+                    except:
+                        puts.append({
+                            'strike': strike,
+                            'bid': 0, 'ask': 0, 'last': 0,
+                            'volume': 0, 'open_interest': 0,
+                            'iv': 0, 'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0
+                        })
+            
+            # Sort by strike
+            calls.sort(key=lambda x: x['strike'])
+            puts.sort(key=lambda x: x['strike'])
+            
+            print(f"[{self.name}] ✓ Fetched option chain: {len(calls)} calls, {len(puts)} puts for {symbol} {expiry}")
+            
+            return {
+                'calls': calls,
+                'puts': puts,
+                'stock_price': stock_price,
+                'data_source': 'Robinhood'
+            }
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting option chain: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': f'Error: {str(e)}'}
+    
     async def place_stock_order(
         self,
         symbol: str,

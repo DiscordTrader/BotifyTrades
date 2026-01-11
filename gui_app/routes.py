@@ -540,6 +540,54 @@ def get_cached_option_chain_schwab(symbol: str, expiry: str) -> dict:
         print(f"[OPTIONS] Schwab option chain error: {e}", flush=True)
         return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': f'Error: {str(e)}'}
 
+def get_cached_option_chain_robinhood(symbol: str, expiry: str) -> dict:
+    """Get option chain from Robinhood with caching.
+    Returns chain data with 'data_source' field indicating 'Robinhood'
+    """
+    cache_key = f"ROBINHOOD_{symbol}_{expiry}"
+    now = time.time()
+    
+    print(f"[OPTIONS] get_cached_option_chain_robinhood called for {symbol} {expiry}", flush=True)
+    
+    if cache_key in _option_chain_cache:
+        cached_data, cached_time = _option_chain_cache[cache_key]
+        if now - cached_time < _CHAIN_CACHE_TTL:
+            print(f"[OPTIONS] Using cached Robinhood option chain for {cache_key}", flush=True)
+            return cached_data
+    
+    if not _bot_instance or not hasattr(_bot_instance, 'robinhood_broker') or not _bot_instance.robinhood_broker:
+        print(f"[OPTIONS] Robinhood broker not available", flush=True)
+        return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Error: Robinhood not configured'}
+    
+    try:
+        import concurrent.futures
+        
+        def _get_chain_sync():
+            return _bot_instance.robinhood_broker.get_option_chain(symbol, expiry)
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_get_chain_sync)
+            chain = future.result(timeout=30)
+        
+        if not chain:
+            print(f"[OPTIONS] Robinhood returned empty chain for {symbol} {expiry}", flush=True)
+            return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Robinhood (no data)'}
+        
+        # Fetch stock price if not in chain
+        if not chain.get('stock_price') or chain.get('stock_price', 0) <= 0:
+            stock_price = fetch_stock_price_reliable(symbol)
+            if stock_price > 0:
+                chain['stock_price'] = stock_price
+        
+        _option_chain_cache[cache_key] = (chain, now)
+        print(f"[OPTIONS] ✓ Using Robinhood data for {symbol} {expiry} (stock_price={chain.get('stock_price')})", flush=True)
+        return chain
+    except Exception as e:
+        print(f"[OPTIONS] Robinhood option chain error: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': f'Error: {str(e)}'}
+
 def get_option_chain_for_broker(symbol: str, expiry: str, broker: str = 'WEBULL') -> dict:
     """Get option chain from the specified broker.
     
@@ -562,11 +610,7 @@ def get_option_chain_for_broker(symbol: str, expiry: str, broker: str = 'WEBULL'
     elif 'SCHWAB' in broker_upper:
         return get_cached_option_chain_schwab(symbol, expiry)
     elif 'ROBINHOOD' in broker_upper:
-        # Robinhood doesn't have public option chain API - fallback to Webull
-        print(f"[OPTIONS] Robinhood has no option chain API, using Webull fallback", flush=True)
-        chain = get_cached_option_chain_webull(symbol, expiry)
-        chain['data_source'] = 'Webull (Robinhood fallback)'
-        return chain
+        return get_cached_option_chain_robinhood(symbol, expiry)
     else:
         return get_cached_option_chain_webull(symbol, expiry)
 _cache_ttl: int = 5  # 5 second cache
