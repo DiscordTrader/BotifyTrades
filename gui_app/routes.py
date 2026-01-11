@@ -13018,6 +13018,118 @@ def register_routes(app):
                 'configured': schwab_configured
             }
             
+            # Check Robinhood (LIVE ONLY - no paper trading)
+            robinhood_connected = False
+            robinhood_buying_power = 0
+            robinhood_positions = 0
+            if _bot_instance and hasattr(_bot_instance, 'robinhood_broker') and _bot_instance.robinhood_broker:
+                try:
+                    broker = _bot_instance.robinhood_broker
+                    import asyncio
+                    loop = getattr(_bot_instance, 'loop', None)
+                    if loop and loop.is_running():
+                        if hasattr(broker, 'is_connected'):
+                            try:
+                                future = asyncio.run_coroutine_threadsafe(broker.is_connected(), loop)
+                                robinhood_connected = future.result(timeout=5)
+                            except:
+                                robinhood_connected = getattr(broker, '_connected', False)
+                        if robinhood_connected:
+                            try:
+                                future = asyncio.run_coroutine_threadsafe(broker.get_account_info(), loop)
+                                account = future.result(timeout=5)
+                                if account:
+                                    robinhood_buying_power = float(account.get('buying_power', 0) or 0)
+                                future = asyncio.run_coroutine_threadsafe(broker.get_positions(), loop)
+                                positions = future.result(timeout=5)
+                                robinhood_positions = len(positions) if positions else 0
+                            except:
+                                pass
+                except:
+                    pass
+            
+            robinhood_creds = db.get_robinhood_settings() if hasattr(db, 'get_robinhood_settings') else None
+            robinhood_configured = bool(robinhood_creds and robinhood_creds.get('username') and robinhood_creds.get('password'))
+            
+            broker_status['robinhood'] = {
+                'connected': robinhood_connected,
+                'status': 'connected' if robinhood_connected else ('configured' if robinhood_configured else 'not_configured'),
+                'account_type': 'LIVE',  # Robinhood has no paper trading
+                'buying_power': robinhood_buying_power,
+                'positions': robinhood_positions,
+                'configured': robinhood_configured
+            }
+            
+            # Check IBKR
+            ibkr_connected = False
+            ibkr_buying_power = 0
+            ibkr_positions = 0
+            if _bot_instance and hasattr(_bot_instance, 'ibkr_broker') and _bot_instance.ibkr_broker:
+                try:
+                    broker = _bot_instance.ibkr_broker
+                    if hasattr(broker, '_connected') and broker._connected:
+                        ibkr_connected = True
+                        if hasattr(broker, 'get_account_info'):
+                            import asyncio
+                            loop = getattr(_bot_instance, 'loop', None)
+                            if loop and loop.is_running():
+                                try:
+                                    future = asyncio.run_coroutine_threadsafe(broker.get_account_info(), loop)
+                                    account = future.result(timeout=5)
+                                    if account:
+                                        ibkr_buying_power = float(account.get('buying_power', 0) or 0)
+                                except:
+                                    pass
+                except:
+                    pass
+            
+            ibkr_creds = db.get_ibkr_settings() if hasattr(db, 'get_ibkr_settings') else None
+            ibkr_configured = bool(ibkr_creds and ibkr_creds.get('host'))
+            
+            broker_status['ibkr'] = {
+                'connected': ibkr_connected,
+                'status': 'connected' if ibkr_connected else ('configured' if ibkr_configured else 'not_configured'),
+                'account_type': 'PAPER' if (ibkr_creds and ibkr_creds.get('paper_trading', True)) else 'LIVE',
+                'buying_power': ibkr_buying_power,
+                'positions': ibkr_positions,
+                'configured': ibkr_configured
+            }
+            
+            # Check Tastytrade
+            tastytrade_connected = False
+            tastytrade_buying_power = 0
+            tastytrade_positions = 0
+            if _bot_instance and hasattr(_bot_instance, 'tastytrade_broker') and _bot_instance.tastytrade_broker:
+                try:
+                    broker = _bot_instance.tastytrade_broker
+                    if hasattr(broker, '_connected') and broker._connected:
+                        tastytrade_connected = True
+                        if hasattr(broker, 'get_account_info'):
+                            import asyncio
+                            loop = getattr(_bot_instance, 'loop', None)
+                            if loop and loop.is_running():
+                                try:
+                                    future = asyncio.run_coroutine_threadsafe(broker.get_account_info(), loop)
+                                    account = future.result(timeout=5)
+                                    if account:
+                                        tastytrade_buying_power = float(account.get('buying_power', 0) or 0)
+                                except:
+                                    pass
+                except:
+                    pass
+            
+            tastytrade_creds = db.get_tastytrade_settings() if hasattr(db, 'get_tastytrade_settings') else None
+            tastytrade_configured = bool(tastytrade_creds and tastytrade_creds.get('username') and tastytrade_creds.get('password'))
+            
+            broker_status['tastytrade'] = {
+                'connected': tastytrade_connected,
+                'status': 'connected' if tastytrade_connected else ('configured' if tastytrade_configured else 'not_configured'),
+                'account_type': 'PAPER' if (tastytrade_creds and tastytrade_creds.get('paper_trading', True)) else 'LIVE',
+                'buying_power': tastytrade_buying_power,
+                'positions': tastytrade_positions,
+                'configured': tastytrade_configured
+            }
+            
             health_data['brokers'] = broker_status
             
             # Feature Settings - Load from config.ini and database
