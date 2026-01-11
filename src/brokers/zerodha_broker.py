@@ -410,6 +410,142 @@ class ZerodhaBroker(BrokerInterface):
             print(f"[{self.name}] Modify order failed: {e}")
             return OrderResult(success=False, message=str(e))
     
+    async def place_stock_order(
+        self,
+        symbol: str,
+        action: str,
+        quantity: int,
+        price: Optional[float] = None,
+        exchange: str = 'NSE',
+        product: str = 'CNC'
+    ) -> OrderResult:
+        """
+        Place a stock order on Zerodha (standardized interface)
+        
+        Args:
+            symbol: Trading symbol (e.g., 'RELIANCE', 'SBIN')
+            action: 'BTO' (buy) or 'STC' (sell)
+            quantity: Number of shares
+            price: Limit price (None for market order)
+            exchange: NSE or BSE (default: NSE)
+            product: CNC (delivery) or MIS (intraday)
+        """
+        order_type = 'limit' if price else 'market'
+        return await self.place_order(
+            symbol=symbol,
+            action=action,
+            quantity=quantity,
+            order_type=order_type,
+            price=price,
+            exchange=exchange,
+            product=product
+        )
+    
+    async def place_option_order(
+        self,
+        symbol: str = None,
+        strike: float = None,
+        expiry: str = None,
+        option_type: str = None,
+        action: str = None,
+        quantity: int = None,
+        price: Optional[float] = None,
+        qty: int = None,
+        opt_type: str = None,
+        expiry_mmdd: str = None,
+        limit_price: float = None,
+        lots: int = None,
+        **kwargs
+    ) -> OrderResult:
+        """
+        Place an option order on Zerodha (standardized interface)
+        
+        Supports both Alpaca-style and Webull-style parameters.
+        Builds the Zerodha trading symbol and submits order.
+        
+        Args:
+            symbol: Underlying symbol (e.g., 'NIFTY', 'BANKNIFTY')
+            strike: Strike price
+            expiry: Expiry date (various formats supported)
+            option_type/opt_type: 'CE' (call) or 'PE' (put)
+            action: 'BTO' (buy) or 'STC' (sell)
+            quantity/qty: Number of contracts
+            price/limit_price: Limit price (None for market order)
+            lots: Number of lots (multiplied by lot size)
+        """
+        actual_opt_type = option_type or opt_type or 'CE'
+        actual_expiry = expiry or expiry_mmdd or ''
+        actual_price = price or limit_price
+        actual_qty = quantity or qty or 1
+        
+        opt_suffix = 'CE' if actual_opt_type.upper() in ('C', 'CALL', 'CE') else 'PE'
+        
+        LOT_SIZES = {
+            'NIFTY': 25, 'BANKNIFTY': 15, 'FINNIFTY': 25, 'MIDCPNIFTY': 50,
+            'RELIANCE': 250, 'TCS': 150, 'INFY': 300, 'HDFCBANK': 550,
+            'ICICIBANK': 1375, 'SBIN': 1500, 'TATAMOTORS': 1425
+        }
+        lot_size = LOT_SIZES.get(symbol.upper(), 50)
+        
+        if lots is not None:
+            order_qty = lots * lot_size
+            print(f"[{self.name}] Quantity: {lots} lots x {lot_size} = {order_qty} units")
+        elif actual_qty < lot_size:
+            order_qty = lot_size
+            print(f"[{self.name}] Quantity: {actual_qty} < lot_size({lot_size}), using 1 lot")
+        else:
+            calculated_lots = max(1, round(actual_qty / lot_size))
+            order_qty = calculated_lots * lot_size
+            print(f"[{self.name}] Quantity: {actual_qty} → {calculated_lots} lots = {order_qty} units")
+        
+        try:
+            expiry_formatted = ''
+            if actual_expiry:
+                from datetime import datetime
+                MONTH_MAP = {
+                    1: 'JAN', 2: 'FEB', 3: 'MAR', 4: 'APR', 5: 'MAY', 6: 'JUN',
+                    7: 'JUL', 8: 'AUG', 9: 'SEP', 10: 'O', 11: 'N', 12: 'D'
+                }
+                WEEK_MONTH_MAP = {
+                    1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6',
+                    7: '7', 8: '8', 9: '9', 10: 'O', 11: 'N', 12: 'D'
+                }
+                
+                if '/' in actual_expiry:
+                    parts = actual_expiry.split('/')
+                    if len(parts) == 2:
+                        month, day = int(parts[0]), int(parts[1])
+                        year = datetime.now().year % 100
+                        month_code = WEEK_MONTH_MAP.get(month, str(month))
+                        expiry_formatted = f"{year}{month_code}{day:02d}"
+                elif '-' in actual_expiry:
+                    exp_date = datetime.strptime(actual_expiry, '%Y-%m-%d')
+                    year = exp_date.year % 100
+                    month_code = WEEK_MONTH_MAP.get(exp_date.month, str(exp_date.month))
+                    expiry_formatted = f"{year}{month_code}{exp_date.day:02d}"
+                else:
+                    expiry_formatted = actual_expiry
+            
+            trading_symbol = f"{symbol.upper()}{expiry_formatted}{int(strike)}{opt_suffix}"
+            print(f"[{self.name}] Built trading symbol: {trading_symbol}")
+        except Exception as e:
+            print(f"[{self.name}] Error building trading symbol: {e}")
+            trading_symbol = f"{symbol.upper()}{int(strike)}{opt_suffix}"
+        
+        order_type = 'limit' if actual_price else 'market'
+        
+        print(f"[{self.name}] Placing option: {action} {order_qty} {trading_symbol} @ {actual_price or 'MARKET'}")
+        
+        return await self.place_order(
+            symbol=trading_symbol,
+            action=action,
+            quantity=order_qty,
+            order_type=order_type,
+            price=actual_price,
+            exchange='NFO',
+            product='NRML'
+        )
+    
     async def get_holdings(self) -> List[Dict[str, Any]]:
         """Get delivery holdings (long-term portfolio)"""
         if not self.kite:

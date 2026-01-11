@@ -521,6 +521,221 @@ class DhanQBroker(BrokerInterface):
         except Exception as e:
             return [OrderResult(success=False, message=str(e))]
     
+    async def place_stock_order(
+        self,
+        symbol: str,
+        action: str,
+        quantity: int,
+        price: Optional[float] = None,
+        exchange: str = 'NSE'
+    ) -> OrderResult:
+        """
+        Place a stock order on DhanQ (standardized interface)
+        
+        Args:
+            symbol: Trading symbol (e.g., 'RELIANCE', 'SBIN')
+            action: 'BTO' (buy) or 'STC' (sell)
+            quantity: Number of shares
+            price: Limit price (None for market order)
+            exchange: NSE or BSE (default: NSE)
+        """
+        security_id = self.get_security_id(symbol.upper())
+        
+        if not security_id:
+            return OrderResult(
+                success=False,
+                message=f"Security ID not found for {symbol}. Add to NSE_SECURITY_IDS mapping."
+            )
+        
+        exchange_segment = f"{exchange.upper()}_EQ"
+        order_type = 'LIMIT' if price else 'MARKET'
+        
+        return await self.place_order(
+            security_id=str(security_id),
+            action=action,
+            quantity=quantity,
+            order_type=order_type,
+            price=price,
+            exchange_segment=exchange_segment,
+            product_type='INTRADAY'
+        )
+    
+    async def place_option_order(
+        self,
+        symbol: str = None,
+        strike: float = None,
+        expiry: str = None,
+        option_type: str = None,
+        action: str = None,
+        quantity: int = None,
+        price: Optional[float] = None,
+        qty: int = None,
+        opt_type: str = None,
+        expiry_mmdd: str = None,
+        limit_price: float = None,
+        lots: int = None,
+        **kwargs
+    ) -> OrderResult:
+        """
+        Place an option order on DhanQ (standardized interface)
+        
+        Args:
+            symbol: Underlying symbol (e.g., 'NIFTY', 'BANKNIFTY')
+            strike: Strike price
+            expiry: Expiry date
+            option_type/opt_type: 'CE' (call) or 'PE' (put)
+            action: 'BTO' (buy) or 'STC' (sell)
+            quantity/qty: Number of contracts
+            price/limit_price: Limit price (None for market order)
+            lots: Number of lots (multiplied by lot size)
+        """
+        actual_opt_type = option_type or opt_type or 'CE'
+        actual_expiry = expiry or expiry_mmdd or ''
+        actual_price = price or limit_price
+        actual_qty = quantity or qty or 1
+        
+        opt_suffix = 'CE' if actual_opt_type.upper() in ('C', 'CALL', 'CE') else 'PE'
+        
+        lot_size = self.NSE_LOT_SIZES.get(symbol.upper(), 25)
+        
+        if lots is not None:
+            order_qty = lots * lot_size
+            print(f"[{self.name}] Quantity: {lots} lots x {lot_size} = {order_qty} units")
+        elif actual_qty < lot_size:
+            order_qty = lot_size
+            print(f"[{self.name}] Quantity: {actual_qty} < lot_size({lot_size}), using 1 lot")
+        else:
+            calculated_lots = max(1, round(actual_qty / lot_size))
+            order_qty = calculated_lots * lot_size
+            print(f"[{self.name}] Quantity: {actual_qty} → {calculated_lots} lots = {order_qty} units")
+        
+        option_security_id = await self._lookup_option_security_id(
+            symbol=symbol.upper(),
+            strike=strike,
+            expiry=actual_expiry,
+            option_type=opt_suffix
+        )
+        
+        if not option_security_id:
+            return OrderResult(
+                success=False,
+                message=f"Option security ID not found for {symbol} {strike} {opt_suffix} {actual_expiry}. "
+                        "Please check the instrument mapping or use ExpiryResolver."
+            )
+        
+        try:
+            from datetime import datetime
+            expiry_formatted = ''
+            if actual_expiry:
+                if '/' in actual_expiry:
+                    parts = actual_expiry.split('/')
+                    if len(parts) == 2:
+                        month, day = int(parts[0]), int(parts[1])
+                        year = datetime.now().year
+                        expiry_formatted = f"{year}{month:02d}{day:02d}"
+                elif '-' in actual_expiry:
+                    exp_date = datetime.strptime(actual_expiry, '%Y-%m-%d')
+                    expiry_formatted = exp_date.strftime('%Y%m%d')
+                else:
+                    expiry_formatted = actual_expiry
+            
+            trading_symbol = f"{symbol.upper()}{expiry_formatted}{int(strike)}{opt_suffix}"
+            print(f"[{self.name}] Built trading symbol: {trading_symbol}")
+        except Exception as e:
+            print(f"[{self.name}] Error building trading symbol: {e}")
+            trading_symbol = f"{symbol.upper()}{int(strike)}{opt_suffix}"
+        
+        order_type = 'LIMIT' if actual_price else 'MARKET'
+        
+        print(f"[{self.name}] Placing option: {action} {order_qty} {trading_symbol} (ID: {option_security_id}) @ {actual_price or 'MARKET'}")
+        
+        if order_qty > 1800:
+            slice_results = await self.place_slice_order(
+                security_id=str(option_security_id),
+                action=action,
+                quantity=order_qty,
+                order_type=order_type,
+                price=actual_price,
+                exchange_segment='NSE_FNO',
+                product_type='INTRADAY'
+            )
+            if slice_results and len(slice_results) > 0:
+                first_result = slice_results[0]
+                if first_result.success:
+                    order_ids = [r.order_id for r in slice_results if r.success and r.order_id]
+                    return OrderResult(
+                        success=True,
+                        order_id=','.join(order_ids),
+                        message=f"Slice order placed: {len(slice_results)} legs, IDs: {','.join(order_ids[:3])}..."
+                    )
+                else:
+                    return first_result
+            else:
+                return OrderResult(success=False, message="Slice order returned no results")
+        else:
+            return await self.place_order(
+                security_id=str(option_security_id),
+                action=action,
+                quantity=order_qty,
+                order_type=order_type,
+                price=actual_price,
+                exchange_segment='NSE_FNO',
+                product_type='INTRADAY'
+            )
+    
+    async def _lookup_option_security_id(
+        self,
+        symbol: str,
+        strike: float,
+        expiry: str,
+        option_type: str
+    ) -> Optional[str]:
+        """
+        Look up the contract-specific security ID for an option.
+        Uses ExpiryResolver service if available, otherwise falls back to API lookup.
+        """
+        try:
+            from src.services.expiry_resolver import expiry_resolver
+            resolved = expiry_resolver.resolve_option(
+                underlying=symbol.upper(),
+                strike=float(strike),
+                option_type=option_type,
+                expiry=expiry,
+                broker='dhanq'
+            )
+            if resolved and resolved.security_id:
+                print(f"[{self.name}] ✓ Resolved option security ID: {resolved.security_id}")
+                return str(resolved.security_id)
+        except ImportError:
+            print(f"[{self.name}] ExpiryResolver not available, using fallback")
+        except Exception as e:
+            print(f"[{self.name}] ExpiryResolver error: {e}")
+        
+        try:
+            response = await asyncio.to_thread(
+                self.session.get,
+                f"{self.API_BASE_URL}/optionChain",
+                headers=self._get_headers(),
+                params={
+                    'underlyingSecurityId': str(self.get_security_id(symbol.upper())),
+                    'expiryDate': expiry
+                }
+            )
+            
+            if response.status_code == 200:
+                chain = response.json()
+                for option in chain.get('data', []):
+                    if (option.get('strikePrice') == strike and 
+                        option.get('optionType') == option_type):
+                        security_id = option.get('securityId')
+                        if security_id:
+                            print(f"[{self.name}] ✓ Found option security ID via API: {security_id}")
+                            return str(security_id)
+        except Exception as e:
+            print(f"[{self.name}] Option chain lookup error: {e}")
+        
+        return None
+    
     async def modify_order(self, order_id: str, quantity: int = None,
                            price: float = None, order_type: str = None,
                            trigger_price: float = None, validity: str = 'DAY',
