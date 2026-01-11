@@ -210,6 +210,10 @@ class BotLifecycleManager:
         """
         Restart the bot by launching a new process and exiting current one.
         
+        For PyInstaller frozen builds, we use a delayed restart approach:
+        - Create a batch/shell script that waits, then launches new instance
+        - Exit immediately to release temp folder locks
+        
         Returns:
             True if restart initiated (process will exit)
         """
@@ -232,6 +236,7 @@ class BotLifecycleManager:
             print("[LIFECYCLE] Launching new instance...")
             
             import subprocess
+            import tempfile
             
             if hasattr(sys, '_MEIPASS'):
                 # PyInstaller frozen executable - restart the exe itself
@@ -239,29 +244,61 @@ class BotLifecycleManager:
                 print(f"[LIFECYCLE] Frozen build - restarting: {exe_path}")
                 
                 if sys.platform == 'win32':
-                    # Windows: use os.startfile for frozen exe
-                    os.startfile(exe_path)
+                    # Windows: Create a batch script that waits then launches
+                    # This ensures the old process fully exits before new one starts
+                    # which prevents temp folder conflicts
+                    batch_content = f'''@echo off
+timeout /t 2 /nobreak >nul
+start "" "{exe_path}"
+del "%~f0"
+'''
+                    # Write batch file to user's temp directory (not PyInstaller's temp)
+                    batch_path = os.path.join(tempfile.gettempdir(), f"botify_restart_{os.getpid()}.bat")
+                    with open(batch_path, 'w') as f:
+                        f.write(batch_content)
+                    
+                    print(f"[LIFECYCLE] Created restart script: {batch_path}")
+                    
+                    # Launch batch script with hidden window, fully detached
+                    CREATE_NO_WINDOW = 0x08000000
+                    DETACHED_PROCESS = 0x00000008
+                    subprocess.Popen(
+                        ['cmd', '/c', batch_path],
+                        creationflags=CREATE_NO_WINDOW | DETACHED_PROCESS,
+                        close_fds=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                    print("[LIFECYCLE] Restart script launched, exiting immediately...")
+                    
                 elif sys.platform == 'darwin':
-                    # macOS: use open command for app bundles or direct exec
+                    # macOS: use open command for app bundles or direct exec with delay
                     if '.app' in exe_path:
                         app_path = exe_path.split('.app')[0] + '.app'
-                        subprocess.Popen(['open', '-n', app_path],
-                                       start_new_session=True,
-                                       stdout=subprocess.DEVNULL,
-                                       stderr=subprocess.DEVNULL)
+                        # Use shell script with delay
+                        subprocess.Popen(
+                            ['bash', '-c', f'sleep 2 && open -n "{app_path}"'],
+                            start_new_session=True,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL
+                        )
                     else:
-                        subprocess.Popen([exe_path],
-                                       start_new_session=True,
-                                       stdout=subprocess.DEVNULL,
-                                       stderr=subprocess.DEVNULL)
+                        subprocess.Popen(
+                            ['bash', '-c', f'sleep 2 && "{exe_path}"'],
+                            start_new_session=True,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL
+                        )
                 else:
-                    # Linux: direct execution
-                    subprocess.Popen([exe_path],
-                                   start_new_session=True,
-                                   stdout=subprocess.DEVNULL,
-                                   stderr=subprocess.DEVNULL)
+                    # Linux: Use bash with delay
+                    subprocess.Popen(
+                        ['bash', '-c', f'sleep 2 && "{exe_path}"'],
+                        start_new_session=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
             else:
-                # Development mode - restart with python
+                # Development mode - restart with python (direct is fine here)
                 python_exe = sys.executable
                 script = os.path.abspath(sys.argv[0])
                 print(f"[LIFECYCLE] Dev mode - restarting: {python_exe} {script}")
@@ -270,9 +307,9 @@ class BotLifecycleManager:
                                stdout=subprocess.DEVNULL,
                                stderr=subprocess.DEVNULL,
                                cwd=os.path.dirname(script) or '.')
+                time.sleep(1)
             
-            print("[LIFECYCLE] New instance launched, exiting current...")
-            time.sleep(1)
+            print("[LIFECYCLE] Exiting current process for restart...")
             os._exit(0)
             
         except Exception as e:
