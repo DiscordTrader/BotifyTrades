@@ -348,26 +348,18 @@ class RobinhoodBroker(BrokerInterface):
             )
             
             if call_options:
-                # Extract option IDs for batch market data fetch
-                option_ids = [opt.get('id') for opt in call_options if opt.get('id')]
-                
-                # Batch fetch market data using option IDs
-                market_lookup = {}
-                if option_ids:
-                    try:
-                        market_data_list = rh.options.get_option_market_data_by_id(option_ids) or []
-                        for md in market_data_list:
-                            if md and isinstance(md, dict):
-                                instr_id = md.get('instrument_id') or md.get('id')
-                                if instr_id:
-                                    market_lookup[instr_id] = md
-                    except Exception as e:
-                        print(f"[{self.name}] Error fetching call market data: {e}")
-                
+                # Fetch market data individually for each option (robin-stocks doesn't support batch)
                 for opt in call_options:
                     strike = float(opt.get('strike_price', 0))
                     opt_id = opt.get('id', '')
-                    data = market_lookup.get(opt_id, {})
+                    
+                    # Fetch market data for this specific option
+                    data = {}
+                    if opt_id:
+                        try:
+                            data = rh.options.get_option_market_data_by_id(opt_id) or {}
+                        except:
+                            pass
                     
                     calls.append({
                         'strike': strike,
@@ -391,26 +383,18 @@ class RobinhoodBroker(BrokerInterface):
             )
             
             if put_options:
-                # Extract option IDs for batch market data fetch
-                option_ids = [opt.get('id') for opt in put_options if opt.get('id')]
-                
-                # Batch fetch market data using option IDs
-                market_lookup = {}
-                if option_ids:
-                    try:
-                        market_data_list = rh.options.get_option_market_data_by_id(option_ids) or []
-                        for md in market_data_list:
-                            if md and isinstance(md, dict):
-                                instr_id = md.get('instrument_id') or md.get('id')
-                                if instr_id:
-                                    market_lookup[instr_id] = md
-                    except Exception as e:
-                        print(f"[{self.name}] Error fetching put market data: {e}")
-                
+                # Fetch market data individually for each option (robin-stocks doesn't support batch)
                 for opt in put_options:
                     strike = float(opt.get('strike_price', 0))
                     opt_id = opt.get('id', '')
-                    data = market_lookup.get(opt_id, {})
+                    
+                    # Fetch market data for this specific option
+                    data = {}
+                    if opt_id:
+                        try:
+                            data = rh.options.get_option_market_data_by_id(opt_id) or {}
+                        except:
+                            pass
                     
                     puts.append({
                         'strike': strike,
