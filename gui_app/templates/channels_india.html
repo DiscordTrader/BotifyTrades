@@ -1,668 +1,373 @@
 {% extends "base.html" %}
 
-{% block title %}India Markets - Ψ∿ BotifyTrades{% endblock %}
+{% block title %}India Markets - BotifyTrades{% endblock %}
 
 {% block content %}
 <style>
-.broker-selector {
+.broker-tabs {
     display: flex;
-    gap: 8px;
+    gap: 4px;
     padding: 4px;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 12px;
-    border: 1px solid rgba(255, 153, 0, 0.2);
+    background: var(--card-bg, #1a1a2e);
+    border-radius: 8px;
+    border: 1px solid var(--border-accent, rgba(15, 240, 179, 0.2));
 }
-.broker-selector-btn {
+.broker-tab {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px 20px;
+    gap: 6px;
+    padding: 8px 16px;
     border: none;
-    border-radius: 10px;
+    border-radius: 6px;
     background: transparent;
-    color: #8E8E93;
-    font-size: 14px;
+    color: var(--text-secondary, #8E8E93);
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
     position: relative;
 }
-.broker-selector-btn:hover {
-    background: rgba(255, 255, 255, 0.05);
+.broker-tab:hover { background: rgba(15, 240, 179, 0.05); color: #fff; }
+.broker-tab.active {
+    background: var(--accent-gradient, linear-gradient(135deg, #0FF0B3 0%, #7C3AED 100%));
+    color: #fff;
 }
-.broker-selector-btn.active {
-    background: var(--broker-color, #ff9900);
-    color: white;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-.broker-selector-btn .broker-icon {
-    font-size: 18px;
-}
-.broker-selector-btn .status-dot {
-    width: 8px;
-    height: 8px;
+.broker-tab .dot {
+    width: 6px; height: 6px;
     border-radius: 50%;
     background: #ff6b6b;
-    position: absolute;
-    top: 8px;
-    right: 8px;
 }
-.broker-selector-btn .status-dot.connected {
-    background: #00ff88;
-    box-shadow: 0 0 8px #00ff88;
-}
-.dashboard-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-}
-.broker-info {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-}
-.broker-title {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--broker-color, #ff9900);
-}
-.status-badge {
-    padding: 6px 14px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-.status-badge.connected {
-    background: rgba(0, 255, 136, 0.15);
-    color: #00ff88;
-    border: 1px solid rgba(0, 255, 136, 0.3);
-}
-.status-badge.disconnected {
-    background: rgba(255, 107, 107, 0.15);
-    color: #ff6b6b;
-    border: 1px solid rgba(255, 107, 107, 0.3);
-}
-.account-stats {
+.broker-tab .dot.connected { background: #00ff88; box-shadow: 0 0 6px #00ff88; }
+.stats-row {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-bottom: 24px;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
 }
-.stat-card {
-    background: linear-gradient(135deg, rgba(var(--broker-rgb, 255, 153, 0), 0.1), rgba(var(--broker-rgb, 255, 153, 0), 0.02));
-    border: 1px solid rgba(var(--broker-rgb, 255, 153, 0), 0.2);
-    border-radius: 12px;
-    padding: 20px;
+.stat-box {
+    background: var(--card-bg, rgba(26, 26, 46, 0.8));
+    border: 1px solid var(--border-accent, rgba(15, 240, 179, 0.15));
+    border-radius: 8px;
+    padding: 12px 16px;
     text-align: center;
 }
-.stat-card .label {
-    font-size: 11px;
-    color: #8E8E93;
+.stat-box .label {
+    font-size: 10px;
+    color: var(--text-secondary, #8E8E93);
     text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
 }
-.stat-card .value {
-    font-size: 28px;
+.stat-box .value {
+    font-size: 18px;
     font-weight: 700;
-    color: var(--broker-color, #ff9900);
+    color: var(--accent-mint, #0FF0B3);
 }
-.stat-card .subtext {
-    font-size: 11px;
-    color: #8E8E93;
-    margin-top: 4px;
-}
-.dashboard-tabs {
+.stat-box .value.positive { color: #00ff88; }
+.stat-box .value.negative { color: #ff6b6b; }
+.data-tabs {
     display: flex;
-    gap: 6px;
-    margin-bottom: 20px;
+    gap: 4px;
+    margin-bottom: 12px;
     background: rgba(0, 0, 0, 0.2);
-    padding: 6px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-}
-.dashboard-tab {
-    padding: 12px 24px;
-    border: none;
+    padding: 4px;
     border-radius: 8px;
+}
+.data-tab {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
     background: transparent;
-    color: #8E8E93;
-    font-size: 13px;
+    color: var(--text-secondary, #8E8E93);
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.2s;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 }
-.dashboard-tab:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: #ffffff;
+.data-tab:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
+.data-tab.active {
+    background: var(--accent-gradient, linear-gradient(135deg, #0FF0B3 0%, #7C3AED 100%));
+    color: #fff;
 }
-.dashboard-tab.active {
-    background: var(--broker-color, #ff9900);
-    color: white;
-}
-.dashboard-tab .count {
+.data-tab .count {
     background: rgba(0, 0, 0, 0.3);
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 10px;
 }
-.tab-content {
-    display: none;
-}
-.tab-content.active {
-    display: block;
-}
-.data-table-pro {
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.compact-table {
     width: 100%;
     border-collapse: collapse;
+    font-size: 12px;
 }
-.data-table-pro thead tr {
-    background: rgba(var(--broker-rgb, 255, 153, 0), 0.08);
+.compact-table thead tr {
+    background: rgba(15, 240, 179, 0.05);
 }
-.data-table-pro th {
-    padding: 14px 16px;
-    font-size: 11px;
+.compact-table th {
+    padding: 10px 12px;
+    font-size: 10px;
     font-weight: 700;
-    color: var(--broker-color, #ff9900);
+    color: var(--accent-mint, #0FF0B3);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     text-align: left;
-    border-bottom: 1px solid rgba(var(--broker-rgb, 255, 153, 0), 0.2);
+    border-bottom: 1px solid var(--border-accent, rgba(15, 240, 179, 0.15));
 }
-.data-table-pro td {
-    padding: 14px 16px;
-    font-size: 13px;
-    color: #ffffff;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+.compact-table td {
+    padding: 10px 12px;
+    color: #fff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
-.data-table-pro tbody tr:hover {
-    background: rgba(255, 255, 255, 0.02);
-}
-.empty-state {
+.compact-table tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
+.empty-msg {
     text-align: center;
-    padding: 60px 20px;
-    color: #8E8E93;
+    padding: 40px 20px;
+    color: var(--text-secondary, #8E8E93);
 }
-.empty-state .icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-    opacity: 0.5;
-}
-.empty-state .title {
-    font-size: 16px;
-    color: #ffffff;
-    margin-bottom: 8px;
-}
-.empty-state .description {
-    font-size: 13px;
-    max-width: 400px;
-    margin: 0 auto;
-}
-.btn-reconnect {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    border: 1px solid rgba(255, 193, 7, 0.4);
-    border-radius: 8px;
-    background: rgba(255, 193, 7, 0.1);
-    color: #ffc107;
-    font-size: 13px;
+.empty-msg .icon { font-size: 32px; margin-bottom: 8px; opacity: 0.5; }
+.empty-msg .title { font-size: 13px; color: #fff; margin-bottom: 4px; }
+.empty-msg .desc { font-size: 11px; }
+.action-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.2s;
+    border: 1px solid var(--border-accent, rgba(15, 240, 179, 0.3));
+    background: rgba(15, 240, 179, 0.1);
+    color: var(--accent-mint, #0FF0B3);
 }
-.btn-reconnect:hover {
-    background: rgba(255, 193, 7, 0.2);
-    transform: translateY(-1px);
-}
-.btn-reconnect:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-.btn-refresh {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    border: 1px solid rgba(var(--broker-rgb, 255, 153, 0), 0.4);
-    border-radius: 8px;
-    background: rgba(var(--broker-rgb, 255, 153, 0), 0.1);
-    color: var(--broker-color, #ff9900);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-.btn-refresh:hover {
-    background: rgba(var(--broker-rgb, 255, 153, 0), 0.2);
-}
-.pnl-positive { color: #00ff88 !important; }
-.pnl-negative { color: #ff6b6b !important; }
-.side-buy { color: #00ff88; font-weight: 600; }
-.side-sell { color: #ff6b6b; font-weight: 600; }
-.status-pill {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 10px;
+.action-btn:hover { background: rgba(15, 240, 179, 0.2); }
+.action-btn.danger { border-color: rgba(255, 107, 107, 0.3); background: rgba(255, 107, 107, 0.1); color: #ff6b6b; }
+.status-badge {
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-size: 9px;
     font-weight: 700;
     text-transform: uppercase;
 }
-.status-open { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
-.status-filled { background: rgba(0, 255, 136, 0.2); color: #00ff88; }
-.status-cancelled, .status-rejected { background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }
-.status-pending { background: rgba(156, 39, 176, 0.2); color: #9c27b0; }
-.status-watching { background: rgba(0, 212, 255, 0.2); color: #00d4ff; }
-.loading-skeleton {
-    background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s infinite;
-    border-radius: 4px;
+.status-badge.connected { background: rgba(0, 255, 136, 0.15); color: #00ff88; }
+.status-badge.disconnected { background: rgba(255, 107, 107, 0.15); color: #ff6b6b; }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.pill-open { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
+.pill-filled { background: rgba(0, 255, 136, 0.2); color: #00ff88; }
+.pill-cancelled { background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }
+.pill-pending { background: rgba(124, 58, 237, 0.2); color: #7C3AED; }
+.pill-watching { background: rgba(15, 240, 179, 0.2); color: #0FF0B3; }
+.side-buy { color: #00ff88; font-weight: 600; }
+.side-sell { color: #ff6b6b; font-weight: 600; }
+.lot-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
 }
-@keyframes shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+.lot-item {
+    text-align: center;
+    padding: 8px;
+    background: rgba(15, 240, 179, 0.03);
+    border-radius: 6px;
+    border: 1px solid var(--border-accent, rgba(15, 240, 179, 0.15));
 }
+.lot-item .sym { font-weight: 700; color: var(--accent-mint, #0FF0B3); font-size: 12px; }
+.lot-item .val { font-size: 18px; font-weight: 800; color: #fff; }
+.lot-item .lbl { font-size: 9px; color: var(--text-secondary, #8E8E93); }
 </style>
 
-<!-- India Market Header -->
-<div class="table-container" style="margin-bottom: 24px; background: linear-gradient(135deg, #1a0f2e 0%, #2d1f4a 50%, #1a2f1a 100%); border: 1px solid rgba(255, 153, 0, 0.3);">
-    <div style="padding: 24px; display: flex; justify-content: space-between; align-items: center;">
+<div class="table-container" style="margin-bottom: 16px; background: var(--accent-gradient-subtle, linear-gradient(135deg, rgba(15, 240, 179, 0.08) 0%, rgba(124, 58, 237, 0.08) 100%)); border: 1px solid var(--border-accent);">
+    <div style="padding: 16px; display: flex; justify-content: space-between; align-items: center;">
         <div>
-            <h1 style="margin: 0 0 8px 0; font-size: 28px; color: #ff9900; display: flex; align-items: center; gap: 12px;">
+            <h1 style="margin: 0; font-size: 20px; color: var(--accent-mint, #0FF0B3); display: flex; align-items: center; gap: 8px;">
                 🇮🇳 India Markets
             </h1>
-            <p style="margin: 0; color: #b4b8c5; font-size: 14px;">
-                NSE • BSE • MCX — Trade NIFTY, BANKNIFTY, and Indian equities
-            </p>
+            <p style="margin: 4px 0 0 0; color: var(--text-secondary); font-size: 12px;">NSE | BSE | MCX</p>
         </div>
-        <div style="display: flex; gap: 24px; align-items: center;">
-            <div style="text-align: right;">
-                <div style="font-size: 11px; color: #8E8E93; text-transform: uppercase; letter-spacing: 1px;">Trading Hours</div>
-                <div style="font-size: 14px; color: #00ff88; font-weight: 600;">9:15 AM - 3:30 PM IST</div>
-            </div>
-            <div style="width: 1px; height: 40px; background: rgba(255, 153, 0, 0.3);"></div>
-            <div style="text-align: right;">
-                <div style="font-size: 11px; color: #8E8E93; text-transform: uppercase; letter-spacing: 1px;">Currency</div>
-                <div style="font-size: 18px; color: #ff9900; font-weight: 700;">₹ INR</div>
-            </div>
+        <div style="display: flex; gap: 16px; align-items: center; font-size: 11px;">
+            <div><span style="color: var(--text-secondary);">Hours:</span> <span style="color: #00ff88; font-weight: 600;">9:15 AM - 3:30 PM IST</span></div>
+            <div><span style="color: var(--text-secondary);">Currency:</span> <span style="color: var(--accent-mint); font-weight: 700;">₹ INR</span></div>
+            <span style="color: #ff6b6b; font-size: 10px;">⚠️ LIVE ONLY</span>
         </div>
     </div>
 </div>
 
-<!-- Broker Selector -->
-<div class="table-container" style="margin-bottom: 24px; padding: 20px;">
-    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
-        <div class="broker-selector" id="broker-selector">
-            <button class="broker-selector-btn" data-broker="zerodha" style="--broker-color: #ff5722;">
-                <span class="broker-icon">🔥</span>
-                <span>Zerodha</span>
-                <span class="status-dot" id="zerodha-dot"></span>
-            </button>
-            <button class="broker-selector-btn" data-broker="dhanq" style="--broker-color: #8a2be2;">
-                <span class="broker-icon">🔮</span>
-                <span>DhanQ</span>
-                <span class="status-dot" id="dhanq-dot"></span>
-            </button>
-            <button class="broker-selector-btn" data-broker="upstox" style="--broker-color: #00c853;">
-                <span class="broker-icon">📈</span>
-                <span>Upstox</span>
-                <span class="status-dot" id="upstox-dot"></span>
-            </button>
+<div class="table-container" style="margin-bottom: 16px; padding: 16px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div class="broker-tabs" id="broker-tabs">
+            <button class="broker-tab active" data-broker="zerodha">🔥 Zerodha <span class="dot" id="zerodha-dot"></span></button>
+            <button class="broker-tab" data-broker="dhanq">🔮 DhanQ <span class="dot" id="dhanq-dot"></span></button>
+            <button class="broker-tab" data-broker="upstox">📈 Upstox <span class="dot" id="upstox-dot"></span></button>
         </div>
-        <div style="display: flex; align-items: center; gap: 8px; color: #8E8E93; font-size: 12px;">
-            <span style="color: #ff6b6b;">⚠️</span>
-            All India brokers are <strong style="color: #ff6b6b;">LIVE TRADING</strong> only - No paper trading
+        <div style="display: flex; gap: 8px;">
+            <button class="action-btn" id="btn-reconnect" onclick="reconnectBroker()">🔌 Reconnect</button>
+            <button class="action-btn" id="btn-refresh" onclick="refreshDashboard()">🔄 Refresh</button>
         </div>
-    </div>
-</div>
-
-<!-- Broker Dashboard (Dynamic) -->
-<div id="broker-dashboard" class="table-container" style="margin-bottom: 24px; --broker-color: #ff5722; --broker-rgb: 255, 87, 34;">
-    <div style="padding: 24px;">
-        <!-- Dashboard Header -->
-        <div class="dashboard-header">
-            <div class="broker-info">
-                <div class="broker-title" id="dashboard-broker-title">
-                    <span id="dashboard-broker-icon">🔥</span>
-                    <span id="dashboard-broker-name">Zerodha</span>
-                </div>
-                <span class="status-badge disconnected" id="dashboard-status-badge">NOT CONNECTED</span>
-                <span id="dashboard-user-id" style="color: #8E8E93; font-size: 13px;"></span>
-            </div>
-            <div style="display: flex; gap: 12px;">
-                <button class="btn-reconnect" id="btn-reconnect" onclick="reconnectBroker()">
-                    <span>🔌</span> Reconnect
-                </button>
-                <button class="btn-refresh" id="btn-refresh" onclick="refreshDashboard()">
-                    <span>🔄</span> Refresh
-                </button>
-            </div>
-        </div>
-        
-        <!-- Account Stats -->
-        <div class="account-stats" id="account-stats">
-            <div class="stat-card">
-                <div class="label">Available Balance</div>
-                <div class="value" id="stat-available">₹0.00</div>
-            </div>
-            <div class="stat-card">
-                <div class="label">Margin Used</div>
-                <div class="value" id="stat-margin">₹0.00</div>
-            </div>
-            <div class="stat-card">
-                <div class="label">Open Positions</div>
-                <div class="value" id="stat-positions">0</div>
-            </div>
-            <div class="stat-card">
-                <div class="label">Today's P&L</div>
-                <div class="value" id="stat-pnl">₹0.00</div>
-            </div>
-        </div>
-        
-        <!-- Dashboard Tabs -->
-        <div class="dashboard-tabs">
-            <button class="dashboard-tab active" data-tab="positions" onclick="switchDashboardTab('positions')">
-                📊 Positions <span class="count" id="tab-positions-count">0</span>
-            </button>
-            <button class="dashboard-tab" data-tab="orders" onclick="switchDashboardTab('orders')">
-                📋 Orders <span class="count" id="tab-orders-count">0</span>
-            </button>
-            <button class="dashboard-tab" data-tab="trades" onclick="switchDashboardTab('trades')">
-                💹 Trades <span class="count" id="tab-trades-count">0</span>
-            </button>
-            <button class="dashboard-tab" data-tab="conditional" onclick="switchDashboardTab('conditional')">
-                ⏰ Conditional <span class="count" id="tab-conditional-count">0</span>
-            </button>
-            <button class="dashboard-tab" data-tab="amo" onclick="switchDashboardTab('amo')">
-                🌙 AMO <span class="count" id="tab-amo-count">0</span>
-            </button>
-        </div>
-        
-        <!-- Positions Tab -->
-        <div class="tab-content active" id="tab-positions">
-            <table class="data-table-pro">
-                <thead>
-                    <tr>
-                        <th>Symbol</th>
-                        <th style="text-align: center;">Qty</th>
-                        <th style="text-align: right;">Avg Price</th>
-                        <th style="text-align: right;">LTP</th>
-                        <th style="text-align: right;">P&L</th>
-                        <th style="text-align: center;">Product</th>
-                    </tr>
-                </thead>
-                <tbody id="positions-body">
-                    <tr><td colspan="6" class="empty-state"><div class="icon">📊</div><div class="title">No Positions</div><div class="description">Open positions will appear here</div></td></tr>
-                </tbody>
-            </table>
-        </div>
-        
-        <!-- Orders Tab -->
-        <div class="tab-content" id="tab-orders">
-            <table class="data-table-pro">
-                <thead>
-                    <tr>
-                        <th>Order ID</th>
-                        <th>Symbol</th>
-                        <th style="text-align: center;">Side</th>
-                        <th style="text-align: center;">Qty</th>
-                        <th style="text-align: right;">Price</th>
-                        <th style="text-align: center;">Status</th>
-                        <th style="text-align: center;">Time</th>
-                        <th style="text-align: center;">Action</th>
-                    </tr>
-                </thead>
-                <tbody id="orders-body">
-                    <tr><td colspan="8" class="empty-state"><div class="icon">📋</div><div class="title">No Orders</div><div class="description">Orders will appear here</div></td></tr>
-                </tbody>
-            </table>
-        </div>
-        
-        <!-- Trades Tab -->
-        <div class="tab-content" id="tab-trades">
-            <table class="data-table-pro">
-                <thead>
-                    <tr>
-                        <th>Trade ID</th>
-                        <th>Symbol</th>
-                        <th style="text-align: center;">Side</th>
-                        <th style="text-align: center;">Qty</th>
-                        <th style="text-align: right;">Price</th>
-                        <th style="text-align: center;">Time</th>
-                    </tr>
-                </thead>
-                <tbody id="trades-body">
-                    <tr><td colspan="6" class="empty-state"><div class="icon">💹</div><div class="title">No Trades</div><div class="description">Executed trades will appear here</div></td></tr>
-                </tbody>
-            </table>
-        </div>
-        
-        <!-- Conditional Orders Tab -->
-        <div class="tab-content" id="tab-conditional">
-            <div style="margin-bottom: 16px; padding: 12px; background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 8px;">
-                <div style="font-size: 12px; color: #ffc107;">⚡ Conditional orders monitor price conditions and execute when triggered</div>
-            </div>
-            <table class="data-table-pro">
-                <thead>
-                    <tr>
-                        <th>Symbol</th>
-                        <th style="text-align: center;">Trigger</th>
-                        <th style="text-align: center;">LTP</th>
-                        <th style="text-align: center;">Status</th>
-                        <th style="text-align: center;">SL/PT</th>
-                        <th style="text-align: center;">Created</th>
-                        <th style="text-align: center;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="conditional-body">
-                    <tr><td colspan="7" class="empty-state"><div class="icon">⏰</div><div class="title">No Conditional Orders</div><div class="description">Price-triggered orders will appear here</div></td></tr>
-                </tbody>
-            </table>
-        </div>
-        
-        <!-- AMO Tab -->
-        <div class="tab-content" id="tab-amo">
-            <div style="margin-bottom: 16px; padding: 12px; background: rgba(156, 39, 176, 0.1); border: 1px solid rgba(156, 39, 176, 0.3); border-radius: 8px;">
-                <div style="font-size: 12px; color: #9c27b0;">🌙 After Market Orders - Queued during blackout hours and submitted at market open</div>
-            </div>
-            <table class="data-table-pro">
-                <thead>
-                    <tr>
-                        <th>Symbol</th>
-                        <th style="text-align: center;">Side</th>
-                        <th style="text-align: center;">Qty</th>
-                        <th style="text-align: right;">Price</th>
-                        <th style="text-align: center;">Status</th>
-                        <th style="text-align: center;">Queued At</th>
-                        <th style="text-align: center;">Action</th>
-                    </tr>
-                </thead>
-                <tbody id="amo-body">
-                    <tr><td colspan="7" class="empty-state"><div class="icon">🌙</div><div class="title">No AMO Orders</div><div class="description">After-market orders will appear here</div></td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-<!-- Lot Size Calculator -->
-<div class="table-container" style="margin-bottom: 24px; background: linear-gradient(135deg, #0a1628 0%, #162447 100%); border: 1px solid rgba(0, 212, 255, 0.3);">
-    <div class="table-header" style="border-bottom: 1px solid rgba(0, 212, 255, 0.2);">
-        <h3 class="table-title" style="color: #00d4ff;">📊 F&O Lot Size Reference</h3>
-    </div>
-    <div style="padding: 16px;">
-        <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px;">
-            <div style="text-align: center; padding: 12px; background: rgba(0, 212, 255, 0.05); border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.2);">
-                <div style="font-weight: 700; color: #00d4ff; font-size: 16px;">NIFTY</div>
-                <div style="font-size: 24px; font-weight: 800; color: #ffffff;">25</div>
-                <div style="font-size: 10px; color: #8E8E93;">contracts/lot</div>
-            </div>
-            <div style="text-align: center; padding: 12px; background: rgba(0, 212, 255, 0.05); border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.2);">
-                <div style="font-weight: 700; color: #00d4ff; font-size: 16px;">BANKNIFTY</div>
-                <div style="font-size: 24px; font-weight: 800; color: #ffffff;">15</div>
-                <div style="font-size: 10px; color: #8E8E93;">contracts/lot</div>
-            </div>
-            <div style="text-align: center; padding: 12px; background: rgba(0, 212, 255, 0.05); border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.2);">
-                <div style="font-weight: 700; color: #00d4ff; font-size: 16px;">FINNIFTY</div>
-                <div style="font-size: 24px; font-weight: 800; color: #ffffff;">25</div>
-                <div style="font-size: 10px; color: #8E8E93;">contracts/lot</div>
-            </div>
-            <div style="text-align: center; padding: 12px; background: rgba(0, 212, 255, 0.05); border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.2);">
-                <div style="font-weight: 700; color: #00d4ff; font-size: 16px;">MIDCPNIFTY</div>
-                <div style="font-size: 24px; font-weight: 800; color: #ffffff;">50</div>
-                <div style="font-size: 10px; color: #8E8E93;">contracts/lot</div>
-            </div>
-            <div style="text-align: center; padding: 12px; background: rgba(0, 212, 255, 0.05); border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.2);">
-                <div style="font-weight: 700; color: #00d4ff; font-size: 16px;">SENSEX</div>
-                <div style="font-size: 24px; font-weight: 800; color: #ffffff;">10</div>
-                <div style="font-size: 10px; color: #8E8E93;">contracts/lot</div>
-            </div>
-            <div style="text-align: center; padding: 12px; background: rgba(0, 212, 255, 0.05); border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.2);">
-                <div style="font-weight: 700; color: #00d4ff; font-size: 16px;">BANKEX</div>
-                <div style="font-size: 24px; font-weight: 800; color: #ffffff;">15</div>
-                <div style="font-size: 10px; color: #8E8E93;">contracts/lot</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Channel Management Section -->
-<div class="table-container" style="margin-bottom: 32px;">
-    <div class="table-header">
-        <div style="display: flex; gap: 16px; align-items: center;">
-            <h3 class="table-title">📡 India Market Channels</h3>
-            <div style="display: flex; background: rgba(255, 153, 0, 0.05); border: 1px solid var(--border-color); border-radius: 8px; padding: 4px; gap: 4px;">
-                <button id="channel-type-execute" class="channel-type-tab active" onclick="switchChannelType('EXECUTE')" style="padding: 6px 14px; border: none; border-radius: 6px; background: linear-gradient(135deg, #ff9900, #ff6600); color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
-                    🎯 Execution
-                </button>
-                <button id="channel-type-track" class="channel-type-tab" onclick="switchChannelType('TRACK')" style="padding: 6px 14px; border: none; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
-                    📊 Tracking
-                </button>
-            </div>
-        </div>
-        <button onclick="document.getElementById('add-channel-form').scrollIntoView({behavior: 'smooth'})" class="btn btn-primary btn-small" style="background: linear-gradient(135deg, #ff9900, #ff6600);">
-            ➕ Add India Channel
-        </button>
     </div>
     
-    <div id="channels-list">
-        <div style="text-align: center; padding: 40px;">
-            <div class="spinner" style="margin: 0 auto 20px;"></div>
-            <div style="color: var(--text-secondary);">Loading India channels...</div>
-        </div>
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        <span id="broker-name" style="font-size: 14px; font-weight: 700; color: #fff;">Zerodha</span>
+        <span class="status-badge disconnected" id="status-badge">NOT CONNECTED</span>
+        <span id="user-id" style="font-size: 11px; color: var(--text-secondary);"></span>
+    </div>
+    
+    <div class="stats-row" id="stats-row">
+        <div class="stat-box"><div class="label">Available</div><div class="value" id="stat-available">₹0</div></div>
+        <div class="stat-box"><div class="label">Margin Used</div><div class="value" id="stat-margin">₹0</div></div>
+        <div class="stat-box"><div class="label">Positions</div><div class="value" id="stat-positions">0</div></div>
+        <div class="stat-box"><div class="label">Orders</div><div class="value" id="stat-orders">0</div></div>
+        <div class="stat-box"><div class="label">Today P&L</div><div class="value" id="stat-pnl">₹0</div></div>
+    </div>
+    
+    <div class="data-tabs">
+        <button class="data-tab active" data-tab="positions" onclick="switchTab('positions')">📊 Positions <span class="count" id="cnt-positions">0</span></button>
+        <button class="data-tab" data-tab="orders" onclick="switchTab('orders')">📋 Orders <span class="count" id="cnt-orders">0</span></button>
+        <button class="data-tab" data-tab="trades" onclick="switchTab('trades')">💹 Trades <span class="count" id="cnt-trades">0</span></button>
+        <button class="data-tab" data-tab="conditional" onclick="switchTab('conditional')">⏰ Conditional <span class="count" id="cnt-conditional">0</span></button>
+        <button class="data-tab" data-tab="amo" onclick="switchTab('amo')">🌙 AMO <span class="count" id="cnt-amo">0</span></button>
+    </div>
+    
+    <div class="tab-panel active" id="panel-positions">
+        <table class="compact-table"><thead><tr>
+            <th>Symbol</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Avg</th><th style="text-align:right;">LTP</th><th style="text-align:right;">P&L</th><th style="text-align:center;">Product</th>
+        </tr></thead><tbody id="tbody-positions">
+            <tr><td colspan="6" class="empty-msg"><div class="icon">📊</div><div class="title">No Positions</div><div class="desc">Open positions will appear here</div></td></tr>
+        </tbody></table>
+    </div>
+    
+    <div class="tab-panel" id="panel-orders">
+        <table class="compact-table"><thead><tr>
+            <th>ID</th><th>Symbol</th><th style="text-align:center;">Side</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Price</th><th style="text-align:center;">Status</th><th style="text-align:center;">Time</th><th style="text-align:center;">Action</th>
+        </tr></thead><tbody id="tbody-orders">
+            <tr><td colspan="8" class="empty-msg"><div class="icon">📋</div><div class="title">No Orders</div><div class="desc">Orders will appear here</div></td></tr>
+        </tbody></table>
+    </div>
+    
+    <div class="tab-panel" id="panel-trades">
+        <table class="compact-table"><thead><tr>
+            <th>ID</th><th>Symbol</th><th style="text-align:center;">Side</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Price</th><th style="text-align:center;">Time</th>
+        </tr></thead><tbody id="tbody-trades">
+            <tr><td colspan="6" class="empty-msg"><div class="icon">💹</div><div class="title">No Trades</div><div class="desc">Executed trades will appear here</div></td></tr>
+        </tbody></table>
+    </div>
+    
+    <div class="tab-panel" id="panel-conditional">
+        <table class="compact-table"><thead><tr>
+            <th>Symbol</th><th style="text-align:center;">Trigger</th><th style="text-align:center;">LTP</th><th style="text-align:center;">Status</th><th style="text-align:center;">SL/PT</th><th style="text-align:center;">Created</th><th style="text-align:center;">Action</th>
+        </tr></thead><tbody id="tbody-conditional">
+            <tr><td colspan="7" class="empty-msg"><div class="icon">⏰</div><div class="title">No Conditional Orders</div><div class="desc">Price-triggered orders will appear here</div></td></tr>
+        </tbody></table>
+    </div>
+    
+    <div class="tab-panel" id="panel-amo">
+        <table class="compact-table"><thead><tr>
+            <th>Symbol</th><th style="text-align:center;">Side</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Price</th><th style="text-align:center;">Status</th><th style="text-align:center;">Queued</th><th style="text-align:center;">Action</th>
+        </tr></thead><tbody id="tbody-amo">
+            <tr><td colspan="7" class="empty-msg"><div class="icon">🌙</div><div class="title">No AMO Orders</div><div class="desc">After-market orders will appear here</div></td></tr>
+        </tbody></table>
     </div>
 </div>
 
-<!-- Add New India Channel Form -->
-<div class="card" style="margin-top: 32px; border: 1px solid rgba(255, 153, 0, 0.3);">
-    <div class="card-header" style="background: linear-gradient(135deg, #1a0f2e 0%, #2d1f4a 100%); color: #ff9900;">➕ Add India Market Channel</div>
-    <div class="card-body">
-        <form id="add-channel-form" class="form-horizontal" style="max-width: 700px;">
+<div class="table-container" style="margin-bottom: 16px; padding: 12px 16px;">
+    <div style="font-size: 12px; font-weight: 700; color: var(--accent-mint); margin-bottom: 8px;">📊 F&O Lot Sizes</div>
+    <div class="lot-grid">
+        <div class="lot-item"><div class="sym">NIFTY</div><div class="val">25</div><div class="lbl">per lot</div></div>
+        <div class="lot-item"><div class="sym">BANKNIFTY</div><div class="val">15</div><div class="lbl">per lot</div></div>
+        <div class="lot-item"><div class="sym">FINNIFTY</div><div class="val">25</div><div class="lbl">per lot</div></div>
+        <div class="lot-item"><div class="sym">MIDCPNIFTY</div><div class="val">50</div><div class="lbl">per lot</div></div>
+        <div class="lot-item"><div class="sym">SENSEX</div><div class="val">10</div><div class="lbl">per lot</div></div>
+        <div class="lot-item"><div class="sym">BANKEX</div><div class="val">15</div><div class="lbl">per lot</div></div>
+    </div>
+</div>
+
+<div class="table-container" style="margin-bottom: 16px;">
+    <div class="table-header">
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <h3 class="table-title">📡 India Channels</h3>
+            <div style="display: flex; background: rgba(15, 240, 179, 0.05); border: 1px solid var(--border-accent); border-radius: 6px; padding: 3px; gap: 3px;">
+                <button id="channel-type-execute" class="data-tab active" onclick="switchChannelType('EXECUTE')" style="padding: 5px 10px; font-size: 11px;">🎯 Execute</button>
+                <button id="channel-type-track" class="data-tab" onclick="switchChannelType('TRACK')" style="padding: 5px 10px; font-size: 11px;">📊 Track</button>
+            </div>
+        </div>
+        <button onclick="document.getElementById('add-channel-form').scrollIntoView({behavior: 'smooth'})" class="action-btn">➕ Add Channel</button>
+    </div>
+    <div id="channels-list" style="padding: 16px;">
+        <div style="text-align: center; padding: 30px; color: var(--text-secondary);">Loading channels...</div>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom: 16px; border: 1px solid var(--border-accent);">
+    <div class="card-header" style="background: var(--accent-gradient-subtle); color: var(--accent-mint); font-size: 13px;">➕ Add India Channel</div>
+    <div class="card-body" style="padding: 16px;">
+        <form id="add-channel-form" style="max-width: 600px;">
             <input type="hidden" id="channel-market" value="IN">
-            
-            <div class="form-group">
-                <label for="channel-type-select" class="form-label">Channel Type</label>
-                <select id="channel-type-select" class="form-control" required>
-                    <option value="EXECUTE">🎯 Execution Channel (Live Trading)</option>
-                    <option value="TRACK">📊 Tracking Channel (Paper Trading / Analysis)</option>
-                </select>
-            </div>
-            
-            <div class="form-group">
-                <label for="channel-name" class="form-label">Channel Name</label>
-                <input type="text" id="channel-name" class="form-control" placeholder="NIFTY Scalping Signals" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="channel-id" class="form-label">Discord/Telegram Channel ID</label>
-                <input type="text" id="channel-id" class="form-control" placeholder="551065756557639680" required>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Select India Brokers</label>
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 8px;">
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(255, 87, 34, 0.1); border: 1px solid rgba(255, 87, 34, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                        <input type="checkbox" id="new-broker-ZERODHA" value="ZERODHA" style="width: 16px; height: 16px; cursor: pointer;">
-                        <div>
-                            <div style="font-weight: 600; color: #ff5722; font-size: 12px;">🔥 Zerodha</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">Kite Connect</div>
-                        </div>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(138, 43, 226, 0.1); border: 1px solid rgba(138, 43, 226, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                        <input type="checkbox" id="new-broker-DHANQ" value="DHANQ" style="width: 16px; height: 16px; cursor: pointer;">
-                        <div>
-                            <div style="font-weight: 600; color: #8a2be2; font-size: 12px;">🔮 DhanQ</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">DhanHQ v2 API</div>
-                        </div>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 12px; background: rgba(0, 200, 83, 0.1); border: 1px solid rgba(0, 200, 83, 0.3); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
-                        <input type="checkbox" id="new-broker-UPSTOX" value="UPSTOX" style="width: 16px; height: 16px; cursor: pointer;">
-                        <div>
-                            <div style="font-weight: 600; color: #00c853; font-size: 12px;">📈 Upstox</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">Upstox API</div>
-                        </div>
-                    </label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div>
+                    <label style="font-size: 11px; color: var(--text-secondary); display: block; margin-bottom: 4px;">Channel Type</label>
+                    <select id="channel-type-select" class="form-control" style="font-size: 12px; padding: 8px;">
+                        <option value="EXECUTE">🎯 Execution (Live)</option>
+                        <option value="TRACK">📊 Tracking</option>
+                    </select>
                 </div>
-                <small style="color: var(--text-muted); font-size: 0.8125rem; margin-top: 8px; display: block;">
-                    ⚠️ All India brokers are LIVE trading only. No paper trading available.
-                </small>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Default Position Size</label>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                    <div>
-                        <label style="font-size: 11px; color: #8E8E93;">Lots (F&O)</label>
-                        <input type="number" id="default-lots" class="form-control" placeholder="1" min="1" max="100" value="1">
-                    </div>
-                    <div>
-                        <label style="font-size: 11px; color: #8E8E93;">% of Portfolio</label>
-                        <input type="number" id="position-size-pct" class="form-control" placeholder="5" min="0.1" max="100" step="0.1" value="5">
-                    </div>
+                <div>
+                    <label style="font-size: 11px; color: var(--text-secondary); display: block; margin-bottom: 4px;">Channel Name</label>
+                    <input type="text" id="channel-name" class="form-control" placeholder="NIFTY Signals" style="font-size: 12px; padding: 8px;" required>
                 </div>
             </div>
-            
-            <button type="submit" class="btn btn-primary" style="margin-top: 16px; background: linear-gradient(135deg, #ff9900, #ff6600);">
-                ➕ Add India Channel
-            </button>
+            <div style="margin-bottom: 12px;">
+                <label style="font-size: 11px; color: var(--text-secondary); display: block; margin-bottom: 4px;">Discord/Telegram Channel ID</label>
+                <input type="text" id="channel-id" class="form-control" placeholder="551065756557639680" style="font-size: 12px; padding: 8px;" required>
+            </div>
+            <div style="margin-bottom: 12px;">
+                <label style="font-size: 11px; color: var(--text-secondary); display: block; margin-bottom: 4px;">Select Brokers</label>
+                <div style="display: flex; gap: 8px;">
+                    <label style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(15, 240, 179, 0.05); border: 1px solid var(--border-accent); border-radius: 6px; cursor: pointer; font-size: 11px;">
+                        <input type="checkbox" id="new-broker-ZERODHA" value="ZERODHA"> 🔥 Zerodha
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(15, 240, 179, 0.05); border: 1px solid var(--border-accent); border-radius: 6px; cursor: pointer; font-size: 11px;">
+                        <input type="checkbox" id="new-broker-DHANQ" value="DHANQ"> 🔮 DhanQ
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(15, 240, 179, 0.05); border: 1px solid var(--border-accent); border-radius: 6px; cursor: pointer; font-size: 11px;">
+                        <input type="checkbox" id="new-broker-UPSTOX" value="UPSTOX"> 📈 Upstox
+                    </label>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div>
+                    <label style="font-size: 11px; color: var(--text-secondary); display: block; margin-bottom: 4px;">Lots (F&O)</label>
+                    <input type="number" id="default-lots" class="form-control" value="1" min="1" max="100" style="font-size: 12px; padding: 8px;">
+                </div>
+                <div>
+                    <label style="font-size: 11px; color: var(--text-secondary); display: block; margin-bottom: 4px;">% of Portfolio</label>
+                    <input type="number" id="position-size-pct" class="form-control" value="5" min="0.1" max="100" step="0.1" style="font-size: 12px; padding: 8px;">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary" style="font-size: 12px; padding: 8px 16px;">➕ Add Channel</button>
         </form>
     </div>
 </div>
 
-<!-- Signal Format Reference -->
-<div class="table-container" style="margin-top: 32px; background: rgba(0, 0, 0, 0.3);">
-    <div class="table-header">
-        <h3 class="table-title">📝 Supported India Signal Formats</h3>
-    </div>
-    <div style="padding: 20px;">
-        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
-            <div style="background: rgba(255, 153, 0, 0.05); padding: 16px; border-radius: 8px; border: 1px solid rgba(255, 153, 0, 0.2);">
-                <div style="font-weight: 700; color: #ff9900; margin-bottom: 8px;">Options Format</div>
-                <code style="display: block; background: #1C1C1E; padding: 12px; border-radius: 6px; font-size: 12px; color: #00ff88;">
-                    BUY NIFTY 24000 CE @ ₹145<br>
-                    SELL BANKNIFTY 51000 PE @ 200<br>
-                    BUY NIFTY 25900 CE ABOVE ₹190 SL ₹180 TGT ₹202-220
-                </code>
-            </div>
-            <div style="background: rgba(0, 212, 255, 0.05); padding: 16px; border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.2);">
-                <div style="font-weight: 700; color: #00d4ff; margin-bottom: 8px;">Equity Format</div>
-                <code style="display: block; background: #1C1C1E; padding: 12px; border-radius: 6px; font-size: 12px; color: #00ff88;">
-                    BUY RELIANCE @ 2500<br>
-                    SELL TCS @ 3800<br>
-                    BUY INFY 1500 QTY 100
-                </code>
-            </div>
+<div class="table-container" style="padding: 16px;">
+    <div style="font-size: 12px; font-weight: 700; color: var(--accent-mint); margin-bottom: 12px;">📝 Signal Formats</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div style="background: rgba(15, 240, 179, 0.03); padding: 12px; border-radius: 6px; border: 1px solid var(--border-accent);">
+            <div style="font-weight: 600; color: var(--accent-mint); font-size: 11px; margin-bottom: 6px;">Options</div>
+            <code style="display: block; background: #0a0a0f; padding: 8px; border-radius: 4px; font-size: 10px; color: #00ff88; line-height: 1.6;">
+                BUY NIFTY 24000 CE @ ₹145<br>
+                SELL BANKNIFTY 51000 PE @ 200<br>
+                BUY NIFTY 25900 CE ABOVE ₹190 SL ₹180
+            </code>
+        </div>
+        <div style="background: rgba(15, 240, 179, 0.03); padding: 12px; border-radius: 6px; border: 1px solid var(--border-accent);">
+            <div style="font-weight: 600; color: var(--accent-mint); font-size: 11px; margin-bottom: 6px;">Equity</div>
+            <code style="display: block; background: #0a0a0f; padding: 8px; border-radius: 4px; font-size: 10px; color: #00ff88; line-height: 1.6;">
+                BUY RELIANCE @ 2500<br>
+                SELL TCS @ 3800<br>
+                BUY INFY 1500 QTY 100
+            </code>
         </div>
     </div>
 </div>
@@ -672,387 +377,278 @@
 <script src="{{ url_for('static', filename='js/channels_india.js') }}"></script>
 <script>
 const MARKET = 'IN';
-const BROKER_CONFIG = {
-    zerodha: { name: 'Zerodha', icon: '🔥', color: '#ff5722', rgb: '255, 87, 34' },
-    dhanq: { name: 'DhanQ', icon: '🔮', color: '#8a2be2', rgb: '138, 43, 226' },
-    upstox: { name: 'Upstox', icon: '📈', color: '#00c853', rgb: '0, 200, 83' }
-};
-
 let selectedBroker = 'zerodha';
-let brokerStatuses = {};
-let dashboardData = { positions: [], orders: [], trades: [], conditional: [], amo: [] };
-let refreshInterval = null;
+let brokerData = { positions: [], orders: [], trades: [], conditional: [], amo: [] };
 
 function selectBroker(broker) {
     selectedBroker = broker;
-    const config = BROKER_CONFIG[broker];
-    
-    document.querySelectorAll('.broker-selector-btn').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.broker === broker) {
-            btn.classList.add('active');
-        }
-    });
-    
-    const dashboard = document.getElementById('broker-dashboard');
-    dashboard.style.setProperty('--broker-color', config.color);
-    dashboard.style.setProperty('--broker-rgb', config.rgb);
-    
-    document.getElementById('dashboard-broker-icon').textContent = config.icon;
-    document.getElementById('dashboard-broker-name').textContent = config.name;
-    
-    loadBrokerDashboard();
+    document.querySelectorAll('.broker-tab').forEach(b => b.classList.remove('active'));
+    document.querySelector(`.broker-tab[data-broker="${broker}"]`).classList.add('active');
+    document.getElementById('broker-name').textContent = broker.charAt(0).toUpperCase() + broker.slice(1);
+    loadDashboard();
 }
 
 async function loadBrokerStatuses() {
     try {
-        const response = await fetch('/api/india/brokers');
-        const data = await response.json();
+        const res = await fetch('/api/india/brokers');
+        const data = await res.json();
         if (data.success) {
-            data.brokers.forEach(broker => {
-                brokerStatuses[broker.id] = broker.connected;
-                const dot = document.getElementById(`${broker.id}-dot`);
-                if (dot) {
-                    dot.classList.toggle('connected', broker.connected);
-                }
+            data.brokers.forEach(b => {
+                const dot = document.getElementById(`${b.id}-dot`);
+                if (dot) dot.classList.toggle('connected', b.connected);
             });
         }
-    } catch (e) {
-        console.error('Failed to load broker statuses:', e);
-    }
+    } catch (e) { console.error('Status error:', e); }
 }
 
-async function loadBrokerDashboard() {
-    const broker = selectedBroker;
-    const config = BROKER_CONFIG[broker];
-    
+async function loadDashboard() {
     try {
-        const statusRes = await fetch(`/api/india/${broker}/status`);
-        const statusData = await statusRes.json();
+        const statusRes = await fetch(`/api/india/${selectedBroker}/status`);
+        const status = await statusRes.json();
+        const badge = document.getElementById('status-badge');
+        const userId = document.getElementById('user-id');
         
-        const badge = document.getElementById('dashboard-status-badge');
-        const userId = document.getElementById('dashboard-user-id');
-        
-        if (statusData.connected) {
+        if (status.connected) {
             badge.className = 'status-badge connected';
             badge.textContent = 'CONNECTED';
-            userId.textContent = statusData.user_id ? `User: ${statusData.user_id}` : '';
-            
-            await Promise.all([
-                loadAccountData(),
-                loadPositions(),
-                loadOrders(),
-                loadTrades(),
-                loadConditional(),
-                loadAmo()
-            ]);
+            userId.textContent = status.user_id ? `User: ${status.user_id}` : '';
+            await Promise.all([loadAccount(), loadPositions(), loadOrders(), loadTrades(), loadConditional(), loadAmo()]);
         } else {
             badge.className = 'status-badge disconnected';
             badge.textContent = 'NOT CONNECTED';
             userId.textContent = '';
-            
-            document.getElementById('stat-available').textContent = '₹0.00';
-            document.getElementById('stat-margin').textContent = '₹0.00';
-            document.getElementById('stat-positions').textContent = '0';
-            document.getElementById('stat-pnl').textContent = '₹0.00';
-            
-            showEmptyState('positions-body', '📊', 'Not Connected', `Connect to ${config.name} to view positions`);
-            showEmptyState('orders-body', '📋', 'Not Connected', `Connect to ${config.name} to view orders`);
-            showEmptyState('trades-body', '💹', 'Not Connected', `Connect to ${config.name} to view trades`);
-            showEmptyState('conditional-body', '⏰', 'Not Connected', `Connect to ${config.name} to view conditional orders`);
-            showEmptyState('amo-body', '🌙', 'Not Connected', `Connect to ${config.name} to view AMO orders`);
+            resetStats();
+            showEmpty('positions'); showEmpty('orders'); showEmpty('trades'); showEmpty('conditional'); showEmpty('amo');
         }
-    } catch (e) {
-        console.error('Failed to load dashboard:', e);
-    }
+    } catch (e) { console.error('Dashboard error:', e); }
 }
 
-async function loadAccountData() {
+async function loadAccount() {
     try {
         const res = await fetch(`/api/india/${selectedBroker}/account`);
         const data = await res.json();
         if (data.success) {
-            document.getElementById('stat-available').textContent = `₹${formatNumber(data.available || 0)}`;
-            document.getElementById('stat-margin').textContent = `₹${formatNumber(data.margin_used || 0)}`;
+            document.getElementById('stat-available').textContent = `₹${fmt(data.available || 0)}`;
+            document.getElementById('stat-margin').textContent = `₹${fmt(data.margin_used || 0)}`;
         }
-    } catch (e) {
-        console.error('Failed to load account:', e);
-    }
+    } catch (e) { console.error('Account error:', e); }
 }
 
 async function loadPositions() {
     try {
         const res = await fetch(`/api/india/${selectedBroker}/positions`);
         const data = await res.json();
-        dashboardData.positions = data.positions || [];
-        document.getElementById('tab-positions-count').textContent = dashboardData.positions.length;
-        document.getElementById('stat-positions').textContent = dashboardData.positions.length;
+        brokerData.positions = data.positions || [];
+        document.getElementById('cnt-positions').textContent = brokerData.positions.length;
+        document.getElementById('stat-positions').textContent = brokerData.positions.length;
         
         let totalPnl = 0;
+        if (brokerData.positions.length === 0) { showEmpty('positions'); return; }
         
-        if (dashboardData.positions.length === 0) {
-            showEmptyState('positions-body', '📊', 'No Positions', 'Open positions will appear here');
-        } else {
-            const tbody = document.getElementById('positions-body');
-            tbody.innerHTML = dashboardData.positions.map(pos => {
-                const pnl = parseFloat(pos.pnl || pos.unrealized_profit || 0);
-                totalPnl += pnl;
-                const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-                return `<tr>
-                    <td><strong>${pos.symbol || pos.tradingsymbol || '-'}</strong></td>
-                    <td style="text-align: center;">${pos.quantity || pos.qty || 0}</td>
-                    <td style="text-align: right;">₹${formatNumber(pos.average_price || pos.buy_price || 0)}</td>
-                    <td style="text-align: right;">₹${formatNumber(pos.ltp || pos.last_price || 0)}</td>
-                    <td style="text-align: right;" class="${pnlClass}">₹${formatNumber(pnl)}</td>
-                    <td style="text-align: center;"><span class="status-pill">${pos.product || 'MIS'}</span></td>
-                </tr>`;
-            }).join('');
-        }
+        document.getElementById('tbody-positions').innerHTML = brokerData.positions.map(p => {
+            const pnl = parseFloat(p.pnl || p.unrealized_profit || 0);
+            totalPnl += pnl;
+            return `<tr>
+                <td><strong>${p.symbol || p.tradingsymbol || '-'}</strong></td>
+                <td style="text-align:center;">${p.quantity || p.qty || 0}</td>
+                <td style="text-align:right;">₹${fmt(p.average_price || p.buy_price || 0)}</td>
+                <td style="text-align:right;">₹${fmt(p.ltp || p.last_price || 0)}</td>
+                <td style="text-align:right;" class="${pnl >= 0 ? 'side-buy' : 'side-sell'}">₹${fmt(pnl)}</td>
+                <td style="text-align:center;"><span class="pill">${p.product || 'MIS'}</span></td>
+            </tr>`;
+        }).join('');
         
         const pnlEl = document.getElementById('stat-pnl');
-        pnlEl.textContent = `₹${formatNumber(totalPnl)}`;
-        pnlEl.className = totalPnl >= 0 ? 'value pnl-positive' : 'value pnl-negative';
-    } catch (e) {
-        console.error('Failed to load positions:', e);
-    }
+        pnlEl.textContent = `₹${fmt(totalPnl)}`;
+        pnlEl.className = `value ${totalPnl >= 0 ? 'positive' : 'negative'}`;
+    } catch (e) { console.error('Positions error:', e); }
 }
 
 async function loadOrders() {
     try {
         const res = await fetch(`/api/india/${selectedBroker}/orders`);
         const data = await res.json();
-        dashboardData.orders = data.orders || [];
-        document.getElementById('tab-orders-count').textContent = dashboardData.orders.length;
+        brokerData.orders = data.orders || [];
+        document.getElementById('cnt-orders').textContent = brokerData.orders.length;
+        document.getElementById('stat-orders').textContent = brokerData.orders.length;
         
-        if (dashboardData.orders.length === 0) {
-            showEmptyState('orders-body', '📋', 'No Orders', 'Orders will appear here');
-        } else {
-            const tbody = document.getElementById('orders-body');
-            tbody.innerHTML = dashboardData.orders.map(order => {
-                const status = (order.status || 'PENDING').toUpperCase();
-                const statusClass = status === 'FILLED' || status === 'COMPLETE' ? 'status-filled' : 
-                                   status === 'OPEN' || status === 'PENDING' ? 'status-open' : 'status-cancelled';
-                const sideClass = (order.transaction_type || order.side || '').toUpperCase().includes('BUY') ? 'side-buy' : 'side-sell';
-                return `<tr>
-                    <td><code style="font-size: 11px;">${(order.order_id || order.id || '-').toString().slice(-8)}</code></td>
-                    <td><strong>${order.symbol || order.tradingsymbol || '-'}</strong></td>
-                    <td style="text-align: center;" class="${sideClass}">${order.transaction_type || order.side || '-'}</td>
-                    <td style="text-align: center;">${order.quantity || order.qty || 0}</td>
-                    <td style="text-align: right;">₹${formatNumber(order.price || order.average_price || 0)}</td>
-                    <td style="text-align: center;"><span class="status-pill ${statusClass}">${status}</span></td>
-                    <td style="text-align: center; font-size: 11px; color: #8E8E93;">${formatTime(order.order_timestamp || order.time)}</td>
-                    <td style="text-align: center;">${status === 'OPEN' || status === 'PENDING' ? `<button onclick="cancelOrder('${order.order_id || order.id}')" style="padding: 4px 8px; border: 1px solid rgba(255,107,107,0.4); background: transparent; color: #ff6b6b; border-radius: 4px; cursor: pointer; font-size: 10px;">Cancel</button>` : '-'}</td>
-                </tr>`;
-            }).join('');
-        }
-    } catch (e) {
-        console.error('Failed to load orders:', e);
-    }
+        if (brokerData.orders.length === 0) { showEmpty('orders'); return; }
+        
+        document.getElementById('tbody-orders').innerHTML = brokerData.orders.map(o => {
+            const st = (o.status || 'PENDING').toUpperCase();
+            const stClass = st === 'FILLED' || st === 'COMPLETE' ? 'pill-filled' : st === 'OPEN' || st === 'PENDING' ? 'pill-open' : 'pill-cancelled';
+            const side = (o.transaction_type || o.side || '').toUpperCase();
+            return `<tr>
+                <td><code style="font-size:10px;">${(o.order_id || o.id || '-').toString().slice(-8)}</code></td>
+                <td><strong>${o.symbol || o.tradingsymbol || '-'}</strong></td>
+                <td style="text-align:center;" class="${side.includes('BUY') ? 'side-buy' : 'side-sell'}">${side}</td>
+                <td style="text-align:center;">${o.quantity || o.qty || 0}</td>
+                <td style="text-align:right;">₹${fmt(o.price || o.average_price || 0)}</td>
+                <td style="text-align:center;"><span class="pill ${stClass}">${st}</span></td>
+                <td style="text-align:center; font-size:10px; color:#8E8E93;">${fmtTime(o.order_timestamp || o.time)}</td>
+                <td style="text-align:center;">${st === 'OPEN' || st === 'PENDING' ? `<button class="action-btn danger" onclick="cancelOrder('${o.order_id || o.id}')" style="padding:3px 8px;font-size:9px;">Cancel</button>` : '-'}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) { console.error('Orders error:', e); }
 }
 
 async function loadTrades() {
     try {
         const res = await fetch(`/api/india/${selectedBroker}/trades`);
         const data = await res.json();
-        dashboardData.trades = data.trades || [];
-        document.getElementById('tab-trades-count').textContent = dashboardData.trades.length;
+        brokerData.trades = data.trades || [];
+        document.getElementById('cnt-trades').textContent = brokerData.trades.length;
         
-        if (dashboardData.trades.length === 0) {
-            showEmptyState('trades-body', '💹', 'No Trades', 'Executed trades will appear here');
-        } else {
-            const tbody = document.getElementById('trades-body');
-            tbody.innerHTML = dashboardData.trades.map(trade => {
-                const sideClass = (trade.transaction_type || trade.side || '').toUpperCase().includes('BUY') ? 'side-buy' : 'side-sell';
-                return `<tr>
-                    <td><code style="font-size: 11px;">${(trade.trade_id || trade.id || '-').toString().slice(-8)}</code></td>
-                    <td><strong>${trade.symbol || trade.tradingsymbol || '-'}</strong></td>
-                    <td style="text-align: center;" class="${sideClass}">${trade.transaction_type || trade.side || '-'}</td>
-                    <td style="text-align: center;">${trade.quantity || trade.qty || 0}</td>
-                    <td style="text-align: right;">₹${formatNumber(trade.price || trade.average_price || 0)}</td>
-                    <td style="text-align: center; font-size: 11px; color: #8E8E93;">${formatTime(trade.fill_timestamp || trade.time)}</td>
-                </tr>`;
-            }).join('');
-        }
-    } catch (e) {
-        console.error('Failed to load trades:', e);
-    }
+        if (brokerData.trades.length === 0) { showEmpty('trades'); return; }
+        
+        document.getElementById('tbody-trades').innerHTML = brokerData.trades.map(t => {
+            const side = (t.transaction_type || t.side || '').toUpperCase();
+            return `<tr>
+                <td><code style="font-size:10px;">${(t.trade_id || t.id || '-').toString().slice(-8)}</code></td>
+                <td><strong>${t.symbol || t.tradingsymbol || '-'}</strong></td>
+                <td style="text-align:center;" class="${side.includes('BUY') ? 'side-buy' : 'side-sell'}">${side}</td>
+                <td style="text-align:center;">${t.quantity || t.qty || 0}</td>
+                <td style="text-align:right;">₹${fmt(t.price || t.average_price || 0)}</td>
+                <td style="text-align:center; font-size:10px; color:#8E8E93;">${fmtTime(t.fill_timestamp || t.time)}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) { console.error('Trades error:', e); }
 }
 
 async function loadConditional() {
     try {
         const res = await fetch(`/api/india/${selectedBroker}/conditional`);
         const data = await res.json();
-        dashboardData.conditional = data.orders || [];
-        document.getElementById('tab-conditional-count').textContent = dashboardData.conditional.length;
+        brokerData.conditional = data.orders || [];
+        document.getElementById('cnt-conditional').textContent = brokerData.conditional.length;
         
-        if (dashboardData.conditional.length === 0) {
-            showEmptyState('conditional-body', '⏰', 'No Conditional Orders', 'Price-triggered orders will appear here');
-        } else {
-            const tbody = document.getElementById('conditional-body');
-            tbody.innerHTML = dashboardData.conditional.map(order => {
-                const status = (order.status || 'PENDING').toUpperCase();
-                const statusClass = status === 'WATCHING' ? 'status-watching' : status === 'TRIGGERED' ? 'status-filled' : 'status-pending';
-                return `<tr>
-                    <td><strong>${order.symbol || '-'}</strong></td>
-                    <td style="text-align: center;">${order.trigger_condition || '-'} ₹${order.trigger_price || '-'}</td>
-                    <td style="text-align: center;">₹${formatNumber(order.current_price || 0)}</td>
-                    <td style="text-align: center;"><span class="status-pill ${statusClass}">${status}</span></td>
-                    <td style="text-align: center; font-size: 11px;">SL: ₹${order.stop_loss || '-'} / PT: ₹${order.profit_target || '-'}</td>
-                    <td style="text-align: center; font-size: 11px; color: #8E8E93;">${formatTime(order.created_at)}</td>
-                    <td style="text-align: center;"><button onclick="cancelConditional('${order.id}')" style="padding: 4px 8px; border: 1px solid rgba(255,107,107,0.4); background: transparent; color: #ff6b6b; border-radius: 4px; cursor: pointer; font-size: 10px;">Cancel</button></td>
-                </tr>`;
-            }).join('');
-        }
-    } catch (e) {
-        console.error('Failed to load conditional:', e);
-    }
+        if (brokerData.conditional.length === 0) { showEmpty('conditional'); return; }
+        
+        document.getElementById('tbody-conditional').innerHTML = brokerData.conditional.map(o => {
+            const st = (o.status || 'PENDING').toUpperCase();
+            const stClass = st === 'WATCHING' ? 'pill-watching' : st === 'TRIGGERED' ? 'pill-filled' : 'pill-pending';
+            return `<tr>
+                <td><strong>${o.symbol || '-'}</strong></td>
+                <td style="text-align:center;">${o.trigger_condition || '-'} ₹${o.trigger_price || '-'}</td>
+                <td style="text-align:center;">₹${fmt(o.current_price || 0)}</td>
+                <td style="text-align:center;"><span class="pill ${stClass}">${st}</span></td>
+                <td style="text-align:center; font-size:10px;">SL:₹${o.stop_loss || '-'} PT:₹${o.profit_target || '-'}</td>
+                <td style="text-align:center; font-size:10px; color:#8E8E93;">${fmtTime(o.created_at)}</td>
+                <td style="text-align:center;"><button class="action-btn danger" onclick="cancelConditional('${o.id}')" style="padding:3px 8px;font-size:9px;">Cancel</button></td>
+            </tr>`;
+        }).join('');
+    } catch (e) { console.error('Conditional error:', e); }
 }
 
 async function loadAmo() {
     try {
         const res = await fetch(`/api/india/${selectedBroker}/amo`);
         const data = await res.json();
-        dashboardData.amo = data.orders || [];
-        document.getElementById('tab-amo-count').textContent = dashboardData.amo.length;
+        brokerData.amo = data.orders || [];
+        document.getElementById('cnt-amo').textContent = brokerData.amo.length;
         
-        if (dashboardData.amo.length === 0) {
-            showEmptyState('amo-body', '🌙', 'No AMO Orders', 'After-market orders will appear here');
-        } else {
-            const tbody = document.getElementById('amo-body');
-            tbody.innerHTML = dashboardData.amo.map(order => {
-                const status = (order.status || 'PENDING').toUpperCase();
-                const statusClass = status === 'SUBMITTED' ? 'status-filled' : status === 'PENDING' ? 'status-pending' : 'status-cancelled';
-                const sideClass = (order.side || '').toUpperCase().includes('BUY') ? 'side-buy' : 'side-sell';
-                return `<tr>
-                    <td><strong>${order.symbol || '-'}</strong></td>
-                    <td style="text-align: center;" class="${sideClass}">${order.side || '-'}</td>
-                    <td style="text-align: center;">${order.quantity || 0}</td>
-                    <td style="text-align: right;">₹${formatNumber(order.price || 0)}</td>
-                    <td style="text-align: center;"><span class="status-pill ${statusClass}">${status}</span></td>
-                    <td style="text-align: center; font-size: 11px; color: #8E8E93;">${formatTime(order.created_at)}</td>
-                    <td style="text-align: center;">${status === 'PENDING' ? `<button onclick="cancelAmo('${order.id}')" style="padding: 4px 8px; border: 1px solid rgba(255,107,107,0.4); background: transparent; color: #ff6b6b; border-radius: 4px; cursor: pointer; font-size: 10px;">Cancel</button>` : '-'}</td>
-                </tr>`;
-            }).join('');
-        }
-    } catch (e) {
-        console.error('Failed to load AMO:', e);
-    }
+        if (brokerData.amo.length === 0) { showEmpty('amo'); return; }
+        
+        document.getElementById('tbody-amo').innerHTML = brokerData.amo.map(o => {
+            const st = (o.status || 'PENDING').toUpperCase();
+            const stClass = st === 'SUBMITTED' ? 'pill-filled' : st === 'PENDING' ? 'pill-pending' : 'pill-cancelled';
+            const side = (o.side || '').toUpperCase();
+            return `<tr>
+                <td><strong>${o.symbol || '-'}</strong></td>
+                <td style="text-align:center;" class="${side.includes('BUY') ? 'side-buy' : 'side-sell'}">${side}</td>
+                <td style="text-align:center;">${o.quantity || 0}</td>
+                <td style="text-align:right;">₹${fmt(o.price || 0)}</td>
+                <td style="text-align:center;"><span class="pill ${stClass}">${st}</span></td>
+                <td style="text-align:center; font-size:10px; color:#8E8E93;">${fmtTime(o.created_at)}</td>
+                <td style="text-align:center;">${st === 'PENDING' ? `<button class="action-btn danger" onclick="cancelAmo('${o.id}')" style="padding:3px 8px;font-size:9px;">Cancel</button>` : '-'}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) { console.error('AMO error:', e); }
 }
 
-function showEmptyState(tbodyId, icon, title, description) {
-    document.getElementById(tbodyId).innerHTML = `<tr><td colspan="10" class="empty-state"><div class="icon">${icon}</div><div class="title">${title}</div><div class="description">${description}</div></td></tr>`;
+function showEmpty(type) {
+    const icons = {positions:'📊',orders:'📋',trades:'💹',conditional:'⏰',amo:'🌙'};
+    const titles = {positions:'No Positions',orders:'No Orders',trades:'No Trades',conditional:'No Conditional Orders',amo:'No AMO Orders'};
+    document.getElementById(`tbody-${type}`).innerHTML = `<tr><td colspan="10" class="empty-msg"><div class="icon">${icons[type]}</div><div class="title">${titles[type]}</div></td></tr>`;
 }
 
-function switchDashboardTab(tab) {
-    document.querySelectorAll('.dashboard-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    document.querySelector(`.dashboard-tab[data-tab="${tab}"]`).classList.add('active');
-    document.getElementById(`tab-${tab}`).classList.add('active');
+function resetStats() {
+    document.getElementById('stat-available').textContent = '₹0';
+    document.getElementById('stat-margin').textContent = '₹0';
+    document.getElementById('stat-positions').textContent = '0';
+    document.getElementById('stat-orders').textContent = '0';
+    document.getElementById('stat-pnl').textContent = '₹0';
+    ['positions','orders','trades','conditional','amo'].forEach(t => document.getElementById(`cnt-${t}`).textContent = '0');
+}
+
+function switchTab(tab) {
+    document.querySelectorAll('.data-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector(`.data-tab[data-tab="${tab}"]`).classList.add('active');
+    document.getElementById(`panel-${tab}`).classList.add('active');
 }
 
 async function reconnectBroker() {
     const btn = document.getElementById('btn-reconnect');
-    btn.disabled = true;
-    btn.innerHTML = '<span>⏳</span> Connecting...';
-    
+    btn.disabled = true; btn.textContent = '⏳ Connecting...';
     try {
         const res = await fetch(`/api/india/${selectedBroker}/reconnect`, { method: 'POST' });
         const data = await res.json();
-        
         if (data.success && data.connected) {
-            showToast(`${BROKER_CONFIG[selectedBroker].name} connected successfully!`, 'success');
-            loadBrokerStatuses();
-            loadBrokerDashboard();
-        } else {
-            showToast(data.error || 'Failed to connect', 'error');
-        }
-    } catch (e) {
-        showToast('Connection failed: ' + e.message, 'error');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span>🔌</span> Reconnect';
-    }
+            showToast('Connected successfully!', 'success');
+            loadBrokerStatuses(); loadDashboard();
+        } else { showToast(data.error || 'Failed to connect', 'error'); }
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = '🔌 Reconnect'; }
 }
 
 async function refreshDashboard() {
     const btn = document.getElementById('btn-refresh');
-    btn.innerHTML = '<span>⏳</span> Refreshing...';
-    await loadBrokerDashboard();
-    btn.innerHTML = '<span>🔄</span> Refresh';
+    btn.textContent = '⏳...';
+    await loadDashboard();
+    btn.textContent = '🔄 Refresh';
 }
 
 async function cancelOrder(orderId) {
     if (!confirm('Cancel this order?')) return;
     try {
         const res = await fetch(`/api/india/${selectedBroker}/cancel-order`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ order_id: orderId })
         });
         const data = await res.json();
-        if (data.success) {
-            showToast('Order cancelled', 'success');
-            loadOrders();
-        } else {
-            showToast(data.error || 'Failed to cancel', 'error');
-        }
-    } catch (e) {
-        showToast('Error: ' + e.message, 'error');
-    }
+        data.success ? (showToast('Cancelled', 'success'), loadOrders()) : showToast(data.error || 'Failed', 'error');
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
 }
 
-function formatNumber(num) {
-    return parseFloat(num || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function formatTime(timestamp) {
-    if (!timestamp) return '-';
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-}
-
-function showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.style.cssText = `position: fixed; bottom: 20px; right: 20px; padding: 16px 24px; border-radius: 8px; color: white; font-weight: 600; z-index: 10000; animation: fadeIn 0.3s;`;
-    toast.style.background = type === 'success' ? '#00c853' : type === 'error' ? '#ff6b6b' : '#00d4ff';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+function fmt(n) { return parseFloat(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtTime(t) { if (!t) return '-'; return new Date(t).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }); }
+function showToast(msg, type = 'info') {
+    const t = document.createElement('div');
+    t.style.cssText = `position:fixed;bottom:20px;right:20px;padding:12px 20px;border-radius:8px;color:#fff;font-weight:600;z-index:10000;font-size:12px;`;
+    t.style.background = type === 'success' ? '#00c853' : type === 'error' ? '#ff6b6b' : '#0FF0B3';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3000);
 }
 
 function switchChannelType(type) {
-    console.log('[India] Switching to category:', type);
     indiaChannelCategory = type;
-    document.getElementById('channel-type-execute').style.background = type === 'EXECUTE' ? 'linear-gradient(135deg, #ff9900, #ff6600)' : 'transparent';
-    document.getElementById('channel-type-execute').style.color = type === 'EXECUTE' ? 'white' : 'var(--text-secondary)';
-    document.getElementById('channel-type-track').style.background = type === 'TRACK' ? 'linear-gradient(135deg, #ff9900, #ff6600)' : 'transparent';
-    document.getElementById('channel-type-track').style.color = type === 'TRACK' ? 'white' : 'var(--text-secondary)';
+    document.getElementById('channel-type-execute').classList.toggle('active', type === 'EXECUTE');
+    document.getElementById('channel-type-track').classList.toggle('active', type === 'TRACK');
     document.getElementById('channel-type-select').value = type;
     loadIndiaChannels();
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('[India] Page loaded, initializing...');
-    
-    document.querySelectorAll('.broker-selector-btn').forEach(btn => {
+    document.querySelectorAll('.broker-tab').forEach(btn => {
         btn.addEventListener('click', () => selectBroker(btn.dataset.broker));
     });
-    
     loadBrokerStatuses();
     selectBroker('zerodha');
-    
     initIndiaChannelManagement('EXECUTE');
-    
-    document.getElementById('channel-type-select').addEventListener('change', function() {
-        switchChannelType(this.value);
-    });
-    
-    refreshInterval = setInterval(() => {
-        loadBrokerStatuses();
-        if (brokerStatuses[selectedBroker]) {
-            loadBrokerDashboard();
-        }
-    }, 30000);
+    document.getElementById('channel-type-select').addEventListener('change', function() { switchChannelType(this.value); });
+    setInterval(() => { loadBrokerStatuses(); loadDashboard(); }, 30000);
 });
 </script>
 {% endblock %}
