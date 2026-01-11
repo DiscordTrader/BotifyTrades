@@ -6839,6 +6839,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 if hasattr(self, 'paper_broker') and self.paper_broker:
                     conditional_order_router.set_broker_instance('Alpaca', self.paper_broker)
                     print("[STARTUP] ✓ Alpaca registered for US conditional order monitoring", flush=True)
+                if hasattr(self, 'schwab_broker') and self.schwab_broker:
+                    conditional_order_router.set_broker_instance('Schwab', self.schwab_broker)
+                    print("[STARTUP] ✓ Schwab registered for US conditional order monitoring", flush=True)
+                if hasattr(self, 'ibkr_broker') and self.ibkr_broker:
+                    conditional_order_router.set_broker_instance('IBKR', self.ibkr_broker)
+                    print("[STARTUP] ✓ IBKR registered for US conditional order monitoring", flush=True)
+                if hasattr(self, 'tastytrade_broker') and self.tastytrade_broker:
+                    conditional_order_router.set_broker_instance('Tastytrade', self.tastytrade_broker)
+                    print("[STARTUP] ✓ Tastytrade registered for US conditional order monitoring", flush=True)
+                if hasattr(self, 'robinhood_broker') and self.robinhood_broker:
+                    conditional_order_router.set_broker_instance('Robinhood', self.robinhood_broker)
+                    print("[STARTUP] ✓ Robinhood registered for US conditional order monitoring", flush=True)
                 # India Brokers
                 if hasattr(self, 'upstox_broker') and self.upstox_broker:
                     conditional_order_router.set_broker_instance('upstox', self.upstox_broker)
