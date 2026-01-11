@@ -3523,12 +3523,13 @@ def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = No
             el.signal_detected_at, el.latency_total_ms,
             el.analyst_entry_qty, el.sizing_mode,
             c.name as channel_name,
-            sl.author_name,
+            COALESCE(sl.author_name, sig.author_name) as author_name,
             el.signal_lot_id
         FROM execution_closures ec
         JOIN execution_lots el ON ec.execution_lot_id = el.id
         LEFT JOIN channels c ON ec.channel_id = c.discord_channel_id
         LEFT JOIN signal_lots sl ON el.signal_lot_id = sl.id
+        LEFT JOIN signals sig ON sl.signal_id = sig.id
         WHERE 1=1
     '''
     params = []
@@ -3543,7 +3544,7 @@ def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = No
         query += ' AND ec.filled_at >= datetime("now", ?)'
         params.append(f'-{days} days')
     if user:
-        query += ' AND sl.author_name LIKE ?'
+        query += ' AND COALESCE(sl.author_name, sig.author_name) LIKE ?'
         params.append(f'%{user}%')
     if exit_source:
         query += ' AND ec.exit_source = ?'
@@ -3562,12 +3563,14 @@ def get_execution_pnl_users():
     cursor = conn.cursor()
     
     cursor.execute('''
-        SELECT DISTINCT sl.author_name
+        SELECT DISTINCT COALESCE(sl.author_name, sig.author_name) as author_name
         FROM execution_closures ec
         JOIN execution_lots el ON ec.execution_lot_id = el.id
         LEFT JOIN signal_lots sl ON el.signal_lot_id = sl.id
-        WHERE sl.author_name IS NOT NULL AND sl.author_name != ''
-        ORDER BY sl.author_name
+        LEFT JOIN signals sig ON sl.signal_id = sig.id
+        WHERE COALESCE(sl.author_name, sig.author_name) IS NOT NULL 
+              AND COALESCE(sl.author_name, sig.author_name) != ''
+        ORDER BY author_name
     ''')
     
     return [row[0] for row in cursor.fetchall()]

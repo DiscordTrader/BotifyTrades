@@ -3,24 +3,27 @@
 {% block title %}PNL Tracker - BotifyTrades{% endblock %}
 
 {% block content %}
-<!-- Market Tabs -->
-<div class="market-tabs" style="margin-bottom: 16px; display: flex; gap: 8px;">
-    <button id="usMarketTab" class="market-tab active" onclick="switchMarket('US')" style="padding: 12px 32px; background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%); color: #fff; border: none; border-radius: 12px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease;">
-        <span style="font-size: 20px;">🇺🇸</span> US Market <span class="currency-badge" style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 6px; font-size: 12px;">USD</span>
-    </button>
-    <button id="indiaMarketTab" class="market-tab" onclick="switchMarket('INDIA')" style="padding: 12px 32px; background: #3A3A3C; color: #fff; border: none; border-radius: 12px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease;">
-        <span style="font-size: 20px;">🇮🇳</span> India Market <span class="currency-badge" style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 6px; font-size: 12px;">INR</span>
-    </button>
-</div>
-
-<!-- P&L Type Tabs -->
-<div class="pnl-type-tabs" style="margin-bottom: 24px; display: flex; gap: 4px; background: #1C1C1E; padding: 4px; border-radius: 12px; width: fit-content;">
-    <button id="signalPnlTab" class="pnl-type-tab active" onclick="switchPnlType('signal')" style="padding: 10px 24px; background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%); color: #fff; border: none; border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.3s ease;">
-        <span>📊</span> Signal P&L <span style="font-size: 10px; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px;">Theoretical</span>
-    </button>
-    <button id="executionPnlTab" class="pnl-type-tab" onclick="switchPnlType('execution')" style="padding: 10px 24px; background: transparent; color: #8E8E93; border: none; border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.3s ease;">
-        <span>🎯</span> Execution P&L <span style="font-size: 10px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Broker Fills</span>
-    </button>
+<!-- Tab Container with Nested Structure -->
+<div class="pnl-tab-container" style="margin-bottom: 24px;">
+    <!-- Primary Market Tabs -->
+    <div class="market-tabs" style="display: flex; gap: 0; margin-bottom: 0;">
+        <button id="usMarketTab" class="market-tab active" onclick="switchMarket('US')" style="padding: 14px 28px; background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%); color: #fff; border: none; border-radius: 12px 12px 0 0; font-weight: 700; font-size: 16px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease; position: relative; z-index: 2;">
+            <span style="font-size: 18px;">🇺🇸</span> US
+        </button>
+        <button id="indiaMarketTab" class="market-tab" onclick="switchMarket('INDIA')" style="padding: 14px 28px; background: #2C2C2E; color: #8E8E93; border: none; border-radius: 12px 12px 0 0; font-weight: 700; font-size: 16px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease; margin-left: 4px;">
+            <span style="font-size: 18px;">🇮🇳</span> IN
+        </button>
+    </div>
+    
+    <!-- P&L Type Subtabs (nested within market context) -->
+    <div class="pnl-type-tabs" style="display: flex; gap: 0; background: linear-gradient(180deg, #1C1C1E 0%, #2C2C2E 100%); padding: 12px 16px; border-radius: 0 12px 12px 12px;">
+        <button id="signalPnlTab" class="pnl-type-tab active" onclick="switchPnlType('signal')" style="padding: 10px 20px; background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%); color: #fff; border: none; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.3s ease;">
+            <span>📊</span> Signal P&L <span style="font-size: 9px; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px;">Theoretical</span>
+        </button>
+        <button id="executionPnlTab" class="pnl-type-tab" onclick="switchPnlType('execution')" style="padding: 10px 20px; background: transparent; color: #8E8E93; border: none; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.3s ease; margin-left: 8px;">
+            <span>🎯</span> Execution P&L <span style="font-size: 9px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Broker Fills</span>
+        </button>
+    </div>
 </div>
 
 <!-- Signal P&L View -->
@@ -412,24 +415,36 @@ function formatCurrency(amount, market) {
 function switchMarket(market) {
     currentMarket = market;
     
-    // Update tab styling
+    // Update market tab styling
     const usTab = document.getElementById('usMarketTab');
     const indiaTab = document.getElementById('indiaMarketTab');
     
     if (market === 'US') {
         usTab.style.background = 'linear-gradient(135deg, #00d4ff 0%, #0080ff 100%)';
+        usTab.style.color = '#fff';
+        usTab.style.zIndex = '2';
         usTab.classList.add('active');
-        indiaTab.style.background = '#3A3A3C';
+        indiaTab.style.background = '#2C2C2E';
+        indiaTab.style.color = '#8E8E93';
+        indiaTab.style.zIndex = '1';
         indiaTab.classList.remove('active');
     } else {
-        indiaTab.style.background = 'linear-gradient(135deg, #ff9933 0%, #138808 100%)';  // India colors
+        indiaTab.style.background = 'linear-gradient(135deg, #ff9933 0%, #138808 100%)';
+        indiaTab.style.color = '#fff';
+        indiaTab.style.zIndex = '2';
         indiaTab.classList.add('active');
-        usTab.style.background = '#3A3A3C';
+        usTab.style.background = '#2C2C2E';
+        usTab.style.color = '#8E8E93';
+        usTab.style.zIndex = '1';
         usTab.classList.remove('active');
     }
     
-    // Reload data with new market filter
-    loadPNLData();
+    // Reload data for current P&L type with new market filter
+    if (currentPnlType === 'signal') {
+        loadPNLData();
+    } else {
+        loadExecutionData();
+    }
 }
 
 // Get date range based on filter selection
