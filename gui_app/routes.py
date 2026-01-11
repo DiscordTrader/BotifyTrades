@@ -11204,6 +11204,9 @@ def register_routes(app):
                 try:
                     import robin_stocks.robinhood as rh
                     import pyotp
+                    import time
+                    import requests
+                    import random
                     
                     # Generate TOTP code if secret is provided
                     mfa_code = None
@@ -11214,20 +11217,170 @@ def register_routes(app):
                         except Exception as totp_err:
                             print(f"[API] Robinhood: 2FA generation failed: {totp_err}")
                     else:
-                        print(f"[API] Robinhood: No TOTP secret configured")
+                        print(f"[API] Robinhood: No TOTP secret - will use device approval")
                     
-                    # Login to Robinhood
+                    # Generate device token for device approval workflow
+                    def generate_device_token():
+                        rands = []
+                        for i in range(16):
+                            r = random.random()
+                            rand = 4294967296.0 * r
+                            rands.append((int(rand) >> ((3 & i) << 3)) & 255)
+                        hexa = []
+                        for i in range(256):
+                            hexa.append(str(hex(i+256)).lstrip("0x").rstrip("L")[1:])
+                        id_str = ""
+                        for i in range(16):
+                            id_str += hexa[rands[i]]
+                            if i in [3, 5, 7, 9]:
+                                id_str += "-"
+                        return id_str
+                    
+                    device_token = generate_device_token()
+                    print(f"[API] Robinhood: Generated device token: {device_token[:8]}...")
+                    
+                    # Try login with device approval handling
                     print(f"[API] Robinhood: Attempting login with username={username[:3]}***, has_2fa={bool(mfa_code)}")
-                    login_result = rh.login(
-                        username=username,
-                        password=password,
-                        mfa_code=mfa_code,
-                        store_session=True,
-                        expiresIn=86400
-                    )
-                    print(f"[API] Robinhood: Login result type={type(login_result)}, has_token={bool(login_result and 'access_token' in login_result) if login_result else False}")
                     
-                    if login_result and 'access_token' in login_result:
+                    # First, try direct OAuth login to detect device approval requirement
+                    oauth_url = "https://api.robinhood.com/oauth2/token/"
+                    oauth_payload = {
+                        "grant_type": "password",
+                        "scope": "internal",
+                        "client_id": "c82SH0WZOsabOXGP2sxqcj34FxkvfnWRZBKlBjFS",
+                        "device_token": device_token,
+                        "username": username,
+                        "password": password,
+                    }
+                    if mfa_code:
+                        oauth_payload["mfa_code"] = mfa_code
+                    
+                    oauth_response = requests.post(oauth_url, data=oauth_payload)
+                    oauth_data = oauth_response.json()
+                    print(f"[API] Robinhood: OAuth response status={oauth_response.status_code}, keys={list(oauth_data.keys())}")
+                    
+                    # Check if device approval is required
+                    if "verification_workflow" in oauth_data:
+                        workflow_id = oauth_data["verification_workflow"].get("id")
+                        workflow_status = oauth_data["verification_workflow"].get("workflow_status", "unknown")
+                        print(f"[API] Robinhood: Device approval required - workflow_id={workflow_id}, status={workflow_status}")
+                        
+                        # Update status to show waiting for approval
+                        set_broker_status(broker_id, False, 'pending', 'Waiting for device approval on Robinhood app')
+                        
+                        # Initiate the pathfinder verification
+                        pathfinder_url = "https://api.robinhood.com/pathfinder/user_machine/"
+                        pathfinder_payload = {
+                            "device_id": device_token,
+                            "flow": "suv",
+                            "input": {"workflow_id": workflow_id}
+                        }
+                        
+                        try:
+                            pf_response = requests.post(pathfinder_url, json=pathfinder_payload)
+                            print(f"[API] Robinhood: Pathfinder response status={pf_response.status_code}")
+                            
+                            if pf_response.status_code == 200:
+                                pf_data = pf_response.json()
+                                machine_id = pf_data.get('id')
+                                inquiries_url = f"https://api.robinhood.com/pathfinder/inquiries/{machine_id}/user_view/"
+                                
+                                # Poll for device approval (60 second timeout for web request)
+                                print(f"[API] Robinhood: Polling for device approval (60s timeout)...")
+                                print(f"[API] Robinhood: >>> APPROVE THE LOGIN ON YOUR ROBINHOOD APP <<<")
+                                
+                                start_time = time.time()
+                                approved = False
+                                while time.time() - start_time < 60:
+                                    time.sleep(5)
+                                    
+                                    inquiries_payload = {"sequence": 0, "user_input": {"status": "continue"}}
+                                    inq_response = requests.post(inquiries_url, json=inquiries_payload)
+                                    inq_data = inq_response.json()
+                                    
+                                    # Check for approval
+                                    if "type_context" in inq_data:
+                                        result = inq_data["type_context"].get("result", "")
+                                        if result == "workflow_status_approved":
+                                            approved = True
+                                            break
+                                    
+                                    vw_status = inq_data.get("verification_workflow", {}).get("workflow_status", "unknown")
+                                    print(f"[API] Robinhood: Device approval status: {vw_status}")
+                                    
+                                    if vw_status == "workflow_status_approved":
+                                        approved = True
+                                        break
+                                
+                                if approved:
+                                    print(f"[API] Robinhood: ✓ Device approved! Retrying login...")
+                                    # Retry the OAuth login after approval
+                                    oauth_response = requests.post(oauth_url, data=oauth_payload)
+                                    oauth_data = oauth_response.json()
+                                    
+                                    if oauth_response.status_code == 200 and "access_token" in oauth_data:
+                                        # Store the token and continue
+                                        access_token = oauth_data["access_token"]
+                                        print(f"[API] Robinhood: ✓ Login successful after device approval!")
+                                        
+                                        # Use robin_stocks with the obtained token
+                                        rh.authentication.LOGGED_IN = True
+                                        rh.authentication.ACCESS_TOKEN = access_token
+                                        
+                                        # Get account info
+                                        account = rh.profiles.load_account_profile()
+                                        portfolio = rh.profiles.load_portfolio_profile()
+                                        
+                                        buying_power = float(account.get('buying_power', 0) or 0) if account else 0
+                                        portfolio_value = float(portfolio.get('equity', 0) or 0) if portfolio else 0
+                                        cash = float(account.get('cash', 0) or 0) if account else 0
+                                        
+                                        account_info = {
+                                            'buying_power': buying_power,
+                                            'portfolio_value': portfolio_value,
+                                            'cash': cash,
+                                            'mode': 'LIVE',
+                                            'warning': 'NO PAPER MODE - All trades use real money'
+                                        }
+                                        
+                                        set_broker_status(broker_id, True, 'connected', account_info=account_info)
+                                        
+                                        return jsonify({
+                                            'success': True,
+                                            'message': 'Robinhood connected successfully! Device approved. WARNING: All trades are LIVE.',
+                                            'status': 'connected',
+                                            'account_info': account_info
+                                        })
+                                    else:
+                                        print(f"[API] Robinhood: Login failed after approval - {oauth_data}")
+                                        set_broker_status(broker_id, False, 'error', 'Login failed after device approval')
+                                        return jsonify({'success': False, 'error': 'Login failed after device approval. Please try again.'}), 400
+                                else:
+                                    print(f"[API] Robinhood: Device approval timeout")
+                                    set_broker_status(broker_id, False, 'error', 'Device approval timeout')
+                                    return jsonify({'success': False, 'error': 'Device approval timeout. Please approve the login on your Robinhood app and try again.'}), 400
+                            else:
+                                print(f"[API] Robinhood: Pathfinder error - {pf_response.text}")
+                        except Exception as pf_err:
+                            print(f"[API] Robinhood: Pathfinder exception - {pf_err}")
+                        
+                        # Fallback error message
+                        set_broker_status(broker_id, False, 'error', 'Device approval required')
+                        return jsonify({
+                            'success': False, 
+                            'error': 'Robinhood requires device approval. Please approve the login on your Robinhood mobile app, then click Connect again.',
+                            'requires_device_approval': True
+                        }), 400
+                    
+                    # Direct login successful
+                    elif oauth_response.status_code == 200 and "access_token" in oauth_data:
+                        access_token = oauth_data["access_token"]
+                        print(f"[API] Robinhood: ✓ Direct login successful!")
+                        
+                        # Use robin_stocks with the obtained token
+                        rh.authentication.LOGGED_IN = True
+                        rh.authentication.ACCESS_TOKEN = access_token
+                        
                         # Get account info
                         account = rh.profiles.load_account_profile()
                         portfolio = rh.profiles.load_portfolio_profile()
@@ -11253,9 +11406,10 @@ def register_routes(app):
                             'account_info': account_info
                         })
                     else:
-                        error_detail = login_result.get('detail', 'Login failed') if login_result else 'No response'
-                        print(f"[API] Robinhood: Login failed - result={login_result}")
-                        set_broker_status(broker_id, False, 'error', error_detail)
+                        # Login failed - check error details
+                        error_detail = oauth_data.get('detail', oauth_data.get('error', 'Unknown error'))
+                        print(f"[API] Robinhood: Login failed - {oauth_data}")
+                        set_broker_status(broker_id, False, 'error', str(error_detail))
                         return jsonify({'success': False, 'error': f'Robinhood login failed: {error_detail}'}), 400
                         
                 except ImportError:
