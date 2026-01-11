@@ -11176,6 +11176,18 @@ Environment Variables:
     
     if not use_gui_mode:
         # Console mode: Run without splash screen
+        # Still need to check for single instance in console mode!
+        try:
+            from src.gui.single_instance import check_single_instance
+            if not check_single_instance("BotifyTrades"):
+                _original_print("[STARTUP] ⚠️ Another instance of BotifyTrades is already running!")
+                _original_print("[STARTUP] Please close the existing instance before starting a new one.")
+                sys.exit(1)
+        except Exception as si_err:
+            _original_print(f"[STARTUP] Single instance check error: {si_err}")
+            _original_print("[STARTUP] ⚠️ Cannot verify single instance - refusing to start for safety.")
+            sys.exit(1)
+        
         try:
             from src.license import start_network_monitor, show_license_expired_popup
             license_key = None

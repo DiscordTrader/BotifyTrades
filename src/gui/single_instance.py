@@ -36,9 +36,11 @@ def _check_windows_mutex(app_name: str) -> bool:
         
         kernel32 = ctypes.windll.kernel32
         
-        mutex_name = f"Local\\{app_name}_SingleInstance_Mutex"
+        mutex_name = f"Global\\{app_name}_SingleInstance_Mutex_V2"
         
         ERROR_ALREADY_EXISTS = 183
+        
+        kernel32.SetLastError(0)
         
         _lock_handle = kernel32.CreateMutexW(
             None,
@@ -50,21 +52,21 @@ def _check_windows_mutex(app_name: str) -> bool:
         
         if _lock_handle is None or _lock_handle == 0:
             print(f"[SINGLE INSTANCE] Failed to create mutex (error: {last_error})")
-            return True
+            return False
         
         if last_error == ERROR_ALREADY_EXISTS:
-            print(f"[SINGLE INSTANCE] Mutex already exists - another instance is running")
+            print(f"[SINGLE INSTANCE] ⚠️ Another instance is already running!")
             kernel32.CloseHandle(_lock_handle)
             _lock_handle = None
             return False
         
-        print(f"[SINGLE INSTANCE] Mutex created successfully")
+        print(f"[SINGLE INSTANCE] ✓ Mutex acquired - single instance verified")
         atexit.register(_cleanup_windows_mutex)
         return True
         
     except Exception as e:
         print(f"[SINGLE INSTANCE] Windows mutex check failed: {e}")
-        return True
+        return False
 
 
 def _check_file_lock(app_name: str) -> bool:
