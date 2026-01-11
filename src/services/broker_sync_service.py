@@ -1014,6 +1014,10 @@ class BrokerSyncService:
         This allows per-channel risk settings to work for positions that were opened via Discord signals.
         """
         
+        broker_positions = normalized_data.get('positions', [])
+        if not broker_positions:
+            return
+        
         # Get all tracked trades for this broker (handle case-insensitive broker names)
         all_db_trades = self.db.get_trades(status='OPEN', limit=1000)
         

@@ -274,15 +274,88 @@ class RobinhoodBroker(BrokerInterface):
         try:
             if status == 'open':
                 stock_orders = rh.orders.get_all_open_stock_orders() or []
-                option_orders = rh.options.get_all_open_option_orders() or []
+                option_orders = []
+                try:
+                    option_orders = rh.orders.get_all_open_option_orders() or []
+                except Exception:
+                    pass
                 return list(stock_orders) + list(option_orders)
             else:
                 stock_orders = rh.orders.get_all_stock_orders() or []
-                option_orders = rh.options.get_all_option_orders() or []
+                option_orders = []
+                try:
+                    option_orders = rh.orders.get_all_option_orders() or []
+                except Exception:
+                    pass
                 return list(stock_orders) + list(option_orders)
                 
         except Exception as e:
             print(f"[{self.name}] Error getting orders: {e}")
+            return []
+    
+    def get_pending_orders(self) -> list:
+        """Get pending/open orders for BrokerSyncService (synchronous)
+        
+        Returns list of orders with BrokerSyncService expected fields:
+        - broker_order_id, symbol, quantity, limit_price, order_type, status
+        """
+        if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
+            return []
+        
+        try:
+            orders = []
+            
+            stock_orders = rh.orders.get_all_open_stock_orders() or []
+            for order in stock_orders:
+                instrument_url = order.get('instrument', '')
+                symbol = order.get('symbol', '')
+                if not symbol and instrument_url:
+                    try:
+                        instrument = rh.stocks.get_instrument_by_url(instrument_url)
+                        symbol = instrument.get('symbol', '') if instrument else ''
+                    except:
+                        pass
+                
+                side = order.get('side', 'buy').upper()
+                order_type = 'BTO' if side == 'BUY' else 'STC'
+                state = order.get('state', 'pending').upper()
+                status = 'PENDING' if state in ('QUEUED', 'CONFIRMED', 'PENDING') else state
+                
+                orders.append({
+                    'broker_order_id': order.get('id'),
+                    'symbol': symbol,
+                    'quantity': float(order.get('quantity', 0)),
+                    'limit_price': float(order.get('price', 0) or order.get('average_price', 0) or 0),
+                    'order_type': order_type,
+                    'status': status,
+                    'asset_type': 'stock'
+                })
+            
+            try:
+                option_orders = rh.orders.get_all_open_option_orders() or []
+                for order in option_orders:
+                    symbol = order.get('chain_symbol', '')
+                    direction = order.get('direction', 'debit').upper()
+                    order_type = 'BTO' if 'DEBIT' in direction else 'STC'
+                    state = order.get('state', 'pending').upper()
+                    status = 'PENDING' if state in ('QUEUED', 'CONFIRMED', 'PENDING') else state
+                    
+                    orders.append({
+                        'broker_order_id': order.get('id'),
+                        'symbol': symbol,
+                        'quantity': float(order.get('quantity', 0)),
+                        'limit_price': float(order.get('price', 0) or order.get('premium', 0) or 0),
+                        'order_type': order_type,
+                        'status': status,
+                        'asset_type': 'option'
+                    })
+            except Exception:
+                pass
+            
+            return orders
+            
+        except Exception as e:
+            print(f"[{self.name}] Error getting pending orders: {e}")
             return []
     
     def get_options_expiration_dates(self, symbol: str) -> list:
