@@ -15227,10 +15227,12 @@ def register_routes(app):
             
             elif broker_name == 'zerodha':
                 from src.brokers.zerodha_broker import ZerodhaBroker
+                print(f"[ZERODHA DEBUG] test route - credentials keys: {list(credentials.keys())}")
                 result = ZerodhaBroker.test_connection(
                     api_key=credentials.get('api_key', ''),
                     access_token=credentials.get('access_token', ''),
-                    api_secret=credentials.get('api_secret', '')
+                    api_secret=credentials.get('api_secret', ''),
+                    request_token=credentials.get('request_token', '')
                 )
             
             elif broker_name == 'dhanq':
@@ -15403,8 +15405,12 @@ def register_routes(app):
                         'message': 'Zerodha broker not available. Install kiteconnect: pip install kiteconnect'
                     })
                 
+                print(f"[ZERODHA DEBUG] Reconnect request received")
                 stored = db.get_broker_credentials('zerodha')
+                print(f"[ZERODHA DEBUG] Stored credentials found: {stored is not None}")
+                
                 if not stored or not stored.get('credentials'):
+                    print(f"[ZERODHA DEBUG] No credentials in database")
                     return jsonify({
                         'success': False,
                         'message': 'No Zerodha credentials found. Please save credentials first.'
@@ -15416,17 +15422,29 @@ def register_routes(app):
                 access_token = creds.get('access_token', '')
                 request_token = creds.get('request_token', '')
                 
+                print(f"[ZERODHA DEBUG] api_key: {'***' + api_key[-4:] if len(api_key) > 4 else 'EMPTY'}")
+                print(f"[ZERODHA DEBUG] api_secret: {'***' + api_secret[-4:] if len(api_secret) > 4 else 'EMPTY'}")
+                print(f"[ZERODHA DEBUG] access_token: {'***' + access_token[-8:] if len(access_token) > 8 else 'EMPTY'}")
+                print(f"[ZERODHA DEBUG] request_token: {'***' + request_token[-8:] if len(request_token) > 8 else 'EMPTY'}")
+                
                 if not api_key:
+                    print(f"[ZERODHA DEBUG] FAILED: No API key")
                     return jsonify({
                         'success': False,
                         'message': 'Incomplete credentials. API key is required.'
                     })
                 
                 if not access_token and not (request_token and api_secret):
+                    print(f"[ZERODHA DEBUG] FAILED: Need access_token OR (request_token + api_secret)")
+                    print(f"[ZERODHA DEBUG]   access_token empty: {not access_token}")
+                    print(f"[ZERODHA DEBUG]   request_token empty: {not request_token}")
+                    print(f"[ZERODHA DEBUG]   api_secret empty: {not api_secret}")
                     return jsonify({
                         'success': False,
                         'message': 'Incomplete credentials. Either access_token OR (request_token + api_secret) is required.'
                     })
+                
+                print(f"[ZERODHA DEBUG] Credentials validation passed, calling test_connection...")
                 
                 result = ZerodhaBroker.test_connection(api_key, access_token, api_secret, request_token)
                 

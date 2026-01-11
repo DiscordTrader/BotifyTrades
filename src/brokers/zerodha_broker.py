@@ -736,7 +736,14 @@ class ZerodhaBroker(BrokerInterface):
                         api_secret: str = None, request_token: str = None) -> Dict[str, Any]:
         """Test connection with provided credentials"""
         try:
+            print(f"[ZERODHA DEBUG] test_connection called")
+            print(f"[ZERODHA DEBUG]   api_key: {'***' + api_key[-4:] if api_key and len(api_key) > 4 else 'NONE'}")
+            print(f"[ZERODHA DEBUG]   access_token: {'***' + access_token[-8:] if access_token and len(access_token) > 8 else 'NONE'}")
+            print(f"[ZERODHA DEBUG]   api_secret: {'***' + api_secret[-4:] if api_secret and len(api_secret) > 4 else 'NONE'}")
+            print(f"[ZERODHA DEBUG]   request_token: {'***' + request_token[-8:] if request_token and len(request_token) > 8 else 'NONE'}")
+            
             if not KITE_AVAILABLE:
+                print(f"[ZERODHA DEBUG] KITE_AVAILABLE=False")
                 return {
                     'success': False,
                     'message': 'Kite Connect library not installed. Run: pip install kiteconnect'
@@ -747,10 +754,12 @@ class ZerodhaBroker(BrokerInterface):
             used_request_token_flow = False
             
             if access_token:
+                print(f"[ZERODHA DEBUG] Trying access_token flow...")
                 try:
                     kite.set_access_token(access_token)
                     profile = kite.profile()
                     if profile:
+                        print(f"[ZERODHA DEBUG] Access token worked! User: {profile.get('user_id')}")
                         return {
                             'success': True,
                             'message': f"Connected! User: {profile.get('user_name', 'N/A')} ({profile.get('user_id', 'N/A')})",
@@ -759,7 +768,9 @@ class ZerodhaBroker(BrokerInterface):
                             'access_token': access_token
                         }
                 except Exception as token_err:
+                    print(f"[ZERODHA DEBUG] Access token failed: {token_err}")
                     if request_token and api_secret:
+                        print(f"[ZERODHA DEBUG] Will try request_token flow as fallback...")
                         pass
                     else:
                         error_msg = str(token_err)
@@ -771,11 +782,16 @@ class ZerodhaBroker(BrokerInterface):
                         raise
             
             if request_token and api_secret:
+                print(f"[ZERODHA DEBUG] Trying request_token + api_secret flow...")
+                print(f"[ZERODHA DEBUG] Calling kite.generate_session()...")
                 data = kite.generate_session(request_token, api_secret=api_secret)
+                print(f"[ZERODHA DEBUG] generate_session returned: {list(data.keys()) if data else 'None'}")
                 new_access_token = data["access_token"]
                 kite.set_access_token(new_access_token)
                 used_request_token_flow = True
+                print(f"[ZERODHA DEBUG] Request token flow succeeded, got new access_token")
             elif not access_token:
+                print(f"[ZERODHA DEBUG] FAILED: No access_token and no (request_token + api_secret)")
                 return {
                     'success': False,
                     'message': 'Access token or request_token + api_secret required'
