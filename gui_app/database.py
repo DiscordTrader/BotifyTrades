@@ -3506,8 +3506,8 @@ def update_execution_lot_remaining(lot_id: int, remaining_qty: int, status: str)
         return False
 
 
-def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = None, limit: int = 100):
-    """Get execution-based P&L with optional filtering"""
+def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = None, limit: int = 100, user: str = None, exit_source: str = None):
+    """Get execution-based P&L with optional filtering including channel names and author info"""
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -3521,9 +3521,14 @@ def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = No
             el.fill_price as entry_fill_price, el.signal_price as entry_signal_price,
             el.slippage_pct as entry_slippage_pct, el.order_filled_at as entry_filled_at,
             el.signal_detected_at, el.latency_total_ms,
-            el.analyst_entry_qty, el.sizing_mode
+            el.analyst_entry_qty, el.sizing_mode,
+            c.name as channel_name,
+            sl.author_name,
+            el.signal_lot_id
         FROM execution_closures ec
         JOIN execution_lots el ON ec.execution_lot_id = el.id
+        LEFT JOIN channels c ON ec.channel_id = c.discord_channel_id
+        LEFT JOIN signal_lots sl ON el.signal_lot_id = sl.id
         WHERE 1=1
     '''
     params = []
@@ -3532,17 +3537,67 @@ def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = No
         query += ' AND ec.channel_id = ?'
         params.append(str(channel_id))
     if broker:
-        query += ' AND ec.broker = ?'
-        params.append(broker)
+        query += ' AND UPPER(ec.broker) LIKE UPPER(?)'
+        params.append(f'%{broker}%')
     if days:
         query += ' AND ec.filled_at >= datetime("now", ?)'
         params.append(f'-{days} days')
+    if user:
+        query += ' AND sl.author_name LIKE ?'
+        params.append(f'%{user}%')
+    if exit_source:
+        query += ' AND ec.exit_source = ?'
+        params.append(exit_source)
     
     query += ' ORDER BY ec.filled_at DESC LIMIT ?'
     params.append(limit)
     
     cursor.execute(query, params)
     return cursor.fetchall()
+
+
+def get_execution_pnl_users():
+    """Get unique list of users/authors from execution P&L data for filtering"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT DISTINCT sl.author_name
+        FROM execution_closures ec
+        JOIN execution_lots el ON ec.execution_lot_id = el.id
+        LEFT JOIN signal_lots sl ON el.signal_lot_id = sl.id
+        WHERE sl.author_name IS NOT NULL AND sl.author_name != ''
+        ORDER BY sl.author_name
+    ''')
+    
+    return [row[0] for row in cursor.fetchall()]
+
+
+def get_execution_pnl_channels():
+    """Get unique list of channels from execution P&L data for filtering"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT DISTINCT ec.channel_id, c.name
+        FROM execution_closures ec
+        LEFT JOIN channels c ON ec.channel_id = c.discord_channel_id
+        ORDER BY c.name
+    ''')
+    
+    return [{'id': row[0], 'name': row[1] or f"Channel {row[0][:8]}..."} for row in cursor.fetchall()]
+
+
+def get_execution_pnl_brokers():
+    """Get unique list of brokers from execution P&L data for filtering"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT DISTINCT broker FROM execution_closures WHERE broker IS NOT NULL ORDER BY broker
+    ''')
+    
+    return [row[0] for row in cursor.fetchall()]
 
 
 def get_execution_leaderboard(days: int = None):

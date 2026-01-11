@@ -8895,7 +8895,7 @@ def register_routes(app):
     
     @app.route('/api/execution-pnl', methods=['GET'])
     def api_get_execution_pnl():
-        """Get execution-based P&L with actual broker fills"""
+        """Get execution-based P&L with actual broker fills, enhanced with channel/user info"""
         try:
             from gui_app.database import get_execution_pnl
             
@@ -8903,16 +8903,40 @@ def register_routes(app):
             broker = request.args.get('broker')
             days = request.args.get('days', type=int)
             limit = request.args.get('limit', 100, type=int)
+            user = request.args.get('user')
+            exit_source = request.args.get('exit_source')
             
-            rows = get_execution_pnl(channel_id, broker, days, limit)
+            rows = get_execution_pnl(channel_id, broker, days, limit, user, exit_source)
             
             results = []
+            total_entry_slip = 0
+            total_exit_slip = 0
+            total_latency = 0
+            slip_count = 0
+            latency_count = 0
+            
             for row in rows:
+                entry_slip = row['entry_slippage_pct'] or 0
+                exit_slip = row['exit_slippage_pct'] or 0
+                latency = row['latency_total_ms'] or 0
+                
+                if entry_slip != 0:
+                    total_entry_slip += entry_slip
+                    slip_count += 1
+                if exit_slip != 0:
+                    total_exit_slip += exit_slip
+                if latency > 0:
+                    total_latency += latency
+                    latency_count += 1
+                
                 results.append({
                     'id': row['id'],
                     'execution_lot_id': row['execution_lot_id'],
                     'channel_id': row['channel_id'],
+                    'channel_name': row['channel_name'] or f"Channel {str(row['channel_id'])[:8]}...",
                     'broker': row['broker'],
+                    'author_name': row['author_name'] or 'Unknown',
+                    'signal_lot_id': row['signal_lot_id'],
                     'symbol': row['symbol'],
                     'asset_type': row['asset_type'],
                     'strike': row['strike'],
@@ -8922,13 +8946,13 @@ def register_routes(app):
                     'entry': {
                         'fill_price': row['entry_fill_price'],
                         'signal_price': row['entry_signal_price'],
-                        'slippage_pct': row['entry_slippage_pct'],
+                        'slippage_pct': entry_slip,
                         'filled_at': row['entry_filled_at']
                     },
                     'exit': {
                         'fill_price': row['exit_fill_price'],
                         'signal_price': row['signal_exit_price'],
-                        'slippage_pct': row['exit_slippage_pct'],
+                        'slippage_pct': exit_slip,
                         'filled_at': row['exit_filled_at']
                     },
                     'pnl': row['pnl'],
@@ -8937,7 +8961,7 @@ def register_routes(app):
                     'exit_source': row['exit_source'],
                     'latency': {
                         'signal_detected_at': row['signal_detected_at'],
-                        'total_ms': row['latency_total_ms']
+                        'total_ms': latency
                     },
                     'sizing': {
                         'analyst_entry_qty': row['analyst_entry_qty'],
@@ -8945,9 +8969,9 @@ def register_routes(app):
                     }
                 })
             
-            total_pnl = sum(r['pnl'] for r in results)
-            win_count = sum(1 for r in results if r['pnl'] > 0)
-            loss_count = sum(1 for r in results if r['pnl'] <= 0)
+            total_pnl = sum(r['pnl'] or 0 for r in results)
+            win_count = sum(1 for r in results if (r['pnl'] or 0) > 0)
+            loss_count = sum(1 for r in results if (r['pnl'] or 0) <= 0)
             
             return jsonify({
                 'success': True,
@@ -8957,7 +8981,10 @@ def register_routes(app):
                     'total_pnl': round(total_pnl, 2),
                     'win_count': win_count,
                     'loss_count': loss_count,
-                    'win_rate': round(win_count / len(results) * 100, 1) if results else 0
+                    'win_rate': round(win_count / len(results) * 100, 1) if results else 0,
+                    'avg_entry_slippage': round(total_entry_slip / slip_count, 2) if slip_count > 0 else 0,
+                    'avg_exit_slippage': round(total_exit_slip / slip_count, 2) if slip_count > 0 else 0,
+                    'avg_latency_ms': round(total_latency / latency_count) if latency_count > 0 else 0
                 }
             })
             
@@ -8965,6 +8992,24 @@ def register_routes(app):
             print(f"[API] Error getting execution P&L: {e}")
             import traceback
             traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/execution-pnl/filters', methods=['GET'])
+    def api_get_execution_pnl_filters():
+        """Get filter options for execution P&L page (users, channels, brokers)"""
+        try:
+            from gui_app.database import get_execution_pnl_users, get_execution_pnl_channels, get_execution_pnl_brokers
+            
+            return jsonify({
+                'success': True,
+                'users': get_execution_pnl_users(),
+                'channels': get_execution_pnl_channels(),
+                'brokers': get_execution_pnl_brokers(),
+                'exit_sources': ['SIGNAL', 'PT1', 'PT2', 'PT3', 'PT4', 'STOP_LOSS', 'TRAILING', 'MANUAL', 'RISK']
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting execution P&L filters: {e}")
             return jsonify({'error': str(e)}), 500
     
     @app.route('/api/execution-lots', methods=['GET'])

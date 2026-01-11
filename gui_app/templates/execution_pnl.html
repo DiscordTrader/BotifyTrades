@@ -55,12 +55,26 @@
         <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
             <select id="filter-broker" onchange="loadExecutionPnl()" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-darker); color: var(--text-primary); font-size: 13px;">
                 <option value="">All Brokers</option>
-                <option value="webull">Webull</option>
-                <option value="alpaca">Alpaca</option>
-                <option value="tastytrade">Tastytrade</option>
-                <option value="schwab">Schwab</option>
-                <option value="robinhood">Robinhood</option>
-                <option value="ibkr">IBKR</option>
+            </select>
+            
+            <select id="filter-channel" onchange="loadExecutionPnl()" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-darker); color: var(--text-primary); font-size: 13px;">
+                <option value="">All Channels</option>
+            </select>
+            
+            <select id="filter-user" onchange="loadExecutionPnl()" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-darker); color: var(--text-primary); font-size: 13px;">
+                <option value="">All Users</option>
+            </select>
+            
+            <select id="filter-exit-source" onchange="loadExecutionPnl()" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-darker); color: var(--text-primary); font-size: 13px;">
+                <option value="">All Exit Types</option>
+                <option value="SIGNAL">Signal</option>
+                <option value="PT1">PT1</option>
+                <option value="PT2">PT2</option>
+                <option value="PT3">PT3</option>
+                <option value="PT4">PT4</option>
+                <option value="STOP_LOSS">Stop Loss</option>
+                <option value="TRAILING">Trailing</option>
+                <option value="MANUAL">Manual</option>
             </select>
             
             <select id="filter-days" onchange="loadExecutionPnl()" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-darker); color: var(--text-primary); font-size: 13px;">
@@ -159,17 +173,91 @@
         background: rgba(124, 58, 237, 0.2);
         color: #a78bfa;
     }
+    
+    .broker-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    .broker-badge.webull { background: linear-gradient(135deg, #ff6b00, #ff9500); color: #fff; }
+    .broker-badge.alpaca, .broker-badge.alpaca_paper, .broker-badge.alpaca_live { background: linear-gradient(135deg, #00c853, #00e676); color: #fff; }
+    .broker-badge.robinhood { background: linear-gradient(135deg, #00c805, #21ce99); color: #fff; }
+    .broker-badge.tastytrade, .broker-badge.tastytrade_live, .broker-badge.tastytrade_paper { background: linear-gradient(135deg, #e91e63, #ff5722); color: #fff; }
+    .broker-badge.schwab { background: linear-gradient(135deg, #0070c9, #00a0dc); color: #fff; }
+    .broker-badge.ibkr, .broker-badge.ibkr_paper { background: linear-gradient(135deg, #d41f2c, #ff4444); color: #fff; }
+    .broker-badge.zerodha { background: linear-gradient(135deg, #387ed1, #5da5e8); color: #fff; }
+    .broker-badge.upstox { background: linear-gradient(135deg, #7b1fa2, #9c27b0); color: #fff; }
+    .broker-badge.dhanq { background: linear-gradient(135deg, #1565c0, #1976d2); color: #fff; }
+    
+    .channel-badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        background: rgba(100, 100, 255, 0.2);
+        color: #8888ff;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .user-badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        background: rgba(255, 183, 0, 0.2);
+        color: #ffb700;
+    }
 </style>
 
 <script>
 let executionData = [];
 
+function loadFilters() {
+    fetch('/api/execution-pnl/filters')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                const brokerSelect = document.getElementById('filter-broker');
+                const channelSelect = document.getElementById('filter-channel');
+                const userSelect = document.getElementById('filter-user');
+                
+                brokerSelect.innerHTML = '<option value="">All Brokers</option>';
+                data.brokers.forEach(b => {
+                    brokerSelect.innerHTML += `<option value="${b}">${b}</option>`;
+                });
+                
+                channelSelect.innerHTML = '<option value="">All Channels</option>';
+                data.channels.forEach(c => {
+                    channelSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+                });
+                
+                userSelect.innerHTML = '<option value="">All Users</option>';
+                data.users.forEach(u => {
+                    userSelect.innerHTML += `<option value="${u}">${u}</option>`;
+                });
+            }
+        })
+        .catch(err => console.error('Error loading filters:', err));
+}
+
 function loadExecutionPnl() {
     const broker = document.getElementById('filter-broker').value;
+    const channel = document.getElementById('filter-channel').value;
+    const user = document.getElementById('filter-user').value;
+    const exitSource = document.getElementById('filter-exit-source').value;
     const days = document.getElementById('filter-days').value;
     
     let url = '/api/execution-pnl?limit=200';
-    if (broker) url += '&broker=' + broker;
+    if (broker) url += '&broker=' + encodeURIComponent(broker);
+    if (channel) url += '&channel_id=' + encodeURIComponent(channel);
+    if (user) url += '&user=' + encodeURIComponent(user);
+    if (exitSource) url += '&exit_source=' + encodeURIComponent(exitSource);
     if (days) url += '&days=' + days;
     
     document.getElementById('execution-table').innerHTML = `
@@ -196,25 +284,14 @@ function loadExecutionPnl() {
 
 function renderExecutionTable(trades, summary) {
     const totalPnl = summary.total_pnl || 0;
-    document.getElementById('total-pnl').textContent = '$' + totalPnl.toFixed(2);
+    document.getElementById('total-pnl').textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
     document.getElementById('total-pnl').className = 'stat-value ' + (totalPnl >= 0 ? 'success' : 'error');
     document.getElementById('total-trades').textContent = summary.total_trades || 0;
     document.getElementById('win-rate').textContent = (summary.win_rate || 0).toFixed(1) + '%';
     
-    let avgLatency = 0, avgEntrySlip = 0, avgExitSlip = 0, latencyCount = 0, slipCount = 0;
-    trades.forEach(t => {
-        if (t.latency && t.latency.total_ms) { avgLatency += t.latency.total_ms; latencyCount++; }
-        if (t.entry && t.entry.slippage_pct != null) { avgEntrySlip += Math.abs(t.entry.slippage_pct); slipCount++; }
-        if (t.exit && t.exit.slippage_pct != null) { avgExitSlip += Math.abs(t.exit.slippage_pct); }
-    });
-    
-    if (latencyCount > 0) {
-        document.getElementById('avg-latency').textContent = Math.round(avgLatency / latencyCount) + 'ms';
-    }
-    if (slipCount > 0) {
-        document.getElementById('avg-entry-slip').textContent = (avgEntrySlip / slipCount).toFixed(2) + '%';
-        document.getElementById('avg-exit-slip').textContent = (avgExitSlip / slipCount).toFixed(2) + '%';
-    }
+    document.getElementById('avg-latency').textContent = (summary.avg_latency_ms || 0) + 'ms';
+    document.getElementById('avg-entry-slip').textContent = (summary.avg_entry_slippage || 0).toFixed(2) + '%';
+    document.getElementById('avg-exit-slip').textContent = (summary.avg_exit_slippage || 0).toFixed(2) + '%';
     
     if (trades.length === 0) {
         document.getElementById('execution-table').innerHTML = `
@@ -231,15 +308,16 @@ function renderExecutionTable(trades, summary) {
         <table class="data-table">
             <thead>
                 <tr>
+                    <th>Broker</th>
+                    <th>Channel</th>
+                    <th>User</th>
                     <th style="width: 120px;">Symbol</th>
                     <th>Qty</th>
                     <th>Entry</th>
                     <th>Exit</th>
                     <th>P&L</th>
-                    <th>Slippage</th>
+                    <th>Exit Type</th>
                     <th>Latency</th>
-                    <th>Exit Source</th>
-                    <th>Sizing</th>
                     <th>Closed</th>
                 </tr>
             </thead>
@@ -251,6 +329,7 @@ function renderExecutionTable(trades, summary) {
         const entrySlip = trade.entry?.slippage_pct;
         const exitSlip = trade.exit?.slippage_pct;
         const latencyMs = trade.latency?.total_ms;
+        const brokerClass = (trade.broker || '').toLowerCase().replace(/[^a-z]/g, '_');
         
         const entrySlipClass = !entrySlip ? 'neutral' : (entrySlip > 0 ? 'positive' : 'negative');
         const exitSlipClass = !exitSlip ? 'neutral' : (exitSlip > 0 ? 'negative' : 'positive');
@@ -258,35 +337,40 @@ function renderExecutionTable(trades, summary) {
         
         html += `
             <tr>
+                <td>
+                    <span class="broker-badge ${brokerClass}">${trade.broker || '-'}</span>
+                </td>
+                <td>
+                    <span class="channel-badge" title="${trade.channel_name || ''}">${trade.channel_name || '-'}</span>
+                </td>
+                <td>
+                    <span class="user-badge">${trade.author_name || 'Unknown'}</span>
+                </td>
                 <td style="font-weight: 600;">${symbol}</td>
                 <td style="font-family: 'JetBrains Mono', monospace;">${trade.closed_qty}</td>
                 <td>
                     <div style="font-family: 'JetBrains Mono', monospace;">$${trade.entry?.fill_price?.toFixed(2) || '-'}</div>
-                    <div style="font-size: 10px; color: var(--text-muted);">Signal: $${trade.entry?.signal_price?.toFixed(2) || '-'}</div>
+                    <div style="font-size: 10px; color: var(--text-muted);">
+                        <span class="slippage-badge ${entrySlipClass}" style="padding: 1px 4px;">Slip: ${entrySlip?.toFixed(1) || '0'}%</span>
+                    </div>
                 </td>
                 <td>
                     <div style="font-family: 'JetBrains Mono', monospace;">$${trade.exit?.fill_price?.toFixed(2) || '-'}</div>
-                    <div style="font-size: 10px; color: var(--text-muted);">Signal: $${trade.exit?.signal_price?.toFixed(2) || '-'}</div>
+                    <div style="font-size: 10px; color: var(--text-muted);">
+                        <span class="slippage-badge ${exitSlipClass}" style="padding: 1px 4px;">Slip: ${exitSlip?.toFixed(1) || '0'}%</span>
+                    </div>
                 </td>
                 <td>
-                    <div class="pnl-cell ${trade.pnl >= 0 ? 'positive' : 'negative'}">
-                        ${trade.pnl >= 0 ? '+' : ''}$${trade.pnl?.toFixed(2) || '0.00'}
+                    <div class="pnl-cell ${(trade.pnl || 0) >= 0 ? 'positive' : 'negative'}">
+                        ${(trade.pnl || 0) >= 0 ? '+' : ''}$${(trade.pnl || 0).toFixed(2)}
                     </div>
                     <div style="font-size: 10px; color: var(--text-muted);">${(trade.pnl_percent || 0).toFixed(1)}%</div>
-                </td>
-                <td>
-                    <span class="slippage-badge ${entrySlipClass}" title="Entry Slippage">E: ${entrySlip?.toFixed(2) || '0'}%</span>
-                    <span class="slippage-badge ${exitSlipClass}" title="Exit Slippage">X: ${exitSlip?.toFixed(2) || '0'}%</span>
-                </td>
-                <td>
-                    <span class="latency-segment ${latencyClass}">${latencyMs ? latencyMs + 'ms' : '-'}</span>
                 </td>
                 <td>
                     <span class="exit-source-badge ${(trade.exit_source || 'signal').toLowerCase()}">${trade.exit_source || 'SIGNAL'}</span>
                 </td>
                 <td>
-                    <span class="sizing-mode-badge">${trade.sizing?.mode || '-'}</span>
-                    ${trade.sizing?.analyst_entry_qty ? `<div style="font-size: 10px; color: var(--text-muted);">Analyst: ${trade.sizing.analyst_entry_qty}</div>` : ''}
+                    <span class="latency-segment ${latencyClass}">${latencyMs ? latencyMs + 'ms' : '-'}</span>
                 </td>
                 <td style="font-size: 12px; color: var(--text-secondary);">
                     ${formatDate(trade.exit?.filled_at)}
@@ -398,6 +482,7 @@ function showError(elementId, message) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    loadFilters();
     loadExecutionPnl();
 });
 </script>
