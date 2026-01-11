@@ -302,6 +302,7 @@ class RobinhoodBroker(BrokerInterface):
         """Get option chain for a symbol and expiry date.
         
         Uses robin-stocks library to fetch options data.
+        Optimized to only fetch ITM + limited OTM strikes for performance.
         
         Args:
             symbol: Underlying stock symbol
@@ -313,8 +314,11 @@ class RobinhoodBroker(BrokerInterface):
         if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
             return {'calls': [], 'puts': [], 'stock_price': None, 'data_source': 'Error: Robinhood not connected'}
         
+        # Configurable: how many OTM strikes to load per side
+        OTM_LIMIT = 15
+        
         try:
-            # Get stock price
+            # Get stock price first (needed for ITM/OTM filtering)
             stock_price = None
             try:
                 prices = rh.stocks.get_latest_price(symbol)
@@ -347,18 +351,47 @@ class RobinhoodBroker(BrokerInterface):
                 optionType='call'
             )
             
+            # Get put options
+            put_options = rh.options.find_tradable_options(
+                symbol,
+                expirationDate=expiry,
+                optionType='put'
+            )
+            
+            # Filter strikes to ITM + limited OTM for performance
+            if stock_price and stock_price > 0:
+                # CALLS: ITM = strike < stock_price, OTM = strike >= stock_price
+                if call_options:
+                    # Sort by strike
+                    call_options = sorted(call_options, key=lambda x: float(x.get('strike_price', 0)))
+                    itm_calls = [opt for opt in call_options if float(opt.get('strike_price', 0)) < stock_price]
+                    otm_calls = [opt for opt in call_options if float(opt.get('strike_price', 0)) >= stock_price]
+                    # Take all ITM + first OTM_LIMIT OTM strikes
+                    call_options = itm_calls + otm_calls[:OTM_LIMIT]
+                
+                # PUTS: ITM = strike > stock_price, OTM = strike <= stock_price
+                if put_options:
+                    # Sort by strike descending to get closest OTM first
+                    put_options = sorted(put_options, key=lambda x: float(x.get('strike_price', 0)))
+                    itm_puts = [opt for opt in put_options if float(opt.get('strike_price', 0)) > stock_price]
+                    otm_puts = [opt for opt in put_options if float(opt.get('strike_price', 0)) <= stock_price]
+                    # Take last OTM_LIMIT OTM strikes (closest to ATM) + all ITM
+                    call_options_count = len(call_options) if call_options else 0
+                    put_options = otm_puts[-OTM_LIMIT:] + itm_puts
+                
+                total_options = (len(call_options) if call_options else 0) + (len(put_options) if put_options else 0)
+                print(f"[{self.name}] Filtered to {total_options} strikes (ITM + {OTM_LIMIT} OTM per side) near ${stock_price:.2f}")
+            
+            # Fetch market data for filtered call options
             if call_options:
-                # Fetch market data individually for each option (robin-stocks doesn't support batch)
                 for opt in call_options:
                     strike = float(opt.get('strike_price', 0))
                     opt_id = opt.get('id', '')
                     
-                    # Fetch market data for this specific option
                     data = {}
                     if opt_id:
                         try:
                             result = rh.options.get_option_market_data_by_id(opt_id)
-                            # Function returns a list with one dict, extract it
                             if result and isinstance(result, list) and len(result) > 0:
                                 data = result[0] or {}
                             elif result and isinstance(result, dict):
@@ -380,25 +413,16 @@ class RobinhoodBroker(BrokerInterface):
                         'vega': float(data.get('vega', 0) or 0),
                     })
             
-            # Get put options
-            put_options = rh.options.find_tradable_options(
-                symbol,
-                expirationDate=expiry,
-                optionType='put'
-            )
-            
+            # Fetch market data for filtered put options
             if put_options:
-                # Fetch market data individually for each option (robin-stocks doesn't support batch)
                 for opt in put_options:
                     strike = float(opt.get('strike_price', 0))
                     opt_id = opt.get('id', '')
                     
-                    # Fetch market data for this specific option
                     data = {}
                     if opt_id:
                         try:
                             result = rh.options.get_option_market_data_by_id(opt_id)
-                            # Function returns a list with one dict, extract it
                             if result and isinstance(result, list) and len(result) > 0:
                                 data = result[0] or {}
                             elif result and isinstance(result, dict):
