@@ -217,6 +217,35 @@ class BrokerSyncService:
             except Exception:
                 pass
         
+        # ===== INDIA BROKERS (WARNING: ALL LIVE ONLY - no paper trading) =====
+        
+        # Add Zerodha if available
+        if hasattr(self.broker_manager, 'zerodha_broker') and self.broker_manager.zerodha_broker:
+            zerodha = self.broker_manager.zerodha_broker
+            try:
+                if getattr(zerodha, 'connected', False):
+                    brokers_to_sync.append(('ZERODHA', zerodha))
+            except Exception:
+                pass
+        
+        # Add Upstox if available
+        if hasattr(self.broker_manager, 'upstox_broker') and self.broker_manager.upstox_broker:
+            upstox = self.broker_manager.upstox_broker
+            try:
+                if getattr(upstox, 'connected', False):
+                    brokers_to_sync.append(('UPSTOX', upstox))
+            except Exception:
+                pass
+        
+        # Add DhanQ if available
+        if hasattr(self.broker_manager, 'dhanq_broker') and self.broker_manager.dhanq_broker:
+            dhanq = self.broker_manager.dhanq_broker
+            try:
+                if getattr(dhanq, 'connected', False):
+                    brokers_to_sync.append(('DHANQ', dhanq))
+            except Exception:
+                pass
+        
         if not brokers_to_sync:
             print("[SYNC] No brokers available for sync", flush=True)
             return
@@ -530,6 +559,128 @@ class BrokerSyncService:
                     except Exception as e:
                         print(f"[SYNC] Robinhood fetch error: {e}")
             
+            # ===== INDIA BROKERS =====
+            
+            elif broker_name == 'ZERODHA':
+                if hasattr(broker_instance, 'get_positions'):
+                    try:
+                        positions = await broker_instance.get_positions() or []
+                        for pos in positions:
+                            product = pos.get('product', 'MIS')
+                            quantity = pos.get('quantity', 0) or pos.get('overnight_quantity', 0) or pos.get('day_quantity', 0)
+                            if quantity == 0:
+                                continue
+                            result['positions'].append({
+                                'symbol': pos.get('tradingsymbol'),
+                                'quantity': quantity,
+                                'avg_price': pos.get('average_price') or pos.get('buy_price') or 0,
+                                'current_price': pos.get('last_price') or 0,
+                                'unrealized_pnl': pos.get('pnl') or pos.get('unrealised') or 0,
+                                'position_id': None,
+                                'asset_type': 'option' if any(x in pos.get('tradingsymbol', '') for x in ['CE', 'PE']) else 'stock',
+                                'product': product,
+                                'exchange': pos.get('exchange', 'NSE')
+                            })
+                        
+                        if hasattr(broker_instance, 'get_orders'):
+                            orders = await broker_instance.get_orders() or []
+                            for order in orders:
+                                status = (order.get('status') or '').upper()
+                                if status in ('COMPLETE', 'CANCELLED', 'REJECTED'):
+                                    continue
+                                result['pending_orders'].append({
+                                    'broker_order_id': order.get('order_id'),
+                                    'symbol': order.get('tradingsymbol'),
+                                    'quantity': order.get('quantity'),
+                                    'limit_price': order.get('price'),
+                                    'order_type': order.get('transaction_type'),
+                                    'status': status
+                                })
+                    except Exception as e:
+                        print(f"[SYNC] Zerodha fetch error: {e}")
+                        import traceback
+                        traceback.print_exc()
+            
+            elif broker_name == 'UPSTOX':
+                if hasattr(broker_instance, 'get_positions'):
+                    try:
+                        positions = await broker_instance.get_positions() or []
+                        for pos in positions:
+                            quantity = pos.get('quantity', 0) or pos.get('net_quantity', 0)
+                            if quantity == 0:
+                                continue
+                            symbol = pos.get('trading_symbol') or pos.get('tradingsymbol') or ''
+                            result['positions'].append({
+                                'symbol': symbol,
+                                'quantity': quantity,
+                                'avg_price': pos.get('average_price') or pos.get('buy_price') or 0,
+                                'current_price': pos.get('last_price') or pos.get('ltp') or 0,
+                                'unrealized_pnl': pos.get('pnl') or pos.get('unrealised_pnl') or 0,
+                                'position_id': pos.get('instrument_token'),
+                                'asset_type': 'option' if any(x in symbol for x in ['CE', 'PE']) else 'stock',
+                                'product': pos.get('product', 'I'),
+                                'exchange': pos.get('exchange', 'NSE_FO')
+                            })
+                        
+                        if hasattr(broker_instance, 'get_orders'):
+                            orders = await broker_instance.get_orders() or []
+                            for order in orders:
+                                status = (order.get('status') or '').upper()
+                                if status in ('COMPLETE', 'CANCELLED', 'REJECTED', 'FILLED'):
+                                    continue
+                                result['pending_orders'].append({
+                                    'broker_order_id': order.get('order_id'),
+                                    'symbol': order.get('trading_symbol') or order.get('tradingsymbol'),
+                                    'quantity': order.get('quantity'),
+                                    'limit_price': order.get('price'),
+                                    'order_type': order.get('transaction_type'),
+                                    'status': status
+                                })
+                    except Exception as e:
+                        print(f"[SYNC] Upstox fetch error: {e}")
+                        import traceback
+                        traceback.print_exc()
+            
+            elif broker_name == 'DHANQ':
+                if hasattr(broker_instance, 'get_positions'):
+                    try:
+                        positions = await broker_instance.get_positions() or []
+                        for pos in positions:
+                            quantity = pos.get('netQty', 0) or pos.get('quantity', 0)
+                            if quantity == 0:
+                                continue
+                            symbol = pos.get('tradingSymbol') or pos.get('symbol') or ''
+                            result['positions'].append({
+                                'symbol': symbol,
+                                'quantity': quantity,
+                                'avg_price': pos.get('averagePrice') or pos.get('buyAvg') or 0,
+                                'current_price': pos.get('lastTradedPrice') or pos.get('ltp') or 0,
+                                'unrealized_pnl': pos.get('unrealizedProfit') or pos.get('pnl') or 0,
+                                'position_id': pos.get('securityId'),
+                                'asset_type': 'option' if any(x in symbol for x in ['CE', 'PE']) else 'stock',
+                                'product': pos.get('productType', 'INTRADAY'),
+                                'exchange': pos.get('exchangeSegment', 'NSE_FNO')
+                            })
+                        
+                        if hasattr(broker_instance, 'get_orders'):
+                            orders = await broker_instance.get_orders() or []
+                            for order in orders:
+                                status = (order.get('orderStatus') or order.get('status') or '').upper()
+                                if status in ('TRADED', 'CANCELLED', 'REJECTED'):
+                                    continue
+                                result['pending_orders'].append({
+                                    'broker_order_id': order.get('orderId'),
+                                    'symbol': order.get('tradingSymbol') or order.get('symbol'),
+                                    'quantity': order.get('quantity'),
+                                    'limit_price': order.get('price'),
+                                    'order_type': order.get('transactionType'),
+                                    'status': status
+                                })
+                    except Exception as e:
+                        print(f"[SYNC] DhanQ fetch error: {e}")
+                        import traceback
+                        traceback.print_exc()
+            
             print(f"[SYNC] {broker_name}: {len(result['positions'])} positions, {len(result['pending_orders'])} pending orders")
             if result['positions']:
                 symbols = [p['symbol'] for p in result['positions']]
@@ -581,6 +732,12 @@ class BrokerSyncService:
             elif broker_lower.startswith('tastytrade') and 'tastytrade' in trade_broker:
                 active_trades.append(t)
             elif broker_lower == 'robinhood' and 'robinhood' in trade_broker:
+                active_trades.append(t)
+            elif broker_lower == 'zerodha' and 'zerodha' in trade_broker:
+                active_trades.append(t)
+            elif broker_lower == 'upstox' and 'upstox' in trade_broker:
+                active_trades.append(t)
+            elif broker_lower == 'dhanq' and 'dhanq' in trade_broker:
                 active_trades.append(t)
             elif trade_broker == broker_lower:
                 active_trades.append(t)

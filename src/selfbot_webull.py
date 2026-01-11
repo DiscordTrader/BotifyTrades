@@ -9084,17 +9084,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         quantity=signal['qty'],
                         price=signal.get('price')  # None for market orders
                     )
-                elif broker_upper in india_brokers and signal.get('lots'):
-                    # Indian brokers use Webull-style + lots parameter
+                elif broker_upper in india_brokers:
+                    # Indian brokers (Zerodha, Upstox, DhanQ) use standardized interface
+                    # They accept both Alpaca-style and Webull-style parameters
+                    _original_print(f"[{broker_name}] India broker - lots={signal.get('lots')}, qty={signal['qty']}")
                     result = await broker_instance.place_option_order(
-                        action=signal['action'],
-                        qty=signal['qty'],
                         symbol=signal['symbol'],
                         strike=signal['strike'],
-                        opt_type=signal['opt_type'],
-                        expiry_mmdd=signal['expiry'],
-                        limit_price=signal.get('price'),
-                        lots=signal.get('lots')
+                        expiry=signal['expiry'],
+                        option_type=signal['opt_type'],
+                        action=signal['action'],
+                        quantity=signal['qty'],
+                        price=signal.get('price'),
+                        lots=signal.get('lots')  # Optional - broker handles lot size calculation
                     )
                 else:
                     # Webull and other legacy US brokers - no lots parameter
@@ -9544,6 +9546,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elif broker_name_lower == 'upstox' and self.upstox_broker and self.upstox_broker.connected:
                             broker_instance = self.upstox_broker
                             _original_print(f"[MULTI-BROKER] Using Upstox LIVE broker (India)")
+                        # Zerodha (India - Always LIVE): 'zerodha', 'ZERODHA'
+                        elif broker_name_lower == 'zerodha' and self.zerodha_broker and self.zerodha_broker.connected:
+                            broker_instance = self.zerodha_broker
+                            _original_print(f"[MULTI-BROKER] Using Zerodha LIVE broker (India)")
                         # Robinhood (LIVE ONLY - NO PAPER MODE): 'robinhood', 'ROBINHOOD', 'rh'
                         elif broker_name_lower in ('robinhood', 'rh') and self.robinhood_broker and self.robinhood_broker.connected:
                             broker_instance = self.robinhood_broker
