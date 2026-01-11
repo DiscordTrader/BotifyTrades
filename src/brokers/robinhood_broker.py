@@ -348,40 +348,32 @@ class RobinhoodBroker(BrokerInterface):
             )
             
             if call_options:
-                # Build list of strikes for this expiry
-                call_strikes = [opt.get('strike_price') for opt in call_options if opt.get('strike_price')]
+                # Extract option IDs for batch market data fetch
+                option_ids = [opt.get('id') for opt in call_options if opt.get('id')]
                 
-                # Batch fetch market data for ALL calls at once using inputSymbols
-                market_data_list = []
-                try:
-                    # Use get_option_market_data with all parameters - returns list of dicts
-                    market_data_list = rh.options.get_option_market_data(
-                        symbol,
-                        expirationDate=expiry,
-                        optionType='call'
-                    ) or []
-                except Exception as e:
-                    print(f"[{self.name}] Error fetching call market data: {e}")
-                    market_data_list = []
-                
-                # Create lookup by strike price
+                # Batch fetch market data using option IDs
                 market_lookup = {}
-                for md in market_data_list:
-                    if md and isinstance(md, dict):
-                        strike_str = md.get('strike_price')
-                        if strike_str:
-                            market_lookup[strike_str] = md
+                if option_ids:
+                    try:
+                        market_data_list = rh.options.get_option_market_data_by_id(option_ids) or []
+                        for md in market_data_list:
+                            if md and isinstance(md, dict):
+                                instr_id = md.get('instrument_id') or md.get('id')
+                                if instr_id:
+                                    market_lookup[instr_id] = md
+                    except Exception as e:
+                        print(f"[{self.name}] Error fetching call market data: {e}")
                 
                 for opt in call_options:
                     strike = float(opt.get('strike_price', 0))
-                    strike_str = opt.get('strike_price', '')
-                    data = market_lookup.get(strike_str, {})
+                    opt_id = opt.get('id', '')
+                    data = market_lookup.get(opt_id, {})
                     
                     calls.append({
                         'strike': strike,
                         'bid': float(data.get('bid_price', 0) or 0),
                         'ask': float(data.get('ask_price', 0) or 0),
-                        'last': float(data.get('mark_price', 0) or data.get('last_trade_price', 0) or 0),
+                        'last': float(data.get('adjusted_mark_price', 0) or data.get('mark_price', 0) or data.get('last_trade_price', 0) or 0),
                         'volume': int(data.get('volume', 0) or 0),
                         'open_interest': int(data.get('open_interest', 0) or 0),
                         'iv': float(data.get('implied_volatility', 0) or 0),
@@ -399,36 +391,32 @@ class RobinhoodBroker(BrokerInterface):
             )
             
             if put_options:
-                # Batch fetch market data for ALL puts at once
-                market_data_list = []
-                try:
-                    market_data_list = rh.options.get_option_market_data(
-                        symbol,
-                        expirationDate=expiry,
-                        optionType='put'
-                    ) or []
-                except Exception as e:
-                    print(f"[{self.name}] Error fetching put market data: {e}")
-                    market_data_list = []
+                # Extract option IDs for batch market data fetch
+                option_ids = [opt.get('id') for opt in put_options if opt.get('id')]
                 
-                # Create lookup by strike price
+                # Batch fetch market data using option IDs
                 market_lookup = {}
-                for md in market_data_list:
-                    if md and isinstance(md, dict):
-                        strike_str = md.get('strike_price')
-                        if strike_str:
-                            market_lookup[strike_str] = md
+                if option_ids:
+                    try:
+                        market_data_list = rh.options.get_option_market_data_by_id(option_ids) or []
+                        for md in market_data_list:
+                            if md and isinstance(md, dict):
+                                instr_id = md.get('instrument_id') or md.get('id')
+                                if instr_id:
+                                    market_lookup[instr_id] = md
+                    except Exception as e:
+                        print(f"[{self.name}] Error fetching put market data: {e}")
                 
                 for opt in put_options:
                     strike = float(opt.get('strike_price', 0))
-                    strike_str = opt.get('strike_price', '')
-                    data = market_lookup.get(strike_str, {})
+                    opt_id = opt.get('id', '')
+                    data = market_lookup.get(opt_id, {})
                     
                     puts.append({
                         'strike': strike,
                         'bid': float(data.get('bid_price', 0) or 0),
                         'ask': float(data.get('ask_price', 0) or 0),
-                        'last': float(data.get('mark_price', 0) or data.get('last_trade_price', 0) or 0),
+                        'last': float(data.get('adjusted_mark_price', 0) or data.get('mark_price', 0) or data.get('last_trade_price', 0) or 0),
                         'volume': int(data.get('volume', 0) or 0),
                         'open_interest': int(data.get('open_interest', 0) or 0),
                         'iv': float(data.get('implied_volatility', 0) or 0),
