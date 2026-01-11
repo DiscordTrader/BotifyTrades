@@ -13,17 +13,14 @@ from typing import Optional, Dict, Any
 _cached_cipher = None
 
 def get_encryption_key():
-    """Get encryption key - portable across machines using LICENSE_KEY or shared secret.
+    """Get encryption key - maintains backward compatibility while supporting portability.
     
     Priority order:
-    1. ENCRYPTION_KEY environment variable (direct key)
-    2. Derive from LICENSE_KEY (makes credentials portable across machines)
-    3. Derive from SESSION_SECRET (fallback for deployments)
-    4. .encryption_key file (legacy, machine-specific)
-    5. Generate new key (last resort, will create .encryption_key file)
+    1. ENCRYPTION_KEY environment variable (direct override)
+    2. .encryption_key file (existing installations - backward compatible)
+    3. Derive from LICENSE_KEY (new installations - portable across machines)
+    4. Generate new key (last resort, will create .encryption_key file)
     """
-    license_key = os.environ.get('LICENSE_KEY', '')
-    session_secret = os.environ.get('SESSION_SECRET', '')
     encryption_key_env = os.environ.get('ENCRYPTION_KEY', '')
     
     if encryption_key_env:
@@ -32,27 +29,26 @@ def get_encryption_key():
         except Exception:
             pass
     
-    if license_key and len(license_key) >= 8:
-        derived = hashlib.sha256(f"botify_creds_{license_key}".encode()).digest()
-        return base64.urlsafe_b64encode(derived)
-    
-    if session_secret and len(session_secret) >= 8:
-        derived = hashlib.sha256(f"botify_creds_{session_secret}".encode()).digest()
-        return base64.urlsafe_b64encode(derived)
-    
     key_file = Path.cwd() / '.encryption_key'
     if key_file.exists():
         try:
             with open(key_file, 'rb') as f:
-                return f.read()
+                key = f.read()
+                if key and len(key) >= 32:
+                    return key
         except Exception:
             pass
+    
+    license_key = os.environ.get('LICENSE_KEY', '')
+    if license_key and len(license_key) >= 8:
+        derived = hashlib.sha256(f"botify_creds_{license_key}".encode()).digest()
+        return base64.urlsafe_b64encode(derived)
     
     key = Fernet.generate_key()
     try:
         with open(key_file, 'wb') as f:
             f.write(key)
-        print("[CONFIG] ⚠️ Generated new encryption key (machine-specific). Set LICENSE_KEY for portable credentials.")
+        print("[CONFIG] ⚠️ Generated new encryption key. For portable credentials, set LICENSE_KEY environment variable.")
     except Exception:
         print("[CONFIG] ⚠️ Could not save encryption key file")
     return key
