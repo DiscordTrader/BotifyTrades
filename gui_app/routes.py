@@ -15711,6 +15711,66 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    # ============ EXTENDED HOURS TRADING API ============
+    
+    @app.route('/api/brokers/extended-hours', methods=['GET'])
+    @login_required
+    def api_get_extended_hours_settings():
+        """Get extended hours trading settings for all brokers"""
+        try:
+            settings = db.get_all_extended_hours_settings()
+            return jsonify({
+                'success': True,
+                'settings': settings,
+                'supported_brokers': {
+                    'schwab': {'method': 'SEAMLESS session', 'hours': 'Pre-market + After-hours'},
+                    'alpaca': {'method': 'extended_hours flag', 'hours': '4AM-9:30AM, 4PM-8PM ET', 'note': 'LIMIT orders only'},
+                    'ibkr': {'method': 'outsideRth flag', 'hours': '4AM-9:30AM, 4PM-8PM ET'},
+                    'robinhood': {'method': 'extendedHours flag', 'hours': '9AM-9:30AM, 4PM-6PM ET', 'note': 'Stocks only, NOT options'},
+                    'webull': {'method': 'outsideRegularTradingHour flag', 'hours': '4AM-9:30AM, 4PM-8PM ET', 'note': 'LIMIT orders only'}
+                }
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/extended-hours/<broker_name>', methods=['GET'])
+    @login_required
+    def api_get_broker_extended_hours(broker_name):
+        """Get extended hours trading setting for a specific broker"""
+        try:
+            enabled = db.get_broker_extended_hours(broker_name.lower())
+            return jsonify({
+                'success': True,
+                'broker': broker_name.lower(),
+                'extended_hours_enabled': enabled
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/extended-hours/<broker_name>', methods=['POST'])
+    @login_required
+    def api_set_broker_extended_hours(broker_name):
+        """Set extended hours trading setting for a specific broker"""
+        try:
+            data = request.get_json()
+            enabled = data.get('enabled', False)
+            
+            success = db.set_broker_extended_hours(broker_name.lower(), enabled)
+            
+            if success:
+                status = 'ENABLED' if enabled else 'DISABLED'
+                print(f"[API] Extended hours {status} for {broker_name}")
+                return jsonify({
+                    'success': True,
+                    'broker': broker_name.lower(),
+                    'extended_hours_enabled': enabled,
+                    'message': f'Extended hours trading {status} for {broker_name}'
+                })
+            else:
+                return jsonify({'success': False, 'error': 'Failed to save setting'}), 500
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     # ============ MULTI-BROKER DASHBOARD API ============
     
     @app.route('/api/v2/broker-states', methods=['GET'])
