@@ -348,29 +348,34 @@ class RobinhoodBroker(BrokerInterface):
             )
             
             if call_options:
-                # Extract instrument URLs for batch market data fetch
-                instrument_urls = [opt.get('url') for opt in call_options if opt.get('url')]
+                # Build list of strikes for this expiry
+                call_strikes = [opt.get('strike_price') for opt in call_options if opt.get('strike_price')]
                 
-                # Batch fetch market data for all calls at once
+                # Batch fetch market data for ALL calls at once using inputSymbols
                 market_data_list = []
-                if instrument_urls:
-                    try:
-                        market_data_list = rh.options.get_option_market_data_by_id(instrument_urls) or []
-                    except:
-                        market_data_list = []
+                try:
+                    # Use get_option_market_data with all parameters - returns list of dicts
+                    market_data_list = rh.options.get_option_market_data(
+                        symbol,
+                        expirationDate=expiry,
+                        optionType='call'
+                    ) or []
+                except Exception as e:
+                    print(f"[{self.name}] Error fetching call market data: {e}")
+                    market_data_list = []
                 
-                # Create lookup by instrument URL
+                # Create lookup by strike price
                 market_lookup = {}
                 for md in market_data_list:
                     if md and isinstance(md, dict):
-                        instr_url = md.get('instrument')
-                        if instr_url:
-                            market_lookup[instr_url] = md
+                        strike_str = md.get('strike_price')
+                        if strike_str:
+                            market_lookup[strike_str] = md
                 
                 for opt in call_options:
                     strike = float(opt.get('strike_price', 0))
-                    instr_url = opt.get('url', '')
-                    data = market_lookup.get(instr_url, {})
+                    strike_str = opt.get('strike_price', '')
+                    data = market_lookup.get(strike_str, {})
                     
                     calls.append({
                         'strike': strike,
@@ -394,29 +399,30 @@ class RobinhoodBroker(BrokerInterface):
             )
             
             if put_options:
-                # Extract instrument URLs for batch market data fetch
-                instrument_urls = [opt.get('url') for opt in put_options if opt.get('url')]
-                
-                # Batch fetch market data for all puts at once
+                # Batch fetch market data for ALL puts at once
                 market_data_list = []
-                if instrument_urls:
-                    try:
-                        market_data_list = rh.options.get_option_market_data_by_id(instrument_urls) or []
-                    except:
-                        market_data_list = []
+                try:
+                    market_data_list = rh.options.get_option_market_data(
+                        symbol,
+                        expirationDate=expiry,
+                        optionType='put'
+                    ) or []
+                except Exception as e:
+                    print(f"[{self.name}] Error fetching put market data: {e}")
+                    market_data_list = []
                 
-                # Create lookup by instrument URL
+                # Create lookup by strike price
                 market_lookup = {}
                 for md in market_data_list:
                     if md and isinstance(md, dict):
-                        instr_url = md.get('instrument')
-                        if instr_url:
-                            market_lookup[instr_url] = md
+                        strike_str = md.get('strike_price')
+                        if strike_str:
+                            market_lookup[strike_str] = md
                 
                 for opt in put_options:
                     strike = float(opt.get('strike_price', 0))
-                    instr_url = opt.get('url', '')
-                    data = market_lookup.get(instr_url, {})
+                    strike_str = opt.get('strike_price', '')
+                    data = market_lookup.get(strike_str, {})
                     
                     puts.append({
                         'strike': strike,
