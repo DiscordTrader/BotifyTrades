@@ -2836,12 +2836,13 @@ def register_routes(app):
         try:
             print("[API] Fetching Schwab balance...")
             from src.brokers.schwab_broker import SchwabBroker
-            from .broker_credentials_service import get_schwab_credentials
+            # Use the correct credentials source (same as schwab_auth.py)
+            from .schwab_auth import get_schwab_credentials
             
             creds = get_schwab_credentials()
-            print(f"[API] Schwab credentials found: client_id={bool(creds.get('client_id'))}, secret={bool(creds.get('client_secret'))}")
+            print(f"[API] Schwab credentials found: client_id={bool(creds.get('client_id') if creds else False)}, secret={bool(creds.get('client_secret') if creds else False)}")
             
-            if not creds.get('client_id') or not creds.get('client_secret'):
+            if not creds or not creds.get('client_id') or not creds.get('client_secret'):
                 result = jsonify({
                     'buying_power': 0,
                     'cash_balance': 0,
@@ -3032,7 +3033,8 @@ def register_routes(app):
         
         try:
             from src.brokers.schwab_broker import SchwabBroker
-            from .broker_credentials_service import get_schwab_credentials
+            # Use the correct credentials source (same as schwab_auth.py)
+            from .schwab_auth import get_schwab_credentials
             
             data = request.get_json(silent=True) or {}
             quantity = data.get('quantity')
@@ -3056,7 +3058,7 @@ def register_routes(app):
             
             creds = get_schwab_credentials()
             
-            if not creds.get('client_id') or not creds.get('client_secret'):
+            if not creds or not creds.get('client_id') or not creds.get('client_secret'):
                 return jsonify({'success': False, 'error': 'Schwab not configured'}), 400
             
             config = {
@@ -13001,14 +13003,15 @@ def register_routes(app):
                 except:
                     pass
             
-            from .broker_credentials_service import get_schwab_credentials
+            # Use the correct credentials source (same as schwab_auth.py)
+            from .schwab_auth import get_schwab_credentials
             schwab_creds = get_schwab_credentials()
-            schwab_configured = bool(schwab_creds.get('client_id') and schwab_creds.get('client_secret'))
+            schwab_configured = bool(schwab_creds and schwab_creds.get('client_id') and schwab_creds.get('client_secret'))
             
             broker_status['schwab'] = {
                 'connected': schwab_connected,
                 'status': 'connected' if schwab_connected else ('configured' if schwab_configured else 'not_configured'),
-                'account_type': 'PAPER' if schwab_creds.get('dry_run', True) else 'LIVE',
+                'account_type': 'PAPER' if (schwab_creds.get('dry_run', True) if schwab_creds else True) else 'LIVE',
                 'buying_power': schwab_buying_power,
                 'positions': schwab_positions,
                 'token_expiry': schwab_token_expiry,
