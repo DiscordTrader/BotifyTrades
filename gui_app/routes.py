@@ -15241,16 +15241,20 @@ def register_routes(app):
                     login_time = result.get('login_time', '')
                     if hasattr(login_time, 'isoformat'):
                         login_time = login_time.isoformat()
-                    db.save_broker_credentials('zerodha', 'IN', {
+                    creds_to_save = {
                         'api_key': credentials.get('api_key', ''),
                         'api_secret': credentials.get('api_secret', ''),
                         'access_token': result.get('access_token'),
                         'request_token': '',
-                        'user_id': result.get('user_id', ''),
+                        'user_id': str(result.get('user_id', '')),
                         'login_time': str(login_time) if login_time else '',
                         'token_issued_at': datetime.now().isoformat()
-                    })
-                    print(f"[ZERODHA] ✓ Access token saved to database (expires 6 AM IST)")
+                    }
+                    save_success = db.save_broker_credentials('zerodha', 'IN', creds_to_save)
+                    if save_success:
+                        print(f"[ZERODHA] ✓ Access token saved to database (expires 6 AM IST)")
+                    else:
+                        print(f"[ZERODHA] ⚠️ Failed to save access_token to database")
             
             elif broker_name == 'dhanq':
                 from src.brokers.dhanq_broker import DhanQBroker
