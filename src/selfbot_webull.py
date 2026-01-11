@@ -11185,13 +11185,8 @@ Environment Variables:
                 sys.exit(1)
         except Exception as si_err:
             _original_print(f"[STARTUP] Single instance check error: {si_err}")
-            # On non-Windows platforms (Linux/Replit), allow starting with a warning
-            import platform
-            if platform.system() != 'Windows':
-                _original_print("[STARTUP] ℹ️ Single instance check not available on this platform - proceeding anyway")
-            else:
-                _original_print("[STARTUP] ⚠️ Cannot verify single instance - refusing to start for safety.")
-                sys.exit(1)
+            _original_print("[STARTUP] ⚠️ Cannot verify single instance - refusing to start for safety.")
+            sys.exit(1)
         
         try:
             from src.license import start_network_monitor, show_license_expired_popup
