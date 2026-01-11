@@ -15238,13 +15238,16 @@ def register_routes(app):
                 if result.get('success') and result.get('access_token'):
                     from datetime import datetime
                     print(f"[ZERODHA DEBUG] Test succeeded with request_token flow - saving new access_token")
+                    login_time = result.get('login_time', '')
+                    if hasattr(login_time, 'isoformat'):
+                        login_time = login_time.isoformat()
                     db.save_broker_credentials('zerodha', 'IN', {
                         'api_key': credentials.get('api_key', ''),
                         'api_secret': credentials.get('api_secret', ''),
                         'access_token': result.get('access_token'),
                         'request_token': '',
                         'user_id': result.get('user_id', ''),
-                        'login_time': result.get('login_time', ''),
+                        'login_time': str(login_time) if login_time else '',
                         'token_issued_at': datetime.now().isoformat()
                     })
                     print(f"[ZERODHA] ✓ Access token saved to database (expires 6 AM IST)")
