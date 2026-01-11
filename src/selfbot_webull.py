@@ -9047,10 +9047,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     else:
                         resp = {'broker': broker_name, 'result': resp, 'executed_qty': signal['qty']}
             elif signal['asset'] == 'option':
-                # Handle different broker parameter names
-                # AlpacaBroker uses: symbol, strike, expiry, option_type, action, quantity, price
-                # WebullBroker uses: action, qty, symbol, strike, opt_type, expiry_mmdd, limit_price
-                if broker_name == 'ALPACA_PAPER' or 'ALPACA' in broker_name.upper():
+                # Handle different broker parameter names for options
+                # Modern brokers (Alpaca, Robinhood, Schwab, IBKR, Tastytrade): symbol, strike, expiry, option_type, action, quantity, price
+                # Webull uses: action, qty, symbol, strike, opt_type, expiry_mmdd, limit_price
+                # Indian brokers (Upstox, Zerodha, DhanQ) use Webull-style + lots parameter
+                broker_upper = broker_name.upper()
+                uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE'])
+                india_brokers = ['UPSTOX', 'ZERODHA', 'DHANQ']
+                
+                _original_print(f"[{broker_name}] Placing option order: {signal['action']} {signal['qty']} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @ ${signal.get('price')}")
+                
+                if uses_modern_signature:
+                    # Modern brokers use: symbol, strike, expiry, option_type, action, quantity, price
                     result = await broker_instance.place_option_order(
                         symbol=signal['symbol'],
                         strike=signal['strike'],
@@ -9060,47 +9068,43 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         quantity=signal['qty'],
                         price=signal.get('price')  # None for market orders
                     )
+                elif broker_upper in india_brokers and signal.get('lots'):
+                    # Indian brokers use Webull-style + lots parameter
+                    result = await broker_instance.place_option_order(
+                        action=signal['action'],
+                        qty=signal['qty'],
+                        symbol=signal['symbol'],
+                        strike=signal['strike'],
+                        opt_type=signal['opt_type'],
+                        expiry_mmdd=signal['expiry'],
+                        limit_price=signal.get('price'),
+                        lots=signal.get('lots')
+                    )
                 else:
-                    # Webull and other US brokers
-                    _original_print(f"[{broker_name}] Placing option order: {signal['action']} {signal['qty']} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @ ${signal.get('price')}")
-                    # Only pass lots parameter to Indian brokers (Upstox, Zerodha, DhanQ)
-                    india_brokers = ['UPSTOX', 'ZERODHA', 'DHANQ']
-                    if broker_name.upper() in india_brokers and signal.get('lots'):
-                        result = await broker_instance.place_option_order(
-                            action=signal['action'],
-                            qty=signal['qty'],
-                            symbol=signal['symbol'],
-                            strike=signal['strike'],
-                            opt_type=signal['opt_type'],
-                            expiry_mmdd=signal['expiry'],
-                            limit_price=signal.get('price'),
-                            lots=signal.get('lots')
-                        )
+                    # Webull and other legacy US brokers - no lots parameter
+                    result = await broker_instance.place_option_order(
+                        action=signal['action'],
+                        qty=signal['qty'],
+                        symbol=signal['symbol'],
+                        strike=signal['strike'],
+                        opt_type=signal['opt_type'],
+                        expiry_mmdd=signal['expiry'],
+                        limit_price=signal.get('price'),
+                        channel_id=signal.get('channel_id')
+                    )
+                
+                # Log the result for debugging (applies to all option orders)
+                if hasattr(result, 'success'):
+                    if result.success:
+                        _original_print(f"[{broker_name}] ✅ Option order SUCCESS: {result.order_id}")
                     else:
-                        # US brokers (Webull, etc.) - no lots parameter
-                        result = await broker_instance.place_option_order(
-                            action=signal['action'],
-                            qty=signal['qty'],
-                            symbol=signal['symbol'],
-                            strike=signal['strike'],
-                            opt_type=signal['opt_type'],
-                            expiry_mmdd=signal['expiry'],
-                            limit_price=signal.get('price'),
-                            channel_id=signal.get('channel_id')
-                        )
-                    # Log the result for debugging
-                    if hasattr(result, 'success'):
-                        if result.success:
-                            _original_print(f"[{broker_name}] ✅ Option order SUCCESS: {result.message}, Order ID: {result.order_id}")
-                        else:
-                            _original_print(f"[{broker_name}] ❌ Option order FAILED: {result.message}")
-                    elif isinstance(result, dict):
-                        if result.get('success') or result.get('orderId'):
-                            _original_print(f"[{broker_name}] ✅ Option order SUCCESS: {result.get('msg', result.get('orderId'))}")
-                        else:
-                            _original_print(f"[{broker_name}] ❌ Option order FAILED: {result.get('msg', result.get('error', 'Unknown error'))}")
+                        _original_print(f"[{broker_name}] ❌ Option order FAILED: {result.message}")
+                elif isinstance(result, dict):
+                    if result.get('success') or result.get('orderId'):
+                        _original_print(f"[{broker_name}] ✅ Option order SUCCESS: {result.get('orderId', result.get('msg'))}")
                     else:
-                        _original_print(f"[{broker_name}] Option order result: {result}")
+                        _original_print(f"[{broker_name}] ❌ Option order FAILED: {result.get('msg', result.get('error', 'Unknown error'))}")
+                
                 # Convert OrderResult to dict format for consistency
                 if hasattr(result, 'success'):
                     resp = {
