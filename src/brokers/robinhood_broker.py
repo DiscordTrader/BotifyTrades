@@ -357,7 +357,12 @@ class RobinhoodBroker(BrokerInterface):
                     data = {}
                     if opt_id:
                         try:
-                            data = rh.options.get_option_market_data_by_id(opt_id) or {}
+                            result = rh.options.get_option_market_data_by_id(opt_id)
+                            # Function returns a list with one dict, extract it
+                            if result and isinstance(result, list) and len(result) > 0:
+                                data = result[0] or {}
+                            elif result and isinstance(result, dict):
+                                data = result
                         except:
                             pass
                     
@@ -392,7 +397,12 @@ class RobinhoodBroker(BrokerInterface):
                     data = {}
                     if opt_id:
                         try:
-                            data = rh.options.get_option_market_data_by_id(opt_id) or {}
+                            result = rh.options.get_option_market_data_by_id(opt_id)
+                            # Function returns a list with one dict, extract it
+                            if result and isinstance(result, list) and len(result) > 0:
+                                data = result[0] or {}
+                            elif result and isinstance(result, dict):
+                                data = result
                         except:
                             pass
                     
