@@ -76,6 +76,59 @@ class ZerodhaBroker(BrokerInterface):
         """Zerodha is always live trading"""
         return True
     
+    @staticmethod
+    def check_token_expiry(token_issued_at: str = None) -> Dict[str, Any]:
+        """
+        Check if the Zerodha access token is likely expired.
+        Tokens expire daily at 6 AM IST (00:30 UTC).
+        
+        Args:
+            token_issued_at: ISO format timestamp when token was obtained
+            
+        Returns:
+            dict with 'expired' boolean, 'hours_remaining', 'message'
+        """
+        from datetime import datetime, timedelta
+        import pytz
+        
+        try:
+            ist = pytz.timezone('Asia/Kolkata')
+            now_ist = datetime.now(ist)
+            
+            today_6am_ist = now_ist.replace(hour=6, minute=0, second=0, microsecond=0)
+            if now_ist.hour < 6:
+                expiry_time = today_6am_ist
+            else:
+                expiry_time = today_6am_ist + timedelta(days=1)
+            
+            time_remaining = expiry_time - now_ist
+            hours_remaining = time_remaining.total_seconds() / 3600
+            
+            if hours_remaining <= 0:
+                return {
+                    'expired': True,
+                    'hours_remaining': 0,
+                    'message': 'Token has expired. Please login again to get a new request_token.'
+                }
+            elif hours_remaining <= 1:
+                return {
+                    'expired': False,
+                    'hours_remaining': round(hours_remaining, 1),
+                    'message': f'Token expiring soon! Only {round(hours_remaining * 60)} minutes remaining until 6 AM IST.'
+                }
+            else:
+                return {
+                    'expired': False,
+                    'hours_remaining': round(hours_remaining, 1),
+                    'message': f'Token valid. Expires in {round(hours_remaining, 1)} hours at 6 AM IST.'
+                }
+        except Exception as e:
+            return {
+                'expired': False,
+                'hours_remaining': -1,
+                'message': f'Could not determine token status: {e}'
+            }
+    
     async def connect(self) -> bool:
         """Connect to Zerodha using API key and access token, with fallback to request_token"""
         try:
@@ -91,6 +144,12 @@ class ZerodhaBroker(BrokerInterface):
             if not api_key:
                 print(f"[{self.name}] No API key provided")
                 return False
+            
+            expiry_status = self.check_token_expiry()
+            if expiry_status.get('expired'):
+                print(f"[{self.name}] ⚠️ {expiry_status['message']}")
+            elif expiry_status.get('hours_remaining', 99) <= 2:
+                print(f"[{self.name}] ⚠️ {expiry_status['message']}")
             
             print(f"[{self.name}] Connecting...")
             
@@ -732,13 +791,16 @@ class ZerodhaBroker(BrokerInterface):
             if profile:
                 result = {
                     'success': True,
-                    'message': f"Connected! User: {profile.get('user_name', 'N/A')} ({profile.get('user_id', 'N/A')})",
+                    'message': f"Connected! User: {profile.get('user_name', 'N/A')} ({profile.get('user_id', 'N/A')}). Token expires 6 AM IST.",
                     'user_id': profile.get('user_id'),
-                    'user_name': profile.get('user_name')
+                    'user_name': profile.get('user_name'),
+                    'token_expiry': '6 AM IST daily'
                 }
                 if new_access_token:
                     result['access_token'] = new_access_token
                     result['used_request_token_flow'] = True
+                    if 'login_time' in data:
+                        result['login_time'] = data['login_time']
                 return result
             else:
                 return {

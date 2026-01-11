@@ -15432,14 +15432,22 @@ def register_routes(app):
                 
                 if result.get('success'):
                     fresh_access_token = result.get('access_token', access_token)
+                    login_time = result.get('login_time', '')
+                    user_id = result.get('user_id', '')
                     
-                    if fresh_access_token and fresh_access_token != access_token:
-                        db.save_broker_credentials('zerodha', {
-                            'api_key': api_key,
-                            'api_secret': api_secret,
-                            'access_token': fresh_access_token
-                        })
-                        print(f"[ZERODHA] ✓ Fresh access token from test_connection persisted")
+                    from datetime import datetime
+                    token_issued_at = datetime.now().isoformat()
+                    
+                    db.save_broker_credentials('zerodha', {
+                        'api_key': api_key,
+                        'api_secret': api_secret,
+                        'access_token': fresh_access_token or access_token,
+                        'request_token': request_token,
+                        'user_id': user_id,
+                        'login_time': login_time,
+                        'token_issued_at': token_issued_at
+                    })
+                    print(f"[ZERODHA] ✓ Credentials persisted (token expires 6 AM IST)")
                     
                     db.update_broker_connection_status('zerodha', True, f"Connected - API Key: {api_key[:8]}...")
                     
