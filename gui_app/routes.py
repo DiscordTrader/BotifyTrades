@@ -15238,7 +15238,7 @@ def register_routes(app):
                 if result.get('success') and result.get('access_token'):
                     from datetime import datetime
                     print(f"[ZERODHA DEBUG] Test succeeded with request_token flow - saving new access_token")
-                    db.save_broker_credentials('zerodha', {
+                    db.save_broker_credentials('zerodha', 'IN', {
                         'api_key': credentials.get('api_key', ''),
                         'api_secret': credentials.get('api_secret', ''),
                         'access_token': result.get('access_token'),
