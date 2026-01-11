@@ -411,22 +411,24 @@ class WebullBroker(BrokerInterface):
         """Place a stock order"""
         try:
             side = 'BUY' if action == 'BTO' else 'SELL'
-            extended_hours = self._get_extended_hours_enabled()
+            extended_hours_enabled = self._get_extended_hours_enabled()
             
             def execute_order():
                 if price is None:
-                    # Market order
+                    # Market order - does NOT support extended hours on Webull
+                    if extended_hours_enabled:
+                        print(f"[{self.name}] ⚠️ Extended hours disabled for MARKET orders (not supported by Webull)")
                     return self.wb.place_order(
                         stock=symbol,
                         price=0.0,
                         action=side,
                         orderType='MKT',
                         enforce='GTC',
-                        quant=quantity,
-                        outsideRegularTradingHour=extended_hours
+                        quant=quantity
+                        # outsideRegularTradingHour NOT set for market orders
                     )
                 else:
-                    # Limit order
+                    # Limit order - supports extended hours trading
                     return self.wb.place_order(
                         stock=symbol,
                         price=price,
@@ -434,7 +436,7 @@ class WebullBroker(BrokerInterface):
                         orderType='LMT',
                         enforce='GTC',
                         quant=quantity,
-                        outsideRegularTradingHour=extended_hours
+                        outsideRegularTradingHour=extended_hours_enabled
                     )
             
             response = await asyncio.to_thread(execute_order)
@@ -682,11 +684,15 @@ class WebullBroker(BrokerInterface):
                     action=action
                 )
             
-            extended_hours = self._get_extended_hours_enabled()
+            # NOTE: Webull options API may not fully support outsideRegularTradingHour
+            # Options are primarily traded during regular hours, but we include the flag for limit orders
+            extended_hours_enabled = self._get_extended_hours_enabled()
             
             def execute_order():
                 if price is None:
-                    # Market order
+                    # Market order - extended hours not reliably supported
+                    if extended_hours_enabled:
+                        print(f"[{self.name}] ⚠️ Extended hours disabled for MARKET option orders (limited support)")
                     return self.wb.place_order_option(
                         optionId=option_id,
                         lmtPrice=0.0,
@@ -694,11 +700,11 @@ class WebullBroker(BrokerInterface):
                         action=side,
                         orderType='MKT',
                         enforce='GTC',
-                        quant=quantity,
-                        outsideRegularTradingHour=extended_hours
+                        quant=quantity
+                        # outsideRegularTradingHour NOT set for market orders
                     )
                 else:
-                    # Limit order
+                    # Limit order - may support extended hours for liquid options
                     return self.wb.place_order_option(
                         optionId=option_id,
                         lmtPrice=price,
@@ -707,7 +713,7 @@ class WebullBroker(BrokerInterface):
                         orderType='LMT',
                         enforce='GTC',
                         quant=quantity,
-                        outsideRegularTradingHour=extended_hours
+                        outsideRegularTradingHour=extended_hours_enabled
                     )
             
             response = await asyncio.to_thread(execute_order)

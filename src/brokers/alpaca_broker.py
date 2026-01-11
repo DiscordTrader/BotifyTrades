@@ -235,9 +235,12 @@ class AlpacaBroker(BrokerInterface):
             if stop_price is not None:
                 stop_price = round(stop_price, 2)
             
+            # Check extended hours setting (only applies to LIMIT orders, not STOP or MARKET)
+            extended_hours = self._get_extended_hours_enabled() if price is not None and stop_price is None else False
+            
             # Create order request
             if stop_price is not None:
-                # Stop order (for stop loss)
+                # Stop order (for stop loss) - does NOT support extended hours
                 order_data = StopOrderRequest(
                     symbol=symbol,
                     qty=quantity,
@@ -246,7 +249,7 @@ class AlpacaBroker(BrokerInterface):
                     stop_price=stop_price
                 )
             elif price is None:
-                # Market order
+                # Market order - does NOT support extended hours on Alpaca
                 order_data = MarketOrderRequest(
                     symbol=symbol,
                     qty=quantity,
@@ -254,13 +257,14 @@ class AlpacaBroker(BrokerInterface):
                     time_in_force=TimeInForce.DAY
                 )
             else:
-                # Limit order
+                # Limit order - supports extended hours trading
                 order_data = LimitOrderRequest(
                     symbol=symbol,
                     qty=quantity,
                     side=side,
                     time_in_force=TimeInForce.GTC,  # Good till cancelled for profit targets
-                    limit_price=price
+                    limit_price=price,
+                    extended_hours=extended_hours
                 )
             
             # Submit order
@@ -395,11 +399,20 @@ class AlpacaBroker(BrokerInterface):
                 stop_loss = None
                 take_profit = None
             
-            # Check extended hours setting (only applies to LIMIT orders)
-            extended_hours = self._get_extended_hours_enabled() if entry_price is not None else False
+            # Check extended hours setting
+            # NOTE: Extended hours only applies to SIMPLE LIMIT orders, NOT bracket orders
+            # Bracket orders (with stop_loss/take_profit legs) cannot use extended hours
+            # because the exit legs don't support extended hours execution
+            extended_hours_enabled = self._get_extended_hours_enabled()
+            use_extended_hours = extended_hours_enabled and entry_price is not None and order_class == OrderClass.SIMPLE
+            
+            if extended_hours_enabled and order_class != OrderClass.SIMPLE:
+                print(f"[{self.name}] ⚠️ Extended hours disabled for BRACKET orders (exit legs don't support it)")
             
             if entry_price is None:
                 # Market order (extended hours not supported for market orders)
+                if extended_hours_enabled:
+                    print(f"[{self.name}] ⚠️ Extended hours disabled for MARKET orders (not supported by Alpaca)")
                 order_data = MarketOrderRequest(
                     symbol=symbol,
                     qty=quantity,
@@ -410,7 +423,7 @@ class AlpacaBroker(BrokerInterface):
                     take_profit=take_profit
                 )
             else:
-                # Limit order - supports extended hours trading
+                # Limit order - supports extended hours trading (only for SIMPLE orders)
                 order_data = LimitOrderRequest(
                     symbol=symbol,
                     qty=quantity,
@@ -420,7 +433,7 @@ class AlpacaBroker(BrokerInterface):
                     order_class=order_class,
                     stop_loss=stop_loss,
                     take_profit=take_profit,
-                    extended_hours=extended_hours
+                    extended_hours=use_extended_hours
                 )
             
             # Submit order
@@ -686,32 +699,37 @@ class AlpacaBroker(BrokerInterface):
             if 'uncovered' in error_msg.lower():
                 # For STC orders, retry with MARKET order if limit order fails
                 # Sometimes Alpaca Paper trading has issues with limit order pricing
+                # NOTE: Market order retry only works during regular trading hours
                 if action.upper() == "STC" and price is not None:
-                    try:
-                        print(f"[{self.name}] ⚠️ Limit STC failed, retrying with MARKET order...", flush=True)
-                        market_req = MarketOrderRequest(
-                            symbol=contract.symbol,
-                            qty=quantity,
-                            side=OrderSide.SELL,
-                            time_in_force=TimeInForce.DAY,
-                            type=OrderType.MARKET,
-                            position_intent=PositionIntent.SELL_TO_CLOSE,
-                        )
-                        order = await asyncio.to_thread(self.trading_client.submit_order, order_data=market_req)
-                        if order:
-                            filled_price = float(order.filled_avg_price or 0)
-                            print(f"[{self.name}] ✅ MARKET STC order succeeded!", flush=True)
-                            return OrderResult(
-                                success=True,
-                                order_id=str(order.id),
-                                message=f"✅ Sold {quantity}x {symbol} ${strike} (MARKET)",
-                                price=filled_price,
-                                quantity=quantity,
-                                symbol=symbol,
-                                action=action
+                    # Check if we're in extended hours - if so, market orders won't work
+                    if extended_hours:
+                        print(f"[{self.name}] ⚠️ Cannot retry with MARKET order during extended hours (not supported)", flush=True)
+                    else:
+                        try:
+                            print(f"[{self.name}] ⚠️ Limit STC failed, retrying with MARKET order...", flush=True)
+                            market_req = MarketOrderRequest(
+                                symbol=contract.symbol,
+                                qty=quantity,
+                                side=OrderSide.SELL,
+                                time_in_force=TimeInForce.DAY,
+                                type=OrderType.MARKET,
+                                position_intent=PositionIntent.SELL_TO_CLOSE,
                             )
-                    except Exception as retry_e:
-                        print(f"[{self.name}] ❌ MARKET STC retry also failed: {retry_e}", flush=True)
+                            order = await asyncio.to_thread(self.trading_client.submit_order, order_data=market_req)
+                            if order:
+                                filled_price = float(order.filled_avg_price or 0)
+                                print(f"[{self.name}] ✅ MARKET STC order succeeded!", flush=True)
+                                return OrderResult(
+                                    success=True,
+                                    order_id=str(order.id),
+                                    message=f"✅ Sold {quantity}x {symbol} ${strike} (MARKET)",
+                                    price=filled_price,
+                                    quantity=quantity,
+                                    symbol=symbol,
+                                    action=action
+                                )
+                        except Exception as retry_e:
+                            print(f"[{self.name}] ❌ MARKET STC retry also failed: {retry_e}", flush=True)
                 
                 return OrderResult(
                     success=False,

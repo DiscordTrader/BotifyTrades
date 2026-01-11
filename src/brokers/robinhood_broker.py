@@ -516,11 +516,13 @@ class RobinhoodBroker(BrokerInterface):
         
         try:
             is_buy = action.upper() in ['BTO', 'BUY']
-            extended_hours = self._get_extended_hours_enabled()
+            extended_hours_enabled = self._get_extended_hours_enabled()
             
             def execute_order():
                 if stop_price is not None:
-                    # Stop orders don't support extended hours
+                    # Stop orders do NOT support extended hours on Robinhood
+                    if extended_hours_enabled:
+                        print(f"[{self.name}] ⚠️ Extended hours disabled for STOP orders (not supported by Robinhood)")
                     if is_buy:
                         return rh.orders.order_buy_stop_loss(
                             symbol=symbol,
@@ -543,7 +545,7 @@ class RobinhoodBroker(BrokerInterface):
                             quantity=quantity,
                             limitPrice=price,
                             timeInForce='gtc',
-                            extendedHours=extended_hours
+                            extendedHours=extended_hours_enabled
                         )
                     else:
                         return rh.orders.order_sell_limit(
@@ -551,7 +553,7 @@ class RobinhoodBroker(BrokerInterface):
                             quantity=quantity,
                             limitPrice=price,
                             timeInForce='gtc',
-                            extendedHours=extended_hours
+                            extendedHours=extended_hours_enabled
                         )
                 else:
                     # Market orders support extended hours
@@ -560,14 +562,14 @@ class RobinhoodBroker(BrokerInterface):
                             symbol=symbol,
                             quantity=quantity,
                             timeInForce='gtc',
-                            extendedHours=extended_hours
+                            extendedHours=extended_hours_enabled
                         )
                     else:
                         return rh.orders.order_sell_market(
                             symbol=symbol,
                             quantity=quantity,
                             timeInForce='gtc',
-                            extendedHours=extended_hours
+                            extendedHours=extended_hours_enabled
                         )
             
             order = await asyncio.to_thread(execute_order)
