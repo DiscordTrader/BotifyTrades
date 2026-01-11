@@ -9135,14 +9135,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         )
                     else:
                         # Robinhood, Schwab, IBKR, Tastytrade don't accept channel_id
-                        _original_print(f"[DEBUG] About to call {broker_name}.place_stock_order({signal['symbol']}, {signal['action']}, {signal['qty']}, {signal.get('price')})", flush=True)
                         result = await broker_instance.place_stock_order(
                             symbol=signal['symbol'],
                             action=signal['action'],
                             quantity=signal['qty'],
                             price=signal.get('price')  # None for market orders
                         )
-                        _original_print(f"[DEBUG] {broker_name}.place_stock_order returned: {result}", flush=True)
                 else:
                     # Webull and other legacy brokers (uses qty, not quantity)
                     result = await broker_instance.place_stock_order(
