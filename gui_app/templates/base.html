@@ -136,6 +136,11 @@
                         <span class="dropdown-text">License</span>
                         <span class="dropdown-desc">View license status</span>
                     </a>
+                    <a href="/brokers" class="dropdown-item {% if request.path == '/brokers' %}active{% endif %}">
+                        <span class="dropdown-icon">🏦</span>
+                        <span class="dropdown-text">Brokers</span>
+                        <span class="dropdown-desc">Configure all brokers</span>
+                    </a>
                     <a href="/architecture" class="dropdown-item {% if request.path == '/architecture' %}active{% endif %}">
                         <span class="dropdown-icon">📐</span>
                         <span class="dropdown-text">Docs</span>
