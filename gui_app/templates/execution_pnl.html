@@ -44,6 +44,16 @@
     </div>
 </div>
 
+<div class="view-toggle" style="display: flex; gap: 4px; margin-bottom: 16px; background: rgba(30, 30, 40, 0.5); padding: 4px; border-radius: 12px; width: fit-content;">
+    <button id="view-executions-btn" onclick="switchView('executions')" class="view-btn active" style="padding: 10px 24px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; background: linear-gradient(135deg, #00d4ff, #7c3aed); color: #fff;">
+        Per-Execution View
+    </button>
+    <button id="view-signals-btn" onclick="switchView('signals')" class="view-btn" style="padding: 10px 24px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; background: transparent; color: var(--text-secondary);">
+        Signal Summary View
+    </button>
+</div>
+
+<div id="executions-view">
 <div class="table-container" style="margin-bottom: 24px;">
     <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <h3 class="table-title" style="margin: 0; display: flex; align-items: center; gap: 10px;">
@@ -96,6 +106,39 @@
             <div style="color: var(--text-secondary);">Loading execution data...</div>
         </div>
     </div>
+</div>
+</div>
+
+<div id="signals-view" style="display: none;">
+<div class="table-container" style="margin-bottom: 24px;">
+    <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+        <h3 class="table-title" style="margin: 0; display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 20px;">📊</span>
+            Signal Summary
+            <span style="font-size: 12px; background: linear-gradient(135deg, #7c3aed, #e91e63); padding: 4px 12px; border-radius: 20px;">Aggregated by Signal</span>
+        </h3>
+        
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+            <select id="signal-filter-days" onchange="loadSignalSummary()" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-darker); color: var(--text-primary); font-size: 13px;">
+                <option value="7">Last 7 Days</option>
+                <option value="30" selected>Last 30 Days</option>
+                <option value="90">Last 90 Days</option>
+                <option value="">All Time</option>
+            </select>
+            
+            <button onclick="loadSignalSummary()" class="btn btn-primary btn-small" style="padding: 8px 16px;">
+                🔄 Refresh
+            </button>
+        </div>
+    </div>
+    
+    <div id="signal-summary-table" style="overflow-x: auto;">
+        <div style="text-align: center; padding: 60px 20px;">
+            <div class="spinner" style="margin: 0 auto 20px;"></div>
+            <div style="color: var(--text-secondary);">Loading signal summary...</div>
+        </div>
+    </div>
+</div>
 </div>
 
 <div class="table-container">
@@ -479,6 +522,218 @@ function showError(elementId, message) {
             <div>${message}</div>
         </div>
     `;
+}
+
+function switchView(view) {
+    const executionsBtn = document.getElementById('view-executions-btn');
+    const signalsBtn = document.getElementById('view-signals-btn');
+    const executionsView = document.getElementById('executions-view');
+    const signalsView = document.getElementById('signals-view');
+    
+    if (view === 'executions') {
+        executionsBtn.style.background = 'linear-gradient(135deg, #00d4ff, #7c3aed)';
+        executionsBtn.style.color = '#fff';
+        signalsBtn.style.background = 'transparent';
+        signalsBtn.style.color = 'var(--text-secondary)';
+        executionsView.style.display = 'block';
+        signalsView.style.display = 'none';
+    } else {
+        signalsBtn.style.background = 'linear-gradient(135deg, #7c3aed, #e91e63)';
+        signalsBtn.style.color = '#fff';
+        executionsBtn.style.background = 'transparent';
+        executionsBtn.style.color = 'var(--text-secondary)';
+        executionsView.style.display = 'none';
+        signalsView.style.display = 'block';
+        loadSignalSummary();
+    }
+}
+
+function loadSignalSummary() {
+    const days = document.getElementById('signal-filter-days').value;
+    
+    let url = '/api/signal-summary?limit=100';
+    if (days) url += '&days=' + days;
+    
+    document.getElementById('signal-summary-table').innerHTML = `
+        <div style="text-align: center; padding: 40px;">
+            <div class="spinner" style="margin: 0 auto 20px;"></div>
+            <div style="color: var(--text-secondary);">Loading signal summary...</div>
+        </div>
+    `;
+    
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                renderSignalSummary(data.signals, data.summary);
+            } else {
+                showError('signal-summary-table', data.error || 'Failed to load data');
+            }
+        })
+        .catch(err => showError('signal-summary-table', err.message));
+}
+
+function renderSignalSummary(signals, summary) {
+    if (signals.length === 0) {
+        document.getElementById('signal-summary-table').innerHTML = `
+            <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+                <div style="font-size: 48px; margin-bottom: 16px;">📭</div>
+                <div style="font-size: 16px;">No signal data found</div>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `
+        <div style="margin-bottom: 16px; padding: 12px; background: rgba(124, 58, 237, 0.1); border-radius: 8px; display: flex; gap: 24px;">
+            <span>Signals: <strong>${summary.total_signals}</strong></span>
+            <span>Total P&L: <strong class="${summary.total_pnl >= 0 ? 'success' : 'error'}">${summary.total_pnl >= 0 ? '+' : ''}$${summary.total_pnl.toFixed(2)}</strong></span>
+            <span>Wins: <strong style="color: #00ff88;">${summary.win_count}</strong></span>
+            <span>Losses: <strong style="color: #ff6464;">${summary.loss_count}</strong></span>
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 30px;"></th>
+                    <th>Symbol</th>
+                    <th>Channel</th>
+                    <th>User</th>
+                    <th>Brokers</th>
+                    <th>Total P&L</th>
+                    <th>Avg %</th>
+                    <th>Status</th>
+                    <th>Opened</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    signals.forEach(signal => {
+        const symbol = signal.symbol + (signal.asset_type === 'option' ? ` ${signal.strike}${signal.call_put?.charAt(0) || ''} ${signal.expiry || ''}` : '');
+        const brokerBadges = signal.brokers_used.map(b => `<span class="broker-badge ${b.toLowerCase().replace(/[^a-z]/g, '_')}" style="font-size: 9px; padding: 2px 6px;">${b}</span>`).join(' ');
+        
+        html += `
+            <tr class="signal-row" data-signal-id="${signal.signal_lot_id}" onclick="toggleSignalDetails(${signal.signal_lot_id}, this)" style="cursor: pointer;">
+                <td><span class="expand-icon" style="font-size: 12px; transition: transform 0.2s;">▶</span></td>
+                <td style="font-weight: 600;">${symbol}</td>
+                <td><span class="channel-badge">${signal.channel_name || '-'}</span></td>
+                <td><span class="user-badge">${signal.author_name || 'Unknown'}</span></td>
+                <td>${brokerBadges || '-'}</td>
+                <td>
+                    <div class="pnl-cell ${(signal.total_pnl || 0) >= 0 ? 'positive' : 'negative'}">
+                        ${(signal.total_pnl || 0) >= 0 ? '+' : ''}$${(signal.total_pnl || 0).toFixed(2)}
+                    </div>
+                </td>
+                <td style="font-family: 'JetBrains Mono', monospace;">${(signal.avg_pnl_percent || 0).toFixed(1)}%</td>
+                <td>
+                    <span style="padding: 2px 8px; border-radius: 4px; font-size: 10px; ${signal.signal_status === 'CLOSED' ? 'background: rgba(0, 255, 136, 0.2); color: #00ff88;' : 'background: rgba(255, 183, 0, 0.2); color: #ffb700;'}">${signal.signal_status || 'OPEN'}</span>
+                </td>
+                <td style="font-size: 12px; color: var(--text-secondary);">${formatDate(signal.opened_at)}</td>
+            </tr>
+            <tr class="signal-details-row" id="details-${signal.signal_lot_id}" style="display: none;">
+                <td colspan="9" style="padding: 0;">
+                    <div class="signal-details-container" style="background: rgba(30, 30, 40, 0.5); padding: 16px; margin: 4px 12px 12px 24px; border-radius: 8px; border-left: 3px solid #7c3aed;">
+                        <div style="text-align: center; padding: 20px; color: var(--text-secondary);">
+                            <div class="spinner" style="width: 20px; height: 20px; margin: 0 auto 8px;"></div>
+                            Loading broker executions...
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table>';
+    document.getElementById('signal-summary-table').innerHTML = html;
+}
+
+function toggleSignalDetails(signalLotId, row) {
+    const detailsRow = document.getElementById('details-' + signalLotId);
+    const icon = row.querySelector('.expand-icon');
+    
+    if (detailsRow.style.display === 'none') {
+        detailsRow.style.display = 'table-row';
+        icon.style.transform = 'rotate(90deg)';
+        loadSignalExecutionDetails(signalLotId);
+    } else {
+        detailsRow.style.display = 'none';
+        icon.style.transform = 'rotate(0deg)';
+    }
+}
+
+function loadSignalExecutionDetails(signalLotId) {
+    fetch(`/api/signal-summary/${signalLotId}/executions`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                renderSignalExecutionDetails(signalLotId, data.executions);
+            } else {
+                document.querySelector(`#details-${signalLotId} .signal-details-container`).innerHTML = `
+                    <div style="color: #ff6464;">Error: ${data.error}</div>
+                `;
+            }
+        })
+        .catch(err => {
+            document.querySelector(`#details-${signalLotId} .signal-details-container`).innerHTML = `
+                <div style="color: #ff6464;">Error: ${err.message}</div>
+            `;
+        });
+}
+
+function renderSignalExecutionDetails(signalLotId, executions) {
+    if (executions.length === 0) {
+        document.querySelector(`#details-${signalLotId} .signal-details-container`).innerHTML = `
+            <div style="text-align: center; color: var(--text-secondary);">No broker executions found</div>
+        `;
+        return;
+    }
+    
+    let html = `
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <thead>
+                <tr style="color: var(--text-muted); text-transform: uppercase; font-size: 10px;">
+                    <th style="text-align: left; padding: 8px;">Broker</th>
+                    <th style="text-align: left; padding: 8px;">Qty</th>
+                    <th style="text-align: left; padding: 8px;">Entry Fill</th>
+                    <th style="text-align: left; padding: 8px;">Exit Fill</th>
+                    <th style="text-align: left; padding: 8px;">P&L</th>
+                    <th style="text-align: left; padding: 8px;">Exit Type</th>
+                    <th style="text-align: left; padding: 8px;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    executions.forEach(exec => {
+        const brokerClass = exec.broker.toLowerCase().replace(/[^a-z]/g, '_');
+        html += `
+            <tr style="border-top: 1px solid rgba(255,255,255,0.05);">
+                <td style="padding: 8px;"><span class="broker-badge ${brokerClass}">${exec.broker}</span></td>
+                <td style="padding: 8px; font-family: 'JetBrains Mono', monospace;">${exec.closed_qty || exec.original_qty}</td>
+                <td style="padding: 8px; font-family: 'JetBrains Mono', monospace;">
+                    $${exec.entry?.fill_price?.toFixed(2) || '-'}
+                    <span style="font-size: 10px; color: var(--text-muted);">(Sig: $${exec.entry?.signal_price?.toFixed(2) || '-'})</span>
+                </td>
+                <td style="padding: 8px; font-family: 'JetBrains Mono', monospace;">
+                    ${exec.exit ? `$${exec.exit.fill_price?.toFixed(2) || '-'}` : '-'}
+                </td>
+                <td style="padding: 8px;">
+                    <span class="pnl-cell ${(exec.pnl || 0) >= 0 ? 'positive' : 'negative'}">
+                        ${exec.pnl != null ? ((exec.pnl >= 0 ? '+' : '') + '$' + exec.pnl.toFixed(2)) : '-'}
+                    </span>
+                </td>
+                <td style="padding: 8px;">
+                    ${exec.exit?.source ? `<span class="exit-source-badge ${exec.exit.source.toLowerCase()}">${exec.exit.source}</span>` : '-'}
+                </td>
+                <td style="padding: 8px;">
+                    <span style="padding: 2px 6px; border-radius: 4px; font-size: 10px; ${exec.lot_status === 'CLOSED' ? 'background: rgba(0, 255, 136, 0.2); color: #00ff88;' : 'background: rgba(255, 183, 0, 0.2); color: #ffb700;'}">${exec.lot_status}</span>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table>';
+    document.querySelector(`#details-${signalLotId} .signal-details-container`).innerHTML = html;
 }
 
 document.addEventListener('DOMContentLoaded', function() {

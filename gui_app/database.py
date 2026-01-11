@@ -3639,6 +3639,100 @@ def get_execution_leaderboard(days: int = None):
     return cursor.fetchall()
 
 
+def get_signal_execution_summary(channel_id: str = None, user: str = None, days: int = None, limit: int = 100):
+    """Get signal-level aggregation with per-broker execution breakdown.
+    Returns one row per signal with aggregated P&L across all broker executions."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT 
+            sl.id as signal_lot_id,
+            sl.symbol,
+            sl.asset_type,
+            sl.strike,
+            sl.expiry,
+            sl.call_put,
+            sl.original_qty as signal_qty,
+            sl.signal_price,
+            sl.author_name,
+            sl.channel_id,
+            c.name as channel_name,
+            sl.opened_at,
+            sl.status as signal_status,
+            COUNT(DISTINCT el.id) as broker_count,
+            GROUP_CONCAT(DISTINCT el.broker) as brokers_used,
+            SUM(ec.closed_qty) as total_closed_qty,
+            ROUND(SUM(ec.pnl), 2) as total_pnl,
+            ROUND(AVG(ec.pnl_percent), 2) as avg_pnl_percent,
+            ROUND(AVG(el.slippage_pct), 4) as avg_entry_slippage,
+            ROUND(AVG(ec.slippage_pct), 4) as avg_exit_slippage,
+            ROUND(AVG(el.latency_total_ms), 0) as avg_latency_ms,
+            MAX(ec.filled_at) as last_exit_at
+        FROM signal_lots sl
+        LEFT JOIN execution_lots el ON el.signal_lot_id = sl.id
+        LEFT JOIN execution_closures ec ON ec.execution_lot_id = el.id
+        LEFT JOIN channels c ON sl.channel_id = c.discord_channel_id
+        WHERE 1=1
+    '''
+    params = []
+    
+    if channel_id:
+        query += ' AND sl.channel_id = ?'
+        params.append(str(channel_id))
+    if user:
+        query += ' AND sl.author_name LIKE ?'
+        params.append(f'%{user}%')
+    if days:
+        query += ' AND sl.opened_at >= datetime("now", ?)'
+        params.append(f'-{days} days')
+    
+    query += '''
+        GROUP BY sl.id
+        ORDER BY sl.opened_at DESC
+        LIMIT ?
+    '''
+    params.append(limit)
+    
+    cursor.execute(query, params)
+    return cursor.fetchall()
+
+
+def get_signal_execution_details(signal_lot_id: int):
+    """Get all broker-level execution details for a specific signal lot.
+    Used for master-detail expansion."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT 
+            el.id as execution_lot_id,
+            el.broker,
+            el.original_qty,
+            el.remaining_qty,
+            el.fill_price as entry_fill_price,
+            el.signal_price as entry_signal_price,
+            el.slippage_pct as entry_slippage,
+            el.latency_total_ms,
+            el.order_filled_at as entry_filled_at,
+            el.status as lot_status,
+            ec.closed_qty,
+            ec.fill_price as exit_fill_price,
+            ec.signal_exit_price,
+            ec.slippage_pct as exit_slippage,
+            ec.pnl,
+            ec.pnl_percent,
+            ec.exit_source,
+            ec.filled_at as exit_filled_at
+        FROM execution_lots el
+        LEFT JOIN execution_closures ec ON ec.execution_lot_id = el.id
+        WHERE el.signal_lot_id = ?
+        ORDER BY el.broker, ec.filled_at
+    ''', (signal_lot_id,))
+    
+    return cursor.fetchall()
+
+
 # ============================================
 # PENDING ORDER METADATA FUNCTIONS
 # Bridge between order placement and BrokerSyncService

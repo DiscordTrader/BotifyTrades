@@ -9012,6 +9012,114 @@ def register_routes(app):
             print(f"[API] Error getting execution P&L filters: {e}")
             return jsonify({'error': str(e)}), 500
     
+    @app.route('/api/signal-summary', methods=['GET'])
+    def api_get_signal_summary():
+        """Get signal-level aggregation with per-broker breakdown - Two-Tier P&L Signal Layer"""
+        try:
+            from gui_app.database import get_signal_execution_summary
+            
+            channel_id = request.args.get('channel_id')
+            user = request.args.get('user')
+            days = request.args.get('days', type=int)
+            limit = request.args.get('limit', default=100, type=int)
+            
+            rows = get_signal_execution_summary(channel_id, user, days, limit)
+            
+            results = []
+            total_pnl = 0
+            for row in rows:
+                signal = {
+                    'signal_lot_id': row['signal_lot_id'],
+                    'symbol': row['symbol'],
+                    'asset_type': row['asset_type'],
+                    'strike': row['strike'],
+                    'expiry': row['expiry'],
+                    'call_put': row['call_put'],
+                    'signal_qty': row['signal_qty'],
+                    'signal_price': row['signal_price'],
+                    'author_name': row['author_name'],
+                    'channel_id': row['channel_id'],
+                    'channel_name': row['channel_name'] or f"Channel {row['channel_id'][:8]}..." if row['channel_id'] else '-',
+                    'opened_at': row['opened_at'],
+                    'signal_status': row['signal_status'],
+                    'broker_count': row['broker_count'] or 0,
+                    'brokers_used': row['brokers_used'].split(',') if row['brokers_used'] else [],
+                    'total_closed_qty': row['total_closed_qty'] or 0,
+                    'total_pnl': row['total_pnl'] or 0,
+                    'avg_pnl_percent': row['avg_pnl_percent'] or 0,
+                    'avg_entry_slippage': row['avg_entry_slippage'] or 0,
+                    'avg_exit_slippage': row['avg_exit_slippage'] or 0,
+                    'avg_latency_ms': row['avg_latency_ms'] or 0,
+                    'last_exit_at': row['last_exit_at']
+                }
+                results.append(signal)
+                total_pnl += signal['total_pnl']
+            
+            return jsonify({
+                'success': True,
+                'signals': results,
+                'count': len(results),
+                'summary': {
+                    'total_signals': len(results),
+                    'total_pnl': round(total_pnl, 2),
+                    'win_count': len([s for s in results if s['total_pnl'] > 0]),
+                    'loss_count': len([s for s in results if s['total_pnl'] <= 0 and s['total_pnl'] != 0])
+                }
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting signal summary: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/signal-summary/<int:signal_lot_id>/executions', methods=['GET'])
+    def api_get_signal_executions(signal_lot_id):
+        """Get per-broker execution details for a signal - master-detail drill-down"""
+        try:
+            from gui_app.database import get_signal_execution_details
+            
+            rows = get_signal_execution_details(signal_lot_id)
+            
+            results = []
+            for row in rows:
+                exec_detail = {
+                    'execution_lot_id': row['execution_lot_id'],
+                    'broker': row['broker'],
+                    'original_qty': row['original_qty'],
+                    'remaining_qty': row['remaining_qty'],
+                    'entry': {
+                        'fill_price': row['entry_fill_price'],
+                        'signal_price': row['entry_signal_price'],
+                        'slippage': row['entry_slippage'],
+                        'filled_at': row['entry_filled_at']
+                    },
+                    'latency_ms': row['latency_total_ms'],
+                    'lot_status': row['lot_status'],
+                    'closed_qty': row['closed_qty'],
+                    'exit': {
+                        'fill_price': row['exit_fill_price'],
+                        'signal_price': row['signal_exit_price'],
+                        'slippage': row['exit_slippage'],
+                        'source': row['exit_source'],
+                        'filled_at': row['exit_filled_at']
+                    } if row['closed_qty'] else None,
+                    'pnl': row['pnl'],
+                    'pnl_percent': row['pnl_percent']
+                }
+                results.append(exec_detail)
+            
+            return jsonify({
+                'success': True,
+                'signal_lot_id': signal_lot_id,
+                'executions': results,
+                'broker_count': len(set(r['broker'] for r in results))
+            })
+            
+        except Exception as e:
+            print(f"[API] Error getting signal execution details: {e}")
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/api/execution-lots', methods=['GET'])
     def api_get_execution_lots():
         """Get open execution lots"""
