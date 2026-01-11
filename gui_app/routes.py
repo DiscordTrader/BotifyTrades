@@ -3212,6 +3212,228 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/robinhood/positions/<symbol>/close', methods=['POST'])
+    @login_required
+    def api_robinhood_close_position(symbol: str) -> Any:
+        """Close a Robinhood position by symbol (WARNING: LIVE ONLY - no paper trading)"""
+        import asyncio
+        
+        if not _bot_instance or not hasattr(_bot_instance, 'robinhood_broker') or not _bot_instance.robinhood_broker:
+            return jsonify({'success': False, 'error': 'Robinhood broker not initialized'}), 500
+        
+        try:
+            data = request.get_json(silent=True) or {}
+            quantity = data.get('quantity')
+            limit_price = data.get('limit_price')
+            asset_type = data.get('asset_type', 'stock')
+            
+            if not quantity:
+                return jsonify({'success': False, 'error': 'Quantity is required'}), 400
+            
+            try:
+                quantity = int(quantity)
+            except (ValueError, TypeError):
+                return jsonify({'success': False, 'error': 'Invalid quantity format'}), 400
+            
+            if limit_price is not None:
+                try:
+                    limit_price = float(limit_price)
+                    if limit_price <= 0:
+                        return jsonify({'success': False, 'error': 'Limit price must be positive'}), 400
+                except (ValueError, TypeError):
+                    return jsonify({'success': False, 'error': 'Invalid limit price format'}), 400
+            
+            order_type_str = f"LIMIT @ ${limit_price}" if limit_price else "MARKET"
+            print(f"[API] Closing Robinhood position (LIVE): {symbol}, qty={quantity}, {order_type_str}")
+            
+            loop = _bot_instance.loop if hasattr(_bot_instance, 'loop') else asyncio.get_event_loop()
+            
+            if asset_type.lower() == 'option':
+                strike = data.get('strike')
+                expiry = data.get('expiry')
+                call_put = data.get('call_put') or data.get('option_type')
+                
+                future = asyncio.run_coroutine_threadsafe(
+                    _bot_instance.robinhood_broker.place_option_order(
+                        symbol, strike, expiry, call_put, 'STC', quantity, limit_price
+                    ),
+                    loop
+                )
+            else:
+                future = asyncio.run_coroutine_threadsafe(
+                    _bot_instance.robinhood_broker.place_stock_order(symbol, 'STC', quantity, limit_price),
+                    loop
+                )
+            
+            order_result = future.result(timeout=30)
+            
+            if order_result and order_result.success:
+                _api_cache.pop('robinhood_balance', None)
+                return jsonify({
+                    'success': True,
+                    'message': order_result.message,
+                    'order_id': order_result.order_id
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': order_result.message if order_result else 'Failed to close position'
+                }), 400
+                
+        except Exception as e:
+            print(f"[API] Exception closing Robinhood position {symbol}: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/ibkr/positions/<symbol>/close', methods=['POST'])
+    @login_required
+    def api_ibkr_close_position(symbol: str) -> Any:
+        """Close an Interactive Brokers position by symbol"""
+        import asyncio
+        
+        if not _bot_instance or not hasattr(_bot_instance, 'ibkr_broker') or not _bot_instance.ibkr_broker:
+            return jsonify({'success': False, 'error': 'IBKR broker not initialized'}), 500
+        
+        try:
+            data = request.get_json(silent=True) or {}
+            quantity = data.get('quantity')
+            limit_price = data.get('limit_price')
+            asset_type = data.get('asset_type', 'stock')
+            
+            if not quantity:
+                return jsonify({'success': False, 'error': 'Quantity is required'}), 400
+            
+            try:
+                quantity = int(quantity)
+            except (ValueError, TypeError):
+                return jsonify({'success': False, 'error': 'Invalid quantity format'}), 400
+            
+            if limit_price is not None:
+                try:
+                    limit_price = float(limit_price)
+                    if limit_price <= 0:
+                        return jsonify({'success': False, 'error': 'Limit price must be positive'}), 400
+                except (ValueError, TypeError):
+                    return jsonify({'success': False, 'error': 'Invalid limit price format'}), 400
+            
+            order_type_str = f"LIMIT @ ${limit_price}" if limit_price else "MARKET"
+            print(f"[API] Closing IBKR position: {symbol}, qty={quantity}, {order_type_str}")
+            
+            loop = _bot_instance.loop if hasattr(_bot_instance, 'loop') else asyncio.get_event_loop()
+            
+            if asset_type.lower() == 'option':
+                strike = data.get('strike')
+                expiry = data.get('expiry')
+                call_put = data.get('call_put') or data.get('option_type')
+                
+                future = asyncio.run_coroutine_threadsafe(
+                    _bot_instance.ibkr_broker.place_option_order(
+                        symbol, strike, expiry, call_put, 'STC', quantity, limit_price
+                    ),
+                    loop
+                )
+            else:
+                future = asyncio.run_coroutine_threadsafe(
+                    _bot_instance.ibkr_broker.place_stock_order(symbol, 'STC', quantity, limit_price),
+                    loop
+                )
+            
+            order_result = future.result(timeout=30)
+            
+            if order_result and order_result.success:
+                _api_cache.pop('ibkr_balance', None)
+                return jsonify({
+                    'success': True,
+                    'message': order_result.message,
+                    'order_id': order_result.order_id
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': order_result.message if order_result else 'Failed to close position'
+                }), 400
+                
+        except Exception as e:
+            print(f"[API] Exception closing IBKR position {symbol}: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/tastytrade/positions/<symbol>/close', methods=['POST'])
+    @login_required
+    def api_tastytrade_close_position(symbol: str) -> Any:
+        """Close a Tastytrade position by symbol"""
+        import asyncio
+        
+        if not _bot_instance or not hasattr(_bot_instance, 'tastytrade_broker') or not _bot_instance.tastytrade_broker:
+            return jsonify({'success': False, 'error': 'Tastytrade broker not initialized'}), 500
+        
+        try:
+            data = request.get_json(silent=True) or {}
+            quantity = data.get('quantity')
+            limit_price = data.get('limit_price')
+            asset_type = data.get('asset_type', 'stock')
+            
+            if not quantity:
+                return jsonify({'success': False, 'error': 'Quantity is required'}), 400
+            
+            try:
+                quantity = int(quantity)
+            except (ValueError, TypeError):
+                return jsonify({'success': False, 'error': 'Invalid quantity format'}), 400
+            
+            if limit_price is not None:
+                try:
+                    limit_price = float(limit_price)
+                    if limit_price <= 0:
+                        return jsonify({'success': False, 'error': 'Limit price must be positive'}), 400
+                except (ValueError, TypeError):
+                    return jsonify({'success': False, 'error': 'Invalid limit price format'}), 400
+            
+            order_type_str = f"LIMIT @ ${limit_price}" if limit_price else "MARKET"
+            print(f"[API] Closing Tastytrade position: {symbol}, qty={quantity}, {order_type_str}")
+            
+            loop = _bot_instance.loop if hasattr(_bot_instance, 'loop') else asyncio.get_event_loop()
+            
+            if asset_type.lower() == 'option':
+                strike = data.get('strike')
+                expiry = data.get('expiry')
+                call_put = data.get('call_put') or data.get('option_type')
+                
+                future = asyncio.run_coroutine_threadsafe(
+                    _bot_instance.tastytrade_broker.place_option_order(
+                        symbol, strike, expiry, call_put, 'STC', quantity, limit_price
+                    ),
+                    loop
+                )
+            else:
+                future = asyncio.run_coroutine_threadsafe(
+                    _bot_instance.tastytrade_broker.place_stock_order(symbol, 'STC', quantity, limit_price),
+                    loop
+                )
+            
+            order_result = future.result(timeout=30)
+            
+            if order_result and order_result.success:
+                _api_cache.pop('tastytrade_balance', None)
+                return jsonify({
+                    'success': True,
+                    'message': order_result.message,
+                    'order_id': order_result.order_id
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': order_result.message if order_result else 'Failed to close position'
+                }), 400
+                
+        except Exception as e:
+            print(f"[API] Exception closing Tastytrade position {symbol}: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/api/ibkr/balance', methods=['GET'])
     def api_ibkr_balance() -> Any:
         """Get Interactive Brokers account balance for Dashboard"""
