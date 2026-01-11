@@ -1078,25 +1078,34 @@ function renderExecutionData(trades) {
                         const entrySignalPrice = entryObj.signal_price != null ? entryObj.signal_price.toFixed(2) : '-';
                         const entryFillPrice = entryObj.fill_price != null ? entryObj.fill_price.toFixed(2) : '-';
                         const entrySlippage = entryObj.slippage_pct || 0;
+                        const exitSignalPrice = exitObj.signal_price != null ? exitObj.signal_price.toFixed(2) : '-';
                         const exitFillPrice = exitObj.fill_price != null ? exitObj.fill_price.toFixed(2) : '-';
+                        const exitSlippage = exitObj.slippage_pct || 0;
                         
                         return `
-                            <div class="closure-row" style="grid-template-columns: 0.5fr 1.5fr 1.5fr 1fr 1fr 1fr 1fr;">
+                            <div class="closure-row" style="grid-template-columns: 0.4fr 1fr 1fr 1fr 1fr 0.8fr 0.8fr 0.6fr;">
                                 <div><span class="stc-badge">Exit #${cIndex + 1}</span></div>
                                 <div style="color: #fff;">
-                                    <div style="font-size: 10px; color: #8E8E93;">Bot Detected</div>
+                                    <div style="font-size: 10px; color: #8E8E93;">Entry Detected</div>
                                     <strong>$${entrySignalPrice}</strong>
                                 </div>
                                 <div style="color: #fff;">
-                                    <div style="font-size: 10px; color: #8E8E93;">Broker Fill</div>
+                                    <div style="font-size: 10px; color: #8E8E93;">Entry Fill</div>
                                     <strong>$${entryFillPrice}</strong>
-                                    <span style="font-size: 10px; color: ${entrySlippage > 0 ? '#ff6464' : '#00ff88'};">
+                                    <span style="font-size: 9px; color: ${entrySlippage > 0 ? '#ff6464' : '#00ff88'};">
                                         (${entrySlippage > 0 ? '+' : ''}${entrySlippage.toFixed(2)}%)
                                     </span>
                                 </div>
                                 <div style="color: #fff;">
+                                    <div style="font-size: 10px; color: #8E8E93;">Exit Detected</div>
+                                    <strong>$${exitSignalPrice}</strong>
+                                </div>
+                                <div style="color: #fff;">
                                     <div style="font-size: 10px; color: #8E8E93;">Exit Fill</div>
                                     <strong>$${exitFillPrice}</strong>
+                                    <span style="font-size: 9px; color: ${exitSlippage > 0 ? '#ff6464' : '#00ff88'};">
+                                        (${exitSlippage > 0 ? '+' : ''}${exitSlippage.toFixed(2)}%)
+                                    </span>
                                 </div>
                                 <div class="${cProfitClass}">
                                     <div style="font-size: 10px; color: #8E8E93;">P&L</div>
@@ -1104,7 +1113,7 @@ function renderExecutionData(trades) {
                                 </div>
                                 <div>
                                     <div style="font-size: 10px; color: #8E8E93;">Exit Type</div>
-                                    <span style="background: ${reasonColor}20; color: ${reasonColor}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${exitReason}</span>
+                                    <span style="background: ${reasonColor}20; color: ${reasonColor}; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">${exitReason}</span>
                                 </div>
                                 <div style="color: #8E8E93; font-size: 11px;">
                                     <div style="font-size: 10px;">Latency</div>
@@ -1114,8 +1123,9 @@ function renderExecutionData(trades) {
                         `;
                     }).join('')}
                     
-                    <div class="aggregate-footer" style="grid-template-columns: 0.5fr 1.5fr 1.5fr 1fr 1fr 1fr 1fr;">
+                    <div class="aggregate-footer" style="grid-template-columns: 0.4fr 1fr 1fr 1fr 1fr 0.8fr 0.8fr 0.6fr;">
                         <div style="color: #7c3aed;">TOTALS</div>
+                        <div></div>
                         <div></div>
                         <div></div>
                         <div style="color: #fff;">Qty: ${pos.total_qty}</div>
