@@ -7398,7 +7398,7 @@ def init_signal_formats_table():
             ('US', 'SCHWAB', 'Charles Schwab', '["client_id","client_secret","redirect_uri"]', 'httpx', 1, 1, 0, '30-min access / 7-day refresh', 6),
             ('CA', 'questrade', 'Questrade', '["refresh_token"]', 'qtrade', 1, 1, 0, '30-min access / 3-day refresh', 1),
             ('IN', 'upstox', 'Upstox', '["api_key","api_secret","redirect_uri","access_token","refresh_token","token_issued_at"]', 'upstox-python-sdk', 1, 1, 0, '24h access / auto-refresh', 1),
-            ('IN', 'zerodha', 'Zerodha (Kite)', '["api_key","api_secret","user_id","password","totp_secret"]', 'kiteconnect', 1, 1, 0, 'Daily 6 AM IST', 2),
+            ('IN', 'zerodha', 'Zerodha (Kite)', '["api_key","api_secret","access_token","request_token"]', 'kiteconnect', 1, 1, 0, 'Daily 6 AM IST', 2),
             ('IN', 'dhanq', 'DhanQ', '["client_id","access_token"]', 'dhanhq', 1, 1, 0, '24 hours (auto-refresh available)', 3)
     ''')
     
@@ -7429,6 +7429,13 @@ def init_signal_formats_table():
         INSERT OR IGNORE INTO broker_profiles 
         (country_code, broker_name, display_name, credential_fields, python_library, supports_options, supports_stocks, supports_paper, token_expiry_info, display_order, enabled)
         VALUES ('US', 'SCHWAB', 'Charles Schwab', '["client_id","client_secret","redirect_uri"]', 'httpx', 1, 1, 0, '30-min access / 7-day refresh', 6, 1)
+    ''')
+    
+    # Migration: Fix Zerodha credential fields to match API requirements
+    cursor.execute('''
+        UPDATE broker_profiles 
+        SET credential_fields = '["api_key","api_secret","access_token","request_token"]'
+        WHERE broker_name = 'zerodha'
     ''')
     
     conn.commit()
