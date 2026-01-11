@@ -2,28 +2,77 @@
 Configuration Service
 Handles encrypted storage and retrieval of credentials
 """
+import os
 import json
 import base64
+import hashlib
 from cryptography.fernet import Fernet
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-# Encryption key (should be machine-specific in production)
+_cached_cipher = None
+
 def get_encryption_key():
-    """Get or create encryption key"""
-    key_file = Path.cwd() / '.encryption_key'
+    """Get encryption key - portable across machines using LICENSE_KEY or shared secret.
     
+    Priority order:
+    1. ENCRYPTION_KEY environment variable (direct key)
+    2. Derive from LICENSE_KEY (makes credentials portable across machines)
+    3. Derive from SESSION_SECRET (fallback for deployments)
+    4. .encryption_key file (legacy, machine-specific)
+    5. Generate new key (last resort, will create .encryption_key file)
+    """
+    license_key = os.environ.get('LICENSE_KEY', '')
+    session_secret = os.environ.get('SESSION_SECRET', '')
+    encryption_key_env = os.environ.get('ENCRYPTION_KEY', '')
+    
+    if encryption_key_env:
+        try:
+            return base64.urlsafe_b64decode(encryption_key_env)
+        except Exception:
+            pass
+    
+    if license_key and len(license_key) >= 8:
+        derived = hashlib.sha256(f"botify_creds_{license_key}".encode()).digest()
+        return base64.urlsafe_b64encode(derived)
+    
+    if session_secret and len(session_secret) >= 8:
+        derived = hashlib.sha256(f"botify_creds_{session_secret}".encode()).digest()
+        return base64.urlsafe_b64encode(derived)
+    
+    key_file = Path.cwd() / '.encryption_key'
     if key_file.exists():
-        with open(key_file, 'rb') as f:
-            return f.read()
-    else:
-        key = Fernet.generate_key()
+        try:
+            with open(key_file, 'rb') as f:
+                return f.read()
+        except Exception:
+            pass
+    
+    key = Fernet.generate_key()
+    try:
         with open(key_file, 'wb') as f:
             f.write(key)
-        return key
+        print("[CONFIG] ⚠️ Generated new encryption key (machine-specific). Set LICENSE_KEY for portable credentials.")
+    except Exception:
+        print("[CONFIG] ⚠️ Could not save encryption key file")
+    return key
 
 
-cipher = Fernet(get_encryption_key())
+def get_cipher():
+    """Get or create cached Fernet cipher instance."""
+    global _cached_cipher
+    if _cached_cipher is None:
+        _cached_cipher = Fernet(get_encryption_key())
+    return _cached_cipher
+
+
+def reset_cipher():
+    """Reset cipher cache (call if LICENSE_KEY changes)."""
+    global _cached_cipher
+    _cached_cipher = None
+
+
+cipher = get_cipher()
 
 
 def encrypt_value(value: str) -> bytes:
@@ -31,11 +80,21 @@ def encrypt_value(value: str) -> bytes:
     return cipher.encrypt(value.encode())
 
 
-def decrypt_value(encrypted: bytes) -> str:
-    """Decrypt a configuration value"""
+def decrypt_value(encrypted: bytes, config_key: str = None) -> str:
+    """Decrypt a configuration value.
+    
+    Args:
+        encrypted: The encrypted bytes to decrypt
+        config_key: Optional key name for logging purposes
+        
+    Returns:
+        Decrypted string, or empty string if decryption fails
+    """
     try:
         return cipher.decrypt(encrypted).decode()
-    except Exception:
+    except Exception as e:
+        if config_key:
+            print(f"[CONFIG] ⚠️ Failed to decrypt '{config_key}': encryption key mismatch. Re-save credentials to fix.")
         return ""
 
 
@@ -72,7 +131,9 @@ def load_config(key: str) -> Optional[Any]:
     row = cursor.fetchone()
     
     if row:
-        decrypted = decrypt_value(row[0])
+        decrypted = decrypt_value(row[0], config_key=key)
+        if not decrypted:
+            return None
         try:
             return json.loads(decrypted)
         except Exception:
@@ -93,7 +154,9 @@ def get_all_config() -> Dict[str, Any]:
     config = {}
     for row in cursor.fetchall():
         key = row[0]
-        decrypted = decrypt_value(row[1])
+        decrypted = decrypt_value(row[1], config_key=key)
+        if not decrypted:
+            continue
         try:
             config[key] = json.loads(decrypted)
         except Exception:
