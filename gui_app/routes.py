@@ -15234,6 +15234,20 @@ def register_routes(app):
                     api_secret=credentials.get('api_secret', ''),
                     request_token=credentials.get('request_token', '')
                 )
+                
+                if result.get('success') and result.get('access_token'):
+                    from datetime import datetime
+                    print(f"[ZERODHA DEBUG] Test succeeded with request_token flow - saving new access_token")
+                    db.save_broker_credentials('zerodha', {
+                        'api_key': credentials.get('api_key', ''),
+                        'api_secret': credentials.get('api_secret', ''),
+                        'access_token': result.get('access_token'),
+                        'request_token': '',
+                        'user_id': result.get('user_id', ''),
+                        'login_time': result.get('login_time', ''),
+                        'token_issued_at': datetime.now().isoformat()
+                    })
+                    print(f"[ZERODHA] ✓ Access token saved to database (expires 6 AM IST)")
             
             elif broker_name == 'dhanq':
                 from src.brokers.dhanq_broker import DhanQBroker
