@@ -11210,11 +11210,14 @@ def register_routes(app):
                     if totp_secret:
                         try:
                             mfa_code = pyotp.TOTP(totp_secret).now()
-                            print(f"[API] Robinhood: Generated 2FA code")
+                            print(f"[API] Robinhood: Generated 2FA code: {mfa_code[:2]}****")
                         except Exception as totp_err:
                             print(f"[API] Robinhood: 2FA generation failed: {totp_err}")
+                    else:
+                        print(f"[API] Robinhood: No TOTP secret configured")
                     
                     # Login to Robinhood
+                    print(f"[API] Robinhood: Attempting login with username={username[:3]}***, has_2fa={bool(mfa_code)}")
                     login_result = rh.login(
                         username=username,
                         password=password,
@@ -11222,6 +11225,7 @@ def register_routes(app):
                         store_session=True,
                         expiresIn=86400
                     )
+                    print(f"[API] Robinhood: Login result type={type(login_result)}, has_token={bool(login_result and 'access_token' in login_result) if login_result else False}")
                     
                     if login_result and 'access_token' in login_result:
                         # Get account info
@@ -11250,6 +11254,7 @@ def register_routes(app):
                         })
                     else:
                         error_detail = login_result.get('detail', 'Login failed') if login_result else 'No response'
+                        print(f"[API] Robinhood: Login failed - result={login_result}")
                         set_broker_status(broker_id, False, 'error', error_detail)
                         return jsonify({'success': False, 'error': f'Robinhood login failed: {error_detail}'}), 400
                         
