@@ -6034,6 +6034,85 @@ class SelfClient(discord.Client):
             import traceback
             traceback.print_exc()
     
+    async def handle_extract_raw(self, message: discord.Message, channel_id: int, limit: int = 1000):
+        """Extract ALL raw messages from a channel and save to JSON file."""
+        import json
+        from datetime import datetime
+        
+        try:
+            await message.channel.send(f"📥 Extracting last {limit} messages from channel {channel_id}...")
+            
+            target_channel = self.get_channel(channel_id)
+            if not target_channel:
+                try:
+                    target_channel = await self.fetch_channel(channel_id)
+                except Exception as e:
+                    await message.channel.send(f"❌ Cannot access channel {channel_id}: {e}")
+                    return
+            
+            messages_data = []
+            count = 0
+            
+            async for msg in target_channel.history(limit=limit):
+                count += 1
+                if count % 100 == 0:
+                    print(f"[EXTRACT] Processing message {count}/{limit}...")
+                
+                embed_data = []
+                if msg.embeds:
+                    for embed in msg.embeds:
+                        embed_info = {}
+                        if embed.title:
+                            embed_info['title'] = embed.title
+                        if embed.description:
+                            embed_info['description'] = embed.description
+                        if embed.fields:
+                            embed_info['fields'] = [{'name': f.name, 'value': f.value} for f in embed.fields]
+                        if embed_info:
+                            embed_data.append(embed_info)
+                
+                attachments = [{'filename': a.filename, 'url': a.url} for a in msg.attachments] if msg.attachments else []
+                
+                msg_data = {
+                    'id': str(msg.id),
+                    'timestamp': msg.created_at.isoformat(),
+                    'author_id': str(msg.author.id),
+                    'author_name': msg.author.name,
+                    'author_display': msg.author.display_name,
+                    'content': msg.content,
+                    'embeds': embed_data,
+                    'attachments': attachments,
+                    'reply_to': str(msg.reference.message_id) if msg.reference else None
+                }
+                messages_data.append(msg_data)
+            
+            channel_name = getattr(target_channel, 'name', str(channel_id))
+            filename = f"extracted_{channel_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump({
+                    'channel_id': str(channel_id),
+                    'channel_name': channel_name,
+                    'extracted_at': datetime.now().isoformat(),
+                    'message_count': len(messages_data),
+                    'messages': messages_data
+                }, f, indent=2, ensure_ascii=False)
+            
+            await message.channel.send(
+                f"✅ **Extracted {len(messages_data)} messages**\n"
+                f"📁 Saved to: `{filename}`\n"
+                f"📊 Channel: {channel_name}\n\n"
+                f"Sample (first 3 messages):\n" +
+                "\n".join([f"• `{m['content'][:80]}...`" if len(m['content']) > 80 else f"• `{m['content']}`" 
+                          for m in messages_data[:3] if m['content']])
+            )
+            print(f"[EXTRACT] ✓ Saved {len(messages_data)} messages to {filename}")
+            
+        except Exception as e:
+            await message.channel.send(f"❌ Error extracting messages: {e}")
+            import traceback
+            traceback.print_exc()
+    
     async def handle_analyze_command(self, message: discord.Message, symbol: str, timeframe: str = '1day'):
         """Handle !analyze [SYMBOL] [TIMEFRAME] command - provides AI stock analysis with market data"""
         # Prevent duplicate execution of the same command
@@ -7997,6 +8076,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             channel_id = int(args[0]) if args else 1239624229583061052  # Default to Bishop
             limit = int(args[1]) if len(args) > 1 else 200
             await self.handle_extract_history(message, channel_id, limit)
+            return
+        
+        # !extractraw [CHANNEL_ID] [LIMIT] - Extract ALL messages to JSON file (no filtering)
+        if message.content.strip().lower().startswith('!extractraw') and self.user and message.author.id == self.user.id:
+            content = message.content.strip()
+            args = content[11:].strip().split()
+            if not args:
+                await message.channel.send("❌ Usage: `!extractraw [CHANNEL_ID] [LIMIT]`\nExample: `!extractraw 1234567890123456789 1000`")
+                return
+            channel_id = int(args[0])
+            limit = int(args[1]) if len(args) > 1 else 1000
+            await self.handle_extract_raw(message, channel_id, limit)
             return
         
         # Pre-process special formats (Bullwinkle scalps, etc.)
