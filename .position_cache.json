@@ -4098,7 +4098,7 @@
   },
   "ALPACA_PAPER_APLD_stock": {
     "entry_price": 33.66,
-    "highest_price": 38.2816,
+    "highest_price": 38.38,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -4659,7 +4659,7 @@
   },
   "ALPACA_PAPER_RKLB_100.0_2026-01-23_C": {
     "entry_price": 1.98,
-    "highest_price": 1.9,
+    "highest_price": 1.92,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
