@@ -295,6 +295,68 @@ JACOB_TARGET_PATTERN = re.compile(
 )
 
 
+def tokenize_levels_with_strikethrough(levels_str: str) -> list:
+    """
+    Tokenize price levels with strikethrough awareness.
+    
+    Handles both formats:
+    - Per-target: ~~1.21~~ - ~~1.24~~ - 1.28
+    - Range: ~~1.21 - 1.24 - 1.28~~ (all inside one strikethrough)
+    - Mixed: ~~1.21 - 1.24~~ - 1.28 (first two hit, last pending)
+    
+    Returns list of tuples: [(price_value, is_hit), ...]
+    """
+    tokens = []
+    inside_strike = False
+    current_token = ""
+    token_was_struck = False  # Track if current token was inside strikethrough
+    i = 0
+    
+    while i < len(levels_str):
+        # Check for ~~ marker
+        if i < len(levels_str) - 1 and levels_str[i:i+2] == '~~':
+            if inside_strike:
+                # Closing ~~ - mark current token as struck before toggling
+                token_was_struck = True
+            inside_strike = not inside_strike
+            if inside_strike:
+                # Opening ~~ - mark current token as struck
+                token_was_struck = True
+            i += 2
+            continue
+        
+        char = levels_str[i]
+        
+        # Check for separator (hyphen or dash)
+        if char in '-–':
+            # Emit current token if we have one
+            clean = re.sub(r'[^\d.]', '', current_token)
+            if clean:
+                try:
+                    # Token is hit if it was ever inside strikethrough
+                    tokens.append((float(clean), token_was_struck or inside_strike))
+                except ValueError:
+                    pass
+            current_token = ""
+            token_was_struck = inside_strike  # Reset for next token, inheriting current state
+            i += 1
+            continue
+        
+        current_token += char
+        i += 1
+    
+    # Process final token
+    if current_token.strip():
+        clean = re.sub(r'[^\d.]', '', current_token)
+        if clean:
+            try:
+                tokens.append((float(clean), token_was_struck or inside_strike))
+            except ValueError:
+                pass
+    
+    return tokens
+
+
 def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
     """
     Parse TRADE IDEA format signals (C1apped style).
@@ -309,6 +371,7 @@ def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
     Strikethrough Detection:
     When levels have ~~strikethrough~~ (e.g., "Levels: ~~1.26~~ - 1.29"), 
     those are marked as hit_levels indicating partial exits occurred.
+    Supports both per-target (~~1.21~~ - ~~1.24~~) and range (~~1.21 - 1.24~~) formats.
     
     Returns dict with parsed components or None if not a TRADE IDEA.
     """
@@ -336,26 +399,16 @@ def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
         levels_str = levels_line_match.group(1)
         levels_str = re.sub(r'[+\s]+$', '', levels_str)
         
-        for level in re.split(r'\s*[-–]\s*', levels_str):
-            level = level.strip()
-            if not level:
-                continue
-            
-            is_struck = '~~' in level
-            level_clean = re.sub(r'~~', '', level)
-            level_clean = re.sub(r'[^\d.]', '', level_clean)
-            
-            if level_clean:
-                try:
-                    level_value = float(level_clean)
-                    profit_targets.append(level_value)
-                    
-                    if is_struck:
-                        hit_levels.append(level_value)
-                    else:
-                        pending_levels.append(level_value)
-                except ValueError:
-                    pass
+        # Use state-machine tokenizer for proper strikethrough handling
+        # Handles both ~~1.21~~ - ~~1.24~~ and ~~1.21 - 1.24~~ formats
+        tokens = tokenize_levels_with_strikethrough(levels_str)
+        
+        for level_value, is_hit in tokens:
+            profit_targets.append(level_value)
+            if is_hit:
+                hit_levels.append(level_value)
+            else:
+                pending_levels.append(level_value)
     
     is_exit = 'all out' in text.lower() or 'closed' in text.lower() or 'exited' in text.lower()
     is_update = len(hit_levels) > 0 or 'raised' in text.lower() or 'moved' in text.lower()
