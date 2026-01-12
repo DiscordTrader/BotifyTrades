@@ -10236,7 +10236,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 except Exception as le:
                                                     _original_print(f"[RISK] ⚠️ Lot matching warning: {le}")
                                                 
-                                                # Record execution closure with correct exit_source
+                                                # Record execution closure with correct exit_source for Execution P&L
                                                 try:
                                                     from gui_app.database import record_execution_closure_atomic, map_risk_trigger_to_exit_source
                                                     
@@ -10244,7 +10244,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     tier = signal.get('_tier_to_mark')
                                                     exit_source = map_risk_trigger_to_exit_source(risk_trigger, tier)
                                                     
-                                                    closure_id, pnl = record_execution_closure_atomic(
+                                                    closure_id, exec_pnl = record_execution_closure_atomic(
                                                         broker='ALPACA_PAPER',
                                                         symbol=signal['symbol'],
                                                         asset_type=signal['asset'],
@@ -10259,9 +10259,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                         channel_id=str(signal['channel_id'])
                                                     )
                                                     if closure_id:
-                                                        _original_print(f"[RISK] ✓ Execution closure #{closure_id} recorded with exit_source={exit_source}")
+                                                        _original_print(f"[RISK] ✓ Execution P&L closure #{closure_id} recorded (exit_source={exit_source})")
                                                 except Exception as ec_error:
-                                                    _original_print(f"[RISK] ⚠️ Execution closure warning: {ec_error}")
+                                                    _original_print(f"[RISK] ⚠️ Execution P&L closure warning: {ec_error}")
                                                 
                                             except Exception as db_error:
                                                 _original_print(f"[RISK] ⚠️ Database save warning: {db_error}")
