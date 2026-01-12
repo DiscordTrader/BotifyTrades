@@ -19,6 +19,13 @@ from dataclasses import dataclass
 from collections import defaultdict
 from enum import Enum
 
+from gui_app.database import (
+    is_circuit_breaker_tripped,
+    get_effective_exit_strategy_mode,
+    log_risk_event,
+)
+from .exit_order_arbiter import ExitOrderArbiter
+
 
 class OrderState(Enum):
     PENDING = 'pending'
@@ -116,6 +123,7 @@ class SignalExitManager:
         self._debouncer = EditDebouncer(debounce_ms=100)
         self._exit_processed: Dict[int, Dict] = {}
         self._sl_versions: Dict[int, int] = {}
+        self._arbiter = ExitOrderArbiter()
     
     async def handle_new_entry(
         self,
@@ -267,12 +275,17 @@ class SignalExitManager:
         signal_instance_id: int,
         exit_type: str,
         reason: str = None,
-        source: str = 'signal'
+        source: str = 'signal',
+        channel_id: str = None
     ) -> Dict[str, Any]:
         """
         Handle full exit signal with idempotency.
         
+        Routes through ExitOrderArbiter for proper precedence and audit logging.
         Prevents double-execution of exits.
+        
+        Note: Exits are NOT blocked by circuit breaker - you always want to be
+        able to close positions, even when new entries are halted.
         """
         if signal_instance_id in self._exit_processed:
             existing = self._exit_processed[signal_instance_id]
@@ -280,6 +293,28 @@ class SignalExitManager:
                 'success': False,
                 'reason': f"Already exited via {existing.get('source')} at {existing.get('processed_at')}",
                 'skipped': True
+            }
+        
+        managed = self._managed_orders.get(signal_instance_id)
+        exit_strategy_mode = 'signal'
+        if channel_id:
+            exit_strategy_mode = get_effective_exit_strategy_mode(channel_id)
+        elif managed:
+            exit_strategy_mode = managed.exit_strategy_mode
+        
+        arbiter_result = await self._arbiter.request_exit(
+            signal_instance_id=signal_instance_id,
+            source=source,
+            exit_type=exit_type,
+            exit_strategy_mode=exit_strategy_mode
+        )
+        
+        if not arbiter_result.get('approved', True):
+            print(f"[EXIT MANAGER] Exit blocked by arbiter: {arbiter_result.get('reason')}")
+            return {
+                'success': False,
+                'reason': arbiter_result.get('reason'),
+                'arbiter_blocked': True
             }
         
         self._exit_processed[signal_instance_id] = {
@@ -291,11 +326,18 @@ class SignalExitManager:
         }
         
         try:
-            managed = self._managed_orders.get(signal_instance_id)
             if managed:
                 managed.remaining_qty = 0
                 managed.state = OrderState.FILLED
                 managed.updated_at = datetime.now()
+            
+            log_risk_event(
+                event_type='EXIT_SIGNAL',
+                signal_instance_id=signal_instance_id,
+                channel_id=channel_id,
+                source=source,
+                details={'exit_type': exit_type, 'reason': reason, 'mode': exit_strategy_mode}
+            )
             
             self._exit_processed[signal_instance_id]['processing'] = False
             self._exit_processed[signal_instance_id]['completed'] = True
