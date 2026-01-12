@@ -23,6 +23,9 @@ from gui_app.database import (
     is_circuit_breaker_tripped,
     get_effective_exit_strategy_mode,
     log_risk_event,
+    find_matching_execution_lot,
+    create_execution_closure,
+    get_execution_lot_by_id,
 )
 from .exit_order_arbiter import ExitOrderArbiter
 
@@ -276,13 +279,25 @@ class SignalExitManager:
         exit_type: str,
         reason: str = None,
         source: str = 'signal',
-        channel_id: str = None
+        channel_id: str = None,
+        broker: str = None,
+        symbol: str = None,
+        asset_type: str = None,
+        fill_price: float = None,
+        closed_qty: int = None,
+        broker_order_id: str = None,
+        strike: float = None,
+        expiry: str = None,
+        call_put: str = None
     ) -> Dict[str, Any]:
         """
         Handle full exit signal with idempotency.
         
         Routes through ExitOrderArbiter for proper precedence and audit logging.
         Prevents double-execution of exits.
+        
+        If fill information is provided (broker, symbol, fill_price, closed_qty),
+        also records the exit to Execution P&L for Two-Tier tracking.
         
         Note: Exits are NOT blocked by circuit breaker - you always want to be
         able to close positions, even when new entries are halted.
@@ -339,6 +354,23 @@ class SignalExitManager:
                 details={'exit_type': exit_type, 'reason': reason, 'mode': exit_strategy_mode}
             )
             
+            pnl_result = None
+            if broker and symbol and fill_price and closed_qty:
+                pnl_result = await self.record_execution_pnl(
+                    broker=broker,
+                    symbol=symbol,
+                    asset_type=asset_type or ('option' if strike else 'stock'),
+                    closed_qty=closed_qty,
+                    fill_price=fill_price,
+                    channel_id=channel_id,
+                    exit_source=source,
+                    broker_order_id=broker_order_id,
+                    strike=strike,
+                    expiry=expiry,
+                    call_put=call_put
+                )
+                print(f"[EXIT MANAGER] P&L recorded: {pnl_result}")
+            
             self._exit_processed[signal_instance_id]['processing'] = False
             self._exit_processed[signal_instance_id]['completed'] = True
             
@@ -349,7 +381,8 @@ class SignalExitManager:
                 'success': True,
                 'exit_type': exit_type,
                 'source': source,
-                'reason': reason
+                'reason': reason,
+                'pnl_recorded': pnl_result.get('pnl_recorded') if pnl_result else False
             }
             
         except Exception as e:
@@ -361,22 +394,93 @@ class SignalExitManager:
         broker: str,
         order_id: str,
         new_sl_price: float,
-        signal_instance_id: int
+        signal_instance_id: int,
+        broker_instance: Any = None,
+        symbol: str = None,
+        quantity: int = None
     ) -> Dict[str, Any]:
         """
         Modify broker SL order using broker-appropriate method.
         
         - Alpaca/Schwab/IBKR: Use REPLACE order
         - Robinhood/Webull/Tastytrade: Cancel + New order
+        
+        Args:
+            broker: Broker name
+            order_id: Original SL order ID
+            new_sl_price: New stop loss price
+            signal_instance_id: For tracking
+            broker_instance: Broker adapter instance (optional)
+            symbol: Ticker symbol (needed for cancel+new)
+            quantity: Position quantity (needed for cancel+new)
         """
+        import asyncio
+        
         capabilities = self.BROKER_CAPABILITIES.get(broker, {})
         
-        if capabilities.get('supports_replace'):
-            print(f"[EXIT MANAGER] Using REPLACE for {broker} SL order {order_id}")
-            return {'success': True, 'method': 'replace', 'simulated': True}
-        else:
-            print(f"[EXIT MANAGER] Using CANCEL+NEW for {broker} SL order {order_id}")
-            return {'success': True, 'method': 'cancel_new', 'simulated': True}
+        if not broker_instance:
+            print(f"[EXIT MANAGER] No broker instance for {broker} SL modify - simulating")
+            method = 'replace' if capabilities.get('supports_replace') else 'cancel_new'
+            return {'success': True, 'method': method, 'simulated': True}
+        
+        loop = asyncio.get_event_loop()
+        
+        try:
+            if capabilities.get('supports_replace'):
+                print(f"[EXIT MANAGER] Using REPLACE for {broker} SL order {order_id}")
+                
+                if broker == 'alpaca':
+                    if hasattr(broker_instance, 'replace_order'):
+                        result = await loop.run_in_executor(None, lambda: broker_instance.replace_order(
+                            order_id, stop_price=new_sl_price
+                        ))
+                        return {'success': True, 'method': 'replace', 'new_order_id': getattr(result, 'id', None)}
+                
+                elif broker == 'schwab':
+                    if hasattr(broker_instance, 'replace_order'):
+                        result = await loop.run_in_executor(None, lambda: broker_instance.replace_order(
+                            order_id, stop_price=new_sl_price
+                        ))
+                        return {'success': True, 'method': 'replace', 'result': result}
+                
+                elif broker == 'ibkr':
+                    if hasattr(broker_instance, 'modify_order'):
+                        result = await loop.run_in_executor(None, lambda: broker_instance.modify_order(
+                            order_id, stop_price=new_sl_price
+                        ))
+                        return {'success': True, 'method': 'replace', 'result': result}
+                
+                return {'success': True, 'method': 'replace', 'simulated': True}
+            
+            else:
+                print(f"[EXIT MANAGER] Using CANCEL+NEW for {broker} SL order {order_id}")
+                
+                cancel_success = False
+                new_order_id = None
+                
+                if hasattr(broker_instance, 'cancel_order'):
+                    cancel_result = await loop.run_in_executor(None, lambda: broker_instance.cancel_order(order_id))
+                    cancel_success = cancel_result if isinstance(cancel_result, bool) else True
+                    
+                    if cancel_success and symbol and quantity:
+                        await asyncio.sleep(0.2)
+                        
+                        if hasattr(broker_instance, 'place_stop_order'):
+                            new_order = await loop.run_in_executor(None, lambda: broker_instance.place_stop_order(
+                                symbol=symbol, quantity=quantity, stop_price=new_sl_price, side='sell'
+                            ))
+                            new_order_id = getattr(new_order, 'id', None) or (new_order.get('id') if isinstance(new_order, dict) else None)
+                
+                return {
+                    'success': cancel_success,
+                    'method': 'cancel_new',
+                    'cancelled_order_id': order_id,
+                    'new_order_id': new_order_id
+                }
+                
+        except Exception as e:
+            print(f"[EXIT MANAGER] Error modifying {broker} SL order: {e}")
+            return {'success': False, 'method': None, 'error': str(e)}
     
     async def _mark_exit_completed(self, signal_instance_id: int, source: str):
         """Mark position as fully exited."""
@@ -391,6 +495,89 @@ class SignalExitManager:
             'processed_at': datetime.now().isoformat(),
             'completed': True
         }
+    
+    async def record_execution_pnl(
+        self,
+        broker: str,
+        symbol: str,
+        asset_type: str,
+        closed_qty: int,
+        fill_price: float,
+        channel_id: str = None,
+        exit_source: str = 'signal',
+        broker_order_id: str = None,
+        signal_exit_price: float = None,
+        strike: float = None,
+        expiry: str = None,
+        call_put: str = None
+    ) -> Dict[str, Any]:
+        """
+        Record execution P&L when a position is closed.
+        
+        This wires SignalExitManager exits to the Two-Tier P&L system:
+        - Finds matching open execution lot (FIFO)
+        - Creates execution_closure record with P&L
+        - Updates execution_lot status (CLOSED/PARTIAL)
+        
+        Args:
+            broker: Broker name (alpaca, schwab, etc.)
+            symbol: Stock/option symbol
+            asset_type: 'stock' or 'option'
+            closed_qty: Number of shares/contracts closed
+            fill_price: Actual fill price from broker
+            channel_id: Discord channel ID
+            exit_source: signal, trailing, channel, manual, circuit_breaker
+            broker_order_id: Broker's order ID for the exit
+            signal_exit_price: Expected price from signal (for slippage calc)
+            strike, expiry, call_put: Option details if applicable
+        
+        Returns:
+            Dict with success status, P&L details
+        """
+        exec_lot = find_matching_execution_lot(
+            broker=broker,
+            symbol=symbol,
+            asset_type=asset_type,
+            strike=strike,
+            expiry=expiry,
+            call_put=call_put
+        )
+        
+        if not exec_lot:
+            print(f"[EXIT MANAGER] No matching execution lot for {symbol}@{broker}")
+            return {
+                'success': False,
+                'reason': f"No open execution lot found for {symbol}",
+                'pnl_recorded': False
+            }
+        
+        closure_id = create_execution_closure(
+            execution_lot_id=exec_lot['id'],
+            channel_id=channel_id or exec_lot.get('channel_id'),
+            broker=broker,
+            closed_qty=closed_qty,
+            fill_price=fill_price,
+            filled_at=datetime.now(),
+            exit_source=exit_source,
+            broker_order_id=broker_order_id,
+            signal_exit_price=signal_exit_price
+        )
+        
+        if closure_id:
+            print(f"[EXIT MANAGER] Execution P&L recorded: lot={exec_lot['id']}, "
+                  f"closure={closure_id}, qty={closed_qty}, price=${fill_price}")
+            return {
+                'success': True,
+                'execution_lot_id': exec_lot['id'],
+                'closure_id': closure_id,
+                'pnl_recorded': True
+            }
+        else:
+            return {
+                'success': False,
+                'reason': 'Failed to create execution closure',
+                'pnl_recorded': False
+            }
     
     def _log_sl_change(
         self,

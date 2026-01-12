@@ -300,6 +300,41 @@ class BrokerPriceMonitor(PriceMonitor):
                             elif isinstance(data, dict) and 'last_price' in data:
                                 return float(data['last_price'])
             
+            elif self.broker_name.lower() == 'schwab':
+                if hasattr(self.broker_instance, 'get_quote'):
+                    quote = await loop.run_in_executor(None, lambda: self.broker_instance.get_quote(self.symbol))
+                    if quote:
+                        if isinstance(quote, dict) and 'lastPrice' in quote:
+                            return float(quote['lastPrice'])
+                        elif hasattr(quote, 'lastPrice'):
+                            return float(quote.lastPrice)
+            
+            elif self.broker_name.lower() == 'ibkr':
+                if hasattr(self.broker_instance, 'get_quote'):
+                    quote = await loop.run_in_executor(None, lambda: self.broker_instance.get_quote(self.symbol))
+                    if quote:
+                        if hasattr(quote, 'last') and quote.last:
+                            return float(quote.last)
+                        elif isinstance(quote, dict) and 'last' in quote:
+                            return float(quote['last'])
+                        elif isinstance(quote, dict) and 'close' in quote:
+                            return float(quote['close'])
+            
+            elif self.broker_name.lower() == 'robinhood':
+                if hasattr(self.broker_instance, 'get_quote'):
+                    quote = await loop.run_in_executor(None, lambda: self.broker_instance.get_quote(self.symbol))
+                    if quote and 'last_trade_price' in quote:
+                        return float(quote['last_trade_price'])
+            
+            elif self.broker_name.lower() == 'tastytrade':
+                if hasattr(self.broker_instance, 'get_quote'):
+                    quote = await loop.run_in_executor(None, lambda: self.broker_instance.get_quote(self.symbol))
+                    if quote:
+                        if isinstance(quote, dict) and 'last' in quote:
+                            return float(quote['last'])
+                        elif hasattr(quote, 'last'):
+                            return float(quote.last)
+            
         except Exception as e:
             print(f"[{self.broker_name.upper()}] Quote error for {self.symbol}: {e}")
         
