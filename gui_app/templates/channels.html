@@ -1331,6 +1331,21 @@ function renderChannels() {
                     </div>
                     
                     <div class="control-group" style="margin-top: 12px;">
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 0.85rem; color: var(--text-secondary);">Signal Update Automation</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" ${channel.signal_update_automation ? 'checked' : ''} 
+                                       onchange="updateSignalUpdateAutomation(${channel.id}, this.checked)"
+                                       title="Automatically update broker orders when traders edit their Discord signals (C1apped/WaxUI style)">
+                                <span class="slider"></span>
+                            </label>
+                        </label>
+                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+                            Auto-update SL/PT when trader edits signal
+                        </div>
+                    </div>
+                    
+                    <div class="control-group" style="margin-top: 12px;">
                         <label style="font-size: 0.85rem; color: var(--text-secondary);">
                             Order Timeout (All Orders)
                         </label>
@@ -1548,6 +1563,28 @@ async function updateExitStrategy(channelId, mode) {
             showNotification(`Exit strategy set to ${modeLabels[mode] || mode}`);
         } else {
             showNotification('Error updating exit strategy', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function updateSignalUpdateAutomation(channelId, enabled) {
+    try {
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ signal_update_automation: enabled ? 1 : 0 })
+        });
+        
+        if (response.ok) {
+            showNotification(enabled ? 
+                'Signal Update Automation enabled - broker orders will update when signals are edited' : 
+                'Signal Update Automation disabled');
+        } else {
+            showNotification('Error updating Signal Update Automation', 'error');
             await loadChannels();
         }
     } catch (error) {
