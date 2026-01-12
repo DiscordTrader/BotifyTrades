@@ -3286,6 +3286,47 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/robinhood/orders/<order_id>/cancel', methods=['POST'])
+    @login_required
+    def api_robinhood_cancel_order(order_id: str) -> Any:
+        """Cancel a Robinhood order by order ID (WARNING: LIVE ONLY)"""
+        import asyncio
+        
+        if not _bot_instance or not hasattr(_bot_instance, 'robinhood_broker') or not _bot_instance.robinhood_broker:
+            return jsonify({'success': False, 'error': 'Robinhood broker not initialized'}), 500
+        
+        try:
+            data = request.get_json(silent=True) or {}
+            order_type = data.get('order_type', 'stock')
+            
+            print(f"[API] Cancelling Robinhood order (LIVE): {order_id}, type={order_type}")
+            
+            loop = _bot_instance.loop if hasattr(_bot_instance, 'loop') else asyncio.get_event_loop()
+            
+            future = asyncio.run_coroutine_threadsafe(
+                _bot_instance.robinhood_broker.cancel_order(order_id, order_type),
+                loop
+            )
+            
+            result = future.result(timeout=15)
+            
+            if result:
+                return jsonify({
+                    'success': True,
+                    'message': f'Order {order_id} cancelled'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'Failed to cancel order'
+                }), 400
+                
+        except Exception as e:
+            print(f"[API] Exception cancelling Robinhood order {order_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/api/ibkr/positions/<symbol>/close', methods=['POST'])
     @login_required
     def api_ibkr_close_position(symbol: str) -> Any:
@@ -4783,6 +4824,101 @@ def register_routes(app):
         # Run the blocking webull calls in a thread so we don't block the event loop
         return await run_async_safely(_blocking_call)
     
+    @app.route('/api/orders/<broker>/<order_id>/cancel', methods=['POST'])
+    @login_required
+    def api_cancel_order_unified(broker: str, order_id: str) -> Any:
+        """
+        Unified cancel order endpoint for all brokers.
+        Routes to the appropriate broker-specific cancel handler.
+        
+        Supported brokers: alpaca, webull, robinhood
+        Unsupported (returns error): schwab, ibkr, tastytrade
+        """
+        import asyncio
+        
+        broker_lower = broker.lower().replace('_paper', '').replace('-', '')
+        
+        print(f"[API] Unified cancel: broker={broker}, order_id={order_id}")
+        
+        SUPPORTED_CANCEL_BROKERS = {
+            'alpaca': 'alpaca',
+            'alpacapaper': 'alpaca',
+            'webull': 'webull',
+            'robinhood': 'robinhood',
+        }
+        
+        UNSUPPORTED_BROKERS = ['schwab', 'ibkr', 'tastytrade', 'questrade']
+        
+        if broker_lower in UNSUPPORTED_BROKERS:
+            return jsonify({
+                'success': False,
+                'error': f'{broker.title()} does not support order cancellation via API. Please cancel directly in the broker app.',
+                'unsupported': True
+            }), 400
+        
+        resolved_broker = SUPPORTED_CANCEL_BROKERS.get(broker_lower)
+        
+        if not resolved_broker:
+            return jsonify({
+                'success': False,
+                'error': f'Unknown broker: {broker}. Supported: Alpaca, Webull, Robinhood'
+            }), 400
+        
+        try:
+            if resolved_broker == 'alpaca':
+                if not _bot_instance or not hasattr(_bot_instance, 'paper_broker') or not _bot_instance.paper_broker:
+                    return jsonify({'success': False, 'error': 'Alpaca broker not initialized'}), 500
+                
+                async def _cancel():
+                    return await _bot_instance.paper_broker.cancel_order(order_id)
+                
+                future = asyncio.run_coroutine_threadsafe(_cancel(), _bot_instance.loop)
+                result = future.result(timeout=15)
+                
+                if result.get('success'):
+                    return jsonify({'success': True, 'message': f'Order {order_id} cancelled'})
+                else:
+                    return jsonify({'success': False, 'error': result.get('error', 'Failed to cancel')}), 400
+            
+            elif resolved_broker == 'webull':
+                if not _bot_instance or not hasattr(_bot_instance, 'wb') or not _bot_instance.wb:
+                    return jsonify({'success': False, 'error': 'Webull broker not initialized'}), 500
+                
+                future = asyncio.run_coroutine_threadsafe(
+                    _cancel_webull_order(order_id),
+                    _bot_instance.loop
+                )
+                result = future.result(timeout=15)
+                
+                if result.get('success'):
+                    return jsonify({'success': True, 'message': f'Order {order_id} cancelled'})
+                else:
+                    return jsonify({'success': False, 'error': result.get('error', 'Failed to cancel')}), 400
+            
+            elif resolved_broker == 'robinhood':
+                if not _bot_instance or not hasattr(_bot_instance, 'robinhood_broker') or not _bot_instance.robinhood_broker:
+                    return jsonify({'success': False, 'error': 'Robinhood broker not initialized'}), 500
+                
+                loop = _bot_instance.loop if hasattr(_bot_instance, 'loop') else asyncio.get_event_loop()
+                future = asyncio.run_coroutine_threadsafe(
+                    _bot_instance.robinhood_broker.cancel_order(order_id, 'stock'),
+                    loop
+                )
+                result = future.result(timeout=15)
+                
+                if result:
+                    return jsonify({'success': True, 'message': f'Order {order_id} cancelled'})
+                else:
+                    return jsonify({'success': False, 'error': 'Failed to cancel order'}), 400
+            
+        except Exception as e:
+            print(f"[API] Exception in unified cancel: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+        
+        return jsonify({'success': False, 'error': 'Unexpected error'}), 500
+    
     @app.route('/api/trades/<int:trade_id>/close', methods=['POST'])
     def close_position_by_id(trade_id):
         """Close a position by trade ID (used by Dashboard) - Uses LIVE broker quantity"""
@@ -4933,7 +5069,85 @@ def register_routes(app):
                             'error': f'Alpaca close failed: {result.message}'
                         }), 500
             
-            # ========== WEBULL BROKER CLOSE (original logic) ==========
+            # ========== ROBINHOOD BROKER CLOSE ==========
+            if 'ROBINHOOD' in broker:
+                print(f"[API] Routing to Robinhood broker for close (LIVE ONLY)...")
+                
+                if not hasattr(_bot_instance, 'robinhood_broker') or not _bot_instance.robinhood_broker:
+                    return jsonify({'success': False, 'error': 'Robinhood broker not initialized'}), 500
+                
+                trade_qty = int(trade.get('quantity') or 1)
+                quantity_to_close = trade_qty
+                if requested_quantity is not None:
+                    try:
+                        quantity_to_close = int(requested_quantity)
+                    except (ValueError, TypeError):
+                        pass
+                
+                try:
+                    if asset_type == 'option':
+                        future = asyncio.run_coroutine_threadsafe(
+                            _bot_instance.robinhood_broker.place_option_order(
+                                symbol, strike, expiry, call_put, 'STC', quantity_to_close, requested_limit_price
+                            ),
+                            _bot_instance.loop
+                        )
+                    else:
+                        future = asyncio.run_coroutine_threadsafe(
+                            _bot_instance.robinhood_broker.place_stock_order(symbol, 'STC', quantity_to_close, requested_limit_price),
+                            _bot_instance.loop
+                        )
+                    
+                    result = future.result(timeout=30)
+                    
+                    if result and result.success:
+                        db.close_trade(trade_id, result.fill_price or requested_limit_price or 0, 'manual_close')
+                        return jsonify({
+                            'success': True,
+                            'message': f"Position closed: {quantity_to_close} {symbol} @ {order_type}"
+                        })
+                    else:
+                        return jsonify({
+                            'success': False,
+                            'error': f'Robinhood close failed: {result.message if result else "Unknown error"}'
+                        }), 500
+                except Exception as e:
+                    print(f"[CLOSE] Robinhood close error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return jsonify({'success': False, 'error': f'Robinhood close error: {str(e)}'}), 500
+            
+            # ========== SCHWAB BROKER CLOSE ==========
+            if 'SCHWAB' in broker:
+                print(f"[API] Routing to Schwab broker for close...")
+                # Schwab has a dedicated close endpoint - redirect user to use that
+                return jsonify({
+                    'success': False,
+                    'error': f'For Schwab positions, please use the Schwab-specific close button in the Schwab Analytics section, or close directly in the Schwab app.',
+                    'redirect_hint': f'/api/schwab/positions/{symbol}/close'
+                }), 400
+            
+            # ========== IBKR BROKER CLOSE ==========
+            if 'IBKR' in broker or 'INTERACTIVE' in broker:
+                print(f"[API] Routing to IBKR broker for close...")
+                # IBKR has a dedicated close endpoint
+                return jsonify({
+                    'success': False,
+                    'error': f'For IBKR positions, please use the IBKR-specific close button in the IBKR Analytics section, or close directly in TWS/Gateway.',
+                    'redirect_hint': f'/api/ibkr/positions/{symbol}/close'
+                }), 400
+            
+            # ========== TASTYTRADE BROKER CLOSE ==========
+            if 'TASTYTRADE' in broker or 'TASTY' in broker:
+                print(f"[API] Routing to Tastytrade broker for close...")
+                # Tastytrade has a dedicated close endpoint
+                return jsonify({
+                    'success': False,
+                    'error': f'For Tastytrade positions, please use the Tastytrade-specific close button in the Tastytrade Analytics section, or close directly in the broker app.',
+                    'redirect_hint': f'/api/tastytrade/positions/{symbol}/close'
+                }), 400
+            
+            # ========== WEBULL BROKER CLOSE (original logic / fallback) ==========
             print(f"[API] Entering Webull close section for {symbol}", flush=True)
             
             # For options, we need the optionId to match positions

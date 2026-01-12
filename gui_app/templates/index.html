@@ -1501,19 +1501,16 @@ async function executeClose(tradeId, symbol, quantity, broker, limitPrice, order
 
 async function cancelOrder(orderId, symbol, broker) {
     // Determine broker from trade data or current selection
-    const effectiveBroker = broker || currentBroker || '';
-    const isAlpaca = effectiveBroker.toLowerCase().includes('alpaca');
-    const brokerName = isAlpaca ? 'Alpaca' : 'Webull';
+    const effectiveBroker = broker || currentBroker || 'webull';
+    const brokerDisplay = effectiveBroker.charAt(0).toUpperCase() + effectiveBroker.slice(1).replace('_paper', ' Paper');
     
-    if (!confirm(`⚠️ Cancel pending order for ${symbol}?\n\nOrder ID: ${orderId}\n\nThis will cancel the order at ${brokerName}.`)) {
+    if (!confirm(`⚠️ Cancel pending order for ${symbol}?\n\nOrder ID: ${orderId}\nBroker: ${brokerDisplay}\n\nThis will cancel the order.`)) {
         return;
     }
     
     try {
-        // Route to correct endpoint based on broker
-        const url = isAlpaca 
-            ? `/api/alpaca/orders/${orderId}/cancel`
-            : `/api/webull/orders/${orderId}/cancel`;
+        // Use unified cancel endpoint for all brokers
+        const url = `/api/orders/${encodeURIComponent(effectiveBroker)}/${encodeURIComponent(orderId)}/cancel`;
         
         const response = await fetch(url, {
             method: 'POST',
@@ -1526,6 +1523,8 @@ async function cancelOrder(orderId, symbol, broker) {
             alert(`✅ Order cancelled successfully!\n\nOrder ID: ${orderId}`);
             loadTrades();
             loadStats();
+        } else if (result.unsupported) {
+            alert(`⚠️ ${result.error}`);
         } else {
             alert(`❌ Failed to cancel order: ${result.error || 'Unknown error'}`);
         }

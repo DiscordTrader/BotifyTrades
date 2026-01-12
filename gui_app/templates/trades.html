@@ -685,14 +685,8 @@ async function cancelOrder(orderId, symbol, broker = null) {
     }
     
     try {
-        let endpoint;
-        if (brokerName.toLowerCase().includes('alpaca')) {
-            endpoint = `/api/alpaca/orders/${orderId}/cancel`;
-        } else if (brokerName.toLowerCase() === 'webull') {
-            endpoint = `/api/webull/orders/${orderId}/cancel`;
-        } else {
-            endpoint = `/api/${brokerName.toLowerCase()}/orders/${orderId}/cancel`;
-        }
+        // Use unified cancel endpoint for all brokers
+        const endpoint = `/api/orders/${encodeURIComponent(brokerName)}/${encodeURIComponent(orderId)}/cancel`;
         
         const response = await fetch(endpoint, {
             method: 'POST',
@@ -701,9 +695,11 @@ async function cancelOrder(orderId, symbol, broker = null) {
         
         const result = await response.json();
         
-        if (response.ok) {
+        if (response.ok && result.success) {
             alert(`✅ Order cancelled successfully!\n\nOrder ID: ${orderId}`);
             loadTrades();
+        } else if (result.unsupported) {
+            alert(`⚠️ ${result.error}`);
         } else {
             alert(`❌ Failed to cancel order: ${result.error || 'Unknown error'}`);
         }
