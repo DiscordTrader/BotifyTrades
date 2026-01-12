@@ -2293,19 +2293,27 @@ def update_channel(channel_id: int, **kwargs):
             values.append(0)
             fields.append("track_enabled = ?")
             values.append(1)
-    elif 'execute_enabled' in kwargs and 'category' not in kwargs:
-        # If execute_enabled is being set, update category accordingly
-        if kwargs['execute_enabled'] == 1:
-            fields.append("category = ?")
-            values.append('EXECUTE')
-        elif 'track_enabled' in kwargs and kwargs['track_enabled'] == 1:
-            fields.append("category = ?")
-            values.append('TRACK')
-    elif 'track_enabled' in kwargs and kwargs['track_enabled'] == 1 and 'category' not in kwargs:
-        # If track_enabled is being set and execute_enabled is not, set category to TRACK
-        if 'execute_enabled' not in kwargs or kwargs['execute_enabled'] == 0:
-            fields.append("category = ?")
-            values.append('TRACK')
+    elif ('execute_enabled' in kwargs or 'track_enabled' in kwargs) and 'category' not in kwargs:
+        # When updating flags, get current state from database to determine new category
+        cursor.execute('SELECT execute_enabled, track_enabled FROM channels WHERE id = ?', (channel_id,))
+        current = cursor.fetchone()
+        if current:
+            current_execute = current[0] if current[0] is not None else 0
+            current_track = current[1] if current[1] is not None else 0
+            
+            # Apply the updates being made
+            new_execute = kwargs.get('execute_enabled', current_execute)
+            new_track = kwargs.get('track_enabled', current_track)
+            
+            # Determine category based on combined state
+            # Priority: EXECUTE > TRACK (if execute is enabled, category is EXECUTE)
+            if new_execute == 1:
+                fields.append("category = ?")
+                values.append('EXECUTE')
+            elif new_track == 1:
+                fields.append("category = ?")
+                values.append('TRACK')
+            # If both are 0, don't change category (leave as last known state)
     
     if fields:
         values.append(datetime.now())
