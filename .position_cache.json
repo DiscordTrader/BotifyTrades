@@ -4707,5 +4707,22 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-12T14:47:13.653281"
+  },
+  "ALPACA_PAPER_OPTX_stock": {
+    "entry_price": 6.30014,
+    "highest_price": 6.5673,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-12T15:05:22.516130"
   }
 }
