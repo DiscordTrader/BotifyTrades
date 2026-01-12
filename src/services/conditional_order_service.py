@@ -50,6 +50,7 @@ from gui_app.database import (
     cancel_conditional_order,
     expire_old_conditional_orders,
     get_channel_conditional_settings,
+    is_circuit_breaker_tripped,
 )
 
 
@@ -1020,6 +1021,19 @@ class ConditionalOrderService:
         import sys
         sys.stderr.write(f"[CONDITIONAL] _execute_order called for #{order_id} @ {triggered_price}\n")
         sys.stderr.flush()
+        
+        circuit_status = is_circuit_breaker_tripped()
+        if circuit_status.get('tripped'):
+            reason = circuit_status.get('reason', 'Circuit breaker tripped')
+            sys.stderr.write(f"[CONDITIONAL] ⛔ BLOCKED by circuit breaker: {reason}\n")
+            sys.stderr.flush()
+            update_conditional_order_status(
+                order_id,
+                'BLOCKED',
+                event='CIRCUIT_BREAKER',
+                error_message=f"Trading halted: {reason}"
+            )
+            return
         
         if order_id in self.monitors:
             await self.monitors[order_id].stop()

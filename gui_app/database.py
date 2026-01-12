@@ -8973,6 +8973,67 @@ def log_risk_event(
         return False
 
 
+def is_circuit_breaker_tripped() -> Dict:
+    """
+    Check if circuit breaker is tripped (trading should be halted).
+    
+    Returns dict with:
+    - tripped: bool - whether trading is halted
+    - reason: str - why it was tripped (if applicable)
+    - daily_loss: float - current day's realized loss
+    - limit: float - configured daily loss limit
+    """
+    settings = get_global_risk_settings()
+    
+    if not settings.get('enable_circuit_breaker'):
+        return {'tripped': False, 'reason': None, 'daily_loss': 0, 'limit': 0}
+    
+    daily_loss_limit = settings.get('global_daily_loss_limit', 0)
+    max_positions = settings.get('global_max_positions', 10)
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT COALESCE(SUM(CASE WHEN pnl < 0 THEN pnl ELSE 0 END), 0) as daily_loss
+            FROM signal_instances 
+            WHERE DATE(closed_at) = DATE('now') AND status = 'closed'
+        ''')
+        row = cursor.fetchone()
+        daily_loss = abs(row[0]) if row else 0
+        
+        cursor.execute('''
+            SELECT COUNT(*) FROM signal_instances WHERE status = 'open'
+        ''')
+        open_positions = cursor.fetchone()[0] or 0
+        
+        if daily_loss_limit > 0 and daily_loss >= daily_loss_limit:
+            log_risk_event('CIRCUIT_BREAKER_TRIPPED', source='daily_loss_limit',
+                          details={'daily_loss': daily_loss, 'limit': daily_loss_limit})
+            return {
+                'tripped': True,
+                'reason': f'Daily loss limit exceeded: ${daily_loss:.2f} >= ${daily_loss_limit:.2f}',
+                'daily_loss': daily_loss,
+                'limit': daily_loss_limit
+            }
+        
+        if max_positions > 0 and open_positions >= max_positions:
+            return {
+                'tripped': True,
+                'reason': f'Max positions reached: {open_positions} >= {max_positions}',
+                'daily_loss': daily_loss,
+                'limit': daily_loss_limit,
+                'open_positions': open_positions,
+                'max_positions': max_positions
+            }
+        
+        return {'tripped': False, 'reason': None, 'daily_loss': daily_loss, 'limit': daily_loss_limit}
+    except Exception as e:
+        print(f"[CIRCUIT BREAKER] Error checking status: {e}")
+        return {'tripped': False, 'reason': None, 'error': str(e)}
+
+
 def get_effective_exit_strategy_mode(channel_id: str) -> str:
     """Get effective exit strategy mode (channel override or global default)."""
     conn = get_connection()
