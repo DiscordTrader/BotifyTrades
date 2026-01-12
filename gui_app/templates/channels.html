@@ -1252,141 +1252,117 @@ function renderChannels() {
         const platformIcon = platform === 'telegram' ? '📱' : '💬';
         
         return `
-            <div class="channel-card ${isActive ? '' : 'inactive'}">
-                <div class="channel-card-header">
-                    <div class="channel-info">
-                        <div class="channel-name">
-                            <span class="status-dot ${isActive ? '' : 'inactive'}"></span>
-                            ${platformIcon} ${channel.name}
-                        </div>
-                        <span class="channel-id">${channel.discord_channel_id || channel.telegram_chat_id || ''}</span>
+            <div class="channel-card ${isActive ? '' : 'inactive'}" style="background: linear-gradient(180deg, #141927 0%, #0F1319 100%); border: 1px solid rgba(139,161,199,0.15); box-shadow: 0 8px 32px rgba(0,0,0,0.4);">
+                <!-- Header -->
+                <div class="channel-card-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: rgba(20,25,39,0.8); border-bottom: 1px solid rgba(139,161,199,0.1);">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="status-dot ${isActive ? '' : 'inactive'}" style="width: 6px; height: 6px;"></span>
+                        <span style="font-weight: 600; font-size: 0.85rem; color: #E4E8F0;">${channel.name}</span>
                     </div>
                     <div style="display: flex; gap: 6px; align-items: center;">
-                        <span style="font-size: 11px; padding: 3px 8px; background: rgba(100,100,100,0.3); border-radius: 4px;">${marketEmoji} ${marketLabel}</span>
-                        <span class="channel-mode-badge ${modeClass}">${modeText}</span>
+                        <span style="font-size: 10px; padding: 2px 6px; background: rgba(100,120,150,0.25); border-radius: 3px; color: #8BA1C7;">${marketLabel}</span>
+                        <span class="channel-mode-badge ${modeClass}" style="font-size: 10px; padding: 2px 8px;">${modeText}</span>
                     </div>
                 </div>
                 
-                <div class="channel-controls">
-                    <div class="control-group execute">
-                        <label>
-                            Execute Trades
-                            <label class="toggle-switch">
-                                <input type="checkbox" ${executeEnabled ? 'checked' : ''} 
-                                       onchange="toggleExecute(${channel.id}, this.checked)">
+                <!-- Main Controls Grid -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: rgba(139,161,199,0.08);">
+                    <!-- Execute Panel -->
+                    <div style="background: #0F1319; padding: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: ${executeEnabled ? '#10F0B3' : '#6B7A90'};">Execute</span>
+                            <label class="toggle-switch" style="transform: scale(0.75);">
+                                <input type="checkbox" ${executeEnabled ? 'checked' : ''} onchange="toggleExecute(${channel.id}, this.checked)">
                                 <span class="slider"></span>
                             </label>
-                        </label>
-                        <div class="position-size-input">
-                            <input type="number" 
-                                   value="${channel.position_size_pct || ''}" 
-                                   placeholder="Auto"
-                                   min="0.1" max="100" step="0.1"
-                                   class="exec-input"
-                                   onchange="updatePositionSize(${channel.id}, this.value, 'execution')">
-                            <span>% position</span>
                         </div>
-                        <div class="position-size-input" style="margin-top: 6px;">
-                            <input type="number" 
-                                   value="${channel.default_quantity || ''}" 
-                                   placeholder="Auto"
-                                   min="1" max="1000" step="1"
-                                   class="exec-input"
-                                   onchange="updateDefaultQuantity(${channel.id}, this.value)"
-                                   title="Default quantity when signal has no qty (overrides global default)">
-                            <span>default qty</span>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                            <div>
+                                <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Size %</span>
+                                <input type="number" value="${channel.position_size_pct || ''}" placeholder="—" min="0.1" max="100" step="0.1"
+                                       style="width: 100%; padding: 4px 6px; font-size: 11px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF; margin-top: 2px;"
+                                       onchange="updatePositionSize(${channel.id}, this.value, 'execution')">
+                            </div>
+                            <div>
+                                <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Qty</span>
+                                <input type="number" value="${channel.default_quantity || ''}" placeholder="—" min="1" max="1000" step="1"
+                                       style="width: 100%; padding: 4px 6px; font-size: 11px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF; margin-top: 2px;"
+                                       onchange="updateDefaultQuantity(${channel.id}, this.value)">
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="control-group">
-                        <label>
-                            Track Signals
-                            <label class="toggle-switch">
-                                <input type="checkbox" ${trackEnabled ? 'checked' : ''} 
-                                       onchange="toggleTrack(${channel.id}, this.checked)">
+                    <!-- Track Panel -->
+                    <div style="background: #0F1319; padding: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: ${trackEnabled ? '#10F0B3' : '#6B7A90'};">Track</span>
+                            <label class="toggle-switch" style="transform: scale(0.75);">
+                                <input type="checkbox" ${trackEnabled ? 'checked' : ''} onchange="toggleTrack(${channel.id}, this.checked)">
                                 <span class="slider"></span>
                             </label>
-                        </label>
-                        <div class="position-size-input">
-                            <input type="number" 
-                                   value="${channel.tracking_position_size_pct || ''}" 
-                                   placeholder="Auto"
-                                   min="0.1" max="100" step="0.1"
+                        </div>
+                        <div>
+                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Size %</span>
+                            <input type="number" value="${channel.tracking_position_size_pct || ''}" placeholder="—" min="0.1" max="100" step="0.1"
+                                   style="width: 100%; padding: 4px 6px; font-size: 11px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF; margin-top: 2px;"
                                    onchange="updatePositionSize(${channel.id}, this.value, 'tracking')">
-                            <span>% position</span>
-                        </div>
-                    </div>
-                    
-                    <div style="display: flex; gap: 12px; margin-top: 12px;">
-                        <div style="flex: 1;">
-                            <label style="font-size: 0.75rem; color: var(--text-secondary);">Exit Strategy</label>
-                            <select class="exec-input" style="width: 100%; padding: 5px 8px; margin-top: 2px; font-size: 0.8rem;"
-                                    onchange="updateExitStrategy(${channel.id}, this.value)"
-                                    title="How to handle exits: follow trader signals, use automated risk management, or both">
-                                <option value="signal" ${(channel.exit_strategy_mode || 'signal') === 'signal' ? 'selected' : ''}>Signal</option>
-                                <option value="risk" ${channel.exit_strategy_mode === 'risk' ? 'selected' : ''}>Risk</option>
-                                <option value="hybrid" ${channel.exit_strategy_mode === 'hybrid' ? 'selected' : ''}>Hybrid</option>
-                            </select>
-                        </div>
-                        <div style="flex: 1; display: flex; flex-direction: column; align-items: flex-end;">
-                            <label style="font-size: 0.75rem; color: var(--text-secondary);">Auto SL/PT</label>
-                            <label class="toggle-switch" style="margin-top: 4px;">
-                                <input type="checkbox" ${channel.signal_update_automation ? 'checked' : ''} 
-                                       onchange="updateSignalUpdateAutomation(${channel.id}, this.checked)"
-                                       title="Auto-update broker orders when trader edits signal (C1apped/WaxUI)">
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <div style="display: flex; gap: 12px; margin-top: 10px;">
-                        <div style="flex: 1;">
-                            <label style="font-size: 0.7rem; color: var(--text-secondary);">Timeout</label>
-                            <div style="display: flex; align-items: center; gap: 4px; margin-top: 2px;">
-                                <input type="number" class="exec-input"
-                                       value="${channel.order_timeout_minutes || ''}" 
-                                       placeholder="∞"
-                                       min="1" max="1440" step="1"
-                                       style="width: 50px; padding: 4px 6px; font-size: 0.8rem;"
-                                       onchange="updateOrderTimeout(${channel.id}, this.value)"
-                                       title="Minutes until unfilled orders are canceled">
-                                <span style="font-size: 0.7rem; color: var(--text-muted);">min</span>
-                            </div>
-                        </div>
-                        <div style="flex: 1; display: flex; flex-direction: column;">
-                            <div style="display: flex; align-items: center; gap: 6px;">
-                                <label style="font-size: 0.7rem; color: var(--text-secondary);">Slippage</label>
-                                <label class="toggle-switch" style="transform: scale(0.85);">
-                                    <input type="checkbox" ${channel.slippage_protection_enabled ? 'checked' : ''} 
-                                           onchange="updateSlippageProtection(${channel.id}, this.checked, null)"
-                                           title="Reject orders when signal price differs too much from market">
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 4px; margin-top: 2px;">
-                                <input type="number" class="exec-input"
-                                       id="slippage-max-${channel.id}"
-                                       value="${channel.slippage_max_pct || ''}" 
-                                       placeholder="50"
-                                       min="1" max="500" step="1"
-                                       style="width: 50px; padding: 4px 6px; font-size: 0.8rem;"
-                                       ${channel.slippage_protection_enabled ? '' : 'disabled'}
-                                       onchange="updateSlippageProtection(${channel.id}, null, this.value)"
-                                       title="Max % deviation from market price">
-                                <span style="font-size: 0.7rem; color: var(--text-muted);">%</span>
-                            </div>
                         </div>
                     </div>
                 </div>
                 
-                <div class="channel-footer">
-                    <button class="user-filter-btn" onclick="openUserModal(${channel.id}, '${channel.name}')">
-                        👥 Users
-                        <span class="user-count ${userCount > 0 ? '' : 'all'}">${userCount > 0 ? userCount : 'All'}</span>
+                <!-- Risk Controls Row -->
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: rgba(139,161,199,0.08); border-top: 1px solid rgba(139,161,199,0.08);">
+                    <div style="background: #0F1319; padding: 8px 10px;">
+                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">Exit Mode</span>
+                        <select style="width: 100%; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
+                                onchange="updateExitStrategy(${channel.id}, this.value)">
+                            <option value="signal" ${(channel.exit_strategy_mode || 'signal') === 'signal' ? 'selected' : ''}>Signal</option>
+                            <option value="risk" ${channel.exit_strategy_mode === 'risk' ? 'selected' : ''}>Risk</option>
+                            <option value="hybrid" ${channel.exit_strategy_mode === 'hybrid' ? 'selected' : ''}>Hybrid</option>
+                        </select>
+                    </div>
+                    <div style="background: #0F1319; padding: 8px 10px; display: flex; flex-direction: column; align-items: center;">
+                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; margin-bottom: 4px;">Auto SL</span>
+                        <label class="toggle-switch" style="transform: scale(0.7);">
+                            <input type="checkbox" ${channel.signal_update_automation ? 'checked' : ''} 
+                                   onchange="updateSignalUpdateAutomation(${channel.id}, this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div style="background: #0F1319; padding: 8px 10px;">
+                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">Timeout</span>
+                        <div style="display: flex; align-items: center; gap: 3px;">
+                            <input type="number" value="${channel.order_timeout_minutes || ''}" placeholder="∞" min="1" max="1440" step="1"
+                                   style="width: 40px; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
+                                   onchange="updateOrderTimeout(${channel.id}, this.value)">
+                            <span style="font-size: 9px; color: #6B7A90;">m</span>
+                        </div>
+                    </div>
+                    <div style="background: #0F1319; padding: 8px 10px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Slip</span>
+                            <label class="toggle-switch" style="transform: scale(0.6);">
+                                <input type="checkbox" ${channel.slippage_protection_enabled ? 'checked' : ''} 
+                                       onchange="updateSlippageProtection(${channel.id}, this.checked, null)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 3px;">
+                            <input type="number" id="slippage-max-${channel.id}" value="${channel.slippage_max_pct || ''}" placeholder="50" min="1" max="500" step="1"
+                                   style="width: 40px; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
+                                   ${channel.slippage_protection_enabled ? '' : 'disabled'}
+                                   onchange="updateSlippageProtection(${channel.id}, null, this.value)">
+                            <span style="font-size: 9px; color: #6B7A90;">%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Footer -->
+                <div style="display: flex; justify-content: space-between; padding: 8px 12px; background: rgba(15,19,25,0.6); border-top: 1px solid rgba(139,161,199,0.08);">
+                    <button onclick="openUserModal(${channel.id}, '${channel.name}')" style="font-size: 10px; padding: 4px 10px; background: rgba(139,161,199,0.1); border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #8BA1C7; cursor: pointer;">
+                        Users <span style="background: rgba(16,240,179,0.15); color: #10F0B3; padding: 1px 5px; border-radius: 2px; margin-left: 4px; font-size: 9px;">${userCount > 0 ? userCount : 'All'}</span>
                     </button>
-                    <button class="delete-btn" onclick="deleteChannel(${channel.id})">
-                        🗑️ Delete
-                    </button>
+                    <button onclick="deleteChannel(${channel.id})" style="font-size: 10px; padding: 4px 10px; background: rgba(255,82,82,0.1); border: 1px solid rgba(255,82,82,0.2); border-radius: 3px; color: #FF5252; cursor: pointer;">Delete</button>
                 </div>
             </div>
         `;
