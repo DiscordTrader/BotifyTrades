@@ -10236,6 +10236,33 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 except Exception as le:
                                                     _original_print(f"[RISK] ⚠️ Lot matching warning: {le}")
                                                 
+                                                # Record execution closure with correct exit_source
+                                                try:
+                                                    from gui_app.database import record_execution_closure_atomic, map_risk_trigger_to_exit_source
+                                                    
+                                                    risk_trigger = signal.get('risk_trigger', '')
+                                                    tier = signal.get('_tier_to_mark')
+                                                    exit_source = map_risk_trigger_to_exit_source(risk_trigger, tier)
+                                                    
+                                                    closure_id, pnl = record_execution_closure_atomic(
+                                                        broker='ALPACA_PAPER',
+                                                        symbol=signal['symbol'],
+                                                        asset_type=signal['asset'],
+                                                        closed_qty=signal['qty'],
+                                                        fill_price=signal.get('price', 0),
+                                                        filled_at=datetime.now().isoformat(),
+                                                        exit_source=exit_source,
+                                                        strike=signal.get('strike'),
+                                                        expiry=signal.get('expiry'),
+                                                        call_put=signal.get('opt_type'),
+                                                        broker_order_id=str(result.order_id) if result.order_id else None,
+                                                        channel_id=str(signal['channel_id'])
+                                                    )
+                                                    if closure_id:
+                                                        _original_print(f"[RISK] ✓ Execution closure #{closure_id} recorded with exit_source={exit_source}")
+                                                except Exception as ec_error:
+                                                    _original_print(f"[RISK] ⚠️ Execution closure warning: {ec_error}")
+                                                
                                             except Exception as db_error:
                                                 _original_print(f"[RISK] ⚠️ Database save warning: {db_error}")
                                         elif DATABASE_MODULE_AVAILABLE:
