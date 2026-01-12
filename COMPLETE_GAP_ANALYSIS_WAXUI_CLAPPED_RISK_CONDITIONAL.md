@@ -871,6 +871,331 @@ async def modify_sl_order(
 
 ---
 
+## 🖥️ UI/UX ARCHITECTURE & CONFIGURATION
+
+### Two-Tier Configuration Model
+
+The system uses a **Global + Per-Channel Override** model:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    GLOBAL DEFAULTS                            │
+│              (/risk-management page)                          │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │ Signal Update Automation: OFF (default)                 │ │
+│  │ Exit Strategy Mode: SIGNAL (default)                    │ │
+│  │ Circuit Breaker: OFF (default)                          │ │
+│  │ Trailing Stop Execution: OFF (default)                  │ │
+│  │ Daily Loss Limit: $0 (disabled)                         │ │
+│  └─────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌──────────────────────────────────────────────────────────────┐
+│               PER-CHANNEL OVERRIDES                           │
+│            (Channel detail modal)                             │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │ □ Use Global Settings (checked = inherit)               │ │
+│  │ ─────────────────────────────────────────────────────── │ │
+│  │ Signal Update Automation: [Inherit/On/Off]              │ │
+│  │ Exit Strategy Mode: [Inherit/Signal/Risk/Hybrid]        │ │
+│  │ Channel-specific Daily Loss Limit: $___                 │ │
+│  └─────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Global vs Per-Channel Matrix
+
+| Setting | Global Location | Per-Channel Override | Default | Architect Recommendation |
+|---------|-----------------|---------------------|---------|-------------------------|
+| **Signal Update Automation** | /risk-management | ✅ Yes | **OFF** | OFF - Major behavior change |
+| **Exit Strategy Mode** | /risk-management | ✅ Yes | **SIGNAL** | SIGNAL - Safest, follows trader |
+| **Circuit Breaker** | /risk-management | ✅ Yes | **OFF** | OFF initially, prompt to enable |
+| **Trailing Stop Execution** | /risk-management | ✅ Yes | **OFF** | OFF - Must opt-in |
+| **Daily Loss Limit** | /risk-management | ✅ Yes | **$0 (disabled)** | Disabled, per-channel override |
+| **Max Positions** | /risk-management | ✅ Yes | **10** | Sensible default |
+| **Order Timeout** | /risk-management | ❌ Global only | **5 min** | Global is sufficient |
+
+### Default Value Recommendations
+
+| Feature | Default | Reason |
+|---------|---------|--------|
+| **on_message_edit handling** | **OFF** | Major behavior change - user must explicitly enable |
+| **Exit Strategy Mode** | **SIGNAL** | Safest: follows trader signals exactly |
+| **Circuit Breaker** | **OFF** | Show setup wizard prompt to enable |
+| **Trailing Stop Execution** | **OFF** | Requires understanding - must opt-in |
+| **Daily Loss Limit** | **$0 (disabled)** | User sets based on risk tolerance |
+
+### UI Placement Recommendations
+
+#### 1. Global Risk Management Page (`/risk-management`)
+
+Add new card: **"Signal Update Automation"**
+
+```html
+<!-- File: gui_app/templates/risk_management.html -->
+
+<div class="card bg-dark mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">
+      <i class="fas fa-sync-alt me-2"></i>Signal Update Automation
+      <span class="badge bg-warning ms-2">NEW</span>
+    </h5>
+    <div class="form-check form-switch">
+      <input class="form-check-input" type="checkbox" id="enableSignalUpdateAutomation"
+             {{ 'checked' if settings.enable_signal_update_automation else '' }}>
+      <label class="form-check-label" for="enableSignalUpdateAutomation">Enable</label>
+    </div>
+  </div>
+  <div class="card-body">
+    <p class="text-muted mb-3">
+      When enabled, the bot will automatically detect when traders <strong>edit their signals</strong> 
+      (like C1apped updating stop loss or marking targets as hit) and update your broker orders accordingly.
+    </p>
+    
+    <div class="alert alert-info">
+      <i class="fas fa-info-circle me-2"></i>
+      <strong>What this does:</strong>
+      <ul class="mb-0 mt-2">
+        <li>Detects when trader raises stop loss → Updates your broker stop loss</li>
+        <li>Detects when profit targets are hit (strikethrough) → Triggers partial exits</li>
+        <li>Detects "All out" exit signals → Closes your position</li>
+      </ul>
+    </div>
+    
+    <div class="alert alert-warning" id="signalAutomationWarning" style="display: none;">
+      <i class="fas fa-exclamation-triangle me-2"></i>
+      <strong>Warning:</strong> This will automatically modify your broker orders when signals are edited.
+      Test with paper trading first!
+    </div>
+  </div>
+</div>
+```
+
+#### 2. Exit Strategy Mode Selector
+
+```html
+<!-- Add to both /risk-management and channel detail modal -->
+
+<div class="mb-4">
+  <label class="form-label">
+    <i class="fas fa-door-open me-2"></i>Exit Strategy Mode
+  </label>
+  
+  <div class="btn-group w-100" role="group">
+    <input type="radio" class="btn-check" name="exitStrategyMode" id="exitModeSignal" value="signal"
+           {{ 'checked' if settings.exit_strategy_mode == 'signal' else '' }}>
+    <label class="btn btn-outline-primary" for="exitModeSignal">
+      <i class="fas fa-bullhorn me-1"></i> Signal
+    </label>
+    
+    <input type="radio" class="btn-check" name="exitStrategyMode" id="exitModeRisk" value="risk"
+           {{ 'checked' if settings.exit_strategy_mode == 'risk' else '' }}>
+    <label class="btn btn-outline-warning" for="exitModeRisk">
+      <i class="fas fa-shield-alt me-1"></i> Risk
+    </label>
+    
+    <input type="radio" class="btn-check" name="exitStrategyMode" id="exitModeHybrid" value="hybrid"
+           {{ 'checked' if settings.exit_strategy_mode == 'hybrid' else '' }}>
+    <label class="btn btn-outline-success" for="exitModeHybrid">
+      <i class="fas fa-balance-scale me-1"></i> Hybrid
+    </label>
+  </div>
+  
+  <div class="mt-2">
+    <small class="text-muted" id="exitModeDescription">
+      <!-- Updated dynamically based on selection -->
+    </small>
+  </div>
+</div>
+
+<script>
+const exitModeDescriptions = {
+  'signal': '📢 <strong>Signal Mode:</strong> Exits follow the trader exactly. Stop loss and profit targets come from signal only.',
+  'risk': '🛡️ <strong>Risk Mode:</strong> Exits follow your channel settings. Trailing stop and channel profit targets override signal.',
+  'hybrid': '⚖️ <strong>Hybrid Mode:</strong> Uses the TIGHTER protection. If trader sets SL at $1.19 but your trailing stop is at $1.22, uses $1.22.'
+};
+
+document.querySelectorAll('input[name="exitStrategyMode"]').forEach(radio => {
+  radio.addEventListener('change', function() {
+    document.getElementById('exitModeDescription').innerHTML = exitModeDescriptions[this.value];
+  });
+});
+</script>
+```
+
+#### 3. Per-Channel Override in Channel Modal
+
+```html
+<!-- File: gui_app/templates/channel_modal.html (or similar) -->
+
+<div class="accordion-item">
+  <h2 class="accordion-header">
+    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+            data-bs-target="#advancedRiskSettings">
+      <i class="fas fa-cog me-2"></i> Advanced Risk Settings
+    </button>
+  </h2>
+  <div id="advancedRiskSettings" class="accordion-collapse collapse">
+    <div class="accordion-body">
+      
+      <!-- Inherit from Global Toggle -->
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" id="useGlobalRiskSettings" checked>
+        <label class="form-check-label" for="useGlobalRiskSettings">
+          <strong>Use Global Risk Settings</strong>
+          <small class="text-muted d-block">Uncheck to customize for this channel only</small>
+        </label>
+      </div>
+      
+      <div id="channelOverrideSettings" style="display: none;">
+        <hr>
+        
+        <!-- Signal Update Automation Override -->
+        <div class="mb-3">
+          <label class="form-label">Signal Update Automation</label>
+          <select class="form-select" name="signal_update_automation_override">
+            <option value="inherit">Inherit from Global</option>
+            <option value="on">Enabled for this channel</option>
+            <option value="off">Disabled for this channel</option>
+          </select>
+        </div>
+        
+        <!-- Exit Strategy Mode Override -->
+        <div class="mb-3">
+          <label class="form-label">Exit Strategy Mode</label>
+          <select class="form-select" name="exit_strategy_mode_override">
+            <option value="inherit">Inherit from Global</option>
+            <option value="signal">Signal (follow trader)</option>
+            <option value="risk">Risk (follow channel settings)</option>
+            <option value="hybrid">Hybrid (tightest protection)</option>
+          </select>
+        </div>
+        
+        <!-- Channel-specific Daily Loss Limit -->
+        <div class="mb-3">
+          <label class="form-label">Daily Loss Limit (this channel only)</label>
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input type="number" class="form-control" name="channel_daily_loss_limit" 
+                   placeholder="0 = use global">
+          </div>
+          <small class="text-muted">Set to 0 to use global limit</small>
+        </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('useGlobalRiskSettings').addEventListener('change', function() {
+  document.getElementById('channelOverrideSettings').style.display = this.checked ? 'none' : 'block';
+});
+</script>
+```
+
+### User-Friendly Mode Explanations
+
+| Mode | Icon | Simple Explanation | When to Use |
+|------|------|-------------------|-------------|
+| **Signal** | 📢 | "Follow the trader exactly" | Trust the trader's exits completely |
+| **Risk** | 🛡️ | "Use your own risk settings" | You have your own exit strategy |
+| **Hybrid** | ⚖️ | "Use whichever protects you more" | Best of both - never less protected |
+
+### Confirmation Dialogs
+
+```javascript
+// When enabling Signal Update Automation
+function enableSignalAutomation() {
+  return confirm(
+    "⚠️ Signal Update Automation\n\n" +
+    "This will automatically update your broker orders when traders edit their signals.\n\n" +
+    "What will happen:\n" +
+    "• Stop loss changes → Your broker SL updated\n" +
+    "• Target hit → Partial position sold\n" +
+    "• Exit signal → Position closed\n\n" +
+    "Recommendation: Test with paper trading first!\n\n" +
+    "Enable Signal Update Automation?"
+  );
+}
+
+// When switching to Hybrid mode
+function switchToHybridMode() {
+  return confirm(
+    "⚖️ Hybrid Mode\n\n" +
+    "In Hybrid mode:\n" +
+    "• Uses the TIGHTER stop loss between signal and your settings\n" +
+    "• Stop loss can only move UP (more protection), never down\n" +
+    "• Trailing stop can override signal if it provides better protection\n\n" +
+    "This provides maximum protection but may exit earlier than the trader.\n\n" +
+    "Switch to Hybrid Mode?"
+  );
+}
+```
+
+### Database Schema for Settings
+
+```python
+# File: gui_app/database.py - Global settings table
+
+global_risk_settings_columns = [
+    ('enable_signal_update_automation', 'INTEGER DEFAULT 0'),  # OFF by default
+    ('exit_strategy_mode', "TEXT DEFAULT 'signal'"),  # signal, risk, hybrid
+    ('enable_circuit_breaker', 'INTEGER DEFAULT 0'),  # OFF by default
+    ('enable_trailing_execution', 'INTEGER DEFAULT 0'),  # OFF by default
+    ('global_daily_loss_limit', 'REAL DEFAULT 0'),  # 0 = disabled
+    ('global_max_positions', 'INTEGER DEFAULT 10'),
+    ('order_timeout_minutes', 'INTEGER DEFAULT 5'),
+]
+
+# Per-channel override columns (add to channels table)
+channel_override_columns = [
+    ('use_global_risk_settings', 'INTEGER DEFAULT 1'),  # 1 = inherit from global
+    ('signal_update_automation_override', "TEXT DEFAULT 'inherit'"),  # inherit, on, off
+    ('exit_strategy_mode_override', "TEXT DEFAULT 'inherit'"),  # inherit, signal, risk, hybrid
+    ('channel_daily_loss_limit', 'REAL DEFAULT 0'),  # 0 = use global
+]
+```
+
+### Feature Flag Rollout Strategy
+
+| Phase | Users | Features Enabled | Duration |
+|-------|-------|------------------|----------|
+| **Phase 1** | Beta testers only | All features, paper trading only | 1 week |
+| **Phase 2** | Opt-in users | All features, live trading allowed | 2 weeks |
+| **Phase 3** | All new users | Defaults OFF, prompt to configure | Ongoing |
+| **Phase 4** | Existing users | Grandfathered with all OFF, nag to enable | Ongoing |
+
+### Grandfather Strategy for Existing Users
+
+```python
+# When user first accesses new risk management page after upgrade
+
+def check_upgrade_needed(user_id: int) -> bool:
+    """Check if user needs to acknowledge new features."""
+    settings = get_global_risk_settings(user_id)
+    return settings.get('acknowledged_v2_features') != True
+
+def show_upgrade_banner():
+    """Show banner explaining new features."""
+    return """
+    <div class="alert alert-info alert-dismissible">
+      <h5>🎉 New Risk Management Features Available!</h5>
+      <p>We've added powerful new automation features:</p>
+      <ul>
+        <li><strong>Signal Update Automation</strong> - Auto-update broker orders when traders edit signals</li>
+        <li><strong>Exit Strategy Modes</strong> - Choose between Signal, Risk, or Hybrid exits</li>
+        <li><strong>Circuit Breaker</strong> - Emergency kill switch for all trading</li>
+      </ul>
+      <p>All new features are <strong>disabled by default</strong>. Enable them when you're ready!</p>
+      <button class="btn btn-primary" onclick="acknowledgeUpgrade()">Got it!</button>
+    </div>
+    """
+```
+
+---
+
 ## 1. WAXUI SIGNAL FORMAT - COMPLETE GAP ANALYSIS
 
 ### Current WaxUI Parsing (What Works)
