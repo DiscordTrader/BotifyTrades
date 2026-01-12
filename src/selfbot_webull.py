@@ -7181,16 +7181,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         """
         Handle Discord message edits - CRITICAL for C1apped signal updates.
         
-        C1apped-style signals use embed EDITs to update SL/PT in real-time:
-        - Original entry message is posted with initial SL/PT
-        - Trader EDITS the same message to adjust SL (move to breakeven, tighten, etc.)
-        - We must detect these edits and update broker orders accordingly
+        C1apped-style TRADE IDEA signals use embed EDITs to update SL/PT in real-time:
+        - Original entry: TRADE IDEA with Ticker, Entry, Levels, SL
+        - EDIT: Trader updates SL (move to breakeven, tighten)
+        - EDIT: Trader strikes through hit profit levels (~~1.26~~ - 1.29)
+        - EDIT: "All out" / "Closed" indicates full exit
         
         This handler:
         1. Checks if the edited message is an open signal instance
-        2. Parses the new embed for updated SL/PT values
-        3. Routes through ExitOrderArbiter for precedence checks
-        4. Updates broker orders via SignalExitManager
+        2. Uses TRADE IDEA parser for proper C1apped format parsing
+        3. Detects SL changes, hit levels (strikethrough), and exits
+        4. Routes through ExitOrderArbiter for precedence checks
+        5. Updates broker orders via SignalExitManager with audit logging
         """
         if not DATABASE_MODULE_AVAILABLE:
             return
@@ -7228,30 +7230,115 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             new_sl = None
             new_pts = []
+            hit_levels = []
+            is_exit = False
             
-            import re
-            sl_patterns = [
-                r'[Ss]top\s*[Ll]oss[:\s]*\$?([\d.]+)',
-                r'SL[:\s]*\$?([\d.]+)',
-                r'[Ss]top[:\s]*\$?([\d.]+)',
-            ]
-            for pattern in sl_patterns:
-                match = re.search(pattern, combined_content)
-                if match:
-                    new_sl = float(match.group(1))
-                    break
+            try:
+                from src.signals.parser import parse_trade_idea, is_trade_idea_signal
+                
+                if is_trade_idea_signal(combined_content):
+                    parsed = parse_trade_idea(combined_content)
+                    if parsed:
+                        new_sl = parsed.get('stop_loss')
+                        new_pts = parsed.get('profit_targets', [])
+                        hit_levels = parsed.get('hit_levels', [])
+                        is_exit = parsed.get('is_exit', False)
+                        print(f"[OMS EDIT] C1apped TRADE IDEA parsed: SL=${new_sl}, "
+                              f"PTs={new_pts}, hit={hit_levels}, exit={is_exit}")
+            except ImportError:
+                pass
             
-            pt_pattern = r'[Pp]rofit\s*[Tt]arget[s]?[:\s]*([\d.\s,]+)'
-            pt_match = re.search(pt_pattern, combined_content)
-            if pt_match:
-                pt_values = re.findall(r'[\d.]+', pt_match.group(1))
-                new_pts = [float(v) for v in pt_values[:4]]
+            if new_sl is None:
+                import re
+                sl_patterns = [
+                    r'(?:⛔\s*)?(?:SL|Stop\s*Loss|Stop)[:\s]*\$?([\d.]+)',
+                    r'[Ss]top\s*[Ll]oss[:\s]*\$?([\d.]+)',
+                ]
+                for pattern in sl_patterns:
+                    match = re.search(pattern, combined_content, re.IGNORECASE)
+                    if match:
+                        new_sl = float(match.group(1))
+                        break
             
             current_sl = instance.get('current_sl') or instance.get('stop_loss')
+            current_hit_count = instance.get('hit_level_count', 0)
+            
+            exit_mode = db.get_effective_exit_strategy_mode(str(after.channel.id))
+            
+            if is_exit:
+                try:
+                    from src.services.exit_order_arbiter import exit_order_arbiter
+                    from src.services.signal_exit_manager import signal_exit_manager
+                    
+                    arbiter_result = await exit_order_arbiter.request_exit(
+                        signal_instance_id=instance['id'],
+                        source='signal',
+                        exit_type='signal_close',
+                        exit_strategy_mode=exit_mode,
+                        reason='C1apped signal edited to ALL OUT/CLOSED'
+                    )
+                    
+                    if arbiter_result.get('approved'):
+                        db.log_risk_event(
+                            event_type='FULL_EXIT',
+                            signal_instance_id=instance['id'],
+                            channel_id=str(after.channel.id),
+                            source='signal_edit',
+                            details={'message_id': str(after.id), 'exit_type': 'signal_close'}
+                        )
+                        
+                        await signal_exit_manager.handle_exit_signal(
+                            signal_instance_id=instance['id'],
+                            exit_type='signal_close',
+                            reason='C1apped ALL OUT signal',
+                            source='signal'
+                        )
+                        
+                        db.update_signal_instance_oms(instance['id'], {
+                            'exit_processed': 1,
+                            'exit_source': 'signal_edit',
+                            'last_message_id': str(after.id)
+                        })
+                        db.close_signal_instance(instance_id=instance['id'], close_reason='signal_exit')
+                        print(f"[OMS EDIT] ✓ FULL EXIT processed for {instance.get('ticker')}")
+                        return
+                        
+                except ImportError as ie:
+                    print(f"[OMS EDIT] ⚠️ OMS services not available: {ie}")
+            
+            if hit_levels and len(hit_levels) > current_hit_count:
+                new_hits = len(hit_levels) - current_hit_count
+                print(f"[OMS EDIT] Detected {new_hits} new PT hit(s): {hit_levels}")
+                
+                try:
+                    from src.services.signal_exit_manager import signal_exit_manager
+                    
+                    for i in range(current_hit_count, len(hit_levels)):
+                        db.log_risk_event(
+                            event_type='PT_HIT',
+                            signal_instance_id=instance['id'],
+                            channel_id=str(after.channel.id),
+                            source='signal_edit',
+                            details={'pt_level': i + 1, 'pt_price': hit_levels[i]}
+                        )
+                        
+                        await signal_exit_manager.handle_pt_hit(
+                            signal_instance_id=instance['id'],
+                            hit_level_index=i + 1,
+                            current_price=hit_levels[i]
+                        )
+                    
+                    db.update_signal_instance_oms(instance['id'], {
+                        'hit_level_count': len(hit_levels)
+                    })
+                    print(f"[OMS EDIT] ✓ Processed {new_hits} PT hit(s)")
+                    
+                except ImportError as ie:
+                    db.update_signal_instance_oms(instance['id'], {
+                        'hit_level_count': len(hit_levels)
+                    })
             
             if new_sl and current_sl and abs(new_sl - current_sl) > 0.001:
-                exit_mode = db.get_effective_exit_strategy_mode(str(after.channel.id))
-                
                 try:
                     from src.services.exit_order_arbiter import exit_order_arbiter
                     from src.services.signal_exit_manager import signal_exit_manager
