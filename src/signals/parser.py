@@ -256,7 +256,7 @@ TRADE_IDEA_LEVELS_PATTERN = re.compile(
     re.IGNORECASE
 )
 TRADE_IDEA_SL_PATTERN = re.compile(
-    r'(?:⛔\s*)?(?:SL|Stop\s*Loss|Stop):\s*\$?([\d.]+)',
+    r'(?:⛔\s*)?(?:SL|Stop\s*Loss|Stop):\s*\$?([\d.]+|B/?E|BE|BREAK\s*EVEN)',
     re.IGNORECASE
 )
 
@@ -388,7 +388,18 @@ def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
     ticker = ticker_match.group(1).upper()
     entry_price = float(entry_match.group(1))
     
-    stop_loss = float(sl_match.group(1)) if sl_match else None
+    stop_loss = None
+    is_breakeven = False
+    if sl_match:
+        sl_value = sl_match.group(1).strip().upper()
+        if sl_value in ('B/E', 'BE', 'BREAKEVEN', 'BREAK EVEN'):
+            stop_loss = entry_price
+            is_breakeven = True
+        else:
+            try:
+                stop_loss = float(sl_value)
+            except ValueError:
+                stop_loss = None
     
     profit_targets = []
     hit_levels = []
@@ -411,7 +422,7 @@ def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
                 pending_levels.append(level_value)
     
     is_exit = 'all out' in text.lower() or 'closed' in text.lower() or 'exited' in text.lower()
-    is_update = len(hit_levels) > 0 or 'raised' in text.lower() or 'moved' in text.lower()
+    is_update = len(hit_levels) > 0 or is_breakeven or 'raised' in text.lower() or 'moved' in text.lower()
     
     signal_type = 'exit' if is_exit else ('update' if is_update else 'entry')
     
@@ -422,6 +433,7 @@ def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
         'entry_price': entry_price,
         'price': entry_price,
         'stop_loss': stop_loss,
+        'is_breakeven': is_breakeven,
         'profit_targets': profit_targets,
         'hit_levels': hit_levels,
         'pending_levels': pending_levels,
@@ -436,10 +448,11 @@ def parse_trade_idea(text: str) -> Optional[Dict[str, Any]]:
         '_trade_idea': True,
     }
     
+    be_str = " [B/E]" if is_breakeven else ""
     hit_str = f", HIT={hit_levels}" if hit_levels else ""
     pending_str = f", PENDING={pending_levels}" if pending_levels else ""
     type_str = f" [{signal_type.upper()}]" if signal_type != 'entry' else ""
-    print(f"[TRADE IDEA] ✓ Parsed: {ticker} @ {entry_price}, SL={stop_loss}{hit_str}{pending_str}{type_str}")
+    print(f"[TRADE IDEA] ✓ Parsed: {ticker} @ {entry_price}, SL={stop_loss}{be_str}{hit_str}{pending_str}{type_str}")
     return result
 
 

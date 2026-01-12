@@ -8658,13 +8658,13 @@ def create_signal_instance(
         cursor.execute('''
             INSERT INTO signal_instances 
             (channel_id, ticker, entry_price, direction, quantity, remaining_qty, author_id, author_name, fingerprint, 
-             first_message_id, last_message_id, stop_loss, profit_targets, ttl_hours)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             first_message_id, last_message_id, discord_message_id, original_sl, current_sl, stop_loss, profit_targets, ttl_hours)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             str(channel_id), ticker.upper(), entry_price, direction.upper(),
             quantity, quantity,
-            author_id, author_name, fingerprint, message_id, message_id,
-            stop_loss, targets_json, ttl_hours
+            author_id, author_name, fingerprint, message_id, message_id, message_id,
+            stop_loss, stop_loss, stop_loss, targets_json, ttl_hours
         ))
         conn.commit()
         print(f"[DEDUPE] ✓ Created signal instance: {ticker} @ {entry_price} x{quantity} (fingerprint: {fingerprint})")
