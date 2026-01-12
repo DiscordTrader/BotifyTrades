@@ -4727,7 +4727,7 @@
   },
   "ALPACA_PAPER_IWM_259.0_2026-01-12_C": {
     "entry_price": 0.51,
-    "highest_price": 0.54,
+    "highest_price": 0.7,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
