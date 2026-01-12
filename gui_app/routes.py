@@ -5691,6 +5691,31 @@ def register_routes(app):
                 except Exception as e:
                     print(f"[API] Error fetching Alpaca positions: {e}")
             
+            # Fetch Robinhood positions if broker filter is ROBINHOOD or no filter
+            robinhood_positions = []
+            if not broker_filter_upper or broker_filter_upper == 'ROBINHOOD':
+                try:
+                    if hasattr(_bot_instance, 'robinhood_broker') and _bot_instance.robinhood_broker:
+                        rh_broker = _bot_instance.robinhood_broker
+                        rh_raw_positions = rh_broker.get_all_positions()
+                        for pos in rh_raw_positions:
+                            robinhood_positions.append({
+                                'symbol': pos.get('symbol', ''),
+                                'quantity': float(pos.get('quantity', 0)),
+                                'avg_cost': float(pos.get('avg_price') or pos.get('average_buy_price') or 0),
+                                'current_price': float(pos.get('current_price', 0)),
+                                'unrealized_pl': float(pos.get('unrealized_pnl', 0)),
+                                'asset': pos.get('asset_type') or pos.get('type', 'stock'),
+                                'strike': pos.get('strike_price'),
+                                'expiry': pos.get('expiration_date'),
+                                'call_put': pos.get('option_type', '').upper()[:1] if pos.get('option_type') else None,
+                                'broker': 'ROBINHOOD'
+                            })
+                        # Add Robinhood positions to live_positions for unified processing
+                        live_positions.extend(robinhood_positions)
+                except Exception as e:
+                    print(f"[API] Error fetching Robinhood positions: {e}")
+            
             # Create order_id -> status mapping for quick lookup
             order_status_map = {order['order_id']: order['status'] for order in webull_orders}
             
@@ -5766,6 +5791,26 @@ def register_routes(app):
             
             # Process each position group and enrich with source_display
             for pos_key, trades in position_groups.items():
+                # DEDUPLICATION: Sort trades to prefer discord source over sync
+                # Priority: discord > sync_discord > sync (stale entries without order_id)
+                def trade_priority(t):
+                    source = (t.get('source') or '').lower()
+                    has_order_id = bool(t.get('order_id'))
+                    if source == 'discord' and has_order_id:
+                        return 0  # Highest priority
+                    elif source == 'sync_discord' and has_order_id:
+                        return 1
+                    elif source == 'discord':
+                        return 2
+                    elif source == 'sync_discord':
+                        return 3
+                    elif source == 'sync' and has_order_id:
+                        return 4
+                    else:
+                        return 5  # Lowest priority (stale sync without order_id)
+                
+                trades = sorted(trades, key=trade_priority)
+                
                 # Enrich trades with source_display for UI badges
                 for trade in trades:
                     trade['source_display'] = db.get_trade_source_display(trade)
@@ -5777,7 +5822,8 @@ def register_routes(app):
                 if has_live_position:
                     # CONSOLIDATE: Show single row with LIVE broker quantity and current price
                     live_pos = live_position_map[pos_key]
-                    first_trade = trades[0]  # Use first trade for metadata
+                    # Use best trade (sorted by priority) for metadata
+                    first_trade = trades[0]
                     
                     # Use broker's avg_cost as authoritative source for live positions
                     # Broker tracks ALL orders including those made outside this bot
