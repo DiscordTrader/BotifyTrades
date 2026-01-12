@@ -8244,6 +8244,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[DEDUPE] ✓ New signal instance created: {ticker} @ {entry_price} (ID: {instance_id})")
                     # Convert to stock signal format for processing
                     india_stock_signal = trade_idea
+                    # Add bracket order fields for execution (SL/PT from signal)
+                    if stop_loss:
+                        india_stock_signal['stop_loss_price'] = stop_loss
+                    if profit_targets and len(profit_targets) > 0:
+                        india_stock_signal['profit_target_price'] = profit_targets[0]  # Use first target
+                    if stop_loss or profit_targets:
+                        print(f"[TRADE IDEA] ✓ Bracket order enabled: SL=${stop_loss}, PT1=${profit_targets[0] if profit_targets else 'None'}")
                 else:
                     # Failed to create (duplicate or error), skip
                     return
