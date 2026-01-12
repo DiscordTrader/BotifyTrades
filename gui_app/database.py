@@ -503,6 +503,24 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added per-channel slippage protection columns")
     
+    # ============================================
+    # OMS/RMS COLUMNS - Signal Update Automation & Risk Management
+    # ============================================
+    
+    # Migrate: Add signal update automation columns for C1apped/WaxUI dynamic updates
+    try:
+        cursor.execute('SELECT signal_update_automation FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN signal_update_automation INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN signal_update_automation_override TEXT DEFAULT NULL')
+        cursor.execute('ALTER TABLE channels ADD COLUMN exit_strategy_mode_override TEXT DEFAULT NULL')
+        cursor.execute('ALTER TABLE channels ADD COLUMN use_global_risk_settings INTEGER DEFAULT 1')
+        cursor.execute('ALTER TABLE channels ADD COLUMN channel_daily_loss_limit REAL DEFAULT 0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN channel_max_positions INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN circuit_breaker_enabled INTEGER DEFAULT 1')
+        conn.commit()
+        print("[DATABASE] ✓ Added OMS/RMS columns for signal update automation")
+    
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -973,6 +991,49 @@ def init_db():
         )
     ''')
     
+    # ============================================
+    # GLOBAL OMS/RMS SETTINGS
+    # ============================================
+    
+    # Global risk settings - Signal Update Automation, Circuit Breaker, etc.
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS global_risk_settings (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            enable_signal_update_automation INTEGER DEFAULT 0,
+            exit_strategy_mode TEXT DEFAULT 'signal',
+            enable_circuit_breaker INTEGER DEFAULT 0,
+            enable_trailing_execution INTEGER DEFAULT 0,
+            global_daily_loss_limit REAL DEFAULT 0,
+            global_max_positions INTEGER DEFAULT 10,
+            order_timeout_minutes INTEGER DEFAULT 5,
+            acknowledged_v2_features INTEGER DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    cursor.execute('''
+        INSERT OR IGNORE INTO global_risk_settings (id) VALUES (1)
+    ''')
+    
+    # Risk events audit log - Immutable record of all risk decisions
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS risk_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            signal_instance_id INTEGER,
+            channel_id TEXT,
+            source TEXT,
+            details TEXT,
+            before_state TEXT,
+            after_state TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_risk_events_instance ON risk_events(signal_instance_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_risk_events_channel ON risk_events(channel_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_risk_events_type ON risk_events(event_type)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_risk_events_created ON risk_events(created_at)')
+    
     # Application Users (login credentials for control panel)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS app_users (
@@ -1337,6 +1398,27 @@ def init_db():
             UNIQUE(channel_id, fingerprint)
         )
     ''')
+    
+    # Migrate: Add OMS/RMS columns to signal_instances for C1apped/WaxUI tracking
+    try:
+        cursor.execute('SELECT discord_message_id FROM signal_instances LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE signal_instances ADD COLUMN discord_message_id TEXT')
+        cursor.execute('ALTER TABLE signal_instances ADD COLUMN discord_channel_id TEXT')
+        cursor.execute('ALTER TABLE signal_instances ADD COLUMN original_sl REAL')
+        cursor.execute('ALTER TABLE signal_instances ADD COLUMN current_sl REAL')
+        cursor.execute('ALTER TABLE signal_instances ADD COLUMN sl_order_id TEXT')
+        cursor.execute('ALTER TABLE signal_instances ADD COLUMN pt_order_ids TEXT')
+        cursor.execute('ALTER TABLE signal_instances ADD COLUMN entry_order_id TEXT')
+        cursor.execute('ALTER TABLE signal_instances ADD COLUMN hit_level_count INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE signal_instances ADD COLUMN exit_processed INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE signal_instances ADD COLUMN exit_source TEXT')
+        cursor.execute('ALTER TABLE signal_instances ADD COLUMN exit_strategy_mode TEXT')
+        cursor.execute('ALTER TABLE signal_instances ADD COLUMN sl_version INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE signal_instances ADD COLUMN broker TEXT')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_instances_message_id ON signal_instances(discord_message_id)')
+        conn.commit()
+        print("[DATABASE] ✓ Added OMS/RMS columns to signal_instances for dynamic signal tracking")
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_instances_channel ON signal_instances(channel_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_instances_ticker ON signal_instances(ticker)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_instances_fingerprint ON signal_instances(fingerprint)')
@@ -8696,6 +8778,261 @@ def get_open_signal_instances(channel_id: str = None) -> List[Dict]:
     except Exception as e:
         print(f"[DEDUPE] Error getting open instances: {e}")
         return []
+
+
+# ==================== OMS/RMS HELPER FUNCTIONS ====================
+
+def get_signal_instance_by_message_id(message_id: str) -> Optional[Dict]:
+    """Look up signal instance by Discord message ID for edit tracking."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT * FROM signal_instances 
+            WHERE discord_message_id = ? AND status = 'OPEN'
+            ORDER BY first_seen DESC LIMIT 1
+        ''', (str(message_id),))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    except Exception as e:
+        print(f"[OMS] Error getting instance by message_id: {e}")
+        return None
+
+
+def update_signal_instance_oms(instance_id: int, updates: Dict) -> bool:
+    """
+    Update signal instance with OMS/RMS fields.
+    
+    Supports: discord_message_id, discord_channel_id, original_sl, current_sl,
+    sl_order_id, pt_order_ids, entry_order_id, hit_level_count, exit_processed,
+    exit_source, exit_strategy_mode, sl_version, broker, remaining_qty
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    allowed_fields = [
+        'discord_message_id', 'discord_channel_id', 'original_sl', 'current_sl',
+        'sl_order_id', 'pt_order_ids', 'entry_order_id', 'hit_level_count',
+        'exit_processed', 'exit_source', 'exit_strategy_mode', 'sl_version',
+        'broker', 'remaining_qty', 'stop_loss', 'last_message_id'
+    ]
+    
+    try:
+        set_clauses = []
+        params = []
+        
+        for field, value in updates.items():
+            if field in allowed_fields:
+                set_clauses.append(f"{field} = ?")
+                params.append(value)
+        
+        if not set_clauses:
+            return False
+        
+        set_clauses.append("last_updated = CURRENT_TIMESTAMP")
+        params.append(instance_id)
+        
+        cursor.execute(f'''
+            UPDATE signal_instances 
+            SET {', '.join(set_clauses)}
+            WHERE id = ?
+        ''', params)
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[OMS] Error updating signal instance: {e}")
+        return False
+
+
+def update_signal_instance_sl_atomic(
+    instance_id: int,
+    new_sl: float,
+    expected_version: int,
+    source: str = 'signal'
+) -> bool:
+    """
+    Atomically update SL only if version matches (optimistic locking).
+    
+    Returns True if update succeeded, False if version mismatch.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            UPDATE signal_instances 
+            SET current_sl = ?, 
+                sl_version = sl_version + 1,
+                exit_source = ?,
+                last_updated = CURRENT_TIMESTAMP
+            WHERE id = ? AND sl_version = ?
+        ''', (new_sl, source, instance_id, expected_version))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[OMS] Error in atomic SL update: {e}")
+        return False
+
+
+def get_global_risk_settings() -> Dict:
+    """Get global risk management settings."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT * FROM global_risk_settings WHERE id = 1')
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return {
+            'enable_signal_update_automation': False,
+            'exit_strategy_mode': 'signal',
+            'enable_circuit_breaker': False,
+            'enable_trailing_execution': False,
+            'global_daily_loss_limit': 0,
+            'global_max_positions': 10,
+            'order_timeout_minutes': 5
+        }
+    except Exception as e:
+        print(f"[OMS] Error getting global risk settings: {e}")
+        return {}
+
+
+def update_global_risk_settings(updates: Dict) -> bool:
+    """Update global risk management settings."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    allowed_fields = [
+        'enable_signal_update_automation', 'exit_strategy_mode',
+        'enable_circuit_breaker', 'enable_trailing_execution',
+        'global_daily_loss_limit', 'global_max_positions',
+        'order_timeout_minutes', 'acknowledged_v2_features'
+    ]
+    
+    try:
+        set_clauses = []
+        params = []
+        
+        for field, value in updates.items():
+            if field in allowed_fields:
+                set_clauses.append(f"{field} = ?")
+                params.append(value)
+        
+        if not set_clauses:
+            return False
+        
+        set_clauses.append("updated_at = CURRENT_TIMESTAMP")
+        
+        cursor.execute(f'''
+            UPDATE global_risk_settings 
+            SET {', '.join(set_clauses)}
+            WHERE id = 1
+        ''', params)
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[OMS] Error updating global risk settings: {e}")
+        return False
+
+
+def log_risk_event(
+    event_type: str,
+    signal_instance_id: int = None,
+    channel_id: str = None,
+    source: str = None,
+    details: Dict = None,
+    before_state: Dict = None,
+    after_state: Dict = None
+) -> bool:
+    """Log an immutable risk event for audit trail."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO risk_events (
+                event_type, signal_instance_id, channel_id, source,
+                details, before_state, after_state
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            event_type,
+            signal_instance_id,
+            channel_id,
+            source,
+            json.dumps(details) if details else None,
+            json.dumps(before_state) if before_state else None,
+            json.dumps(after_state) if after_state else None
+        ))
+        conn.commit()
+        print(f"[AUDIT] {event_type}: instance={signal_instance_id}, source={source}")
+        return True
+    except Exception as e:
+        print(f"[AUDIT] Error logging risk event: {e}")
+        return False
+
+
+def get_effective_exit_strategy_mode(channel_id: str) -> str:
+    """Get effective exit strategy mode (channel override or global default)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT use_global_risk_settings, exit_strategy_mode, exit_strategy_mode_override
+            FROM channels WHERE discord_channel_id = ?
+        ''', (str(channel_id),))
+        row = cursor.fetchone()
+        
+        if row:
+            use_global = row[0] if row[0] is not None else 1
+            channel_mode = row[1]
+            override = row[2]
+            
+            if override and override != 'inherit':
+                return override
+            
+            if not use_global and channel_mode:
+                return channel_mode
+        
+        global_settings = get_global_risk_settings()
+        return global_settings.get('exit_strategy_mode', 'signal')
+    except Exception as e:
+        print(f"[OMS] Error getting exit strategy mode: {e}")
+        return 'signal'
+
+
+def is_signal_update_automation_enabled(channel_id: str) -> bool:
+    """Check if signal update automation is enabled for this channel."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT use_global_risk_settings, signal_update_automation, signal_update_automation_override
+            FROM channels WHERE discord_channel_id = ?
+        ''', (str(channel_id),))
+        row = cursor.fetchone()
+        
+        if row:
+            use_global = row[0] if row[0] is not None else 1
+            channel_automation = row[1]
+            override = row[2]
+            
+            if override == 'on':
+                return True
+            if override == 'off':
+                return False
+            
+            if not use_global and channel_automation is not None:
+                return bool(channel_automation)
+        
+        global_settings = get_global_risk_settings()
+        return bool(global_settings.get('enable_signal_update_automation', False))
+    except Exception as e:
+        print(f"[OMS] Error checking signal update automation: {e}")
+        return False
 
 
 def get_open_position_for_symbol(channel_id: str, symbol: str) -> Optional[Dict]:

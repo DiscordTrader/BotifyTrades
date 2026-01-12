@@ -38,6 +38,31 @@ The Bot Lifecycle Manager provides centralized control for bot stop/restart oper
 
 The Signal Tracking System provides comprehensive lifecycle tracking for all signals from detection through broker execution with full audit trails. The QA Workflow Validation System provides comprehensive registry-based validation ensuring the complete signal-to-execution pipeline remains intact.
 
+### OMS/RMS Architecture (January 2026)
+
+The Order Management System (OMS) and Risk Management System (RMS) provide industry-grade dynamic SL/PT management for signals that update via Discord message edits (C1apped-style) or WaxUI update patterns.
+
+**Core Services** (src/services/):
+- **WaxUI Entry Registry**: Links update signals to original entries using ticker matching, with holding state tracking (Full→Most→Majority→Half→Runners→Closed), profit ladder parsing, and trailing stop detection
+- **Exit Order Arbiter**: Arbitrates between signal-driven and risk-driven exit requests using precedence matrix (Manual > Circuit Breaker > Signal/Risk/Hybrid), enforcing the CRITICAL rule that SL can NEVER be lowered in hybrid mode
+- **Signal Exit Manager**: Manages complete order lifecycle with broker-aware modify flow (Alpaca/Schwab/IBKR use REPLACE, Robinhood/Webull/Tastytrade use cancel+new), debouncing (100ms window), and idempotent exit handling
+- **Circuit Breaker**: Emergency trading halt controls with global/per-channel halt, daily loss limit enforcement, position count limits, and error threshold tracking
+
+**Exit Strategy Modes**:
+- **Signal Mode**: Exits follow trader signals exactly, trailing/channel SL ignored
+- **Risk Mode**: Exits follow channel risk settings (trailing stops), signal SL ignored
+- **Hybrid Mode**: Uses TIGHTER protection (higher SL for long positions), SL can only move UP
+
+**Database Schema Additions**:
+- `signal_instances`: Added discord_message_id, original_sl, current_sl, sl_version (optimistic locking), exit_processed (idempotency), exit_source, broker columns
+- `channels`: Added signal_update_automation, exit_strategy_mode_override, use_global_risk_settings, channel_daily_loss_limit, circuit_breaker_enabled columns
+- `global_risk_settings`: New table for enable_signal_update_automation, exit_strategy_mode, enable_circuit_breaker, global_daily_loss_limit
+- `risk_events`: Immutable audit log for all SL changes, exits, and PT hits
+
+**on_message_edit Handler**: Detects Discord message edits on tracked signals, parses updated SL/PT from embeds, routes through ExitOrderArbiter, updates broker orders via SignalExitManager with full audit logging.
+
+**Feature Defaults**: All new features default to OFF to prevent surprise behavior changes for existing users (grandfather strategy).
+
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ. Upstox Integration provides V3 HFT API trading for Indian markets. Charles Schwab Integration provides OAuth2-authenticated trading with automatic token refresh, handled by a SchwabTokenManager singleton. Automatic OAuth Callback implements an industry-standard OAuth flow with a temporary HTTPS callback server, PKCE for security, automatic code capture and token exchange, secure token storage using OS keyring, and multi-account support. A Full US Broker QA Pipeline provides consistent integration patterns across all supported US brokers, including BrokerSyncService position/order syncing, SignalVerificationService real-time quotes, RiskManager position monitoring, conditional order routing support, and System Health status checks. UI templates use consistent broker identifiers for channel configuration.
 

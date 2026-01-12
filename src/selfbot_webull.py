@@ -7177,6 +7177,144 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         print(f"\n[Discord RESUMED] ✓ Websocket connection restored!")
         print(f"[Discord RESUMED] Current latency: {self.latency * 1000:.2f}ms")
 
+    async def on_message_edit(self, before: discord.Message, after: discord.Message):
+        """
+        Handle Discord message edits - CRITICAL for C1apped signal updates.
+        
+        C1apped-style signals use embed EDITs to update SL/PT in real-time:
+        - Original entry message is posted with initial SL/PT
+        - Trader EDITS the same message to adjust SL (move to breakeven, tighten, etc.)
+        - We must detect these edits and update broker orders accordingly
+        
+        This handler:
+        1. Checks if the edited message is an open signal instance
+        2. Parses the new embed for updated SL/PT values
+        3. Routes through ExitOrderArbiter for precedence checks
+        4. Updates broker orders via SignalExitManager
+        """
+        if not DATABASE_MODULE_AVAILABLE:
+            return
+        
+        try:
+            from gui_app import database as db
+            
+            if not db.is_signal_update_automation_enabled(str(after.channel.id)):
+                return
+            
+            instance = db.get_signal_instance_by_message_id(str(after.id))
+            if not instance:
+                return
+            
+            if instance.get('exit_processed'):
+                print(f"[OMS EDIT] Skip - already exited: {after.id}")
+                return
+            
+            print(f"\n[OMS EDIT] 📝 Detected edit on message {after.id}")
+            
+            combined_content = after.content
+            embed_content_parts = []
+            if hasattr(after, 'embeds') and after.embeds:
+                for embed in after.embeds:
+                    if embed.title:
+                        embed_content_parts.append(embed.title)
+                    if embed.description:
+                        embed_content_parts.append(embed.description)
+                    for field in embed.fields:
+                        if field.name and field.value:
+                            embed_content_parts.append(f"{field.name}: {field.value}")
+            
+            if embed_content_parts:
+                combined_content = after.content + "\n" + "\n".join(embed_content_parts)
+            
+            new_sl = None
+            new_pts = []
+            
+            import re
+            sl_patterns = [
+                r'[Ss]top\s*[Ll]oss[:\s]*\$?([\d.]+)',
+                r'SL[:\s]*\$?([\d.]+)',
+                r'[Ss]top[:\s]*\$?([\d.]+)',
+            ]
+            for pattern in sl_patterns:
+                match = re.search(pattern, combined_content)
+                if match:
+                    new_sl = float(match.group(1))
+                    break
+            
+            pt_pattern = r'[Pp]rofit\s*[Tt]arget[s]?[:\s]*([\d.\s,]+)'
+            pt_match = re.search(pt_pattern, combined_content)
+            if pt_match:
+                pt_values = re.findall(r'[\d.]+', pt_match.group(1))
+                new_pts = [float(v) for v in pt_values[:4]]
+            
+            current_sl = instance.get('current_sl') or instance.get('stop_loss')
+            
+            if new_sl and current_sl and abs(new_sl - current_sl) > 0.001:
+                exit_mode = db.get_effective_exit_strategy_mode(str(after.channel.id))
+                
+                try:
+                    from src.services.exit_order_arbiter import exit_order_arbiter
+                    from src.services.signal_exit_manager import signal_exit_manager
+                    
+                    arbiter_result = await exit_order_arbiter.request_sl_update(
+                        signal_instance_id=instance['id'],
+                        source='signal',
+                        new_sl_price=new_sl,
+                        current_sl_price=current_sl,
+                        exit_strategy_mode=exit_mode,
+                        position_direction='long'
+                    )
+                    
+                    if arbiter_result.get('approved'):
+                        final_sl = arbiter_result.get('final_sl', new_sl)
+                        
+                        db.log_risk_event(
+                            event_type='SL_UPDATE',
+                            signal_instance_id=instance['id'],
+                            channel_id=str(after.channel.id),
+                            source='signal_edit',
+                            details={'message_id': str(after.id), 'exit_mode': exit_mode},
+                            before_state={'sl': current_sl},
+                            after_state={'sl': final_sl}
+                        )
+                        
+                        sl_version = instance.get('sl_version', 0)
+                        if db.update_signal_instance_sl_atomic(
+                            instance_id=instance['id'],
+                            new_sl=final_sl,
+                            expected_version=sl_version,
+                            source='signal_edit'
+                        ):
+                            print(f"[OMS EDIT] ✓ SL updated: ${current_sl} -> ${final_sl}")
+                            
+                            await signal_exit_manager.handle_sl_update(
+                                signal_instance_id=instance['id'],
+                                new_sl_price=final_sl,
+                                exit_strategy_mode=exit_mode,
+                                source='signal'
+                            )
+                        else:
+                            print(f"[OMS EDIT] ⚠️ SL update failed - version mismatch (concurrent edit)")
+                    else:
+                        print(f"[OMS EDIT] SL update rejected: {arbiter_result.get('reason')}")
+                
+                except ImportError as ie:
+                    print(f"[OMS EDIT] ⚠️ OMS services not available: {ie}")
+                    db.update_signal_instance_oms(instance['id'], {
+                        'current_sl': new_sl,
+                        'stop_loss': new_sl,
+                        'last_message_id': str(after.id)
+                    })
+            
+            db.update_signal_instance_oms(instance['id'], {
+                'last_message_id': str(after.id)
+            })
+            
+        except Exception as e:
+            print(f"[OMS EDIT] Error processing message edit: {e}")
+            import traceback
+            traceback.print_exc()
+
     async def on_message(self, message: discord.Message):
         # FIRST: Deduplicate messages BEFORE any processing (Discord self-bot sometimes delivers duplicate events)
         # Ensure lock exists (create if needed)
