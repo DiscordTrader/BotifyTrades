@@ -1070,14 +1070,31 @@ class RiskManager:
         sl_price = cache.stop_loss_price
         target_price = cache.profit_target_price
         
+        trailing_pct = channel_settings.trailing_stop_pct if channel_settings else 0
+        activation_pct = channel_settings.trailing_activation_pct if channel_settings else 15.0
+        trailing_active = cache.trailing_activated
+        high_price = cache.highest_price
+        
+        trailing_status = ""
+        if trailing_pct > 0:
+            if trailing_active:
+                stop_price = high_price * (1 - trailing_pct / 100)
+                trailing_status = f" | [TRAIL ✓] High: ${high_price:.2f}, Stop: ${stop_price:.2f}"
+            else:
+                remaining = activation_pct - pct_change
+                if remaining > 0:
+                    trailing_status = f" | [TRAIL] Activate at +{activation_pct}% (need +{remaining:.1f}%)"
+                else:
+                    trailing_status = f" | [TRAIL] Ready to activate"
+        
         if sl_price or target_price:
             print(f"[RISK] [{channel_name}] {pos_key}: ${current:.2f} ({pct_change:+.2f}%) | "
-                  f"Entry: ${entry:.2f} | SL: ${sl_price or 'N/A'} | Target: ${target_price or 'N/A'} | Qty: {qty}")
+                  f"Entry: ${entry:.2f} | SL: ${sl_price or 'N/A'} | Target: ${target_price or 'N/A'} | Qty: {qty}{trailing_status}")
         elif channel_settings:
             print(f"[RISK] [{channel_name}] {pos_key}: ${current:.2f} ({pct_change:+.2f}%) | "
                   f"Entry: ${entry:.2f} | Targets: {channel_settings.profit_target_1_pct}/"
                   f"{channel_settings.profit_target_2_pct}/{channel_settings.profit_target_3_pct}% | "
-                  f"SL: {channel_settings.stop_loss_pct}% | Qty: {qty}")
+                  f"SL: {channel_settings.stop_loss_pct}% | Trail: {trailing_pct}%@{activation_pct}% | Qty: {qty}{trailing_status}")
         else:
             print(f"[RISK] [Global] {pos_key}: ${current:.2f} ({pct_change:+.2f}%) | "
-                  f"Entry: ${entry:.2f} | Qty: {qty}")
+                  f"Entry: ${entry:.2f} | Qty: {qty}{trailing_status}")

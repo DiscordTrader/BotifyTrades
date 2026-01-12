@@ -223,11 +223,11 @@ class PositionCache:
         if position_key in self._cache:
             self._cache[position_key].trailing_activated = True
     
-    def update_highest_price(self, position_key: str, current_price: float) -> None:
+    def update_highest_price(self, position_key: str, current_price: float, verbose: bool = True) -> None:
         """Update highest price for trailing stop calculation."""
         entry = self._cache.get(position_key)
         if entry:
-            entry.update_highest_price(current_price)
+            entry.update_highest_price(current_price, position_key=position_key, verbose=verbose)
     
     def set_channel_settings(self, position_key: str, settings) -> None:
         """Cache channel settings for a position."""

@@ -239,10 +239,15 @@ class PositionCacheEntry:
         self.closing = False
         self.closing_cycles = 0
     
-    def update_highest_price(self, current_price: float) -> None:
-        """Track highest price for trailing stop."""
+    def update_highest_price(self, current_price: float, position_key: str = None, verbose: bool = False) -> bool:
+        """Track highest price for trailing stop. Returns True if new high was set."""
         if current_price > self.highest_price:
+            old_high = self.highest_price
             self.highest_price = current_price
+            if verbose and position_key and self.trailing_activated:
+                print(f"[TRAIL] 📈 {position_key}: New high ${old_high:.2f} → ${current_price:.2f}")
+            return True
+        return False
     
     def has_pending_order_for_tier(self, tier: int) -> bool:
         """Check if there's already a pending order for this tier."""
