@@ -4353,7 +4353,7 @@
   },
   "Webull_NFLX_90.0_01/16_C": {
     "entry_price": 1.16,
-    "highest_price": 1.225,
+    "highest_price": 1.445,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -4365,12 +4365,21 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {},
+    "pending_orders": {
+      "6CG22CBF0A640M56SSORLTBVJ9": {
+        "order_id": "6CG22CBF0A640M56SSORLTBVJ9",
+        "tier": 1,
+        "qty_expected": 1,
+        "qty_filled": 0,
+        "status": "pending",
+        "created_at": "2026-01-12T14:30:33.681397"
+      }
+    },
     "created_at": "2026-01-09T14:56:57.018415"
   },
   "ALPACA_PAPER_NFLX_90.0_2026-01-16_C": {
     "entry_price": 1.16,
-    "highest_price": 1.23,
+    "highest_price": 1.41,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -4639,5 +4648,22 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-12T14:29:27.056855"
+  },
+  "ALPACA_PAPER_EVTV_stock": {
+    "entry_price": 1.21,
+    "highest_price": 1.21,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-12T14:32:06.986485"
   }
 }
