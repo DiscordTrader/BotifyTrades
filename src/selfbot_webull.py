@@ -10872,27 +10872,31 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             except Exception as e:
                                 _original_print(f"[NOTIFICATION] ⚠️ Failed to send to channel: {e}")
                     
-                    # 2. Save execution to database (if channel_record_id is set)
+                    # 2. Save execution to database - ALWAYS save trades (channel_record_id optional)
                     channel_record_id = signal.get('channel_record_id')
-                    if channel_record_id and DATABASE_MODULE_AVAILABLE:
+                    channel_id_str = str(signal.get('channel_id', '')) if signal.get('channel_id') else ''
+                    if not channel_record_id:
+                        _original_print(f"[DATABASE] ⚠️ No channel_record_id - trade will be saved without channel linkage (RiskManager may not monitor)")
+                    if DATABASE_MODULE_AVAILABLE:
                         try:
                             from gui_app import database as db
-                            # Save signal to database
-                            db.add_signal(
-                                discord_channel_id=str(signal['channel_id']),
-                                message_id=str(signal.get('message_id', '')),
-                                signal_type=signal['action'],
-                                symbol=signal['symbol'],
-                                quantity=signal['qty'],
-                                price=signal.get('price'),
-                                asset_type=signal['asset'],
-                                author_name=signal.get('author', 'Auto-Converted'),
-                                strike=signal.get('strike'),
-                                expiry=signal.get('expiry'),
-                                call_put=signal.get('opt_type')
-                            )
+                            # Save signal to database (only if we have channel_id)
+                            if channel_id_str:
+                                db.add_signal(
+                                    discord_channel_id=channel_id_str,
+                                    message_id=str(signal.get('message_id', '')),
+                                    signal_type=signal['action'],
+                                    symbol=signal['symbol'],
+                                    quantity=signal['qty'],
+                                    price=signal.get('price'),
+                                    asset_type=signal['asset'],
+                                    author_name=signal.get('author', 'Auto-Converted'),
+                                    strike=signal.get('strike'),
+                                    expiry=signal.get('expiry'),
+                                    call_put=signal.get('opt_type')
+                                )
                             
-                            # Save trade with stop/target prices for position monitoring
+                            # Save trade with stop/target prices for position monitoring - ALWAYS save trades
                             if signal['action'] == 'BTO':
                                 # Check if this was multi-broker execution
                                 multi_broker_results = resp.get('_multi_broker_results')
@@ -10904,7 +10908,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             # Use executed_qty from broker response (position-sized), fallback to signal qty
                                             executed_qty = broker_resp.get('executed_qty', signal['qty'])
                                             trade_data = {
-                                                'channel_id': str(signal['channel_id']),
+                                                'channel_id': channel_id_str,
                                                 'message_id': str(signal.get('message_id', '')),
                                                 'direction': signal['action'],
                                                 'asset_type': signal['asset'],
@@ -10922,13 +10926,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 'profit_target_price': signal.get('profit_target_price'),
                                                 'conditional_order_id': signal.get('_conditional_order_id')
                                             }
-                                            db.add_trade(trade_data)
-                                            _original_print(f"[DATABASE] ✓ Trade saved for {trade_data['broker']} qty={executed_qty} with SL=${trade_data.get('stop_loss_price')} Target=${trade_data.get('profit_target_price')} cond_order={trade_data.get('conditional_order_id')}")
+                                            trade_id = db.add_trade(trade_data)
+                                            _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
                                 else:
                                     # Single broker execution - use executed_qty from response
                                     executed_qty = resp.get('executed_qty', signal['qty'])
                                     trade_data = {
-                                        'channel_id': str(signal['channel_id']),
+                                        'channel_id': channel_id_str,
                                         'message_id': str(signal.get('message_id', '')),
                                         'direction': signal['action'],
                                         'asset_type': signal['asset'],
@@ -10946,14 +10950,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         'profit_target_price': signal.get('profit_target_price'),
                                         'conditional_order_id': signal.get('_conditional_order_id')
                                     }
-                                    db.add_trade(trade_data)
-                                    _original_print(f"[DATABASE] ✓ Trade saved qty={executed_qty} broker={trade_data['broker']} with SL=${trade_data.get('stop_loss_price')} Target=${trade_data.get('profit_target_price')} cond_order={trade_data.get('conditional_order_id')}")
+                                    trade_id = db.add_trade(trade_data)
+                                    _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
                             
                             elif signal['action'] == 'STC':
                                 # Handle STC trades - especially for risk management exits
                                 from datetime import datetime
                                 trade_data = {
-                                    'channel_id': str(signal['channel_id']),
+                                    'channel_id': channel_id_str,
                                     'message_id': str(signal.get('message_id', '')),
                                     'direction': 'STC',
                                     'asset_type': signal['asset'],
@@ -10972,7 +10976,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     'origin_trade_id': signal.get('origin_trade_id')
                                 }
                                 stc_trade_id = db.add_trade(trade_data)
-                                _original_print(f"[DATABASE] ✓ STC Trade #{stc_trade_id} saved broker={trade_data['broker']}")
+                                _original_print(f"[DATABASE] ✓ STC Trade #{stc_trade_id} saved broker={trade_data['broker']} channel={channel_id_str or 'NONE'}")
                                 
                                 # If this is a risk management exit, close the original BTO trade
                                 if signal.get('origin_trade_id'):
