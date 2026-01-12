@@ -11058,6 +11058,26 @@ if __name__ == '__main__':
     # Required for multiprocessing to work in PyInstaller frozen EXE
     multiprocessing.freeze_support()
     
+    # CRITICAL: Single instance check IMMEDIATELY after freeze_support()
+    # Must happen before ANY other initialization to prevent duplicate processes
+    # Skip for multiprocessing child processes (they have special args)
+    _is_mp_child = len(sys.argv) > 1 and sys.argv[1].startswith('--multiprocessing')
+    if not _is_mp_child:
+        try:
+            from src.gui.single_instance import check_single_instance, show_already_running_dialog
+            if not check_single_instance("BotifyTrades"):
+                _original_print("[STARTUP] Another instance of BotifyTrades is already running!")
+                # Only show dialog for frozen (exe) builds to avoid Qt issues in dev
+                if getattr(sys, 'frozen', False):
+                    show_already_running_dialog()
+                sys.exit(0)
+        except Exception as si_err:
+            _original_print(f"[STARTUP] Single instance check error: {si_err}")
+            # On frozen Windows builds, refuse to start for safety
+            if getattr(sys, 'frozen', False) and sys.platform == 'win32':
+                _original_print("[STARTUP] Cannot verify single instance - refusing to start.")
+                sys.exit(1)
+    
     # Parse command-line arguments
     parser = argparse.ArgumentParser(
         description='BotifyTrades - Discord Trading Bot',
@@ -11106,14 +11126,8 @@ Environment Variables:
     
     if use_gui_mode:
         # GUI mode: Show splash screen with progress, then minimize to system tray
+        # Note: Single instance check already done at startup (before argparse)
         try:
-            # Check for single instance FIRST (before any heavy imports)
-            from src.gui.single_instance import check_single_instance, show_already_running_dialog
-            if not check_single_instance("BotifyTrades"):
-                _original_print("[STARTUP] Another instance of BotifyTrades is already running!")
-                show_already_running_dialog()
-                sys.exit(0)
-            
             from PySide6.QtWidgets import QApplication, QSystemTrayIcon
             from PySide6.QtCore import QTimer, Signal, QObject
             from src.gui.splash_screen import SplashScreen, StartupProgress
@@ -11267,24 +11281,7 @@ Environment Variables:
     
     if not use_gui_mode:
         # Console mode: Run without splash screen
-        # Still need to check for single instance in console mode!
-        try:
-            from src.gui.single_instance import check_single_instance
-            if not check_single_instance("BotifyTrades"):
-                _original_print("[STARTUP] ⚠️ Another instance of BotifyTrades is already running!")
-                _original_print("[STARTUP] Please close the existing instance before starting a new one.")
-                sys.exit(1)
-        except Exception as si_err:
-            _original_print(f"[STARTUP] Single instance check error: {si_err}")
-            # On Windows frozen builds, refuse to start for safety (prevent duplicate orders)
-            # On Linux/dev mode, continue with a warning (cloud environments manage this differently)
-            is_frozen_windows = getattr(sys, 'frozen', False) and sys.platform == 'win32'
-            if is_frozen_windows:
-                _original_print("[STARTUP] ⚠️ Cannot verify single instance - refusing to start for safety.")
-                sys.exit(1)
-            else:
-                _original_print("[STARTUP] ⚠️ Continuing without single instance verification (non-Windows mode)")
-        
+        # Note: Single instance check already done at startup (before argparse)
         try:
             from src.license import start_network_monitor, show_license_expired_popup
             license_key = None
