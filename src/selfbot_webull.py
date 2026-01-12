@@ -1363,10 +1363,11 @@ JC_OPT_PATTERN = r'(BTO|STC)\s+[$]?([A-Za-z]+)\s+[$]?([0-9.]+)([CPcp])\s+([0-9]{
 SPX_NDX_SHORTHAND_PATTERN = r'^(?:(BTO|STC)\s+)?(?:(\d+)\s+)?(\d{4,5})([CPcp])$'
 
 # Waxui-style patterns (LOTTO alerts)
-# Entry format: SPX here 12/05 6880C Avg. 4.00 or "SPX here 12/13 6100C Avg .35"
+# Entry format: SPX here 12/05 6880C Avg. 4.00 or "SPX here 12/13 6100C Avg .35" or "Avg, 3.60"
 # Groups: (symbol, month, day, strike, opt_type, price)
 # Price pattern: supports "4.00", ".35", "0.35" formats
-WAXUI_ENTRY_PATTERN = r'([A-Za-z]+)\s+here\s+(\d{1,2})/(\d{1,2})\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+[Aa]vg\.?\s*(\.?\d+\.?\d*)'
+# Supports both "Avg." (period) and "Avg," (comma) formats
+WAXUI_ENTRY_PATTERN = r'([A-Za-z]+)\s+here\s+(\d{1,2})/(\d{1,2})\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+[Aa]vg[.,]?\s*(\.?\d+\.?\d*)'
 
 # Trim format: "Trim SPX here" or "Trim SPX here at $5.50" - partial exit
 # Groups: (symbol)

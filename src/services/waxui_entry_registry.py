@@ -59,7 +59,7 @@ class WaxUIEntryRegistry:
     """
     
     WAXUI_ENTRY_PATTERN = re.compile(
-        r'([A-Za-z]+)\s+here\s+(\d{1,2})/(\d{1,2})\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+[Aa]vg\.?\s*(\.?\d+\.?\d*)',
+        r'([A-Za-z]+)\s+here\s+(\d{1,2})/(\d{1,2})\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+[Aa]vg[.,]?\s*(\.?\d+\.?\d*)',
         re.IGNORECASE
     )
     WAXUI_TRIM_PATTERN = re.compile(r'[Tt]rim\s+([A-Za-z]+)\s+here', re.IGNORECASE)
