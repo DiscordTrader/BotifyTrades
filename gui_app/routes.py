@@ -1846,6 +1846,21 @@ def register_routes(app):
                 'message': 'Settings saved but verification found mismatches'
             })
         
+        # Invalidate risk settings cache if risk-related fields were updated
+        risk_fields = {'risk_management_enabled', 'profit_target_1_pct', 'profit_target_2_pct', 
+                       'profit_target_3_pct', 'profit_target_4_pct', 'stop_loss_pct', 
+                       'trailing_stop_pct', 'trailing_activation_pct', 'leave_runner_enabled',
+                       'leave_runner_pct', 'profit_target_qty_1', 'profit_target_qty_2',
+                       'profit_target_qty_3', 'profit_target_qty_4'}
+        if any(field in data for field in risk_fields):
+            try:
+                from src.risk.position_monitor import risk_manager_instance
+                if risk_manager_instance:
+                    invalidated = risk_manager_instance.invalidate_settings_cache()
+                    print(f"[RISK] Invalidated {invalidated} cached channel settings after GUI update")
+            except Exception as e:
+                print(f"[RISK] Could not invalidate cache: {e}")
+        
         return jsonify({'success': True, 'verified': True})
     
     @app.route('/api/channels/<int:channel_id>', methods=['DELETE'])

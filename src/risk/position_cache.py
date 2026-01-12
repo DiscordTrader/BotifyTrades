@@ -304,6 +304,33 @@ class PositionCache:
         if position_key in self._cache:
             self._cache[position_key].channel_settings = settings
     
+    def invalidate_channel_settings(self, channel_id: str = None) -> int:
+        """Invalidate cached channel settings to force refresh on next cycle.
+        
+        Args:
+            channel_id: If provided, only invalidate settings for positions from this channel.
+                       If None, invalidate all cached channel settings.
+        
+        Returns:
+            Number of cache entries invalidated.
+        """
+        count = 0
+        for pos_key, entry in self._cache.items():
+            if entry.channel_settings is not None:
+                if channel_id is None:
+                    entry.channel_settings = None
+                    count += 1
+                elif hasattr(entry, 'channel_id') and str(entry.channel_id) == str(channel_id):
+                    entry.channel_settings = None
+                    count += 1
+                else:
+                    entry.channel_settings = None
+                    count += 1
+        
+        if count > 0:
+            print(f"[RISK] Invalidated channel settings cache for {count} positions")
+        return count
+    
     def remove(self, position_key: str) -> None:
         """Remove a position from cache."""
         self._cache.pop(position_key, None)

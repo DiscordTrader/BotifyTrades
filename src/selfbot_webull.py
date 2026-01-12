@@ -5833,6 +5833,13 @@ class SelfClient(discord.Client):
                 self.loop.create_task(self.risk_manager.start_monitoring())
                 print("[RISK] ✓ RiskManager module initialized")
                 
+                # Register global instance for Flask route access (cache invalidation)
+                try:
+                    from src.risk.position_monitor import set_risk_manager_instance
+                    set_risk_manager_instance(self.risk_manager)
+                except Exception as e:
+                    print(f"[RISK] ⚠️ Could not register global instance: {e}")
+                
                 # Link risk manager to sync service for pending order reconciliation
                 if hasattr(self, 'sync_service') and self.sync_service:
                     self.sync_service.set_risk_manager(self.risk_manager)

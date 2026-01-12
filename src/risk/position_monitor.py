@@ -27,6 +27,15 @@ except ImportError:
     ARBITER_AVAILABLE = False
     exit_order_arbiter = None
 
+# Global RiskManager instance for external access (e.g., Flask routes)
+risk_manager_instance: Optional['RiskManager'] = None
+
+def set_risk_manager_instance(instance: 'RiskManager') -> None:
+    """Set the global RiskManager instance for external access."""
+    global risk_manager_instance
+    risk_manager_instance = instance
+    print("[RISK] ✓ Global RiskManager instance registered for settings cache invalidation")
+
 
 class RiskDBAdapter:
     """
@@ -568,6 +577,20 @@ class RiskManager:
     def stop_monitoring(self) -> None:
         """Stop the monitoring loop."""
         self._running = False
+    
+    def invalidate_settings_cache(self, channel_id: str = None) -> int:
+        """Force refresh of cached channel settings on next monitoring cycle.
+        
+        Call this when channel risk settings are updated via GUI.
+        
+        Args:
+            channel_id: If provided, only invalidate settings for this channel.
+                       If None, invalidate all cached settings.
+        
+        Returns:
+            Number of cache entries invalidated.
+        """
+        return self.cache.invalidate_channel_settings(channel_id)
     
     async def _monitoring_cycle(self) -> None:
         """Execute one monitoring cycle."""
