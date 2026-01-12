@@ -5125,6 +5125,43 @@ class SelfClient(discord.Client):
             import traceback
             traceback.print_exc()
 
+    def get_broker_instance(self, broker_name: str):
+        """
+        Get broker instance by name for OMS/RMS integration.
+        Used by SignalExitManager for SL modifications and P&L recording.
+        
+        Args:
+            broker_name: Broker identifier (webull, alpaca, schwab, ibkr, robinhood, tastytrade)
+        
+        Returns:
+            Broker instance or None if not available
+        """
+        if not broker_name:
+            return None
+        
+        broker_lower = broker_name.lower()
+        
+        if 'webull' in broker_lower:
+            return getattr(self, 'broker', None)
+        elif 'alpaca' in broker_lower:
+            return getattr(self, 'paper_broker', None)
+        elif 'schwab' in broker_lower:
+            return getattr(self, 'schwab_broker', None)
+        elif 'ibkr' in broker_lower:
+            return getattr(self, 'ibkr_broker', None)
+        elif 'robinhood' in broker_lower:
+            return getattr(self, 'robinhood_broker', None)
+        elif 'tastytrade' in broker_lower:
+            return getattr(self, 'tastytrade_broker', None)
+        elif 'dhanq' in broker_lower:
+            return getattr(self, 'dhanq_broker', None)
+        elif 'upstox' in broker_lower:
+            return getattr(self, 'upstox_broker', None)
+        elif 'zerodha' in broker_lower:
+            return getattr(self, 'zerodha_broker', None)
+        
+        return None
+
     async def setup(self):
         # Create async objects NOW when event loop is properly set up (fixes Windows "different loop" error)
         self.order_queue = asyncio.Queue()
@@ -7374,11 +7411,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         ):
                             print(f"[OMS EDIT] ✓ SL updated: ${current_sl} -> ${final_sl}")
                             
+                            channel_broker = instance.get('broker') or channel_settings.get('broker_override') if channel_settings else None
+                            broker_inst = self.get_broker_instance(channel_broker) if channel_broker else None
+                            
                             await signal_exit_manager.handle_sl_update(
                                 signal_instance_id=instance['id'],
                                 new_sl_price=final_sl,
                                 exit_strategy_mode=exit_mode,
-                                source='signal'
+                                source='signal',
+                                broker=channel_broker,
+                                broker_instance=broker_inst,
+                                symbol=instance.get('ticker'),
+                                quantity=instance.get('qty', 1)
                             )
                         else:
                             print(f"[OMS EDIT] ⚠️ SL update failed - version mismatch (concurrent edit)")
@@ -7851,6 +7895,50 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             print(f"[PNL TRACK] ✓ FULL EXIT: {symbol} @ ${exit_price:.2f}, {actual_exit_qty} contracts, PNL: ${pnl:+.2f} ({pnl_pct:+.1f}%)")
                                         else:
                                             print(f"[PNL TRACK] ✓ PARTIAL EXIT: {symbol} @ ${exit_price:.2f}, {actual_exit_qty}/{original_qty} contracts, Remaining: {new_remaining}, PNL: ${pnl:+.2f} ({pnl_pct:+.1f}%)")
+                                        
+                                        try:
+                                            from src.services.signal_exit_manager import signal_exit_manager
+                                            
+                                            channel_broker = open_pos.get('broker') or (channel_info.get('broker_override') if channel_info else None)
+                                            signal_inst_id = open_pos.get('id')
+                                            
+                                            if signal_inst_id:
+                                                if fully_closed:
+                                                    await signal_exit_manager.handle_exit_signal(
+                                                        signal_instance_id=signal_inst_id,
+                                                        exit_type='stop_loss' if 'SL' in message.content.upper() else 'signal',
+                                                        reason='STC signal from trader',
+                                                        source='signal',
+                                                        channel_id=channel_id,
+                                                        broker=channel_broker,
+                                                        symbol=symbol,
+                                                        asset_type=parsed_signal.get('asset_type', 'option'),
+                                                        fill_price=exit_price,
+                                                        closed_qty=actual_exit_qty,
+                                                        strike=parsed_signal.get('strike'),
+                                                        expiry=parsed_signal.get('expiry'),
+                                                        call_put=parsed_signal.get('opt_type')
+                                                    )
+                                                    print(f"[PNL TRACK] ✓ Full exit P&L recorded for {symbol}")
+                                                else:
+                                                    await signal_exit_manager.handle_partial_exit(
+                                                        signal_instance_id=signal_inst_id,
+                                                        closed_qty=actual_exit_qty,
+                                                        fill_price=exit_price,
+                                                        channel_id=channel_id,
+                                                        broker=channel_broker,
+                                                        symbol=symbol,
+                                                        asset_type=parsed_signal.get('asset_type', 'option'),
+                                                        exit_source='signal',
+                                                        strike=parsed_signal.get('strike'),
+                                                        expiry=parsed_signal.get('expiry'),
+                                                        call_put=parsed_signal.get('opt_type')
+                                                    )
+                                                    print(f"[PNL TRACK] ✓ Partial exit P&L recorded for {symbol}")
+                                        except ImportError:
+                                            pass
+                                        except Exception as pnl_err:
+                                            print(f"[PNL TRACK] ⚠️ Execution P&L error: {pnl_err}")
                                         
                                         # Post Trade Summary to webhook (if enabled)
                                         # COMPLETELY DISABLED for USER builds - Trade Summary is admin-only feature

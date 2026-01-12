@@ -127,6 +127,7 @@ class SignalExitManager:
         self._exit_processed: Dict[int, Dict] = {}
         self._sl_versions: Dict[int, int] = {}
         self._arbiter = ExitOrderArbiter()
+        self._debounce_cache: Dict[str, datetime] = {}
     
     async def handle_new_entry(
         self,
@@ -175,13 +176,27 @@ class SignalExitManager:
         signal_instance_id: int,
         new_sl_price: float,
         exit_strategy_mode: str = None,
-        source: str = 'signal'
+        source: str = 'signal',
+        broker: str = None,
+        broker_instance: Any = None,
+        symbol: str = None,
+        quantity: int = None
     ) -> Dict[str, Any]:
         """
         Handle a stop loss update request.
         
         Uses optimistic locking to prevent race conditions.
         Routes to broker via replace or cancel+new based on capability.
+        
+        Args:
+            signal_instance_id: Signal instance ID
+            new_sl_price: New stop loss price
+            exit_strategy_mode: 'signal', 'risk', or 'hybrid'
+            source: Source of update ('signal', 'trailing', etc.)
+            broker: Broker name for order modification
+            broker_instance: Live broker adapter instance
+            symbol: Ticker symbol (needed for cancel+new flows)
+            quantity: Position quantity (needed for cancel+new flows)
         """
         managed = self._managed_orders.get(signal_instance_id)
         if not managed:
@@ -200,12 +215,19 @@ class SignalExitManager:
         
         broker_result = {'success': True, 'simulated': True}
         
+        effective_broker = broker or managed.broker
+        effective_symbol = symbol or getattr(managed, 'symbol', None)
+        effective_qty = quantity or managed.remaining_qty
+        
         if managed.sl_order_id:
             broker_result = await self._modify_broker_sl(
-                broker=managed.broker,
+                broker=effective_broker,
                 order_id=managed.sl_order_id,
                 new_sl_price=new_sl_price,
-                signal_instance_id=signal_instance_id
+                signal_instance_id=signal_instance_id,
+                broker_instance=broker_instance,
+                symbol=effective_symbol,
+                quantity=effective_qty
             )
         
         self._log_sl_change(
@@ -271,6 +293,134 @@ class SignalExitManager:
             'trimmed_qty': trim_qty,
             'remaining_qty': new_remaining,
             'fully_closed': new_remaining <= 0
+        }
+    
+    async def handle_partial_exit(
+        self,
+        signal_instance_id: int,
+        closed_qty: int,
+        fill_price: float,
+        channel_id: str = None,
+        broker: str = None,
+        symbol: str = None,
+        asset_type: str = None,
+        exit_source: str = 'signal',
+        strike: float = None,
+        expiry: str = None,
+        call_put: str = None
+    ) -> Dict[str, Any]:
+        """
+        Handle partial exit (trim) with proper OMS state management and P&L recording.
+        
+        Routes through ExitOrderArbiter for precedence coordination.
+        Updates ManagedOrder.remaining_qty and records to Execution P&L
+        without finalizing the position (unless remaining becomes 0).
+        
+        Args:
+            signal_instance_id: Signal instance ID
+            closed_qty: Number of contracts/shares closed
+            fill_price: Exit fill price
+            channel_id: Channel ID for tracking
+            broker: Broker name
+            symbol: Ticker symbol
+            asset_type: 'stock' or 'option'
+            exit_source: 'signal', 'trailing', 'channel', etc.
+            strike/expiry/call_put: Option details if applicable
+        
+        Returns:
+            Dict with success status, remaining qty, and P&L info
+        """
+        managed = self._managed_orders.get(signal_instance_id)
+        
+        exit_strategy_mode = 'signal'
+        if managed:
+            exit_strategy_mode = managed.exit_strategy_mode
+        elif channel_id:
+            exit_strategy_mode = get_effective_exit_strategy_mode(channel_id)
+        
+        partial_key = f"partial_{signal_instance_id}_{closed_qty}_{fill_price}"
+        if partial_key in self._debounce_cache:
+            last_time = self._debounce_cache[partial_key]
+            if (datetime.now() - last_time).total_seconds() < 0.5:
+                print(f"[EXIT MANAGER] Partial exit debounced (duplicate within 500ms)")
+                return {'success': False, 'reason': 'Debounced duplicate', 'skipped': True}
+        self._debounce_cache[partial_key] = datetime.now()
+        
+        arbiter_result = await self._arbiter.request_exit(
+            signal_instance_id=signal_instance_id,
+            source=exit_source,
+            exit_type='partial',
+            exit_strategy_mode=exit_strategy_mode
+        )
+        
+        if not arbiter_result.get('approved', True):
+            print(f"[EXIT MANAGER] Partial exit blocked by arbiter: {arbiter_result.get('reason')}")
+            return {
+                'success': False,
+                'reason': arbiter_result.get('reason'),
+                'arbiter_blocked': True
+            }
+        
+        if managed:
+            old_remaining = managed.remaining_qty
+            new_remaining = max(0, old_remaining - closed_qty)
+            managed.remaining_qty = new_remaining
+            managed.updated_at = datetime.now()
+            
+            print(f"[EXIT MANAGER] Partial exit: instance={signal_instance_id}, "
+                  f"closed={closed_qty}, remaining={new_remaining}")
+            
+            fully_closed = new_remaining <= 0
+            if fully_closed:
+                managed.state = OrderState.FILLED
+                self._exit_processed[signal_instance_id] = {
+                    'source': exit_source,
+                    'exit_type': 'partial_complete',
+                    'processed_at': datetime.now().isoformat(),
+                    'completed': True
+                }
+        else:
+            old_remaining = closed_qty
+            new_remaining = 0
+            fully_closed = False
+            print(f"[EXIT MANAGER] Partial exit for untracked position: {signal_instance_id}")
+        
+        pnl_result = None
+        if broker and symbol and fill_price and closed_qty:
+            pnl_result = await self.record_execution_pnl(
+                broker=broker,
+                symbol=symbol,
+                asset_type=asset_type or ('option' if strike else 'stock'),
+                closed_qty=closed_qty,
+                fill_price=fill_price,
+                channel_id=channel_id,
+                exit_source=exit_source,
+                strike=strike,
+                expiry=expiry,
+                call_put=call_put
+            )
+        
+        log_risk_event(
+            event_type='PARTIAL_EXIT',
+            signal_instance_id=signal_instance_id,
+            channel_id=channel_id,
+            source=exit_source,
+            details={
+                'closed_qty': closed_qty,
+                'fill_price': fill_price,
+                'old_remaining': old_remaining,
+                'new_remaining': new_remaining,
+                'fully_closed': fully_closed,
+                'arbiter_approved': True
+            }
+        )
+        
+        return {
+            'success': True,
+            'closed_qty': closed_qty,
+            'remaining_qty': new_remaining,
+            'fully_closed': fully_closed,
+            'pnl_recorded': pnl_result.get('pnl_recorded') if pnl_result else False
         }
     
     async def handle_exit_signal(
