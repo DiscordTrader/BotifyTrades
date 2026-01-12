@@ -3978,6 +3978,48 @@ def update_pending_order_status(broker: str, broker_order_id: str, status: str, 
         return False
 
 
+def map_risk_trigger_to_exit_source(risk_trigger: str, tier: int = None) -> str:
+    """
+    Map risk_trigger from trades table to exit_source enum for execution_closures.
+    
+    Valid exit_source values: 'SIGNAL', 'PT1', 'PT2', 'PT3', 'PT4', 'STOP_LOSS', 'TRAILING', 'MANUAL', 'RISK'
+    
+    Args:
+        risk_trigger: Value from trades.risk_trigger (trailing_stop, profit_target, stop_loss, etc.)
+        tier: Optional tier number for profit target exits (1-4)
+    
+    Returns:
+        Valid exit_source string for execution_closures table
+    """
+    if not risk_trigger:
+        return 'SIGNAL'
+    
+    trigger_lower = risk_trigger.lower()
+    
+    if 'trailing' in trigger_lower:
+        return 'TRAILING'
+    elif 'stop' in trigger_lower and 'loss' in trigger_lower:
+        return 'STOP_LOSS'
+    elif 'profit' in trigger_lower or 'target' in trigger_lower or trigger_lower.startswith('pt'):
+        if tier:
+            return f'PT{tier}' if tier <= 4 else 'PT4'
+        if '1' in trigger_lower:
+            return 'PT1'
+        elif '2' in trigger_lower:
+            return 'PT2'
+        elif '3' in trigger_lower:
+            return 'PT3'
+        elif '4' in trigger_lower:
+            return 'PT4'
+        return 'PT1'
+    elif trigger_lower in ('manual', 'user'):
+        return 'MANUAL'
+    elif trigger_lower in ('risk', 'risk_management'):
+        return 'RISK'
+    
+    return 'SIGNAL'
+
+
 def record_execution_closure_atomic(
     broker: str, symbol: str, asset_type: str, closed_qty: int, fill_price: float, filled_at,
     exit_source: str = 'SIGNAL', strike: float = None, expiry: str = None, call_put: str = None,
