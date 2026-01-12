@@ -9269,11 +9269,88 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 print(f"[TRADE IDEA] ✅ Parsed: {structured['symbol']} Entry=${structured['entry_price']}, SL=${structured['stop_loss']}, Target=${structured['target_price']}")
                 await self.handle_auto_signal_conversion(message, message.content.strip())
                 return
-            else:
-                # ALL pattern matching failed - print debug info
-                text_preview = message.content.strip()[:80]
-                print(f"[Discord] ❌ No pattern matched: '{text_preview}'")
-                print(f"[Discord]    Supported: BTO/STC options, BTO/STC stock, TRADE IDEA (Ticker/Entry/SL/Levels)")
+            
+            # Check for PARTIAL EXIT signals for non-mapped channels (e.g., "selling 80% here EVTV")
+            try:
+                from src.signals.parser import is_partial_exit_signal, parse_partial_exit_signal
+                
+                if is_partial_exit_signal(message.content):
+                    parsed_partial = parse_partial_exit_signal(message.content)
+                    if parsed_partial:
+                        symbol = parsed_partial.get('symbol')
+                        exit_pct = parsed_partial.get('exit_percent', 0)
+                        action_type = parsed_partial.get('action', 'PARTIAL_EXIT')
+                        
+                        # If no symbol specified, try to find from context
+                        if not symbol:
+                            try:
+                                from src.services.signal_conversation_state import get_conversation_state_manager
+                                manager = get_conversation_state_manager()
+                                symbol = manager.get_recent_symbol_for_author(
+                                    int(message.channel.id),
+                                    int(message.author.id)
+                                )
+                                if symbol:
+                                    parsed_partial['symbol'] = symbol
+                                    print(f"[PARTIAL EXIT] Inferred symbol from context: {symbol}")
+                            except Exception as e:
+                                print(f"[PARTIAL EXIT] Could not get context symbol: {e}")
+                        
+                        if symbol:
+                            print(f"[PARTIAL EXIT] Processing {exit_pct}% exit of {symbol}")
+                            
+                            # Execute partial exit via position cache
+                            try:
+                                from src.risk.position_cache import get_position_cache
+                                cache = get_position_cache()
+                                
+                                position = cache.get_position(symbol)
+                                
+                                if position and position.qty > 0:
+                                    exit_qty = int(position.qty * (exit_pct / 100.0))
+                                    if exit_qty > 0:
+                                        asset_type = getattr(position, 'asset_type', 'stock')
+                                        stc_signal = {
+                                            'asset': asset_type,
+                                            'action': 'STC',
+                                            'symbol': symbol,
+                                            'qty': exit_qty,
+                                            'is_market_order': True,
+                                            '_partial_exit': True,
+                                            '_exit_percent': exit_pct,
+                                            '_exit_reason': action_type,
+                                            'channel_id': str(message.channel.id),
+                                        }
+                                        
+                                        # Add option details if this is an option position
+                                        if hasattr(position, 'strike') and position.strike:
+                                            stc_signal['strike'] = position.strike
+                                        if hasattr(position, 'opt_type') and position.opt_type:
+                                            stc_signal['opt_type'] = position.opt_type
+                                        if hasattr(position, 'expiry') and position.expiry:
+                                            stc_signal['expiry'] = position.expiry
+                                        
+                                        # Queue the partial exit via order_queue
+                                        await self.order_queue.put(stc_signal)
+                                        print(f"[PARTIAL EXIT] ✓ Queued STC for {exit_qty} {asset_type} of {symbol} ({exit_pct}%)")
+                                    else:
+                                        print(f"[PARTIAL EXIT] ⚠️ Calculated exit qty is 0 (position: {position.qty})")
+                                else:
+                                    print(f"[PARTIAL EXIT] ⚠️ No open position found for {symbol}")
+                            except Exception as e:
+                                print(f"[PARTIAL EXIT] ❌ Error executing partial exit: {e}")
+                        else:
+                            print(f"[PARTIAL EXIT] ⚠️ Could not determine symbol for partial exit")
+                        return
+            except Exception as e:
+                import traceback
+                print(f"[PARTIAL EXIT] ⚠️ Error checking partial exit: {e}")
+                traceback.print_exc()
+            
+            # ALL pattern matching failed - print debug info
+            text_preview = message.content.strip()[:80]
+            print(f"[Discord] ❌ No pattern matched: '{text_preview}'")
+            print(f"[Discord]    Supported: BTO/STC options, BTO/STC stock, TRADE IDEA (Ticker/Entry/SL/Levels)")
     
     async def execute_on_single_broker(self, signal: dict, broker_name: str, broker_instance) -> dict:
         """Execute order on a single broker instance"""

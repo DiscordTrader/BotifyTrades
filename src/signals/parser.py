@@ -166,11 +166,12 @@ CONDITIONAL_TARGET_RANGE_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Partial exit patterns: "selling 80% MLTX", "selling 60%", "selling half"
+# Partial exit patterns: "selling 80% MLTX", "selling 60%", "selling half", "selling 80% here EVTV"
 PARTIAL_EXIT_PATTERN = re.compile(
     r'(?:selling|sold|trimm?(?:ing|ed)?|taking\s+(?:off|profit))\s+'
     r'(?:(?P<percent>\d+(?:\.\d+)?)\s*%|(?P<fraction>half|quarter|third))\s*'
     r'(?:of\s+)?(?:my\s+)?(?:position\s+)?(?:in\s+)?'
+    r'(?:here\s+|now\s+|on\s+)?'
     r'(?:\$?(?P<symbol>[A-Z]{1,5}))?',
     re.IGNORECASE
 )
