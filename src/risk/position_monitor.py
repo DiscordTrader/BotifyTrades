@@ -418,6 +418,10 @@ class RiskManager:
         
         self._load_db_price_targets()
         
+        reconciled = self._reconcile_conditional_orders()
+        if reconciled > 0:
+            print(f"[RISK] ✓ Reconciled {reconciled} conditional order position(s) with SL/PT")
+        
         print(f"[RISK] ✓ Position monitoring started - Monitoring Webull + Alpaca + Schwab + IBKR + Tastytrade + Robinhood")
         self._running = True
         
@@ -1012,6 +1016,120 @@ class RiskManager:
         self._db_price_targets = self.db_adapter.load_position_price_targets()
         if self._db_price_targets:
             print(f"[RISK] ✓ Loaded stop/target prices for {len(self._db_price_targets)} positions from database")
+    
+    def _reconcile_conditional_orders(self) -> int:
+        """
+        Reconcile executed conditional orders with open positions.
+        Links positions to their source channels and seeds SL/PT into cache.
+        
+        This handles cases where:
+        - Conditional orders triggered but bot restarted before seeding
+        - BrokerSync created trade records without channel context
+        - Positions are showing as "Pre-tracking" despite having conditional orders
+        """
+        try:
+            from gui_app.database import get_connection
+            import json
+            
+            conn = get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT id, symbol, channel_id, broker_primary,
+                       stop_loss_pct, stop_loss_fixed, stop_loss_type, stop_loss_value,
+                       take_profit_targets, target_ranges, trigger_price,
+                       trailing_stop_enabled, leave_runner
+                FROM conditional_orders
+                WHERE status IN ('EXECUTED', 'TRACKING')
+                AND created_at >= datetime('now', '-7 days')
+            ''')
+            
+            executed_orders = cursor.fetchall()
+            if not executed_orders:
+                return 0
+            
+            reconciled_count = 0
+            for order in executed_orders:
+                order_id = order['id']
+                symbol = order['symbol'].upper()
+                channel_id = order['channel_id']
+                broker = order['broker_primary']
+                trigger_price = order['trigger_price']
+                
+                sl_pct = order['stop_loss_pct'] or order['stop_loss_value']
+                sl_fixed = order['stop_loss_fixed']
+                sl_type = order['stop_loss_type'] or 'pct'
+                
+                profit_targets_raw = order['take_profit_targets'] or order['target_ranges']
+                
+                sl_price = None
+                if sl_fixed and sl_type == 'fixed':
+                    sl_price = float(sl_fixed)
+                elif sl_pct and trigger_price:
+                    sl_price = trigger_price * (1 - float(sl_pct) / 100)
+                
+                pt_price = None
+                if profit_targets_raw:
+                    try:
+                        if isinstance(profit_targets_raw, str):
+                            pts = json.loads(profit_targets_raw)
+                        else:
+                            pts = profit_targets_raw
+                        
+                        if isinstance(pts, list) and pts:
+                            first_pt = pts[0]
+                            if isinstance(first_pt, (int, float)):
+                                pt_price = float(first_pt)
+                            elif isinstance(first_pt, dict) and 'price' in first_pt:
+                                pt_price = float(first_pt['price'])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                
+                if not sl_price and not pt_price:
+                    continue
+                
+                pos_key_stock = f"{broker}_{symbol}_stock"
+                pos_key_simple = f"{broker}_{symbol}"
+                
+                cache_entry = self.cache.get(pos_key_stock) or self.cache.get(pos_key_simple)
+                if cache_entry:
+                    updated = False
+                    
+                    if sl_price and not cache_entry.stop_loss_price:
+                        cache_entry.stop_loss_price = sl_price
+                        updated = True
+                    
+                    if pt_price and not cache_entry.profit_target_price:
+                        cache_entry.profit_target_price = pt_price
+                        updated = True
+                    
+                    if updated:
+                        reconciled_count += 1
+                        sl_display = f"${sl_price:.2f}" if sl_price else "N/A"
+                        pt_display = f"${pt_price:.2f}" if pt_price else "N/A"
+                        print(f"[RISK] 🔗 Linked {symbol} to conditional order #{order_id} "
+                              f"(SL: {sl_display}, PT: {pt_display})")
+                else:
+                    self.cache._cache[pos_key_stock] = PositionCacheEntry(
+                        entry_price=trigger_price or 0,
+                        highest_price=trigger_price or 0,
+                        stop_loss_price=sl_price,
+                        profit_target_price=pt_price,
+                        broker=broker
+                    )
+                    reconciled_count += 1
+                    print(f"[RISK] ✨ Created cache entry for {symbol} from conditional order #{order_id}")
+            
+            if reconciled_count > 0:
+                self.cache.save()
+            
+            return reconciled_count
+            
+        except Exception as e:
+            print(f"[RISK] Error reconciling conditional orders: {e}")
+            import traceback
+            traceback.print_exc()
+            return 0
     
     def _to_snapshot(self, pos: Dict) -> PositionSnapshot:
         """Convert raw position dict to PositionSnapshot."""
