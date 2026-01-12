@@ -11060,9 +11060,9 @@ if __name__ == '__main__':
     
     # CRITICAL: Single instance check IMMEDIATELY after freeze_support()
     # Must happen before ANY other initialization to prevent duplicate processes
-    # Skip for multiprocessing child processes (they have special args)
-    _is_mp_child = len(sys.argv) > 1 and sys.argv[1].startswith('--multiprocessing')
-    if not _is_mp_child:
+    # Skip for multiprocessing child processes using Python's official API
+    _is_main_process = multiprocessing.parent_process() is None
+    if _is_main_process:
         try:
             from src.gui.single_instance import check_single_instance, show_already_running_dialog
             if not check_single_instance("BotifyTrades"):
