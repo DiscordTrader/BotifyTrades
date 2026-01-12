@@ -63,6 +63,12 @@ The Order Management System (OMS) and Risk Management System (RMS) provide indus
 
 **Position Monitor Integration**: The risk/position_monitor.py now integrates with ExitOrderArbiter in hybrid mode. Exit decisions route through the arbiter using appropriate source tags ('trailing' for trailing stops, 'channel' for PT/SL hits). This ensures hybrid mode enforces the "SL can never be lowered" rule consistently.
 
+**Circuit Breaker Enforcement**: The `is_circuit_breaker_tripped()` function in database.py provides centralized circuit breaker checks. It verifies daily loss limits and max position counts before allowing new entries. Integrated into:
+- Conditional Order Service: Blocks triggered orders when circuit breaker is tripped
+- Signal Exit Manager: Routes exits through arbiter but does NOT block exits (positions can always be closed)
+
+**UI Location**: Global Risk Settings (OMS/RMS) are integrated into the Conditional Orders section on the Settings page, providing a unified view of entry automation and exit risk controls.
+
 **API Endpoints**:
 - `GET /api/settings/global-risk`: Fetch global OMS/RMS settings
 - `POST /api/settings/global-risk`: Update global OMS/RMS settings
