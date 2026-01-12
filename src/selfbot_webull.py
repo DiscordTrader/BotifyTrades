@@ -7058,8 +7058,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         channel_id = order.get('channel_id')
                         channel_settings = None
-                        if channel_id and (not has_signal_sl or not has_signal_targets):
+                        if channel_id:
                             channel_settings = get_channel_by_discord_id(str(channel_id))
+                            # CRITICAL: Add channel_record_id for trade database saving
+                            if channel_settings and channel_settings.get('id'):
+                                signal['channel_record_id'] = channel_settings['id']
+                                print(f"[CONDITIONAL] ✓ Linked to channel #{channel_settings['id']} for trade tracking", flush=True)
                         
                         # Stop Loss: Signal value first, then channel settings
                         # Hybrid SL: Both fixed price AND percentage (whichever triggers first)
@@ -10915,10 +10919,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 'broker': (broker_resp.get('broker') or 'WEBULL').upper(),
                                                 'order_id': broker_resp.get('orderId'),
                                                 'stop_loss_price': signal.get('stop_loss_price'),
-                                                'profit_target_price': signal.get('profit_target_price')
+                                                'profit_target_price': signal.get('profit_target_price'),
+                                                'conditional_order_id': signal.get('_conditional_order_id')
                                             }
                                             db.add_trade(trade_data)
-                                            _original_print(f"[DATABASE] ✓ Trade saved for {trade_data['broker']} qty={executed_qty} with SL=${trade_data.get('stop_loss_price')} Target=${trade_data.get('profit_target_price')}")
+                                            _original_print(f"[DATABASE] ✓ Trade saved for {trade_data['broker']} qty={executed_qty} with SL=${trade_data.get('stop_loss_price')} Target=${trade_data.get('profit_target_price')} cond_order={trade_data.get('conditional_order_id')}")
                                 else:
                                     # Single broker execution - use executed_qty from response
                                     executed_qty = resp.get('executed_qty', signal['qty'])
@@ -10938,10 +10943,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         'broker': (resp.get('broker') or 'WEBULL').upper(),
                                         'order_id': resp.get('orderId'),
                                         'stop_loss_price': signal.get('stop_loss_price'),
-                                        'profit_target_price': signal.get('profit_target_price')
+                                        'profit_target_price': signal.get('profit_target_price'),
+                                        'conditional_order_id': signal.get('_conditional_order_id')
                                     }
                                     db.add_trade(trade_data)
-                                    _original_print(f"[DATABASE] ✓ Trade saved qty={executed_qty} broker={trade_data['broker']} with SL=${trade_data.get('stop_loss_price')} Target=${trade_data.get('profit_target_price')}")
+                                    _original_print(f"[DATABASE] ✓ Trade saved qty={executed_qty} broker={trade_data['broker']} with SL=${trade_data.get('stop_loss_price')} Target=${trade_data.get('profit_target_price')} cond_order={trade_data.get('conditional_order_id')}")
                             
                             elif signal['action'] == 'STC':
                                 # Handle STC trades - especially for risk management exits

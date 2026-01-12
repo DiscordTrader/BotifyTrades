@@ -2479,8 +2479,8 @@ def add_trade(signal_data: Dict) -> int:
             strike, expiry, call_put, quantity, intended_price,
             executed_price, executed_at, status, broker, order_id,
             stop_loss_price, profit_target_price, risk_trigger, origin_trade_id,
-            user_id, source, pnl, pnl_percent
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            user_id, source, pnl, pnl_percent, conditional_order_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         signal_data.get('channel_id'),
         signal_data.get('message_id'),
@@ -2504,7 +2504,8 @@ def add_trade(signal_data: Dict) -> int:
         signal_data.get('user_id'),
         signal_data.get('source', 'discord'),
         pnl,
-        pnl_percent
+        pnl_percent,
+        signal_data.get('conditional_order_id')
     ))
     
     conn.commit()

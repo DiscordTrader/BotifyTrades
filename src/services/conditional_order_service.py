@@ -1198,36 +1198,45 @@ class ConditionalOrderService:
                 sys.stderr.flush()
                 
                 try:
-                    from gui_app.database import record_trade
+                    from src.risk.position_cache import PositionCache
                     
                     qty = order.get('calculated_qty') or order.get('qty_value') or 1
+                    asset_type = order.get('asset_type', 'stock')
+                    channel_id = order.get('channel_id')
                     
-                    trade_id = record_trade(
-                        action='BTO',
-                        asset_type=order.get('asset_type', 'stock'),
-                        symbol=symbol,
-                        qty=int(qty),
-                        price=entry_price,
-                        author_id=f"conditional_{order_id}",
-                        author_name="Conditional Order",
-                        channel_id=order.get('channel_id'),
-                        message_id=f"cond_{order_id}",
-                        broker=broker,
-                        strike=order.get('strike'),
-                        expiry=order.get('expiry'),
-                        call_put=order.get('opt_type'),
-                        stop_loss_price=sl_price,
-                        profit_target_price=pt_prices[0] if pt_prices else None
-                    )
-                    
-                    if trade_id:
-                        sys.stderr.write(f"[CONDITIONAL] ✓ Created trade #{trade_id} with SL/PT seeded\n")
+                    broker_upper = broker.upper() if broker else 'UNKNOWN'
+                    if asset_type == 'option':
+                        strike = order.get('strike')
+                        expiry = order.get('expiry')
+                        opt_type = order.get('opt_type', 'C')
+                        position_key = f"{broker_upper}_{symbol}_{strike}_{expiry}_{opt_type}"
                     else:
-                        sys.stderr.write(f"[CONDITIONAL] ⚠️ Trade record not created (may already exist)\n")
+                        position_key = f"{broker_upper}_{symbol}_stock"
+                    
+                    cache = PositionCache()
+                    
+                    cache_data = {
+                        'symbol': symbol,
+                        'entry_price': entry_price,
+                        'quantity': int(qty),
+                        'broker': broker_upper,
+                        'channel_id': str(channel_id) if channel_id else None,
+                        'conditional_order_id': order_id,
+                        'stop_loss_price': sl_price,
+                        'stop_loss_pct': float(sl_pct) if sl_pct else None,
+                        'profit_targets': pt_prices if pt_prices else None,
+                        'trailing_enabled': trailing_enabled,
+                        'leave_runner': leave_runner,
+                        'asset_type': asset_type,
+                    }
+                    
+                    cache.set(position_key, cache_data)
+                    sl_display = f"${sl_price:.2f}" if sl_price else "None"
+                    sys.stderr.write(f"[CONDITIONAL] ✓ Seeded position cache: {position_key} with SL={sl_display} PT={pt_prices}\n")
                     sys.stderr.flush()
                     
                 except Exception as e:
-                    sys.stderr.write(f"[CONDITIONAL] ⚠️ Failed to seed trade: {e}\n")
+                    sys.stderr.write(f"[CONDITIONAL] ⚠️ Failed to seed position cache: {e}\n")
                     sys.stderr.flush()
             else:
                 sys.stderr.write(f"[CONDITIONAL] No SL/PT settings to seed for {symbol}\n")
