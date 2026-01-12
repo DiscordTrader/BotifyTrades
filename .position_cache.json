@@ -4727,7 +4727,7 @@
   },
   "ALPACA_PAPER_IWM_259.0_2026-01-12_C": {
     "entry_price": 0.51,
-    "highest_price": 1.53,
+    "highest_price": 1.64,
     "trailing_activated": true,
     "closing": false,
     "closing_cycles": 0,
@@ -4761,7 +4761,7 @@
   },
   "ALPACA_PAPER_TQQQ_stock": {
     "entry_price": 55.5,
-    "highest_price": 55.75,
+    "highest_price": 55.9423,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -4775,5 +4775,22 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-12T15:35:16.327462"
+  },
+  "Alpaca_LVLU_stock": {
+    "entry_price": 11.85,
+    "highest_price": 11.85,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": 10.665,
+    "profit_target_price": 6.0,
+    "broker": "Alpaca",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-12T16:22:54.936924"
   }
 }

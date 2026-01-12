@@ -19,6 +19,58 @@ class PositionCache:
     def __init__(self, cache_file: Optional[Path] = None):
         self.cache_file = cache_file or Path.cwd() / '.position_cache.json'
         self._cache: Dict[str, PositionCacheEntry] = {}
+        self._trade_id_map: Dict[str, int] = {}  # position_key -> trade_id for database persistence
+    
+    def restore_trailing_state_from_db(self) -> int:
+        """Restore trailing stop state from database for all open trades. 
+        Also populates trade_id mappings for ALL open trades to enable persistence.
+        Returns count of trailing states restored."""
+        try:
+            from gui_app.database import get_open_trades_with_trailing_state
+            trades = get_open_trades_with_trailing_state()
+            restored = 0
+            mapped = 0
+            
+            for trade in trades:
+                broker = trade['broker'] or 'UNKNOWN'
+                asset_type = trade['asset_type'] or 'stock'
+                
+                if asset_type == 'option' and trade['strike']:
+                    pos_key = f"{broker}_{trade['symbol']}_{trade['strike']}_{trade['expiry']}_{trade['call_put']}"
+                else:
+                    pos_key = f"{broker}_{trade['symbol']}_stock"
+                
+                # Store trade_id mapping for ALL open trades (needed for persistence)
+                self._trade_id_map[pos_key] = trade['id']
+                mapped += 1
+                
+                # Restore trailing state only if it was activated
+                if trade['trailing_activated']:
+                    # If cache entry exists, restore trailing state
+                    if pos_key in self._cache:
+                        self._cache[pos_key].trailing_activated = True
+                        if trade['highest_price']:
+                            self._cache[pos_key].highest_price = trade['highest_price']
+                        highest_val = trade['highest_price'] or 0.0
+                        print(f"[RISK] ✓ Restored trailing state: {pos_key} | activated=True, highest=${highest_val:.2f}")
+                        restored += 1
+            
+            if mapped > 0:
+                print(f"[RISK] Mapped {mapped} open trades to position cache for trailing persistence")
+            if restored > 0:
+                print(f"[RISK] Restored trailing state for {restored} positions from database")
+            return restored
+        except Exception as e:
+            print(f"[RISK] Warning: Could not restore trailing state from DB: {e}")
+            return 0
+    
+    def get_trade_id(self, position_key: str) -> Optional[int]:
+        """Get trade_id for a position key, used for database persistence."""
+        return self._trade_id_map.get(position_key)
+    
+    def set_trade_id(self, position_key: str, trade_id: int) -> None:
+        """Store trade_id mapping for a position key."""
+        self._trade_id_map[position_key] = trade_id
     
     def load(self) -> int:
         """Load cache from file. Returns number of positions loaded."""
@@ -218,16 +270,34 @@ class PositionCache:
             entry.tier3_hit = True
             entry.tier4_hit = True
     
-    def activate_trailing_stop(self, position_key: str) -> None:
-        """Activate trailing stop for a position."""
+    def activate_trailing_stop(self, position_key: str, trade_id: int = None) -> None:
+        """Activate trailing stop for a position and persist to database."""
         if position_key in self._cache:
-            self._cache[position_key].trailing_activated = True
+            entry = self._cache[position_key]
+            entry.trailing_activated = True
+            
+            # Persist to database for survival across restarts
+            if trade_id:
+                try:
+                    from gui_app.database import save_trailing_state
+                    save_trailing_state(trade_id, True, entry.highest_price)
+                except Exception as e:
+                    print(f"[RISK] Warning: Could not persist trailing state: {e}")
     
-    def update_highest_price(self, position_key: str, current_price: float, verbose: bool = True) -> None:
-        """Update highest price for trailing stop calculation."""
+    def update_highest_price(self, position_key: str, current_price: float, verbose: bool = True, trade_id: int = None) -> None:
+        """Update highest price for trailing stop calculation and persist if trailing is active."""
         entry = self._cache.get(position_key)
         if entry:
+            old_highest = entry.highest_price
             entry.update_highest_price(current_price, position_key=position_key, verbose=verbose)
+            
+            # Persist to database if trailing is activated and highest price changed
+            if entry.trailing_activated and trade_id and entry.highest_price > old_highest:
+                try:
+                    from gui_app.database import save_trailing_state
+                    save_trailing_state(trade_id, True, entry.highest_price)
+                except Exception as e:
+                    print(f"[RISK] Warning: Could not persist highest price: {e}")
     
     def set_channel_settings(self, position_key: str, settings) -> None:
         """Cache channel settings for a position."""

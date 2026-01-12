@@ -8938,6 +8938,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     opt['_broker_override'] = channel_info.get('broker_override')
                     print(f"[DATABASE] ✓ Added channel_record_id={opt['channel_record_id']} for trade tracking")
                 
+                # GAP FIX: Check circuit breaker before execution (same as conditional orders)
+                try:
+                    from gui_app.database import is_circuit_breaker_tripped
+                    circuit_status = is_circuit_breaker_tripped(channel_id=str(message.channel.id))
+                    if circuit_status.get('tripped'):
+                        reason = circuit_status.get('reason', 'Circuit breaker tripped')
+                        print(f"[CIRCUIT BREAKER] ⛔ BLOCKED: {reason}")
+                        print(f"[CIRCUIT BREAKER] Signal NOT queued for execution")
+                        return
+                except Exception as cb_err:
+                    print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
+                
                 await self.order_queue.put(opt)
                 print(f"[DEBUG] Queue size AFTER put: {self.order_queue.qsize()}", flush=True)
                 print(f"[QUEUE] ✅ Signal successfully queued for LIVE execution", flush=True)
@@ -8994,6 +9006,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         opt['author'] = author_name
                         print(f"[DATABASE] ✓ Added channel_record_id={opt['channel_record_id']} for paper trade tracking")
                     
+                    # GAP FIX: Check circuit breaker before paper trading
+                    try:
+                        from gui_app.database import is_circuit_breaker_tripped
+                        circuit_status = is_circuit_breaker_tripped(channel_id=str(message.channel.id))
+                        if circuit_status.get('tripped'):
+                            reason = circuit_status.get('reason', 'Circuit breaker tripped')
+                            print(f"[CIRCUIT BREAKER] ⛔ BLOCKED (paper): {reason}")
+                            return
+                    except Exception as cb_err:
+                        print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
+                    
                     await self.order_queue.put(opt)
                     print(f"[QUEUE] ✓ Signal queued for PAPER execution")
                 else:
@@ -9002,6 +9025,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             # Legacy fallback - channel in config.ini CHANNEL_IDS list
             if not execute_enabled and not track_enabled and message.channel.id in CHANNEL_IDS:
                 print(f"[ROUTE] Legacy channel - adding to order queue")
+                # GAP FIX: Check circuit breaker before legacy execution
+                try:
+                    from gui_app.database import is_circuit_breaker_tripped
+                    circuit_status = is_circuit_breaker_tripped()
+                    if circuit_status.get('tripped'):
+                        reason = circuit_status.get('reason', 'Circuit breaker tripped')
+                        print(f"[CIRCUIT BREAKER] ⛔ BLOCKED (legacy): {reason}")
+                        return
+                except Exception as cb_err:
+                    print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
                 await self.order_queue.put(opt)
             
             return

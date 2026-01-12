@@ -700,6 +700,17 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Lot size tracking column added")
     
+    # Migration: Add trailing stop state columns for persistence across restarts
+    try:
+        cursor.execute('SELECT trailing_activated FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding trailing stop state columns to trades table...")
+        cursor.execute("ALTER TABLE trades ADD COLUMN trailing_activated INTEGER DEFAULT 0")
+        cursor.execute("ALTER TABLE trades ADD COLUMN highest_price REAL")
+        cursor.execute("ALTER TABLE trades ADD COLUMN trailing_activated_at TIMESTAMP")
+        conn.commit()
+        print("[DATABASE] ✓ Trailing stop state columns added (trailing_activated, highest_price, trailing_activated_at)")
+    
     # Signals table (all signals received, including tracked ones)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS signals (
@@ -3093,6 +3104,77 @@ def update_trade(trade_id: int, **kwargs):
     
     cursor.execute(query, values)
     conn.commit()
+
+
+def save_trailing_state(trade_id: int, trailing_activated: bool, highest_price: float, activated_at=None):
+    """Save trailing stop state to database for persistence across restarts."""
+    from datetime import datetime
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        UPDATE trades
+        SET trailing_activated = ?,
+            highest_price = ?,
+            trailing_activated_at = ?
+        WHERE id = ?
+    ''', (1 if trailing_activated else 0, highest_price, activated_at or datetime.now(), trade_id))
+    
+    conn.commit()
+    print(f"[DATABASE] ✓ Saved trailing state for trade #{trade_id}: activated={trailing_activated}, highest=${highest_price:.2f}")
+
+
+def get_trailing_state(trade_id: int) -> dict:
+    """Get trailing stop state from database."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT trailing_activated, highest_price, trailing_activated_at
+        FROM trades
+        WHERE id = ?
+    ''', (trade_id,))
+    
+    row = cursor.fetchone()
+    if row:
+        return {
+            'trailing_activated': bool(row[0]),
+            'highest_price': row[1],
+            'trailing_activated_at': row[2]
+        }
+    return {'trailing_activated': False, 'highest_price': None, 'trailing_activated_at': None}
+
+
+def get_open_trades_with_trailing_state():
+    """Get all open trades with trailing stop state for RiskManager initialization."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT id, symbol, broker, strike, expiry, call_put, asset_type,
+               executed_price, quantity, channel_id, trailing_activated, highest_price
+        FROM trades
+        WHERE status = 'OPEN' AND direction = 'BTO'
+    ''')
+    
+    trades = []
+    for row in cursor.fetchall():
+        trades.append({
+            'id': row[0],
+            'symbol': row[1],
+            'broker': row[2],
+            'strike': row[3],
+            'expiry': row[4],
+            'call_put': row[5],
+            'asset_type': row[6],
+            'entry_price': row[7],
+            'quantity': row[8],
+            'channel_id': row[9],
+            'trailing_activated': bool(row[10]) if row[10] else False,
+            'highest_price': row[11]
+        })
+    
+    return trades
 
 
 # Lot management functions for PNL tracking

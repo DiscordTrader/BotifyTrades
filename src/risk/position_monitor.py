@@ -254,6 +254,131 @@ class RiskDBAdapter:
             print(f"[RISK] Warning: Could not fetch channel settings: {e}")
             return None
     
+    def get_open_trade_id_for_position(
+        self,
+        symbol: str,
+        asset_type: str,
+        broker: str,
+        strike: Optional[float] = None,
+        expiry: Optional[str] = None,
+        call_put: Optional[str] = None
+    ) -> Optional[int]:
+        """Get the trade_id for an open position from the database."""
+        if not self._db:
+            return None
+        
+        try:
+            conn = self._db.get_connection()
+            cursor = conn.cursor()
+            
+            if asset_type == 'option' and strike:
+                # Build query with all option identifiers for precise matching
+                # Normalize expiry formats for matching (support ALL common formats)
+                from datetime import datetime
+                expiry_variants = []
+                if expiry:
+                    expiry_variants.append(expiry)  # Always include original
+                    
+                    if '-' in expiry:
+                        # YYYY-MM-DD format (len 10)
+                        parts = expiry.split('-')
+                        if len(parts) == 3 and len(parts[0]) == 4:
+                            yyyy, mm, dd = parts[0], parts[1].zfill(2), parts[2].zfill(2)
+                            expiry_variants.append(f"{mm}/{dd}")  # MM/DD
+                            expiry_variants.append(f"{int(mm)}/{int(dd)}")  # M/D (no padding)
+                            expiry_variants.append(f"{mm}/{dd}/{yyyy[2:]}")  # MM/DD/YY
+                            expiry_variants.append(f"{int(mm)}/{int(dd)}/{yyyy[2:]}")  # M/D/YY
+                            expiry_variants.append(f"{mm}/{dd}/{yyyy}")  # MM/DD/YYYY
+                            expiry_variants.append(f"{int(mm)}/{int(dd)}/{yyyy}")  # M/D/YYYY
+                    elif '/' in expiry:
+                        parts = expiry.split('/')
+                        if len(parts) == 2:
+                            # MM/DD or M/D format
+                            mm, dd = parts[0].zfill(2), parts[1].zfill(2)
+                            year = datetime.now().year
+                            yy = str(year)[2:]  # Two-digit year
+                            expiry_variants.append(f"{year}-{mm}-{dd}")  # YYYY-MM-DD
+                            expiry_variants.append(f"{mm}/{dd}")  # MM/DD
+                            expiry_variants.append(f"{int(parts[0])}/{int(parts[1])}")  # M/D
+                            expiry_variants.append(f"{mm}/{dd}/{yy}")  # MM/DD/YY
+                            expiry_variants.append(f"{int(parts[0])}/{int(parts[1])}/{yy}")  # M/D/YY
+                            expiry_variants.append(f"{mm}/{dd}/{year}")  # MM/DD/YYYY
+                            expiry_variants.append(f"{int(parts[0])}/{int(parts[1])}/{year}")  # M/D/YYYY
+                        elif len(parts) == 3:
+                            # MM/DD/YY or MM/DD/YYYY or M/D/YY variants
+                            mm, dd = parts[0].zfill(2), parts[1].zfill(2)
+                            yy_raw = parts[2]
+                            if len(yy_raw) == 2:
+                                year = 2000 + int(yy_raw)
+                            elif len(yy_raw) == 4:
+                                year = int(yy_raw)
+                            else:
+                                year = datetime.now().year
+                            
+                            expiry_variants.append(f"{year}-{mm}-{dd}")  # YYYY-MM-DD
+                            expiry_variants.append(f"{mm}/{dd}")  # MM/DD
+                            expiry_variants.append(f"{int(parts[0])}/{int(parts[1])}")  # M/D
+                            expiry_variants.append(f"{mm}/{dd}/{str(year)[2:]}")  # MM/DD/YY
+                            expiry_variants.append(f"{int(parts[0])}/{int(parts[1])}/{str(year)[2:]}")  # M/D/YY
+                            expiry_variants.append(f"{mm}/{dd}/{year}")  # MM/DD/YYYY
+                            expiry_variants.append(f"{int(parts[0])}/{int(parts[1])}/{year}")  # M/D/YYYY
+                    
+                    # Deduplicate while preserving order
+                    seen = set()
+                    expiry_variants = [x for x in expiry_variants if not (x in seen or seen.add(x))]
+                
+                # Normalize call_put
+                cp_normalized = call_put.upper()[0] if call_put else None
+                
+                # Try each expiry variant
+                for exp_try in expiry_variants:
+                    if cp_normalized:
+                        cursor.execute('''
+                            SELECT id FROM trades
+                            WHERE symbol = ? AND asset_type = 'option'
+                            AND strike = ? AND expiry = ? AND call_put = ?
+                            AND status = 'OPEN' AND direction = 'BTO'
+                            AND LOWER(broker) = LOWER(?)
+                            ORDER BY id DESC LIMIT 1
+                        ''', (symbol, strike, exp_try, cp_normalized, broker))
+                    else:
+                        cursor.execute('''
+                            SELECT id FROM trades
+                            WHERE symbol = ? AND asset_type = 'option'
+                            AND strike = ? AND expiry = ?
+                            AND status = 'OPEN' AND direction = 'BTO'
+                            AND LOWER(broker) = LOWER(?)
+                            ORDER BY id DESC LIMIT 1
+                        ''', (symbol, strike, exp_try, broker))
+                    
+                    row = cursor.fetchone()
+                    if row:
+                        return row[0]
+                
+                # Fallback: match by strike only if no expiry match found
+                cursor.execute('''
+                    SELECT id FROM trades
+                    WHERE symbol = ? AND asset_type = 'option'
+                    AND strike = ? AND status = 'OPEN' AND direction = 'BTO'
+                    AND LOWER(broker) = LOWER(?)
+                    ORDER BY id DESC LIMIT 1
+                ''', (symbol, strike, broker))
+                row = cursor.fetchone()
+                return row[0] if row else None
+            else:
+                cursor.execute('''
+                    SELECT id FROM trades
+                    WHERE symbol = ? AND asset_type = 'stock'
+                    AND status = 'OPEN' AND direction = 'BTO'
+                    AND LOWER(broker) = LOWER(?)
+                    ORDER BY id DESC LIMIT 1
+                ''', (symbol, broker))
+                row = cursor.fetchone()
+                return row[0] if row else None
+        except Exception as e:
+            print(f"[RISK] Warning: Could not lookup trade_id: {e}")
+            return None
+    
     def load_position_price_targets(self) -> Dict[str, Dict[str, Optional[float]]]:
         """Load stop/target prices for all open positions.
         
@@ -415,6 +540,11 @@ class RiskManager:
         cached_count = self.cache.load()
         if cached_count > 0:
             print(f"[RISK] Loaded {cached_count} cached positions")
+        
+        # Restore trailing stop state from database for survival across restarts
+        trailing_restored = self.cache.restore_trailing_state_from_db()
+        if trailing_restored > 0:
+            print(f"[RISK] ✓ Restored trailing stop state for {trailing_restored} positions from database")
         
         self._load_db_price_targets()
         
@@ -767,7 +897,23 @@ class RiskManager:
         if self.cache.is_closing(pos_key):
             return
         
-        self.cache.update_highest_price(pos_key, position.current_price)
+        # Get trade_id for database persistence of trailing state
+        # If not mapped yet (new position), look it up from DB and cache it
+        trade_id = self.cache.get_trade_id(pos_key)
+        if trade_id is None:
+            call_put = self._normalize_call_put(position.direction) if position.asset == 'option' else None
+            trade_id = self.db_adapter.get_open_trade_id_for_position(
+                symbol=position.symbol,
+                asset_type=position.asset,
+                broker=position.broker,
+                strike=position.strike,
+                expiry=position.expiry,
+                call_put=call_put
+            )
+            if trade_id:
+                self.cache.set_trade_id(pos_key, trade_id)
+        
+        self.cache.update_highest_price(pos_key, position.current_price, trade_id=trade_id)
         
         pct_change = position.pct_change
         
