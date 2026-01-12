@@ -8864,6 +8864,81 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[STC] ❌ Error looking up position: {e}")
                     return
             
+            # Handle WaxUI Trim/Close signals - have symbol but need strike/expiry from open position
+            if (opt.get('_waxui_trim') or opt.get('_waxui_close')) and opt.get('strike') is None:
+                waxui_type = 'TRIM' if opt.get('_waxui_trim') else 'CLOSE'
+                exit_type = opt.get('_exit_type', 'ALL')
+                print(f"[WAXUI {waxui_type}] Looking up open position for {opt['symbol']} (exit_type={exit_type})")
+                try:
+                    from gui_app.database import get_connection
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    # Find most recent open BTO trade for this symbol from this channel
+                    cursor.execute('''
+                        SELECT id, symbol, strike, call_put, expiry, quantity, broker
+                        FROM trades 
+                        WHERE symbol = ?
+                        AND channel_id = ? 
+                        AND direction = 'BTO' 
+                        AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                        ORDER BY created_at DESC 
+                        LIMIT 1
+                    ''', (opt['symbol'], str(message.channel.id)))
+                    open_position = cursor.fetchone()
+                    if open_position:
+                        opt['strike'] = open_position['strike']
+                        opt['opt_type'] = open_position['call_put']
+                        opt['expiry'] = open_position['expiry']
+                        original_qty = open_position['quantity'] or 1
+                        
+                        # Calculate exit quantity based on exit_type
+                        if exit_type == 'HALF':
+                            exit_qty = max(1, original_qty // 2)
+                            print(f"[WAXUI TRIM] Selling HALF: {exit_qty} of {original_qty} contracts")
+                        else:
+                            exit_qty = original_qty
+                            print(f"[WAXUI CLOSE] Selling ALL: {exit_qty} contracts")
+                        
+                        opt['qty'] = exit_qty
+                        opt['_original_qty'] = original_qty
+                        opt['_trade_id'] = open_position['id']
+                        print(f"[WAXUI {waxui_type}] ✓ Found position: {opt['symbol']} ${opt['strike']}{opt['opt_type']} {opt['expiry']} | Qty: {exit_qty}/{original_qty}")
+                    else:
+                        # Fallback: search without channel filter for symbol-only lookup
+                        cursor.execute('''
+                            SELECT id, symbol, strike, call_put, expiry, quantity, broker
+                            FROM trades 
+                            WHERE symbol = ?
+                            AND direction = 'BTO' 
+                            AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                            ORDER BY created_at DESC 
+                            LIMIT 1
+                        ''', (opt['symbol'],))
+                        open_position = cursor.fetchone()
+                        if open_position:
+                            opt['strike'] = open_position['strike']
+                            opt['opt_type'] = open_position['call_put']
+                            opt['expiry'] = open_position['expiry']
+                            original_qty = open_position['quantity'] or 1
+                            
+                            if exit_type == 'HALF':
+                                exit_qty = max(1, original_qty // 2)
+                            else:
+                                exit_qty = original_qty
+                            
+                            opt['qty'] = exit_qty
+                            opt['_original_qty'] = original_qty
+                            opt['_trade_id'] = open_position['id']
+                            print(f"[WAXUI {waxui_type}] ✓ Found position (any channel): {opt['symbol']} ${opt['strike']}{opt['opt_type']} {opt['expiry']} | Qty: {exit_qty}/{original_qty}")
+                        else:
+                            print(f"[WAXUI {waxui_type}] ❌ No open positions found for {opt['symbol']} - cannot process {waxui_type}")
+                            return
+                except Exception as e:
+                    print(f"[WAXUI {waxui_type}] ❌ Error looking up position: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return
+            
             print(f"[SIGNAL PARSED] ✓ Option Signal: {opt['action']} {opt['qty']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ ${opt['price']}")
             print(f"[CHANNEL CONFIG] execute_enabled={execute_enabled}, track_enabled={track_enabled}, paper_trade_enabled={channel_info.get('paper_trade_enabled', 0) if channel_info else 0}")
             
