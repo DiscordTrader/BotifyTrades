@@ -1112,6 +1112,8 @@ class ConditionalOrderService:
                         event='EXECUTION_SUCCESS',
                         details='Order executed successfully'
                     )
+                    
+                    await self._seed_risk_settings_after_execution(order, triggered_price)
                 else:
                     update_conditional_order_status(
                         order_id,
@@ -1134,6 +1136,108 @@ class ConditionalOrderService:
         
         if self.notification_callback:
             await self.notification_callback(order, triggered_price, 'TRIGGERED')
+    
+    async def _seed_risk_settings_after_execution(self, order: dict, entry_price: float):
+        """
+        Seed SL/PT settings from conditional order into position cache after execution.
+        This ensures RiskManager picks up the configured stops and targets.
+        
+        Example: "@Daytrades APVO over 13.25 / SL 9% / profits 14.45-16"
+        After trigger, seeds:
+        - Stop loss price at entry_price * (1 - 0.09)
+        - Profit targets at $14.45, $16
+        """
+        import sys
+        try:
+            symbol = order.get('symbol', '')
+            broker = order.get('broker_primary', 'unknown')
+            order_id = order.get('id')
+            
+            sl_pct = order.get('stop_loss_pct') or order.get('stop_loss_value')
+            sl_fixed = order.get('stop_loss_fixed')
+            sl_type = order.get('stop_loss_type', 'pct')
+            
+            profit_targets_raw = order.get('take_profit_targets') or order.get('target_ranges')
+            trailing_enabled = bool(order.get('trailing_stop_enabled'))
+            leave_runner = bool(order.get('leave_runner'))
+            
+            sl_price = None
+            if sl_fixed and sl_type == 'fixed':
+                sl_price = float(sl_fixed)
+            elif sl_pct:
+                sl_price = entry_price * (1 - float(sl_pct) / 100)
+            
+            pt_prices = []
+            if profit_targets_raw:
+                import json
+                try:
+                    if isinstance(profit_targets_raw, str):
+                        pts = json.loads(profit_targets_raw)
+                    else:
+                        pts = profit_targets_raw
+                    
+                    if isinstance(pts, list):
+                        for pt in pts:
+                            if isinstance(pt, (int, float)):
+                                pt_prices.append(float(pt))
+                            elif isinstance(pt, dict) and 'price' in pt:
+                                pt_prices.append(float(pt['price']))
+                    elif isinstance(pts, dict):
+                        for key in ['pt1', 'pt2', 'pt3', 'pt4', 'target1', 'target2']:
+                            if key in pts and pts[key]:
+                                pt_prices.append(float(pts[key]))
+                except (json.JSONDecodeError, TypeError, ValueError) as e:
+                    sys.stderr.write(f"[CONDITIONAL] Failed to parse profit targets: {e}\n")
+            
+            if sl_price or pt_prices:
+                sys.stderr.write(f"[CONDITIONAL] 🎯 Seeding risk settings for {symbol}:\n")
+                if sl_price:
+                    sys.stderr.write(f"[CONDITIONAL]   SL: ${sl_price:.2f} (entry: ${entry_price:.2f})\n")
+                if pt_prices:
+                    sys.stderr.write(f"[CONDITIONAL]   PT: {pt_prices}\n")
+                sys.stderr.flush()
+                
+                try:
+                    from gui_app.database import record_trade
+                    
+                    qty = order.get('calculated_qty') or order.get('qty_value') or 1
+                    
+                    trade_id = record_trade(
+                        action='BTO',
+                        asset_type=order.get('asset_type', 'stock'),
+                        symbol=symbol,
+                        qty=int(qty),
+                        price=entry_price,
+                        author_id=f"conditional_{order_id}",
+                        author_name="Conditional Order",
+                        channel_id=order.get('channel_id'),
+                        message_id=f"cond_{order_id}",
+                        broker=broker,
+                        strike=order.get('strike'),
+                        expiry=order.get('expiry'),
+                        call_put=order.get('opt_type'),
+                        stop_loss_price=sl_price,
+                        profit_target_price=pt_prices[0] if pt_prices else None
+                    )
+                    
+                    if trade_id:
+                        sys.stderr.write(f"[CONDITIONAL] ✓ Created trade #{trade_id} with SL/PT seeded\n")
+                    else:
+                        sys.stderr.write(f"[CONDITIONAL] ⚠️ Trade record not created (may already exist)\n")
+                    sys.stderr.flush()
+                    
+                except Exception as e:
+                    sys.stderr.write(f"[CONDITIONAL] ⚠️ Failed to seed trade: {e}\n")
+                    sys.stderr.flush()
+            else:
+                sys.stderr.write(f"[CONDITIONAL] No SL/PT settings to seed for {symbol}\n")
+                sys.stderr.flush()
+                
+        except Exception as e:
+            sys.stderr.write(f"[CONDITIONAL] Error seeding risk settings: {e}\n")
+            sys.stderr.flush()
+            import traceback
+            traceback.print_exc()
     
     def cancel_order(self, order_id: int, reason: str = 'User cancelled') -> bool:
         """Cancel a conditional order."""

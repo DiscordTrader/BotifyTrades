@@ -20,7 +20,9 @@ def evaluate_trailing_stop(
     trailing_activation_pct: float,
     stop_loss_pct: float = 0.0,
     channel_name: str = "Global",
-    verbose: bool = True
+    verbose: bool = True,
+    leave_runner_enabled: bool = False,
+    leave_runner_pct: float = 25.0
 ) -> Tuple[ExitDecision, bool]:
     """
     Evaluate trailing stop conditions.
@@ -29,6 +31,7 @@ def evaluate_trailing_stop(
     1. Trailing stop activates when profit >= trailing_activation_pct
     2. Once active, triggers if price drops trailing_stop_pct from highest
     3. Before activation, fixed stop loss still applies
+    4. Leave Runner: Keep a percentage of position when exiting (if enabled)
     
     Args:
         position: Current position snapshot
@@ -38,6 +41,8 @@ def evaluate_trailing_stop(
         stop_loss_pct: Fixed stop loss percentage (before trailing activates)
         channel_name: Channel name for logging
         verbose: Enable detailed trailing stop logging
+        leave_runner_enabled: Whether to leave a runner position
+        leave_runner_pct: Percentage of position to keep as runner
         
     Returns:
         Tuple of (ExitDecision, should_activate_trailing)
@@ -48,6 +53,13 @@ def evaluate_trailing_stop(
     pct_change = position.pct_change
     current = position.current_price
     current_qty = int(position.quantity)
+    
+    exit_qty = current_qty
+    if leave_runner_enabled and current_qty > 1:
+        runner_qty = max(1, int(current_qty * (leave_runner_pct / 100.0)))
+        exit_qty = current_qty - runner_qty
+        if exit_qty < 1:
+            exit_qty = current_qty
     
     should_activate = False
     
@@ -74,14 +86,18 @@ def evaluate_trailing_stop(
                   f"Buffer: {distance_from_stop:.1f}%")
         
         if current <= trailing_stop_price:
+            runner_msg = ""
+            if leave_runner_enabled and exit_qty < current_qty:
+                runner_msg = f", leaving {current_qty - exit_qty} as runner"
             print(f"[TRAIL] ⚠️  TRIGGERED [{channel_name}] {position.position_key}: "
                   f"${current:.2f} <= Stop ${trailing_stop_price:.2f} "
-                  f"(dropped {trailing_stop_pct}% from high ${cache.highest_price:.2f})")
+                  f"(dropped {trailing_stop_pct}% from high ${cache.highest_price:.2f}){runner_msg}")
             return ExitDecision.trailing_stop(
                 reason=f"(${current:.2f} <= ${trailing_stop_price:.2f}, "
                        f"dropped {trailing_stop_pct}% from high ${cache.highest_price:.2f})",
-                qty=current_qty,
-                channel_name=channel_name
+                qty=exit_qty,
+                channel_name=channel_name,
+                is_partial=(exit_qty < current_qty)
             ), should_activate
     
     if not cache.trailing_activated and stop_loss_pct > 0:

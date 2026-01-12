@@ -133,13 +133,14 @@ class ExitDecision:
         )
     
     @classmethod
-    def trailing_stop(cls, reason: str, qty: int, channel_name: str = "Global") -> 'ExitDecision':
-        """Factory for trailing stop exit."""
+    def trailing_stop(cls, reason: str, qty: int, channel_name: str = "Global", 
+                      is_partial: bool = False) -> 'ExitDecision':
+        """Factory for trailing stop exit (supports Leave Runner partial exits)."""
         return cls(
             should_exit=True,
             reason=f"TRAILING STOP [{channel_name}] {reason}",
             exit_qty=qty,
-            is_partial=False,
+            is_partial=is_partial,
             risk_trigger='trailing_stop'
         )
 

@@ -835,8 +835,14 @@ class RiskManager:
         )
         channel_name = channel_settings.channel_name if channel_settings else "Global"
         
+        leave_runner_enabled = channel_settings.leave_runner_enabled if channel_settings else False
+        leave_runner_pct = channel_settings.leave_runner_pct if channel_settings else 25.0
+        
         decision, should_activate = evaluate_trailing_stop(
-            position, cache, trailing_pct, activation_pct, stop_pct, channel_name
+            position, cache, trailing_pct, activation_pct, stop_pct, channel_name,
+            verbose=True,
+            leave_runner_enabled=leave_runner_enabled,
+            leave_runner_pct=leave_runner_pct
         )
         if should_activate:
             self.cache.activate_trailing_stop(position.position_key)
