@@ -1159,7 +1159,9 @@ function renderPositionCards(trades) {
                     </div>
                     <div class="symbol-details">
                         ${optionDetails ? `<span>${optionDetails}</span>` : ''}
-                        <span>${trade.quantity} ${trade.asset_type || 'shares'}</span>
+                        <span>${trade.remaining_qty !== undefined && trade.remaining_qty !== trade.original_qty ? 
+                            `${trade.remaining_qty}/${trade.original_qty}` : 
+                            trade.quantity} ${trade.asset_type === 'option' ? 'contracts' : 'shares'}${trade.display_status === 'PARTIAL' ? ' <span style="color:#f59e0b;font-size:10px">(PARTIAL)</span>' : ''}</span>
                     </div>
                 </div>
                 
@@ -1239,30 +1241,30 @@ function renderPositionCards(trades) {
                         <div class="close-header">Close Position</div>
                         
                         <div class="quote-buttons">
-                            <button class="btn-quote bid" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', ${bidPrice.toFixed(2)}, '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
+                            <button class="btn-quote bid" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.remaining_qty || trade.quantity}, '${trade.broker || ''}', ${bidPrice.toFixed(2)}, '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
                                 <span class="quote-label">BID</span>
                                 <span class="quote-price">$${bidPrice.toFixed(2)}</span>
                             </button>
-                            <button class="btn-quote mid" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', ${midPrice.toFixed(2)}, '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
+                            <button class="btn-quote mid" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.remaining_qty || trade.quantity}, '${trade.broker || ''}', ${midPrice.toFixed(2)}, '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
                                 <span class="quote-label">MID</span>
                                 <span class="quote-price">$${midPrice.toFixed(2)}</span>
                             </button>
-                            <button class="btn-quote ask" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', ${askPrice.toFixed(2)}, '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
+                            <button class="btn-quote ask" onclick="closePosition('${trade.id}', '${trade.symbol}', ${trade.remaining_qty || trade.quantity}, '${trade.broker || ''}', ${askPrice.toFixed(2)}, '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
                                 <span class="quote-label">ASK</span>
                                 <span class="quote-price">$${askPrice.toFixed(2)}</span>
                             </button>
                         </div>
                         
                         <div class="close-inputs">
-                            <input type="number" id="qty-${trade.id}" value="${trade.quantity}" min="1" max="${trade.quantity}" placeholder="Qty">
+                            <input type="number" id="qty-${trade.id}" value="${trade.remaining_qty || trade.quantity}" min="1" max="${trade.remaining_qty || trade.quantity}" placeholder="Qty">
                             <input type="number" id="limit-${trade.id}" value="${currentPrice.toFixed(2)}" step="0.01" placeholder="Limit $">
                         </div>
                         
                         <div class="close-buttons">
-                            <button class="btn-close limit" onclick="closeLimitOrder('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
+                            <button class="btn-close limit" onclick="closeLimitOrder('${trade.id}', '${trade.symbol}', ${trade.remaining_qty || trade.quantity}, '${trade.broker || ''}', '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
                                 LIMIT
                             </button>
-                            <button class="btn-close market" onclick="closeMarketOrder('${trade.id}', '${trade.symbol}', ${trade.quantity}, '${trade.broker || ''}', '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
+                            <button class="btn-close market" onclick="closeMarketOrder('${trade.id}', '${trade.symbol}', ${trade.remaining_qty || trade.quantity}, '${trade.broker || ''}', '${trade.strike || ''}', '${trade.expiry || ''}', '${trade.call_put || ''}')">
                                 MARKET
                             </button>
                         </div>
@@ -1309,16 +1311,22 @@ function renderTradesTable(trades) {
             <span class="channel-badge__name">${sourceDisplay.name}</span>
         </span>`;
         
+        // Calculate quantity display for partial exits
+        const qtyDisplay = trade.remaining_qty !== undefined && trade.remaining_qty !== trade.original_qty ? 
+            `${trade.remaining_qty}/${trade.original_qty}` : (trade.quantity || 0);
+        const statusDisplay = trade.display_status || trade.status || 'UNKNOWN';
+        const statusClass = statusDisplay === 'PARTIAL' ? 'style="background:#f59e0b;color:#000"' : '';
+        
         html += `<tr>
             <td><strong>${symbolDisplay}</strong></td>
             <td class="source-column">${sourceBadge}</td>
             <td><span class="broker-badge ${brokerClass}" style="font-size: 0.7rem;">${brokerLabel}</span></td>
             <td>${trade.asset_type || 'stock'}</td>
-            <td>${trade.quantity || 0}</td>
+            <td>${qtyDisplay}</td>
             <td>$${entryPrice.toFixed(2)}</td>
             <td>$${currentPrice.toFixed(2)}</td>
             <td class="${pnlClass}"><strong>$${pnl.toFixed(2)}</strong> (${pnlPercent.toFixed(1)}%)</td>
-            <td><span class="badge">${trade.status || 'UNKNOWN'}</span></td>`;
+            <td><span class="badge" ${statusClass}>${statusDisplay}</span></td>`;
         
         if (isPending) {
             const orderId = trade.order_id || trade.id;

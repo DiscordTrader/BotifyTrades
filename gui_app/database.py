@@ -4140,6 +4140,149 @@ def record_execution_closure_atomic(
         return None, None
 
 
+def get_trade_remaining_qty(trade_id: int) -> dict:
+    """
+    Derive remaining quantity for a trade from execution_lots (canonical source).
+    Returns dict with original_qty, remaining_qty, realized_pnl, status.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # First get the trade to find matching criteria
+    cursor.execute('SELECT * FROM trades WHERE id = ?', (trade_id,))
+    trade = cursor.fetchone()
+    if not trade:
+        return None
+    
+    # Find matching execution_lots by broker, symbol, and option details
+    query = '''
+        SELECT 
+            COALESCE(SUM(el.original_qty), 0) as total_original,
+            COALESCE(SUM(el.remaining_qty), 0) as total_remaining,
+            COALESCE(SUM(ec.pnl), 0) as realized_pnl
+        FROM execution_lots el
+        LEFT JOIN execution_closures ec ON ec.execution_lot_id = el.id
+        WHERE el.broker = ? AND el.symbol = ?
+    '''
+    params = [trade['broker'], trade['symbol']]
+    
+    if trade['asset_type'] == 'option':
+        if trade['strike']:
+            query += ' AND el.strike = ?'
+            params.append(trade['strike'])
+        if trade['expiry']:
+            query += ' AND el.expiry = ?'
+            params.append(trade['expiry'])
+        if trade['call_put']:
+            query += ' AND el.call_put = ?'
+            params.append(trade['call_put'])
+    
+    cursor.execute(query, params)
+    result = cursor.fetchone()
+    
+    if result and result['total_original'] > 0:
+        remaining = result['total_remaining']
+        original = result['total_original']
+        status = 'CLOSED' if remaining == 0 else ('PARTIAL' if remaining < original else 'OPEN')
+        return {
+            'original_qty': original,
+            'remaining_qty': remaining,
+            'realized_pnl': result['realized_pnl'],
+            'derived_status': status
+        }
+    
+    # Fallback to trade table quantity
+    return {
+        'original_qty': trade['quantity'],
+        'remaining_qty': trade['quantity'] if trade['status'] == 'OPEN' else 0,
+        'realized_pnl': trade['pnl'] or 0,
+        'derived_status': trade['status']
+    }
+
+
+def get_trades_with_remaining_qty(status: str = None, broker: str = None, limit: int = 100) -> list:
+    """
+    Get trades enriched with remaining_qty derived from execution_lots.
+    This provides accurate quantity tracking for partial exits (TRIM).
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Build base query
+    query = '''
+        SELECT 
+            t.*,
+            COALESCE(el_agg.total_original, t.quantity) as original_qty,
+            COALESCE(el_agg.total_remaining, 
+                CASE WHEN t.status = 'OPEN' THEN t.quantity ELSE 0 END) as remaining_qty,
+            COALESCE(ec_agg.realized_pnl, 0) as realized_pnl,
+            CASE 
+                WHEN el_agg.total_remaining = 0 THEN 'CLOSED'
+                WHEN el_agg.total_remaining < el_agg.total_original THEN 'PARTIAL'
+                ELSE t.status 
+            END as effective_status
+        FROM trades t
+        LEFT JOIN (
+            SELECT 
+                broker, symbol, strike, expiry, call_put,
+                SUM(original_qty) as total_original,
+                SUM(remaining_qty) as total_remaining
+            FROM execution_lots
+            GROUP BY broker, symbol, strike, expiry, call_put
+        ) el_agg ON el_agg.broker = t.broker 
+            AND el_agg.symbol = t.symbol
+            AND (t.asset_type = 'stock' OR (
+                el_agg.strike = t.strike 
+                AND el_agg.expiry = t.expiry 
+                AND el_agg.call_put = t.call_put
+            ))
+        LEFT JOIN (
+            SELECT 
+                el.broker, el.symbol, el.strike, el.expiry, el.call_put,
+                SUM(ec.pnl) as realized_pnl
+            FROM execution_lots el
+            JOIN execution_closures ec ON ec.execution_lot_id = el.id
+            GROUP BY el.broker, el.symbol, el.strike, el.expiry, el.call_put
+        ) ec_agg ON ec_agg.broker = t.broker 
+            AND ec_agg.symbol = t.symbol
+            AND (t.asset_type = 'stock' OR (
+                ec_agg.strike = t.strike 
+                AND ec_agg.expiry = t.expiry 
+                AND ec_agg.call_put = t.call_put
+            ))
+        WHERE t.direction = 'BTO'
+    '''
+    
+    params = []
+    if status:
+        if status.upper() == 'OPEN':
+            query += " AND (el_agg.total_remaining > 0 OR (el_agg.total_remaining IS NULL AND t.status = 'OPEN'))"
+        elif status.upper() == 'CLOSED':
+            query += " AND (el_agg.total_remaining = 0 OR (el_agg.total_remaining IS NULL AND t.status = 'CLOSED'))"
+        elif status.upper() == 'PARTIAL':
+            query += " AND el_agg.total_remaining > 0 AND el_agg.total_remaining < el_agg.total_original"
+    
+    if broker:
+        query += ' AND LOWER(t.broker) = LOWER(?)'
+        params.append(broker)
+    
+    query += ' ORDER BY t.created_at DESC LIMIT ?'
+    params.append(limit)
+    
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    
+    # Convert to list of dicts with proper field names
+    result = []
+    for row in rows:
+        trade = dict(row)
+        # Ensure quantity reflects remaining for open positions
+        trade['display_qty'] = f"{trade['remaining_qty']}/{trade['original_qty']}" if trade['remaining_qty'] != trade['original_qty'] else str(trade['quantity'])
+        result.append(trade)
+    
+    return result
+
+
 def get_performance_metrics(channel_id: int = None, period_start=None, period_end=None):
     """Get aggregated performance metrics"""
     conn = get_connection()

@@ -5636,8 +5636,22 @@ def register_routes(app):
         limit = int(request.args.get('limit', 1000))
         
         try:
-            # Get database trades with filters
+            # Get database trades with filters, enriched with remaining_qty from execution_lots
             db_trades = db.get_trades(status=status_filter, broker=broker_filter, limit=limit)
+            
+            # Enrich each trade with remaining_qty from canonical execution_lots
+            for trade in db_trades:
+                if trade.get('direction') == 'BTO' and trade.get('id'):
+                    qty_info = db.get_trade_remaining_qty(trade['id'])
+                    if qty_info:
+                        trade['original_qty'] = qty_info['original_qty']
+                        trade['remaining_qty'] = qty_info['remaining_qty']
+                        trade['realized_pnl'] = qty_info['realized_pnl']
+                        # Show partial status if quantity reduced
+                        if qty_info['remaining_qty'] < qty_info['original_qty'] and qty_info['remaining_qty'] > 0:
+                            trade['display_status'] = 'PARTIAL'
+                        else:
+                            trade['display_status'] = trade['status']
             
             # Get live positions based on broker filter
             live_positions = []
