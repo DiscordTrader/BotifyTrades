@@ -8941,7 +8941,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 # GAP FIX: Check circuit breaker before execution (same as conditional orders)
                 try:
                     from gui_app.database import is_circuit_breaker_tripped
-                    circuit_status = is_circuit_breaker_tripped(channel_id=str(message.channel.id))
+                    circuit_status = is_circuit_breaker_tripped()
                     if circuit_status.get('tripped'):
                         reason = circuit_status.get('reason', 'Circuit breaker tripped')
                         print(f"[CIRCUIT BREAKER] ⛔ BLOCKED: {reason}")
@@ -9009,7 +9009,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # GAP FIX: Check circuit breaker before paper trading
                     try:
                         from gui_app.database import is_circuit_breaker_tripped
-                        circuit_status = is_circuit_breaker_tripped(channel_id=str(message.channel.id))
+                        circuit_status = is_circuit_breaker_tripped()
                         if circuit_status.get('tripped'):
                             reason = circuit_status.get('reason', 'Circuit breaker tripped')
                             print(f"[CIRCUIT BREAKER] ⛔ BLOCKED (paper): {reason}")
