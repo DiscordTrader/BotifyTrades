@@ -363,7 +363,7 @@ function displayTradesTable(trades) {
                                style="width: 50px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-size: 11px; text-align: center;">
                         <button id="close-btn-${trade.id}" class="btn btn-danger btn-small" onclick="closePosition(event, '${trade.id}', '${trade.symbol}', ${qty}, '${trade.asset_type}')">Close</button>
                     </div>
-                ` : trade.status === 'PENDING' ? `<button class="btn btn-danger btn-small" onclick="cancelOrder('${trade.order_id}', '${trade.symbol}')">Cancel</button>` : '-'}
+                ` : trade.status === 'PENDING' ? `<button class="btn btn-danger btn-small" onclick="cancelOrder('${trade.order_id}', '${trade.symbol}', '${trade.broker || currentBroker}')">Cancel</button>` : '-'}
             </td>
         </tr>`;
     });
@@ -531,7 +531,7 @@ function generateTradeRow(trade) {
             <td style="padding: 10px 8px; text-align: center;">
                 <div style="display: flex; gap: 6px; justify-content: center;">
                     ${trade.status === 'PENDING' ? `
-                        <button onclick="cancelOrder('${trade.order_id}', '${trade.symbol}')" 
+                        <button onclick="cancelOrder('${trade.order_id}', '${trade.symbol}', '${trade.broker || currentBroker}')" 
                                 style="padding: 5px 10px; background: var(--danger-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">
                             ❌ Cancel
                         </button>
@@ -676,13 +676,25 @@ async function closePosition(evt, tradeId, symbol, maxQuantity, assetType) {
     }
 }
 
-async function cancelOrder(orderId, symbol) {
-    if (!confirm(`⚠️ Cancel pending order for ${symbol}?\n\nOrder ID: ${orderId}\n\nThis will cancel the order at Webull.`)) {
+async function cancelOrder(orderId, symbol, broker = null) {
+    const brokerName = broker || currentBroker || 'webull';
+    const brokerDisplay = brokerName.charAt(0).toUpperCase() + brokerName.slice(1).replace('_paper', ' Paper');
+    
+    if (!confirm(`⚠️ Cancel pending order for ${symbol}?\n\nOrder ID: ${orderId}\nBroker: ${brokerDisplay}\n\nThis will cancel the order.`)) {
         return;
     }
     
     try {
-        const response = await fetch(`/api/webull/orders/${orderId}/cancel`, {
+        let endpoint;
+        if (brokerName.toLowerCase().includes('alpaca')) {
+            endpoint = `/api/alpaca/orders/${orderId}/cancel`;
+        } else if (brokerName.toLowerCase() === 'webull') {
+            endpoint = `/api/webull/orders/${orderId}/cancel`;
+        } else {
+            endpoint = `/api/${brokerName.toLowerCase()}/orders/${orderId}/cancel`;
+        }
+        
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
