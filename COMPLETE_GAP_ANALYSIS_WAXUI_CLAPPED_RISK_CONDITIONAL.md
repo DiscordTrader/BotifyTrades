@@ -8,11 +8,345 @@
 
 | Component | Current State | Gaps Found | Priority | Breaking Risk |
 |-----------|---------------|------------|----------|---------------|
+| **🚨 C1apped Message Edit** | **NO on_message_edit handler** | **CRITICAL** | **P0** | **Low** |
 | **WaxUI Parsing** | Entry/Trim/Close only | 7 major gaps | P0 | Low |
 | **C1apped/TRADE IDEA** | Basic parsing | 6 major gaps | P0 | Medium |
 | **Risk Management** | Settings stored, not enforced | 9 major gaps | P0 | Medium |
 | **Conditional Orders** | Basic monitoring | 5 major gaps | P1 | Medium |
 | **Trailing Stop** | Column exists, not executed | 4 major gaps | P0 | Medium |
+
+---
+
+## 🚨 CRITICAL GAP: Discord Message Edit Handling
+
+### The Problem (From Screenshots)
+
+C1apped signals are **Discord embeds that get EDITED** - they don't post new messages for updates:
+
+| Time | What Happens | SL | Levels | Current Handling |
+|------|--------------|------|--------|------------------|
+| 8:15 AM | **Original post** | 1.09 | 1.26 - 1.29 - 1.33 - 1.38+ | ✅ Processed by on_message |
+| 8:39 AM | **EDIT: PT1 hit** | 1.09 | ~~1.26~~ - 1.29 - 1.33 - 1.38+ | ❌ MISSED (no edit handler) |
+| 8:43 AM | **EDIT: SL raised** | **1.19** | ~~1.26~~ - 1.29 - 1.33 - 1.38+ | ❌ MISSED (no edit handler) |
+| Later | **EDIT: All out** | 1.19 | ~~1.26~~ | ❌ MISSED (no edit handler) |
+
+### Why This Is Critical
+
+1. **SL changes are NEVER propagated to broker** - User's broker SL stays at 1.09 even when trader raises to 1.19
+2. **PT hits are NEVER detected** - Can't trigger partial exits
+3. **Exit signals are MISSED** - "All out" never triggers STC
+4. **The entire dynamic signal flow is broken**
+
+### Current Code Evidence
+
+```bash
+$ grep -n "on_message_edit" src/selfbot_webull.py
+(no results)  # ← NO EDIT HANDLER EXISTS
+```
+
+### Complete Implementation Required
+
+#### Step 1: Add Message ID to Database
+
+```sql
+-- File: gui_app/database.py - Add to signal_instances table
+
+ALTER TABLE signal_instances ADD COLUMN discord_message_id TEXT;
+ALTER TABLE signal_instances ADD COLUMN discord_channel_id TEXT;
+CREATE INDEX idx_signal_instances_message_id ON signal_instances(discord_message_id);
+```
+
+```python
+# Python migration in gui_app/database.py
+signal_instance_new_columns = [
+    ('discord_message_id', 'TEXT'),
+    ('discord_channel_id', 'TEXT'),
+    ('original_sl', 'REAL'),  # Store original SL for comparison
+    ('current_sl', 'REAL'),   # Track current SL (may differ from original)
+    ('hit_level_count', 'INTEGER DEFAULT 0'),  # Track how many PTs hit
+]
+```
+
+#### Step 2: Store Message ID on Original Signal
+
+```python
+# File: src/selfbot_webull.py - In signal processing (~line 8200)
+
+# After successfully processing a TRADE IDEA signal:
+if trade_idea and instance_id:
+    # Store Discord message metadata for edit tracking
+    update_signal_instance(instance_id, {
+        'discord_message_id': str(message.id),
+        'discord_channel_id': str(message.channel.id),
+        'original_sl': trade_idea.get('stop_loss'),
+        'current_sl': trade_idea.get('stop_loss'),
+        'hit_level_count': len(trade_idea.get('hit_levels', []))
+    })
+    print(f"[TRADE IDEA] Stored message_id={message.id} for edit tracking")
+```
+
+#### Step 3: Add on_message_edit Handler (THE CRITICAL FIX)
+
+```python
+# File: src/selfbot_webull.py - Add after on_message handler
+
+@client.event
+async def on_message_edit(before: discord.Message, after: discord.Message):
+    """
+    Handle Discord message edits for C1apped/TRADE IDEA signals.
+    
+    C1apped traders EDIT their Discord embeds to:
+    1. Strike through hit profit targets (~~1.26~~)
+    2. Raise stop loss (SL: 1.09 -> SL: 1.19)
+    3. Post exit signals ("All out here")
+    
+    This handler detects these changes and propagates them to the broker.
+    """
+    try:
+        # Skip if not from a tracked channel
+        channel_id = str(after.channel.id)
+        channel_info = get_channel_info(channel_id)
+        if not channel_info or not channel_info.get('enabled'):
+            return
+        
+        # Skip bot messages, DMs, etc.
+        if after.author.bot:
+            return
+        
+        # Extract embed content (C1apped uses embeds)
+        embed_content_parts = []
+        if hasattr(after, 'embeds') and after.embeds:
+            for embed in after.embeds:
+                if embed.title:
+                    embed_content_parts.append(embed.title)
+                if embed.description:
+                    embed_content_parts.append(embed.description)
+                for field in embed.fields:
+                    embed_content_parts.append(f"{field.name}: {field.value}")
+        
+        combined_content = after.content + "\n" + "\n".join(embed_content_parts)
+        
+        # Check if this is a TRADE IDEA signal
+        from src.signals.parser import is_trade_idea_signal, parse_trade_idea
+        
+        if not is_trade_idea_signal(combined_content):
+            return
+        
+        # Look up existing signal instance by message_id
+        message_id = str(after.id)
+        existing_instance = get_signal_instance_by_message_id(message_id)
+        
+        if not existing_instance:
+            # This edit is for a message we didn't track (e.g., from before bot started)
+            print(f"[MESSAGE EDIT] No tracked instance for message_id={message_id}")
+            return
+        
+        # Reparse the edited message
+        parsed = parse_trade_idea(combined_content)
+        if not parsed:
+            return
+        
+        print(f"[MESSAGE EDIT] Detected edit for {parsed['ticker']} (instance={existing_instance['id']})")
+        
+        # Compare SL: Did it change?
+        old_sl = existing_instance.get('current_sl') or existing_instance.get('original_sl')
+        new_sl = parsed.get('stop_loss')
+        
+        sl_changed = False
+        if new_sl and old_sl and abs(new_sl - old_sl) > 0.001:
+            sl_changed = True
+            sl_direction = "RAISED" if new_sl > old_sl else "LOWERED"
+            print(f"[MESSAGE EDIT] 📈 SL {sl_direction}: ${old_sl} -> ${new_sl}")
+        
+        # Compare hit levels: Did new targets get hit?
+        old_hit_count = existing_instance.get('hit_level_count', 0)
+        new_hit_count = len(parsed.get('hit_levels', []))
+        
+        new_hits = False
+        if new_hit_count > old_hit_count:
+            new_hits = True
+            print(f"[MESSAGE EDIT] 🎯 New PT hit! {old_hit_count} -> {new_hit_count}")
+        
+        # Check for exit signal
+        is_exit = parsed.get('is_exit', False)
+        if is_exit:
+            print(f"[MESSAGE EDIT] 🚪 EXIT SIGNAL detected: All out")
+        
+        # Get exit strategy mode for this channel
+        exit_strategy_mode = channel_info.get('exit_strategy_mode', 'signal')
+        
+        # Route changes through SignalExitManager
+        if get_feature_flag('enable_signal_exit_manager'):
+            from src.services.signal_exit_manager import signal_exit_manager
+            from src.services.exit_order_arbiter import exit_order_arbiter
+            
+            if sl_changed and exit_strategy_mode in ['signal', 'hybrid']:
+                # Request SL update through arbiter
+                arbiter_result = await exit_order_arbiter.request_sl_update(
+                    signal_instance_id=existing_instance['id'],
+                    source='signal',
+                    new_sl_price=new_sl,
+                    current_sl_price=old_sl,
+                    exit_strategy_mode=exit_strategy_mode
+                )
+                
+                if arbiter_result['approved']:
+                    # Execute SL update
+                    sl_result = await signal_exit_manager.handle_sl_update(
+                        signal_instance_id=existing_instance['id'],
+                        new_sl_price=new_sl,
+                        exit_strategy_mode=exit_strategy_mode,
+                        source='signal_edit'
+                    )
+                    print(f"[MESSAGE EDIT] ✅ SL update sent to broker: {sl_result}")
+            
+            if new_hits:
+                # Trigger partial exit for new PT hits
+                pt_result = await signal_exit_manager.handle_pt_hit(
+                    signal_instance_id=existing_instance['id'],
+                    hit_level_index=new_hit_count,
+                    current_price=parsed.get('hit_levels', [])[-1] if parsed.get('hit_levels') else None
+                )
+                print(f"[MESSAGE EDIT] ✅ PT hit processed: {pt_result}")
+            
+            if is_exit:
+                # Trigger full exit
+                exit_result = await signal_exit_manager.handle_exit_signal(
+                    signal_instance_id=existing_instance['id'],
+                    exit_type='signal',
+                    reason='Trader posted exit signal'
+                )
+                print(f"[MESSAGE EDIT] ✅ Exit executed: {exit_result}")
+        else:
+            # Feature flag off - just log the changes
+            print(f"[MESSAGE EDIT] Changes detected but SignalExitManager disabled")
+        
+        # Update stored values
+        update_signal_instance(existing_instance['id'], {
+            'current_sl': new_sl if new_sl else old_sl,
+            'hit_level_count': new_hit_count,
+        })
+        
+    except Exception as e:
+        print(f"[MESSAGE EDIT] Error processing edit: {e}")
+        import traceback
+        traceback.print_exc()
+```
+
+#### Step 4: Database Helper Functions
+
+```python
+# File: gui_app/database.py - Add these functions
+
+def get_signal_instance_by_message_id(message_id: str) -> Optional[Dict]:
+    """Look up signal instance by Discord message ID."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT * FROM signal_instances 
+        WHERE discord_message_id = ? AND status = 'open'
+        ORDER BY created_at DESC LIMIT 1
+    ''', (message_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if row:
+        return dict(row)
+    return None
+
+
+def update_signal_instance_sl(instance_id: int, new_sl: float, source: str = 'signal'):
+    """Update the current stop loss for a signal instance."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE signal_instances 
+        SET current_sl = ?, updated_at = ?, sl_update_source = ?
+        WHERE id = ?
+    ''', (new_sl, datetime.now().isoformat(), source, instance_id))
+    conn.commit()
+    conn.close()
+```
+
+### Debouncing Rapid Edits
+
+C1apped may make multiple quick edits. Add debouncing to prevent broker API flooding:
+
+```python
+# File: src/services/signal_exit_manager.py
+
+from collections import defaultdict
+from datetime import datetime, timedelta
+import asyncio
+
+class EditDebouncer:
+    """Debounce rapid message edits to prevent broker API flooding."""
+    
+    def __init__(self, debounce_ms: int = 100):
+        self.debounce_ms = debounce_ms
+        self._pending = {}  # message_id -> (task, latest_data)
+    
+    async def debounce(self, message_id: str, callback, *args, **kwargs):
+        """Debounce a callback for the given message."""
+        
+        # Cancel any pending task for this message
+        if message_id in self._pending:
+            old_task, _ = self._pending[message_id]
+            old_task.cancel()
+        
+        # Create new debounced task
+        async def delayed_call():
+            await asyncio.sleep(self.debounce_ms / 1000)
+            del self._pending[message_id]
+            await callback(*args, **kwargs)
+        
+        task = asyncio.create_task(delayed_call())
+        self._pending[message_id] = (task, kwargs)
+
+
+# Global debouncer
+edit_debouncer = EditDebouncer(debounce_ms=100)
+```
+
+### Updated on_message_edit with Debouncing
+
+```python
+@client.event
+async def on_message_edit(before: discord.Message, after: discord.Message):
+    # ... (channel checks as above) ...
+    
+    # Debounce to handle rapid edits
+    from src.services.signal_exit_manager import edit_debouncer
+    
+    await edit_debouncer.debounce(
+        message_id=str(after.id),
+        callback=process_trade_idea_edit,
+        after=after,
+        channel_info=channel_info
+    )
+```
+
+### Testing the Edit Handler
+
+```python
+# Test cases for on_message_edit:
+
+# Test 1: SL Raised
+# Before: SL: 1.09 | After: SL: 1.19
+# Expected: Broker SL modified from 1.09 to 1.19
+
+# Test 2: PT Hit (Strikethrough)
+# Before: Levels: 1.26 - 1.29 | After: Levels: ~~1.26~~ - 1.29
+# Expected: Partial exit triggered for first PT
+
+# Test 3: Exit Signal
+# Before: (normal signal) | After: "All out here"
+# Expected: Full exit triggered
+
+# Test 4: Rapid Edits
+# 3 edits within 50ms
+# Expected: Only final state processed after 100ms debounce
+```
 
 ---
 
