@@ -7173,9 +7173,13 @@ def register_routes(app):
     # Trading Settings
     @app.route('/api/settings/trading', methods=['GET'])
     def api_get_trading_settings():
-        """Get trading settings"""
+        """Get trading settings - trade_summary fields filtered for USER builds"""
         try:
             settings = db.get_trading_settings()
+            # Filter out admin-only fields for USER builds
+            if not is_admin_build():
+                settings.pop('trade_summary_enabled', None)
+                settings.pop('trade_summary_channel', None)
             return jsonify(settings)
         except Exception as e:
             print(f"[API] Error fetching trading settings: {e}")
@@ -7183,14 +7187,21 @@ def register_routes(app):
     
     @app.route('/api/settings/trading', methods=['POST'])
     def api_update_trading_settings():
-        """Update trading settings"""
+        """Update trading settings - trade_summary fields blocked for USER builds"""
         try:
             data = request.json
             max_position_size = data.get('max_position_size', 600)
             global_default_quantity = data.get('global_default_quantity')
             max_position_size_enabled = data.get('max_position_size_enabled', True)
-            trade_summary_enabled = data.get('trade_summary_enabled', True)
-            trade_summary_channel = data.get('trade_summary_channel', '')
+            
+            # For USER builds, preserve existing trade_summary settings (admin-only feature)
+            if is_admin_build():
+                trade_summary_enabled = data.get('trade_summary_enabled', True)
+                trade_summary_channel = data.get('trade_summary_channel', '')
+            else:
+                existing = db.get_trading_settings()
+                trade_summary_enabled = existing.get('trade_summary_enabled', False)
+                trade_summary_channel = existing.get('trade_summary_channel', '')
             
             # Validate max position size
             if not (100 <= max_position_size <= 10000):
@@ -9537,27 +9548,37 @@ def register_routes(app):
 
     @app.route('/api/settings/signal_conversion', methods=['GET'])
     def api_get_signal_conversion_settings():
-        """Get signal conversion settings"""
+        """Get signal conversion settings - admin-only fields filtered for USER builds"""
         try:
             settings = db.get_signal_conversion_settings()
-            return jsonify({
+            response = {
                 'success': True,
-                'conversion_channel_id': settings.get('conversion_channel_id', ''),
-                'target_execution_channel_id': settings.get('target_execution_channel_id', ''),
                 'notification_channel_id': settings.get('notification_channel_id', ''),
                 'notifications_enabled': settings.get('notifications_enabled', True)
-            })
+            }
+            # Only include admin-only fields for ADMIN builds
+            if is_admin_build():
+                response['conversion_channel_id'] = settings.get('conversion_channel_id', '')
+                response['target_execution_channel_id'] = settings.get('target_execution_channel_id', '')
+            return jsonify(response)
         except Exception as e:
             print(f"[API] Error getting signal conversion settings: {e}")
             return jsonify({'error': str(e)}), 500
     
     @app.route('/api/settings/signal_conversion', methods=['POST'])
     def api_save_signal_conversion_settings():
-        """Save signal conversion settings"""
+        """Save signal conversion settings - admin-only fields blocked for USER builds"""
         try:
             data = request.json
-            conversion_channel_id = data.get('conversion_channel_id', '').strip()
-            target_execution_channel_id = data.get('target_execution_channel_id', '').strip()
+            # For USER builds, only allow notification settings
+            if is_admin_build():
+                conversion_channel_id = data.get('conversion_channel_id', '').strip()
+                target_execution_channel_id = data.get('target_execution_channel_id', '').strip()
+            else:
+                # USER builds cannot set conversion settings - preserve existing values
+                existing = db.get_signal_conversion_settings()
+                conversion_channel_id = existing.get('conversion_channel_id', '')
+                target_execution_channel_id = existing.get('target_execution_channel_id', '')
             notification_channel_id = data.get('notification_channel_id', '').strip()
             notifications_enabled = data.get('notifications_enabled', True)
             
