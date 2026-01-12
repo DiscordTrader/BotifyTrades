@@ -315,15 +315,12 @@ class PositionCache:
             Number of cache entries invalidated.
         """
         count = 0
-        for pos_key, entry in self._cache.items():
+        for pos_key, entry in list(self._cache.items()):
             if entry.channel_settings is not None:
                 if channel_id is None:
                     entry.channel_settings = None
                     count += 1
                 elif hasattr(entry, 'channel_id') and str(entry.channel_id) == str(channel_id):
-                    entry.channel_settings = None
-                    count += 1
-                else:
                     entry.channel_settings = None
                     count += 1
         

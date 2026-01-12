@@ -1846,22 +1846,29 @@ def register_routes(app):
                 'message': 'Settings saved but verification found mismatches'
             })
         
-        # Invalidate risk settings cache if risk-related fields were updated
+        # Request risk settings cache invalidation if risk-related fields were updated
+        # Uses thread-safe flag approach - actual invalidation happens in RiskManager's monitoring loop
         risk_fields = {'risk_management_enabled', 'profit_target_1_pct', 'profit_target_2_pct', 
                        'profit_target_3_pct', 'profit_target_4_pct', 'stop_loss_pct', 
                        'trailing_stop_pct', 'trailing_activation_pct', 'leave_runner_enabled',
                        'leave_runner_pct', 'profit_target_qty_1', 'profit_target_qty_2',
-                       'profit_target_qty_3', 'profit_target_qty_4'}
+                       'profit_target_qty_3', 'profit_target_qty_4', 'exit_strategy_mode'}
+        cache_warning = None
         if any(field in data for field in risk_fields):
             try:
-                from src.risk.position_monitor import risk_manager_instance
-                if risk_manager_instance:
-                    invalidated = risk_manager_instance.invalidate_settings_cache()
-                    print(f"[RISK] Invalidated {invalidated} cached channel settings after GUI update")
+                from src.risk.position_monitor import request_settings_invalidation
+                success = request_settings_invalidation()
+                if not success:
+                    cache_warning = "Risk settings saved but RiskManager not running - restart bot to apply"
+                    print(f"[RISK] ⚠️ {cache_warning}")
             except Exception as e:
-                print(f"[RISK] Could not invalidate cache: {e}")
+                cache_warning = f"Risk settings saved but invalidation request failed: {e}"
+                print(f"[RISK] ⚠️ {cache_warning}")
         
-        return jsonify({'success': True, 'verified': True})
+        response = {'success': True, 'verified': True}
+        if cache_warning:
+            response['cache_warning'] = cache_warning
+        return jsonify(response)
     
     @app.route('/api/channels/<int:channel_id>', methods=['DELETE'])
     def api_delete_channel(channel_id):

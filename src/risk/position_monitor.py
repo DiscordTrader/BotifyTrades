@@ -20,6 +20,8 @@ from .tiered_targets import evaluate_tiered_targets, format_tier_reason, evaluat
 from .global_risk import evaluate_global_risk, evaluate_price_based_stops
 from .trailing_stop import evaluate_trailing_stop, get_effective_trailing_settings
 
+import threading
+
 try:
     from src.services.exit_order_arbiter import exit_order_arbiter
     ARBITER_AVAILABLE = True
@@ -28,13 +30,64 @@ except ImportError:
     exit_order_arbiter = None
 
 # Global RiskManager instance for external access (e.g., Flask routes)
+# Uses a simple flag to signal invalidation needed - processed by monitoring loop
+_risk_manager_lock = threading.Lock()
 risk_manager_instance: Optional['RiskManager'] = None
+_invalidation_requested = threading.Event()
 
 def set_risk_manager_instance(instance: 'RiskManager') -> None:
     """Set the global RiskManager instance for external access."""
     global risk_manager_instance
-    risk_manager_instance = instance
+    with _risk_manager_lock:
+        risk_manager_instance = instance
     print("[RISK] ✓ Global RiskManager instance registered for settings cache invalidation")
+
+def request_settings_invalidation() -> bool:
+    """
+    Thread-safe request for cache invalidation from Flask WSGI threads.
+    Sets a flag that the RiskManager monitoring loop will process.
+    
+    This approach avoids cross-thread cache mutation - the invalidation
+    is processed by the same thread that owns the cache.
+    
+    Returns:
+        True if request was queued, False if RiskManager unavailable
+    """
+    with _risk_manager_lock:
+        if risk_manager_instance is None:
+            return False
+    _invalidation_requested.set()
+    print("[RISK] Settings invalidation requested - will be processed on next monitoring cycle")
+    return True
+
+def check_and_process_invalidation_request() -> int:
+    """
+    Called by RiskManager monitoring loop to check and process invalidation requests.
+    This ensures cache mutation happens on the owning thread.
+    
+    Returns:
+        Number of cache entries invalidated, or 0 if no request pending
+    """
+    if not _invalidation_requested.is_set():
+        return 0
+    
+    # Get instance reference while holding lock
+    with _risk_manager_lock:
+        instance = risk_manager_instance
+    
+    if instance is None:
+        return 0
+    
+    try:
+        count = instance.invalidate_settings_cache()
+        # Clear flag only after successful invalidation
+        _invalidation_requested.clear()
+        print(f"[RISK] ✓ Processed settings invalidation request - {count} entries refreshed")
+        return count
+    except Exception as e:
+        # Don't clear flag - will retry on next cycle
+        print(f"[RISK] Error during cache invalidation (will retry): {e}")
+        return 0
 
 
 class RiskDBAdapter:
@@ -594,6 +647,9 @@ class RiskManager:
     
     async def _monitoring_cycle(self) -> None:
         """Execute one monitoring cycle."""
+        # Check for pending invalidation requests from Flask (thread-safe)
+        check_and_process_invalidation_request()
+        
         risk_settings = self._get_risk_settings()
         
         if not risk_settings.enabled:
