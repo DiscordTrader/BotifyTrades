@@ -6339,6 +6339,38 @@ def register_routes(app):
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
     
+    # Global Risk Settings (OMS/RMS)
+    @app.route('/api/settings/global-risk', methods=['GET'])
+    def api_get_global_risk_settings():
+        """Get global risk management settings for OMS/RMS"""
+        try:
+            settings = db.get_global_risk_settings()
+            return jsonify(settings)
+        except Exception as e:
+            print(f"[API] Error fetching global risk settings: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/settings/global-risk', methods=['POST', 'PUT'])
+    def api_update_global_risk_settings():
+        """Update global risk management settings for OMS/RMS"""
+        try:
+            data = request.json
+            success = db.update_global_risk_settings(data)
+            
+            if success:
+                return jsonify({
+                    'success': True,
+                    'message': 'Global risk settings updated successfully'
+                })
+            else:
+                return jsonify({'error': 'Failed to update global risk settings'}), 500
+                
+        except Exception as e:
+            print(f"[API] Error updating global risk settings: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+    
     # Conditional Order Settings
     @app.route('/api/settings/conditional_orders', methods=['GET'])
     def api_get_conditional_order_settings():

@@ -20,6 +20,13 @@ from .tiered_targets import evaluate_tiered_targets, format_tier_reason, evaluat
 from .global_risk import evaluate_global_risk, evaluate_price_based_stops
 from .trailing_stop import evaluate_trailing_stop, get_effective_trailing_settings
 
+try:
+    from src.services.exit_order_arbiter import exit_order_arbiter
+    ARBITER_AVAILABLE = True
+except ImportError:
+    ARBITER_AVAILABLE = False
+    exit_order_arbiter = None
+
 
 class RiskDBAdapter:
     """
@@ -850,11 +857,46 @@ class RiskManager:
         decision: ExitDecision,
         channel_settings: Optional[ChannelRiskSettings]
     ) -> None:
-        """Queue an exit order."""
+        """Queue an exit order with ExitOrderArbiter integration for hybrid mode."""
         pos_key = position.position_key
         print(f"[RISK] ✓ EXIT TRIGGERED: {pos_key} - {decision.reason}")
         
         is_stop_exit = 'STOP LOSS' in decision.reason or 'TRAILING STOP' in decision.reason
+        
+        exit_mode = channel_settings.exit_strategy_mode if channel_settings else 'risk'
+        
+        if ARBITER_AVAILABLE and exit_order_arbiter and exit_mode == 'hybrid':
+            try:
+                signal_instance_id = None
+                if hasattr(cache, 'signal_instance_id'):
+                    signal_instance_id = cache.signal_instance_id
+                
+                if 'TRAILING' in decision.reason:
+                    exit_type = 'trailing_stop'
+                    arbiter_source = 'trailing'
+                elif 'TARGET' in decision.reason or 'PROFIT' in decision.reason:
+                    exit_type = 'profit_target'
+                    arbiter_source = 'channel'
+                else:
+                    exit_type = 'stop_loss'
+                    arbiter_source = 'channel'
+                
+                arbiter_result = await exit_order_arbiter.request_exit(
+                    signal_instance_id=signal_instance_id,
+                    source=arbiter_source,
+                    exit_type=exit_type,
+                    exit_strategy_mode=exit_mode,
+                    reason=f"Risk manager: {decision.reason}"
+                )
+                
+                if not arbiter_result.get('approved'):
+                    print(f"[RISK] Exit rejected by arbiter: {arbiter_result.get('reason')}")
+                    return
+                
+                print(f"[RISK] Exit approved by arbiter (hybrid mode)")
+            except Exception as e:
+                print(f"[RISK] Arbiter check failed, proceeding with exit: {e}")
+        
         if not decision.is_partial:
             self.cache.mark_closing(pos_key)
         
