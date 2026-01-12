@@ -59,7 +59,13 @@ The Order Management System (OMS) and Risk Management System (RMS) provide indus
 - `global_risk_settings`: New table for enable_signal_update_automation, exit_strategy_mode, enable_circuit_breaker, global_daily_loss_limit
 - `risk_events`: Immutable audit log for all SL changes, exits, and PT hits
 
-**on_message_edit Handler**: Detects Discord message edits on tracked signals, parses updated SL/PT from embeds, routes through ExitOrderArbiter, updates broker orders via SignalExitManager with full audit logging.
+**on_message_edit Handler**: Detects Discord message edits on tracked signals, parses updated SL/PT from embeds, routes through ExitOrderArbiter, updates broker orders via SignalExitManager with full audit logging. Gates with `signal_update_automation` check before processing.
+
+**Position Monitor Integration**: The risk/position_monitor.py now integrates with ExitOrderArbiter in hybrid mode. Exit decisions route through the arbiter using appropriate source tags ('trailing' for trailing stops, 'channel' for PT/SL hits). This ensures hybrid mode enforces the "SL can never be lowered" rule consistently.
+
+**API Endpoints**:
+- `GET /api/settings/global-risk`: Fetch global OMS/RMS settings
+- `POST /api/settings/global-risk`: Update global OMS/RMS settings
 
 **Feature Defaults**: All new features default to OFF to prevent surprise behavior changes for existing users (grandfather strategy).
 
