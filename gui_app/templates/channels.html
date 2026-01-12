@@ -1317,70 +1317,64 @@ function renderChannels() {
                         </div>
                     </div>
                     
-                    <div class="control-group" style="margin-top: 12px;">
-                        <label style="font-size: 0.85rem; color: var(--text-secondary);">
-                            Exit Strategy
-                        </label>
-                        <select class="exec-input" style="width: 100%; padding: 6px 10px; margin-top: 4px;"
-                                onchange="updateExitStrategy(${channel.id}, this.value)"
-                                title="How to handle exits: follow trader signals, use automated risk management, or both">
-                            <option value="signal" ${(channel.exit_strategy_mode || 'signal') === 'signal' ? 'selected' : ''}>Signal (Follow Trader)</option>
-                            <option value="risk" ${channel.exit_strategy_mode === 'risk' ? 'selected' : ''}>Risk (Auto Targets/Stops)</option>
-                            <option value="hybrid" ${channel.exit_strategy_mode === 'hybrid' ? 'selected' : ''}>Hybrid (Both)</option>
-                        </select>
-                    </div>
-                    
-                    <div class="control-group" style="margin-top: 12px;">
-                        <label style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 0.85rem; color: var(--text-secondary);">Signal Update Automation</span>
-                            <label class="toggle-switch">
+                    <div style="display: flex; gap: 12px; margin-top: 12px;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.75rem; color: var(--text-secondary);">Exit Strategy</label>
+                            <select class="exec-input" style="width: 100%; padding: 5px 8px; margin-top: 2px; font-size: 0.8rem;"
+                                    onchange="updateExitStrategy(${channel.id}, this.value)"
+                                    title="How to handle exits: follow trader signals, use automated risk management, or both">
+                                <option value="signal" ${(channel.exit_strategy_mode || 'signal') === 'signal' ? 'selected' : ''}>Signal</option>
+                                <option value="risk" ${channel.exit_strategy_mode === 'risk' ? 'selected' : ''}>Risk</option>
+                                <option value="hybrid" ${channel.exit_strategy_mode === 'hybrid' ? 'selected' : ''}>Hybrid</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1; display: flex; flex-direction: column; align-items: flex-end;">
+                            <label style="font-size: 0.75rem; color: var(--text-secondary);">Auto SL/PT</label>
+                            <label class="toggle-switch" style="margin-top: 4px;">
                                 <input type="checkbox" ${channel.signal_update_automation ? 'checked' : ''} 
                                        onchange="updateSignalUpdateAutomation(${channel.id}, this.checked)"
-                                       title="Automatically update broker orders when traders edit their Discord signals (C1apped/WaxUI style)">
+                                       title="Auto-update broker orders when trader edits signal (C1apped/WaxUI)">
                                 <span class="slider"></span>
                             </label>
-                        </label>
-                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
-                            Auto-update SL/PT when trader edits signal
                         </div>
                     </div>
                     
-                    <div class="control-group" style="margin-top: 12px;">
-                        <label style="font-size: 0.85rem; color: var(--text-secondary);">
-                            Order Timeout (All Orders)
-                        </label>
-                        <div class="position-size-input" style="margin-top: 4px;">
-                            <input type="number" 
-                                   value="${channel.order_timeout_minutes || ''}" 
-                                   placeholder="No Timeout"
-                                   min="1" max="1440" step="1"
-                                   onchange="updateOrderTimeout(${channel.id}, this.value)"
-                                   title="Minutes until unfilled orders are canceled (applies to ALL order types)">
-                            <span>minutes</span>
+                    <div style="display: flex; gap: 12px; margin-top: 10px;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.7rem; color: var(--text-secondary);">Timeout</label>
+                            <div style="display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+                                <input type="number" class="exec-input"
+                                       value="${channel.order_timeout_minutes || ''}" 
+                                       placeholder="∞"
+                                       min="1" max="1440" step="1"
+                                       style="width: 50px; padding: 4px 6px; font-size: 0.8rem;"
+                                       onchange="updateOrderTimeout(${channel.id}, this.value)"
+                                       title="Minutes until unfilled orders are canceled">
+                                <span style="font-size: 0.7rem; color: var(--text-muted);">min</span>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <div class="control-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
-                        <label style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 0.85rem; color: var(--text-secondary);">Slippage Protection</span>
-                            <label class="toggle-switch">
-                                <input type="checkbox" ${channel.slippage_protection_enabled ? 'checked' : ''} 
-                                       onchange="updateSlippageProtection(${channel.id}, this.checked, null)"
-                                       title="Reject orders when signal price differs too much from market price">
-                                <span class="slider"></span>
-                            </label>
-                        </label>
-                        <div class="position-size-input" style="margin-top: 6px;">
-                            <input type="number" 
-                                   id="slippage-max-${channel.id}"
-                                   value="${channel.slippage_max_pct || ''}" 
-                                   placeholder="50"
-                                   min="1" max="500" step="1"
-                                   class="exec-input"
-                                   ${channel.slippage_protection_enabled ? '' : 'disabled'}
-                                   onchange="updateSlippageProtection(${channel.id}, null, this.value)"
-                                   title="Maximum allowed price deviation from market (e.g., 50 = reject if signal price is 50% different from market)">
-                            <span>% max slippage</span>
+                        <div style="flex: 1; display: flex; flex-direction: column;">
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <label style="font-size: 0.7rem; color: var(--text-secondary);">Slippage</label>
+                                <label class="toggle-switch" style="transform: scale(0.85);">
+                                    <input type="checkbox" ${channel.slippage_protection_enabled ? 'checked' : ''} 
+                                           onchange="updateSlippageProtection(${channel.id}, this.checked, null)"
+                                           title="Reject orders when signal price differs too much from market">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+                                <input type="number" class="exec-input"
+                                       id="slippage-max-${channel.id}"
+                                       value="${channel.slippage_max_pct || ''}" 
+                                       placeholder="50"
+                                       min="1" max="500" step="1"
+                                       style="width: 50px; padding: 4px 6px; font-size: 0.8rem;"
+                                       ${channel.slippage_protection_enabled ? '' : 'disabled'}
+                                       onchange="updateSlippageProtection(${channel.id}, null, this.value)"
+                                       title="Max % deviation from market price">
+                                <span style="font-size: 0.7rem; color: var(--text-muted);">%</span>
+                            </div>
                         </div>
                     </div>
                 </div>
