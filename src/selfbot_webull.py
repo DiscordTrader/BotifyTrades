@@ -8032,7 +8032,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         from src.signals.parser import is_conditional_order_signal, parse_conditional_order_signal
                         from src.services.conditional_orders.router import conditional_order_router
                         
-                        if is_conditional_order_signal(message.content) and conditional_order_router.is_enabled():
+                        if is_conditional_order_signal(message.content, require_sl_pt=True) and conditional_order_router.is_enabled():
                             cond_channel_id = str(message.channel.id)
                             print(f"[COND ORDER] ✓ Detected conditional order signal in channel {cond_channel_id}")
                             parsed_cond = parse_conditional_order_signal(message.content)
@@ -8698,7 +8698,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         
         # Check for conditional order signal FIRST (before regular BTO/STC parsing)
         # This routes price-triggered orders to the conditional order service
-        if is_conditional_order_signal(normalized_content):
+        if is_conditional_order_signal(normalized_content, require_sl_pt=True):
             conditional_signal = parse_conditional_order_signal(normalized_content)
             if conditional_signal:
                 print(f"[CONDITIONAL] ✓ Detected conditional order: {conditional_signal['symbol']} {conditional_signal['trigger_type']} ${conditional_signal['trigger_price']}")
