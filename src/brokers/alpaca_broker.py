@@ -606,6 +606,32 @@ class AlpacaBroker(BrokerInterface):
             # The original BTO may have been auto-reduced by Alpaca, so we must check the real held quantity
             if action.upper() == "STC":
                 try:
+                    positions = await self.get_positions()
+                    held_qty = positions.get(contract.symbol, 0)
+                    if held_qty > 0 and held_qty < quantity:
+                        print(f"[{self.name}] ⚠️ Adjusting STC quantity for {contract.symbol}: {quantity} -> {held_qty} (actual position)", flush=True)
+                        quantity = held_qty
+                    elif held_qty <= 0:
+                        return OrderResult(
+                            success=False,
+                            message=f"No open position found for {contract.symbol} (cannot STC)",
+                            symbol=symbol,
+                            action=action
+                        )
+                except Exception as pos_err:
+                    print(f"[{self.name}] ⚠️ Error checking position for {contract.symbol}: {pos_err}", flush=True)
+
+            # Check for existing pending orders that might be locking shares/contracts
+            if action.upper() in ('STC', 'BTC'):
+                try:
+                    open_orders = await asyncio.to_thread(self.get_orders, status='open')
+                    for o in open_orders:
+                        if o.symbol == (contract.symbol if 'option' in str(type(contract)).lower() else symbol) and o.side == side:
+                             print(f"[{self.name}] ⚠️ Found existing pending {o.side} order for {o.symbol} (ID: {o.id}). Shares may be locked.", flush=True)
+                             # Optional: Cancel it? For now just log it as it explains the 'insufficient qty' error
+                except Exception as order_err:
+                    print(f"[{self.name}] ⚠️ Error checking open orders: {order_err}", flush=True)
+                try:
                     positions = await asyncio.to_thread(self.trading_client.get_all_positions)
                     held_qty = 0
                     for pos in positions:
