@@ -250,8 +250,20 @@ class RobinhoodBroker(BrokerInterface):
             option_positions = rh.options.get_open_option_positions()
             if option_positions:
                 for pos in option_positions:
-                    avg_price = float(pos.get('average_price', 0) or 0)
+                    raw_avg_price = pos.get('average_price')
+                    raw_avg_float = float(raw_avg_price or 0)
                     qty = float(pos.get('quantity', 0))
+                    
+                    # Robinhood returns average_price in different formats:
+                    # - Some positions return price per contract in dollars (e.g., 1.25 = $1.25)
+                    # - Others return price in cents or total (e.g., 100.0 might mean $1.00)
+                    # If price seems too high (>$50 per contract), assume it's in cents
+                    if raw_avg_float > 50:
+                        avg_price = raw_avg_float / 100.0  # Convert from cents to dollars
+                        print(f"[ROBINHOOD] Option position: {pos.get('chain_symbol')} - converted avg_price from {raw_avg_float} cents to ${avg_price:.4f}")
+                    else:
+                        avg_price = raw_avg_float
+                        print(f"[ROBINHOOD] Option position: {pos.get('chain_symbol')} - avg_price=${avg_price:.4f}")
                     
                     # Get option instrument details (strike, expiry, type)
                     option_url = pos.get('option', '')
