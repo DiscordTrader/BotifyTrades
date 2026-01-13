@@ -2584,7 +2584,7 @@ class WebullBroker:
     async def place_option_order(self, action: str, qty: int, symbol: str,
                                  strike: float, opt_type: str, expiry_mmdd: str,
                                  limit_price: float, expiry_year: Optional[str] = None,
-                                 channel_id: Optional[str] = None) -> Dict[str, Any]:
+                                 channel_id: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         await self._ensure_login()
         
         # Log if using paper trading account (actual Webull paper API will be called)
