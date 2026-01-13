@@ -542,7 +542,20 @@ class AlpacaBroker(BrokerInterface):
         try:
             from datetime import datetime
             
+            # SIDE: Buy/Sell mapping
+            side = OrderSide.BUY if action in ('BTO', 'BTC') else OrderSide.SELL
+            
+            # INTENT: Mapping BTO/STC to Alpaca PositionIntent
+            intent = kwargs.get('position_intent')
+            if not intent:
+                intent = PositionIntent.BUY_TO_OPEN if action == 'BTO' else \
+                         PositionIntent.SELL_TO_CLOSE if action == 'STC' else \
+                         PositionIntent.SELL_TO_OPEN if action == 'STO' else \
+                         PositionIntent.BUY_TO_CLOSE if action == 'BTC' else \
+                         PositionIntent.BUY_TO_OPEN # Fallback
+
             # Normalize expiry to YYYY-MM-DD
+            expiry_date = expiry
             if "/" in expiry:
                 parts = expiry.split("/")
                 if len(parts) == 2:

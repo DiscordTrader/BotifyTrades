@@ -10229,9 +10229,26 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 order_success = False
                 resp = None
                 
-                # Check for multi-broker execution
-                enabled_brokers = signal.get('_enabled_brokers', None)
-                if enabled_brokers and isinstance(enabled_brokers, list) and len(enabled_brokers) > 0:
+            # Check for multi-broker execution
+            enabled_brokers = signal.get('_enabled_brokers', None)
+            
+            # LIVE TRADE ROUTING (Non-multi-broker fallback or manual override)
+            if not enabled_brokers:
+                # If no multi-broker setting, check if we have a specific broker override (e.g. from risk management)
+                risk_broker = signal.get('broker')
+                if risk_broker:
+                    # Map to instances
+                    if str(risk_broker).upper() == 'ALPACA_PAPER' and self.paper_broker:
+                        enabled_brokers = ['ALPACA_PAPER']
+                    elif str(risk_broker).upper() == 'WEBULL' and self.broker:
+                        enabled_brokers = ['WEBULL']
+                    else:
+                        enabled_brokers = [str(risk_broker).upper()]
+                else:
+                    # Default to primary broker
+                    enabled_brokers = [self.broker.name if self.broker else 'WEBULL']
+
+            if enabled_brokers and isinstance(enabled_brokers, list) and len(enabled_brokers) > 0:
                     # MULTI-BROKER EXECUTION - Execute on all selected brokers
                     _original_print(f"[MULTI-BROKER] Executing on {len(enabled_brokers)} brokers: {enabled_brokers}")
                     
