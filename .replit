@@ -19,12 +19,13 @@ args = "User Trading Bot"
 name = "User Trading Bot"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python src/selfbot_webull.py"
-
-[workflows.workflow.metadata]
-outputType = "console"
+waitForPort = 5000
 
 [nix]
 channel = "stable-25_05"
