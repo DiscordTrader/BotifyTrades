@@ -2953,26 +2953,83 @@ def register_routes(app):
     
     @app.route('/api/schwab/balance', methods=['GET'])
     def api_schwab_balance() -> Any:
-        """Get Charles Schwab account balance for Dashboard"""
+        """Get Charles Schwab account balance for Dashboard
+        
+        Uses the bot's existing Schwab broker instance if available,
+        otherwise creates a new connection using stored credentials.
+        """
         import asyncio
         
         cache_key = 'schwab_balance'
         if cache_key in _api_cache:
             cached_value, timestamp = _api_cache[cache_key]
             if time.time() - timestamp < 5:
-                return cached_value
+                return jsonify(cached_value)
         
         try:
             print("[API] Fetching Schwab balance...")
+            
+            # PRIORITY 1: Use the bot's existing Schwab broker instance (shares tokens/connection)
+            if _bot_instance and hasattr(_bot_instance, 'schwab_broker') and _bot_instance.schwab_broker:
+                broker = _bot_instance.schwab_broker
+                if broker.connected:
+                    print("[API] Using bot's existing Schwab broker instance")
+                    try:
+                        account_future = asyncio.run_coroutine_threadsafe(
+                            broker.get_account_info(),
+                            _bot_instance.loop
+                        )
+                        account_info = account_future.result(timeout=10)
+                        
+                        positions_future = asyncio.run_coroutine_threadsafe(
+                            broker.get_positions(),
+                            _bot_instance.loop
+                        )
+                        positions_raw = positions_future.result(timeout=10)
+                        
+                        positions_list = []
+                        for symbol, pos_data in (positions_raw or {}).items():
+                            if isinstance(pos_data, dict):
+                                positions_list.append({
+                                    'symbol': symbol,
+                                    'qty': pos_data.get('quantity', 0),
+                                    'market_value': pos_data.get('market_value', 0),
+                                    'avg_price': pos_data.get('average_price', 0),
+                                    'unrealized_pnl': pos_data.get('unrealized_pnl', 0)
+                                })
+                            else:
+                                positions_list.append({
+                                    'symbol': symbol,
+                                    'qty': pos_data,
+                                    'market_value': 0,
+                                    'avg_price': 0,
+                                    'unrealized_pnl': 0
+                                })
+                        
+                        result_data = {
+                            'buying_power': account_info.get('buying_power', 0) if account_info else 0,
+                            'cash_balance': account_info.get('cash', 0) if account_info else 0,
+                            'net_liquidation': account_info.get('portfolio_value', 0) if account_info else 0,
+                            'equity': account_info.get('portfolio_value', 0) if account_info else 0,
+                            'unrealized_pnl': account_info.get('unrealized_pnl', 0) if account_info else 0,
+                            'positions': positions_list,
+                            'account_number': getattr(broker, 'account_number', None),
+                            'status': 'ok'
+                        }
+                        _api_cache[cache_key] = (result_data, time.time())
+                        return jsonify(result_data)
+                    except Exception as e:
+                        print(f"[API] Error using bot's Schwab broker: {e}")
+            
+            # PRIORITY 2: Create new connection using stored credentials/tokens
             from src.brokers.schwab_broker import SchwabBroker
-            # Use the correct credentials source (same as schwab_auth.py)
             from .schwab_auth import get_schwab_credentials
             
             creds = get_schwab_credentials()
-            print(f"[API] Schwab credentials found: client_id={bool(creds.get('client_id') if creds else False)}, secret={bool(creds.get('client_secret') if creds else False)}")
+            print(f"[API] Schwab credentials found: client_id={bool(creds.get('client_id') if creds else False)}")
             
             if not creds or not creds.get('client_id') or not creds.get('client_secret'):
-                result = jsonify({
+                return jsonify({
                     'buying_power': 0,
                     'cash_balance': 0,
                     'net_liquidation': 0,
@@ -2982,7 +3039,6 @@ def register_routes(app):
                     'status': 'not_configured',
                     'error': 'Schwab credentials not configured. Go to Settings to connect.'
                 })
-                return result
             
             config = {
                 'client_id': creds.get('client_id'),
@@ -2994,22 +3050,17 @@ def register_routes(app):
             broker = SchwabBroker(config)
             
             async def _fetch_schwab_data():
-                """Fetch all Schwab data in one async context"""
-                print("[API] Schwab connecting...")
                 connected = await broker.connect()
-                print(f"[API] Schwab connected: {connected}")
                 if not connected:
                     return None, None, False
                 account_info = await broker.get_account_info()
-                print(f"[API] Schwab account info: buying_power={account_info.get('buying_power', 0)}")
                 positions_raw = await broker.get_positions()
                 return account_info, positions_raw, True
             
             account_info, positions_raw, connected = asyncio.run(_fetch_schwab_data())
             
             if not connected:
-                print("[API] Schwab not authenticated")
-                result = jsonify({
+                return jsonify({
                     'buying_power': 0,
                     'cash_balance': 0,
                     'net_liquidation': 0,
@@ -3019,7 +3070,6 @@ def register_routes(app):
                     'status': 'not_authenticated',
                     'error': 'Not authenticated with Schwab. Click "Connect with Schwab" in Settings.'
                 })
-                return result
             
             positions_list = []
             for symbol, pos_data in (positions_raw or {}).items():
@@ -3040,7 +3090,7 @@ def register_routes(app):
                         'unrealized_pnl': 0
                     })
             
-            result = jsonify({
+            result_data = {
                 'buying_power': account_info.get('buying_power', 0) if account_info else 0,
                 'cash_balance': account_info.get('cash', 0) if account_info else 0,
                 'net_liquidation': account_info.get('portfolio_value', 0) if account_info else 0,
@@ -3049,15 +3099,15 @@ def register_routes(app):
                 'positions': positions_list,
                 'account_number': broker.account_number,
                 'status': 'ok'
-            })
-            _api_cache[cache_key] = (result, time.time())
-            return result
+            }
+            _api_cache[cache_key] = (result_data, time.time())
+            return jsonify(result_data)
                 
         except Exception as e:
             print(f"[API] Exception in Schwab balance endpoint: {e}")
             import traceback
             traceback.print_exc()
-            result = jsonify({
+            return jsonify({
                 'buying_power': 0,
                 'cash_balance': 0,
                 'net_liquidation': 0,
@@ -3067,7 +3117,6 @@ def register_routes(app):
                 'status': 'error',
                 'error': str(e)
             })
-            return result
     
     @app.route('/api/robinhood/balance', methods=['GET'])
     def api_robinhood_balance() -> Any:

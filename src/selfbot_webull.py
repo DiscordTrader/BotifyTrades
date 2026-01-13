@@ -10049,6 +10049,66 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 signal = await self.order_queue.get()
                 _original_print(f"[WORKER] ✅ Got signal from queue: {signal.get('action')} {signal.get('symbol')}", flush=True)
                 
+                # ORDER-LEVEL DEDUPLICATION: Prevent duplicate order execution
+                # - Discord/Telegram signals (with message_id): PERMANENT blocking
+                # - Manual/relay signals (hash-based): TTL-based, allows re-entry after 60s
+                import hashlib
+                import time as time_module
+                
+                DEDUPE_TTL_SECONDS = 60  # TTL for hash-based signals only
+                
+                # Determine if this is a platform signal (permanent blocking) or manual (TTL-based)
+                original_message_id = signal.get('message_id')
+                is_platform_signal = bool(original_message_id and str(original_message_id).strip())
+                
+                if is_platform_signal:
+                    signal_id = original_message_id
+                else:
+                    # For manual/relay trades without message_id, create a hash-based key
+                    hash_content = f"{signal.get('action', '')}_{signal.get('symbol', '')}_{signal.get('strike', '')}_{signal.get('expiry', '')}_{signal.get('qty', '')}_{signal.get('price', '')}_{signal.get('channel_id', '')}"
+                    signal_id = f"HASH_{hashlib.md5(hash_content.encode()).hexdigest()[:16]}"
+                    signal['signal_uuid'] = signal_id
+                
+                order_key = f"{signal_id}_{signal.get('action', '')}_{signal.get('symbol', '')}_{signal.get('strike', '')}_{signal.get('expiry', '')}"
+                
+                if not hasattr(self, '_executed_orders'):
+                    self._executed_orders = {}  # {key: timestamp}
+                    self._executed_orders_permanent = set()  # Permanent blocking for platform signals
+                    self._executed_orders_lock = asyncio.Lock()
+                
+                current_time = time_module.time()
+                async with self._executed_orders_lock:
+                    if is_platform_signal:
+                        # PERMANENT blocking for Discord/Telegram messages
+                        if order_key in self._executed_orders_permanent:
+                            _original_print(f"[WORKER] ⏭️ DUPLICATE ORDER BLOCKED: {signal.get('action')} {signal.get('symbol')} (platform msg_id: {signal_id})", flush=True)
+                            continue
+                        self._executed_orders_permanent.add(order_key)
+                        
+                        # Limit permanent cache size (keep last 2000)
+                        if len(self._executed_orders_permanent) > 2000:
+                            oldest = list(self._executed_orders_permanent)[:1000]
+                            for k in oldest:
+                                self._executed_orders_permanent.discard(k)
+                    else:
+                        # TTL-based blocking for manual/relay signals
+                        if order_key in self._executed_orders:
+                            last_exec_time = self._executed_orders[order_key]
+                            elapsed = current_time - last_exec_time
+                            if elapsed < DEDUPE_TTL_SECONDS:
+                                _original_print(f"[WORKER] ⏭️ DUPLICATE ORDER BLOCKED: {signal.get('action')} {signal.get('symbol')} (seen {elapsed:.1f}s ago)", flush=True)
+                                continue
+                            else:
+                                _original_print(f"[WORKER] ✓ Allowing re-entry after {elapsed:.1f}s: {signal.get('action')} {signal.get('symbol')}", flush=True)
+                        
+                        # Record this execution with timestamp
+                        self._executed_orders[order_key] = current_time
+                        
+                        # Cleanup old TTL entries (older than 5 minutes)
+                        expired_keys = [k for k, t in self._executed_orders.items() if current_time - t > 300]
+                        for k in expired_keys:
+                            del self._executed_orders[k]
+                
                 # Pre-trade analysis for BTO orders
                 if signal['action'] == 'BTO' and ENABLE_SWING_ANALYSIS and self.swing_analyzer:
                     symbol = signal['symbol']
@@ -10162,6 +10222,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elif broker_name_lower in ('robinhood', 'rh') and self.robinhood_broker and self.robinhood_broker.connected:
                             broker_instance = self.robinhood_broker
                             _original_print(f"[MULTI-BROKER] Using Robinhood LIVE broker (WARNING: NO PAPER MODE)")
+                        # Charles Schwab: 'schwab', 'SCHWAB', 'schwab_live', 'SCHWAB_LIVE', 'schwab_paper', 'SCHWAB_PAPER'
+                        elif broker_name_lower in ('schwab', 'schwab_live', 'schwab_paper') and self.schwab_broker and self.schwab_broker.connected:
+                            is_paper = getattr(self.schwab_broker, 'dry_run', True)
+                            mode = "PAPER" if is_paper else "LIVE"
+                            broker_instance = self.schwab_broker
+                            _original_print(f"[MULTI-BROKER] Using Schwab {mode} broker")
+                        # Questrade (Canada - LIVE): 'questrade', 'QUESTRADE'
+                        elif broker_name_lower == 'questrade' and hasattr(self, 'questrade_broker') and self.questrade_broker and self.questrade_broker.connected:
+                            broker_instance = self.questrade_broker
+                            _original_print(f"[MULTI-BROKER] Using Questrade LIVE broker (Canada)")
                         else:
                             _original_print(f"[MULTI-BROKER] ⚠️  Broker '{broker_name}' not available or not connected")
                             _original_print(f"[DEBUG] Requested: '{broker_name_lower}', paper_broker: {getattr(self.paper_broker, 'name', None) if self.paper_broker else None}, broker: {getattr(self.broker, 'name', None) if self.broker else None}")
