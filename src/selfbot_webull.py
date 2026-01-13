@@ -10037,6 +10037,75 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             _original_print(f"[TELEGRAM CONDITIONAL] Falling back to immediate execution", flush=True)
             await self.order_queue.put(signal)
     
+    async def execute_on_single_broker(self, signal: dict, broker_name: str, broker_instance) -> dict:
+        """Execute order on a specific broker instance and return normalized response"""
+        try:
+            # Prepare common order parameters
+            action = signal.get('action', 'BTO').upper()
+            symbol = signal.get('symbol', '')
+            qty = signal.get('qty', 1)
+            price = signal.get('price')
+            asset_type = signal.get('asset', 'option')
+            
+            _original_print(f"[{broker_name}] Executing {action} {qty} {symbol}")
+            
+            if asset_type == 'option':
+                strike = signal.get('strike')
+                expiry = signal.get('expiry')
+                opt_type = signal.get('opt_type', 'C')
+                
+                _original_print(f"[{broker_name}] Placing option order: {action} {qty} {symbol} ${strike}{opt_type} {expiry} @ ${price}")
+                
+                # Use place_option_order method
+                result = await broker_instance.place_option_order(
+                    symbol=symbol,
+                    strike=strike,
+                    expiry=expiry,
+                    option_type=opt_type,
+                    action=action,
+                    quantity=qty,
+                    price=price,
+                    opt_type=opt_type  # Extra kwarg for compatibility
+                )
+            else:
+                # Stock order
+                _original_print(f"[{broker_name}] Placing stock order: {action} {qty} {symbol} @ ${price}")
+                result = await broker_instance.place_stock_order(
+                    symbol=symbol,
+                    action=action,
+                    quantity=qty,
+                    price=price
+                )
+            
+            # Normalize response
+            if hasattr(result, 'success') and hasattr(result, 'order_id'):
+                # Handle Result object from some brokers
+                return {
+                    'success': result.success,
+                    'orderId': result.order_id,
+                    'msg': result.message if hasattr(result, 'message') else '',
+                    'broker': broker_name
+                }
+            elif isinstance(result, dict):
+                # Already a dict
+                result['broker'] = broker_name
+                return result
+            else:
+                # Unknown format
+                return {
+                    'success': bool(result),
+                    'orderId': str(result),
+                    'broker': broker_name
+                }
+                
+        except Exception as e:
+            _original_print(f"[{broker_name}] ❌ Option order FAILED: {e}")
+            return {
+                'success': False,
+                'msg': str(e),
+                'broker': broker_name
+            }
+
     async def worker(self):
         """Process orders from queue with pre-trade analysis"""
         _original_print("[WORKER] 💤 Waiting for broker_ready event...", flush=True)
@@ -10311,9 +10380,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             strike=signal.get('strike'),
                                             expiry=signal.get('expiry'),
                                             option_type=signal.get('opt_type', 'C'),
-                                            action='STC',
+                                            action=signal.get('action', 'STC'),
                                             quantity=signal['qty'],
-                                            price=signal.get('price')
+                                            price=signal.get('price'),
+                                            opt_type=signal.get('opt_type', 'C') # Pass both to be safe
                                         )
                                     else:
                                         _original_print(f"[RISK] Closing Alpaca stock position: {signal['symbol']}")

@@ -4370,7 +4370,7 @@
   },
   "ALPACA_PAPER_NFLX_90.0_2026-01-16_C": {
     "entry_price": 1.16,
-    "highest_price": 1.68,
+    "highest_price": 1.75,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -4812,7 +4812,7 @@
   },
   "ALPACA_PAPER_XAIR_stock": {
     "entry_price": 1.58,
-    "highest_price": 1.6372,
+    "highest_price": 1.6965,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
