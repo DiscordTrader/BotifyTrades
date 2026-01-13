@@ -7519,6 +7519,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             except Exception as e:
                 pass
         
+        # Allow admin commands from ANY channel (before channel filter)
+        # !extractraw and !extracthistory work from any channel for admin use
+        if self.user and message.author.id == self.user.id:
+            content = message.content.strip().lower()
+            if content.startswith('!extractraw'):
+                args = message.content.strip()[11:].strip().split()
+                if not args:
+                    await message.channel.send("❌ Usage: `!extractraw [CHANNEL_ID] [LIMIT]`\nExample: `!extractraw 1234567890123456789 1000`")
+                    return
+                try:
+                    channel_id = int(args[0])
+                    limit = int(args[1]) if len(args) > 1 else 1000
+                    await self.handle_extract_raw(message, channel_id, limit)
+                except ValueError:
+                    await message.channel.send("❌ Invalid channel ID. Use numeric ID like `1234567890123456789`")
+                return
+            elif content.startswith('!extracthistory'):
+                args = message.content.strip()[15:].strip().split()
+                channel_id = int(args[0]) if args else 1239624229583061052
+                limit = int(args[1]) if len(args) > 1 else 200
+                await self.handle_extract_history(message, channel_id, limit)
+                return
+        
         # If not in database, not in legacy CHANNEL_IDS list, AND not a mapped source, ignore
         if not channel_info and message.channel.id not in CHANNEL_IDS and not is_mapped_source_channel:
             return
