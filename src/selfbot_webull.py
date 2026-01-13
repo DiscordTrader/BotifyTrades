@@ -10245,8 +10245,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         else:
                             enabled_brokers = [str(risk_broker).upper()]
                     else:
-                        # Default to primary broker
-                        enabled_brokers = [self.broker.name if self.broker else 'WEBULL']
+                        # Check channel configuration for enabled brokers
+                        channel_id = signal.get('channel_id')
+                        if channel_id and DATABASE_MODULE_AVAILABLE:
+                            try:
+                                from gui_app import database as db
+                                channel_cfg = db.get_channel_by_discord_id(str(channel_id))
+                                if channel_cfg and channel_cfg.get('enabled_brokers'):
+                                    import json
+                                    try:
+                                        enabled_brokers = json.loads(channel_cfg['enabled_brokers'])
+                                        _original_print(f"[MULTI-BROKER] Using channel enabled_brokers: {enabled_brokers}")
+                                    except:
+                                        pass
+                            except Exception as e:
+                                _original_print(f"[DEBUG] Error loading channel brokers: {e}")
+                        
+                        if not enabled_brokers:
+                            # Default to primary broker
+                            enabled_brokers = [self.broker.name if self.broker else 'WEBULL']
 
                 if enabled_brokers and isinstance(enabled_brokers, list) and len(enabled_brokers) > 0:
                     # MULTI-BROKER EXECUTION - Execute on all selected brokers
