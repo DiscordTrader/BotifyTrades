@@ -7002,7 +7002,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         sys.stderr.write(f"[CONDITIONAL EXEC] Starting execution for order: {order.get('id')}\n")
                         sys.stderr.flush()
                         symbol = order['symbol']
-                        broker_name = order.get('broker_primary', 'Webull')
+                        broker_name = order.get('broker_primary')
+                        if not broker_name:
+                            sys.stderr.write(f"[CONDITIONAL EXEC] ❌ Order #{order.get('id')} has no broker_primary - SKIPPING\n")
+                            sys.stderr.flush()
+                            return
                         market = order.get('market', 'US')
                         currency = '₹' if market == 'INDIA' else '$'
                         option_info = f" {order.get('strike')}{order.get('opt_type')}" if order.get('strike') else ""
@@ -11175,7 +11179,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 if multi_results:
                                     success_brokers = [r.get('broker', 'Unknown') for r in multi_results if r.get('success') or 'orderId' in r]
                                 else:
-                                    success_brokers = [resp.get('broker', 'Webull')]
+                                    success_brokers = [resp.get('broker', 'Unknown')]
                             else:
                                 # OrderResult object - single broker execution
                                 multi_results = []
@@ -11258,7 +11262,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         else:
                                             display_qty = resp.get('executed_qty', signal['qty'])
                                             order_id = resp.get('orderId', 'N/A')
-                                            broker_name = resp.get('broker', 'Webull')
+                                            broker_name = resp.get('broker', 'Unknown')
                                     else:
                                         # OrderResult object
                                         display_qty = getattr(resp, 'quantity', None) or signal['qty']

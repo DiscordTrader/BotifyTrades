@@ -1488,7 +1488,7 @@ class RiskManager:
             avg_cost=float(pos.get('avg_cost', 0)),
             current_price=float(pos.get('current_price', 0)),
             asset=pos.get('asset', 'stock'),
-            broker=pos.get('broker', 'Webull'),
+            broker=pos.get('broker', 'UNKNOWN'),
             strike=pos.get('strike'),
             expiry=pos.get('expiry'),
             direction=pos.get('direction'),

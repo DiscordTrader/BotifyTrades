@@ -119,19 +119,16 @@ class BrokerManager:
             except Exception as e:
                 print(f"[BROKER MANAGER] ❌ Schwab error: {e}")
         
-        # Set default broker
-        self.default_broker = brokers_config.get('default_broker', 'WEBULL')
-        if self.default_broker not in self.brokers:
-            # Fall back to first available broker
-            if self.brokers:
-                self.default_broker = list(self.brokers.keys())[0]
-                print(f"[BROKER MANAGER] Default broker not available, using {self.default_broker}")
-            else:
-                print(f"[BROKER MANAGER] ❌ No brokers available!")
-                return False
+        # STRICT ROUTING: No default broker - all trades must specify broker via channel config
+        # default_broker is kept for backwards compatibility but NOT used for routing
+        self.default_broker = None  # Disabled - strict channel routing enforced
+        
+        if not self.brokers:
+            print(f"[BROKER MANAGER] ❌ No brokers available!")
+            return False
         
         print(f"[BROKER MANAGER] Initialized with {len(self.brokers)} broker(s): {list(self.brokers.keys())}")
-        print(f"[BROKER MANAGER] Default broker: {self.default_broker}")
+        print(f"[BROKER MANAGER] STRICT ROUTING: No default broker - channel config required")
         return len(self.brokers) > 0
     
     def extract_broker_from_signal(self, message: str) -> tuple[Optional[str], str]:
@@ -266,26 +263,35 @@ class BrokerManager:
         )
     
     async def get_account_info(self, broker_name: Optional[str] = None) -> Dict[str, Any]:
-        """Get account info from specified broker"""
-        target_broker = broker_name if broker_name else self.default_broker
-        broker = self.brokers.get(target_broker)
+        """Get account info from specified broker - STRICT: broker_name required for trading contexts"""
+        if not broker_name:
+            print("[BROKER MANAGER] ⚠️ get_account_info called without broker_name")
+            return {}
+        broker = self.brokers.get(broker_name)
         if not broker:
+            print(f"[BROKER MANAGER] ❌ Broker '{broker_name}' not available for account info")
             return {}
         return await broker.get_account_info()
     
     async def get_positions(self, broker_name: Optional[str] = None) -> Dict[str, Any]:
-        """Get positions from specified broker"""
-        target_broker = broker_name if broker_name else self.default_broker
-        broker = self.brokers.get(target_broker)
+        """Get positions from specified broker - STRICT: broker_name required for trading contexts"""
+        if not broker_name:
+            print("[BROKER MANAGER] ⚠️ get_positions called without broker_name")
+            return {}
+        broker = self.brokers.get(broker_name)
         if not broker:
+            print(f"[BROKER MANAGER] ❌ Broker '{broker_name}' not available for positions")
             return {}
         return await broker.get_positions()
     
     async def get_quote(self, symbol: str, broker_name: Optional[str] = None) -> Optional[float]:
-        """Get quote from specified broker"""
-        target_broker = broker_name if broker_name else self.default_broker
-        broker = self.brokers.get(target_broker)
+        """Get quote from specified broker - STRICT: broker_name required"""
+        if not broker_name:
+            print(f"[BROKER MANAGER] ⚠️ get_quote for {symbol} called without broker_name")
+            return None
+        broker = self.brokers.get(broker_name)
         if not broker:
+            print(f"[BROKER MANAGER] ❌ Broker '{broker_name}' not available for quote")
             return None
         return await broker.get_quote(symbol)
     
