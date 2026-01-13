@@ -8,6 +8,7 @@ Features:
 - Order caching to skip already-processed orders
 - Duplicate order prevention via database tracking
 - Quiet logging: only important events are logged
+- Rate limit enforcement via centralized RateLimitManager
 """
 
 import sys
@@ -23,6 +24,13 @@ try:
 except ImportError:
     import database as db
     import webhook_service
+
+try:
+    from src.services.rate_limit_manager import get_rate_limit_manager
+    RATE_LIMIT_AVAILABLE = True
+except ImportError:
+    RATE_LIMIT_AVAILABLE = False
+    get_rate_limit_manager = None
 
 
 def is_market_open() -> bool:
@@ -147,7 +155,14 @@ def get_trade_monitor() -> 'TradeMonitor':
 
 
 class TradeMonitor:
-    """Monitors broker for new filled orders and posts to Discord"""
+    """
+    Monitors broker for new filled orders and posts to Discord.
+    
+    Enhanced with:
+    - Thread-safe cancellation via asyncio.Event
+    - Re-checks enable state each cycle
+    - Standby mode when disabled (zero API calls)
+    """
     
     def __init__(self, broker=None):
         self.broker = broker
@@ -158,6 +173,8 @@ class TradeMonitor:
         self._http_session = None
         self._poll_count = 0
         self._last_status_log = None
+        self._stop_event = asyncio.Event()
+        self._standby_mode = False
     
     async def _get_http_session(self):
         """Get or create reusable aiohttp session for non-blocking HTTP"""
@@ -198,7 +215,7 @@ class TradeMonitor:
         print(f"[TRADE MONITOR] Broker connected: {broker_name}", flush=True)
         
     async def start(self):
-        """Start the trade monitor loop"""
+        """Start the trade monitor loop with enable gate"""
         if self.running:
             return
             
@@ -213,12 +230,15 @@ class TradeMonitor:
         
         broker_name = getattr(self.broker, 'name', type(self.broker).__name__)
         self.running = True
+        self._stop_event.clear()
+        self._standby_mode = False
         self._task = asyncio.create_task(self._poll_loop())
         print(f"[TRADE MONITOR] ✓ Started - monitoring {broker_name}", flush=True)
         
     async def stop(self):
-        """Stop the trade monitor"""
+        """Stop the trade monitor with cooperative cancellation"""
         self.running = False
+        self._stop_event.set()
         if self._task:
             self._task.cancel()
             try:
@@ -226,54 +246,88 @@ class TradeMonitor:
             except asyncio.CancelledError:
                 pass
         print("[TRADE MONITOR] Stopped", flush=True)
+    
+    def request_stop(self):
+        """Thread-safe request to stop the monitor (can be called from Flask thread)"""
+        self._stop_event.set()
+        self.running = False
+        print("[TRADE MONITOR] Stop requested", flush=True)
         
     async def _poll_loop(self):
-        """Main polling loop - quiet mode"""
-        print("[TRADE MONITOR] Poll loop started", flush=True)
-        while self.running:
+        """Main polling loop with enable gate and cooperative cancellation"""
+        print("[TRADE MONITOR] Poll loop started with enable gate", flush=True)
+        
+        while self.running and not self._stop_event.is_set():
             try:
                 settings = db.get_trade_monitor_settings()
-                if not settings.get('enabled'):
-                    print("[TRADE MONITOR] Disabled, stopping...", flush=True)
-                    self.running = False
-                    break
+                is_enabled = settings.get('enabled', False)
+                
+                if is_enabled:
+                    if self._standby_mode:
+                        print("[TRADE MONITOR] ✓ Resuming active monitoring", flush=True)
+                        self._standby_mode = False
                     
-                base_interval = settings.get('poll_interval_seconds', 10)
-                poll_interval = get_adaptive_poll_interval(base_interval)
-                
-                self._poll_count += 1
-                
-                now = datetime.now()
-                # Log status every 5 minutes (300 seconds)
-                if self._last_status_log is None or (now - self._last_status_log).seconds >= 300:
-                    market_status = "OPEN" if is_market_open() else "CLOSED"
-                    print(f"[TRADE MONITOR] Active (market={market_status}, poll={poll_interval}s, count={self._poll_count})", flush=True)
-                    self._last_status_log = now
-                
-                await self._check_for_new_orders(settings)
-                
-                self._last_poll_time = now
-                await asyncio.sleep(poll_interval)
+                    base_interval = settings.get('poll_interval_seconds', 10)
+                    poll_interval = get_adaptive_poll_interval(base_interval)
+                    
+                    self._poll_count += 1
+                    
+                    now = datetime.now()
+                    if self._last_status_log is None or (now - self._last_status_log).seconds >= 300:
+                        market_status = "OPEN" if is_market_open() else "CLOSED"
+                        print(f"[TRADE MONITOR] Active (market={market_status}, poll={poll_interval}s, count={self._poll_count})", flush=True)
+                        self._last_status_log = now
+                    
+                    await self._check_for_new_orders(settings)
+                    
+                    self._last_poll_time = now
+                    
+                    try:
+                        await asyncio.wait_for(self._stop_event.wait(), timeout=poll_interval)
+                        break
+                    except asyncio.TimeoutError:
+                        pass
+                else:
+                    if not self._standby_mode:
+                        print("[TRADE MONITOR] ⏸️ Entering standby - disabled in settings (zero API calls)", flush=True)
+                        self._standby_mode = True
+                    
+                    try:
+                        await asyncio.wait_for(self._stop_event.wait(), timeout=5)
+                        break
+                    except asyncio.TimeoutError:
+                        pass
                 
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 print(f"[TRADE MONITOR] Error: {e}", flush=True)
                 await asyncio.sleep(10)
+        
+        print("[TRADE MONITOR] Poll loop ended", flush=True)
                 
     async def _check_for_new_orders(self, settings: Dict[str, Any]):
-        """Check broker for new filled orders - quiet mode"""
+        """Check broker for new filled orders with rate limit enforcement"""
         if not self.broker:
             return
             
-        broker_name = getattr(self.broker, 'name', 'UNKNOWN')
+        broker_name = getattr(self.broker, 'name', 'UNKNOWN').lower()
         test_mode_setting = db.get_setting('trade_monitor_test_mode', 'false')
         test_mode = test_mode_setting.lower() == 'true'
+        
+        rate_manager = get_rate_limit_manager() if RATE_LIMIT_AVAILABLE else None
+        if rate_manager:
+            can_proceed, wait_time = rate_manager.can_make_request(broker_name)
+            if not can_proceed:
+                print(f"[TRADE MONITOR] {broker_name.title()} rate limit - skipping cycle (wait {wait_time:.1f}s)", flush=True)
+                return
         
         try:
             orders = []
             
             if hasattr(self.broker, 'get_order_history'):
+                if rate_manager:
+                    rate_manager.record_request(broker_name)
                 filled_orders = await self.broker.get_order_history(count=20)
                 if filled_orders:
                     for order in filled_orders:
@@ -281,11 +335,23 @@ class TradeMonitor:
                     orders.extend(filled_orders)
             
             if test_mode and hasattr(self.broker, 'get_pending_orders'):
-                pending_orders = await self.broker.get_pending_orders()
-                if pending_orders:
-                    for order in pending_orders:
-                        order['_status'] = 'PENDING'
-                    orders.extend(pending_orders)
+                if rate_manager:
+                    can_proceed2, wait_time2 = rate_manager.can_make_request(broker_name)
+                    if can_proceed2:
+                        rate_manager.record_request(broker_name)
+                        pending_orders = await self.broker.get_pending_orders()
+                        if pending_orders:
+                            for order in pending_orders:
+                                order['_status'] = 'PENDING'
+                            orders.extend(pending_orders)
+                    else:
+                        print(f"[TRADE MONITOR] {broker_name.title()} rate limit - skipping pending orders (wait {wait_time2:.1f}s)", flush=True)
+                else:
+                    pending_orders = await self.broker.get_pending_orders()
+                    if pending_orders:
+                        for order in pending_orders:
+                            order['_status'] = 'PENDING'
+                        orders.extend(pending_orders)
             
             if test_mode:
                 current_order_ids = {o.get('order_id') for o in orders if o.get('order_id')}

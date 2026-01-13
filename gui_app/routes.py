@@ -17347,3 +17347,102 @@ def register_routes(app):
             import traceback
             traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # ============ SERVICE ORCHESTRATOR API ============
+    
+    @app.route('/api/services', methods=['GET'])
+    @login_required
+    def api_get_services():
+        """Get all registered services with their status."""
+        try:
+            services = db.get_service_registry()
+            return jsonify({'success': True, 'services': services})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/services/<service_id>', methods=['PUT'])
+    @login_required
+    def api_update_service(service_id):
+        """Update service configuration."""
+        try:
+            data = request.get_json()
+            enabled = data.get('enabled')
+            priority = data.get('priority')
+            interval = data.get('interval')
+            
+            success = db.update_service_config(
+                service_id,
+                enabled=enabled,
+                priority=priority,
+                interval=interval
+            )
+            
+            if success:
+                return jsonify({'success': True, 'message': f'Service {service_id} updated'})
+            else:
+                return jsonify({'success': False, 'error': 'No changes applied'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/services/<service_id>/toggle', methods=['POST'])
+    @login_required
+    def api_toggle_service(service_id):
+        """Toggle service enabled state."""
+        try:
+            data = request.get_json()
+            enabled = data.get('enabled', True)
+            
+            success = db.update_service_config(service_id, enabled=enabled)
+            
+            if success:
+                status = 'enabled' if enabled else 'disabled'
+                return jsonify({'success': True, 'message': f'Service {service_id} {status}'})
+            else:
+                return jsonify({'success': False, 'error': 'Service not found'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/broker-limits', methods=['GET'])
+    @login_required
+    def api_get_broker_limits():
+        """Get broker rate limits and usage."""
+        try:
+            limits = db.get_broker_limits()
+            
+            from src.services.rate_limit_manager import rate_limit_manager
+            if rate_limit_manager:
+                for limit in limits:
+                    broker = limit.get('broker_name', '')
+                    status = rate_limit_manager.get_status(broker)
+                    if status:
+                        limit['current_usage'] = status.get('calls_this_window', 0)
+                        limit['is_throttled'] = status.get('is_throttled', False)
+                        limit['available_calls'] = status.get('available_calls', 0)
+            
+            return jsonify({'success': True, 'limits': limits})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/services/status', methods=['GET'])
+    @login_required
+    def api_get_service_status():
+        """Get aggregated status of all background services."""
+        try:
+            services = db.get_service_registry()
+            
+            active_count = sum(1 for s in services if s.get('status') == 'running')
+            paused_count = sum(1 for s in services if s.get('status') == 'paused')
+            error_count = sum(1 for s in services if s.get('status') == 'error')
+            
+            return jsonify({
+                'success': True,
+                'summary': {
+                    'total': len(services),
+                    'active': active_count,
+                    'paused': paused_count,
+                    'error': error_count
+                },
+                'services': services
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500

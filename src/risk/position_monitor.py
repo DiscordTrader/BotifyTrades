@@ -2,6 +2,11 @@
 Position Monitor
 ================
 Main async monitoring loop coordinating all risk strategies.
+
+Enhanced with:
+- Service enable gate (only fetch broker data when risk enabled)
+- Standby loop for processing invalidations without API calls
+- Integration with centralized RateLimitManager
 """
 import asyncio
 import re
@@ -21,6 +26,13 @@ from .global_risk import evaluate_global_risk, evaluate_price_based_stops
 from .trailing_stop import evaluate_trailing_stop, get_effective_trailing_settings
 
 import threading
+
+try:
+    from src.services.rate_limit_manager import get_rate_limit_manager
+    RATE_LIMIT_AVAILABLE = True
+except ImportError:
+    RATE_LIMIT_AVAILABLE = False
+    get_rate_limit_manager = None
 
 try:
     from src.services.exit_order_arbiter import exit_order_arbiter
@@ -589,21 +601,11 @@ class RiskManager:
         self._running = False
     
     async def start_monitoring(self) -> None:
-        """Start the position monitoring loop."""
-        risk_settings = self._get_risk_settings()
-        channel_count = self.db_adapter.count_channels_with_risk()
-        
-        self._log_status(risk_settings, channel_count)
-        
-        if not risk_settings.enabled and channel_count == 0:
-            print("[RISK] ❌ Position monitoring disabled (no global or channel-level risk settings)")
-            return
-        
+        """Start the position monitoring loop with enable gate and standby support."""
         cached_count = self.cache.load()
         if cached_count > 0:
             print(f"[RISK] Loaded {cached_count} cached positions")
         
-        # Restore trailing stop state from database for survival across restarts
         trailing_restored = self.cache.restore_trailing_state_from_db()
         if trailing_restored > 0:
             print(f"[RISK] ✓ Restored trailing stop state for {trailing_restored} positions from database")
@@ -614,18 +616,72 @@ class RiskManager:
         if reconciled > 0:
             print(f"[RISK] ✓ Reconciled {reconciled} conditional order position(s) with SL/PT")
         
-        print(f"[RISK] ✓ Position monitoring started - Monitoring Webull + Alpaca + Schwab + IBKR + Tastytrade + Robinhood")
+        print(f"[RISK] ✓ Position monitoring loop started - Will activate when risk settings enabled")
         self._running = True
+        self._standby_mode = False
+        self._last_status_log = 0
         
         while self._running:
             try:
-                await self._monitoring_cycle()
+                is_enabled = self._check_service_enabled()
+                
+                if is_enabled:
+                    if self._standby_mode:
+                        print("[RISK] ✓ Resuming active monitoring - risk settings enabled")
+                        self._standby_mode = False
+                    
+                    await self._monitoring_cycle()
+                    await asyncio.sleep(self._get_adaptive_interval())
+                else:
+                    if not self._standby_mode:
+                        print("[RISK] ⏸️ Entering standby mode - no risk settings enabled (zero API calls)")
+                        self._standby_mode = True
+                    
+                    await self._standby_cycle()
+                    await asyncio.sleep(5)
+                    
             except Exception as e:
                 print(f"[RISK] Error in monitoring cycle: {e}")
                 import traceback
                 traceback.print_exc()
-            
-            await asyncio.sleep(self.monitoring_interval)
+                await asyncio.sleep(self.monitoring_interval)
+    
+    def _check_service_enabled(self) -> bool:
+        """Check if risk monitoring should be active (any channel has risk enabled)."""
+        try:
+            from gui_app.database import get_setting
+            risk_monitor_enabled = get_setting('risk_monitor_enabled', 'true').lower() == 'true'
+            if not risk_monitor_enabled:
+                return False
+        except Exception:
+            pass
+        
+        risk_settings = self._get_risk_settings()
+        channel_count = self.db_adapter.count_channels_with_risk()
+        
+        return risk_settings.enabled or channel_count > 0
+    
+    def _get_adaptive_interval(self) -> float:
+        """Get adaptive monitoring interval based on broker limits and market hours."""
+        base_interval = self.monitoring_interval
+        
+        if RATE_LIMIT_AVAILABLE and get_rate_limit_manager:
+            rate_manager = get_rate_limit_manager()
+            webull_interval = rate_manager.get_recommended_interval('webull', is_active=True)
+            base_interval = max(base_interval, webull_interval)
+        
+        return base_interval
+    
+    async def _standby_cycle(self) -> None:
+        """Standby cycle - process invalidations WITHOUT making broker API calls."""
+        check_and_process_invalidation_request()
+        
+        import time
+        now = time.time()
+        if now - self._last_status_log > 300:
+            channel_count = self.db_adapter.count_channels_with_risk()
+            print(f"[RISK] Standby: {channel_count} channels with risk settings (waiting for activation)")
+            self._last_status_log = now
     
     def stop_monitoring(self) -> None:
         """Stop the monitoring loop."""
@@ -685,48 +741,107 @@ class RiskManager:
         self.cache.save()
     
     async def _fetch_all_positions(self) -> List[PositionSnapshot]:
-        """Fetch positions from all brokers."""
+        """Fetch positions from all brokers with rate limit enforcement."""
         positions = []
+        rate_manager = get_rate_limit_manager() if RATE_LIMIT_AVAILABLE else None
         
-        webull_positions = await self.position_fetcher() or []
-        for pos in webull_positions:
-            pos['broker'] = 'Webull'
-            positions.append(self._to_snapshot(pos))
+        if rate_manager:
+            can_proceed, wait_time = rate_manager.can_make_request('webull')
+            if not can_proceed:
+                print(f"[RISK] Webull rate limit reached - skipping this cycle (wait {wait_time:.1f}s)")
+            else:
+                rate_manager.record_request('webull')
+                webull_positions = await self.position_fetcher() or []
+                for pos in webull_positions:
+                    pos['broker'] = 'Webull'
+                    positions.append(self._to_snapshot(pos))
+        else:
+            webull_positions = await self.position_fetcher() or []
+            for pos in webull_positions:
+                pos['broker'] = 'Webull'
+                positions.append(self._to_snapshot(pos))
         
         if self.alpaca_broker and getattr(self.alpaca_broker, 'connected', False):
             try:
-                alpaca_positions = await self._fetch_alpaca_positions()
-                positions.extend(alpaca_positions)
+                if rate_manager:
+                    can_proceed, wait_time = rate_manager.can_make_request('alpaca')
+                    if not can_proceed:
+                        print(f"[RISK] Alpaca rate limit - skipping (wait {wait_time:.1f}s)")
+                    else:
+                        rate_manager.record_request('alpaca')
+                        alpaca_positions = await self._fetch_alpaca_positions()
+                        positions.extend(alpaca_positions)
+                else:
+                    alpaca_positions = await self._fetch_alpaca_positions()
+                    positions.extend(alpaca_positions)
             except Exception as e:
                 print(f"[RISK] Warning: Could not fetch Alpaca positions: {e}")
         
         if self.schwab_broker:
             try:
-                is_auth = await self.schwab_broker.is_authenticated()
-                if is_auth:
-                    schwab_positions = await self._fetch_schwab_positions()
-                    positions.extend(schwab_positions)
+                if rate_manager:
+                    can_proceed, wait_time = rate_manager.can_make_request('schwab')
+                    if not can_proceed:
+                        print(f"[RISK] Schwab rate limit - skipping (wait {wait_time:.1f}s)")
+                    else:
+                        is_auth = await self.schwab_broker.is_authenticated()
+                        if is_auth:
+                            rate_manager.record_request('schwab')
+                            schwab_positions = await self._fetch_schwab_positions()
+                            positions.extend(schwab_positions)
+                else:
+                    is_auth = await self.schwab_broker.is_authenticated()
+                    if is_auth:
+                        schwab_positions = await self._fetch_schwab_positions()
+                        positions.extend(schwab_positions)
             except Exception as e:
                 print(f"[RISK] Warning: Could not fetch Schwab positions: {e}")
         
         if self.ibkr_broker and getattr(self.ibkr_broker, 'connected', False):
             try:
-                ibkr_positions = await self._fetch_ibkr_positions()
-                positions.extend(ibkr_positions)
+                if rate_manager:
+                    can_proceed, wait_time = rate_manager.can_make_request('ibkr')
+                    if not can_proceed:
+                        print(f"[RISK] IBKR rate limit - skipping (wait {wait_time:.1f}s)")
+                    else:
+                        rate_manager.record_request('ibkr')
+                        ibkr_positions = await self._fetch_ibkr_positions()
+                        positions.extend(ibkr_positions)
+                else:
+                    ibkr_positions = await self._fetch_ibkr_positions()
+                    positions.extend(ibkr_positions)
             except Exception as e:
                 print(f"[RISK] Warning: Could not fetch IBKR positions: {e}")
         
         if self.tastytrade_broker and getattr(self.tastytrade_broker, 'connected', False):
             try:
-                tastytrade_positions = await self._fetch_tastytrade_positions()
-                positions.extend(tastytrade_positions)
+                if rate_manager:
+                    can_proceed, wait_time = rate_manager.can_make_request('tastytrade')
+                    if not can_proceed:
+                        print(f"[RISK] Tastytrade rate limit - skipping (wait {wait_time:.1f}s)")
+                    else:
+                        rate_manager.record_request('tastytrade')
+                        tastytrade_positions = await self._fetch_tastytrade_positions()
+                        positions.extend(tastytrade_positions)
+                else:
+                    tastytrade_positions = await self._fetch_tastytrade_positions()
+                    positions.extend(tastytrade_positions)
             except Exception as e:
                 print(f"[RISK] Warning: Could not fetch Tastytrade positions: {e}")
         
         if self.robinhood_broker and getattr(self.robinhood_broker, 'connected', False):
             try:
-                robinhood_positions = await self._fetch_robinhood_positions()
-                positions.extend(robinhood_positions)
+                if rate_manager:
+                    can_proceed, wait_time = rate_manager.can_make_request('robinhood')
+                    if not can_proceed:
+                        print(f"[RISK] Robinhood rate limit - skipping (wait {wait_time:.1f}s)")
+                    else:
+                        rate_manager.record_request('robinhood')
+                        robinhood_positions = await self._fetch_robinhood_positions()
+                        positions.extend(robinhood_positions)
+                else:
+                    robinhood_positions = await self._fetch_robinhood_positions()
+                    positions.extend(robinhood_positions)
             except Exception as e:
                 print(f"[RISK] Warning: Could not fetch Robinhood positions: {e}")
         

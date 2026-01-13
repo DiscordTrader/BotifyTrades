@@ -1330,10 +1330,15 @@ class ConditionalOrderService:
             sys.stderr.flush()
     
     async def _main_loop(self):
-        """Main service loop."""
+        """Main service loop with enable gate and pending order check."""
         import sys
+        import time
         sys.stderr.write("[CONDITIONAL] _main_loop starting...\n")
         sys.stderr.flush()
+        
+        self._standby_mode = False
+        self._last_status_log = 0
+        
         try:
             await self._restore_active_orders()
         except Exception as e:
@@ -1342,19 +1347,54 @@ class ConditionalOrderService:
             import traceback
             traceback.print_exc()
         
-        sys.stderr.write("[CONDITIONAL] Entering monitoring loop...\n")
+        sys.stderr.write("[CONDITIONAL] Entering monitoring loop with enable gate...\n")
         sys.stderr.flush()
+        
         while self.is_running:
             try:
-                expired = expire_old_conditional_orders()
-                if expired > 0:
-                    sys.stderr.write(f"[CONDITIONAL] Expired {expired} orders\n")
-                    sys.stderr.flush()
+                is_enabled = self.is_enabled()
+                pending_count = len(get_active_conditional_orders())
+                
+                if is_enabled and pending_count > 0:
+                    if self._standby_mode:
+                        print(f"[CONDITIONAL] ✓ Resuming active monitoring - {pending_count} pending orders")
+                        self._standby_mode = False
+                        await self._restore_active_orders()
+                    
+                    expired = expire_old_conditional_orders()
+                    if expired > 0:
+                        print(f"[CONDITIONAL] Expired {expired} orders")
+                    
+                    await asyncio.sleep(30)
+                else:
+                    if not self._standby_mode:
+                        if not is_enabled:
+                            print("[CONDITIONAL] ⏸️ Entering standby - service disabled (zero API calls)")
+                        else:
+                            print("[CONDITIONAL] ⏸️ Entering standby - no pending orders (zero API calls)")
+                        self._standby_mode = True
+                        
+                        for order_id in list(self.monitor_tasks.keys()):
+                            task = self.monitor_tasks.get(order_id)
+                            if task and not task.done():
+                                task.cancel()
+                        self.monitor_tasks.clear()
+                        self.monitors.clear()
+                    
+                    now = time.time()
+                    if now - self._last_status_log > 300:
+                        if is_enabled:
+                            print(f"[CONDITIONAL] Standby: service enabled but no pending orders")
+                        else:
+                            print(f"[CONDITIONAL] Standby: service disabled")
+                        self._last_status_log = now
+                    
+                    await asyncio.sleep(5)
+                    
             except Exception as e:
-                sys.stderr.write(f"[CONDITIONAL] ❌ Error in expire check: {e}\n")
+                sys.stderr.write(f"[CONDITIONAL] ❌ Error in main loop: {e}\n")
                 sys.stderr.flush()
-            
-            await asyncio.sleep(60)
+                await asyncio.sleep(30)
     
     async def _restore_active_orders(self):
         """Restore monitoring for active orders after restart."""

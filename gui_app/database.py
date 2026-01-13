@@ -11049,6 +11049,208 @@ def get_filled_orders_count(broker: str = None, symbol: str = None, days: int = 
         return 0
 
 
+# ============ SERVICE ORCHESTRATOR TABLES ============
+
+def init_service_orchestrator_tables():
+    """Create tables for Service Orchestrator - manages background services with priority-based scheduling."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS service_registry (
+            service_id TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL,
+            broker_scope TEXT DEFAULT 'all',
+            default_interval INTEGER DEFAULT 30,
+            min_interval INTEGER DEFAULT 5,
+            max_interval INTEGER DEFAULT 300,
+            priority INTEGER DEFAULT 5,
+            enabled INTEGER DEFAULT 1,
+            last_run TIMESTAMP,
+            last_result TEXT,
+            status TEXT DEFAULT 'idle',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS broker_limits (
+            broker_name TEXT PRIMARY KEY,
+            data_limit_per_min INTEGER DEFAULT 60,
+            order_limit_per_min INTEGER DEFAULT 30,
+            current_calls INTEGER DEFAULT 0,
+            window_start TIMESTAMP,
+            last_429_at TIMESTAMP,
+            backoff_until TIMESTAMP,
+            total_calls INTEGER DEFAULT 0,
+            rate_limit_hits INTEGER DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS service_metrics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            service_id TEXT NOT NULL,
+            calls_made INTEGER DEFAULT 0,
+            latency_ms INTEGER DEFAULT 0,
+            errors INTEGER DEFAULT 0,
+            rate_limit_hits INTEGER DEFAULT 0,
+            FOREIGN KEY (service_id) REFERENCES service_registry(service_id)
+        )
+    ''')
+    
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_service_metrics_timestamp ON service_metrics(timestamp)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_service_metrics_service ON service_metrics(service_id)')
+    
+    default_services = [
+        ('risk_manager', 'Risk Manager', 'all', 30, 5, 120, 1, 1),
+        ('conditional_orders', 'Conditional Orders', 'all', 5, 3, 60, 2, 1),
+        ('position_sync', 'Position Sync', 'all', 30, 10, 180, 3, 1),
+        ('trade_monitor', 'Trade Monitor', 'all', 10, 5, 60, 4, 1),
+        ('balance_fetch', 'Balance Fetch', 'all', 90, 30, 300, 5, 1),
+        ('options_chain', 'Options Chain', 'all', 60, 30, 300, 6, 0),
+    ]
+    
+    for service in default_services:
+        cursor.execute('''
+            INSERT OR IGNORE INTO service_registry 
+            (service_id, display_name, broker_scope, default_interval, min_interval, max_interval, priority, enabled)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', service)
+    
+    default_broker_limits = [
+        ('webull', 20, 10),
+        ('alpaca', 200, 200),
+        ('robinhood', 8, 8),
+        ('ibkr', 50, 50),
+        ('tastytrade', 120, 120),
+        ('schwab', 120, 120),
+        ('questrade', 20, 20),
+        ('zerodha', 10, 10),
+        ('upstox', 25, 250),
+        ('dhanq', 20, 25),
+        ('finnhub', 60, 0),
+    ]
+    
+    for broker in default_broker_limits:
+        cursor.execute('''
+            INSERT OR IGNORE INTO broker_limits (broker_name, data_limit_per_min, order_limit_per_min)
+            VALUES (?, ?, ?)
+        ''', broker)
+    
+    conn.commit()
+    print("[DATABASE] ✓ Service orchestrator tables ready")
+
+
+def get_service_registry() -> List[Dict[str, Any]]:
+    """Get all registered services."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT * FROM service_registry ORDER BY priority ASC')
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DATABASE] Error getting service registry: {e}")
+        return []
+
+
+def update_service_config(service_id: str, enabled: bool = None, priority: int = None, 
+                          interval: int = None) -> bool:
+    """Update service configuration."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        updates = []
+        params = []
+        
+        if enabled is not None:
+            updates.append("enabled = ?")
+            params.append(1 if enabled else 0)
+        if priority is not None:
+            updates.append("priority = ?")
+            params.append(priority)
+        if interval is not None:
+            updates.append("default_interval = ?")
+            params.append(interval)
+        
+        if not updates:
+            return False
+        
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(service_id)
+        
+        cursor.execute(f'''
+            UPDATE service_registry SET {", ".join(updates)}
+            WHERE service_id = ?
+        ''', params)
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error updating service config: {e}")
+        return False
+
+
+def update_service_status(service_id: str, status: str, last_result: str = None) -> bool:
+    """Update service runtime status."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            UPDATE service_registry SET 
+                status = ?, 
+                last_run = CURRENT_TIMESTAMP,
+                last_result = COALESCE(?, last_result),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE service_id = ?
+        ''', (status, last_result, service_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error updating service status: {e}")
+        return False
+
+
+def get_broker_limits() -> List[Dict[str, Any]]:
+    """Get all broker rate limits."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT * FROM broker_limits ORDER BY broker_name')
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DATABASE] Error getting broker limits: {e}")
+        return []
+
+
+def record_broker_rate_limit_hit(broker_name: str) -> bool:
+    """Record a rate limit hit for a broker."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            UPDATE broker_limits SET 
+                last_429_at = CURRENT_TIMESTAMP,
+                rate_limit_hits = rate_limit_hits + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE broker_name = ?
+        ''', (broker_name.lower(),))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error recording rate limit hit: {e}")
+        return False
+
+
 # Initialize tables
 init_channel_messages_table()
 init_signal_formats_table()
@@ -11058,5 +11260,6 @@ migrate_trades_for_conditional_orders()
 init_conditional_order_settings()
 init_upstox_pending_orders_table()
 init_upstox_settings()
+init_service_orchestrator_tables()
 
 init_db()
