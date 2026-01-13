@@ -2655,6 +2655,9 @@ def get_trades(status: Optional[str] = None, broker: Optional[str] = None, limit
         query += ' AND LOWER(t.broker) = LOWER(?)'
         params.append(broker)
     
+    # Filter out trades marked as hidden
+    query += ' AND (t.hide_in_ui IS NULL OR t.hide_in_ui = 0)'
+    
     query += ' ORDER BY t.executed_at DESC LIMIT ?'
     params.append(limit)
     
