@@ -10091,6 +10091,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _original_print(f"[WORKER] ⏭️ DUPLICATE ORDER BLOCKED: {signal.get('action')} {signal.get('symbol')} (platform msg_id: {signal_id})", flush=True)
                             self.order_queue.task_done()
                             continue
+                        # RECORD IN PERMANENT CACHE
                         self._executed_orders_permanent.add(order_key)
                         
                         # Limit permanent cache size (keep last 2000)
@@ -10106,6 +10107,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elapsed = current_time - last_exec_time
                         if elapsed < DEDUPE_TTL_SECONDS:
                             _original_print(f"[WORKER] ⏭️ DUPLICATE ORDER BLOCKED: {signal.get('action')} {signal.get('symbol')} (seen {elapsed:.1f}s ago)", flush=True)
+                            # CRITICAL: Always call task_done() before continuing
                             self.order_queue.task_done()
                             continue
                         else:
