@@ -10327,6 +10327,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         # Each broker needs to independently calculate qty based on its own portfolio
                         import copy
                         broker_signal = copy.deepcopy(signal)
+                        broker_signal['broker'] = broker_name.upper() # Ensure correct broker is passed for DB saving
                         resp = await self.execute_on_single_broker(broker_signal, broker_name.upper(), broker_instance)
                         responses.append(resp)
                     
