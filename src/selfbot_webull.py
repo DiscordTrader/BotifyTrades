@@ -3139,8 +3139,8 @@ class WebullBroker:
             base_payload = {
                 'stock': base_sym,
                 'tId': int(tId),
-                'price': float(limit_price),
-                'lmtPrice': float(limit_price),
+                'price': round(float(limit_price), 2),
+                'lmtPrice': round(float(limit_price), 2),
                 'action': side,
                 'orderType': 'LMT',
                 'enforce': WB_ENFORCE,

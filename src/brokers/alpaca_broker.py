@@ -307,25 +307,31 @@ class AlpacaBroker(BrokerInterface):
                             self._auto_adjust_in_progress = {}
                         self._auto_adjust_in_progress[symbol] = True
                         
-                        account_info = await self.get_account_info()
-                        buying_power = account_info['buying_power']
-                        
-                        # Get current price
-                        current_price = await self.get_quote(symbol)
-                        
-                        if current_price and buying_power > 0:
-                            # Calculate max quantity we can afford
-                            max_qty = int(buying_power / current_price)
-                            
-                            if max_qty > 0 and max_qty != quantity:
-                                print(f"[{self.name}] Auto-adjusting: {quantity} → {max_qty} shares (buying power: ${buying_power:.2f})")
-                                result = await self.place_stock_order(symbol, action, max_qty, price)
-                                # Clear the flag after successful adjustment
-                                if symbol in self._auto_adjust_in_progress:
-                                    del self._auto_adjust_in_progress[symbol]
-                                return result
+                        # Calculate available quantity based on action
+                        if action.upper() in ('STC', 'SELL'):
+                            # For sell orders, the limiting factor is the position size
+                            positions = await self.get_positions()
+                            available_qty = positions.get(symbol, 0)
+                            print(f"[{self.name}] Auto-adjusting SELL: {quantity} -> {available_qty} (position size)")
+                        else:
+                            # For buy orders, the limiting factor is buying power
+                            account_info = await self.get_account_info()
+                            buying_power = account_info['buying_power']
+                            current_price = await self.get_quote(symbol)
+                            if current_price and buying_power > 0:
+                                available_qty = int(buying_power / current_price)
+                                print(f"[{self.name}] Auto-adjusting BUY: {quantity} -> {available_qty} (buying power: ${buying_power:.2f})")
                             else:
-                                print(f"[{self.name}] ❌ Cannot auto-adjust: max_qty={max_qty} (same or zero)")
+                                available_qty = 0
+                        
+                        if available_qty > 0 and available_qty != quantity:
+                            result = await self.place_stock_order(symbol, action, available_qty, price)
+                            # Clear the flag after successful adjustment
+                            if symbol in self._auto_adjust_in_progress:
+                                del self._auto_adjust_in_progress[symbol]
+                            return result
+                        else:
+                            print(f"[{self.name}] ❌ Cannot auto-adjust: available_qty={available_qty} (same or zero)")
                         
                         # Clear flag on completion
                         if symbol in self._auto_adjust_in_progress:
