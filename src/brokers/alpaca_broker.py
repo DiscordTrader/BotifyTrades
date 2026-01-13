@@ -535,7 +535,8 @@ class AlpacaBroker(BrokerInterface):
         option_type: str,
         action: str,
         quantity: int,
-        price: Optional[float] = None
+        price: Optional[float] = None,
+        **kwargs
     ) -> OrderResult:
         """Place an options order using Alpaca's option contracts endpoint"""
         try:
