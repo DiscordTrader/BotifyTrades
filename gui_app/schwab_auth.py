@@ -416,17 +416,22 @@ def schwab_login():
                 print(f"[SCHWAB AUTH] OAuth server module not available: {e}")
         
         # Fallback: Standard redirect (for Replit or when callback server fails)
+        # Always use the dynamically generated redirect URI for Replit
+        redirect_uri = get_default_redirect_uri()
+        
         params = {
             'response_type': 'code',
             'client_id': creds['client_id'],
-            'redirect_uri': creds['redirect_uri'],
+            'redirect_uri': redirect_uri,
             'scope': 'readonly'
         }
         
         auth_url = f"https://api.schwabapi.com/v1/oauth/authorize?{urllib.parse.urlencode(params)}"
         
-        print(f"[SCHWAB AUTH] Redirecting to Schwab for authorization...")
-        print(f"[SCHWAB AUTH] Callback URL: {creds['redirect_uri']}")
+        print(f"[SCHWAB AUTH] ========== INITIATING OAUTH ==========")
+        print(f"[SCHWAB AUTH] Client ID: {creds['client_id'][:8]}...")
+        print(f"[SCHWAB AUTH] Redirect URI: {redirect_uri}")
+        print(f"[SCHWAB AUTH] Auth URL: {auth_url[:100]}...")
         
         return redirect(auth_url)
         
@@ -685,29 +690,48 @@ def schwab_oauth_reset():
 def schwab_callback():
     """Handle Schwab OAuth callback (for Replit/web-based flow)."""
     try:
+        print(f"[SCHWAB CALLBACK] ========== CALLBACK RECEIVED ==========")
+        print(f"[SCHWAB CALLBACK] Full URL: {request.url}")
+        print(f"[SCHWAB CALLBACK] Args: {dict(request.args)}")
+        
         code = request.args.get('code')
         error = request.args.get('error')
+        error_description = request.args.get('error_description', '')
         
         if error:
-            flash(f"Schwab authorization failed: {error}", "error")
+            print(f"[SCHWAB CALLBACK] Error from Schwab: {error} - {error_description}")
+            flash(f"Schwab authorization failed: {error} - {error_description}", "error")
             return redirect(url_for('settings_page'))
         
         if not code:
+            print(f"[SCHWAB CALLBACK] No authorization code in request")
             flash("No authorization code received from Schwab", "error")
             return redirect(url_for('settings_page'))
         
+        print(f"[SCHWAB CALLBACK] Got authorization code (first 20 chars): {code[:20]}...")
+        
         creds = get_schwab_credentials()
         if not creds:
-            flash("Schwab credentials not found", "error")
+            print(f"[SCHWAB CALLBACK] No credentials found in database!")
+            flash("Schwab credentials not found. Please save your Client ID and Secret first.", "error")
             return redirect(url_for('settings_page'))
         
-        success = exchange_code_for_tokens(code, creds)
+        print(f"[SCHWAB CALLBACK] Found credentials, client_id: {creds.get('client_id', '')[:8]}...")
+        
+        # IMPORTANT: Use the same redirect_uri that was sent in the authorization request
+        redirect_uri = get_default_redirect_uri()
+        print(f"[SCHWAB CALLBACK] Using redirect_uri: {redirect_uri}")
+        
+        success = exchange_code_for_tokens(code, creds, redirect_uri_override=redirect_uri)
         
         if success:
+            print(f"[SCHWAB CALLBACK] ✓ Token exchange successful!")
             flash("Successfully connected to Schwab!", "success")
             db.update_broker_connection_status('SCHWAB', True)
         else:
-            flash("Failed to exchange authorization code for tokens", "error")
+            last_error = get_last_exchange_error()
+            print(f"[SCHWAB CALLBACK] ✗ Token exchange failed: {last_error}")
+            flash(f"Failed to exchange authorization code: {last_error or 'Unknown error'}", "error")
         
         return redirect(url_for('settings_page'))
         
