@@ -11497,13 +11497,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
 _discord_ready_event = None
 _discord_shutdown_event = None
 _discord_error_queue = None
+_startup_in_progress = False  # Guard against duplicate startup calls
+_discord_thread_started = False  # Prevent multiple Discord threads
 
 def run_discord_bot_thread():
     """
     Runs Discord bot in its own dedicated thread with isolated asyncio event loop.
     Uses client.start() with asyncio.run() for proper loop isolation.
     """
-    global _discord_ready_event, _discord_shutdown_event, _discord_error_queue
+    global _discord_ready_event, _discord_shutdown_event, _discord_error_queue, _discord_thread_started
+    
+    # Guard: Prevent duplicate Discord threads (critical for PyInstaller builds)
+    if _discord_thread_started:
+        _original_print("[Discord Thread] ⚠️ DUPLICATE THREAD BLOCKED - Discord already running")
+        return
+    _discord_thread_started = True
+    _original_print("[Discord Thread] ✓ Thread guard acquired (single instance)")
     
     async def discord_main():
         """Async entrypoint for Discord bot with proper lifecycle"""
@@ -11545,7 +11554,13 @@ def run_discord_bot_thread():
         _discord_error_queue.put(e)
     finally:
         _original_print("[Discord Thread] Shutting down...")
+        _reset_discord_thread_guard()  # Reset guard for restart capability
         _discord_shutdown_event.set()
+
+def _reset_discord_thread_guard():
+    """Reset the Discord thread guard to allow restarts."""
+    global _discord_thread_started
+    _discord_thread_started = False
 
 
 _telegram_ready_event = None
@@ -11658,6 +11673,14 @@ def run_bot_startup(progress_callback=None):
     import time
     global _discord_ready_event, _discord_shutdown_event, _discord_error_queue
     global _telegram_ready_event, _telegram_shutdown_event, _telegram_signal_queue
+    global _startup_in_progress, _discord_thread_started
+    
+    # Guard: Prevent duplicate startup calls (critical for PyInstaller builds with lifecycle watchdog)
+    if _startup_in_progress:
+        _original_print("[STARTUP] ⚠️ DUPLICATE STARTUP BLOCKED - startup already in progress")
+        return None, None, None
+    _startup_in_progress = True
+    _original_print("[STARTUP] ✓ Startup guard acquired (single instance)")
     
     startup_start = time.time()
     step_times = {}
