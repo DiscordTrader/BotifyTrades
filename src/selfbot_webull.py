@@ -6863,6 +6863,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
     
 
     async def on_ready(self):
+        global _discord_ready_event  # Declare at function start for early signaling
+        
         # Guard against duplicate on_ready calls (Discord reconnects can trigger this multiple times)
         if self._on_ready_completed:
             print("[Discord] Reconnected - skipping duplicate on_ready initialization")
@@ -6887,6 +6889,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             else:
                 print(f"[Discord]   - Channel ID {cid} (not accessible)")
         print("[Discord] Ready to process signals")
+        
+        # Signal Discord ready IMMEDIATELY (before broker init) so main thread doesn't timeout
+        # Broker connections will happen in background - signal execution waits on broker_ready event
+        try:
+            if _discord_ready_event:
+                _discord_ready_event.set()
+                print("[Discord] ✓ Bot ready event signaled (early - brokers init in background)")
+        except Exception:
+            pass
 
         await self.setup()
         
@@ -7198,10 +7209,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         except Exception as e:
             print(f"[STARTUP] Warning: Could not start Conditional Order Service: {e}")
         
-        # Signal ready event for thread synchronization (if available)
+        # Signal ready event for thread synchronization (redundant - already signaled early, but safe to call again)
         try:
-            global _discord_ready_event
-            if _discord_ready_event:
+            if _discord_ready_event and not _discord_ready_event.is_set():
                 _discord_ready_event.set()
                 print("[Discord] ✓ Bot ready event signaled")
         except Exception:
