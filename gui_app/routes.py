@@ -14126,6 +14126,52 @@ def register_routes(app):
                 'has_critical_errors': any(e.get('severity') == 'critical' for e in recent_errors) if recent_errors else False
             }
             
+            # Service Orchestrator Status
+            services_status = {}
+            try:
+                service_registry = db.get_service_registry() if hasattr(db, 'get_service_registry') else []
+                for svc in service_registry:
+                    services_status[svc.get('service_id', 'unknown')] = {
+                        'name': svc.get('display_name', 'Unknown'),
+                        'enabled': bool(svc.get('enabled', 0)),
+                        'status': svc.get('status', 'idle'),
+                        'priority': svc.get('priority', 5),
+                        'interval': svc.get('default_interval', 30),
+                        'last_run': svc.get('last_run')
+                    }
+            except Exception:
+                pass
+            
+            # Add per-channel risk count
+            channels_with_risk = sum(1 for ch in channels if ch.get('risk_management_enabled'))
+            services_status['risk_manager'] = services_status.get('risk_manager', {})
+            services_status['risk_manager']['channels_with_risk'] = channels_with_risk
+            services_status['risk_manager']['active'] = channels_with_risk > 0
+            
+            health_data['services'] = services_status
+            
+            # Broker Rate Limits
+            rate_limits = {}
+            try:
+                from src.services.rate_limit_manager import get_rate_limit_manager
+                rate_manager = get_rate_limit_manager()
+                if rate_manager:
+                    for broker in ['webull', 'alpaca', 'robinhood', 'ibkr', 'tastytrade', 'schwab']:
+                        status = rate_manager.get_status(broker)
+                        if status:
+                            rate_limits[broker] = {
+                                'requests_in_window': status.get('requests_in_window', 0),
+                                'window_limit': status.get('window_limit', 0),
+                                'utilization_pct': status.get('utilization_pct', 0),
+                                'is_backing_off': status.get('is_backing_off', False),
+                                'total_calls': status.get('total_calls', 0),
+                                'rate_limit_hits': status.get('rate_limit_hits', 0)
+                            }
+            except ImportError:
+                pass
+            
+            health_data['rate_limits'] = rate_limits
+            
             return jsonify({'success': True, 'health': health_data})
             
         except Exception as e:
