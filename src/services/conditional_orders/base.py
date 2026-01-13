@@ -411,6 +411,31 @@ class BaseConditionalOrderService(ABC):
         sys.stderr.write(f"[{self.MARKET}] {msg}\n")
         sys.stderr.flush()
     
+    def _calculate_expiry(self, expiry_setting: str) -> Optional[str]:
+        """Calculate expiry datetime based on legacy setting (end_of_day, 1_hour, 4_hours, 1_day)."""
+        if not expiry_setting:
+            return None
+        
+        now = datetime.now()
+        
+        if expiry_setting == 'end_of_day':
+            # Set expiry to 4 PM market close
+            expiry = now.replace(hour=16, minute=0, second=0, microsecond=0)
+            if expiry <= now:
+                # Already past 4 PM - set to next day
+                expiry = expiry + timedelta(days=1)
+        elif expiry_setting == '1_hour':
+            expiry = now + timedelta(hours=1)
+        elif expiry_setting == '4_hours':
+            expiry = now + timedelta(hours=4)
+        elif expiry_setting == '1_day':
+            expiry = now + timedelta(days=1)
+        else:
+            # Unknown setting - no expiry
+            return None
+        
+        return expiry.strftime('%Y-%m-%d %H:%M:%S')
+    
     def set_broker_instance(self, broker_name: str, instance: Any):
         """Register a broker instance for this market's price monitoring."""
         broker_lower = broker_name.lower()
@@ -542,8 +567,15 @@ class BaseConditionalOrderService(ABC):
         timeout_minutes = channel_settings.get('order_timeout_minutes') or channel_settings.get('conditional_order_timeout_minutes')
         if timeout_minutes:
             expires_at = (datetime.now() + timedelta(minutes=timeout_minutes)).strftime('%Y-%m-%d %H:%M:%S')
+            self._log(f"Using channel timeout: {timeout_minutes} minutes")
         else:
-            expires_at = None
+            # Fall back to legacy expiry setting (end_of_day, 1_hour, 4_hours, 1_day)
+            expiry_setting = channel_settings.get('conditional_order_expiry')
+            expires_at = self._calculate_expiry(expiry_setting)
+            if expires_at:
+                self._log(f"Using legacy expiry setting: {expiry_setting}")
+            else:
+                self._log(f"No timeout configured - order has no expiry")
         
         size_mode = parsed_signal.get('size_mode')
         qty_value = None
