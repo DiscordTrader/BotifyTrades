@@ -9021,6 +9021,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     opt['_broker_override'] = channel_info.get('broker_override')
                     print(f"[DATABASE] ✓ Added channel_record_id={opt['channel_record_id']} for trade tracking")
                 
+                # Check conditional order cooldown (prevents duplicate trades after conditional triggers)
+                if opt.get('action') == 'BTO':
+                    try:
+                        from src.services.conditional_order_cooldown import is_on_cooldown
+                        is_blocked, remaining = is_on_cooldown(opt.get('symbol', ''), str(message.channel.id))
+                        if is_blocked:
+                            print(f"[COOLDOWN] ⏭️ BLOCKED: {opt.get('symbol')} (conditional order executed {120-remaining:.0f}s ago, {remaining:.0f}s remaining)")
+                            print(f"[COOLDOWN] This prevents duplicate trades after conditional orders trigger")
+                            return
+                    except Exception as cd_err:
+                        print(f"[COOLDOWN] Check error (continuing): {cd_err}")
+                
                 # GAP FIX: Check circuit breaker before execution (same as conditional orders)
                 try:
                     from gui_app.database import is_circuit_breaker_tripped
@@ -9231,6 +9243,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             # Execute if execute_enabled flag is True (category is for UI organization only)
             if execute_enabled:
+                # Check conditional order cooldown (prevents duplicate trades after conditional triggers)
+                if stk.get('action') == 'BTO':
+                    try:
+                        from src.services.conditional_order_cooldown import is_on_cooldown
+                        is_blocked, remaining = is_on_cooldown(stk.get('symbol', ''), str(message.channel.id))
+                        if is_blocked:
+                            print(f"[COOLDOWN] ⏭️ BLOCKED: {stk.get('symbol')} (conditional order executed {120-remaining:.0f}s ago, {remaining:.0f}s remaining)")
+                            print(f"[COOLDOWN] This prevents duplicate trades after conditional orders trigger")
+                            return
+                    except Exception as cd_err:
+                        print(f"[COOLDOWN] Check error (continuing): {cd_err}")
+                
                 print(f"[ROUTE] EXECUTE enabled - adding to order queue")
                 
                 # Log bracket order info if present

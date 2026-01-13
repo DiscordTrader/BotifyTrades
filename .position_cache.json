@@ -4792,5 +4792,22 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-12T16:22:54.936924"
+  },
+  "Alpaca_XAIR_stock": {
+    "entry_price": 1.24,
+    "highest_price": 1.24,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": 1.178,
+    "profit_target_price": 6.0,
+    "broker": "Alpaca",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-13T13:50:43.925789"
   }
 }
