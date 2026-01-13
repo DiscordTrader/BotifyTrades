@@ -4761,7 +4761,7 @@
   },
   "ALPACA_PAPER_TQQQ_stock": {
     "entry_price": 55.5,
-    "highest_price": 56.125,
+    "highest_price": 56.48,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
