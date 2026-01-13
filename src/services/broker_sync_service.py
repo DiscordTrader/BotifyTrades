@@ -540,9 +540,10 @@ class BrokerSyncService:
                                 'market_value': pos.get('market_value') or pos.get('equity', 0),
                                 'position_id': None,
                                 'asset_type': pos_type,
-                                'strike': pos.get('strike_price'),
-                                'expiry': pos.get('expiration_date'),
-                                'call_put': 'C' if pos.get('option_type') == 'call' else 'P' if pos.get('option_type') == 'put' else None
+                                # Use new normalized field names from robinhood_broker.py
+                                'strike': pos.get('strike') or pos.get('strike_price'),
+                                'expiry': pos.get('expiry') or pos.get('expiration_date'),
+                                'call_put': pos.get('call_put') or ('C' if pos.get('option_type') == 'call' else 'P' if pos.get('option_type') == 'put' else None)
                             })
                         
                         if hasattr(broker_instance, 'get_pending_orders'):
@@ -1123,24 +1124,13 @@ class BrokerSyncService:
                 # Fallback: most recent trade with matching key
                 return matching_trades[0].get('channel_id')
             
-            # Pass 3: Auto-assign based on broker_override if ONLY ONE channel uses this broker
-            # This handles cases where Discord execution didn't save to database
-            current_broker = broker_name.lower()
-            if 'webull' in current_broker:
-                current_broker = 'webull'
-            elif 'alpaca' in current_broker:
-                current_broker = 'alpaca_paper' if 'paper' in current_broker else 'alpaca'
+            # Pass 3: DISABLED - Do NOT auto-assign based on broker_override
+            # Manual trades should NOT inherit channel attribution just because
+            # they use the same broker as a channel. This caused incorrect
+            # "member-alerts" attribution for manually executed Robinhood trades.
+            # If there's no order_id or position key match, the trade is truly manual.
             
-            channels_for_broker = broker_to_channels.get(current_broker, [])
-            if len(channels_for_broker) == 1:
-                # Only ONE channel uses this broker - safe to auto-assign
-                channel_info = channels_for_broker[0]
-                print(f"[SYNC] Auto-assigning {position['symbol']} to '{channel_info['name']}' (only channel using {broker_name})")
-                return channel_info['discord_id']
-            elif len(channels_for_broker) > 1:
-                print(f"[SYNC] Cannot auto-assign {position['symbol']} - {len(channels_for_broker)} channels use {broker_name}")
-            
-            return None  # No match found
+            return None  # No match found - this is a manual trade
         
         # Find positions not tracked by bot
         broker_positions = normalized_data.get('positions', [])

@@ -250,14 +250,68 @@ class RobinhoodBroker(BrokerInterface):
             option_positions = rh.options.get_open_option_positions()
             if option_positions:
                 for pos in option_positions:
+                    avg_price = float(pos.get('average_price', 0) or 0)
+                    qty = float(pos.get('quantity', 0))
+                    
+                    # Get option instrument details (strike, expiry, type)
+                    option_url = pos.get('option', '')
+                    option_id = pos.get('option_id') or option_url
+                    strike_price = None
+                    expiration_date = None
+                    option_type = None
+                    
+                    # Extract option ID from URL if needed
+                    if isinstance(option_id, str) and '/' in option_id:
+                        option_id = option_id.rstrip('/').split('/')[-1]
+                    
+                    # Fetch option instrument details for strike/expiry/type
+                    if option_id:
+                        try:
+                            option_info = rh.options.get_option_instrument_data_by_id(option_id)
+                            if option_info:
+                                strike_price = option_info.get('strike_price')
+                                expiration_date = option_info.get('expiration_date')
+                                option_type = option_info.get('type')  # 'call' or 'put'
+                        except Exception as e:
+                            print(f"[ROBINHOOD] Could not fetch option instrument details: {e}")
+                    
+                    # Fetch current mark price for P&L calculation
+                    current_price = avg_price  # Fallback to avg_price
+                    try:
+                        if option_id:
+                            market_data = rh.options.get_option_market_data_by_id(option_id)
+                            if market_data and len(market_data) > 0:
+                                data = market_data[0] if isinstance(market_data, list) else market_data
+                                current_price = float(data.get('adjusted_mark_price') or data.get('mark_price') or data.get('last_trade_price') or avg_price)
+                    except Exception as e:
+                        print(f"[ROBINHOOD] Could not fetch mark price for option: {e}")
+                    
+                    # Calculate P&L with 100x multiplier for options
+                    unrealized_pnl = (current_price - avg_price) * qty * 100 if current_price and avg_price else 0
+                    
+                    # Map option_type to call_put (C/P format)
+                    call_put = 'C' if option_type == 'call' else 'P' if option_type == 'put' else None
+                    
+                    # Normalize strike to float
+                    strike_float = float(strike_price) if strike_price else None
+                    
                     positions.append({
                         'symbol': pos.get('chain_symbol', ''),
-                        'quantity': float(pos.get('quantity', 0)),
-                        'average_price': float(pos.get('average_price', 0) or 0),
+                        'quantity': qty,
+                        'average_price': avg_price,
+                        'avg_price': avg_price,
+                        'current_price': current_price,
+                        'unrealized_pnl': unrealized_pnl,
+                        'market_value': current_price * qty * 100,
                         'type': 'option',
-                        'option_type': pos.get('type', ''),
-                        'strike_price': pos.get('strike_price', ''),
-                        'expiration_date': pos.get('expiration_date', '')
+                        'asset_type': 'option',
+                        'option_type': option_type or '',
+                        'strike_price': strike_price or '',
+                        'expiration_date': expiration_date or '',
+                        # Sync service expects these field names:
+                        'strike': strike_float,
+                        'expiry': expiration_date or '',
+                        'call_put': call_put
                     })
             
             return positions
