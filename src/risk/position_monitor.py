@@ -1208,8 +1208,17 @@ class RiskManager:
         channel_settings: Optional[ChannelRiskSettings]
     ) -> None:
         """Queue an exit order with ExitOrderArbiter integration for hybrid mode."""
+        from datetime import datetime
         pos_key = position.position_key
-        print(f"[RISK] ✓ EXIT TRIGGERED: {pos_key} - {decision.reason}")
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        print(f"\n{'='*60}")
+        print(f"[RISK] [{timestamp}] ✓ EXIT TRIGGERED")
+        print(f"[RISK]   Position: {pos_key}")
+        print(f"[RISK]   Reason: {decision.reason}")
+        print(f"[RISK]   Qty: {decision.exit_qty} | Price: ${position.current_price:.2f}")
+        print(f"[RISK]   Broker: {position.broker}")
+        print(f"{'='*60}")
         
         is_stop_exit = 'STOP LOSS' in decision.reason or 'TRAILING STOP' in decision.reason
         
