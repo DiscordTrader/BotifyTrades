@@ -1,7 +1,7 @@
 # BotifyTrades - Multi-Platform Trading Bot
 
 ## Overview
-BotifyTrades is a cross-platform trading automation bot for Discord and Telegram, designed for automated stock and options trading across multiple brokers in the USA, Canada, and India. Its core purpose is to provide automated execution, advanced analytics, a dual-broker architecture for paper and live trading, and comprehensive risk management. The project aims to make sophisticated trading accessible and efficient by integrating advanced trading functionalities within messaging platforms.
+BotifyTrades is a cross-platform trading automation bot for Discord and Telegram, designed for automated stock and options trading across multiple brokers in the USA, Canada, and India. It provides automated execution, advanced analytics, a dual-broker architecture for paper and live trading, and comprehensive risk management. The project's vision is to make sophisticated trading accessible and efficient by integrating advanced trading functionalities within messaging platforms.
 
 ## User Preferences
 - **Security**: Always use environment variables (Replit Secrets) for credentials and license keys
@@ -20,7 +20,7 @@ The bot features a Flask-based web control panel with a dark theme, real-time da
 ### Technical Implementations
 Core technologies include `discord.py-self` for Discord integration and `webull` for brokerage. It employs a true dual-broker architecture for live and paper trading, with platform-specific credential encryption. Order execution uses an asynchronous, queue-based system. Signal parsing uses a multi-layer approach supporting learned formats, built-in regex, and AI fallback. Risk management includes automated profit targets, stop losses, trailing stops, intelligent price slippage protection, and auto-quantity calculation, all GUI-configurable and stored in SQLite. Pre-trade analysis uses technical indicators, and post-execution analysis leverages OpenAI GPT models. Real-time market data is integrated, and interactive Discord commands enable on-demand analysis. An error monitoring system provides automatic detection, logging, and AI assistant contextual help.
 
-The Signal Verification Service detects paper trading and impossible fills using real-time broker data and confidence scoring across multiple data sources. Async broker integrations use thread-safe bridge patterns. The system supports a dual-mode channel system for simultaneous execution and signal forwarding, FIFO-based P&L tracking, and Multi-Broker Execution across multiple accounts with per-channel broker selection. Per-channel risk settings allow independent operation, supporting 4-tier profit targets, trailing stops, and Leave Runner functionality. Exit Strategy Mode allows configuration per channel to follow trader signals, automated risk management, or both. Position Matching for Ambiguous Exit Signals automatically links exit signals to the most recent open position. The Trade Monitor feature automatically detects and posts broker-executed trades as BTO/STC signals to Discord.
+The Signal Verification Service detects paper trading and impossible fills using real-time broker data and confidence scoring. Async broker integrations use thread-safe bridge patterns. The system supports a dual-mode channel system for simultaneous execution and signal forwarding, FIFO-based P&L tracking, and Multi-Broker Execution across multiple accounts with per-channel broker selection. Per-channel risk settings allow independent operation, supporting 4-tier profit targets, trailing stops, and Leave Runner functionality. Exit Strategy Mode allows configuration per channel to follow trader signals, automated risk management, or both. Position Matching for Ambiguous Exit Signals automatically links exit signals to the most recent open position. The Trade Monitor feature automatically detects and posts broker-executed trades as BTO/STC signals to Discord.
 
 The Enhanced Portfolio Simulation Engine v2.0 provides industry-grade portfolio analysis with Monte Carlo Simulation, Theta Decay Modeling, Correlation/Concentration Risk Analysis, Risk Scenario Presets, and Comprehensive Portfolio Projection. Telegram Integration supports reading trading signals from Telegram groups/channels. Market-Specific Channel Pages provide dedicated management for India Markets (NSE/BSE/MCX with DhanQ, Upstox, Zerodha) and Canada Markets (TSX/CSE/NEO with Questrade). The Conditional Order Monitoring System monitors price conditions and executes orders when triggered, supporting signals with "over/above" and "under/below" triggers, SL/PT, and position sizing. The Expiry Resolver Service automatically picks the next valid expiry for Indian F&O signals when not specified.
 
@@ -28,10 +28,12 @@ Filled Orders Tracking syncs filled orders from broker APIs into a local databas
 
 The Bot Lifecycle Manager provides centralized control for bot stop/restart operations via system tray and web GUI, including REST API endpoints and graceful shutdown signaling. The Signal Tracking System provides comprehensive lifecycle tracking for all signals from detection through broker execution with full audit trails. The QA Workflow Validation System ensures the complete signal-to-execution pipeline remains intact.
 
-The Order Management System (OMS) and Risk Management System (RMS) provide dynamic SL/PT management for signals that update via Discord message edits, with a WaxUI Entry Registry linking update signals to original entries. The Exit Order Arbiter arbitrates between signal-driven and risk-driven exit requests, enforcing that stop loss can never be lowered in hybrid mode. The Signal Exit Manager handles the complete order lifecycle with broker-aware modify flows. A Circuit Breaker provides emergency trading halt controls with global/per-channel halt, daily loss limit enforcement, and position count limits. Exit Strategy Modes include Signal Mode, Risk Mode, and Hybrid Mode. Trailing stop state (activation status, highest price watermark) now persists to the database across bot restarts for robust position management.
+The Order Management System (OMS) and Risk Management System (RMS) provide dynamic SL/PT management for signals that update via Discord message edits, with a WaxUI Entry Registry linking update signals to original entries. The Exit Order Arbiter arbitrates between signal-driven and risk-driven exit requests, enforcing that stop loss can never be lowered in hybrid mode. The Signal Exit Manager handles the complete order lifecycle with broker-aware modify flows. A Circuit Breaker provides emergency trading halt controls with global/per-channel halt, daily loss limit enforcement, and position count limits. Exit Strategy Modes include Signal Mode, Risk Mode, and Hybrid Mode. Trailing stop state persists to the database across bot restarts for robust position management.
+
+A Service Orchestrator manages priority-based background services with dynamic activation, API budget allocation, and broker-specific rate limiting, featuring a `RateLimitManager` for token bucket rate limiting and automatic 429 backoff. Services like RiskManager and Trade Monitor have enable gates, and their configurations are stored in `service_registry`, `broker_limits`, and `service_metrics` database tables. Flask API endpoints manage services and broker limits. The orchestrator defines dynamic monitoring intervals based on verified broker API rate limits for various services, allowing for efficient resource utilization.
 
 ### System Design Choices
-The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ. The License Validation System provides industry-standard license activation integrated into the startup splash screen. The Discord bot runs in a dedicated thread. Broker credentials and all bot settings are GUI-manageable and stored in SQLite. Security features include admin password management, rate limiting on login attempts, session-based authentication, and local password recovery.
+The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ. The License Validation System provides industry-standard license activation. The Discord bot runs in a dedicated thread. Broker credentials and all bot settings are GUI-manageable and stored in SQLite. Security features include admin password management, rate limiting on login attempts, session-based authentication, and local password recovery.
 
 ## External Dependencies
 
@@ -56,153 +58,3 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 - **FINNHUB_API_KEY**: Market data
 - **GMAIL_APP_PASSWORD**: For Gmail SMTP
 - **SMTP_PASSWORD**: For custom SMTP
-
-## Future Implementation: Service Orchestrator
-
-### Overview
-Industry-grade Service Orchestrator for priority-based background service management with dynamic activation, API budget allocation, and broker-specific rate limiting.
-
-### Verified Broker API Rate Limits (Official Documentation - Jan 2026)
-
-#### US Brokers
-
-| Broker | Data Limit | Order Limit | Safe Interval | Critical Notes |
-|--------|-----------|-------------|---------------|----------------|
-| **Webull** | 10 req/30s (20/min) | 10 req/30s shared | **6s minimum** | Official OpenAPI; unofficial lib may differ |
-| **Alpaca** | 200/min (10/s burst) | 200/min, 10 orders/s | **3s safe** | WebSocket available for streaming |
-| **Robinhood** | ~8 req/burst | ~1 order/s | **15s safe** | Unofficial; 429 = 14-15s lockout |
-| **IBKR** | 50 msg/s, 60 hist/min | 50 orders/s | **2s safe** | Pacing violations lock channel |
-| **Tastytrade** | 429 on exceed | Shared limit | **5s safe** | No published limits; use DXLink streaming |
-| **Schwab** | 120/min | 120 orders/min | **3s safe** | 10k/day rolling; 429 = 60s backoff |
-
-#### Canadian Broker
-
-| Broker | Data Limit | Order Limit | Safe Interval | Critical Notes |
-|--------|-----------|-------------|---------------|----------------|
-| **Questrade** | Rate limited | Shared | **5s safe** | HTTP 429 on exceed; check response headers |
-
-#### Indian Brokers
-
-| Broker | Data Limit | Order Limit | Safe Interval | Critical Notes |
-|--------|-----------|-------------|---------------|----------------|
-| **Zerodha** | 10 req/s (API key level) | 10/s, 200/min, 3k/day | **3s safe** | Strictest limits; NOT for HFT |
-| **Upstox** | 25/s, 250/min, 1k/30min | 250 orders/min | **3s safe** | WebSocket: 100 instruments/conn |
-| **DhanQ** | 20/s non-trading, 10/s data | 10-25/s, 250/min, 5k/day | **4s safe** | Market Quote: 1 req/s (1000 instruments) |
-
-### Calculated Safe Monitoring Intervals
-
-Based on verified limits, here are the **maximum safe intervals** per broker:
-
-| Broker | Minimum Interval | Recommended Active | Recommended Idle |
-|--------|-----------------|-------------------|------------------|
-| **Webull** | 6s | 10s | 30s |
-| **Alpaca** | 3s | 5s | 15s |
-| **Robinhood** | 15s | 20s | 60s |
-| **IBKR** | 2s | 5s | 15s |
-| **Tastytrade** | 5s | 10s | 30s |
-| **Schwab** | 3s | 5s | 15s |
-| **Questrade** | 5s | 10s | 30s |
-| **Zerodha** | 3s | 5s | 15s |
-| **Upstox** | 3s | 5s | 15s |
-| **DhanQ** | 4s | 8s | 20s |
-
-### Service Priority & Dynamic Intervals
-
-| Service | Priority | Market Hours | After Hours | Activation Condition |
-|---------|----------|-------------|-------------|---------------------|
-| **Order Execution** | Critical | Immediate | Immediate | Always ready |
-| **Risk Manager** | High | 3-5s | 10s | Any channel has risk enabled |
-| **Conditional Orders** | High | 4s | 12s | Pending orders exist |
-| **Position Sync** | Medium | 6s | 18s | Open positions exist |
-| **Options Chain** | Low | 30s cache | 60s | Active options trading |
-| **Balance Fetch** | Background | 90s | 180s | Always (low priority) |
-
-### Dynamic Activation Logic
-```
-Every 5s (orchestration tick):
-├── Check: risk_enabled on any channel?
-│   └── YES → Run RiskManager at 3-5s
-│   └── NO  → Pause RiskManager
-├── Check: Conditional orders pending?
-│   └── YES → Monitor at 4s
-│   └── NO  → Suspend monitoring
-├── Check: Open positions exist?
-│   └── YES → Position sync at 6s
-│   └── NO  → Reduce to 30s heartbeat
-├── Check: Options activity?
-│   └── YES → Warm cache
-│   └── NO  → On-demand only
-└── Broker disconnected?
-    └── Skip + exponential backoff
-```
-
-### Database Schema Required
-```sql
-CREATE TABLE service_registry (
-    service_id TEXT PRIMARY KEY,
-    display_name TEXT,
-    broker_scope TEXT,  -- 'all', 'webull', 'alpaca', etc.
-    default_interval INTEGER,
-    min_interval INTEGER,
-    max_interval INTEGER,
-    priority INTEGER DEFAULT 5,
-    enabled INTEGER DEFAULT 1,
-    last_run TIMESTAMP,
-    last_result TEXT,
-    status TEXT DEFAULT 'idle'  -- running, paused, error, idle
-);
-
-CREATE TABLE broker_limits (
-    broker_name TEXT PRIMARY KEY,
-    data_limit_per_min INTEGER,
-    order_limit_per_min INTEGER,
-    current_calls INTEGER DEFAULT 0,
-    window_start TIMESTAMP,
-    last_429_at TIMESTAMP
-);
-
-CREATE TABLE service_metrics (
-    id INTEGER PRIMARY KEY,
-    timestamp TIMESTAMP,
-    service_id TEXT,
-    calls_made INTEGER,
-    latency_ms INTEGER,
-    errors INTEGER,
-    rate_limit_hits INTEGER
-);
-```
-
-### Routes Requiring Orchestrator Wiring
-- `/api/trades/merged` → Position Sync Service
-- `/api/risk/status` → Risk Monitor Service  
-- `/api/broker/status` → Broker Sync Service
-- `/api/place_order` → Order Execution (priority)
-- `/api/cancel_order` → Order Execution (priority)
-- `/api/sync_positions` → Position Sync Service
-- `/api/conditional_orders/*` → Conditional Orders Service
-- `/api/options/chain/*` → Options Chain Service
-- `/api/broker/balance/*` → Balance Fetch Service
-
-### UI Enhancement (settings.html Background Services card)
-Currently has basic toggles for Broker Sync and Risk Monitor (lines 1297-1327).
-
-**Required Enhancements:**
-1. Service list table with Name | Priority | Interval | Status | Last Run | Actions
-2. Per-service controls: Toggle, Priority dropdown (1-10), Interval input
-3. Per-broker rate limit gauges with 429 error counts
-4. Real-time status indicators (Running/Paused/Error/Idle)
-5. Manual "Run Now" button per service
-
-### Implementation Checklist
-1. Create `service_registry` table + migration
-2. Create `broker_limits` table with verified limits
-3. Build `ServiceOrchestrator` class with priority queue
-4. Create per-broker token bucket throttlers
-5. Wire RiskManager to check `risk_monitor_enabled`
-6. Wire Conditional Orders to check enable state
-7. Add service status tracking (last_run, status)
-8. Enhance UI with full service controls
-9. Add rate limit gauges to UI
-10. Create `/api/services/*` endpoints
-11. Add service metrics logging
-12. Implement WebSocket for real-time status
