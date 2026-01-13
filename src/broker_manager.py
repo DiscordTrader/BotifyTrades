@@ -182,9 +182,11 @@ class BrokerManager:
             # For now, fall through to default
             pass
         
-        # Determine base broker name
+        # Determine base broker name - STRICT: No default broker fallback
         if not broker_name:
-            broker_name = self.default_broker
+            # No broker specified - this should be handled by caller via channel config
+            print(f"[BROKER MANAGER] ❌ No broker specified and no channel override")
+            return None
         
         # Route to paper trading account if requested
         if paper_trade:
@@ -193,11 +195,15 @@ class BrokerManager:
                 print(f"[BROKER MANAGER] Routing to {paper_broker_name} (paper trading)")
                 return self.brokers[paper_broker_name]
             else:
-                print(f"[BROKER MANAGER] ⚠️ {paper_broker_name} not available, falling back to {broker_name}")
-                return self.brokers.get(broker_name, self.brokers[self.default_broker])
+                print(f"[BROKER MANAGER] ❌ {paper_broker_name} not available - no fallback")
+                return None  # STRICT: No fallback to default broker
         
-        # Return live broker
-        return self.brokers.get(broker_name, self.brokers[self.default_broker])
+        # Return requested broker - STRICT: No fallback to default
+        broker = self.brokers.get(broker_name)
+        if not broker:
+            print(f"[BROKER MANAGER] ❌ Broker '{broker_name}' not available - no fallback")
+            return None
+        return broker
     
     async def place_stock_order(
         self,
@@ -207,13 +213,19 @@ class BrokerManager:
         quantity: int,
         price: Optional[float] = None
     ) -> OrderResult:
-        """Place a stock order on specified broker"""
-        target_broker = broker_name if broker_name else self.default_broker
-        broker = self.brokers.get(target_broker)
+        """Place a stock order on specified broker - STRICT: broker_name required"""
+        if not broker_name:
+            return OrderResult(
+                success=False,
+                message="No broker specified - channel broker configuration required",
+                symbol=symbol,
+                action=action
+            )
+        broker = self.brokers.get(broker_name)
         if not broker:
             return OrderResult(
                 success=False,
-                message=f"Broker not available: {target_broker}",
+                message=f"Broker not available: {broker_name}",
                 symbol=symbol,
                 action=action
             )
@@ -232,13 +244,19 @@ class BrokerManager:
         price: Optional[float] = None,
         expiry_year: Optional[str] = None
     ) -> OrderResult:
-        """Place an option order on specified broker"""
-        target_broker = broker_name if broker_name else self.default_broker
-        broker = self.brokers.get(target_broker)
+        """Place an option order on specified broker - STRICT: broker_name required"""
+        if not broker_name:
+            return OrderResult(
+                success=False,
+                message="No broker specified - channel broker configuration required",
+                symbol=symbol,
+                action=action
+            )
+        broker = self.brokers.get(broker_name)
         if not broker:
             return OrderResult(
                 success=False,
-                message=f"Broker not available: {target_broker}",
+                message=f"Broker not available: {broker_name}",
                 symbol=symbol,
                 action=action
             )

@@ -10262,8 +10262,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 _original_print(f"[DEBUG] Error loading channel brokers: {e}")
                         
                         if not enabled_brokers:
-                            # Default to primary broker
-                            enabled_brokers = [self.broker.name if self.broker else 'WEBULL']
+                            # STRICT ROUTING: No primary broker fallback allowed
+                            # Every order MUST have explicit channel broker configuration
+                            channel_name = signal.get('_channel_name', 'Unknown')
+                            _original_print(f"[ROUTING] ❌ REJECTED - No broker configured for channel '{channel_name}' (channel_id={channel_id})")
+                            _original_print(f"[ROUTING] Configure enabled_brokers in channel settings to execute trades")
+                            continue  # Skip this signal - do not execute on any broker
 
                 if enabled_brokers and isinstance(enabled_brokers, list) and len(enabled_brokers) > 0:
                     # MULTI-BROKER EXECUTION - Execute on all selected brokers
@@ -11327,7 +11331,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 'intended_price': signal.get('price'),
                                                 'executed_price': signal.get('price'),
                                                 'executed': True,
-                                                'broker': (broker_resp.get('broker') or 'WEBULL').upper(),
+                                                'broker': broker_resp.get('broker', 'UNKNOWN').upper(),
                                                 'order_id': broker_resp.get('orderId'),
                                                 'stop_loss_price': signal.get('stop_loss_price'),
                                                 'profit_target_price': signal.get('profit_target_price'),
@@ -11351,7 +11355,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         'intended_price': signal.get('price'),
                                         'executed_price': signal.get('price'),
                                         'executed': True,
-                                        'broker': (resp.get('broker') or 'WEBULL').upper(),
+                                        'broker': resp.get('broker', 'UNKNOWN').upper(),
                                         'order_id': resp.get('orderId'),
                                         'stop_loss_price': signal.get('stop_loss_price'),
                                         'profit_target_price': signal.get('profit_target_price'),
@@ -11377,7 +11381,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     'executed_price': signal.get('price'),
                                     'executed': True,
                                     'status': 'CLOSED',
-                                    'broker': (resp.get('broker') or 'WEBULL').upper(),
+                                    'broker': resp.get('broker', 'UNKNOWN').upper(),
                                     'order_id': resp.get('orderId'),
                                     'risk_trigger': signal.get('risk_trigger'),
                                     'origin_trade_id': signal.get('origin_trade_id')

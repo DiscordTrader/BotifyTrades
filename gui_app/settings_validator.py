@@ -266,10 +266,12 @@ class SettingsValidator:
         
         if exec_enabled and not channel.get('broker_override') and not channel.get('enabled_brokers'):
             report.add_issue(ValidationIssue(
-                severity='warning',
+                severity='critical',
                 category='channel',
                 field='broker_assignment',
-                message='Execution enabled but no broker assigned',
+                message='STRICT ROUTING: Execution enabled but no broker assigned - trades will be REJECTED',
+                current_value='enabled_brokers: None',
+                expected_value='At least one broker (e.g., ALPACA_PAPER, WEBULL)',
                 channel_id=channel_id,
                 channel_name=channel_name
             ))
