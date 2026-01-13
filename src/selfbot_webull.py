@@ -5172,6 +5172,13 @@ class SelfClient(discord.Client):
         self._message_dedupe_lock = asyncio.Lock()  # Protect message deduplication from race conditions
         print("[ASYNC] ✓ Queue and events created in event loop")
         
+        # Start broker initialization in background - Discord stays responsive
+        asyncio.create_task(self._init_brokers_background())
+    
+    async def _init_brokers_background(self):
+        """Initialize all brokers in background - Discord connection is NOT blocked."""
+        print("[BROKERS] Starting background broker initialization...")
+        
         self.broker = WebullBroker(loop=self.loop)
         try:
             await self.broker.login()
@@ -5884,6 +5891,8 @@ class SelfClient(discord.Client):
             )
         except Exception as e:
             print(f"[VERIFY] ⚠️ Could not initialize real-time verification: {e}")
+        
+        print("[BROKERS] ✓ Background broker initialization complete - Discord was never blocked")
     
     async def token_refresh_scheduler(self):
         """Automatically refresh Webull tokens every 12 hours"""
