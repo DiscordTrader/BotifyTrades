@@ -1206,7 +1206,8 @@ class BrokerSyncService:
                     'profit_target_percent': 0,
                     'stop_loss_percent': 0,
                     'trailing_stop_enabled': 0,
-                    'source': 'sync' if not origin_channel_id else 'sync_discord'  # Mark source type
+                    'source': 'sync' if not origin_channel_id else 'sync_discord',  # Mark source type
+                    'hide_in_ui': 1 if not origin_channel_id else 0  # Hide manual imports without channel
                 }
                 
                 # Add option-specific fields if it's an option

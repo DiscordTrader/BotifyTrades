@@ -10052,6 +10052,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 # ORDER-LEVEL DEDUPLICATION: Prevent duplicate order execution
                 # - Discord/Telegram signals (with message_id): PERMANENT blocking
                 # - Manual/relay signals (hash-based): TTL-based, allows re-entry after 60s
+                # - Conditional/Auto-triggered (with order_id/uuid): TTL-based blocking
                 import hashlib
                 import time as time_module
                 
@@ -10061,8 +10062,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 original_message_id = signal.get('message_id')
                 is_platform_signal = bool(original_message_id and str(original_message_id).strip())
                 
+                # Check for order_id (from conditional orders) to prevent duplicate execution of triggers
+                trigger_id = signal.get('order_id') or signal.get('signal_uuid')
+                
                 if is_platform_signal:
                     signal_id = original_message_id
+                elif trigger_id:
+                    # Use existing ID for conditional/triggered orders
+                    signal_id = trigger_id
                 else:
                     # For manual/relay trades without message_id, create a hash-based key
                     hash_content = f"{signal.get('action', '')}_{signal.get('symbol', '')}_{signal.get('strike', '')}_{signal.get('expiry', '')}_{signal.get('qty', '')}_{signal.get('price', '')}_{signal.get('channel_id', '')}"
@@ -10078,10 +10085,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 current_time = time_module.time()
                 async with self._executed_orders_lock:
+                    # 1. Check permanent cache for Discord/Telegram
                     if is_platform_signal:
-                        # PERMANENT blocking for Discord/Telegram messages
                         if order_key in self._executed_orders_permanent:
                             _original_print(f"[WORKER] ⏭️ DUPLICATE ORDER BLOCKED: {signal.get('action')} {signal.get('symbol')} (platform msg_id: {signal_id})", flush=True)
+                            self.order_queue.task_done()
                             continue
                         self._executed_orders_permanent.add(order_key)
                         
@@ -10090,24 +10098,26 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             oldest = list(self._executed_orders_permanent)[:1000]
                             for k in oldest:
                                 self._executed_orders_permanent.discard(k)
-                    else:
-                        # TTL-based blocking for manual/relay signals
-                        if order_key in self._executed_orders:
-                            last_exec_time = self._executed_orders[order_key]
-                            elapsed = current_time - last_exec_time
-                            if elapsed < DEDUPE_TTL_SECONDS:
-                                _original_print(f"[WORKER] ⏭️ DUPLICATE ORDER BLOCKED: {signal.get('action')} {signal.get('symbol')} (seen {elapsed:.1f}s ago)", flush=True)
-                                continue
-                            else:
-                                _original_print(f"[WORKER] ✓ Allowing re-entry after {elapsed:.1f}s: {signal.get('action')} {signal.get('symbol')}", flush=True)
-                        
-                        # Record this execution with timestamp
-                        self._executed_orders[order_key] = current_time
-                        
-                        # Cleanup old TTL entries (older than 5 minutes)
-                        expired_keys = [k for k, t in self._executed_orders.items() if current_time - t > 300]
-                        for k in expired_keys:
-                            del self._executed_orders[k]
+                    
+                    # 2. Check TTL cache for EVERYTHING (manual, triggered, etc)
+                    # This provides a second layer of defense even for platform signals
+                    if order_key in self._executed_orders:
+                        last_exec_time = self._executed_orders[order_key]
+                        elapsed = current_time - last_exec_time
+                        if elapsed < DEDUPE_TTL_SECONDS:
+                            _original_print(f"[WORKER] ⏭️ DUPLICATE ORDER BLOCKED: {signal.get('action')} {signal.get('symbol')} (seen {elapsed:.1f}s ago)", flush=True)
+                            self.order_queue.task_done()
+                            continue
+                        else:
+                            _original_print(f"[WORKER] ✓ Allowing re-entry after {elapsed:.1f}s: {signal.get('action')} {signal.get('symbol')}", flush=True)
+                    
+                    # Record this execution with timestamp
+                    self._executed_orders[order_key] = current_time
+                    
+                    # Cleanup old TTL entries (older than 5 minutes)
+                    expired_keys = [k for k, t in self._executed_orders.items() if current_time - t > 300]
+                    for k in expired_keys:
+                        del self._executed_orders[k]
                 
                 # Pre-trade analysis for BTO orders
                 if signal['action'] == 'BTO' and ENABLE_SWING_ANALYSIS and self.swing_analyzer:
