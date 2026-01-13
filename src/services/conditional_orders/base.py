@@ -750,16 +750,6 @@ class BaseConditionalOrderService(ABC):
         if order_id in self.pending_orders:
             del self.pending_orders[order_id]
         
-        symbol = order.get('symbol', '')
-        channel_id = order.get('channel_id', '')
-        if symbol and channel_id:
-            try:
-                from src.services.conditional_order_cooldown import add_cooldown
-                add_cooldown(symbol, channel_id)
-                self._log(f"Added 2-min cooldown for {symbol} in channel {channel_id}")
-            except Exception as e:
-                self._log(f"Cooldown add error: {e}")
-        
         update_conditional_order_status(
             order_id,
             'TRIGGERED',
