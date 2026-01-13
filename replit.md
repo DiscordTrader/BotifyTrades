@@ -62,20 +62,49 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 ### Overview
 Industry-grade Service Orchestrator for priority-based background service management with dynamic activation, API budget allocation, and broker-specific rate limiting.
 
-### Verified Broker API Rate Limits
+### Verified Broker API Rate Limits (Official Documentation - Jan 2026)
 
-| Broker | Market Data | Orders | Critical Notes |
-|--------|-------------|--------|----------------|
-| **Webull** | ~1 req/s, 60/min safe | 15/min actions | Unofficial API, bursty bans |
-| **Alpaca** | 200/min, 1/s burst | 200/min, 10 orders/s | Has streaming WebSocket |
-| **Robinhood** | 120/10min shared | ~1/s order limit | 429 triggers 15min lockout |
-| **IBKR** | 50 msg/s | 60 historical/min | Pacing violations lock channel |
-| **Tastytrade** | 120/min | Shared limit | Has streaming WebSocket |
-| **Schwab** | 120/min | 20 orders/min | 10k/day rolling limit |
-| **Questrade** | 20/s, 100k/day | Shared | Canadian broker |
-| **Upstox** | 40/s, 3000/min | 60 orders/min | Indian broker |
-| **Zerodha** | 3/s | 60 orders/min hard cap | Indian broker |
-| **DhanQ** | 30/s, 1000/min | Shared | Indian broker |
+#### US Brokers
+
+| Broker | Data Limit | Order Limit | Safe Interval | Critical Notes |
+|--------|-----------|-------------|---------------|----------------|
+| **Webull** | 10 req/30s (20/min) | 10 req/30s shared | **6s minimum** | Official OpenAPI; unofficial lib may differ |
+| **Alpaca** | 200/min (10/s burst) | 200/min, 10 orders/s | **3s safe** | WebSocket available for streaming |
+| **Robinhood** | ~8 req/burst | ~1 order/s | **15s safe** | Unofficial; 429 = 14-15s lockout |
+| **IBKR** | 50 msg/s, 60 hist/min | 50 orders/s | **2s safe** | Pacing violations lock channel |
+| **Tastytrade** | 429 on exceed | Shared limit | **5s safe** | No published limits; use DXLink streaming |
+| **Schwab** | 120/min | 120 orders/min | **3s safe** | 10k/day rolling; 429 = 60s backoff |
+
+#### Canadian Broker
+
+| Broker | Data Limit | Order Limit | Safe Interval | Critical Notes |
+|--------|-----------|-------------|---------------|----------------|
+| **Questrade** | Rate limited | Shared | **5s safe** | HTTP 429 on exceed; check response headers |
+
+#### Indian Brokers
+
+| Broker | Data Limit | Order Limit | Safe Interval | Critical Notes |
+|--------|-----------|-------------|---------------|----------------|
+| **Zerodha** | 10 req/s (API key level) | 10/s, 200/min, 3k/day | **3s safe** | Strictest limits; NOT for HFT |
+| **Upstox** | 25/s, 250/min, 1k/30min | 250 orders/min | **3s safe** | WebSocket: 100 instruments/conn |
+| **DhanQ** | 20/s non-trading, 10/s data | 10-25/s, 250/min, 5k/day | **4s safe** | Market Quote: 1 req/s (1000 instruments) |
+
+### Calculated Safe Monitoring Intervals
+
+Based on verified limits, here are the **maximum safe intervals** per broker:
+
+| Broker | Minimum Interval | Recommended Active | Recommended Idle |
+|--------|-----------------|-------------------|------------------|
+| **Webull** | 6s | 10s | 30s |
+| **Alpaca** | 3s | 5s | 15s |
+| **Robinhood** | 15s | 20s | 60s |
+| **IBKR** | 2s | 5s | 15s |
+| **Tastytrade** | 5s | 10s | 30s |
+| **Schwab** | 3s | 5s | 15s |
+| **Questrade** | 5s | 10s | 30s |
+| **Zerodha** | 3s | 5s | 15s |
+| **Upstox** | 3s | 5s | 15s |
+| **DhanQ** | 4s | 8s | 20s |
 
 ### Service Priority & Dynamic Intervals
 
