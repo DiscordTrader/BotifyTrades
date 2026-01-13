@@ -9783,9 +9783,26 @@ def create_conditional_order(
     lots: int = None,
     stop_loss_fixed: float = None,
     stop_loss_pct: float = None,
-    target_ranges: str = None
+    target_ranges: str = None,
+    exit_strategy_mode: str = None,
+    slippage_protection_enabled: int = 0,
+    slippage_max_pct: float = None,
+    trailing_stop_enabled: int = 0,
+    trailing_stop_pct: float = None,
+    trailing_activation_pct: float = None,
+    settings_source: str = None
 ) -> Optional[int]:
-    """Create a new conditional order"""
+    """Create a new conditional order with full channel settings linkage.
+    
+    Channel settings that flow to the order:
+    - Timeout: expires_at (from order_timeout_minutes, conditional_order_timeout_minutes, or conditional_order_expiry)
+    - Position sizing: size_mode, qty_value, calculated_qty
+    - Exit strategy: exit_strategy_mode
+    - Slippage: slippage_protection_enabled, slippage_max_pct
+    - Trailing stop: trailing_stop_enabled, trailing_stop_pct, trailing_activation_pct
+    - Risk: stop_loss_type, stop_loss_value, take_profit_targets
+    - Audit: settings_source tracks which fields came from signal vs channel
+    """
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -9796,14 +9813,18 @@ def create_conditional_order(
                 broker_primary, stop_loss_type, stop_loss_value, take_profit_targets,
                 size_mode, qty_value, calculated_qty, params_source, expires_at,
                 original_message, asset_type, signal_id, strike, opt_type, market, expiry, lot_size, lots,
-                stop_loss_fixed, stop_loss_pct, target_ranges, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
+                stop_loss_fixed, stop_loss_pct, target_ranges, status,
+                exit_strategy_mode, slippage_protection_enabled, slippage_max_pct,
+                trailing_stop_enabled, trailing_stop_pct, trailing_activation_pct, settings_source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?)
         ''', (
             channel_id, symbol.upper(), trigger_type, trigger_price, adjusted_trigger_price,
             broker_primary, stop_loss_type, stop_loss_value, take_profit_targets,
             size_mode, qty_value, calculated_qty, params_source, expires_at,
             original_message, asset_type, signal_id, strike, opt_type, market, expiry, lot_size, lots,
-            stop_loss_fixed, stop_loss_pct, target_ranges
+            stop_loss_fixed, stop_loss_pct, target_ranges,
+            exit_strategy_mode, slippage_protection_enabled, slippage_max_pct,
+            trailing_stop_enabled, trailing_stop_pct, trailing_activation_pct, settings_source
         ))
         
         order_id = cursor.lastrowid
@@ -10253,7 +10274,17 @@ def expire_old_conditional_orders() -> int:
 
 
 def get_channel_conditional_settings(channel_id: str) -> Dict[str, Any]:
-    """Get conditional order settings for a specific channel"""
+    """Get conditional order settings for a specific channel.
+    
+    Returns ALL channel settings that should flow to conditional orders:
+    - Timeout: order_timeout_minutes, conditional_order_timeout_minutes, conditional_order_expiry
+    - Position sizing: position_size_pct, default_quantity
+    - Exit strategy: exit_strategy_mode
+    - Slippage protection: slippage_protection_enabled, slippage_max_pct
+    - Trailing stop: trailing_stop_pct, trailing_activation_pct (enabled if trailing_stop_pct > 0)
+    - Stop loss / profit targets
+    - Leave runner settings
+    """
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -10266,14 +10297,18 @@ def get_channel_conditional_settings(channel_id: str) -> Dict[str, Any]:
                    position_size_pct, stop_loss_pct, profit_target_pct,
                    profit_target_1_pct, profit_target_2_pct, profit_target_3_pct,
                    profit_target_4_pct, trailing_stop_pct, leave_runner_enabled,
-                   leave_runner_pct
+                   leave_runner_pct, trailing_activation_pct,
+                   slippage_protection_enabled, slippage_max_pct
             FROM channels
             WHERE discord_channel_id = ?
         ''', (channel_id,))
         
         row = cursor.fetchone()
         if row:
-            return dict(row)
+            result = dict(row)
+            # Derive trailing_stop_enabled from trailing_stop_pct
+            result['trailing_stop_enabled'] = 1 if result.get('trailing_stop_pct') and result.get('trailing_stop_pct') > 0 else 0
+            return result
         return {}
     except Exception as e:
         print(f"[DATABASE] Error getting channel conditional settings: {e}")

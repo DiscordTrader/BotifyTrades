@@ -537,10 +537,13 @@ class BaseConditionalOrderService(ABC):
             return None
         
         channel_settings = get_channel_conditional_settings(channel_id)
-        self._log(f"Channel settings for {channel_id}: position_size_pct={channel_settings.get('position_size_pct')}, "
-                  f"order_timeout={channel_settings.get('order_timeout_minutes')}, "
-                  f"conditional_order_timeout={channel_settings.get('conditional_order_timeout_minutes')}, "
-                  f"stop_loss_pct={channel_settings.get('stop_loss_pct')}")
+        self._log(f"Channel settings for {channel_id}: "
+                  f"timeout={channel_settings.get('order_timeout_minutes') or channel_settings.get('conditional_order_timeout_minutes') or channel_settings.get('conditional_order_expiry')}, "
+                  f"position_size_pct={channel_settings.get('position_size_pct')}, "
+                  f"default_qty={channel_settings.get('default_quantity')}, "
+                  f"exit_mode={channel_settings.get('exit_strategy_mode')}, "
+                  f"slippage={channel_settings.get('slippage_protection_enabled')}/{channel_settings.get('slippage_max_pct')}, "
+                  f"trailing={channel_settings.get('trailing_stop_pct')}")
         if not channel_settings.get('conditional_order_enabled', True):
             self._log(f"Disabled for channel {channel_id}")
             return None
@@ -615,6 +618,37 @@ class BaseConditionalOrderService(ABC):
         target_ranges = parsed_signal.get('target_ranges')
         target_ranges_json = json.dumps(target_ranges) if target_ranges else None
         
+        # Get channel-level settings for exit strategy, slippage, and trailing stop
+        exit_strategy_mode = channel_settings.get('exit_strategy_mode', 'signal')
+        slippage_protection_enabled = 1 if channel_settings.get('slippage_protection_enabled') else 0
+        slippage_max_pct = channel_settings.get('slippage_max_pct')
+        
+        # Trailing stop - signal overrides channel settings
+        trailing_stop_pct = parsed_signal.get('trailing_stop_pct') or channel_settings.get('trailing_stop_pct')
+        trailing_activation_pct = parsed_signal.get('trailing_activation_pct') or channel_settings.get('trailing_activation_pct')
+        trailing_stop_enabled = 1 if trailing_stop_pct and trailing_stop_pct > 0 else 0
+        
+        # Build settings source metadata for audit trail
+        settings_sources = []
+        if timeout_minutes:
+            settings_sources.append(f"timeout:channel({timeout_minutes}min)")
+        elif expires_at:
+            settings_sources.append(f"timeout:channel({channel_settings.get('conditional_order_expiry', 'default')})")
+        if size_mode == 'percent_account' and not parsed_signal.get('size_mode'):
+            settings_sources.append(f"sizing:channel({qty_value}%)")
+        elif size_mode == 'fixed_qty' and not parsed_signal.get('size_mode'):
+            settings_sources.append(f"sizing:channel({qty_value}qty)")
+        if slippage_protection_enabled:
+            settings_sources.append(f"slippage:channel({slippage_max_pct}%)")
+        if trailing_stop_pct and not parsed_signal.get('trailing_stop_pct'):
+            settings_sources.append(f"trailing:channel({trailing_stop_pct}%)")
+        if exit_strategy_mode != 'signal':
+            settings_sources.append(f"exit_mode:channel({exit_strategy_mode})")
+        settings_source = '; '.join(settings_sources) if settings_sources else None
+        
+        self._log(f"Channel settings applied: exit_mode={exit_strategy_mode}, slippage={slippage_protection_enabled}/{slippage_max_pct}, "
+                  f"trailing={trailing_stop_pct}/{trailing_activation_pct}")
+        
         order_id = create_conditional_order(
             channel_id=channel_id,
             symbol=parsed_signal.get('symbol'),
@@ -640,6 +674,13 @@ class BaseConditionalOrderService(ABC):
             expiry=parsed_signal.get('expiry'),
             lot_size=parsed_signal.get('lot_size'),
             lots=parsed_signal.get('lots'),
+            exit_strategy_mode=exit_strategy_mode,
+            slippage_protection_enabled=slippage_protection_enabled,
+            slippage_max_pct=slippage_max_pct,
+            trailing_stop_enabled=trailing_stop_enabled,
+            trailing_stop_pct=trailing_stop_pct,
+            trailing_activation_pct=trailing_activation_pct,
+            settings_source=settings_source,
         )
         
         if order_id:
