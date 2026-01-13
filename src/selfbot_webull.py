@@ -7489,6 +7489,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             traceback.print_exc()
 
     async def on_message(self, message: discord.Message):
+        # Generate trace ID for complete signal lifecycle tracking
+        trace_id = f"T{message.id % 100000:05d}"  # Short trace ID based on message ID
+        
         # FIRST: Deduplicate messages BEFORE any processing (Discord self-bot sometimes delivers duplicate events)
         # Ensure lock exists (create if needed)
         if not self._message_dedupe_lock:
@@ -7497,8 +7500,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # Check-and-add atomically using lock to prevent race condition
         async with self._message_dedupe_lock:
             if message.id in self._processed_messages:
+                print(f"[DEBUG DEDUPE] [{trace_id}] ⚠️ DUPLICATE BLOCKED - msg_id={message.id} already in cache (size={len(self._processed_messages)})")
                 return  # Silent skip for duplicates
             self._processed_messages.add(message.id)
+            print(f"[DEBUG DEDUPE] [{trace_id}] ✓ NEW MESSAGE - msg_id={message.id} added to cache (size={len(self._processed_messages)})")
         
         # Limit cache size to prevent memory growth (do this after dedupe check)
         if len(self._processed_messages) > self._max_processed_cache:
@@ -7553,8 +7558,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if not channel_info and message.channel.id not in CHANNEL_IDS and not is_mapped_source_channel:
             return
         
-        print(f"[Discord] Processing message ID: {message.id}")
-        print(f"[DEBUG] Author: {message.author.name} (ID: {message.author.id}), Channel: {message.channel.id}")
+        print(f"[DEBUG FLOW] [{trace_id}] ========== SIGNAL LIFECYCLE START ==========")
+        print(f"[DEBUG FLOW] [{trace_id}] Message ID: {message.id}")
+        print(f"[DEBUG FLOW] [{trace_id}] Channel: {message.channel.id} | Author: {message.author.name} (ID: {message.author.id})")
+        print(f"[DEBUG FLOW] [{trace_id}] Execute: {execute_enabled} | Track: {track_enabled} | Category: {channel_category}")
         
         # Add message to sentiment analyzer if enabled
         if self.sentiment_analyzer and not message.author.bot:
@@ -7870,7 +7877,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     
                     # TRACK SIGNAL FOR PNL - even if not executing trades
                     # This allows Trade Summary/PNL tracking for forwarded signals
-                    print(f"[PNL TRACK] Starting signal tracking...", flush=True)
+                    print(f"[DEBUG FLOW] [{trace_id}] === PNL TRACKING PHASE ===")
+                    print(f"[PNL TRACK] [{trace_id}] Starting signal tracking...", flush=True)
                     try:
                         from gui_app.database import (
                             create_signal_instance, close_signal_instance, 
@@ -7921,6 +7929,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 print(f"[PNL TRACK] {'STC' if is_exit else 'BTO'} parsed: {parsed_signal}")
                         
                         if parsed_signal:
+                            # Add trace_id for complete flow tracking
+                            parsed_signal['trace_id'] = trace_id
+                            print(f"[DEBUG FLOW] [{trace_id}] Parsed signal: {parsed_signal.get('symbol')} {'STC' if parsed_signal.get('is_exit') else 'BTO'} @ ${parsed_signal.get('price', 0)}")
+                            
                             symbol = parsed_signal['symbol']
                             is_exit = parsed_signal.get('is_exit', False)
                             

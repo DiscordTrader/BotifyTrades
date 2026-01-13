@@ -26,6 +26,9 @@ class LotMatcher:
     
     def _create_lot(self, signal: Dict) -> int:
         """Create a new lot from BTO signal"""
+        # Trace ID for debug flow tracking
+        trace_id = signal.get('trace_id', 'T?????')
+        
         # Get channel_id (use db_channel_id if available, otherwise lookup)
         channel_id = signal.get('db_channel_id')
         
@@ -57,7 +60,7 @@ class LotMatcher:
             user_id=signal.get('user_id')
         )
         
-        print(f"[LOT_MATCHER] ✓ Created lot {lot_id} for {signal['symbol']} BTO {signal['qty']} @ ${signal['price']}")
+        print(f"[LOT_MATCHER] [{trace_id}] ✓ Created lot {lot_id} for {signal['symbol']} BTO {signal['qty']} @ ${signal['price']}")
         return lot_id
     
     def _close_lots(self, signal: Dict) -> List[Dict]:
