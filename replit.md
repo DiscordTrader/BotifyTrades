@@ -56,3 +56,124 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 - **FINNHUB_API_KEY**: Market data
 - **GMAIL_APP_PASSWORD**: For Gmail SMTP
 - **SMTP_PASSWORD**: For custom SMTP
+
+## Future Implementation: Service Orchestrator
+
+### Overview
+Industry-grade Service Orchestrator for priority-based background service management with dynamic activation, API budget allocation, and broker-specific rate limiting.
+
+### Verified Broker API Rate Limits
+
+| Broker | Market Data | Orders | Critical Notes |
+|--------|-------------|--------|----------------|
+| **Webull** | ~1 req/s, 60/min safe | 15/min actions | Unofficial API, bursty bans |
+| **Alpaca** | 200/min, 1/s burst | 200/min, 10 orders/s | Has streaming WebSocket |
+| **Robinhood** | 120/10min shared | ~1/s order limit | 429 triggers 15min lockout |
+| **IBKR** | 50 msg/s | 60 historical/min | Pacing violations lock channel |
+| **Tastytrade** | 120/min | Shared limit | Has streaming WebSocket |
+| **Schwab** | 120/min | 20 orders/min | 10k/day rolling limit |
+| **Questrade** | 20/s, 100k/day | Shared | Canadian broker |
+| **Upstox** | 40/s, 3000/min | 60 orders/min | Indian broker |
+| **Zerodha** | 3/s | 60 orders/min hard cap | Indian broker |
+| **DhanQ** | 30/s, 1000/min | Shared | Indian broker |
+
+### Service Priority & Dynamic Intervals
+
+| Service | Priority | Market Hours | After Hours | Activation Condition |
+|---------|----------|-------------|-------------|---------------------|
+| **Order Execution** | Critical | Immediate | Immediate | Always ready |
+| **Risk Manager** | High | 3-5s | 10s | Any channel has risk enabled |
+| **Conditional Orders** | High | 4s | 12s | Pending orders exist |
+| **Position Sync** | Medium | 6s | 18s | Open positions exist |
+| **Options Chain** | Low | 30s cache | 60s | Active options trading |
+| **Balance Fetch** | Background | 90s | 180s | Always (low priority) |
+
+### Dynamic Activation Logic
+```
+Every 5s (orchestration tick):
+├── Check: risk_enabled on any channel?
+│   └── YES → Run RiskManager at 3-5s
+│   └── NO  → Pause RiskManager
+├── Check: Conditional orders pending?
+│   └── YES → Monitor at 4s
+│   └── NO  → Suspend monitoring
+├── Check: Open positions exist?
+│   └── YES → Position sync at 6s
+│   └── NO  → Reduce to 30s heartbeat
+├── Check: Options activity?
+│   └── YES → Warm cache
+│   └── NO  → On-demand only
+└── Broker disconnected?
+    └── Skip + exponential backoff
+```
+
+### Database Schema Required
+```sql
+CREATE TABLE service_registry (
+    service_id TEXT PRIMARY KEY,
+    display_name TEXT,
+    broker_scope TEXT,  -- 'all', 'webull', 'alpaca', etc.
+    default_interval INTEGER,
+    min_interval INTEGER,
+    max_interval INTEGER,
+    priority INTEGER DEFAULT 5,
+    enabled INTEGER DEFAULT 1,
+    last_run TIMESTAMP,
+    last_result TEXT,
+    status TEXT DEFAULT 'idle'  -- running, paused, error, idle
+);
+
+CREATE TABLE broker_limits (
+    broker_name TEXT PRIMARY KEY,
+    data_limit_per_min INTEGER,
+    order_limit_per_min INTEGER,
+    current_calls INTEGER DEFAULT 0,
+    window_start TIMESTAMP,
+    last_429_at TIMESTAMP
+);
+
+CREATE TABLE service_metrics (
+    id INTEGER PRIMARY KEY,
+    timestamp TIMESTAMP,
+    service_id TEXT,
+    calls_made INTEGER,
+    latency_ms INTEGER,
+    errors INTEGER,
+    rate_limit_hits INTEGER
+);
+```
+
+### Routes Requiring Orchestrator Wiring
+- `/api/trades/merged` → Position Sync Service
+- `/api/risk/status` → Risk Monitor Service  
+- `/api/broker/status` → Broker Sync Service
+- `/api/place_order` → Order Execution (priority)
+- `/api/cancel_order` → Order Execution (priority)
+- `/api/sync_positions` → Position Sync Service
+- `/api/conditional_orders/*` → Conditional Orders Service
+- `/api/options/chain/*` → Options Chain Service
+- `/api/broker/balance/*` → Balance Fetch Service
+
+### UI Enhancement (settings.html Background Services card)
+Currently has basic toggles for Broker Sync and Risk Monitor (lines 1297-1327).
+
+**Required Enhancements:**
+1. Service list table with Name | Priority | Interval | Status | Last Run | Actions
+2. Per-service controls: Toggle, Priority dropdown (1-10), Interval input
+3. Per-broker rate limit gauges with 429 error counts
+4. Real-time status indicators (Running/Paused/Error/Idle)
+5. Manual "Run Now" button per service
+
+### Implementation Checklist
+1. Create `service_registry` table + migration
+2. Create `broker_limits` table with verified limits
+3. Build `ServiceOrchestrator` class with priority queue
+4. Create per-broker token bucket throttlers
+5. Wire RiskManager to check `risk_monitor_enabled`
+6. Wire Conditional Orders to check enable state
+7. Add service status tracking (last_run, status)
+8. Enhance UI with full service controls
+9. Add rate limit gauges to UI
+10. Create `/api/services/*` endpoints
+11. Add service metrics logging
+12. Implement WebSocket for real-time status
