@@ -4457,6 +4457,13 @@ def parse_option_signal(text: str) -> Optional[dict]:
         print(f"[Discord] Converted expiry: {month_str}/{day} → {expiry}")
     else:
         direction, qty_str, symbol, strike, opt_type, expiry, price_str = m.groups()
+        
+        # Handle missing expiry (0DTE trades) - default to today
+        if not expiry:
+            from datetime import datetime
+            today = datetime.now()
+            expiry = today.strftime("%m/%d")
+            print(f"[Discord] No expiry specified - defaulting to today (0DTE): {expiry}")
     
     # Check for market order: "@ m" or "@m" means execute at market price
     is_market_order = price_str.lower() == 'm'
