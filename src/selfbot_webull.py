@@ -10052,7 +10052,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             if asset_type == 'option':
                 strike = signal.get('strike')
                 expiry = signal.get('expiry')
-                opt_type = signal.get('opt_type', 'C')
+                opt_type = signal.get('opt_type') or signal.get('call_put') or 'C'
                 
                 _original_print(f"[{broker_name}] Placing option order: {action} {qty} {symbol} ${strike}{opt_type} {expiry} @ ${price}")
                 
