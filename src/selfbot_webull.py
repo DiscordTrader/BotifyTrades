@@ -8032,6 +8032,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         from src.signals.parser import is_conditional_order_signal, parse_conditional_order_signal
                         from src.services.conditional_orders.router import conditional_order_router
                         
+                        # Skip conditional order if message has role mention (e.g., @Daytrades)
+                        # These are "watching" announcements, not actionable orders
+                        msg_lower = message.content.lower()
+                        has_role_mention = '<@&' in message.content  # Discord role mention format
+                        has_daytrades = '@daytrades' in msg_lower or 'daytrades' in msg_lower
+                        
+                        if has_role_mention or has_daytrades:
+                            if is_conditional_order_signal(message.content):
+                                print(f"[COND ORDER] ⏭️ SKIPPED: Contains role mention (@Daytrades) - this is an announcement, not an order")
+                                print(f"[COND ORDER] Message: {message.content[:80]}...")
+                                return
+                        
                         if is_conditional_order_signal(message.content) and conditional_order_router.is_enabled():
                             cond_channel_id = str(message.channel.id)
                             print(f"[COND ORDER] ✓ Detected conditional order signal in channel {cond_channel_id}")
