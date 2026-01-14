@@ -4917,7 +4917,7 @@
     "highest_price": 0.9,
     "trailing_activated": false,
     "closing": true,
-    "closing_cycles": 2,
+    "closing_cycles": 1,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "ALPACA_PAPER",
@@ -4965,7 +4965,7 @@
   },
   "ALPACA_PAPER_QNCX_7.5_2026-03-20_C": {
     "entry_price": 0.85,
-    "highest_price": 0.85,
+    "highest_price": 0.9,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -5013,5 +5013,22 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-14T16:37:52.522686"
+  },
+  "ALPACA_PAPER_LPTH_15.0_2026-01-16_C": {
+    "entry_price": 0.1,
+    "highest_price": 0.05,
+    "trailing_activated": false,
+    "closing": true,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "LPTH260116C00015000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-14T18:09:23.860090"
   }
 }

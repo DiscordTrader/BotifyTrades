@@ -258,6 +258,22 @@ class SettingsValidator:
                     channel_name=channel_name
                 ))
         
+        # CRITICAL: Validate risk management settings completeness
+        # If risk_management is enabled, stop_loss_pct MUST be set for downside protection
+        if risk_enabled:
+            stop_loss = channel.get('stop_loss_pct')
+            if stop_loss is None or stop_loss == 0:
+                report.add_issue(ValidationIssue(
+                    severity='critical',
+                    category='channel',
+                    field='stop_loss_pct',
+                    message='RISK ENABLED BUT NO STOP LOSS - positions have NO downside protection (trailing stops only work on upside)',
+                    current_value=stop_loss,
+                    expected_value='30-50% (or appropriate stop loss)',
+                    channel_id=channel_id,
+                    channel_name=channel_name
+                ))
+        
         # Check execution mode consistency
         exec_enabled = channel.get('execute_enabled', 0)
         track_enabled = channel.get('track_enabled', 0)

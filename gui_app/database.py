@@ -3190,9 +3190,23 @@ def get_open_trades_with_trailing_state():
 
 # Lot management functions for PNL tracking
 def create_signal_lot(channel_id: int, signal_id: int, asset_type: str, symbol: str, quantity: int, open_price: float, opened_at, strike: float = None, expiry: str = None, call_put: str = None, author_name: str = None, user_id: int = None):
-    """Create a new signal lot from a BTO signal with author and user attribution"""
+    """Create a new signal lot from a BTO signal with author and user attribution.
+    
+    Idempotent: If a lot with the same signal_id already exists, returns the existing lot_id.
+    This prevents duplicate lot creation from message retries or duplicate processing.
+    """
     conn = get_connection()
     cursor = conn.cursor()
+    
+    # IDEMPOTENCY CHECK: Prevent duplicate lots from same signal
+    if signal_id:
+        cursor.execute('''
+            SELECT id FROM signal_lots WHERE signal_id = ? LIMIT 1
+        ''', (signal_id,))
+        existing = cursor.fetchone()
+        if existing:
+            print(f"[DATABASE] ⚠️ Idempotent: Lot already exists for signal_id={signal_id}, returning existing lot_id={existing['id']}")
+            return existing['id']
     
     cursor.execute('''
         INSERT INTO signal_lots (
