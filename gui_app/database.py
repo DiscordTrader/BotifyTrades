@@ -2151,7 +2151,7 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
                created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct,
                profit_target_4_pct, profit_target_qty_1, profit_target_qty_2, profit_target_qty_3,
                profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode, trade_summary_enabled,
-               slippage_protection_enabled, slippage_max_pct
+               slippage_protection_enabled, slippage_max_pct, signal_update_automation, signal_update_automation_override
         FROM channels WHERE id = ?
     ''', (channel_id,))
     
@@ -2193,7 +2193,9 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
         'exit_strategy_mode': row[30] if row[30] else 'signal',
         'trade_summary_enabled': bool(row[31]) if len(row) > 31 and row[31] is not None else True,
         'slippage_protection_enabled': bool(row[32]) if len(row) > 32 and row[32] is not None else False,
-        'slippage_max_pct': row[33] if len(row) > 33 else None
+        'slippage_max_pct': row[33] if len(row) > 33 else None,
+        'signal_update_automation': bool(row[34]) if len(row) > 34 and row[34] is not None else False,
+        'signal_update_automation_override': row[35] if len(row) > 35 else None
     }
 
 
@@ -2210,7 +2212,7 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
                created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct,
                profit_target_4_pct, profit_target_qty_1, profit_target_qty_2, profit_target_qty_3,
                profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode, trade_summary_enabled,
-               slippage_protection_enabled, slippage_max_pct
+               slippage_protection_enabled, slippage_max_pct, signal_update_automation, signal_update_automation_override
         FROM channels WHERE discord_channel_id = ?
     ''', (str(discord_channel_id),))
     
@@ -2252,7 +2254,9 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
         'exit_strategy_mode': row[30] if len(row) > 30 and row[30] else 'signal',
         'trade_summary_enabled': bool(row[31]) if len(row) > 31 and row[31] is not None else True,
         'slippage_protection_enabled': bool(row[32]) if len(row) > 32 and row[32] is not None else False,
-        'slippage_max_pct': row[33] if len(row) > 33 else None
+        'slippage_max_pct': row[33] if len(row) > 33 else None,
+        'signal_update_automation': bool(row[34]) if len(row) > 34 and row[34] is not None else False,
+        'signal_update_automation_override': row[35] if len(row) > 35 else None
     }
 
 
@@ -2272,7 +2276,7 @@ def update_channel(channel_id: int, **kwargs):
                    'default_quantity', 'risk_management_enabled', 'leave_runner_enabled', 'leave_runner_pct',
                    'trim_order_mode', 'trim_limit_offset', 'exit_strategy_mode', 'market', 'trade_summary_enabled',
                    'conditional_order_timeout_minutes', 'trigger_offset_percent', 'order_timeout_minutes',
-                   'slippage_protection_enabled', 'slippage_max_pct']:
+                   'slippage_protection_enabled', 'slippage_max_pct', 'signal_update_automation', 'signal_update_automation_override']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))
