@@ -4917,7 +4917,7 @@
     "highest_price": 0.9,
     "trailing_activated": false,
     "closing": true,
-    "closing_cycles": 0,
+    "closing_cycles": 2,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "ALPACA_PAPER",
@@ -4965,7 +4965,7 @@
   },
   "ALPACA_PAPER_QNCX_7.5_2026-03-20_C": {
     "entry_price": 0.85,
-    "highest_price": 0.8,
+    "highest_price": 0.85,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
