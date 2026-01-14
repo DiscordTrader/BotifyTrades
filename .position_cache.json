@@ -4911,5 +4911,22 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-14T15:18:26.222476"
+  },
+  "ALPACA_PAPER_QQQ_622.0_2026-01-14_C": {
+    "entry_price": 0.86,
+    "highest_price": 0.9,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "QQQ260114C00622000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-14T15:26:03.747887"
   }
 }
