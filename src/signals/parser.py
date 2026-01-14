@@ -105,6 +105,34 @@ BULLWINKLE_EXIT_COMPLEX = re.compile(
 BULLWINKLE_ENTRY_PATTERN = BULLWINKLE_ENTRY_STANDARD
 BULLWINKLE_EXIT_PATTERN = BULLWINKLE_EXIT_PIPE_PRICE
 
+# ============ JAKE SIGNAL PATTERNS ============
+# Jake's channel format: **SYMBOL** $STRIKEc|p EXPIRY @lim PRICE
+# Examples:
+#   **MSTR** $188c 19DEC2025 @lim3.0
+#   **COIN** $330p 27JUN @lim2.07
+#   **IWM** $244p 09OCT2025 @ lim0.10-0.20
+#   **MSTR** $325c 17OCT @ lim1.90
+
+# Entry pattern: **SYMBOL** $STRIKEc|p EXPIRY @lim PRICE
+JAKE_ENTRY_PATTERN = re.compile(
+    r'\*\*([A-Z]+)\*\*\s+\$?([\d.]+)\s*([cp])\s+'  # **SYMBOL** $STRIKE c|p
+    r'(\d{1,2}[A-Z]{3}(?:\d{2,4})?|\d{1,2}/\d{1,2}(?:/\d{2,4})?)\s*'  # Expiry: 19DEC2025, 12DEC, 27JUN, 1/17
+    r'@\s*lim\s*([\d.]+)(?:\s*-\s*[\d.]+)?',  # @lim PRICE (optional range)
+    re.IGNORECASE
+)
+
+# Exit/Update pattern: **SYMBOL** +XX% @limPRICE (partial exit indicator)
+JAKE_EXIT_PATTERN = re.compile(
+    r'\*\*([A-Z]+)\*\*\s+\+(\d+(?:\.\d+)?)\s*%\s*@\s*lim\s*([\d.]+)',
+    re.IGNORECASE
+)
+
+# Levels pattern: __$**SYMBOL** Levels__ (followed by PT lines)
+JAKE_LEVELS_PATTERN = re.compile(
+    r'__\$?\*?\*?([A-Z]+)\*?\*?\s*Levels?__',
+    re.IGNORECASE
+)
+
 # ============ CONDITIONAL ORDER PATTERNS ============
 # These patterns detect price-triggered conditional orders
 # Examples:
@@ -1442,6 +1470,106 @@ def parse_bullwinkle_signal(text: str) -> Optional[Dict[str, Any]]:
             'qty': None,
             '_qty_from_signal': False,
             '_bullwinkle': True,
+        }
+    
+    return None
+
+
+def _parse_jake_expiry(expiry_text: str) -> str:
+    """
+    Parse Jake's expiry format into MM/DD format.
+    
+    Formats:
+    - 19DEC2025 -> 12/19
+    - 12DEC -> 12/12
+    - 27JUN -> 6/27
+    - 17OCT -> 10/17
+    """
+    if not expiry_text:
+        return ''
+    
+    month_map = {
+        'JAN': '1', 'FEB': '2', 'MAR': '3', 'APR': '4', 'MAY': '5', 'JUN': '6',
+        'JUL': '7', 'AUG': '8', 'SEP': '9', 'OCT': '10', 'NOV': '11', 'DEC': '12'
+    }
+    
+    # Pattern: 19DEC2025 or 12DEC
+    match = re.match(r'^(\d{1,2})([A-Z]{3})(\d{2,4})?$', expiry_text.upper())
+    if match:
+        day, month, year = match.groups()
+        month_num = month_map.get(month, '1')
+        return f"{month_num}/{day}"
+    
+    # Already in MM/DD format
+    if '/' in expiry_text:
+        return expiry_text
+    
+    return expiry_text
+
+
+def is_jake_signal(text: str) -> bool:
+    """Check if text matches Jake signal format."""
+    # Entry: **SYMBOL** $STRIKEc|p EXPIRY @lim PRICE
+    if JAKE_ENTRY_PATTERN.search(text):
+        return True
+    # Exit: **SYMBOL** +XX% @limPRICE
+    if JAKE_EXIT_PATTERN.search(text):
+        return True
+    return False
+
+
+def parse_jake_signal(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse Jake's channel format signals into structured dict.
+    
+    Entry examples:
+    - **MSTR** $188c 19DEC2025 @lim3.0
+    - **COIN** $330p 27JUN @lim2.07
+    - **IWM** $244p 09OCT2025 @ lim0.10-0.20
+    
+    Exit/Update examples:
+    - **IREN** +61% @lim2.29
+    - **SNOW** +50% @lim5.2ish
+    
+    Returns structured dict with symbol, strike, opt_type, expiry, price, qty, action.
+    """
+    if not text:
+        return None
+    
+    # Clean text - remove @everyone, @here, role mentions
+    clean_text = re.sub(r'@everyone|@here|<@&\d+>', '', text).strip()
+    
+    # Try exit pattern first: **SYMBOL** +XX% @limPRICE
+    match = JAKE_EXIT_PATTERN.search(clean_text)
+    if match:
+        symbol, pct_gain, price = match.groups()
+        return {
+            'action': 'STC',
+            'symbol': symbol.upper(),
+            'price': float(price),
+            'pct_gain': float(pct_gain),
+            'qty': None,  # Close all
+            'is_exit': True,
+            '_jake': True,
+            '_needs_position_lookup': True,
+        }
+    
+    # Try entry pattern: **SYMBOL** $STRIKEc|p EXPIRY @lim PRICE
+    match = JAKE_ENTRY_PATTERN.search(clean_text)
+    if match:
+        symbol, strike, opt_type, expiry_text, price = match.groups()
+        expiry = _parse_jake_expiry(expiry_text)
+        return {
+            'asset': 'option',
+            'action': 'BTO',
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': opt_type.upper(),
+            'expiry': expiry,
+            'price': float(price),
+            'qty': None,  # Use channel defaults
+            '_qty_from_signal': False,
+            '_jake': True,
         }
     
     return None

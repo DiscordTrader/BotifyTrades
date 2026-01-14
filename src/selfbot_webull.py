@@ -7750,15 +7750,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     strip_bullwinkle_emojis, format_bullwinkle_for_webhook,
                     is_bracket_order_signal, parse_bracket_order_signal,
                     is_jacob_signal, parse_jacob_signal, format_jacob_for_webhook,
-                    is_zscalps_signal, parse_zscalps_signal
+                    is_zscalps_signal, parse_zscalps_signal,
+                    is_jake_signal, parse_jake_signal
                 )
                 is_bullwinkle = is_bullwinkle_signal(combined_content)
                 is_bracket_order = is_bracket_order_signal(combined_content)
                 is_jacob = is_jacob_signal(combined_content)
                 is_zscalps = is_zscalps_signal(combined_content)
+                is_jake = is_jake_signal(combined_content)
                 
-                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps:
-                    print(f"[DEBUG] BTO/STC or Bullwinkle signal detected - will process for trade execution")
+                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake:
+                    print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake})")
                     
                     is_webhook_dest = destination_type == 'webhook' and target_execution_channel_id and target_execution_channel_id.startswith('https://')
                     is_channel_dest = destination_type == 'channel' and dest_channel_id
@@ -7809,6 +7811,27 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             else:
                                 forward_msg = message.content.strip()
                                 print(f"[CHANNEL MAP] ⚠️ Jacob parse failed, forwarding raw")
+                        elif is_jake:
+                            print(f"[DEBUG] Taking JAKE path", flush=True)
+                            jake_parsed = parse_jake_signal(combined_content)
+                            if jake_parsed:
+                                # Format as BTO/STC
+                                action = jake_parsed.get('action', 'BTO')
+                                symbol = jake_parsed.get('symbol', '')
+                                price = jake_parsed.get('price')
+                                if action == 'BTO':
+                                    strike = jake_parsed.get('strike', '')
+                                    opt_type = jake_parsed.get('opt_type', 'C')
+                                    expiry = jake_parsed.get('expiry', '')
+                                    price_str = f"@ {price}" if price else "@ m"
+                                    forward_msg = f"BTO {symbol} {strike}{opt_type} {expiry} {price_str}"
+                                else:
+                                    price_str = f"@ {price}" if price else ""
+                                    forward_msg = f"STC {symbol} {price_str}"
+                                print(f"[CHANNEL MAP] ✓ Formatted Jake: {forward_msg}")
+                            else:
+                                forward_msg = combined_content.strip()
+                                print(f"[CHANNEL MAP] ⚠️ Jake parse failed, forwarding raw")
                         elif format_as_bto_stc:
                             print(f"[DEBUG] Taking FORMAT_AS_BTO_STC path", flush=True)
                             # Convert any signal format to BTO/STC format for forwarding
@@ -7890,7 +7913,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         # Parse the signal to get details - use unified parse_option_signal for ALL formats
                         parsed_signal = None
-                        print(f"[PNL TRACK] Parsing signal for tracking, is_bullwinkle={is_bullwinkle}, is_jacob={is_jacob}")
+                        print(f"[PNL TRACK] Parsing signal for tracking, is_bullwinkle={is_bullwinkle}, is_jacob={is_jacob}, is_jake={is_jake}")
                         if is_bullwinkle:
                             parsed_signal = parse_bullwinkle_signal(combined_content)
                             print(f"[PNL TRACK] Bullwinkle parsed: {parsed_signal}")
@@ -7910,6 +7933,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     'profit_targets': jacob_parsed.get('profit_targets', [])
                                 }
                                 print(f"[PNL TRACK] Jacob parsed: {parsed_signal}")
+                        elif is_jake:
+                            jake_parsed = parse_jake_signal(combined_content)
+                            if jake_parsed:
+                                is_exit = jake_parsed.get('is_exit', False)
+                                parsed_signal = {
+                                    'symbol': jake_parsed.get('symbol', ''),
+                                    'strike': jake_parsed.get('strike', 0),
+                                    'opt_type': jake_parsed.get('opt_type', 'C'),
+                                    'expiry': jake_parsed.get('expiry', ''),
+                                    'price': jake_parsed.get('price', 0),
+                                    'qty': jake_parsed.get('qty', 1),
+                                    'is_exit': is_exit,
+                                    'asset_type': 'option'
+                                }
+                                print(f"[PNL TRACK] Jake parsed: {parsed_signal}")
                         else:
                             # Use the unified parser which handles ALL formats (BTO/STC, Bishop, EvaPanda, DTE, etc.)
                             parsed_opt = parse_option_signal(combined_content)
