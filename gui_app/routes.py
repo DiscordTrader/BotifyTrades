@@ -2123,7 +2123,7 @@ def register_routes(app):
         # Format trades for frontend
         formatted_trades = []
         for trade in trades:
-            entry_price = float(trade.get('price', 0) or 0)
+            entry_price = float(trade.get('executed_price', 0) or trade.get('intended_price', 0) or 0)
             current_price = float(trade.get('current_price', 0) or 0) or entry_price
             pnl = float(trade.get('pnl', 0) or 0)
             pnl_percent = float(trade.get('pnl_percent', 0) or 0)
@@ -2176,7 +2176,7 @@ def register_routes(app):
             
             formatted_trades = []
             for trade in result['trades']:
-                entry_price = float(trade.get('price', 0) or 0)
+                entry_price = float(trade.get('executed_price', 0) or trade.get('intended_price', 0) or 0)
                 current_price = float(trade.get('current_price', 0) or 0) or entry_price
                 pnl = float(trade.get('pnl', 0) or 0)
                 pnl_percent = float(trade.get('pnl_percent', 0) or 0)
@@ -5445,7 +5445,7 @@ def register_routes(app):
                     'strike': trade.get('strike'),
                     'expiry': trade.get('expiry'),
                     'call_put': trade.get('call_put'),
-                    'entry_price': trade.get('price', 0),
+                    'entry_price': trade.get('executed_price', 0) or trade.get('intended_price', 0),
                     'quantity': trade.get('quantity', 1),
                     'broker': trade.get('broker', 'Webull')
                 })
@@ -5467,7 +5467,7 @@ def register_routes(app):
                     current_price = price_data.get('mid') or price_data.get('last') or price_data.get('bid') or 0
                     
                     if current_price > 0:
-                        entry_price = float(trade.get('price', 0) or 0)
+                        entry_price = float(trade.get('executed_price', 0) or trade.get('intended_price', 0) or 0)
                         quantity = float(trade.get('quantity', 1) or 1)
                         
                         # Calculate P&L
