@@ -5934,7 +5934,7 @@ def register_routes(app):
                         
                         merged.append({
                             **trade,
-                            'entry_price': trade.get('intended_price') or trade.get('executed_price'),
+                            'entry_price': trade.get('executed_price') or trade.get('intended_price'),
                             'source': 'bot_tracked',
                             'fill_status': fill_status,
                             'source_display': trade.get('source_display') or db.get_trade_source_display(trade),

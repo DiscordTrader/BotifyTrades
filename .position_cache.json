@@ -4917,7 +4917,7 @@
     "highest_price": 0.9,
     "trailing_activated": false,
     "closing": true,
-    "closing_cycles": 1,
+    "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "ALPACA_PAPER",
@@ -5098,5 +5098,22 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-14T20:41:29.200884"
+  },
+  "ALPACA_PAPER_ORCL_200.0_2026-01-16_C": {
+    "entry_price": 0.75,
+    "highest_price": 0.71,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "ORCL260116C00200000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-14T20:49:00.697621"
   }
 }
