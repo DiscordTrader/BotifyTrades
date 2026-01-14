@@ -4877,5 +4877,39 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-14T15:10:31.847110"
+  },
+  "ALPACA_PAPER_QQQ_623.0_2026-01-14_C": {
+    "entry_price": 0.8,
+    "highest_price": 0.84,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "QQQ260114C00623000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-14T15:16:19.809188"
+  },
+  "ALPACA_PAPER_SPY_693.0_2026-01-14_C": {
+    "entry_price": 0.43,
+    "highest_price": 0.45,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "SPY260114C00693000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-14T15:18:26.222476"
   }
 }
