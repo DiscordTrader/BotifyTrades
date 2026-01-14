@@ -133,6 +133,34 @@ JAKE_LEVELS_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# ============ ORDER EXECUTED BROKER CONFIRMATION PATTERNS ============
+# Format: "Order Executed\nBought 5 Single SNDK 1/9/2026 360 CALL @4.80 [Buy Open]"
+# Format: "Order Executed\nSold -1 Single SNDK 1/9/2026 360 CALL @9.40 [Sell Close]"
+# Examples:
+#   Order Executed
+#   Bought 5 Single SNDK 1/9/2026 360 CALL @4.80 [Buy Open]
+#   Sold -1 Single SNDK 1/9/2026 360 CALL @9.70 [Sell Close]
+
+# Buy pattern: Bought QTY Single SYMBOL EXPIRY STRIKE CALL/PUT @PRICE [Buy Open]
+ORDER_EXECUTED_BUY_PATTERN = re.compile(
+    r'(?:Order\s+Executed\s*)?\s*Bought\s+(\d+)\s+Single\s+([A-Z]+)\s+'
+    r'(\d{1,2}/\d{1,2}/\d{2,4})\s+'  # Expiry: 1/9/2026
+    r'([\d.]+)\s+'  # Strike: 360
+    r'(CALL|PUT)\s+'  # Option type
+    r'@\s*([\d.]+)',  # Price
+    re.IGNORECASE
+)
+
+# Sell pattern: Sold -QTY Single SYMBOL EXPIRY STRIKE CALL/PUT @PRICE [Sell Close]
+ORDER_EXECUTED_SELL_PATTERN = re.compile(
+    r'(?:Order\s+Executed\s*)?\s*Sold\s+(-?\d+)\s+Single\s+([A-Z]+)\s+'
+    r'(\d{1,2}/\d{1,2}/\d{2,4})\s+'  # Expiry
+    r'([\d.]+)\s+'  # Strike
+    r'(CALL|PUT)\s+'  # Option type
+    r'@\s*([\d.]+)',  # Price
+    re.IGNORECASE
+)
+
 # ============ CONDITIONAL ORDER PATTERNS ============
 # These patterns detect price-triggered conditional orders
 # Examples:
@@ -1570,6 +1598,100 @@ def parse_jake_signal(text: str) -> Optional[Dict[str, Any]]:
             'qty': None,  # Use channel defaults
             '_qty_from_signal': False,
             '_jake': True,
+        }
+    
+    return None
+
+
+def is_order_executed_signal(text: str) -> bool:
+    """
+    Check if text matches the 'Order Executed' broker confirmation format.
+    
+    Examples:
+    - Order Executed\nBought 5 Single SNDK 1/9/2026 360 CALL @4.80 [Buy Open]
+    - Order Executed\nSold -1 Single SNDK 1/9/2026 360 CALL @9.40 [Sell Close]
+    """
+    if not text:
+        return False
+    
+    # Check for signature patterns
+    if 'Order Executed' in text or 'order executed' in text.lower():
+        if ORDER_EXECUTED_BUY_PATTERN.search(text) or ORDER_EXECUTED_SELL_PATTERN.search(text):
+            return True
+    
+    # Also check for just "Bought/Sold X Single" without header
+    if ORDER_EXECUTED_BUY_PATTERN.search(text) or ORDER_EXECUTED_SELL_PATTERN.search(text):
+        return True
+    
+    return False
+
+
+def parse_order_executed_signal(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse 'Order Executed' broker confirmation signals.
+    
+    Examples:
+    - Order Executed\nBought 5 Single SNDK 1/9/2026 360 CALL @4.80 [Buy Open]
+    - Order Executed\nSold -1 Single SNDK 1/9/2026 360 CALL @9.40 [Sell Close]
+    
+    Returns structured dict with action, qty, symbol, expiry, strike, opt_type, price.
+    """
+    if not text:
+        return None
+    
+    # Try buy pattern first
+    match = ORDER_EXECUTED_BUY_PATTERN.search(text)
+    if match:
+        qty, symbol, expiry, strike, opt_type, price = match.groups()
+        
+        # Convert expiry 1/9/2026 to MM/DD format
+        expiry_parts = expiry.split('/')
+        if len(expiry_parts) >= 2:
+            expiry_formatted = f"{expiry_parts[0]}/{expiry_parts[1]}"
+        else:
+            expiry_formatted = expiry
+        
+        return {
+            'asset': 'option',
+            'action': 'BTO',
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': 'C' if opt_type.upper() == 'CALL' else 'P',
+            'expiry': expiry_formatted,
+            'price': float(price),
+            'qty': int(qty),
+            '_qty_from_signal': True,
+            '_order_executed': True,
+            'is_exit': False,
+        }
+    
+    # Try sell pattern
+    match = ORDER_EXECUTED_SELL_PATTERN.search(text)
+    if match:
+        qty, symbol, expiry, strike, opt_type, price = match.groups()
+        
+        # Convert expiry
+        expiry_parts = expiry.split('/')
+        if len(expiry_parts) >= 2:
+            expiry_formatted = f"{expiry_parts[0]}/{expiry_parts[1]}"
+        else:
+            expiry_formatted = expiry
+        
+        # Handle negative qty (e.g., "-1")
+        qty_val = abs(int(qty))
+        
+        return {
+            'asset': 'option',
+            'action': 'STC',
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': 'C' if opt_type.upper() == 'CALL' else 'P',
+            'expiry': expiry_formatted,
+            'price': float(price),
+            'qty': qty_val,
+            '_qty_from_signal': True,
+            '_order_executed': True,
+            'is_exit': True,
         }
     
     return None
