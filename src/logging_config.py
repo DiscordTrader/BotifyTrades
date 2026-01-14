@@ -49,7 +49,13 @@ def rotate_logs_on_startup():
     
     # Clean up old archives (keep last 5 per log type)
     for pattern in ['bot.*.log', 'trades.*.log', 'errors.*.log']:
-        archives = sorted(LOGS_DIR.glob(pattern), key=lambda f: f.stat().st_mtime, reverse=True)
+        # Safe sort - handle files deleted between glob and stat
+        def safe_mtime(f):
+            try:
+                return f.stat().st_mtime
+            except (FileNotFoundError, OSError):
+                return 0
+        archives = sorted(LOGS_DIR.glob(pattern), key=safe_mtime, reverse=True)
         for old_archive in archives[BACKUP_COUNT:]:
             try:
                 old_archive.unlink()
