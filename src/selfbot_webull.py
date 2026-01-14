@@ -9149,6 +9149,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             print(f"[SIGNAL PARSED] ✓ Option Signal: {opt['action']} {opt['qty']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ ${opt['price']}")
             print(f"[CHANNEL CONFIG] execute_enabled={execute_enabled}, track_enabled={track_enabled}, paper_trade_enabled={channel_info.get('paper_trade_enabled', 0) if channel_info else 0}")
             
+            # STRICT ROUTING CHECK: Validate broker assignment BEFORE creating lot
+            # This prevents orphaned PNL lots when signals would be rejected at execution
+            if execute_enabled and channel_info:
+                enabled_brokers_json = channel_info.get('enabled_brokers')
+                broker_override = channel_info.get('broker_override')
+                has_valid_routing = bool(enabled_brokers_json or broker_override)
+                
+                if not has_valid_routing:
+                    channel_name = channel_info.get('name', message.channel.name)
+                    print(f"[STRICT ROUTING] ❌ REJECTED EARLY - No broker configured for '{channel_name}'")
+                    print(f"[STRICT ROUTING] Signal NOT saved to prevent orphaned PNL lot")
+                    print(f"[STRICT ROUTING] Configure enabled_brokers in Execution page to execute trades")
+                    return  # Exit early - don't create lot or queue signal
+            
             # Save signal to database (for both EXECUTE and TRACK channels) with author attribution
             author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
             self._save_signal_to_db(opt, message.channel.id, message.id, author_name)
@@ -9430,6 +9444,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             print(f"[SIGNAL PARSED] ✓ Stock Signal: {stk['action']} {stk['qty']} {stk['symbol']} @ ${stk['price']}")
             print(f"[CHANNEL CONFIG] execute_enabled={execute_enabled}, track_enabled={track_enabled}, paper_trade_enabled={channel_info.get('paper_trade_enabled', 0) if channel_info else 0}")
+            
+            # STRICT ROUTING CHECK: Validate broker assignment BEFORE creating lot
+            # This prevents orphaned PNL lots when signals would be rejected at execution
+            if execute_enabled and channel_info:
+                enabled_brokers_json = channel_info.get('enabled_brokers')
+                broker_override = channel_info.get('broker_override')
+                has_valid_routing = bool(enabled_brokers_json or broker_override)
+                
+                if not has_valid_routing:
+                    channel_name = channel_info.get('name', message.channel.name)
+                    print(f"[STRICT ROUTING] ❌ REJECTED EARLY - No broker configured for '{channel_name}'")
+                    print(f"[STRICT ROUTING] Signal NOT saved to prevent orphaned PNL lot")
+                    print(f"[STRICT ROUTING] Configure enabled_brokers in Execution page to execute trades")
+                    return  # Exit early - don't create lot or queue signal
             
             # Save signal to database (for both EXECUTE and TRACK channels) with author attribution
             author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
