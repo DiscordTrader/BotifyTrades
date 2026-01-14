@@ -4860,5 +4860,22 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-13T14:59:26.902630"
+  },
+  "ALPACA_PAPER_NFLX_92.5_2026-01-16_C": {
+    "entry_price": 0.25,
+    "highest_price": 0.24,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "NFLX260116C00092500",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-14T15:10:31.847110"
   }
 }
