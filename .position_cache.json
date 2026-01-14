@@ -4917,7 +4917,7 @@
     "highest_price": 0.9,
     "trailing_activated": false,
     "closing": true,
-    "closing_cycles": 2,
+    "closing_cycles": 1,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "ALPACA_PAPER",
@@ -4931,7 +4931,7 @@
   },
   "ALPACA_PAPER_SPY_697.0_2026-01-30_C": {
     "entry_price": 3.805,
-    "highest_price": 4.5,
+    "highest_price": 4.54,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -4948,7 +4948,7 @@
   },
   "ALPACA_PAPER_QQQ_617.0_2026-01-14_C": {
     "entry_price": 1.35,
-    "highest_price": 2.46,
+    "highest_price": 2.55,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -5084,7 +5084,7 @@
   },
   "ALPACA_PAPER_MCHP_77.0_2026-01-23_C": {
     "entry_price": 0.75,
-    "highest_price": 0.65,
+    "highest_price": 0.7,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
