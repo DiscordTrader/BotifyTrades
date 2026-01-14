@@ -14893,6 +14893,97 @@ def register_routes(app):
     
     # ============ QA VALIDATION SYSTEM ============
     
+    @app.route('/api/qa/pytest', methods=['POST'])
+    @login_required
+    def api_run_pytest():
+        """Run pytest QA framework integration tests"""
+        try:
+            import subprocess
+            from pathlib import Path
+            
+            qa_path = Path(__file__).parent.parent / 'qa' / 'tests'
+            
+            if not qa_path.exists():
+                return jsonify({
+                    'success': True,
+                    'available': False,
+                    'message': 'QA test framework not available in packaged build',
+                    'passed': 0,
+                    'failed': 0,
+                    'tests': []
+                })
+            
+            test_type = request.get_json().get('type', 'integration') if request.is_json else 'integration'
+            
+            if test_type == 'unit':
+                test_path = str(qa_path / 'unit')
+            elif test_type == 'e2e':
+                test_path = str(qa_path / 'e2e')
+            else:
+                test_path = str(qa_path / 'integration')
+            
+            result = subprocess.run(
+                ['python', '-m', 'pytest', test_path, '-v', '--tb=short', '-q'],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                cwd=str(Path(__file__).parent.parent)
+            )
+            
+            output = result.stdout + result.stderr
+            
+            passed = 0
+            failed = 0
+            tests = []
+            
+            for line in output.split('\n'):
+                if ' PASSED' in line:
+                    passed += 1
+                    test_name = line.split(' PASSED')[0].strip()
+                    tests.append({'name': test_name, 'status': 'pass'})
+                elif ' FAILED' in line:
+                    failed += 1
+                    test_name = line.split(' FAILED')[0].strip()
+                    tests.append({'name': test_name, 'status': 'fail'})
+            
+            import re
+            summary_match = re.search(r'(\d+) passed', output)
+            if summary_match:
+                passed = int(summary_match.group(1))
+            failed_match = re.search(r'(\d+) failed', output)
+            if failed_match:
+                failed = int(failed_match.group(1))
+            
+            return jsonify({
+                'success': failed == 0,
+                'available': True,
+                'passed': passed,
+                'failed': failed,
+                'total': passed + failed,
+                'tests': tests[-20:],
+                'output': output[-2000:] if len(output) > 2000 else output,
+                'test_type': test_type
+            })
+            
+        except subprocess.TimeoutExpired:
+            return jsonify({
+                'success': False,
+                'error': 'Tests timed out after 120 seconds',
+                'available': True
+            })
+        except FileNotFoundError:
+            return jsonify({
+                'success': True,
+                'available': False,
+                'message': 'pytest not available',
+                'passed': 0,
+                'failed': 0
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)})
+    
     @app.route('/api/qa/validate', methods=['GET'])
     @login_required
     def api_qa_validate():

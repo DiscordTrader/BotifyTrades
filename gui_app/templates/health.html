@@ -494,12 +494,25 @@
             <div id="tab-tests" class="diag-tab-content">
                 <div class="diag-actions">
                     <button class="diag-btn primary" onclick="runTests()" id="testBtn">
-                        <span id="testIcon">&#9654;</span> Run 185 Unit Tests
+                        <span id="testIcon">&#9654;</span> Runtime Tests
+                    </button>
+                    <button class="diag-btn" onclick="runPytestIntegration('integration')" id="pytestIntBtn">
+                        <span>&#128736;</span> Integration (76)
+                    </button>
+                    <button class="diag-btn" onclick="runPytestIntegration('unit')" id="pytestUnitBtn">
+                        <span>&#128221;</span> Unit (24)
+                    </button>
+                    <button class="diag-btn" onclick="runPytestIntegration('e2e')" id="pytestE2eBtn">
+                        <span>&#128640;</span> E2E
                     </button>
                     <span class="diag-status" id="testStatus"></span>
                 </div>
+                <div class="test-protection-info" style="background:#1e293b;padding:10px 14px;border-radius:6px;margin-bottom:12px;font-size:13px;color:#888;">
+                    <strong style="color:#10b981;">AI Protection:</strong> These tests run automatically on every code change via GitHub Actions CI/CD. 
+                    Failures block merging to prevent regressions.
+                </div>
                 <div id="testResults" class="diag-results">
-                    <p class="diag-placeholder">Click "Run Unit Tests" to validate system integrity</p>
+                    <p class="diag-placeholder">Click a test button to validate system integrity</p>
                 </div>
             </div>
             
@@ -1482,6 +1495,74 @@ async function runTests() {
             results.innerHTML = html;
             status.textContent = `${data.failed || 0} tests failed`;
         }
+    } catch (error) {
+        results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${error.message}</p>`;
+        status.textContent = 'Error';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function runPytestIntegration(testType) {
+    const btnId = testType === 'unit' ? 'pytestUnitBtn' : testType === 'e2e' ? 'pytestE2eBtn' : 'pytestIntBtn';
+    const btn = document.getElementById(btnId);
+    const status = document.getElementById('testStatus');
+    const results = document.getElementById('testResults');
+    
+    btn.disabled = true;
+    const testLabel = testType === 'unit' ? 'Unit' : testType === 'e2e' ? 'E2E' : 'Integration';
+    status.textContent = `Running ${testLabel} tests...`;
+    results.innerHTML = `<p class="diag-placeholder">Running pytest ${testLabel.toLowerCase()} tests (may take up to 2 min)...</p>`;
+    
+    try {
+        const response = await fetch('/api/qa/pytest', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({type: testType})
+        });
+        const data = await response.json();
+        
+        if (!data.available) {
+            results.innerHTML = `<p class="diag-placeholder" style="color:#888;">${data.message || 'Test framework not available'}</p>`;
+            status.textContent = 'Not available';
+            return;
+        }
+        
+        let html = `
+            <div class="diag-summary">
+                <span class="diag-stat pass">&#10003; ${data.passed} Passed</span>
+                ${data.failed > 0 ? `<span class="diag-stat fail">&#10007; ${data.failed} Failed</span>` : ''}
+            </div>
+            <div style="color:#888;font-size:12px;margin:8px 0;">Test Type: ${data.test_type.toUpperCase()}</div>
+        `;
+        
+        if (data.tests && data.tests.length > 0) {
+            for (const test of data.tests) {
+                const icon = test.status === 'pass' ? '&#10003;' : '&#10007;';
+                const iconClass = test.status === 'pass' ? 'pass' : 'fail';
+                html += `
+                    <div class="diag-item">
+                        <span class="diag-icon ${iconClass}">${icon}</span>
+                        <div class="diag-info">
+                            <div class="diag-name">${test.name}</div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        if (data.output) {
+            html += `
+                <details style="margin-top:12px;">
+                    <summary style="cursor:pointer;color:#888;font-size:12px;">Show raw output</summary>
+                    <pre class="test-output" style="margin-top:8px;max-height:200px;overflow:auto;">${data.output}</pre>
+                </details>
+            `;
+        }
+        
+        results.innerHTML = html;
+        status.textContent = data.success ? `All ${data.passed} ${testLabel} tests passed!` : `${data.failed} tests failed`;
+        
     } catch (error) {
         results.innerHTML = `<p class="diag-placeholder" style="color:#ef4444;">Error: ${error.message}</p>`;
         status.textContent = 'Error';
