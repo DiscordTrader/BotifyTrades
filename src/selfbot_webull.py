@@ -9009,12 +9009,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if opt:
             # Apply tiered quantity defaults for BTO signals without qty from signal text
             if opt.get('action') == 'BTO' and opt.get('qty') is None and not opt.get('_qty_from_signal', False):
-                # Tiered default: channel → global → max_position_size calculation (if enabled) → 1
+                # Tiered default priority:
+                # 1. Channel default_quantity (fixed contracts)
+                # 2. Channel position_size_pct (percentage-based sizing) - NEW: takes priority over global
+                # 3. Global global_default_quantity
+                # 4. Global max_position_size calculation (if enabled)
+                # 5. Fallback to 1
                 channel_default_qty = channel_info.get('default_quantity') if channel_info else None
+                channel_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
                 
                 if channel_default_qty:
                     opt['qty'] = int(channel_default_qty)
                     print(f"[DEFAULT QTY] ✓ Using channel default: {opt['qty']} contracts")
+                elif channel_position_size_pct:
+                    # Channel has percentage-based sizing - set flag for worker to calculate qty from buying power
+                    opt['qty'] = 1  # Placeholder - will be recalculated by worker
+                    opt['_position_size_pct'] = float(channel_position_size_pct)
+                    opt['_calculate_qty'] = True  # Enable position sizing calculation in worker
+                    opt['_pct_from_channel'] = True
+                    print(f"[DEFAULT QTY] ✓ Using channel position_size_pct: {channel_position_size_pct}% (will calculate from buying power)")
                 else:
                     # Check global default and max_position_size settings
                     _current_trading_settings = get_trading_settings()
