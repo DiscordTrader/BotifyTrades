@@ -7752,7 +7752,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     is_jacob_signal, parse_jacob_signal, format_jacob_for_webhook,
                     is_zscalps_signal, parse_zscalps_signal,
                     is_jake_signal, parse_jake_signal,
-                    is_order_executed_signal, parse_order_executed_signal
+                    is_order_executed_signal, parse_order_executed_signal,
+                    is_bishop_signal, parse_bishop_signal,
+                    is_evapanda_signal, parse_evapanda_signal
                 )
                 is_bullwinkle = is_bullwinkle_signal(combined_content)
                 is_bracket_order = is_bracket_order_signal(combined_content)
@@ -7760,9 +7762,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 is_zscalps = is_zscalps_signal(combined_content)
                 is_jake = is_jake_signal(combined_content)
                 is_order_executed = is_order_executed_signal(combined_content)
+                is_bishop = is_bishop_signal(combined_content)
+                is_evapanda = is_evapanda_signal(combined_content)
                 
-                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed:
-                    print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed})")
+                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda:
+                    print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda})")
                     
                     is_webhook_dest = destination_type == 'webhook' and target_execution_channel_id and target_execution_channel_id.startswith('https://')
                     is_channel_dest = destination_type == 'channel' and dest_channel_id
@@ -7852,6 +7856,41 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             else:
                                 forward_msg = combined_content.strip()
                                 print(f"[CHANNEL MAP] ⚠️ Order Executed parse failed, forwarding raw")
+                        elif is_bishop:
+                            print(f"[DEBUG] Taking BISHOP path", flush=True)
+                            bishop_parsed = parse_bishop_signal(combined_content)
+                            if bishop_parsed:
+                                action = bishop_parsed.get('action', 'BTO')
+                                symbol = bishop_parsed.get('symbol', '')
+                                strike = bishop_parsed.get('strike', '')
+                                opt_type = bishop_parsed.get('opt_type', 'C')
+                                expiry = bishop_parsed.get('expiry', '')
+                                price = bishop_parsed.get('price')
+                                if action == 'BTO':
+                                    price_str = f"@ {price}" if price else "@ m"
+                                    forward_msg = f"BTO {symbol} {strike}{opt_type} {expiry} {price_str}"
+                                else:
+                                    forward_msg = f"STC {symbol}"
+                                print(f"[CHANNEL MAP] ✓ Formatted Bishop: {forward_msg}")
+                            else:
+                                forward_msg = combined_content.strip()
+                                print(f"[CHANNEL MAP] ⚠️ Bishop parse failed, forwarding raw")
+                        elif is_evapanda:
+                            print(f"[DEBUG] Taking EVAPANDA path", flush=True)
+                            panda_parsed = parse_evapanda_signal(combined_content)
+                            if panda_parsed:
+                                action = panda_parsed.get('action', 'BTO')
+                                symbol = panda_parsed.get('symbol', '')
+                                strike = panda_parsed.get('strike', '')
+                                opt_type = panda_parsed.get('opt_type', 'C')
+                                expiry = panda_parsed.get('expiry', '')
+                                price = panda_parsed.get('price')
+                                price_str = f"@ {price}" if price else "@ m"
+                                forward_msg = f"{action} {symbol} {strike}{opt_type} {expiry} {price_str}"
+                                print(f"[CHANNEL MAP] ✓ Formatted EvaPanda: {forward_msg}")
+                            else:
+                                forward_msg = combined_content.strip()
+                                print(f"[CHANNEL MAP] ⚠️ EvaPanda parse failed, forwarding raw")
                         elif format_as_bto_stc:
                             print(f"[DEBUG] Taking FORMAT_AS_BTO_STC path", flush=True)
                             # Convert any signal format to BTO/STC format for forwarding
@@ -7933,7 +7972,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         # Parse the signal to get details - use unified parse_option_signal for ALL formats
                         parsed_signal = None
-                        print(f"[PNL TRACK] Parsing signal for tracking, is_bullwinkle={is_bullwinkle}, is_jacob={is_jacob}, is_jake={is_jake}, is_order_executed={is_order_executed}")
+                        print(f"[PNL TRACK] Parsing signal for tracking, is_bullwinkle={is_bullwinkle}, is_jacob={is_jacob}, is_jake={is_jake}, is_order_executed={is_order_executed}, is_bishop={is_bishop}, is_evapanda={is_evapanda}")
                         if is_bullwinkle:
                             parsed_signal = parse_bullwinkle_signal(combined_content)
                             print(f"[PNL TRACK] Bullwinkle parsed: {parsed_signal}")
@@ -7983,6 +8022,36 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     'asset_type': 'option'
                                 }
                                 print(f"[PNL TRACK] Order Executed parsed: {parsed_signal}")
+                        elif is_bishop:
+                            bishop_parsed = parse_bishop_signal(combined_content)
+                            if bishop_parsed:
+                                is_exit = bishop_parsed.get('is_exit', False)
+                                parsed_signal = {
+                                    'symbol': bishop_parsed.get('symbol', ''),
+                                    'strike': bishop_parsed.get('strike', 0),
+                                    'opt_type': bishop_parsed.get('opt_type', 'C'),
+                                    'expiry': bishop_parsed.get('expiry', ''),
+                                    'price': bishop_parsed.get('price', 0),
+                                    'qty': bishop_parsed.get('qty', 1),
+                                    'is_exit': is_exit,
+                                    'asset_type': 'option'
+                                }
+                                print(f"[PNL TRACK] Bishop parsed: {parsed_signal}")
+                        elif is_evapanda:
+                            panda_parsed = parse_evapanda_signal(combined_content)
+                            if panda_parsed:
+                                is_exit = panda_parsed.get('is_exit', False)
+                                parsed_signal = {
+                                    'symbol': panda_parsed.get('symbol', ''),
+                                    'strike': panda_parsed.get('strike', 0),
+                                    'opt_type': panda_parsed.get('opt_type', 'C'),
+                                    'expiry': panda_parsed.get('expiry', ''),
+                                    'price': panda_parsed.get('price', 0),
+                                    'qty': panda_parsed.get('qty', 1),
+                                    'is_exit': is_exit,
+                                    'asset_type': 'option'
+                                }
+                                print(f"[PNL TRACK] EvaPanda parsed: {parsed_signal}")
                         else:
                             # Use the unified parser which handles ALL formats (BTO/STC, Bishop, EvaPanda, DTE, etc.)
                             parsed_opt = parse_option_signal(combined_content)

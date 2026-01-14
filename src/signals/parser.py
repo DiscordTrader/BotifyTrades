@@ -161,6 +161,43 @@ ORDER_EXECUTED_SELL_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# ============ BISHOP FORMAT PATTERNS ============
+# Format (in Discord embeds):
+#   **Option:** TSLA 437.50 C 1/9
+#   **Entry:** 2.48
+# Examples:
+#   **Option:** HOOD 140 C 2/20\n**Entry:** 3.35-3.36
+#   **Option:** ABNB 150 C 2/26\n**Entry:** 3.30
+#   **Option:** TSLA 437.50 P 1/16\n**Entry:** 3.05-3.10
+
+BISHOP_ENTRY_PATTERN = re.compile(
+    r'\*\*Option:\*\*\s*([A-Z]+)\s+([\d.]+)\s*([CP])\s+(\d{1,2}/\d{1,2})'  # **Option:** SYMBOL STRIKE C/P MM/DD
+    r'.*?\*\*Entry:\*\*\s*([\d.]+)',  # **Entry:** PRICE
+    re.IGNORECASE | re.DOTALL
+)
+
+# Bishop exit patterns (narrative style)
+# Examples: "Out of SNOW calls swing for -35%", "trimmed at 37%", "all out"
+BISHOP_EXIT_PATTERN = re.compile(
+    r'(?:out\s+of|trimmed?|all\s+out|exiting?)\s+([A-Z]+)\s+(?:calls?|puts?)',
+    re.IGNORECASE
+)
+
+# ============ EVAPANDA FORMAT PATTERNS ============
+# Format: BTO SYMBOL MM/DD/YY STRIKE+C/P @ PRICE (notes)
+# Examples:
+#   BTO AVGO 01/30/26 400C @ 1.42 (risky swing)
+#   STC SPY 01/15/26 700C @ 1.12 (all out on runner)
+#   BTO NFLX 08/26/2026 130c @ 1.83 (Long Swing)
+
+EVAPANDA_PATTERN = re.compile(
+    r'(BTO|STC)\s+([A-Z]+)\s+'
+    r'(\d{1,2}/\d{1,2}/\d{2,4})\s+'  # Expiry: MM/DD/YY or MM/DD/YYYY
+    r'([\d.]+)\s*([CP])\s*'  # Strike + type: 400C
+    r'@\s*([\d.]+)',  # Price
+    re.IGNORECASE
+)
+
 # ============ CONDITIONAL ORDER PATTERNS ============
 # These patterns detect price-triggered conditional orders
 # Examples:
@@ -1692,6 +1729,136 @@ def parse_order_executed_signal(text: str) -> Optional[Dict[str, Any]]:
             '_qty_from_signal': True,
             '_order_executed': True,
             'is_exit': True,
+        }
+    
+    return None
+
+
+def is_bishop_signal(text: str) -> bool:
+    """
+    Check if text matches Bishop format signals (usually in embeds).
+    
+    Examples:
+    - **Option:** TSLA 437.50 C 1/9\n**Entry:** 2.48
+    - **Option:** HOOD 140 C 2/20\n**Entry:** 3.35-3.36
+    """
+    if not text:
+        return False
+    
+    if BISHOP_ENTRY_PATTERN.search(text):
+        return True
+    if BISHOP_EXIT_PATTERN.search(text):
+        return True
+    return False
+
+
+def parse_bishop_signal(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse Bishop format signals into structured dict.
+    
+    Entry format:
+    - **Option:** TSLA 437.50 C 1/9\n**Entry:** 2.48
+    
+    Returns structured dict with action, symbol, strike, opt_type, expiry, price.
+    """
+    if not text:
+        return None
+    
+    # Try entry pattern: **Option:** SYMBOL STRIKE C/P EXPIRY ... **Entry:** PRICE
+    match = BISHOP_ENTRY_PATTERN.search(text)
+    if match:
+        symbol, strike, opt_type, expiry, price = match.groups()
+        return {
+            'asset': 'option',
+            'action': 'BTO',
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': opt_type.upper(),
+            'expiry': expiry,
+            'price': float(price),
+            'qty': None,
+            '_qty_from_signal': False,
+            '_bishop': True,
+            'is_exit': False,
+        }
+    
+    # Try exit pattern: "Out of SNOW calls swing for -35%"
+    match = BISHOP_EXIT_PATTERN.search(text)
+    if match:
+        symbol = match.group(1)
+        # Try to extract percentage
+        pct_match = re.search(r'([+-]?\d+(?:\.\d+)?)\s*%', text)
+        pct = float(pct_match.group(1)) if pct_match else None
+        
+        return {
+            'asset': 'option',
+            'action': 'STC',
+            'symbol': symbol.upper(),
+            'pct_gain': pct,
+            'qty': None,
+            '_bishop': True,
+            'is_exit': True,
+            '_needs_position_lookup': True,
+        }
+    
+    return None
+
+
+def is_evapanda_signal(text: str) -> bool:
+    """
+    Check if text matches EvaPanda format signals.
+    
+    Examples:
+    - BTO AVGO 01/30/26 400C @ 1.42 (risky swing)
+    - STC SPY 01/15/26 700C @ 1.12 (all out on runner)
+    """
+    if not text:
+        return False
+    
+    return bool(EVAPANDA_PATTERN.search(text))
+
+
+def parse_evapanda_signal(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse EvaPanda format signals into structured dict.
+    
+    Format: BTO SYMBOL MM/DD/YY STRIKE+C/P @ PRICE (notes)
+    
+    Examples:
+    - BTO AVGO 01/30/26 400C @ 1.42 (risky swing)
+    - STC SPY 01/15/26 700C @ 1.12 (all out on runner)
+    - BTO NFLX 08/26/2026 130c @ 1.83 (Long Swing)
+    
+    Returns structured dict with action, symbol, strike, opt_type, expiry, price.
+    """
+    if not text:
+        return None
+    
+    match = EVAPANDA_PATTERN.search(text)
+    if match:
+        action, symbol, expiry_raw, strike, opt_type, price = match.groups()
+        
+        # Convert expiry MM/DD/YY to MM/DD format
+        expiry_parts = expiry_raw.split('/')
+        if len(expiry_parts) >= 2:
+            expiry = f"{expiry_parts[0]}/{expiry_parts[1]}"
+        else:
+            expiry = expiry_raw
+        
+        is_exit = action.upper() == 'STC'
+        
+        return {
+            'asset': 'option',
+            'action': action.upper(),
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': opt_type.upper(),
+            'expiry': expiry,
+            'price': float(price),
+            'qty': None,
+            '_qty_from_signal': False,
+            '_evapanda': True,
+            'is_exit': is_exit,
         }
     
     return None
