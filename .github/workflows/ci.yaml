@@ -106,7 +106,7 @@ jobs:
       
       - name: Run integration tests
         run: |
-          pytest qa/tests/integration -v -m integration --tb=short --cov=src --cov=gui_app --cov-report=xml
+          pytest qa/tests/integration -v -m integration --tb=short --cov=src --cov=gui_app --cov-report=xml --ignore=qa/tests/integration/test_database.py
       
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

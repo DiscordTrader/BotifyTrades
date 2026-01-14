@@ -254,24 +254,13 @@ class TestConditionalOrderMonitoring:
         assert checks_per_minute == 12
     
     @pytest.mark.integration
-    def test_trigger_offset_percent(self, test_db, channel_factory):
+    def test_trigger_offset_percent(self):
         """Trigger offset should adjust the trigger price"""
-        channel = channel_factory(
-            discord_channel_id="trigger-offset",
-            name="trigger-offset-channel"
-        )
-        
-        test_db.execute(
-            "UPDATE channels SET trigger_offset_percent = 0.5 WHERE id = ?",
-            (channel['id'],)
-        )
-        test_db.commit()
-        
         original_trigger = 450.0
         offset_pct = 0.5
         adjusted_trigger = original_trigger * (1 + offset_pct / 100)
         
-        assert adjusted_trigger == 452.25
+        assert round(adjusted_trigger, 2) == 452.25
 
 
 if __name__ == "__main__":

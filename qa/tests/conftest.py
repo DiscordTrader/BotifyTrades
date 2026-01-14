@@ -162,7 +162,9 @@ def channel_factory(test_db):
         trailing_stop_pct: float = None,
         trailing_activation_pct: float = None,
         profit_target_1_pct: float = None,
-        exit_strategy_mode: str = 'hybrid'
+        exit_strategy_mode: str = 'hybrid',
+        leave_runner_enabled: int = 0,
+        conditional_order_enabled: int = 1
     ) -> Dict[str, Any]:
         if discord_channel_id is None:
             discord_channel_id = str(int(datetime.now().timestamp() * 1000000))
@@ -174,13 +176,13 @@ def channel_factory(test_db):
                 discord_channel_id, name, category, execute_enabled,
                 enabled_brokers, risk_management_enabled, stop_loss_pct,
                 trailing_stop_pct, trailing_activation_pct, profit_target_1_pct,
-                exit_strategy_mode
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                exit_strategy_mode, leave_runner_enabled, conditional_order_enabled
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             discord_channel_id, name, category, execute_enabled,
             brokers_json, risk_management_enabled, stop_loss_pct,
             trailing_stop_pct, trailing_activation_pct, profit_target_1_pct,
-            exit_strategy_mode
+            exit_strategy_mode, leave_runner_enabled, conditional_order_enabled
         ))
         test_db.commit()
         

@@ -22,8 +22,8 @@ class TestSignalPNL:
         unrealized_pnl = (current_price - entry_price) * quantity * 100
         pnl_pct = ((current_price - entry_price) / entry_price) * 100
         
-        assert unrealized_pnl == 300.0
-        assert pnl_pct == 20.0
+        assert round(unrealized_pnl, 2) == 300.0
+        assert round(pnl_pct, 2) == 20.0
     
     @pytest.mark.integration
     def test_closed_position_pnl_calculation(self, test_db):
@@ -66,9 +66,9 @@ class TestExecutionPNL:
         slippage_pct = (slippage / intended_price) * 100
         slippage_cost = slippage * quantity * 100
         
-        assert slippage == 0.05
+        assert round(slippage, 2) == 0.05
         assert round(slippage_pct, 2) == 3.33
-        assert slippage_cost == 50.0
+        assert round(slippage_cost, 2) == 50.0
     
     @pytest.mark.integration
     def test_execution_pnl_vs_signal_pnl(self, test_db):
@@ -85,9 +85,9 @@ class TestExecutionPNL:
         
         pnl_difference = signal_pnl - execution_pnl
         
-        assert signal_pnl == 500.0
-        assert execution_pnl == 400.0
-        assert pnl_difference == 100.0
+        assert round(signal_pnl, 2) == 500.0
+        assert round(execution_pnl, 2) == 400.0
+        assert round(pnl_difference, 2) == 100.0
 
 
 class TestFIFOLotMatching:
@@ -264,7 +264,7 @@ class TestMergedPNLEndpoint:
         
         assert merged['signal_pnl'] == 500.0
         assert merged['execution_pnl'] == 400.0
-        assert merged['slippage'] == 0.05
+        assert round(merged['slippage'], 2) == 0.05
     
     @pytest.mark.integration
     def test_entry_price_priority(self, test_db):
