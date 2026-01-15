@@ -1430,6 +1430,14 @@ def init_db():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_instances_message_id ON signal_instances(discord_message_id)')
         conn.commit()
         print("[DATABASE] ✓ Added OMS/RMS columns to signal_instances for dynamic signal tracking")
+    
+    # Migrate: Add signal_qty column for proportional exit tracking
+    try:
+        cursor.execute('SELECT signal_qty FROM signal_instances LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE signal_instances ADD COLUMN signal_qty INTEGER')
+        conn.commit()
+        print("[DATABASE] ✓ Added signal_qty column to signal_instances for proportional exits")
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_instances_channel ON signal_instances(channel_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_instances_ticker ON signal_instances(ticker)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_instances_fingerprint ON signal_instances(fingerprint)')
@@ -8933,10 +8941,15 @@ def create_signal_instance(
     message_id: str = None,
     stop_loss: float = None,
     profit_targets: List[float] = None,
-    ttl_hours: int = 24
+    ttl_hours: int = 24,
+    signal_qty: int = None
 ) -> Optional[int]:
     """
     Create a new signal instance for tracking.
+    
+    Args:
+        signal_qty: Trader's original signal quantity (before position sizing).
+                   Used for proportional exit calculations.
     
     Returns the instance ID if created, None if failed (usually duplicate).
     """
@@ -8955,16 +8968,18 @@ def create_signal_instance(
         cursor.execute('''
             INSERT INTO signal_instances 
             (channel_id, ticker, entry_price, direction, quantity, remaining_qty, author_id, author_name, fingerprint, 
-             first_message_id, last_message_id, discord_message_id, original_sl, current_sl, stop_loss, profit_targets, ttl_hours)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             first_message_id, last_message_id, discord_message_id, original_sl, current_sl, stop_loss, profit_targets, ttl_hours, signal_qty)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             str(channel_id), ticker.upper(), entry_price, direction.upper(),
             quantity, quantity,
             author_id, author_name, fingerprint, message_id, message_id, message_id,
-            stop_loss, stop_loss, stop_loss, targets_json, ttl_hours
+            stop_loss, stop_loss, stop_loss, targets_json, ttl_hours,
+            signal_qty if signal_qty else quantity
         ))
         conn.commit()
-        print(f"[DEDUPE] ✓ Created signal instance: {ticker} @ {entry_price} x{quantity} (fingerprint: {fingerprint})")
+        signal_qty_log = f" (signal: {signal_qty})" if signal_qty and signal_qty != quantity else ""
+        print(f"[DEDUPE] ✓ Created signal instance: {ticker} @ {entry_price} x{quantity}{signal_qty_log} (fingerprint: {fingerprint})")
         return cursor.lastrowid
     except sqlite3.IntegrityError:
         print(f"[DEDUPE] Signal instance already OPEN for {ticker} @ {entry_price}")
