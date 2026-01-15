@@ -800,6 +800,36 @@ class RobinhoodBroker(BrokerInterface):
                         action=action
                     )
             
+            if is_buy:
+                try:
+                    account_info = await self.get_account_info()
+                    buying_power = account_info.get('buying_power', 0) or account_info.get('options_buying_power', 0)
+                    order_cost = price * quantity * 100
+                    print(f"[{self.name}] Buying power: ${buying_power:.2f}, Order cost: ${order_cost:.2f}")
+                    
+                    if buying_power <= 0:
+                        return OrderResult(
+                            success=False,
+                            message=f"No buying power available: ${buying_power:.2f}",
+                            symbol=symbol,
+                            action=action
+                        )
+                    
+                    if order_cost > buying_power:
+                        max_affordable_qty = int(buying_power / (price * 100))
+                        if max_affordable_qty >= 1:
+                            print(f"[{self.name}] ⚠️ Reducing quantity from {quantity} to {max_affordable_qty} (insufficient funds)")
+                            quantity = max_affordable_qty
+                        else:
+                            return OrderResult(
+                                success=False,
+                                message=f"Insufficient buying power: have ${buying_power:.2f}, need ${order_cost:.2f} (min 1 contract = ${price * 100:.2f})",
+                                symbol=symbol,
+                                action=action
+                            )
+                except Exception as e:
+                    print(f"[{self.name}] ⚠️ Could not check buying power: {e} - proceeding with order")
+            
             def execute_option_order():
                 if is_buy:
                     return rh.orders.order_buy_option_limit(
