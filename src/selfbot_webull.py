@@ -9943,6 +9943,54 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 except Exception as e:
                     _original_print(f"[{broker_name}] [POSITION SIZE] Could not get account info for qty adjustment: {e}")
             
+            # Universal buying power check for ALL BTO orders (applies to all brokers)
+            # This runs if position_size_pct didn't already handle it
+            if signal['action'] == 'BTO' and not position_size_pct:
+                try:
+                    account_info = None
+                    if hasattr(broker_instance, 'get_account_info'):
+                        account_info = await broker_instance.get_account_info()
+                    elif hasattr(broker_instance, 'wb') and broker_instance.wb:
+                        import asyncio
+                        raw_account = await asyncio.to_thread(broker_instance.wb.get_account)
+                        if raw_account:
+                            account_info = {
+                                'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0),
+                                'options_buying_power': float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
+                            }
+                    elif hasattr(broker_instance, 'get_account'):
+                        import asyncio
+                        raw_account = await asyncio.to_thread(broker_instance.get_account)
+                        if raw_account:
+                            account_info = {
+                                'buying_power': float(raw_account.get('dayBuyingPower', 0) or raw_account.get('cashBalance', 0) or 0),
+                                'options_buying_power': float(raw_account.get('optionBuyingPower', 0) or raw_account.get('dayBuyingPower', 0) or 0)
+                            }
+                    
+                    if account_info:
+                        buying_power = account_info.get('options_buying_power') or account_info.get('buying_power', 0)
+                        price = signal.get('price') or 0
+                        qty = signal['qty']
+                        
+                        if price > 0 and buying_power > 0:
+                            # Calculate order cost (options x100, stocks x1)
+                            multiplier = 100 if signal['asset'] == 'option' else 1
+                            order_cost = price * qty * multiplier
+                            
+                            if order_cost > buying_power:
+                                max_affordable_qty = int(buying_power / (price * multiplier))
+                                if max_affordable_qty >= 1:
+                                    _original_print(f"[{broker_name}] [FUNDS] ⚠️ Reducing qty from {qty} to {max_affordable_qty} (have ${buying_power:.2f}, need ${order_cost:.2f})")
+                                    signal['qty'] = max_affordable_qty
+                                else:
+                                    min_cost = price * multiplier
+                                    _original_print(f"[{broker_name}] [FUNDS] ❌ Cannot afford 1 unit (have ${buying_power:.2f}, need ${min_cost:.2f})")
+                                    return {'success': False, 'error': f'Insufficient funds: have ${buying_power:.2f}, need ${min_cost:.2f} for 1 unit'}
+                            else:
+                                _original_print(f"[{broker_name}] [FUNDS] ✓ Buying power: ${buying_power:.2f}, Order cost: ${order_cost:.2f}")
+                except Exception as e:
+                    _original_print(f"[{broker_name}] [FUNDS] ⚠️ Could not check buying power: {e} - proceeding with order")
+            
             _original_print(f"[{broker_name}] Executing {signal['action']} {signal['qty']} {signal['symbol']}")
             
             # Check if we should use bracket orders (stocks with stop loss or profit target)
