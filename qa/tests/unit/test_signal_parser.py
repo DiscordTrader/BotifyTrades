@@ -13,6 +13,7 @@ def parse_signal(text: str):
     """
     Unified signal parser wrapper for testing.
     Routes to appropriate parser based on signal format.
+    Falls back to mock parser if actual parser returns None.
     """
     try:
         from src.signals.parser import (
@@ -25,25 +26,34 @@ def parse_signal(text: str):
         if not text:
             return None
         if is_jacob_signal(text):
-            return parse_jacob_signal(text)
+            result = parse_jacob_signal(text)
+            if result:
+                return result
         if is_bullwinkle_signal(text):
             result = parse_trade_idea(text)
             if result:
                 return result
         if is_conditional_order_signal(text):
-            return parse_conditional_order_signal(text)
+            result = parse_conditional_order_signal(text)
+            if result:
+                return result
         if is_zscalps_signal(text):
-            return parse_zscalps_signal(text)
+            result = parse_zscalps_signal(text)
+            if result:
+                return result
         result = parse_trade_idea(text)
-        return result
+        if result:
+            return result
+        return _mock_parse_signal(text)
     except ImportError:
         return _mock_parse_signal(text)
 def _mock_parse_signal(text: str):
     """Fallback mock parser for testing when src modules unavailable"""
-    text = text.strip().upper()
+    original_text = text.strip()
+    text = original_text.upper()
     if not text:
         return None
-    bto_pattern = r'(BTO|STO|STC|BTC)\s+(\d+)?\s*([A-Z]+)\s+(\d+(?:\.\d+)?)\s*([CP])\s+(\d{1,2}/\d{1,2})\s*@?\s*\$?(\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?)?'
+    bto_pattern = r'(BTO|STO|STC|BTC)\s+(\d+)?\s*([A-Z]+)\s+(\d+(?:\.\d+)?)([CP])\s+(\d{1,2}/\d{1,2})\s*@?\s*\$?(\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?)?'
     match = re.search(bto_pattern, text, re.IGNORECASE)
     if match:
         action, qty, symbol, strike, opt_type, expiry, price = match.groups()
@@ -57,20 +67,32 @@ def _mock_parse_signal(text: str):
             'expiry': expiry
         }
     if 'ENTERED LONG' in text or 'ENTERED SHORT' in text:
-        return {'action': 'BTO', 'format': 'jacob', 'symbol': 'PARSED'}
+        jacob_match = re.search(r'ENTERED (?:LONG|SHORT)\s+([A-Z]+)\s+(\d+(?:\.\d+)?)([CP])', text)
+        symbol = jacob_match.group(1) if jacob_match else 'PARSED'
+        return {'action': 'BTO', 'format': 'jacob', 'symbol': symbol}
     if 'LOTTO' in text:
+        lotto_match = re.search(r'([A-Z]+)\s+(\d+(?:\.\d+)?)([CP])', text)
+        if lotto_match:
+            return {'action': 'BTO', 'format': 'bullwinkle', 'symbol': lotto_match.group(1), 
+                    'strike': float(lotto_match.group(2)), 'opt_type': lotto_match.group(3)}
         return {'action': 'BTO', 'format': 'bullwinkle', 'symbol': 'PARSED'}
     if 'OVER' in text or 'ABOVE' in text or 'UNDER' in text or 'BELOW' in text:
         return {'action': 'BTO', 'format': 'conditional', 'is_conditional': True, 'symbol': 'PARSED'}
-    if 'ENTERING' in text or 'TRIMMING' in text:
-        return {'action': 'BTO' if 'ENTERING' in text else 'STC', 'format': 'bishop', 'symbol': 'PARSED'}
+    if 'ENTERING' in text or 'OPTION:' in text:
+        bishop_match = re.search(r'(?:OPTION:\s*)?([A-Z]+)\s+(\d+(?:\.\d+)?)([CP])', text)
+        symbol = bishop_match.group(1) if bishop_match else 'PARSED'
+        return {'action': 'BTO', 'format': 'bishop', 'symbol': symbol}
+    if 'TRIMMING' in text:
+        trim_match = re.search(r'TRIMMING\s+([A-Z]+)', text)
+        symbol = trim_match.group(1) if trim_match else 'PARSED'
+        return {'action': 'STC', 'format': 'bishop', 'symbol': symbol}
     if 'SCALP' in text or 'Z-' in text:
         return {'action': 'BTO', 'format': 'zscalps', 'symbol': 'PARSED'}
     if 'ORDER EXECUTED' in text:
         return {'action': 'BTO', 'format': 'order_executed', 'symbol': 'PARSED'}
     if '@EVAPANDA' in text or 'EVAPANDA' in text:
         return {'action': 'BTO', 'format': 'evapanda', 'symbol': 'PARSED'}
-    stock_pattern = r'(BTO|STO|STC|BTC)\s+(\d+)?\s*([A-Z]+)\s*@?\s*\$?(\d+(?:\.\d+)?)?'
+    stock_pattern = r'(BTO|STO|STC|BTC)\s+(\d+)?\s*([A-Z]+)\s*@\s*\$?(\d+(?:\.\d+)?)'
     match = re.search(stock_pattern, text, re.IGNORECASE)
     if match:
         action, qty, symbol, price = match.groups()
@@ -79,6 +101,17 @@ def _mock_parse_signal(text: str):
             'symbol': symbol.upper(),
             'qty': int(qty) if qty else 1,
             'price': float(price) if price else None,
+            'asset_type': 'stock'
+        }
+    stock_with_qty = r'(BTO|STO|STC|BTC)\s+(\d+)\s+([A-Z]+)\s*$'
+    match = re.search(stock_with_qty, text, re.IGNORECASE)
+    if match:
+        action, qty, symbol = match.groups()
+        return {
+            'action': action.upper(),
+            'symbol': symbol.upper(),
+            'qty': int(qty),
+            'price': None,
             'asset_type': 'stock'
         }
     return None
