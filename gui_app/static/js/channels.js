@@ -280,13 +280,15 @@ async function loadChannels() {
                                             <span class="toggle-slider"></span>
                                         </label>
                                     </div>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 10px 0;">After hitting profit targets, automatically move your stop loss to lock in gains (PT1→Breakeven, PT2→+5%, PT3→+15%).</p>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">What it does:</strong> Each time you hit a profit target (PT1, PT2, PT3, PT4), your stop loss automatically moves UP to lock in more gains.</p>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">Example:</strong> You buy at $1.00. When you hit PT1 (+10%), Standard profile moves your stop to $1.00 (breakeven) - now you can't lose money. Hit PT2 (+20%)? Stop moves to $1.05 (+5% locked in).</p>
+                                    <p style="font-size: 10px; color: #666; margin: 0 0 10px 0; font-style: italic;">Note: Stop loss only moves UP (never down). Your original stop loss still protects you before any PT is hit.</p>
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Profile:</label>
                                         <select id="risk-dynamic-sl-profile-${channel.id}" style="padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
-                                            <option value="conservative" ${channel.dynamic_sl_profile === 'conservative' ? 'selected' : ''}>Conservative (BE, +3%, +10%)</option>
-                                            <option value="standard" ${!channel.dynamic_sl_profile || channel.dynamic_sl_profile === 'standard' ? 'selected' : ''}>Standard (BE, +5%, +15%)</option>
-                                            <option value="aggressive" ${channel.dynamic_sl_profile === 'aggressive' ? 'selected' : ''}>Aggressive (-2%, BE, +10%)</option>
+                                            <option value="conservative" ${channel.dynamic_sl_profile === 'conservative' ? 'selected' : ''}>Conservative - Safer, locks gains slowly (PT1: BE, PT2: +3%, PT3: +10%, PT4: +20%)</option>
+                                            <option value="standard" ${!channel.dynamic_sl_profile || channel.dynamic_sl_profile === 'standard' ? 'selected' : ''}>Standard - Balanced protection (PT1: BE, PT2: +5%, PT3: +15%, PT4: +25%)</option>
+                                            <option value="aggressive" ${channel.dynamic_sl_profile === 'aggressive' ? 'selected' : ''}>Aggressive - More room to run (PT1: -2%, PT2: BE, PT3: +10%, PT4: +20%)</option>
                                         </select>
                                     </div>
                                 </div>
@@ -301,7 +303,9 @@ async function loadChannels() {
                                             <span class="toggle-slider"></span>
                                         </label>
                                     </div>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 10px 0;">Automatically exit if your gains drop more than a set % from peak (activates after PT2 or trailing activation threshold).</p>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">What it does:</strong> Protects your gains by exiting if profit drops too much from its highest point.</p>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">Example:</strong> Your trade reaches +50% profit (peak). With 30% giveback, if profit drops to +35% (gave back 30% of gains), you exit automatically - keeping +35% instead of watching it fall further.</p>
+                                    <p style="font-size: 10px; color: #666; margin: 0 0 10px 0; font-style: italic;">Note: Only activates after hitting PT2 or your trailing activation threshold - won't trigger on early volatility.</p>
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Max Giveback:</label>
                                         <input type="number" id="risk-giveback-pct-${channel.id}" value="${channel.giveback_allowed_pct || 30}" placeholder="30" step="1" min="5" max="80" style="width: 80px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
