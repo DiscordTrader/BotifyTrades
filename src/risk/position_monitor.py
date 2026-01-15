@@ -200,7 +200,8 @@ class RiskDBAdapter:
                                    c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
                                    c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
                                    c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
-                                   c.exit_strategy_mode
+                                   c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
+                                   c.giveback_allowed_pct, c.dynamic_sl_profile
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -217,7 +218,8 @@ class RiskDBAdapter:
                                    c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
                                    c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
                                    c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
-                                   c.exit_strategy_mode
+                                   c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
+                                   c.giveback_allowed_pct, c.dynamic_sl_profile
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -241,7 +243,8 @@ class RiskDBAdapter:
                                c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
                                c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
                                c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
-                               c.exit_strategy_mode
+                               c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
+                               c.giveback_allowed_pct, c.dynamic_sl_profile
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -258,7 +261,8 @@ class RiskDBAdapter:
                                c.risk_management_enabled, c.leave_runner_enabled, c.leave_runner_pct,
                                c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
                                c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
-                               c.exit_strategy_mode
+                               c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
+                               c.giveback_allowed_pct, c.dynamic_sl_profile
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -301,6 +305,12 @@ class RiskDBAdapter:
                 # Extract exit strategy mode (signal, risk, hybrid)
                 exit_mode = row[18] if len(row) > 18 and row[18] else 'signal'
                 
+                # Extract enhanced risk settings
+                enable_dynamic_sl = bool(row[19]) if len(row) > 19 and row[19] else False
+                enable_giveback_guard = bool(row[20]) if len(row) > 20 and row[20] else False
+                giveback_allowed_pct = row[21] if len(row) > 21 and row[21] is not None else 30.0
+                dynamic_sl_profile = row[22] if len(row) > 22 and row[22] else 'standard'
+                
                 # Risk management is enabled - return settings
                 return ChannelRiskSettings(
                     channel_id=str(row[0]),
@@ -320,7 +330,11 @@ class RiskDBAdapter:
                     leave_runner_pct=leave_runner_pct,
                     trim_order_mode=trim_mode,
                     trim_limit_offset=trim_offset,
-                    exit_strategy_mode=exit_mode
+                    exit_strategy_mode=exit_mode,
+                    enable_dynamic_sl=enable_dynamic_sl,
+                    enable_giveback_guard=enable_giveback_guard,
+                    giveback_allowed_pct=giveback_allowed_pct,
+                    dynamic_sl_profile=dynamic_sl_profile
                 )
             
             return None

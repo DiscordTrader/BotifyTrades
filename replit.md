@@ -30,6 +30,17 @@ The Bot Lifecycle Manager provides centralized control for bot stop/restart oper
 
 The Order Management System (OMS) and Risk Management System (RMS) provide dynamic SL/PT management for signals that update via Discord message edits, with a WaxUI Entry Registry linking update signals to original entries. The Exit Order Arbiter arbitrates between signal-driven and risk-driven exit requests, enforcing that stop loss can never be lowered in hybrid mode. The Signal Exit Manager handles the complete order lifecycle with broker-aware modify flows. A Circuit Breaker provides emergency trading halt controls with global/per-channel halt, daily loss limit enforcement, and position count limits. Exit Strategy Modes include Signal Mode, Risk Mode, and Hybrid Mode. Trailing stop state persists to the database across bot restarts for robust position management.
 
+**Enhanced Risk Management v2.0**: The Risk Engine (`src/risk/risk_engine.py`) provides industry-grade exit evaluation with:
+- **Dynamic SL Escalation**: Automatically moves stop loss after profit targets are hit. Three profiles available:
+  - Conservative (PT1→BE, PT2→+3%, PT3→+10%, PT4→+20%)
+  - Standard (PT1→BE, PT2→+5%, PT3→+15%, PT4→+25%)
+  - Aggressive (PT1→-2%, PT2→BE, PT3→+10%, PT4→+20%)
+- **Max Profit Giveback Guard**: Exits position when profit drops more than X% from peak (configurable, default 30%). Activates after PT2 hit OR when max PnL exceeds trailing activation threshold.
+- **Exit Priority Order**: Hard SL → Dynamic SL → Giveback Guard → Trailing Stop → Runner Exit (highest to lowest priority)
+- **Idempotent Design**: Pure function architecture with `last_evaluated_price` tracking prevents duplicate actions on repeated evaluations.
+
+Database columns: `enable_dynamic_sl`, `enable_giveback_guard`, `giveback_allowed_pct`, `dynamic_sl_profile` in channels table. GUI configuration in Risk Management panel with profile dropdown and percentage inputs.
+
 A Service Orchestrator manages priority-based background services with dynamic activation, API budget allocation, and broker-specific rate limiting, featuring a `RateLimitManager` for token bucket rate limiting and automatic 429 backoff. Services like RiskManager and Trade Monitor have enable gates, and their configurations are stored in `service_registry`, `broker_limits`, and `service_metrics` database tables. Flask API endpoints manage services and broker limits. The orchestrator defines dynamic monitoring intervals based on verified broker API rate limits for various services, allowing for efficient resource utilization.
 
 Order-Level Deduplication prevents duplicate order execution at the worker level. Discord and Telegram signals with message_id are tracked to prevent duplicate events from executing twice. Manual/relay trades are assigned a UUID at execution time for tracking. This complements the message-level deduplication in on_message handler. **Signal Lot Idempotency**: The `create_signal_lot()` function includes idempotent checks based on `signal_id` to prevent duplicate PNL entries from message retries or duplicate processing.

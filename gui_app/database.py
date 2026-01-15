@@ -521,6 +521,17 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added OMS/RMS columns for signal update automation")
     
+    # Migrate: Add enhanced risk management columns (Dynamic SL, Giveback Guard)
+    try:
+        cursor.execute('SELECT enable_dynamic_sl FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN enable_dynamic_sl INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN enable_giveback_guard INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN giveback_allowed_pct REAL DEFAULT 30.0')
+        cursor.execute("ALTER TABLE channels ADD COLUMN dynamic_sl_profile TEXT DEFAULT 'standard'")
+        conn.commit()
+        print("[DATABASE] ✓ Added enhanced risk columns: dynamic_sl, giveback_guard, giveback_pct, dynamic_sl_profile")
+    
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -2284,7 +2295,8 @@ def update_channel(channel_id: int, **kwargs):
                    'default_quantity', 'risk_management_enabled', 'leave_runner_enabled', 'leave_runner_pct',
                    'trim_order_mode', 'trim_limit_offset', 'exit_strategy_mode', 'market', 'trade_summary_enabled',
                    'conditional_order_timeout_minutes', 'trigger_offset_percent', 'order_timeout_minutes',
-                   'slippage_protection_enabled', 'slippage_max_pct', 'signal_update_automation', 'signal_update_automation_override']:
+                   'slippage_protection_enabled', 'slippage_max_pct', 'signal_update_automation', 'signal_update_automation_override',
+                   'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))

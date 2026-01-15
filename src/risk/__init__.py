@@ -36,6 +36,14 @@ from .tiered_targets import evaluate_tiered_targets
 from .global_risk import evaluate_global_risk
 from .trailing_stop import evaluate_trailing_stop
 from .position_monitor import RiskManager, RiskDBAdapter
+from .risk_engine import (
+    RiskAction,
+    ActionType,
+    TradeState,
+    evaluate_exit_actions,
+    apply_actions_to_cache,
+    DYNAMIC_SL_PROFILES
+)
 
 __all__ = [
     'RiskManager',
@@ -49,4 +57,10 @@ __all__ = [
     'evaluate_tiered_targets',
     'evaluate_global_risk',
     'evaluate_trailing_stop',
+    'RiskAction',
+    'ActionType',
+    'TradeState',
+    'evaluate_exit_actions',
+    'apply_actions_to_cache',
+    'DYNAMIC_SL_PROFILES',
 ]

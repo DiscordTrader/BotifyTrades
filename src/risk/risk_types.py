@@ -58,7 +58,7 @@ class RiskSettings:
 
 @dataclass
 class ChannelRiskSettings:
-    """Per-channel risk settings with tiered targets."""
+    """Per-channel risk settings with tiered targets and enhanced risk features."""
     channel_id: str
     channel_name: str
     profit_target_1_pct: float = 0.0  # Tier 1 target
@@ -77,6 +77,12 @@ class ChannelRiskSettings:
     trim_order_mode: str = 'market'  # 'market' or 'limit' for trim orders
     trim_limit_offset: float = 0.01  # Offset for limit orders (e.g., 0.01 = $0.01)
     exit_strategy_mode: str = 'signal'  # 'signal' = follow trader, 'risk' = auto exits, 'hybrid' = both
+    
+    # Enhanced Risk Management Settings
+    enable_dynamic_sl: bool = False  # Dynamic SL escalation after PT hits
+    enable_giveback_guard: bool = False  # Max profit giveback protection
+    giveback_allowed_pct: float = 30.0  # Max giveback % before forced exit
+    dynamic_sl_profile: str = 'standard'  # 'conservative', 'standard', 'aggressive'
     
     @property
     def has_tiered_targets(self) -> bool:
@@ -196,6 +202,12 @@ class PositionCacheEntry:
     tier3_hit: bool = False
     tier4_hit: bool = False
     
+    # Enhanced risk state
+    max_pnl_seen: float = 0.0  # Track max PnL % for giveback guard
+    dynamic_sl_price: Optional[float] = None  # Current dynamic SL after PT escalation
+    giveback_guard_active: bool = False  # Giveback guard activated (after PT2)
+    last_evaluated_price: Optional[float] = None  # For idempotency checks
+    
     # Pending risk orders awaiting fill confirmation
     pending_orders: Dict[str, Any] = field(default_factory=dict)  # order_id -> PendingRiskOrder dict
     
@@ -218,7 +230,11 @@ class PositionCacheEntry:
             'tier3_hit': self.tier3_hit,
             'tier4_hit': self.tier4_hit,
             'pending_orders': self.pending_orders,
-            'created_at': self.created_at.isoformat()
+            'created_at': self.created_at.isoformat(),
+            'max_pnl_seen': self.max_pnl_seen,
+            'dynamic_sl_price': self.dynamic_sl_price,
+            'giveback_guard_active': self.giveback_guard_active,
+            'last_evaluated_price': self.last_evaluated_price
         }
     
     @classmethod

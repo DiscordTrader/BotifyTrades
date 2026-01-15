@@ -269,6 +269,45 @@ async function loadChannels() {
                                         <span style="font-size: 12px; color: #8E8E93;">% of position</span>
                                     </div>
                                 </div>
+                                <div style="margin-top: 16px; padding: 12px; background: rgba(255, 100, 100, 0.05); border: 1px solid rgba(255, 100, 100, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🎯</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #ff6b6b;">Dynamic Stop Loss Escalation</label>
+                                        </div>
+                                        <label class="toggle-switch" title="Automatically move stop loss after hitting profit targets">
+                                            <input type="checkbox" id="risk-dynamic-sl-${channel.id}" ${channel.enable_dynamic_sl ? 'checked' : ''}>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 10px 0;">After hitting profit targets, automatically move your stop loss to lock in gains (PT1→Breakeven, PT2→+5%, PT3→+15%).</p>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Profile:</label>
+                                        <select id="risk-dynamic-sl-profile-${channel.id}" style="padding: 6px 10px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
+                                            <option value="conservative" ${channel.dynamic_sl_profile === 'conservative' ? 'selected' : ''}>Conservative (BE, +3%, +10%)</option>
+                                            <option value="standard" ${!channel.dynamic_sl_profile || channel.dynamic_sl_profile === 'standard' ? 'selected' : ''}>Standard (BE, +5%, +15%)</option>
+                                            <option value="aggressive" ${channel.dynamic_sl_profile === 'aggressive' ? 'selected' : ''}>Aggressive (-2%, BE, +10%)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 200, 0, 0.05); border: 1px solid rgba(255, 200, 0, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🛡️</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #ffc800;">Max Profit Giveback Guard</label>
+                                        </div>
+                                        <label class="toggle-switch" title="Exit if profit drops too much from peak">
+                                            <input type="checkbox" id="risk-giveback-guard-${channel.id}" ${channel.enable_giveback_guard ? 'checked' : ''}>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 10px 0;">Automatically exit if your gains drop more than a set % from peak (activates after PT2 or trailing activation threshold).</p>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Max Giveback:</label>
+                                        <input type="number" id="risk-giveback-pct-${channel.id}" value="${channel.giveback_allowed_pct || 30}" placeholder="30" step="1" min="5" max="80" style="width: 80px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                        <span style="font-size: 12px; color: #8E8E93;">% from peak profit</span>
+                                    </div>
+                                </div>
                                 <div style="margin-top: 16px; padding: 12px; background: rgba(138, 43, 226, 0.05); border: 1px solid rgba(138, 43, 226, 0.2); border-radius: 8px;">
                                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                                         <div style="display: flex; align-items: center; gap: 8px;">
@@ -995,6 +1034,12 @@ async function saveRiskManagement(channelId) {
         const trimLimitOffset = document.getElementById(`risk-trim-offset-${channelId}`).value;
         const tradeSummaryEnabled = document.getElementById(`trade-summary-enabled-${channelId}`)?.checked ? 1 : 0;
         
+        // Enhanced risk settings
+        const enableDynamicSl = document.getElementById(`risk-dynamic-sl-${channelId}`)?.checked ? 1 : 0;
+        const dynamicSlProfile = document.getElementById(`risk-dynamic-sl-profile-${channelId}`)?.value || 'standard';
+        const enableGivebackGuard = document.getElementById(`risk-giveback-guard-${channelId}`)?.checked ? 1 : 0;
+        const givebackAllowedPct = document.getElementById(`risk-giveback-pct-${channelId}`).value;
+        
         const response = await fetch(`/api/channels/${channelId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -1015,7 +1060,11 @@ async function saveRiskManagement(channelId) {
                 leave_runner_pct: leaveRunnerPct ? parseFloat(leaveRunnerPct) : 25.0,
                 trim_order_mode: trimOrderMode,
                 trim_limit_offset: trimLimitOffset ? parseFloat(trimLimitOffset) : 0.01,
-                trade_summary_enabled: tradeSummaryEnabled
+                trade_summary_enabled: tradeSummaryEnabled,
+                enable_dynamic_sl: enableDynamicSl,
+                dynamic_sl_profile: dynamicSlProfile,
+                enable_giveback_guard: enableGivebackGuard,
+                giveback_allowed_pct: givebackAllowedPct ? parseFloat(givebackAllowedPct) : 30.0
             })
         });
         
