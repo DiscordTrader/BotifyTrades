@@ -17162,21 +17162,91 @@ def register_routes(app):
     }
     
     def _get_india_broker(broker_name):
-        """Get India broker instance by name"""
-        if not _bot_instance:
-            return None, 'Bot not running'
+        """Get India broker instance by name - with fallback to create from DB credentials"""
+        global _bot_instance
         
         broker_name = broker_name.lower()
-        if broker_name == 'zerodha':
-            broker = getattr(_bot_instance, 'zerodha_broker', None)
-        elif broker_name == 'dhanq':
-            broker = getattr(_bot_instance, 'dhanq_broker', None)
-        elif broker_name == 'upstox':
-            broker = getattr(_bot_instance, 'upstox_broker', None)
-        else:
-            return None, f'Unknown broker: {broker_name}'
+        broker = None
         
-        return broker, None
+        if _bot_instance:
+            if broker_name == 'zerodha':
+                broker = getattr(_bot_instance, 'zerodha_broker', None)
+            elif broker_name == 'dhanq':
+                broker = getattr(_bot_instance, 'dhanq_broker', None)
+            elif broker_name == 'upstox':
+                broker = getattr(_bot_instance, 'upstox_broker', None)
+            else:
+                return None, f'Unknown broker: {broker_name}'
+        
+        if broker and getattr(broker, 'connected', False):
+            return broker, None
+        
+        stored = db.get_broker_credentials(broker_name)
+        if not stored:
+            return None, f'{broker_name.title()} credentials not configured'
+        
+        try:
+            if broker_name == 'zerodha':
+                api_key = stored.get('api_key', '')
+                api_secret = stored.get('api_secret', '')
+                access_token = stored.get('access_token', '')
+                
+                if not api_key or not access_token:
+                    return None, 'Zerodha: Missing API key or access token. Please reconnect.'
+                
+                from src.brokers.zerodha_broker import ZerodhaBroker
+                broker = ZerodhaBroker({
+                    'api_key': api_key,
+                    'api_secret': api_secret,
+                    'access_token': access_token
+                })
+                broker.connect()
+                
+                if broker.connected and _bot_instance:
+                    _bot_instance.zerodha_broker = broker
+                    print(f"[ZERODHA] ✓ Broker initialized from database credentials")
+                
+                return broker, None
+                
+            elif broker_name == 'upstox':
+                access_token = stored.get('access_token', '')
+                if not access_token:
+                    return None, 'Upstox: Missing access token. Please reconnect.'
+                
+                from src.brokers.upstox_broker import UpstoxBroker
+                broker = UpstoxBroker({'access_token': access_token})
+                broker.connect()
+                
+                if broker.connected and _bot_instance:
+                    _bot_instance.upstox_broker = broker
+                    print(f"[UPSTOX] ✓ Broker initialized from database credentials")
+                
+                return broker, None
+                
+            elif broker_name == 'dhanq':
+                client_id = stored.get('client_id', '')
+                access_token = stored.get('access_token', '')
+                if not client_id or not access_token:
+                    return None, 'DhanQ: Missing client ID or access token. Please reconnect.'
+                
+                from src.brokers.dhanq_broker import DhanQBroker
+                broker = DhanQBroker({
+                    'client_id': client_id,
+                    'access_token': access_token
+                })
+                broker.connect()
+                
+                if broker.connected and _bot_instance:
+                    _bot_instance.dhanq_broker = broker
+                    print(f"[DHANQ] ✓ Broker initialized from database credentials")
+                
+                return broker, None
+                
+        except Exception as e:
+            print(f"[{broker_name.upper()}] Error initializing broker: {e}")
+            return None, f'{broker_name.title()}: {str(e)}'
+        
+        return None, f'{broker_name.title()} broker not initialized'
     
     @app.route('/api/india/brokers', methods=['GET'])
     @login_required
