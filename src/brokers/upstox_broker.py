@@ -399,6 +399,12 @@ class UpstoxBroker(BrokerInterface):
                     }
                 else:
                     print(f"[{self.name}] Funds API error: {data.get('errors', data.get('message', 'Unknown error'))}")
+            elif response.status_code == 423:
+                print(f"[{self.name}] Funds API HTTP 423 - API locked (may be outside market hours 9:15AM-3:30PM IST)")
+                return {'available': None, 'margin_used': None, 'currency': self.CURRENCY, 'error': 'API locked (outside market hours)'}
+            elif response.status_code == 401:
+                print(f"[{self.name}] Funds API HTTP 401 - Access token expired, re-authenticate required")
+                return {'available': None, 'margin_used': None, 'currency': self.CURRENCY, 'error': 'Token expired'}
             else:
                 print(f"[{self.name}] Funds API HTTP error: {response.status_code}")
             
