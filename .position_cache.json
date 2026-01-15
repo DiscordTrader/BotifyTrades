@@ -14,7 +14,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T05:09:27.768137"
+    "created_at": "2025-12-10T05:09:27.768137",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SERV_13.5_2025-12-05_C": {
     "entry_price": 0.2,
@@ -31,7 +35,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T05:09:27.768149"
+    "created_at": "2025-12-10T05:09:27.768149",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TCRT_stock": {
     "entry_price": 3.66,
@@ -48,7 +56,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T05:09:27.768154"
+    "created_at": "2025-12-10T05:09:27.768154",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_stock": {
     "entry_price": 687.49,
@@ -65,7 +77,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T05:09:27.768159"
+    "created_at": "2025-12-10T05:09:27.768159",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_stock": {
     "entry_price": 627.926667,
@@ -82,7 +98,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T05:09:27.768163"
+    "created_at": "2025-12-10T05:09:27.768163",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_INTC_stock": {
     "entry_price": 42.25,
@@ -99,7 +119,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T05:09:27.768201"
+    "created_at": "2025-12-10T05:09:27.768201",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ONDS_9.5_2025-12-05_C": {
     "entry_price": 0.05,
@@ -116,7 +140,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T05:09:27.768204"
+    "created_at": "2025-12-10T05:09:27.768204",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_ONDS_9.5_12/05_C": {
     "entry_price": 0.05,
@@ -133,7 +161,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T05:09:27.768207"
+    "created_at": "2025-12-10T05:09:27.768207",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ONDS_stock": {
     "entry_price": 9.22,
@@ -150,7 +182,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T05:09:27.768209"
+    "created_at": "2025-12-10T05:09:27.768209",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_SOFI_28.0_12/05_C": {
     "entry_price": 0.08,
@@ -167,7 +203,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T05:09:27.768214"
+    "created_at": "2025-12-10T05:09:27.768214",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPC_stock": {
     "entry_price": 21.9,
@@ -184,7 +224,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T05:09:27.768217"
+    "created_at": "2025-12-10T05:09:27.768217",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_RKT_21.2_01/16/26_C": {
     "entry_price": 0.54,
@@ -201,7 +245,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T05:09:28.396645"
+    "created_at": "2025-12-10T05:09:28.396645",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NVDA_190.0_2025-12-12_C": {
     "entry_price": 0.9,
@@ -218,7 +266,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T14:34:49.187328"
+    "created_at": "2025-12-10T14:34:49.187328",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_OKTA_90.0_2025-12-12_C": {
     "entry_price": 0.44,
@@ -235,7 +287,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T14:34:49.187463"
+    "created_at": "2025-12-10T14:34:49.187463",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_618.0_2025-12-10_P": {
     "entry_price": 0.83,
@@ -252,7 +308,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T14:41:26.035449"
+    "created_at": "2025-12-10T14:41:26.035449",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_OKLO_110.0_2025-12-12_C": {
     "entry_price": 1.11,
@@ -269,7 +329,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T14:52:37.705786"
+    "created_at": "2025-12-10T14:52:37.705786",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ORCL_220.0_2025-12-12_C": {
     "entry_price": 11.7,
@@ -286,7 +350,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T14:52:37.706072"
+    "created_at": "2025-12-10T14:52:37.706072",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ONDS_9.0_2025-12-12_C": {
     "entry_price": 0.35,
@@ -303,7 +371,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T14:54:39.734411"
+    "created_at": "2025-12-10T14:54:39.734411",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_BULL_stock": {
     "entry_price": 10.01,
@@ -320,7 +392,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T14:56:41.680050"
+    "created_at": "2025-12-10T14:56:41.680050",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_460.0_2025-12-12_C": {
     "entry_price": 2.19,
@@ -337,7 +413,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T15:01:15.895371"
+    "created_at": "2025-12-10T15:01:15.895371",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_627.0_2025-12-10_C": {
     "entry_price": 0.79,
@@ -354,7 +434,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T15:02:16.796076"
+    "created_at": "2025-12-10T15:02:16.796076",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_IWM_253.0_2025-12-10_C": {
     "entry_price": 0.925,
@@ -371,7 +455,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T15:04:20.069241"
+    "created_at": "2025-12-10T15:04:20.069241",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_450.0_2025-12-12_C": {
     "entry_price": 5.25,
@@ -388,7 +476,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T15:09:26.033019"
+    "created_at": "2025-12-10T15:09:26.033019",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NFLX_93.0_2025-12-12_P": {
     "entry_price": 0.5,
@@ -405,7 +497,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T15:14:02.377984"
+    "created_at": "2025-12-10T15:14:02.377984",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_CHWY_37.0_2025-12-19_C": {
     "entry_price": 0.44,
@@ -422,7 +518,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T15:26:40.215960"
+    "created_at": "2025-12-10T15:26:40.215960",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_CHWY_36.0_2025-12-19_C": {
     "entry_price": 0.7,
@@ -439,7 +539,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T15:32:44.520608"
+    "created_at": "2025-12-10T15:32:44.520608",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_460.0_2025-12-19_C": {
     "entry_price": 7.0,
@@ -456,7 +560,11 @@
     "tier3_hit": true,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T16:01:16.433353"
+    "created_at": "2025-12-10T16:01:16.433353",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_683.0_2025-12-10_C": {
     "entry_price": 1.6,
@@ -473,7 +581,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T16:02:17.383879"
+    "created_at": "2025-12-10T16:02:17.383879",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ENVB_stock": {
     "entry_price": 10.47992,
@@ -490,7 +602,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T16:15:47.715355"
+    "created_at": "2025-12-10T16:15:47.715355",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_681.0_2025-12-10_P": {
     "entry_price": 1.12,
@@ -507,7 +623,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T16:51:37.551535"
+    "created_at": "2025-12-10T16:51:37.551535",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_HOOD_138.0_2025-12-12_C": {
     "entry_price": 1.57,
@@ -524,7 +644,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T17:31:02.202199"
+    "created_at": "2025-12-10T17:31:02.202199",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_619.0_2025-12-10_P": {
     "entry_price": 0.82,
@@ -541,7 +665,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T17:51:18.655667"
+    "created_at": "2025-12-10T17:51:18.655667",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_ORCL_280.0_12/12_C": {
     "entry_price": 0.79,
@@ -558,7 +686,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T18:04:59.782276"
+    "created_at": "2025-12-10T18:04:59.782276",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_ORCL_185.0_12/12_P": {
     "entry_price": 0.79,
@@ -575,7 +707,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T18:05:30.504557"
+    "created_at": "2025-12-10T18:05:30.504557",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ORCL_280.0_2025-12-12_C": {
     "entry_price": 0.79,
@@ -592,7 +728,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T18:09:06.041209"
+    "created_at": "2025-12-10T18:09:06.041209",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_BEAT_stock": {
     "entry_price": 1.27,
@@ -609,7 +749,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T18:21:17.037238"
+    "created_at": "2025-12-10T18:21:17.037238",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_META_660.0_2025-12-12_C": {
     "entry_price": 1.9,
@@ -626,7 +770,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T18:23:50.871030"
+    "created_at": "2025-12-10T18:23:50.871030",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_687.0_2025-12-12_C": {
     "entry_price": 2.13,
@@ -643,7 +791,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T18:27:57.184421"
+    "created_at": "2025-12-10T18:27:57.184421",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_SPY_688.0_12/10_C": {
     "entry_price": 0.43,
@@ -660,7 +812,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T18:59:45.361774"
+    "created_at": "2025-12-10T18:59:45.361774",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_SPY_675.0_12/10_P": {
     "entry_price": 0.38,
@@ -677,7 +833,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T19:00:17.862423"
+    "created_at": "2025-12-10T19:00:17.862423",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ORCL_185.0_2025-12-12_P": {
     "entry_price": 0.79,
@@ -694,7 +854,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T19:00:49.431854"
+    "created_at": "2025-12-10T19:00:49.431854",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_ORCL_0.0__": {
     "entry_price": 0.79,
@@ -711,7 +875,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T19:04:32.766467"
+    "created_at": "2025-12-10T19:04:32.766467",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_630.0_2025-12-10_C": {
     "entry_price": 0.17,
@@ -728,7 +896,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T19:41:15.931875"
+    "created_at": "2025-12-10T19:41:15.931875",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_META_630.0_2025-12-12_P": {
     "entry_price": 1.83,
@@ -745,7 +917,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T19:43:20.082985"
+    "created_at": "2025-12-10T19:43:20.082985",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ORCL_265.0_2025-12-12_C": {
     "entry_price": 1.53,
@@ -762,7 +938,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T19:47:27.286124"
+    "created_at": "2025-12-10T19:47:27.286124",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_681.0_2025-12-12_P": {
     "entry_price": 1.28,
@@ -779,7 +959,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T19:55:49.258576"
+    "created_at": "2025-12-10T19:55:49.258576",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_435.0_2025-12-12_P": {
     "entry_price": 1.41,
@@ -796,7 +980,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T20:03:31.391537"
+    "created_at": "2025-12-10T20:03:31.391537",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_470.0_2025-12-19_C": {
     "entry_price": 7.0,
@@ -813,7 +1001,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T20:22:29.467347"
+    "created_at": "2025-12-10T20:22:29.467347",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_QQQ_630.0_12/11_C": {
     "entry_price": 2.12,
@@ -830,7 +1022,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T20:28:39.343253"
+    "created_at": "2025-12-10T20:28:39.343253",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_630.0_2025-12-11_C": {
     "entry_price": 2.12,
@@ -847,7 +1043,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T20:28:39.344520"
+    "created_at": "2025-12-10T20:28:39.344520",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_QQQ_631.0_12/11_C": {
     "entry_price": 1.53,
@@ -864,7 +1064,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T20:30:12.348414"
+    "created_at": "2025-12-10T20:30:12.348414",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_631.0_2025-12-11_C": {
     "entry_price": 1.53,
@@ -881,7 +1085,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T20:30:12.350091"
+    "created_at": "2025-12-10T20:30:12.350091",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_CLSK_15.0_2025-12-12_C": {
     "entry_price": 0.32,
@@ -898,7 +1106,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-10T20:57:20.715347"
+    "created_at": "2025-12-10T20:57:20.715347",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_COIN_280.0_2025-12-12_C": {
     "entry_price": 1.31,
@@ -915,7 +1127,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T14:31:02.837262"
+    "created_at": "2025-12-11T14:31:02.837262",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_618.0_2025-12-11_P": {
     "entry_price": 0.76,
@@ -932,7 +1148,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T14:44:22.821898"
+    "created_at": "2025-12-11T14:44:22.821898",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_AAPL_280.0_2025-12-19_C": {
     "entry_price": 1.52,
@@ -949,7 +1169,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T14:45:55.361821"
+    "created_at": "2025-12-11T14:45:55.361821",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_617.0_2025-12-11_P": {
     "entry_price": 0.76,
@@ -966,7 +1190,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T15:11:02.891917"
+    "created_at": "2025-12-11T15:11:02.891917",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_678.0_2025-12-12_P": {
     "entry_price": 0.58,
@@ -983,7 +1211,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T15:13:05.794130"
+    "created_at": "2025-12-11T15:13:05.794130",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_ORCL_200.0_12/12_C": {
     "entry_price": 1.36,
@@ -1000,7 +1232,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T15:19:46.579528"
+    "created_at": "2025-12-11T15:19:46.579528",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ORCL_200.0_2025-12-12_C": {
     "entry_price": 1.35,
@@ -1017,7 +1253,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T15:19:46.580659"
+    "created_at": "2025-12-11T15:19:46.580659",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_META_662.5_2025-12-12_C": {
     "entry_price": 0.92,
@@ -1034,7 +1274,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T15:51:33.672666"
+    "created_at": "2025-12-11T15:51:33.672666",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_684.0_2025-12-11_C": {
     "entry_price": 1.56,
@@ -1051,7 +1295,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T15:52:04.582998"
+    "created_at": "2025-12-11T15:52:04.582998",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_685.0_2025-12-11_P": {
     "entry_price": 1.21,
@@ -1068,7 +1316,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T15:56:12.308422"
+    "created_at": "2025-12-11T15:56:12.308422",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_IWM_256.0_2025-12-11_C": {
     "entry_price": 0.6,
@@ -1085,7 +1337,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T16:00:50.804422"
+    "created_at": "2025-12-11T16:00:50.804422",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_HOOD_130.0_2025-12-12_C": {
     "entry_price": 0.5,
@@ -1102,7 +1358,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T16:10:06.467384"
+    "created_at": "2025-12-11T16:10:06.467384",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_614.0_2025-12-11_P": {
     "entry_price": 0.25,
@@ -1119,7 +1379,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T16:35:23.835984"
+    "created_at": "2025-12-11T16:35:23.835984",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_RIVN_17.0_2025-12-12_C": {
     "entry_price": 0.43,
@@ -1136,7 +1400,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T18:07:01.541117"
+    "created_at": "2025-12-11T18:07:01.541117",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_QQQ_0.0__": {
     "entry_price": 1.53,
@@ -1153,7 +1421,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T18:16:10.874506"
+    "created_at": "2025-12-11T18:16:10.874506",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_GOOGL_317.5_2025-12-12_C": {
     "entry_price": 0.8,
@@ -1170,7 +1442,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T18:26:26.110297"
+    "created_at": "2025-12-11T18:26:26.110297",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_700.0_2025-12-19_C": {
     "entry_price": 0.65,
@@ -1187,7 +1463,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T19:08:43.321253"
+    "created_at": "2025-12-11T19:08:43.321253",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_UROY_5.0_2025-12-19_C": {
     "entry_price": 0.05,
@@ -1204,7 +1484,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T19:10:15.438185"
+    "created_at": "2025-12-11T19:10:15.438185",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_UROY_7.5_12/19_C": {
     "entry_price": 0.03,
@@ -1221,7 +1505,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T19:16:55.598194"
+    "created_at": "2025-12-11T19:16:55.598194",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_HOOD_130.0_2025-12-19_C": {
     "entry_price": 2.25,
@@ -1238,7 +1526,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-11T20:18:29.276855"
+    "created_at": "2025-12-11T20:18:29.276855",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_IWM_stock": {
     "entry_price": 256.6,
@@ -1255,7 +1547,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T02:00:10.734139"
+    "created_at": "2025-12-12T02:00:10.734139",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_PLTR_195.0_2025-12-12_C": {
     "entry_price": 0.02,
@@ -1272,7 +1568,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T14:36:05.100093"
+    "created_at": "2025-12-12T14:36:05.100093",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SOUN_13.0_2025-12-12_C": {
     "entry_price": 0.08,
@@ -1289,7 +1589,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T14:36:05.100562"
+    "created_at": "2025-12-12T14:36:05.100562",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_HOOD_125.0_2025-12-12_C": {
     "entry_price": 0.81,
@@ -1306,7 +1610,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T14:41:10.720396"
+    "created_at": "2025-12-12T14:41:10.720396",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_HOOD_126.0_2025-12-12_C": {
     "entry_price": 0.43,
@@ -1323,7 +1631,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T14:41:41.241348"
+    "created_at": "2025-12-12T14:41:41.241348",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TE_stock": {
     "entry_price": 5.29,
@@ -1340,7 +1652,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T14:44:45.094573"
+    "created_at": "2025-12-12T14:44:45.094573",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_AVGO_375.0_12/12_C": {
     "entry_price": 2.15,
@@ -1357,7 +1673,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T14:51:23.864450"
+    "created_at": "2025-12-12T14:51:23.864450",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_685.0_2025-12-12_P": {
     "entry_price": 0.52,
@@ -1374,7 +1694,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T14:52:25.556904"
+    "created_at": "2025-12-12T14:52:25.556904",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_470.0_2025-12-12_C": {
     "entry_price": 0.51,
@@ -1391,7 +1715,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T15:05:14.009351"
+    "created_at": "2025-12-12T15:05:14.009351",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_AVGO_375.0_2025-12-12_C": {
     "entry_price": 1.48,
@@ -1408,7 +1736,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T15:06:15.510119"
+    "created_at": "2025-12-12T15:06:15.510119",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_stock": {
     "entry_price": 455.936,
@@ -1425,7 +1757,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T15:08:18.602305"
+    "created_at": "2025-12-12T15:08:18.602305",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TDOC_8.0_2025-12-19_C": {
     "entry_price": 0.14,
@@ -1442,7 +1778,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T15:32:24.120578"
+    "created_at": "2025-12-12T15:32:24.120578",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_RH_170.0_12/19_P": {
     "entry_price": 7.5,
@@ -1459,7 +1799,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T15:34:57.827460"
+    "created_at": "2025-12-12T15:34:57.827460",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_685.0_2025-12-12_C": {
     "entry_price": 0.47,
@@ -1476,7 +1820,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T16:30:25.244054"
+    "created_at": "2025-12-12T16:30:25.244054",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_675.0_2025-12-12_P": {
     "entry_price": 0.38,
@@ -1493,7 +1841,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T16:34:00.610316"
+    "created_at": "2025-12-12T16:34:00.610316",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ORCL_192.5_2025-12-12_P": {
     "entry_price": 0.73,
@@ -1510,7 +1862,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T18:21:42.162458"
+    "created_at": "2025-12-12T18:21:42.162458",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_AMZN_230.0_2025-12-19_C": {
     "entry_price": 2.04,
@@ -1527,7 +1883,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T18:23:14.507371"
+    "created_at": "2025-12-12T18:23:14.507371",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_ORCL_192.5_12/12_P": {
     "entry_price": 1.21,
@@ -1544,7 +1904,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T18:36:05.716697"
+    "created_at": "2025-12-12T18:36:05.716697",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_RIVN_19.0_2025-12-12_P": {
     "entry_price": 0.35,
@@ -1561,7 +1925,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T18:44:20.056836"
+    "created_at": "2025-12-12T18:44:20.056836",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_TSLA_450.0_12/12_P": {
     "entry_price": 0.54,
@@ -1578,7 +1946,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T19:45:00.175843"
+    "created_at": "2025-12-12T19:45:00.175843",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_450.0_2025-12-12_P": {
     "entry_price": 0.54,
@@ -1595,7 +1967,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T19:45:00.177615"
+    "created_at": "2025-12-12T19:45:00.177615",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_AMZN_227.5_2025-12-19_C": {
     "entry_price": 2.97,
@@ -1612,7 +1988,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T20:32:09.731915"
+    "created_at": "2025-12-12T20:32:09.731915",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_UROY_0.0__": {
     "entry_price": 0.03,
@@ -1629,7 +2009,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-12T22:11:14.143933"
+    "created_at": "2025-12-12T22:11:14.143933",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ENSC_stock": {
     "entry_price": 1.39,
@@ -1646,7 +2030,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T14:31:22.286416"
+    "created_at": "2025-12-15T14:31:22.286416",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_COIN_270.0_2025-12-19_C": {
     "entry_price": 5.85,
@@ -1663,7 +2051,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T14:34:03.707625"
+    "created_at": "2025-12-15T14:34:03.707625",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_500.0_2025-12-19_C": {
     "entry_price": 4.75,
@@ -1680,7 +2072,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T14:43:35.893056"
+    "created_at": "2025-12-15T14:43:35.893056",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ONDS_8.5_2025-12-19_C": {
     "entry_price": 0.4,
@@ -1697,7 +2093,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T14:44:06.546766"
+    "created_at": "2025-12-15T14:44:06.546766",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_AAPL_282.5_2025-12-26_C": {
     "entry_price": 1.08,
@@ -1714,7 +2114,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T14:45:07.531105"
+    "created_at": "2025-12-15T14:45:07.531105",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_COIN_270.0_2025-12-26_C": {
     "entry_price": 6.0,
@@ -1731,7 +2135,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T14:48:11.138376"
+    "created_at": "2025-12-15T14:48:11.138376",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_470.0_2025-12-19_P": {
     "entry_price": 8.0,
@@ -1748,7 +2156,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T14:48:41.712869"
+    "created_at": "2025-12-15T14:48:41.712869",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NVDA_180.0_2025-12-19_C": {
     "entry_price": 2.3,
@@ -1765,7 +2177,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T15:09:35.782589"
+    "created_at": "2025-12-15T15:09:35.782589",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_614.0_2025-12-15_C": {
     "entry_price": 0.82,
@@ -1782,7 +2198,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T15:23:27.238931"
+    "created_at": "2025-12-15T15:23:27.238931",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_613.0_2025-12-15_C": {
     "entry_price": 0.95,
@@ -1799,7 +2219,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T15:36:41.928955"
+    "created_at": "2025-12-15T15:36:41.928955",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_HIMS_38.0_2025-12-26_C": {
     "entry_price": 0.84,
@@ -1816,7 +2240,11 @@
     "tier3_hit": true,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T16:02:56.957268"
+    "created_at": "2025-12-15T16:02:56.957268",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_609.0_2025-12-15_P": {
     "entry_price": 0.5,
@@ -1833,7 +2261,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T16:05:25.421403"
+    "created_at": "2025-12-15T16:05:25.421403",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_680.0_2025-12-15_P": {
     "entry_price": 0.57,
@@ -1850,7 +2282,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T16:16:06.572196"
+    "created_at": "2025-12-15T16:16:06.572196",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_GOOG_315.0_2025-12-19_C": {
     "entry_price": 1.85,
@@ -1867,7 +2303,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T16:26:47.504751"
+    "created_at": "2025-12-15T16:26:47.504751",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_GME_23.0_2025-12-19_C": {
     "entry_price": 0.2,
@@ -1884,7 +2324,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T16:29:20.200923"
+    "created_at": "2025-12-15T16:29:20.200923",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_615.0_2025-12-15_C": {
     "entry_price": 0.96,
@@ -1901,7 +2345,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T16:30:51.831670"
+    "created_at": "2025-12-15T16:30:51.831670",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_610.0_2025-12-15_P": {
     "entry_price": 0.64,
@@ -1918,7 +2366,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-15T16:40:01.310596"
+    "created_at": "2025-12-15T16:40:01.310596",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_RH_0.0__": {
     "entry_price": 7.5,
@@ -1935,7 +2387,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-16T01:11:06.542116"
+    "created_at": "2025-12-16T01:11:06.542116",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_DAL_75.0_2025-12-19_C": {
     "entry_price": 0.32,
@@ -1952,7 +2408,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-16T14:53:11.922915"
+    "created_at": "2025-12-16T14:53:11.922915",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_GOOGL_295.0_2025-12-26_P": {
     "entry_price": 1.2,
@@ -1969,7 +2429,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-16T14:58:47.994178"
+    "created_at": "2025-12-16T14:58:47.994178",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NOW_750.0_2025-12-19_P": {
     "entry_price": 3.1,
@@ -1986,7 +2450,11 @@
     "tier3_hit": true,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-16T15:01:51.280975"
+    "created_at": "2025-12-16T15:01:51.280975",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_615.0_2025-12-16_C": {
     "entry_price": 0.61,
@@ -2003,7 +2471,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-16T15:01:51.283589"
+    "created_at": "2025-12-16T15:01:51.283589",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_NOW_750.0_12/19_P": {
     "entry_price": 3.1,
@@ -2020,7 +2492,11 @@
     "tier3_hit": true,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-16T15:11:43.822878"
+    "created_at": "2025-12-16T15:11:43.822878",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_PLTR_195.0_2025-12-19_C": {
     "entry_price": 0.44,
@@ -2037,7 +2513,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-16T15:21:27.477532"
+    "created_at": "2025-12-16T15:21:27.477532",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_676.0_2025-12-17_P": {
     "entry_price": 0.87,
@@ -2054,7 +2534,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-17T14:41:15.383970"
+    "created_at": "2025-12-17T14:41:15.383970",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_606.0_2025-12-17_P": {
     "entry_price": 0.79,
@@ -2071,7 +2555,11 @@
     "tier3_hit": true,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-17T14:44:18.751058"
+    "created_at": "2025-12-17T14:44:18.751058",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_614.0_2025-12-17_C": {
     "entry_price": 0.78,
@@ -2088,7 +2576,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-17T14:58:35.233275"
+    "created_at": "2025-12-17T14:58:35.233275",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_680.0_2025-12-17_C": {
     "entry_price": 1.04,
@@ -2105,7 +2597,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-17T15:02:09.348317"
+    "created_at": "2025-12-17T15:02:09.348317",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_NOW_775.0_12/19_P": {
     "entry_price": 2.85,
@@ -2122,7 +2618,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-17T15:08:47.568276"
+    "created_at": "2025-12-17T15:08:47.568276",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NOW_775.0_2025-12-19_P": {
     "entry_price": 2.75,
@@ -2139,7 +2639,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-17T15:08:47.568608"
+    "created_at": "2025-12-17T15:08:47.568608",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_613.0_2025-12-17_C": {
     "entry_price": 0.7,
@@ -2156,7 +2660,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-17T15:29:35.183118"
+    "created_at": "2025-12-17T15:29:35.183118",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_507.5_2025-12-26_C": {
     "entry_price": 4.95,
@@ -2173,7 +2681,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-17T15:55:56.503363"
+    "created_at": "2025-12-17T15:55:56.503363",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_676.0_2025-12-17_C": {
     "entry_price": 0.72,
@@ -2190,7 +2702,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-17T17:02:05.903182"
+    "created_at": "2025-12-17T17:02:05.903182",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_NKE_70.0_12/19_C": {
     "entry_price": 0.99,
@@ -2207,7 +2723,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-17T18:41:26.361900"
+    "created_at": "2025-12-17T18:41:26.361900",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_664.0_2025-12-18_P": {
     "entry_price": 0.46,
@@ -2224,7 +2744,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-17T20:42:06.275938"
+    "created_at": "2025-12-17T20:42:06.275938",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_490.0_2025-12-19_C": {
     "entry_price": 3.7,
@@ -2241,7 +2765,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T14:31:49.642345"
+    "created_at": "2025-12-18T14:31:49.642345",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NKE_70.0_2025-12-19_C": {
     "entry_price": 1.17,
@@ -2258,7 +2786,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T14:34:23.603342"
+    "created_at": "2025-12-18T14:34:23.603342",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NVDA_177.5_2025-12-19_C": {
     "entry_price": 0.28,
@@ -2275,7 +2807,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T14:43:37.699344"
+    "created_at": "2025-12-18T14:43:37.699344",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_611.0_2025-12-18_C": {
     "entry_price": 0.86,
@@ -2292,7 +2828,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T14:46:41.819601"
+    "created_at": "2025-12-18T14:46:41.819601",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_674.0_2025-12-18_P": {
     "entry_price": 0.75,
@@ -2309,7 +2849,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T14:54:51.643750"
+    "created_at": "2025-12-18T14:54:51.643750",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_604.0_2025-12-18_P": {
     "entry_price": 0.75,
@@ -2326,7 +2870,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T15:15:57.277936"
+    "created_at": "2025-12-18T15:15:57.277936",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_502.5_2025-12-19_C": {
     "entry_price": 0.67,
@@ -2343,7 +2891,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T15:17:28.659841"
+    "created_at": "2025-12-18T15:17:28.659841",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_679.0_2025-12-18_P": {
     "entry_price": 0.92,
@@ -2360,7 +2912,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T15:46:58.586995"
+    "created_at": "2025-12-18T15:46:58.586995",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_678.0_2025-12-18_P": {
     "entry_price": 0.7,
@@ -2377,7 +2933,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T15:51:34.043251"
+    "created_at": "2025-12-18T15:51:34.043251",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_682.0_2025-12-18_C": {
     "entry_price": 0.44,
@@ -2394,7 +2954,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T16:12:58.913550"
+    "created_at": "2025-12-18T16:12:58.913550",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_680.0_2025-12-18_C": {
     "entry_price": 1.12,
@@ -2411,7 +2975,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T16:22:58.227429"
+    "created_at": "2025-12-18T16:22:58.227429",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_UPS_102.0_2025-12-19_P": {
     "entry_price": 0.75,
@@ -2428,7 +2996,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T16:36:43.800507"
+    "created_at": "2025-12-18T16:36:43.800507",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_EOSE_stock": {
     "entry_price": 12.31,
@@ -2445,7 +3017,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T17:14:25.998645"
+    "created_at": "2025-12-18T17:14:25.998645",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NKE_67.0_2025-12-19_C": {
     "entry_price": 2.02,
@@ -2462,7 +3038,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T17:19:01.101807"
+    "created_at": "2025-12-18T17:19:01.101807",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_FDX_260.0_12/26_P": {
     "entry_price": 1.51,
@@ -2479,7 +3059,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T18:23:18.440579"
+    "created_at": "2025-12-18T18:23:18.440579",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_FDX_260.0_2025-12-26_P": {
     "entry_price": 1.51,
@@ -2496,7 +3080,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T18:23:18.441293"
+    "created_at": "2025-12-18T18:23:18.441293",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_PYPL_60.0_12/26_C": {
     "entry_price": 0.89,
@@ -2513,7 +3101,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T18:35:11.281494"
+    "created_at": "2025-12-18T18:35:11.281494",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_PYPL_60.0_2025-12-26_C": {
     "entry_price": 0.89,
@@ -2530,7 +3122,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-18T18:35:11.283086"
+    "created_at": "2025-12-18T18:35:11.283086",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ORCL_192.5_2025-12-19_C": {
     "entry_price": 1.15,
@@ -2547,7 +3143,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-19T14:37:52.709426"
+    "created_at": "2025-12-19T14:37:52.709426",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_FDX_275.0_12/26_P": {
     "entry_price": 2.25,
@@ -2564,7 +3164,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-19T14:42:00.436306"
+    "created_at": "2025-12-19T14:42:00.436306",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_FDX_275.0_2025-12-26_P": {
     "entry_price": 2.21,
@@ -2581,7 +3185,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-19T14:43:02.528932"
+    "created_at": "2025-12-19T14:43:02.528932",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_RDDT_230.0_2025-12-19_P": {
     "entry_price": 1.5,
@@ -2598,7 +3206,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-19T14:50:49.117855"
+    "created_at": "2025-12-19T14:50:49.117855",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_680.0_2025-12-19_C": {
     "entry_price": 1.15,
@@ -2615,7 +3227,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-19T14:54:57.958644"
+    "created_at": "2025-12-19T14:54:57.958644",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_675.0_2025-12-19_P": {
     "entry_price": 0.45,
@@ -2632,7 +3248,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-19T14:58:04.284322"
+    "created_at": "2025-12-19T14:58:04.284322",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_620.0_2025-12-19_C": {
     "entry_price": 0.28,
@@ -2649,7 +3269,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-19T15:04:17.562361"
+    "created_at": "2025-12-19T15:04:17.562361",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_677.0_2025-12-19_P": {
     "entry_price": 0.65,
@@ -2666,7 +3290,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-19T15:21:53.353169"
+    "created_at": "2025-12-19T15:21:53.353169",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_BYND_1.5_2025-12-26_C": {
     "entry_price": 0.18,
@@ -2683,7 +3311,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-19T16:16:19.747502"
+    "created_at": "2025-12-19T16:16:19.747502",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_NKE_0.0__": {
     "entry_price": 1.154,
@@ -2700,7 +3332,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-19T17:46:30.693181"
+    "created_at": "2025-12-19T17:46:30.693181",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_SPX_6860.0_12/19_C": {
     "entry_price": 0.15,
@@ -2717,7 +3353,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-19T18:58:46.601815"
+    "created_at": "2025-12-19T18:58:46.601815",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_IREN_55.0_12/26_C": {
     "entry_price": 0.04,
@@ -2734,7 +3374,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-19T20:24:56.317420"
+    "created_at": "2025-12-19T20:24:56.317420",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_IREN_42.0_2025-12-26_C": {
     "entry_price": 1.13,
@@ -2751,7 +3395,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-19T20:50:31.143281"
+    "created_at": "2025-12-19T20:50:31.143281",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_SPX_6840.0_12/19_C": {
     "entry_price": 0.35,
@@ -2768,7 +3416,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-19T20:54:11.056756"
+    "created_at": "2025-12-19T20:54:11.056756",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NOW_stock": {
     "entry_price": 775.0,
@@ -2785,7 +3437,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-20T02:27:36.684194"
+    "created_at": "2025-12-20T02:27:36.684194",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_682.0_2025-12-22_P": {
     "entry_price": 0.7,
@@ -2802,7 +3458,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-22T14:38:38.796008"
+    "created_at": "2025-12-22T14:38:38.796008",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_621.0_2025-12-22_C": {
     "entry_price": 0.64,
@@ -2819,7 +3479,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-22T14:47:15.702168"
+    "created_at": "2025-12-22T14:47:15.702168",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_510.0_2025-12-26_C": {
     "entry_price": 2.83,
@@ -2836,7 +3500,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-22T15:02:13.348599"
+    "created_at": "2025-12-22T15:02:13.348599",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_685.0_2025-12-22_C": {
     "entry_price": 0.35,
@@ -2853,7 +3521,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-22T15:04:48.243687"
+    "created_at": "2025-12-22T15:04:48.243687",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_680.0_2025-12-22_P": {
     "entry_price": 0.21,
@@ -2870,7 +3542,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-22T15:39:40.117374"
+    "created_at": "2025-12-22T15:39:40.117374",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_619.0_2025-12-22_C": {
     "entry_price": 0.75,
@@ -2887,7 +3563,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-22T15:51:00.451192"
+    "created_at": "2025-12-22T15:51:00.451192",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_620.0_2025-12-22_C": {
     "entry_price": 0.41,
@@ -2904,7 +3584,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-22T16:08:05.422059"
+    "created_at": "2025-12-22T16:08:05.422059",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_NVO_48.5_12/26_C": {
     "entry_price": 0.53,
@@ -2921,7 +3605,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-22T16:16:48.383831"
+    "created_at": "2025-12-22T16:16:48.383831",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NVO_48.5_2025-12-26_C": {
     "entry_price": 0.54,
@@ -2938,7 +3626,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-22T16:16:48.384411"
+    "created_at": "2025-12-22T16:16:48.384411",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_FDX_0.0__": {
     "entry_price": 1.873,
@@ -2955,7 +3647,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-23T05:01:01.828882"
+    "created_at": "2025-12-23T05:01:01.828882",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_SPY_680.0_12/23_P": {
     "entry_price": 0.14,
@@ -2972,7 +3668,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-23T15:10:55.514385"
+    "created_at": "2025-12-23T15:10:55.514385",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_CAVA_57.0_12/26_P": {
     "entry_price": 0.5,
@@ -2989,7 +3689,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-23T15:48:43.884726"
+    "created_at": "2025-12-23T15:48:43.884726",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_AAPL_277.5_2025-12-26_C": {
     "entry_price": 0.24,
@@ -3006,7 +3710,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-25T05:21:07.460003"
+    "created_at": "2025-12-25T05:21:07.460003",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NVDA_192.5_2025-12-26_C": {
     "entry_price": 0.38,
@@ -3023,7 +3731,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-26T14:33:28.673147"
+    "created_at": "2025-12-26T14:33:28.673147",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_691.0_2025-12-26_C": {
     "entry_price": 1.0,
@@ -3040,7 +3752,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-26T14:36:59.958095"
+    "created_at": "2025-12-26T14:36:59.958095",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_625.0_2025-12-26_C": {
     "entry_price": 0.61,
@@ -3057,7 +3773,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-26T14:56:48.502357"
+    "created_at": "2025-12-26T14:56:48.502357",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NKE_61.0_2025-12-26_C": {
     "entry_price": 0.08,
@@ -3074,7 +3794,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-26T14:57:18.873124"
+    "created_at": "2025-12-26T14:57:18.873124",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_480.0_2025-12-26_P": {
     "entry_price": 1.89,
@@ -3091,7 +3815,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-26T17:28:33.422645"
+    "created_at": "2025-12-26T17:28:33.422645",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_624.0_2025-12-29_C": {
     "entry_price": 0.44,
@@ -3108,7 +3836,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-29T14:41:37.895815"
+    "created_at": "2025-12-29T14:41:37.895815",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_686.0_2025-12-29_P": {
     "entry_price": 0.45,
@@ -3125,7 +3857,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-29T15:01:14.431794"
+    "created_at": "2025-12-29T15:01:14.431794",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_621.0_2025-12-29_C": {
     "entry_price": 0.49,
@@ -3142,7 +3878,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-29T16:02:14.689884"
+    "created_at": "2025-12-29T16:02:14.689884",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_622.0_2025-12-30_C": {
     "entry_price": 0.55,
@@ -3159,7 +3899,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-30T15:03:28.096964"
+    "created_at": "2025-12-30T15:03:28.096964",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_619.0_2025-12-30_P": {
     "entry_price": 0.64,
@@ -3176,7 +3920,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-30T15:17:04.662111"
+    "created_at": "2025-12-30T15:17:04.662111",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_621.0_2025-12-30_C": {
     "entry_price": 0.4,
@@ -3193,7 +3941,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-30T17:21:08.520446"
+    "created_at": "2025-12-30T17:21:08.520446",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_620.0_2025-12-30_C": {
     "entry_price": 0.97,
@@ -3210,7 +3962,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-30T19:17:18.505273"
+    "created_at": "2025-12-30T19:17:18.505273",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_619.0_2025-12-31_C": {
     "entry_price": 0.68,
@@ -3227,7 +3983,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-31T15:27:32.401081"
+    "created_at": "2025-12-31T15:27:32.401081",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_618.0_2025-12-31_C": {
     "entry_price": 0.85,
@@ -3244,7 +4004,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-31T15:43:09.410687"
+    "created_at": "2025-12-31T15:43:09.410687",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_SPY_686.0_12/31_C": {
     "entry_price": 0.47,
@@ -3261,7 +4025,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-31T17:00:33.420019"
+    "created_at": "2025-12-31T17:00:33.420019",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_ESHA_stock": {
     "entry_price": 23.44,
@@ -3278,7 +4046,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-31T17:48:59.609177"
+    "created_at": "2025-12-31T17:48:59.609177",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_SLS_stock": {
     "entry_price": 3.745,
@@ -3295,7 +4067,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2025-12-31T18:01:27.030559"
+    "created_at": "2025-12-31T18:01:27.030559",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SIDU_stock": {
     "entry_price": 3.770033,
@@ -3312,7 +4088,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-02T14:39:24.996156"
+    "created_at": "2026-01-02T14:39:24.996156",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_621.0_2026-01-02_C": {
     "entry_price": 0.84,
@@ -3329,7 +4109,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-02T15:10:40.395349"
+    "created_at": "2026-01-02T15:10:40.395349",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_QQQ_617.0_01/02_C": {
     "entry_price": 1.19,
@@ -3346,7 +4130,11 @@
     "tier3_hit": true,
     "tier4_hit": true,
     "pending_orders": {},
-    "created_at": "2026-01-02T15:38:34.688513"
+    "created_at": "2026-01-02T15:38:34.688513",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_HOOD_stock": {
     "entry_price": 112.313212,
@@ -3363,7 +4151,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-02T15:58:15.518124"
+    "created_at": "2026-01-02T15:58:15.518124",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_LVRO_stock": {
     "entry_price": 1.29,
@@ -3380,7 +4172,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-02T18:09:20.799681"
+    "created_at": "2026-01-02T18:09:20.799681",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_DVLT_stock": {
     "entry_price": 0.94,
@@ -3397,7 +4193,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-02T18:36:32.585195"
+    "created_at": "2026-01-02T18:36:32.585195",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_CLPT_stock": {
     "entry_price": 14.9,
@@ -3414,7 +4214,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T15:09:12.133755"
+    "created_at": "2026-01-06T15:09:12.133755",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ONDS_14.0_2026-06-18_C": {
     "entry_price": 2.94,
@@ -3431,7 +4235,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T15:09:12.134466"
+    "created_at": "2026-01-06T15:09:12.134466",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_623.0_2026-01-06_C": {
     "entry_price": 0.59,
@@ -3448,7 +4256,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T15:09:12.134898"
+    "created_at": "2026-01-06T15:09:12.134898",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_618.0_2026-01-06_P": {
     "entry_price": 0.461111,
@@ -3465,7 +4277,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T15:09:12.135309"
+    "created_at": "2026-01-06T15:09:12.135309",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ZM_90.0_2026-01-09_C": {
     "entry_price": 0.27,
@@ -3482,7 +4298,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T15:09:12.135703"
+    "created_at": "2026-01-06T15:09:12.135703",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NVO_60.0_2026-01-16_C": {
     "entry_price": 0.89,
@@ -3499,7 +4319,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T15:13:59.741926"
+    "created_at": "2026-01-06T15:13:59.741926",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_700.0_2026-01-23_C": {
     "entry_price": 2.73,
@@ -3516,7 +4340,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T15:29:16.780435"
+    "created_at": "2026-01-06T15:29:16.780435",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_XIFR_13.0_2026-04-17_C": {
     "entry_price": 0.55,
@@ -3533,7 +4361,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T15:30:51.091059"
+    "created_at": "2026-01-06T15:30:51.091059",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_NFLX_91.0_01/09_C": {
     "entry_price": 0.78,
@@ -3550,7 +4382,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T15:40:58.674393"
+    "created_at": "2026-01-06T15:40:58.674393",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_621.0_2026-01-06_P": {
     "entry_price": 0.71,
@@ -3567,7 +4403,11 @@
     "tier3_hit": true,
     "tier4_hit": true,
     "pending_orders": {},
-    "created_at": "2026-01-06T15:42:33.954289"
+    "created_at": "2026-01-06T15:42:33.954289",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_621.0_2026-01-06_C": {
     "entry_price": 0.95,
@@ -3584,7 +4424,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T15:52:47.302463"
+    "created_at": "2026-01-06T15:52:47.302463",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ZETA_25.0_2026-01-16_C": {
     "entry_price": 0.7,
@@ -3601,7 +4445,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T15:56:05.724776"
+    "created_at": "2026-01-06T15:56:05.724776",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ZETA_30.0_2026-02-20_C": {
     "entry_price": 0.68,
@@ -3618,7 +4466,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T15:56:05.725063"
+    "created_at": "2026-01-06T15:56:05.725063",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NFLX_91.0_2026-01-09_C": {
     "entry_price": 0.71,
@@ -3635,7 +4487,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T16:01:11.822905"
+    "created_at": "2026-01-06T16:01:11.822905",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_690.0_2026-01-06_C": {
     "entry_price": 0.29,
@@ -3652,7 +4508,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T16:01:44.188235"
+    "created_at": "2026-01-06T16:01:44.188235",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_DIS_115.0_2026-01-16_C": {
     "entry_price": 1.6,
@@ -3669,7 +4529,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T16:19:49.323827"
+    "created_at": "2026-01-06T16:19:49.323827",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_620.0_2026-01-06_P": {
     "entry_price": 0.84,
@@ -3686,7 +4550,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T16:19:49.324453"
+    "created_at": "2026-01-06T16:19:49.324453",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NVDA_190.0_2026-01-09_C": {
     "entry_price": 2.275,
@@ -3703,7 +4571,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T16:23:09.203025"
+    "created_at": "2026-01-06T16:23:09.203025",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_IWM_253.0_2026-01-09_P": {
     "entry_price": 2.0,
@@ -3720,7 +4592,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T16:41:54.207862"
+    "created_at": "2026-01-06T16:41:54.207862",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_PG_141.0_2026-01-09_C": {
     "entry_price": 0.95,
@@ -3737,7 +4613,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T16:46:48.016005"
+    "created_at": "2026-01-06T16:46:48.016005",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_GOOGL_320.0_2026-01-09_C": {
     "entry_price": 1.0,
@@ -3754,7 +4634,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T16:49:01.324409"
+    "created_at": "2026-01-06T16:49:01.324409",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_BNAI_stock": {
     "entry_price": 4.52,
@@ -3771,7 +4655,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T17:04:03.209436"
+    "created_at": "2026-01-06T17:04:03.209436",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_622.0_2026-01-06_P": {
     "entry_price": 0.48,
@@ -3788,7 +4676,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T17:43:51.181532"
+    "created_at": "2026-01-06T17:43:51.181532",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_PLUG_2.5_2026-01-09_C": {
     "entry_price": 0.06,
@@ -3805,7 +4697,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T18:00:34.330895"
+    "created_at": "2026-01-06T18:00:34.330895",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_440.0_2026-01-09_C": {
     "entry_price": 3.8,
@@ -3822,7 +4718,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T18:55:38.351803"
+    "created_at": "2026-01-06T18:55:38.351803",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_RBLX_80.0_2026-01-16_C": {
     "entry_price": 1.27,
@@ -3839,7 +4739,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T18:59:56.144148"
+    "created_at": "2026-01-06T18:59:56.144148",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NFLX_stock": {
     "entry_price": 90.61,
@@ -3856,7 +4760,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-06T20:56:28.770452"
+    "created_at": "2026-01-06T20:56:28.770452",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_CMG_stock": {
     "entry_price": 38.72,
@@ -3873,7 +4781,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-07T14:30:47.154503"
+    "created_at": "2026-01-07T14:30:47.154503",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_GLUE_stock": {
     "entry_price": 23.899057,
@@ -3890,7 +4802,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-07T14:34:05.706927"
+    "created_at": "2026-01-07T14:34:05.706927",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_692.0_2026-01-07_P": {
     "entry_price": 1.16,
@@ -3907,7 +4823,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-07T14:34:05.708076"
+    "created_at": "2026-01-07T14:34:05.708076",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SKYQ_stock": {
     "entry_price": 0.6522,
@@ -3924,7 +4844,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-07T14:38:50.847185"
+    "created_at": "2026-01-07T14:38:50.847185",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ASBP_stock": {
     "entry_price": 0.1444,
@@ -3941,7 +4865,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-07T14:39:53.125219"
+    "created_at": "2026-01-07T14:39:53.125219",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NVVE_stock": {
     "entry_price": 3.484856,
@@ -3958,7 +4886,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-07T14:45:05.700836"
+    "created_at": "2026-01-07T14:45:05.700836",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ZETA_stock": {
     "entry_price": 23.45,
@@ -3975,7 +4907,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-07T14:48:49.135522"
+    "created_at": "2026-01-07T14:48:49.135522",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SLRX_stock": {
     "entry_price": 0.7993,
@@ -3992,7 +4928,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-07T14:51:25.275765"
+    "created_at": "2026-01-07T14:51:25.275765",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_MNTS_stock": {
     "entry_price": 13.0,
@@ -4009,7 +4949,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-07T14:57:43.522965"
+    "created_at": "2026-01-07T14:57:43.522965",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_AMOD_stock": {
     "entry_price": 0.7313,
@@ -4026,7 +4970,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-07T15:01:00.128007"
+    "created_at": "2026-01-07T15:01:00.128007",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_CVX_160.0_01/09_C": {
     "entry_price": 0.54,
@@ -4043,7 +4991,11 @@
     "tier3_hit": true,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-07T15:07:14.814745"
+    "created_at": "2026-01-07T15:07:14.814745",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SMX_stock": {
     "entry_price": 30.47,
@@ -4060,7 +5012,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-07T15:34:22.984072"
+    "created_at": "2026-01-07T15:34:22.984072",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_DCOY_stock": {
     "entry_price": 0.7993,
@@ -4077,7 +5033,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-08T06:26:44.792376"
+    "created_at": "2026-01-08T06:26:44.792376",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_FLYX_stock": {
     "entry_price": 6.06,
@@ -4094,7 +5054,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-08T14:30:25.301007"
+    "created_at": "2026-01-08T14:30:25.301007",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_APLD_stock": {
     "entry_price": 33.66,
@@ -4111,7 +5075,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-08T14:43:33.327075"
+    "created_at": "2026-01-08T14:43:33.327075",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_JTAI_stock": {
     "entry_price": 0.758,
@@ -4128,7 +5096,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-08T14:43:33.329804"
+    "created_at": "2026-01-08T14:43:33.329804",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ACON_stock": {
     "entry_price": 7.84,
@@ -4145,7 +5117,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-08T14:45:10.907323"
+    "created_at": "2026-01-08T14:45:10.907323",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ONDS_20.0_2026-01-30_C": {
     "entry_price": 0.48,
@@ -4162,7 +5138,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-08T14:57:21.529422"
+    "created_at": "2026-01-08T14:57:21.529422",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_617.0_2026-01-08_P": {
     "entry_price": 0.8,
@@ -4179,7 +5159,11 @@
     "tier3_hit": true,
     "tier4_hit": true,
     "pending_orders": {},
-    "created_at": "2026-01-08T14:58:24.852881"
+    "created_at": "2026-01-08T14:58:24.852881",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_GOOGL_320.0_2026-01-09_P": {
     "entry_price": 1.35,
@@ -4196,7 +5180,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-08T15:06:31.221126"
+    "created_at": "2026-01-08T15:06:31.221126",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NVDA_192.5_2026-01-09_C": {
     "entry_price": 0.16,
@@ -4213,7 +5201,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-08T15:49:46.574363"
+    "created_at": "2026-01-08T15:49:46.574363",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_618.0_2026-01-08_P": {
     "entry_price": 0.72,
@@ -4230,7 +5222,11 @@
     "tier3_hit": true,
     "tier4_hit": true,
     "pending_orders": {},
-    "created_at": "2026-01-08T15:58:19.629835"
+    "created_at": "2026-01-08T15:58:19.629835",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SXTC_stock": {
     "entry_price": 4.22,
@@ -4247,7 +5243,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-08T16:00:53.635517"
+    "created_at": "2026-01-08T16:00:53.635517",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_619.0_2026-01-08_P": {
     "entry_price": 0.76,
@@ -4264,7 +5264,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-08T16:45:46.517462"
+    "created_at": "2026-01-08T16:45:46.517462",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_691.0_2026-01-08_C": {
     "entry_price": 0.44,
@@ -4281,7 +5285,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-08T17:55:21.177124"
+    "created_at": "2026-01-08T17:55:21.177124",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_OPEN_stock": {
     "entry_price": 6.45,
@@ -4298,7 +5306,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-08T20:53:35.489223"
+    "created_at": "2026-01-08T20:53:35.489223",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_MU_330.0_2026-01-09_C": {
     "entry_price": 2.69,
@@ -4315,7 +5327,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-08T20:59:56.681814"
+    "created_at": "2026-01-08T20:59:56.681814",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NVO_stock": {
     "entry_price": 59.764286,
@@ -4332,7 +5348,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T14:33:10.388156"
+    "created_at": "2026-01-09T14:33:10.388156",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_OPAD_stock": {
     "entry_price": 2.62,
@@ -4349,7 +5369,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T14:44:48.508938"
+    "created_at": "2026-01-09T14:44:48.508938",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Webull_NFLX_90.0_01/16_C": {
     "entry_price": 1.16,
@@ -4366,7 +5390,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T14:56:57.018415"
+    "created_at": "2026-01-09T14:56:57.018415",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NFLX_90.0_2026-01-16_C": {
     "entry_price": 1.16,
@@ -4383,7 +5411,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T14:56:57.019457"
+    "created_at": "2026-01-09T14:56:57.019457",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_617.0_2026-01-09_P": {
     "entry_price": 0.83,
@@ -4400,7 +5432,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T14:58:35.441546"
+    "created_at": "2026-01-09T14:58:35.441546",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_618.0_2026-01-09_P": {
     "entry_price": 0.68,
@@ -4417,7 +5453,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T15:06:04.006326"
+    "created_at": "2026-01-09T15:06:04.006326",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ARM_120.0_2026-01-16_C": {
     "entry_price": 0.4,
@@ -4434,7 +5474,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T15:18:18.759438"
+    "created_at": "2026-01-09T15:18:18.759438",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ZETA_25.0_2026-01-09_C": {
     "entry_price": 0.16,
@@ -4451,7 +5495,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T15:26:48.323348"
+    "created_at": "2026-01-09T15:26:48.323348",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_IWM_261.0_2026-01-09_C": {
     "entry_price": 0.43,
@@ -4468,7 +5516,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T15:30:30.765481"
+    "created_at": "2026-01-09T15:30:30.765481",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_624.0_2026-01-09_P": {
     "entry_price": 0.89,
@@ -4485,7 +5537,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T15:37:25.223479"
+    "created_at": "2026-01-09T15:37:25.223479",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_IWM_264.0_2026-01-16_C": {
     "entry_price": 1.1,
@@ -4502,7 +5558,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T15:40:40.849064"
+    "created_at": "2026-01-09T15:40:40.849064",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ONDS_15.0_2026-01-09_C": {
     "entry_price": 0.07,
@@ -4519,7 +5579,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T16:07:51.921673"
+    "created_at": "2026-01-09T16:07:51.921673",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_625.0_2026-01-09_P": {
     "entry_price": 0.83,
@@ -4536,7 +5600,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T16:15:18.341314"
+    "created_at": "2026-01-09T16:15:18.341314",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_RIVN_20.0_2026-01-09_C": {
     "entry_price": 0.09,
@@ -4553,7 +5621,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T16:59:34.772044"
+    "created_at": "2026-01-09T16:59:34.772044",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_LXEO_11.0_2026-01-16_C": {
     "entry_price": 2.05,
@@ -4570,7 +5642,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T17:09:02.449968"
+    "created_at": "2026-01-09T17:09:02.449968",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TSLA_445.0_2026-01-09_C": {
     "entry_price": 3.1,
@@ -4587,7 +5663,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T17:59:55.328301"
+    "created_at": "2026-01-09T17:59:55.328301",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_EOSE_16.0_2026-02-20_C": {
     "entry_price": 1.65,
@@ -4604,7 +5684,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T18:53:57.367691"
+    "created_at": "2026-01-09T18:53:57.367691",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_OPEN_stock": {
     "entry_price": 7.41,
@@ -4621,7 +5705,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-09T19:20:45.731795"
+    "created_at": "2026-01-09T19:20:45.731795",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Alpaca_OPAD_stock": {
     "entry_price": 2.6,
@@ -4638,7 +5726,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-12T14:29:27.056855"
+    "created_at": "2026-01-12T14:29:27.056855",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_EVTV_stock": {
     "entry_price": 1.21,
@@ -4655,7 +5747,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-12T14:32:06.986485"
+    "created_at": "2026-01-12T14:32:06.986485",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_RKLB_100.0_2026-01-23_C": {
     "entry_price": 1.98,
@@ -4672,7 +5768,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-12T14:46:51.057849"
+    "created_at": "2026-01-12T14:46:51.057849",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Alpaca_EVTV_stock": {
     "entry_price": 1.2,
@@ -4689,7 +5789,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-12T14:47:13.652955"
+    "created_at": "2026-01-12T14:47:13.652955",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Alpaca_BDSX_stock": {
     "entry_price": 7.6,
@@ -4706,7 +5810,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-12T14:47:13.653281"
+    "created_at": "2026-01-12T14:47:13.653281",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_OPTX_stock": {
     "entry_price": 6.30014,
@@ -4723,7 +5831,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-12T15:05:22.516130"
+    "created_at": "2026-01-12T15:05:22.516130",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_IWM_259.0_2026-01-12_C": {
     "entry_price": 0.51,
@@ -4740,7 +5852,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-12T15:11:39.389057"
+    "created_at": "2026-01-12T15:11:39.389057",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Alpaca_OPTX_stock": {
     "entry_price": 6.3,
@@ -4757,7 +5873,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-12T15:35:13.907461"
+    "created_at": "2026-01-12T15:35:13.907461",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_TQQQ_stock": {
     "entry_price": 55.5,
@@ -4774,7 +5894,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-12T15:35:16.327462"
+    "created_at": "2026-01-12T15:35:16.327462",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Alpaca_LVLU_stock": {
     "entry_price": 11.85,
@@ -4791,7 +5915,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-12T16:22:54.936924"
+    "created_at": "2026-01-12T16:22:54.936924",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Alpaca_XAIR_stock": {
     "entry_price": 1.24,
@@ -4808,7 +5936,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-13T13:58:27.000773"
+    "created_at": "2026-01-13T13:58:27.000773",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_XAIR_stock": {
     "entry_price": 1.58,
@@ -4825,7 +5957,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-13T14:31:31.625682"
+    "created_at": "2026-01-13T14:31:31.625682",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_XTLB_stock": {
     "entry_price": 1.24,
@@ -4842,7 +5978,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-13T14:57:26.370990"
+    "created_at": "2026-01-13T14:57:26.370990",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "Alpaca_XTLB_stock": {
     "entry_price": 1.25,
@@ -4859,7 +5999,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-13T14:59:26.902630"
+    "created_at": "2026-01-13T14:59:26.902630",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_NFLX_92.5_2026-01-16_C": {
     "entry_price": 0.25,
@@ -4876,7 +6020,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-14T15:10:31.847110"
+    "created_at": "2026-01-14T15:10:31.847110",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_623.0_2026-01-14_C": {
     "entry_price": 0.8,
@@ -4893,7 +6041,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-14T15:16:19.809188"
+    "created_at": "2026-01-14T15:16:19.809188",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_693.0_2026-01-14_C": {
     "entry_price": 0.43,
@@ -4910,7 +6062,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-14T15:18:26.222476"
+    "created_at": "2026-01-14T15:18:26.222476",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_622.0_2026-01-14_C": {
     "entry_price": 0.86,
@@ -4927,7 +6083,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-14T15:26:03.747887"
+    "created_at": "2026-01-14T15:26:03.747887",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_697.0_2026-01-30_C": {
     "entry_price": 3.805,
@@ -4944,7 +6104,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-14T15:49:38.599859"
+    "created_at": "2026-01-14T15:49:38.599859",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_617.0_2026-01-14_C": {
     "entry_price": 1.35,
@@ -4961,7 +6125,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-14T15:55:00.468860"
+    "created_at": "2026-01-14T15:55:00.468860",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_QNCX_7.5_2026-03-20_C": {
     "entry_price": 0.85,
@@ -4978,7 +6146,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-14T16:02:25.983830"
+    "created_at": "2026-01-14T16:02:25.983830",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_PG_147.0_2026-01-16_C": {
     "entry_price": 0.89,
@@ -4995,7 +6167,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-14T16:13:34.221452"
+    "created_at": "2026-01-14T16:13:34.221452",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SMCI_29.0_2026-01-23_C": {
     "entry_price": 0.96,
@@ -5012,7 +6188,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-14T16:37:52.522686"
+    "created_at": "2026-01-14T16:37:52.522686",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_LPTH_15.0_2026-01-16_C": {
     "entry_price": 0.1,
@@ -5029,7 +6209,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-14T18:09:23.860090"
+    "created_at": "2026-01-14T18:09:23.860090",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_IWM_262.0_2026-01-14_C": {
     "entry_price": 0.17,
@@ -5046,7 +6230,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-14T18:50:58.584970"
+    "created_at": "2026-01-14T18:50:58.584970",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_SPY_688.0_2026-01-14_C": {
     "entry_price": 0.528,
@@ -5063,7 +6251,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-14T20:00:56.722618"
+    "created_at": "2026-01-14T20:00:56.722618",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_MCHP_77.0_2026-01-16_C": {
     "entry_price": 0.2,
@@ -5080,7 +6272,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-14T20:37:28.470000"
+    "created_at": "2026-01-14T20:37:28.470000",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_MCHP_77.0_2026-01-23_C": {
     "entry_price": 0.75,
@@ -5097,7 +6293,11 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-14T20:41:29.200884"
+    "created_at": "2026-01-14T20:41:29.200884",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   },
   "ALPACA_PAPER_ORCL_200.0_2026-01-16_C": {
     "entry_price": 0.75,
@@ -5114,6 +6314,10 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {},
-    "created_at": "2026-01-14T20:49:00.697621"
+    "created_at": "2026-01-14T20:49:00.697621",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   }
 }
