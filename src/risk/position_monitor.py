@@ -570,7 +570,7 @@ class RiskManager:
     4. Trailing stop with activation threshold
     """
     
-    DEFAULT_MONITORING_INTERVAL = 30  # seconds
+    DEFAULT_MONITORING_INTERVAL = 5  # seconds - optimized for fast profit/SL locks
     DEFAULT_TRAILING_ACTIVATION = 15.0  # percent
     
     def __init__(
@@ -683,15 +683,35 @@ class RiskManager:
         return risk_settings.enabled or channel_count > 0
     
     def _get_adaptive_interval(self) -> float:
-        """Get adaptive monitoring interval based on broker limits and market hours."""
-        base_interval = self.monitoring_interval
+        """Get adaptive monitoring interval based on broker limits and market hours.
         
-        if RATE_LIMIT_AVAILABLE and get_rate_limit_manager:
-            rate_manager = get_rate_limit_manager()
-            webull_interval = rate_manager.get_recommended_interval('webull', is_active=True)
-            base_interval = max(base_interval, webull_interval)
+        Uses Service Orchestrator optimized intervals:
+        - Alpaca/IBKR/Schwab: 5s (high API limits)
+        - DhanQ: 8s
+        - Webull/Tastytrade/Questrade: 10s
+        - Robinhood: 20s (strict limits)
+        """
+        if not RATE_LIMIT_AVAILABLE or not get_rate_limit_manager:
+            return self.monitoring_interval
         
-        return base_interval
+        rate_manager = get_rate_limit_manager()
+        
+        active_brokers = []
+        if self.alpaca_broker:
+            active_brokers.append('alpaca')
+        if self.schwab_broker:
+            active_brokers.append('schwab')
+        if self.ibkr_broker:
+            active_brokers.append('ibkr')
+        if self.tastytrade_broker:
+            active_brokers.append('tastytrade')
+        if self.robinhood_broker:
+            active_brokers.append('robinhood')
+        active_brokers.append('webull')
+        
+        intervals = [rate_manager.get_recommended_interval(b, is_active=True) for b in active_brokers]
+        
+        return max(intervals) if intervals else self.monitoring_interval
     
     async def _standby_cycle(self) -> None:
         """Standby cycle - process invalidations WITHOUT making broker API calls."""
