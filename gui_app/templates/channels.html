@@ -1301,12 +1301,31 @@ function renderChannels() {
                                 <span class="slider"></span>
                             </label>
                         </div>
-                        <div>
-                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Size %</span>
-                            <input type="number" value="${channel.tracking_position_size_pct || ''}" placeholder="—" min="0.1" max="100" step="0.1"
-                                   style="width: 100%; padding: 4px 6px; font-size: 11px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF; margin-top: 2px;"
-                                   onchange="updatePositionSize(${channel.id}, this.value, 'tracking')">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                            <div>
+                                <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Size %</span>
+                                <input type="number" value="${channel.tracking_position_size_pct || ''}" placeholder="—" min="0.1" max="100" step="0.1"
+                                       style="width: 100%; padding: 4px 6px; font-size: 11px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF; margin-top: 2px;"
+                                       onchange="updatePositionSize(${channel.id}, this.value, 'tracking')">
+                            </div>
+                            <div>
+                                <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Qty</span>
+                                <input type="number" value="${channel.tracking_default_quantity || ''}" placeholder="—" min="1" max="1000" step="1"
+                                       style="width: 100%; padding: 4px 6px; font-size: 11px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF; margin-top: 2px;"
+                                       onchange="updateTrackingDefaultQuantity(${channel.id}, this.value)">
+                            </div>
                         </div>
+                    </div>
+                </div>
+                
+                <!-- Max Position Size Row -->
+                <div style="background: rgba(139,161,199,0.04); padding: 8px 12px; border-top: 1px solid rgba(139,161,199,0.08);">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Max Position $</span>
+                        <input type="number" value="${channel.channel_max_position_size || ''}" placeholder="No limit" min="100" max="100000" step="100"
+                               style="width: 100px; padding: 4px 6px; font-size: 11px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
+                               onchange="updateChannelMaxPositionSize(${channel.id}, this.value)">
+                        <span style="font-size: 9px; color: #6B7A90; opacity: 0.7;">Caps calculated position size</span>
                     </div>
                 </div>
                 
@@ -1508,6 +1527,64 @@ async function updateDefaultQuantity(channelId, value) {
             showNotification(`Default quantity set to ${displayValue}`);
         } else {
             showNotification('Error updating default quantity', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function updateTrackingDefaultQuantity(channelId, value) {
+    try {
+        const trackingQuantity = value === '' ? null : parseInt(value);
+        
+        if (trackingQuantity !== null && (trackingQuantity < 1 || trackingQuantity > 1000)) {
+            showNotification('Tracking quantity must be between 1 and 1000', 'error');
+            await loadChannels();
+            return;
+        }
+        
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tracking_default_quantity: trackingQuantity })
+        });
+        
+        if (response.ok) {
+            const displayValue = trackingQuantity ? `${trackingQuantity}` : 'Auto';
+            showNotification(`Tracking quantity set to ${displayValue}`);
+        } else {
+            showNotification('Error updating tracking quantity', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function updateChannelMaxPositionSize(channelId, value) {
+    try {
+        const maxPosSize = value === '' ? null : parseFloat(value);
+        
+        if (maxPosSize !== null && (maxPosSize < 100 || maxPosSize > 100000)) {
+            showNotification('Max position size must be between $100 and $100,000', 'error');
+            await loadChannels();
+            return;
+        }
+        
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel_max_position_size: maxPosSize })
+        });
+        
+        if (response.ok) {
+            const displayValue = maxPosSize ? `$${maxPosSize.toLocaleString()}` : 'No limit';
+            showNotification(`Max position size set to ${displayValue}`);
+        } else {
+            showNotification('Error updating max position size', 'error');
             await loadChannels();
         }
     } catch (error) {

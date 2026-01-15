@@ -9096,11 +9096,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 # 6. Fallback to 1
                 channel_default_qty = channel_info.get('default_quantity') if channel_info else None
                 channel_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
+                channel_max_position_size = channel_info.get('channel_max_position_size') if channel_info else None
                 signal_qty = opt.get('qty')  # Quantity parsed from signal text
                 
                 # Store trader's original signal qty for proportional exit calculations
                 # This tracks what the TRADER sent, not what WE execute
                 opt['_trader_signal_qty'] = signal_qty if signal_qty else 1
+                
+                # Pass channel max position size to worker for capping
+                if channel_max_position_size:
+                    opt['_channel_max_position_size'] = float(channel_max_position_size)
+                    print(f"[POSITION SIZE] ✓ Channel max position size: ${channel_max_position_size}")
                 
                 if channel_default_qty:
                     # Channel fixed QTY takes highest priority - overrides signal quantity
@@ -9887,6 +9893,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         if buying_power > 0:
                             # Calculate position size in dollars based on percentage
                             position_dollars = (buying_power * position_size_pct) / 100
+                            
+                            # Apply channel-level max position size cap if set
+                            channel_max_pos_size = signal.get('_channel_max_position_size')
+                            if channel_max_pos_size and channel_max_pos_size > 0 and position_dollars > channel_max_pos_size:
+                                _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Capped by channel max: ${position_dollars:.0f} -> ${channel_max_pos_size:.0f}")
+                                position_dollars = channel_max_pos_size
                             
                             if signal['asset'] == 'option':
                                 # Options cost 100x the premium

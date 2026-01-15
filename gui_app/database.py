@@ -532,6 +532,15 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added enhanced risk columns: dynamic_sl, giveback_guard, giveback_pct, dynamic_sl_profile")
     
+    # Migrate: Add channel-level max position size for per-channel dollar cap
+    try:
+        cursor.execute('SELECT channel_max_position_size FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN channel_max_position_size REAL DEFAULT NULL')
+        cursor.execute('ALTER TABLE channels ADD COLUMN tracking_default_quantity INTEGER DEFAULT NULL')
+        conn.commit()
+        print("[DATABASE] ✓ Added channel_max_position_size and tracking_default_quantity columns")
+    
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -2301,7 +2310,7 @@ def update_channel(channel_id: int, **kwargs):
                    'paper_trade_enabled', 'profit_target_pct', 'profit_target_1_pct', 'profit_target_2_pct', 'profit_target_3_pct',
                    'profit_target_4_pct', 'profit_target_qty_1', 'profit_target_qty_2', 'profit_target_qty_3', 'profit_target_qty_4',
                    'stop_loss_pct', 'trailing_stop_pct', 'trailing_activation_pct', 'enabled_brokers', 'position_size_pct', 'tracking_position_size_pct',
-                   'default_quantity', 'risk_management_enabled', 'leave_runner_enabled', 'leave_runner_pct',
+                   'default_quantity', 'tracking_default_quantity', 'channel_max_position_size', 'risk_management_enabled', 'leave_runner_enabled', 'leave_runner_pct',
                    'trim_order_mode', 'trim_limit_offset', 'exit_strategy_mode', 'market', 'trade_summary_enabled',
                    'conditional_order_timeout_minutes', 'trigger_offset_percent', 'order_timeout_minutes',
                    'slippage_protection_enabled', 'slippage_max_pct', 'signal_update_automation', 'signal_update_automation_override',
