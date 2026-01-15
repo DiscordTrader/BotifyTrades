@@ -9061,36 +9061,51 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 print(f"[JACOB] ✓ Detected stock bracket order: {jacob_signal['ticker']} @ {jacob_signal['entry_price']}, SL={jacob_signal.get('stop_loss')}, Targets={jacob_signal.get('profit_targets')}")
         
         if opt:
-            # Apply tiered quantity defaults for BTO signals without qty from signal text
-            if opt.get('action') == 'BTO' and opt.get('qty') is None and not opt.get('_qty_from_signal', False):
-                # Tiered default priority:
-                # 1. Channel default_quantity (fixed contracts)
-                # 2. Channel position_size_pct (percentage-based sizing) - NEW: takes priority over global
-                # 3. Global global_default_quantity
-                # 4. Global max_position_size calculation (if enabled)
-                # 5. Fallback to 1
+            # Apply tiered quantity with CHANNEL SETTINGS TAKING PRIORITY over signal quantity
+            # This ensures channel configuration always controls sizing regardless of signal text
+            if opt.get('action') == 'BTO':
+                # PRIORITY ORDER (channel settings ALWAYS override signal quantity):
+                # 1. Channel default_quantity (fixed contracts) - HIGHEST PRIORITY
+                # 2. Channel position_size_pct (percentage-based sizing)
+                # 3. Signal quantity (from "BTO 20 SPY...") - only if no channel settings
+                # 4. Global global_default_quantity
+                # 5. Global max_position_size calculation (if enabled)
+                # 6. Fallback to 1
                 channel_default_qty = channel_info.get('default_quantity') if channel_info else None
                 channel_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
+                signal_qty = opt.get('qty')  # Quantity parsed from signal text
                 
                 if channel_default_qty:
+                    # Channel fixed QTY takes highest priority - overrides signal quantity
+                    old_qty = opt.get('qty')
                     opt['qty'] = int(channel_default_qty)
-                    print(f"[DEFAULT QTY] ✓ Using channel default: {opt['qty']} contracts")
+                    if old_qty and old_qty != opt['qty']:
+                        print(f"[POSITION SIZE] ✓ Channel QTY={opt['qty']} OVERRIDES signal qty={old_qty}")
+                    else:
+                        print(f"[POSITION SIZE] ✓ Using channel fixed QTY: {opt['qty']} contracts")
                 elif channel_position_size_pct:
-                    # Channel has percentage-based sizing - set flag for worker to calculate qty from buying power
+                    # Channel percentage-based sizing - overrides signal quantity
+                    old_qty = opt.get('qty')
                     opt['qty'] = 1  # Placeholder - will be recalculated by worker
                     opt['_position_size_pct'] = float(channel_position_size_pct)
                     opt['_calculate_qty'] = True  # Enable position sizing calculation in worker
                     opt['_pct_from_channel'] = True
-                    print(f"[DEFAULT QTY] ✓ Using channel position_size_pct: {channel_position_size_pct}% (will calculate from buying power)")
+                    if old_qty:
+                        print(f"[POSITION SIZE] ✓ Channel Size%={channel_position_size_pct}% OVERRIDES signal qty={old_qty}")
+                    else:
+                        print(f"[POSITION SIZE] ✓ Using channel position_size_pct: {channel_position_size_pct}% (will calculate from buying power)")
+                elif signal_qty:
+                    # No channel settings - use signal's quantity as-is
+                    print(f"[POSITION SIZE] ✓ Using signal quantity: {signal_qty} contracts (no channel override)")
                 else:
-                    # Check global default and max_position_size settings
+                    # No channel settings and no signal qty - use global defaults
                     _current_trading_settings = get_trading_settings()
                     global_default_qty = _current_trading_settings.get('global_default_quantity')
                     max_position_size_enabled = _current_trading_settings.get('max_position_size_enabled', True)
                     
                     if global_default_qty:
                         opt['qty'] = int(global_default_qty)
-                        print(f"[DEFAULT QTY] ✓ Using global default: {opt['qty']} contracts")
+                        print(f"[POSITION SIZE] ✓ Using global default: {opt['qty']} contracts")
                     elif max_position_size_enabled:
                         # Use max_position_size calculation only if enabled
                         max_position_size = _current_trading_settings['max_position_size']
@@ -9098,14 +9113,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         if price and price > 0:
                             actual_cost_per_contract = price * 100
                             opt['qty'] = max(1, int(max_position_size / actual_cost_per_contract))
-                            print(f"[DEFAULT QTY] ✓ Using max_position_size calculation: {opt['qty']} contracts (${max_position_size} / ${actual_cost_per_contract})")
+                            print(f"[POSITION SIZE] ✓ Using max_position_size calculation: {opt['qty']} contracts (${max_position_size} / ${actual_cost_per_contract})")
                         else:
                             opt['qty'] = 1
-                            print(f"[DEFAULT QTY] ✓ Fallback to 1 contract (no price available)")
+                            print(f"[POSITION SIZE] ✓ Fallback to 1 contract (no price available)")
                     else:
                         # Max position size disabled and no global default - fallback to 1
                         opt['qty'] = 1
-                        print(f"[DEFAULT QTY] ⚠️ Max position size disabled, no global default set - using 1 contract")
+                        print(f"[POSITION SIZE] ⚠️ Max position size disabled, no global default set - using 1 contract")
             
             # Handle price-only STC signals - find most recent open position from this channel
             if opt.get('_price_only') and opt.get('symbol') is None:

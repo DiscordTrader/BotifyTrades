@@ -36,6 +36,16 @@ Order-Level Deduplication prevents duplicate order execution at the worker level
 
 **Startup Settings Validation**: The settings validator runs at bot startup and flags CRITICAL issues: (1) channels with `execute_enabled=1` but no `enabled_brokers` assigned, (2) channels with `risk_management_enabled=1` but no `stop_loss_pct` configured. Trailing stops only work on the upside after profit thresholds are reached, so a stop loss is mandatory for downside protection.
 
+**Position Sizing Priority** (Channel settings ALWAYS override signal quantity):
+1. Channel QTY (fixed contracts) - HIGHEST PRIORITY
+2. Channel Size % (percentage-based sizing from buying power)
+3. Signal quantity (from "BTO 20 SPY...") - only used if no channel settings
+4. Global default_quantity
+5. Max position size calculation (if enabled)
+6. Fallback to 1 contract
+
+When both QTY and Size% are set on a channel, QTY takes priority (deterministic override). Example: Signal "BTO 20 SPY" with channel QTY=5 → executes 5 contracts. Signal "BTO 20 SPY" with channel Size%=30 → calculates qty from 30% of buying power.
+
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ. The License Validation System provides industry-standard license activation. The Discord bot runs in a dedicated thread. Broker credentials and all bot settings are GUI-manageable and stored in SQLite. Security features include admin password management, rate limiting on login attempts, session-based authentication, and local password recovery.
 
