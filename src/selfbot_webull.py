@@ -2581,10 +2581,21 @@ class WebullBroker:
         print(f"[SLIPPAGE] ❌ Canceling order - price never improved")
         return (SlippageDecision.ABORT, None)
     
-    async def place_option_order(self, action: str, qty: int, symbol: str,
-                                 strike: float, opt_type: str, expiry_mmdd: str,
-                                 limit_price: float, expiry_year: Optional[str] = None,
+    async def place_option_order(self, symbol: str = None, strike: float = None,
+                                 expiry: str = None, option_type: str = None,
+                                 action: str = None, quantity: int = None,
+                                 price: float = None,
+                                 # Legacy parameters for backwards compatibility
+                                 qty: int = None, opt_type: str = None, 
+                                 expiry_mmdd: str = None, limit_price: float = None,
+                                 expiry_year: Optional[str] = None,
                                  channel_id: Optional[str] = None, **kwargs) -> Dict[str, Any]:
+        # Handle both modern and legacy parameter naming
+        qty = quantity if quantity is not None else qty
+        opt_type = option_type if option_type is not None else opt_type
+        expiry_mmdd = expiry if expiry is not None else expiry_mmdd
+        limit_price = price if price is not None else limit_price
+        
         await self._ensure_login()
         
         # Log if using paper trading account (actual Webull paper API will be called)
