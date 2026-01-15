@@ -308,6 +308,35 @@ class DhanQBroker(BrokerInterface):
             print(f"[{self.name}] Error getting account info: {e}")
             return {}
     
+    async def get_account_balance(self) -> Dict[str, Any]:
+        """Get account balance for India Markets page - calls DhanQ fund limits API"""
+        if not self.access_token:
+            return {'available': 0, 'margin_used': 0, 'currency': self.CURRENCY}
+        
+        try:
+            print(f"[{self.name}] Fetching account balance from DhanQ API...")
+            fund_limits = await self._get_fund_limits()
+            
+            if fund_limits:
+                available = fund_limits.get('availabelBalance', 0)
+                margin_used = fund_limits.get('utilizedAmount', 0)
+                
+                print(f"[{self.name}] Balance fetched: available=₹{available}, margin_used=₹{margin_used}")
+                
+                return {
+                    'available': available,
+                    'margin_used': margin_used,
+                    'sod_limit': fund_limits.get('sodLimit', 0),
+                    'collateral_amount': fund_limits.get('collateralAmount', 0),
+                    'withdrawable_balance': fund_limits.get('withdrawableBalance', 0),
+                    'currency': self.CURRENCY
+                }
+            
+            return {'available': 0, 'margin_used': 0, 'currency': self.CURRENCY}
+        except Exception as e:
+            print(f"[{self.name}] Error getting account balance: {e}")
+            return {'available': 0, 'margin_used': 0, 'currency': self.CURRENCY}
+    
     async def get_positions(self) -> List[Dict[str, Any]]:
         """Get current positions"""
         if not self.access_token:

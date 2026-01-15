@@ -229,6 +229,36 @@ class ZerodhaBroker(BrokerInterface):
             print(f"[{self.name}] Error getting account info: {e}")
             return {}
     
+    async def get_account_balance(self) -> Dict[str, Any]:
+        """Get account balance for India Markets page - calls Zerodha margins API"""
+        if not self.kite:
+            return {'available': 0, 'margin_used': 0, 'currency': self.CURRENCY}
+        
+        try:
+            print(f"[{self.name}] Fetching account balance from Zerodha API...")
+            margins = await asyncio.to_thread(self.kite.margins)
+            
+            equity = margins.get('equity', {})
+            commodity = margins.get('commodity', {})
+            
+            available = equity.get('available', {}).get('cash', 0) + commodity.get('available', {}).get('cash', 0)
+            margin_used = equity.get('utilised', {}).get('debits', 0) + commodity.get('utilised', {}).get('debits', 0)
+            
+            print(f"[{self.name}] Balance fetched: available=₹{available}, margin_used=₹{margin_used}")
+            
+            return {
+                'available': available,
+                'margin_used': margin_used,
+                'equity_available': equity.get('available', {}).get('cash', 0),
+                'equity_net': equity.get('net', 0),
+                'commodity_available': commodity.get('available', {}).get('cash', 0),
+                'commodity_net': commodity.get('net', 0),
+                'currency': self.CURRENCY
+            }
+        except Exception as e:
+            print(f"[{self.name}] Error getting account balance: {e}")
+            return {'available': 0, 'margin_used': 0, 'currency': self.CURRENCY}
+    
     async def get_positions(self) -> List[Dict[str, Any]]:
         """Get current positions"""
         if not self.kite:

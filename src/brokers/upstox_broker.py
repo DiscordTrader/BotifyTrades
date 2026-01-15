@@ -360,6 +360,53 @@ class UpstoxBroker(BrokerInterface):
             print(f"[{self.name}] Error getting account info: {e}")
             return {'user_id': self.user_id, 'currency': self.CURRENCY}
     
+    async def get_account_balance(self) -> Dict[str, Any]:
+        """Get account balance for India Markets page - calls Upstox funds API"""
+        try:
+            access_token = self.config.get('access_token')
+            url = "https://api.upstox.com/v2/user/get-funds-and-margin"
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Accept': 'application/json'
+            }
+            
+            print(f"[{self.name}] Fetching account balance from Upstox API...")
+            response = await asyncio.to_thread(requests.get, url, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                print(f"[{self.name}] Funds API response status: {data.get('status')}")
+                
+                if data.get('status') == 'success':
+                    funds_data = data.get('data', {})
+                    equity = funds_data.get('equity', {})
+                    commodity = funds_data.get('commodity', {})
+                    
+                    available = equity.get('available_margin', 0) + commodity.get('available_margin', 0)
+                    margin_used = equity.get('used_margin', 0) + commodity.get('used_margin', 0)
+                    
+                    print(f"[{self.name}] Balance fetched: available=₹{available}, margin_used=₹{margin_used}")
+                    
+                    return {
+                        'available': available,
+                        'margin_used': margin_used,
+                        'equity_available': equity.get('available_margin', 0),
+                        'equity_used': equity.get('used_margin', 0),
+                        'commodity_available': commodity.get('available_margin', 0),
+                        'commodity_used': commodity.get('used_margin', 0),
+                        'payin_amount': equity.get('payin_amount', 0),
+                        'currency': self.CURRENCY
+                    }
+                else:
+                    print(f"[{self.name}] Funds API error: {data.get('errors', data.get('message', 'Unknown error'))}")
+            else:
+                print(f"[{self.name}] Funds API HTTP error: {response.status_code}")
+            
+            return {'available': 0, 'margin_used': 0, 'currency': self.CURRENCY}
+        except Exception as e:
+            print(f"[{self.name}] Error getting account balance: {e}")
+            return {'available': 0, 'margin_used': 0, 'currency': self.CURRENCY}
+    
     async def get_positions(self) -> List[Dict[str, Any]]:
         """Get current positions"""
         if not self.portfolio_api:

@@ -6658,7 +6658,7 @@
   },
   "ALPACA_PAPER_QQQ_626.0_2026-01-15_C": {
     "entry_price": 0.61,
-    "highest_price": 0.61,
+    "highest_price": 0.64,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
