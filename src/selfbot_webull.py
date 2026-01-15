@@ -9149,6 +9149,39 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         opt['qty'] = 1
                         print(f"[POSITION SIZE] ⚠️ Max position size disabled, no global default set - using 1 contract")
             
+            # PROPORTIONAL EXIT FOR STC: Calculate proportional exit qty based on trader's exit percentage
+            # This ensures we exit the same PERCENTAGE of our position as the trader does
+            if opt.get('action') == 'STC' and opt.get('symbol'):
+                trader_exit_qty = opt.get('qty')  # Trader's exit qty from signal
+                channel_id = str(message.channel.id)
+                
+                # Look up our open position to get our qty and trader's original signal qty
+                from gui_app.database import get_open_position_for_symbol
+                our_position = get_open_position_for_symbol(channel_id, opt['symbol'])
+                
+                if our_position and trader_exit_qty:
+                    our_remaining_qty = our_position.get('qty', 1)
+                    our_original_qty = our_position.get('original_qty', our_remaining_qty)
+                    trader_signal_qty = our_position.get('signal_qty', our_original_qty)
+                    
+                    if trader_signal_qty and trader_signal_qty > 0:
+                        import math
+                        # Calculate trader's exit percentage
+                        trader_exit_pct = trader_exit_qty / trader_signal_qty
+                        # Apply to our ORIGINAL position
+                        proportional_exit = math.ceil(our_original_qty * trader_exit_pct)
+                        # Cap at remaining qty
+                        actual_exit_qty = min(proportional_exit, our_remaining_qty)
+                        actual_exit_qty = max(1, actual_exit_qty) if our_remaining_qty > 0 else 0
+                        
+                        # Update the opt qty for broker execution
+                        opt['qty'] = actual_exit_qty
+                        opt['_proportional_exit'] = True
+                        opt['_trader_exit_qty'] = trader_exit_qty
+                        opt['_trader_signal_qty'] = trader_signal_qty
+                        
+                        print(f"[PROPORTIONAL EXIT] ✓ Trader exits {trader_exit_qty}/{trader_signal_qty} ({trader_exit_pct*100:.0f}%) → We exit {actual_exit_qty}/{our_remaining_qty} (of original {our_original_qty})")
+            
             # Handle price-only STC signals - find most recent open position from this channel
             if opt.get('_price_only') and opt.get('symbol') is None:
                 print(f"[STC] Price-only signal detected - looking up most recent open position for channel {message.channel.id}")

@@ -48,6 +48,12 @@ When both QTY and Size% are set on a channel, QTY takes priority (deterministic 
 
 **Proportional Exit Logic**: When traders post partial exit signals (STC for less than their full position), the bot calculates the proportional exit based on the trader's exit percentage. The `signal_qty` field tracks the trader's original quantity separately from the bot's executed quantity. Example: Trader enters 20 contracts → Bot executes 5. Trader exits 10 (50%) → Bot exits `ceil(5 * 0.5) = 3`. Trader exits 5 (25%) → Bot exits `ceil(5 * 0.25) = 2` (capped at remaining). This ensures accurate proportional exits without rounding drift across multiple partial closes.
 
+**Proportional Exit Architecture**: The proportional exit logic is implemented in TWO locations for complete coverage:
+1. **PNL Tracking** (line ~8148): Calculates accurate P&L with proportional exit quantities
+2. **Broker Execution** (line ~9155): Applies proportional exit to `opt['qty']` BEFORE queuing to ANY broker
+
+This ensures ALL brokers (current and future) and ALL channels automatically get proportional exits - it's broker-agnostic and channel-agnostic. The calculation uses `get_open_position_for_symbol()` which retrieves the `signal_qty` (trader's original), `original_qty` (our executed), and `remaining_qty` (what's left) to compute the correct proportional exit.
+
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ. The License Validation System provides industry-standard license activation. The Discord bot runs in a dedicated thread. Broker credentials and all bot settings are GUI-manageable and stored in SQLite. Security features include admin password management, rate limiting on login attempts, session-based authentication, and local password recovery.
 
