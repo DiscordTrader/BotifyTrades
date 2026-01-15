@@ -6406,7 +6406,7 @@
   },
   "ALPACA_PAPER_IWM_265.0_2026-01-15_C": {
     "entry_price": 0.47,
-    "highest_price": 0.74,
+    "highest_price": 0.79,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -6429,7 +6429,7 @@
     "entry_price": 0.2,
     "highest_price": 0.32,
     "trailing_activated": true,
-    "closing": true,
+    "closing": false,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -6439,16 +6439,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {
-      "cbd46403-2e0a-45d0-8bd4-5114544a1f95": {
-        "order_id": "cbd46403-2e0a-45d0-8bd4-5114544a1f95",
-        "tier": 1,
-        "qty_expected": 1,
-        "qty_filled": 0,
-        "status": "pending",
-        "created_at": "2026-01-15T15:09:16.266287"
-      }
-    },
+    "pending_orders": {},
     "created_at": "2026-01-15T14:58:27.268194",
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
@@ -6490,16 +6481,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {
-      "5853a4f8-9b8d-483a-ac79-6607e477c6e2": {
-        "order_id": "5853a4f8-9b8d-483a-ac79-6607e477c6e2",
-        "tier": 1,
-        "qty_expected": 15,
-        "qty_filled": 0,
-        "status": "pending",
-        "created_at": "2026-01-15T15:08:02.946359"
-      }
-    },
+    "pending_orders": {},
     "created_at": "2026-01-15T15:02:11.965437",
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
