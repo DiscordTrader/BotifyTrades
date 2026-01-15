@@ -5324,7 +5324,13 @@ class SelfClient(discord.Client):
                         'paper_trade': paper_mode
                     })
                     
-                    connected = await self.tastytrade_broker.connect()
+                    # Add timeout to prevent blocking
+                    try:
+                        connected = await asyncio.wait_for(self.tastytrade_broker.connect(), timeout=30.0)
+                    except asyncio.TimeoutError:
+                        _original_print("[TASTYTRADE] ⚠️ Connection timeout (30s) - broker skipped", flush=True)
+                        self.tastytrade_broker = None
+                        connected = False
                     if connected:
                         _original_print(f"[TASTYTRADE] ✓ Connected successfully ({mode_str})", flush=True)
                         _original_print(f"[TASTYTRADE]   Account #: {self.tastytrade_broker.account.account_number}", flush=True)
@@ -5391,7 +5397,14 @@ class SelfClient(discord.Client):
                         'totp_secret': rh_totp_secret
                     })
                     
-                    connected = await self.robinhood_broker.connect()
+                    # Add timeout to prevent blocking - Robinhood login can hang
+                    try:
+                        connected = await asyncio.wait_for(self.robinhood_broker.connect(), timeout=30.0)
+                    except asyncio.TimeoutError:
+                        _original_print("[ROBINHOOD] ⚠️ Connection timeout (30s) - broker skipped", flush=True)
+                        _original_print("[ROBINHOOD]   This may indicate 2FA required or network issues", flush=True)
+                        self.robinhood_broker = None
+                        connected = False
                     if connected:
                         _original_print(f"[ROBINHOOD] ✓ Connected successfully (LIVE)", flush=True)
                         try:
@@ -5444,7 +5457,13 @@ class SelfClient(discord.Client):
                     'paper_trade': ibkr_paper_mode
                 })
                 
-                connected = await self.ibkr_broker.connect()
+                # Add timeout - IBKR requires TWS/Gateway running
+                try:
+                    connected = await asyncio.wait_for(self.ibkr_broker.connect(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    _original_print("[IBKR] ⚠️ Connection timeout (15s) - TWS/Gateway may not be running", flush=True)
+                    self.ibkr_broker = None
+                    connected = False
                 if connected:
                     mode = "PAPER" if ibkr_paper_mode else "LIVE"
                     _original_print(f"[IBKR] ✓ Connected successfully ({mode})", flush=True)
@@ -5496,7 +5515,13 @@ class SelfClient(discord.Client):
                             'access_token': dhanq_access_token
                         })
                         
-                        connected = await self.dhanq_broker.connect()
+                        # Add timeout to prevent blocking
+                        try:
+                            connected = await asyncio.wait_for(self.dhanq_broker.connect(), timeout=15.0)
+                        except asyncio.TimeoutError:
+                            _original_print("[DHANQ] ⚠️ Connection timeout (15s) - broker skipped", flush=True)
+                            self.dhanq_broker = None
+                            connected = False
                         if connected:
                             _original_print(f"[DHANQ] ✓ Connected successfully (LIVE trading)", flush=True)
                             try:
@@ -5557,7 +5582,13 @@ class SelfClient(discord.Client):
                             'token_issued_at': token_issued_at
                         })
                         
-                        connected = await self.upstox_broker.connect()
+                        # Add timeout to prevent blocking
+                        try:
+                            connected = await asyncio.wait_for(self.upstox_broker.connect(), timeout=15.0)
+                        except asyncio.TimeoutError:
+                            _original_print("[UPSTOX] ⚠️ Connection timeout (15s) - broker skipped", flush=True)
+                            self.upstox_broker = None
+                            connected = False
                         if connected:
                             _original_print(f"[UPSTOX] ✓ Connected successfully (LIVE trading)", flush=True)
                             try:
@@ -5649,7 +5680,13 @@ class SelfClient(discord.Client):
                             'request_token': zerodha_request_token
                         })
                         
-                        connected = await self.zerodha_broker.connect()
+                        # Add timeout to prevent blocking
+                        try:
+                            connected = await asyncio.wait_for(self.zerodha_broker.connect(), timeout=15.0)
+                        except asyncio.TimeoutError:
+                            _original_print("[ZERODHA] ⚠️ Connection timeout (15s) - broker skipped", flush=True)
+                            self.zerodha_broker = None
+                            connected = False
                         if connected:
                             _original_print(f"[ZERODHA] ✓ Connected successfully (LIVE trading)", flush=True)
                             try:
@@ -5711,7 +5748,13 @@ class SelfClient(discord.Client):
                     'dry_run': schwab_creds.get('dry_run', True)
                 })
                 
-                connected = await self.schwab_broker.connect()
+                # Add timeout to prevent blocking
+                try:
+                    connected = await asyncio.wait_for(self.schwab_broker.connect(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    _original_print("[SCHWAB] ⚠️ Connection timeout (15s) - broker skipped", flush=True)
+                    self.schwab_broker = None
+                    connected = False
                 if connected:
                     mode = "PAPER" if schwab_creds.get('dry_run', True) else "LIVE"
                     _original_print(f"[SCHWAB] ✓ Connected successfully ({mode})", flush=True)
