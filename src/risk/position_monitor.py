@@ -683,35 +683,26 @@ class RiskManager:
         return risk_settings.enabled or channel_count > 0
     
     def _get_adaptive_interval(self) -> float:
-        """Get adaptive monitoring interval based on broker limits and market hours.
+        """Get monitoring interval - configurable via GUI settings.
         
-        Uses Service Orchestrator optimized intervals:
-        - Alpaca/IBKR/Schwab: 5s (high API limits)
-        - DhanQ: 8s
-        - Webull/Tastytrade/Questrade: 10s
-        - Robinhood: 20s (strict limits)
+        Priority:
+        1. GUI setting 'risk_check_interval_seconds' (if set)
+        2. Default 5 seconds for fast profit/SL locks
+        
+        Configure in Settings → Risk Management → Check Interval
+        Recommended: 3-5 seconds for active trading
         """
-        if not RATE_LIMIT_AVAILABLE or not get_rate_limit_manager:
-            return self.monitoring_interval
+        try:
+            from gui_app.database import get_setting
+            custom_interval = get_setting('risk_check_interval_seconds', None)
+            if custom_interval:
+                interval = float(custom_interval)
+                if 1 <= interval <= 60:
+                    return interval
+        except Exception:
+            pass
         
-        rate_manager = get_rate_limit_manager()
-        
-        active_brokers = []
-        if self.alpaca_broker:
-            active_brokers.append('alpaca')
-        if self.schwab_broker:
-            active_brokers.append('schwab')
-        if self.ibkr_broker:
-            active_brokers.append('ibkr')
-        if self.tastytrade_broker:
-            active_brokers.append('tastytrade')
-        if self.robinhood_broker:
-            active_brokers.append('robinhood')
-        active_brokers.append('webull')
-        
-        intervals = [rate_manager.get_recommended_interval(b, is_active=True) for b in active_brokers]
-        
-        return max(intervals) if intervals else self.monitoring_interval
+        return self.monitoring_interval
     
     async def _standby_cycle(self) -> None:
         """Standby cycle - process invalidations WITHOUT making broker API calls."""
