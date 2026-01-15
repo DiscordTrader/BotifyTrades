@@ -9422,6 +9422,7 @@ def get_open_position_for_symbol(channel_id: str, symbol: str) -> Optional[Dict]
             SELECT id, ticker as symbol, entry_price, 
                    COALESCE(remaining_qty, quantity, 1) as qty,
                    COALESCE(quantity, 1) as original_qty,
+                   COALESCE(signal_qty, quantity, 1) as signal_qty,
                    direction as call_put
             FROM signal_instances 
             WHERE ticker = ? 

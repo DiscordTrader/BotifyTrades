@@ -8135,18 +8135,30 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             if is_exit:
                                 # STC - Process partial or full exit and calculate PNL
                                 exit_price = parsed_signal.get('price', 0)
-                                exit_qty = parsed_signal.get('qty')
+                                exit_qty = parsed_signal.get('qty')  # Trader's exit qty from signal
                                 
                                 # Find open position for this symbol in this channel
                                 open_pos = get_open_position_for_symbol(channel_id, symbol)
                                 if open_pos:
                                     entry_price = open_pos.get('entry_price', 0)
-                                    remaining_qty = open_pos.get('qty', 1)
-                                    original_qty = open_pos.get('original_qty', remaining_qty)
+                                    remaining_qty = open_pos.get('qty', 1)  # OUR remaining position
+                                    original_qty = open_pos.get('original_qty', remaining_qty)  # OUR original position
+                                    trader_signal_qty = open_pos.get('signal_qty', original_qty)  # TRADER's original signal qty
                                     
-                                    # Determine exit quantity
-                                    actual_exit_qty = exit_qty if exit_qty else remaining_qty
-                                    actual_exit_qty = min(actual_exit_qty, remaining_qty)  # Can't exit more than we have
+                                    # PROPORTIONAL EXIT: Calculate based on trader's percentage
+                                    # If trader exits 10 of 20 (50%), we exit 50% of OUR position
+                                    if exit_qty and trader_signal_qty and trader_signal_qty > 0:
+                                        # Calculate trader's exit percentage
+                                        trader_exit_pct = exit_qty / trader_signal_qty
+                                        # Apply to our remaining position (round up to ensure we exit something)
+                                        actual_exit_qty = max(1, round(remaining_qty * trader_exit_pct))
+                                        # Cap at our remaining qty
+                                        actual_exit_qty = min(actual_exit_qty, remaining_qty)
+                                        print(f"[PROPORTIONAL EXIT] Trader exits {exit_qty}/{trader_signal_qty} ({trader_exit_pct*100:.0f}%) → We exit {actual_exit_qty}/{remaining_qty} contracts")
+                                    else:
+                                        # No exit qty specified - exit all
+                                        actual_exit_qty = exit_qty if exit_qty else remaining_qty
+                                        actual_exit_qty = min(actual_exit_qty, remaining_qty)
                                     
                                     # Calculate PNL for this exit
                                     pnl = (exit_price - entry_price) * actual_exit_qty * 100
@@ -9074,6 +9086,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 channel_default_qty = channel_info.get('default_quantity') if channel_info else None
                 channel_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
                 signal_qty = opt.get('qty')  # Quantity parsed from signal text
+                
+                # Store trader's original signal qty for proportional exit calculations
+                # This tracks what the TRADER sent, not what WE execute
+                opt['_trader_signal_qty'] = signal_qty if signal_qty else 1
                 
                 if channel_default_qty:
                     # Channel fixed QTY takes highest priority - overrides signal quantity
