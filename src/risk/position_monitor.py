@@ -24,6 +24,13 @@ from .position_cache import PositionCache
 from .tiered_targets import evaluate_tiered_targets, format_tier_reason, evaluate_channel_stop_loss
 from .global_risk import evaluate_global_risk, evaluate_price_based_stops
 from .trailing_stop import evaluate_trailing_stop, get_effective_trailing_settings
+from .risk_engine import (
+    evaluate_exit_actions, 
+    TradeState, 
+    RiskAction, 
+    ActionType,
+    DYNAMIC_SL_PROFILES
+)
 
 import threading
 
@@ -1171,7 +1178,7 @@ class RiskManager:
         channel_settings: Optional[ChannelRiskSettings],
         risk_settings: RiskSettings
     ) -> ExitDecision:
-        """Evaluate all exit conditions in priority order."""
+        """Evaluate all exit conditions in priority order including Enhanced Risk v2.0."""
         
         decision = evaluate_price_based_stops(position, cache)
         if decision.should_exit:
@@ -1187,6 +1194,11 @@ class RiskManager:
             if decision.should_exit:
                 decision.reason = format_tier_reason(decision, channel_settings.channel_name)
                 return decision
+        
+        if channel_settings and (channel_settings.enable_dynamic_sl or channel_settings.enable_giveback_guard):
+            engine_decision = self._evaluate_enhanced_risk(position, cache, channel_settings)
+            if engine_decision and engine_decision.should_exit:
+                return engine_decision
         
         trailing_pct, activation_pct, stop_pct = get_effective_trailing_settings(
             channel_settings, risk_settings, self.trailing_activation_pct
@@ -1213,6 +1225,60 @@ class RiskManager:
                 return decision
         
         return ExitDecision.no_exit()
+    
+    def _evaluate_enhanced_risk(
+        self,
+        position: PositionSnapshot,
+        cache: PositionCacheEntry,
+        channel_settings: ChannelRiskSettings
+    ) -> Optional[ExitDecision]:
+        """
+        Evaluate Enhanced Risk v2.0 features: Dynamic SL and Giveback Guard.
+        Updates cache state and returns exit decision if triggered.
+        """
+        state = TradeState(
+            entry_price=cache.entry_price,
+            current_price=position.current_price,
+            qty=int(position.quantity),
+            remaining_qty=int(position.quantity)
+        )
+        state.copy_from_cache(cache)
+        
+        actions, updated_state = evaluate_exit_actions(state, channel_settings, verbose=False)
+        
+        cache.max_pnl_seen = updated_state.max_pnl_seen
+        cache.dynamic_sl_price = updated_state.dynamic_sl_price
+        cache.giveback_guard_active = updated_state.giveback_guard_active
+        cache.last_evaluated_price = updated_state.last_evaluated_price
+        if updated_state.highest_price > cache.highest_price:
+            cache.highest_price = updated_state.highest_price
+        
+        for action in actions:
+            if action.action_type == ActionType.SELL_ALL:
+                channel_name = channel_settings.channel_name
+                if 'Dynamic SL' in action.reason:
+                    return ExitDecision.stop_loss(action.reason, action.qty, channel_name)
+                elif 'Giveback' in action.reason:
+                    return ExitDecision(
+                        should_exit=True,
+                        reason=f"GIVEBACK GUARD [{channel_name}] {action.reason}",
+                        exit_qty=action.qty,
+                        is_partial=False,
+                        risk_trigger='giveback_guard'
+                    )
+                else:
+                    return ExitDecision.stop_loss(action.reason, action.qty, channel_name)
+            
+            elif action.action_type == ActionType.MOVE_STOP and action.new_stop_price:
+                if cache.dynamic_sl_price is None or action.new_stop_price > cache.dynamic_sl_price:
+                    cache.dynamic_sl_price = action.new_stop_price
+                    print(f"[RISK] Dynamic SL escalated to ${action.new_stop_price:.2f} ({action.reason})")
+            
+            elif action.action_type == ActionType.ACTIVATE_GIVEBACK:
+                cache.giveback_guard_active = True
+                print(f"[RISK] Giveback Guard activated ({action.reason})")
+        
+        return None
     
     async def _execute_exit(
         self,
@@ -1547,7 +1613,7 @@ class RiskManager:
         channel_settings: Optional[ChannelRiskSettings],
         pct_change: float
     ) -> None:
-        """Log position monitoring status."""
+        """Log position monitoring status with Enhanced Risk v2.0 features."""
         pos_key = position.position_key
         current = position.current_price
         entry = cache.entry_price
@@ -1574,14 +1640,31 @@ class RiskManager:
                 else:
                     trailing_status = f" | [TRAIL] Ready to activate"
         
+        enhanced_status = ""
+        if channel_settings:
+            if channel_settings.enable_dynamic_sl:
+                if cache.dynamic_sl_price:
+                    dsl_pct = ((cache.dynamic_sl_price - entry) / entry) * 100
+                    enhanced_status += f" | [DYN-SL ✓] ${cache.dynamic_sl_price:.2f} (+{dsl_pct:.0f}%)"
+                else:
+                    enhanced_status += f" | [DYN-SL] {channel_settings.dynamic_sl_profile}"
+            
+            if channel_settings.enable_giveback_guard:
+                if cache.giveback_guard_active:
+                    max_pnl = cache.max_pnl_seen
+                    threshold = max_pnl * (1 - channel_settings.giveback_allowed_pct / 100)
+                    enhanced_status += f" | [GIVEBACK ✓] Max:{max_pnl:.0f}%, Exit@{threshold:.0f}%"
+                else:
+                    enhanced_status += f" | [GIVEBACK] {channel_settings.giveback_allowed_pct}% guard"
+        
         if sl_price or target_price:
             print(f"[RISK] [{channel_name}] {pos_key}: ${current:.2f} ({pct_change:+.2f}%) | "
-                  f"Entry: ${entry:.2f} | SL: ${sl_price or 'N/A'} | Target: ${target_price or 'N/A'} | Qty: {qty}{trailing_status}")
+                  f"Entry: ${entry:.2f} | SL: ${sl_price or 'N/A'} | Target: ${target_price or 'N/A'} | Qty: {qty}{trailing_status}{enhanced_status}")
         elif channel_settings:
             print(f"[RISK] [{channel_name}] {pos_key}: ${current:.2f} ({pct_change:+.2f}%) | "
                   f"Entry: ${entry:.2f} | Targets: {channel_settings.profit_target_1_pct}/"
                   f"{channel_settings.profit_target_2_pct}/{channel_settings.profit_target_3_pct}% | "
-                  f"SL: {channel_settings.stop_loss_pct}% | Trail: {trailing_pct}%@{activation_pct}% | Qty: {qty}{trailing_status}")
+                  f"SL: {channel_settings.stop_loss_pct}% | Trail: {trailing_pct}%@{activation_pct}% | Qty: {qty}{trailing_status}{enhanced_status}")
         else:
             print(f"[RISK] [Global] {pos_key}: ${current:.2f} ({pct_change:+.2f}%) | "
                   f"Entry: ${entry:.2f} | Qty: {qty}{trailing_status}")
