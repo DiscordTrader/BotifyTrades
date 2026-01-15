@@ -9967,7 +9967,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 # Webull uses: action, qty, symbol, strike, opt_type, expiry_mmdd, limit_price
                 # Indian brokers (Upstox, Zerodha, DhanQ) use Webull-style + lots parameter
                 broker_upper = broker_name.upper()
-                uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE'])
+                uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'WEBULL'])
                 india_brokers = ['UPSTOX', 'ZERODHA', 'DHANQ']
                 
                 _original_print(f"[{broker_name}] Placing option order: {signal['action']} {signal['qty']} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @ ${signal.get('price')}")
