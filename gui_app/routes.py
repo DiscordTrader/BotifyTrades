@@ -17185,11 +17185,13 @@ def register_routes(app):
         if not stored:
             return None, f'{broker_name.title()} credentials not configured'
         
+        creds = stored.get('credentials', {}) or {}
+        
         try:
             if broker_name == 'zerodha':
-                api_key = stored.get('api_key', '')
-                api_secret = stored.get('api_secret', '')
-                access_token = stored.get('access_token', '')
+                api_key = creds.get('api_key', '') or stored.get('api_key', '')
+                api_secret = creds.get('api_secret', '') or stored.get('api_secret', '')
+                access_token = creds.get('access_token', '') or stored.get('access_token', '')
                 
                 if not api_key or not access_token:
                     return None, 'Zerodha: Missing API key or access token. Please reconnect.'
@@ -17209,9 +17211,9 @@ def register_routes(app):
                 return broker, None
                 
             elif broker_name == 'upstox':
-                access_token = stored.get('access_token', '')
+                access_token = creds.get('access_token', '') or stored.get('access_token', '')
                 if not access_token:
-                    return None, 'Upstox: Missing access token. Please reconnect.'
+                    return None, 'Upstox: Missing access token. Please reconnect via Settings → Brokers → Upstox.'
                 
                 from src.brokers.upstox_broker import UpstoxBroker
                 broker = UpstoxBroker({'access_token': access_token})
@@ -17224,8 +17226,8 @@ def register_routes(app):
                 return broker, None
                 
             elif broker_name == 'dhanq':
-                client_id = stored.get('client_id', '')
-                access_token = stored.get('access_token', '')
+                client_id = creds.get('client_id', '') or stored.get('client_id', '')
+                access_token = creds.get('access_token', '') or stored.get('access_token', '')
                 if not client_id or not access_token:
                     return None, 'DhanQ: Missing client ID or access token. Please reconnect.'
                 
