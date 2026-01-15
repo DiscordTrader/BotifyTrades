@@ -46,6 +46,8 @@ Order-Level Deduplication prevents duplicate order execution at the worker level
 
 When both QTY and Size% are set on a channel, QTY takes priority (deterministic override). Example: Signal "BTO 20 SPY" with channel QTY=5 → executes 5 contracts. Signal "BTO 20 SPY" with channel Size%=30 → calculates qty from 30% of buying power.
 
+**Proportional Exit Logic**: When traders post partial exit signals (STC for less than their full position), the bot calculates the proportional exit based on the trader's exit percentage. The `signal_qty` field tracks the trader's original quantity separately from the bot's executed quantity. Example: Trader enters 20 contracts → Bot executes 5. Trader exits 10 (50%) → Bot exits `ceil(5 * 0.5) = 3`. Trader exits 5 (25%) → Bot exits `ceil(5 * 0.25) = 2` (capped at remaining). This ensures accurate proportional exits without rounding drift across multiple partial closes.
+
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ. The License Validation System provides industry-standard license activation. The Discord bot runs in a dedicated thread. Broker credentials and all bot settings are GUI-manageable and stored in SQLite. Security features include admin password management, rate limiting on login attempts, session-based authentication, and local password recovery.
 
