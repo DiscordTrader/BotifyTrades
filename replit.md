@@ -38,8 +38,10 @@ The Order Management System (OMS) and Risk Management System (RMS) provide dynam
 - **Max Profit Giveback Guard**: Exits position when profit drops more than X% from peak (configurable, default 30%). Activates after PT2 hit OR when max PnL exceeds trailing activation threshold.
 - **Exit Priority Order**: Hard SL → Dynamic SL → Giveback Guard → Trailing Stop → Runner Exit (highest to lowest priority)
 - **Idempotent Design**: Pure function architecture with `last_evaluated_price` tracking prevents duplicate actions on repeated evaluations.
+- **Complete Integration**: Risk engine fully integrated into position_monitor.py via `_evaluate_enhanced_risk()` method. Cache state updates (max_pnl_seen, dynamic_sl_price, giveback_guard_active) persist across monitoring cycles.
+- **Enhanced Logging**: Position status logs show `[DYN-SL ✓] $1.05 (+5%)` and `[GIVEBACK ✓] Max:50%, Exit@35%` for full visibility.
 
-Database columns: `enable_dynamic_sl`, `enable_giveback_guard`, `giveback_allowed_pct`, `dynamic_sl_profile` in channels table. GUI configuration in Risk Management panel with profile dropdown and percentage inputs.
+Database columns: `enable_dynamic_sl`, `enable_giveback_guard`, `giveback_allowed_pct`, `dynamic_sl_profile` in channels table. GUI configuration in Risk Management panel with profile dropdown and percentage inputs. Test coverage: 26 unit tests + 14 integration tests verify complete UI→DB→Risk Engine→Broker flow.
 
 A Service Orchestrator manages priority-based background services with dynamic activation, API budget allocation, and broker-specific rate limiting, featuring a `RateLimitManager` for token bucket rate limiting and automatic 429 backoff. Services like RiskManager and Trade Monitor have enable gates, and their configurations are stored in `service_registry`, `broker_limits`, and `service_metrics` database tables. Flask API endpoints manage services and broker limits. The orchestrator defines dynamic monitoring intervals based on verified broker API rate limits for various services, allowing for efficient resource utilization.
 

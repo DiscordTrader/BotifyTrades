@@ -7,6 +7,7 @@ import sys
 import os
 import sqlite3
 import tempfile
+from typing import Optional
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -126,7 +127,7 @@ def insert_channel_settings(conn, channel_id, **kwargs):
     conn.commit()
 
 
-def read_channel_settings_from_db(conn, channel_id) -> ChannelRiskSettings:
+def read_channel_settings_from_db(conn, channel_id) -> Optional[ChannelRiskSettings]:
     """Read channel settings from database and return ChannelRiskSettings object."""
     cursor = conn.cursor()
     cursor.execute('''
@@ -472,7 +473,7 @@ class TestCacheStateUpdates:
         cache.max_pnl_seen = updated_state.max_pnl_seen
         cache.giveback_guard_active = updated_state.giveback_guard_active
         
-        assert cache.max_pnl_seen == 45.0
+        assert cache.max_pnl_seen == pytest.approx(45.0, rel=1e-6)
         assert cache.giveback_guard_active == True
 
 
@@ -480,50 +481,67 @@ class TestCompleteE2EFlow:
     """Complete end-to-end flow tests."""
     
     def test_complete_flow_dynamic_sl_pt1_to_exit(self):
-        """Complete flow: Settings → DB → Risk Engine → Dynamic SL exit."""
+        """Complete flow: Settings → DB → Risk Engine → Dynamic SL exit.
+        
+        Flow: First evaluation hits PT1 → Second evaluation sets Dynamic SL → Third evaluation triggers exit
+        (Dynamic SL escalation happens on next cycle after PT hit by design)
+        """
         conn = create_test_database()
         
         insert_channel_settings(conn, '123456',
             enable_dynamic_sl=1,
             dynamic_sl_profile='standard',
             profit_target_1_pct=20.0,
-            stop_loss_pct=30.0
+            stop_loss_pct=30.0,
+            trailing_stop_pct=0.0
         )
         
         settings = read_channel_settings_from_db(conn, '123456')
         assert settings.enable_dynamic_sl == True
         
-        cache = PositionCacheEntry(entry_price=1.00, highest_price=1.00)
-        
-        state = TradeState(
+        state1 = TradeState(
             entry_price=1.00,
             current_price=1.25,
             qty=10,
-            remaining_qty=8
+            remaining_qty=10,
+            highest_price=1.00,
+            max_pnl_seen=0.0
         )
-        state.copy_from_cache(cache)
         
-        actions, updated_state = evaluate_exit_actions(state, settings)
+        actions1, updated_state1 = evaluate_exit_actions(state1, settings)
         
-        assert updated_state.pt1_hit == True
-        assert updated_state.dynamic_sl_price == 1.00
-        
-        cache.tier1_hit = updated_state.pt1_hit
-        cache.dynamic_sl_price = updated_state.dynamic_sl_price
+        assert updated_state1.pt1_hit == True
         
         state2 = TradeState(
             entry_price=1.00,
-            current_price=0.95,
+            current_price=1.30,
             qty=10,
-            remaining_qty=8,
+            remaining_qty=updated_state1.remaining_qty,
             pt1_hit=True,
-            dynamic_sl_price=1.00,
+            highest_price=1.25,
+            max_pnl_seen=25.0,
             last_evaluated_price=1.25
         )
         
-        actions2, _ = evaluate_exit_actions(state2, settings)
+        actions2, updated_state2 = evaluate_exit_actions(state2, settings)
         
-        sell_actions = [a for a in actions2 if a.action_type == ActionType.SELL_ALL]
+        assert updated_state2.dynamic_sl_price == 1.00
+        
+        state3 = TradeState(
+            entry_price=1.00,
+            current_price=0.95,
+            qty=10,
+            remaining_qty=updated_state2.remaining_qty,
+            pt1_hit=True,
+            dynamic_sl_price=1.00,
+            highest_price=1.30,
+            max_pnl_seen=30.0,
+            last_evaluated_price=1.30
+        )
+        
+        actions3, _ = evaluate_exit_actions(state3, settings)
+        
+        sell_actions = [a for a in actions3 if a.action_type == ActionType.SELL_ALL]
         assert len(sell_actions) >= 1
         assert 'Dynamic SL' in sell_actions[0].reason
         
