@@ -722,6 +722,15 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Trailing stop state columns added (trailing_activated, highest_price, trailing_activated_at)")
     
+    # Migration: Add hide_in_ui column for hiding trades from UI
+    try:
+        cursor.execute('SELECT hide_in_ui FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding hide_in_ui column to trades table...")
+        cursor.execute("ALTER TABLE trades ADD COLUMN hide_in_ui INTEGER DEFAULT 0")
+        conn.commit()
+        print("[DATABASE] ✓ Hide in UI column added")
+    
     # Signals table (all signals received, including tracked ones)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS signals (
@@ -9630,6 +9639,8 @@ def init_conditional_orders_table():
         ('target_ranges', 'TEXT'),
         ('partial_exit_plan', 'TEXT'),
         ('linked_message_ids', 'TEXT'),
+        ('trailing_activation_pct', 'REAL DEFAULT 0'),
+        ('trailing_stop_pct', 'REAL DEFAULT 0'),
     ]
     for col_name, col_type in extended_columns:
         try:
