@@ -8146,15 +8146,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     trader_signal_qty = open_pos.get('signal_qty', original_qty)  # TRADER's original signal qty
                                     
                                     # PROPORTIONAL EXIT: Calculate based on trader's percentage
-                                    # If trader exits 10 of 20 (50%), we exit 50% of OUR position
+                                    # If trader exits 10 of 20 (50%), we exit 50% of OUR ORIGINAL position
+                                    # Use original_qty (not remaining_qty) to avoid rounding drift across multiple exits
                                     if exit_qty and trader_signal_qty and trader_signal_qty > 0:
                                         # Calculate trader's exit percentage
                                         trader_exit_pct = exit_qty / trader_signal_qty
-                                        # Apply to our remaining position (round up to ensure we exit something)
-                                        actual_exit_qty = max(1, round(remaining_qty * trader_exit_pct))
-                                        # Cap at our remaining qty
-                                        actual_exit_qty = min(actual_exit_qty, remaining_qty)
-                                        print(f"[PROPORTIONAL EXIT] Trader exits {exit_qty}/{trader_signal_qty} ({trader_exit_pct*100:.0f}%) → We exit {actual_exit_qty}/{remaining_qty} contracts")
+                                        # Apply to our ORIGINAL position to calculate target exit
+                                        # Use ceiling for better proportional coverage (exit 3 of 5 for 50% instead of 2)
+                                        import math
+                                        proportional_exit = math.ceil(original_qty * trader_exit_pct)
+                                        # But cap at remaining qty (can't exit more than we have left)
+                                        actual_exit_qty = min(proportional_exit, remaining_qty)
+                                        # Ensure at least 1 if we have any remaining
+                                        actual_exit_qty = max(1, actual_exit_qty) if remaining_qty > 0 else 0
+                                        print(f"[PROPORTIONAL EXIT] Trader exits {exit_qty}/{trader_signal_qty} ({trader_exit_pct*100:.0f}%) → We exit {actual_exit_qty}/{remaining_qty} (of original {original_qty})")
                                     else:
                                         # No exit qty specified - exit all
                                         actual_exit_qty = exit_qty if exit_qty else remaining_qty
@@ -8269,6 +8274,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 qty = parsed_signal.get('qty', 1) or 1
                                 
                                 # Create signal instance for tracking with quantity
+                                # signal_qty = trader's original qty (used for proportional exits)
                                 instance_id = create_signal_instance(
                                     channel_id=channel_id,
                                     ticker=symbol,
@@ -8276,7 +8282,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     direction='BTO',
                                     quantity=qty,
                                     author_name=author_name,
-                                    message_id=str(message.id)
+                                    message_id=str(message.id),
+                                    signal_qty=qty  # Store trader's original qty for proportional exit calculations
                                 )
                                 if instance_id:
                                     print(f"[PNL TRACK] ✓ Opened {symbol} @ ${entry_price:.2f} x{qty} (instance #{instance_id})")
@@ -8753,6 +8760,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         return
                     
                     # New signal - create instance and proceed
+                    bullwinkle_qty = bullwinkle_signal.get('qty', 1) or 1
                     instance_id = create_signal_instance(
                         channel_id=str(message.channel.id),
                         ticker=symbol,
@@ -8763,11 +8771,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         message_id=str(message.id),
                         stop_loss=None,
                         profit_targets=[],
-                        ttl_hours=24
+                        ttl_hours=24,
+                        signal_qty=bullwinkle_qty  # Store trader's original qty for proportional exits
                     )
                     
                     if instance_id:
-                        print(f"[DEDUPE] ✓ New Bullwinkle signal instance: {symbol} {strike} @ {entry_price} (ID: {instance_id})")
+                        print(f"[DEDUPE] ✓ New Bullwinkle signal instance: {symbol} {strike} @ {entry_price} x{bullwinkle_qty} (ID: {instance_id})")
                         bullwinkle_opt = bullwinkle_signal
                     else:
                         print(f"[DEDUPE] ⚠️ Failed to create instance for {symbol} - may be duplicate")
@@ -8825,6 +8834,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     return
                 
                 # New signal - create instance and proceed
+                trade_idea_qty = trade_idea.get('qty', 1) or 1
                 instance_id = create_signal_instance(
                     channel_id=str(message.channel.id),
                     ticker=ticker,
@@ -8835,11 +8845,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     message_id=str(message.id),
                     stop_loss=stop_loss,
                     profit_targets=profit_targets,
-                    ttl_hours=24
+                    ttl_hours=24,
+                    signal_qty=trade_idea_qty  # Store trader's original qty for proportional exits
                 )
                 
                 if instance_id:
-                    print(f"[DEDUPE] ✓ New signal instance created: {ticker} @ {entry_price} (ID: {instance_id})")
+                    print(f"[DEDUPE] ✓ New signal instance created: {ticker} @ {entry_price} x{trade_idea_qty} (ID: {instance_id})")
                     # Convert to stock signal format for processing
                     india_stock_signal = trade_idea
                     # Add bracket order fields for execution (SL/PT from signal)
