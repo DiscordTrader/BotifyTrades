@@ -7788,15 +7788,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 is_bto_stc_signal = is_bto_stc_signal or is_bishop_signal
                 
                 # DUAL-ACTION ROUTING: Check if we should execute on broker AND/OR forward to webhook
-                should_execute = False
+                # IMPORTANT: Channel execution (execute_enabled from Channels page) is INDEPENDENT of
+                # mapping execution (execute_on_source from Mapping page). Execute if EITHER is enabled.
+                should_execute = execute_enabled  # Start with channel's execute_enabled setting
                 should_forward = True  # Default behavior
                 format_as_bto_stc = True  # Default behavior
                 
                 if mapping_config:
-                    should_execute = mapping_config.get('execute_on_source', False)
+                    # Mapping's execute_on_source is ADDITIONAL - execute if mapping also wants execution
+                    mapping_execute = mapping_config.get('execute_on_source', False)
+                    should_execute = execute_enabled or mapping_execute  # Execute if EITHER is enabled
                     should_forward = mapping_config.get('forward_enabled', True)
                     format_as_bto_stc = mapping_config.get('format_as_bto_stc', True)
-                    print(f"[DUAL-ACTION] Config: execute={should_execute}, forward={should_forward}, bto_stc={format_as_bto_stc}")
+                    print(f"[DUAL-ACTION] Config: channel_execute={execute_enabled}, mapping_execute={mapping_execute}, combined={should_execute}, forward={should_forward}, bto_stc={format_as_bto_stc}")
                 
                 # Check for Bullwinkle format (needs emoji stripping)
                 from src.signals.parser import (
