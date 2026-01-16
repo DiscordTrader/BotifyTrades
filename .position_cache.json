@@ -6952,7 +6952,7 @@
   },
   "ALPACA_PAPER_SMCI_32.5_2026-01-23_C": {
     "entry_price": 0.91,
-    "highest_price": 1.06,
+    "highest_price": 1.14,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
