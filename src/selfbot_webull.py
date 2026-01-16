@@ -7621,6 +7621,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if self.sentiment_analyzer and not message.author.bot:
             self.sentiment_analyzer.add_message(message.content)
         
+        # FORWARD DEDUPE: Check if message was forwarded by BotifyTrades to prevent double execution
+        # Messages forwarded by this bot contain a hidden marker: ║FWD:source_channel_id║
+        # We skip EXECUTION for forwarded messages but still allow TRACKING
+        FORWARD_MARKER_PATTERN = r'║FWD:(\d+)║$'
+        is_forwarded_message = False
+        forward_source_channel = None
+        import re
+        forward_match = re.search(FORWARD_MARKER_PATTERN, message.content)
+        if forward_match:
+            is_forwarded_message = True
+            forward_source_channel = forward_match.group(1)
+            print(f"[DEDUPE] ⚠️ Forwarded message detected (source: {forward_source_channel}) - will TRACK but NOT EXECUTE")
+        
         # Handle webhook messages - conditionally allow based on ALLOW_SELF_MESSAGES setting
         # When ALLOW_SELF_MESSAGES is True, webhook messages from monitored channels are processed
         # This enables testing via webhooks and automation while still preventing Trade Monitor loops
@@ -7675,6 +7688,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         combined_content = message.content
         if embed_content_parts:
             combined_content = message.content + "\n" + "\n".join(embed_content_parts)
+        
+        # Strip forward marker from combined_content before parsing to ensure accurate signal detection
+        # The marker format is: ║FWD:source_channel_id║
+        if is_forwarded_message:
+            combined_content = re.sub(FORWARD_MARKER_PATTERN, '', combined_content).strip()
         if ALLOWED_AUTHOR_IDS and message.author.id not in ALLOWED_AUTHOR_IDS:
             print(f"[SKIP] Author {message.author.id} not in allowed list")
             return
@@ -7801,6 +7819,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     should_forward = mapping_config.get('forward_enabled', True)
                     format_as_bto_stc = mapping_config.get('format_as_bto_stc', True)
                     print(f"[DUAL-ACTION] Config: channel_execute={execute_enabled}, mapping_execute={mapping_execute}, combined={should_execute}, forward={should_forward}, bto_stc={format_as_bto_stc}")
+                
+                # DEDUPE: If this is a forwarded message, skip execution to prevent double trades
+                # Tracking (PNL) still happens, but broker execution is blocked
+                if is_forwarded_message and should_execute:
+                    print(f"[DEDUPE] ⚠️ BLOCKING execution for forwarded message (source: {forward_source_channel}) - will still track for PNL")
+                    should_execute = False
                 
                 # Check for Bullwinkle format (needs emoji stripping)
                 from src.signals.parser import (
@@ -7984,15 +8008,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             forward_msg = message.content.strip()
                         
                         try:
+                            # Add forward source marker to prevent double execution in destination
+                            # Format: ║FWD:source_channel_id║ (at end of message)
+                            source_channel_id = str(message.channel.id)
+                            forward_marker = f" ║FWD:{source_channel_id}║"
+                            forward_msg_with_marker = forward_msg + forward_marker
+                            
                             if is_webhook_dest:
                                 # Forward to webhook URL
                                 import aiohttp
                                 webhook_url = target_execution_channel_id
                                 print(f"[DEBUG] Posting to webhook: {webhook_url[:50]}...")
                                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
-                                    async with session.post(webhook_url, json={"content": forward_msg}) as resp:
+                                    async with session.post(webhook_url, json={"content": forward_msg_with_marker}) as resp:
                                         if resp.status in [200, 204]:
-                                            print(f"[CHANNEL MAP] ✓ Forwarded BTO/STC signal to webhook")
+                                            print(f"[CHANNEL MAP] ✓ Forwarded BTO/STC signal to webhook (with dedupe marker)")
                                         else:
                                             print(f"[CHANNEL MAP] ⚠️ Webhook returned status {resp.status}")
                             elif is_channel_dest:
@@ -8004,8 +8034,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         dest_channel = await self.fetch_channel(int(dest_channel_id))
                                     
                                     if dest_channel:
-                                        await dest_channel.send(forward_msg)
-                                        print(f"[CHANNEL MAP] ✓ Forwarded BTO/STC signal to channel {dest_channel_id}")
+                                        await dest_channel.send(forward_msg_with_marker)
+                                        print(f"[CHANNEL MAP] ✓ Forwarded BTO/STC signal to channel {dest_channel_id} (with dedupe marker)")
                                     else:
                                         print(f"[CHANNEL MAP] ❌ Could not find destination channel {dest_channel_id}")
                                 except Exception as ch_err:
