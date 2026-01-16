@@ -3833,7 +3833,15 @@ def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = No
             el.signal_detected_at, el.latency_total_ms,
             el.analyst_entry_qty, el.sizing_mode,
             c.name as channel_name,
-            COALESCE(sl.author_name, sig.author_name) as author_name,
+            COALESCE(
+                sl.author_name, 
+                sig.author_name,
+                (SELECT s2.author_name FROM signals s2 
+                 WHERE s2.discord_channel_id = ec.channel_id 
+                 AND s2.symbol = el.symbol 
+                 AND s2.signal_type = 'BTO'
+                 ORDER BY s2.created_at DESC LIMIT 1)
+            ) as author_name,
             el.signal_lot_id
         FROM execution_closures ec
         JOIN execution_lots el ON ec.execution_lot_id = el.id
@@ -3854,8 +3862,15 @@ def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = No
         query += ' AND ec.filled_at >= datetime("now", ?)'
         params.append(f'-{days} days')
     if user:
-        query += ' AND COALESCE(sl.author_name, sig.author_name) LIKE ?'
-        params.append(f'%{user}%')
+        query += ''' AND (
+            sl.author_name LIKE ? OR sig.author_name LIKE ? OR 
+            EXISTS (SELECT 1 FROM signals s2 
+                    WHERE s2.discord_channel_id = ec.channel_id 
+                    AND s2.symbol = el.symbol 
+                    AND s2.signal_type = 'BTO'
+                    AND s2.author_name LIKE ?)
+        )'''
+        params.extend([f'%{user}%', f'%{user}%', f'%{user}%'])
     if exit_source:
         query += ' AND ec.exit_source = ?'
         params.append(exit_source)

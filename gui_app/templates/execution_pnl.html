@@ -88,6 +88,7 @@
             </select>
             
             <select id="filter-days" onchange="loadExecutionPnl()" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-darker); color: var(--text-primary); font-size: 13px;">
+                <option value="1">Today</option>
                 <option value="7">Last 7 Days</option>
                 <option value="30" selected>Last 30 Days</option>
                 <option value="90">Last 90 Days</option>
@@ -120,6 +121,7 @@
         
         <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
             <select id="signal-filter-days" onchange="loadSignalSummary()" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-darker); color: var(--text-primary); font-size: 13px;">
+                <option value="1">Today</option>
                 <option value="7">Last 7 Days</option>
                 <option value="30" selected>Last 30 Days</option>
                 <option value="90">Last 90 Days</option>
