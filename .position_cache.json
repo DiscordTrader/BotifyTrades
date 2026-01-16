@@ -6880,20 +6880,53 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {
-      "9e42be3e-4e84-4ac2-8ed2-289c76254a4e": {
-        "order_id": "9e42be3e-4e84-4ac2-8ed2-289c76254a4e",
-        "tier": 1,
-        "qty_expected": 2,
-        "qty_filled": 0,
-        "status": "pending",
-        "created_at": "2026-01-16T16:32:46.836074"
-      }
-    },
+    "pending_orders": {},
     "created_at": "2026-01-16T16:16:25.880793",
     "max_pnl_seen": 72.85714285714286,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
     "last_evaluated_price": 1.12
+  },
+  "ALPACA_PAPER_PLTR_275.0_2026-01-16_C": {
+    "entry_price": 0.55,
+    "highest_price": 0.0,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "PLTR260116C00275000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-16T16:38:42.178570",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
+  },
+  "ALPACA_PAPER_PLTR_175.0_2026-01-16_C": {
+    "entry_price": 0.7,
+    "highest_price": 0.81,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "PLTR260116C00175000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-16T16:39:43.516862",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   }
 }

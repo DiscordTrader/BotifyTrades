@@ -11707,6 +11707,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             }
                                             trade_id = db.add_trade(trade_data)
                                             _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
+                                            
+                                            # Update signal_lot with actual executed quantity for PNL tracking
+                                            if executed_qty and executed_qty != signal.get('qty', 1):
+                                                db.update_signal_lot_executed_qty(
+                                                    message_id=str(signal.get('message_id', '')),
+                                                    executed_qty=executed_qty,
+                                                    channel_id=channel_id_str
+                                                )
                                 else:
                                     # Single broker execution - use executed_qty from response
                                     executed_qty = resp.get('executed_qty', signal['qty'])
@@ -11731,6 +11739,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     }
                                     trade_id = db.add_trade(trade_data)
                                     _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
+                                    
+                                    # Update signal_lot with actual executed quantity for PNL tracking
+                                    if executed_qty and executed_qty != signal.get('qty', 1):
+                                        db.update_signal_lot_executed_qty(
+                                            message_id=str(signal.get('message_id', '')),
+                                            executed_qty=executed_qty,
+                                            channel_id=channel_id_str
+                                        )
                             
                             elif signal['action'] == 'STC':
                                 # Handle STC trades - especially for risk management exits

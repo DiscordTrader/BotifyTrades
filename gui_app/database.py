@@ -3738,6 +3738,84 @@ def update_execution_lot_remaining(lot_id: int, remaining_qty: int, status: str)
         return False
 
 
+def update_signal_lot_executed_qty(signal_id: int = None, message_id: str = None, executed_qty: int = None, channel_id: str = None):
+    """
+    Update signal_lots original_qty with the actual executed quantity after position sizing.
+    This ensures PNL tracking reflects the real executed quantity, not the signal's parsed quantity.
+    
+    Args:
+        signal_id: The signal ID linked to the lot
+        message_id: The Discord message ID (alternative lookup)
+        executed_qty: The actual executed quantity from broker
+        channel_id: The Discord channel ID for additional filtering
+    
+    Returns:
+        bool: True if updated successfully, False otherwise
+    """
+    if not executed_qty or executed_qty <= 0:
+        return False
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Try to find and update by signal_id first
+        if signal_id:
+            cursor.execute('''
+                UPDATE signal_lots 
+                SET original_qty = ?, remaining_qty = ?
+                WHERE signal_id = ? AND status = 'OPEN'
+            ''', (executed_qty, executed_qty, signal_id))
+            
+            if cursor.rowcount > 0:
+                conn.commit()
+                print(f"[DATABASE] ✓ Updated signal_lot qty to {executed_qty} (signal_id={signal_id})")
+                return True
+        
+        # Fallback: Try to find by message_id via signals table
+        if message_id:
+            cursor.execute('''
+                UPDATE signal_lots 
+                SET original_qty = ?, remaining_qty = ?
+                WHERE signal_id IN (
+                    SELECT id FROM signals WHERE message_id = ?
+                ) AND status = 'OPEN'
+            ''', (executed_qty, executed_qty, str(message_id)))
+            
+            if cursor.rowcount > 0:
+                conn.commit()
+                print(f"[DATABASE] ✓ Updated signal_lot qty to {executed_qty} (message_id={message_id})")
+                return True
+        
+        # Last resort: Find most recent OPEN lot for this channel within last minute
+        if channel_id:
+            cursor.execute('''
+                UPDATE signal_lots 
+                SET original_qty = ?, remaining_qty = ?
+                WHERE id = (
+                    SELECT sl.id FROM signal_lots sl
+                    JOIN channels c ON sl.channel_id = c.id
+                    WHERE c.discord_channel_id = ? 
+                    AND sl.status = 'OPEN'
+                    AND sl.opened_at >= datetime('now', '-1 minute')
+                    ORDER BY sl.opened_at DESC
+                    LIMIT 1
+                )
+            ''', (executed_qty, executed_qty, str(channel_id)))
+            
+            if cursor.rowcount > 0:
+                conn.commit()
+                print(f"[DATABASE] ✓ Updated recent signal_lot qty to {executed_qty} (channel_id={channel_id})")
+                return True
+        
+        print(f"[DATABASE] ⚠️ No matching signal_lot found to update qty")
+        return False
+        
+    except Exception as e:
+        print(f"[DATABASE] Error updating signal_lot executed qty: {e}")
+        return False
+
+
 def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = None, limit: int = 100, user: str = None, exit_source: str = None):
     """Get execution-based P&L with optional filtering including channel names and author info"""
     conn = get_connection()
