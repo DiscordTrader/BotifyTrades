@@ -6133,7 +6133,7 @@
   },
   "ALPACA_PAPER_QNCX_7.5_2026-03-20_C": {
     "entry_price": 0.85,
-    "highest_price": 0.9,
+    "highest_price": 1.05,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -6145,12 +6145,21 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {},
+    "pending_orders": {
+      "fc1ccdb5-3395-443c-b30b-2ed1ea6eb84e": {
+        "order_id": "fc1ccdb5-3395-443c-b30b-2ed1ea6eb84e",
+        "tier": 1,
+        "qty_expected": 9,
+        "qty_filled": 0,
+        "status": "pending",
+        "created_at": "2026-01-16T14:44:07.878482"
+      }
+    },
     "created_at": "2026-01-14T16:02:25.983830",
-    "max_pnl_seen": 0.0,
+    "max_pnl_seen": 23.52941176470589,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.85
+    "last_evaluated_price": 1.05
   },
   "ALPACA_PAPER_PG_147.0_2026-01-16_C": {
     "entry_price": 0.89,
@@ -6742,7 +6751,7 @@
   },
   "ALPACA_PAPER_SPY_695.0_2026-01-16_C": {
     "entry_price": 0.56,
-    "highest_price": 0.63,
+    "highest_price": 0.75,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -6756,6 +6765,27 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-15T20:25:20.132155",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
+  },
+  "ALPACA_PAPER_TSLA_442.5_2026-01-16_C": {
+    "entry_price": 2.56,
+    "highest_price": 3.1,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "TSLA260116C00442500",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-16T14:33:26.326334",
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
