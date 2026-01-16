@@ -6933,7 +6933,7 @@
     "entry_price": 0.11,
     "highest_price": 0.1,
     "trailing_activated": false,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,

@@ -3837,7 +3837,8 @@ def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = No
                 sl.author_name, 
                 sig.author_name,
                 (SELECT s2.author_name FROM signals s2 
-                 WHERE s2.channel_id = ec.channel_id 
+                 JOIN channels ch ON s2.channel_id = ch.id
+                 WHERE ch.discord_channel_id = ec.channel_id 
                  AND s2.symbol = el.symbol 
                  AND s2.direction = 'BTO'
                  ORDER BY s2.received_at DESC LIMIT 1)
@@ -3865,7 +3866,8 @@ def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = No
         query += ''' AND (
             sl.author_name LIKE ? OR sig.author_name LIKE ? OR 
             EXISTS (SELECT 1 FROM signals s2 
-                    WHERE s2.channel_id = ec.channel_id 
+                    JOIN channels ch ON s2.channel_id = ch.id
+                    WHERE ch.discord_channel_id = ec.channel_id 
                     AND s2.symbol = el.symbol 
                     AND s2.direction = 'BTO'
                     AND s2.author_name LIKE ?)
