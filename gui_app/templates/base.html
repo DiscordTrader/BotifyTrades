@@ -106,7 +106,7 @@
             </div>
 
             <div class="nav-dropdown">
-                <button class="nav-dropdown-btn {% if request.path in ['/settings', '/architecture', '/license', '/health', '/telegram', '/brokers'] %}active{% endif %}">
+                <button class="nav-dropdown-btn {% if request.path in ['/settings', '/architecture', '/license', '/health', '/telegram', '/brokers', '/admin/signal-routing'] %}active{% endif %}">
                     Admin
                     <span class="dropdown-arrow">▼</span>
                 </button>
@@ -141,6 +141,13 @@
                         <span class="dropdown-text">Docs</span>
                         <span class="dropdown-desc">Documentation</span>
                     </a>
+                    {% if config.get('BUILD_TYPE') == 'ADMIN' %}
+                    <a href="/admin/signal-routing" class="dropdown-item {% if request.path == '/admin/signal-routing' %}active{% endif %}">
+                        <span class="dropdown-icon">🔀</span>
+                        <span class="dropdown-text">Signal Routing</span>
+                        <span class="dropdown-desc">Source-to-destination mappings</span>
+                    </a>
+                    {% endif %}
                 </div>
             </div>
         </div>
