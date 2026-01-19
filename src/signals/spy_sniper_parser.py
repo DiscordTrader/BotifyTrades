@@ -94,7 +94,15 @@ FULL_EXIT_PHRASES = [
 
 
 def is_spy_sniper_signal(embed_title: Optional[str], embed_description: Optional[str] = None) -> bool:
-    """Check if embed is a spy-sniper trading signal."""
+    """
+    Check if embed is a valid spy-sniper trading signal.
+    
+    Returns True ONLY if:
+    1. Title contains 'open alert', 'trim alert', or 'close alert'
+    2. Description contains a valid option pattern (e.g., SPY 1/16 691P)
+    
+    This prevents forwarding @everyone posts, charts, or other non-trade content.
+    """
     if not embed_title:
         return False
     
@@ -102,7 +110,17 @@ def is_spy_sniper_signal(embed_title: Optional[str], embed_description: Optional
     
     signal_titles = ['open alert', 'trim alert', 'close alert']
     
-    return any(sig in title_lower for sig in signal_titles)
+    if not any(sig in title_lower for sig in signal_titles):
+        return False
+    
+    if not embed_description:
+        return False
+    
+    option_match = OPTION_PATTERN.search(embed_description)
+    if not option_match:
+        return False
+    
+    return True
 
 
 def detect_signal_type(embed_title: Optional[str], embed_description: Optional[str] = None) -> SpySniperSignalType:

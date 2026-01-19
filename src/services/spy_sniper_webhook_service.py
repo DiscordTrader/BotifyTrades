@@ -193,12 +193,22 @@ class SpySniperWebhookService:
         return result
     
     async def _forward_to_webhook(self, result: Dict[str, Any]):
-        """Forward the formatted signal to webhook."""
+        """Forward the formatted signal to webhook. Only forwards valid BTO/STC signals."""
         if not self.config.webhook_url:
             return
         
         formatted_msg = result.get('formatted_message', '')
         if not formatted_msg:
+            print("[SPY-SNIPER] ⏭️ No formatted message to forward")
+            return
+        
+        action = result.get('action', '')
+        if action not in ('BTO', 'STC'):
+            print(f"[SPY-SNIPER] ⏭️ Invalid action '{action}' - only BTO/STC forwarded")
+            return
+        
+        if not (formatted_msg.startswith('BTO ') or formatted_msg.startswith('STC ')):
+            print(f"[SPY-SNIPER] ⏭️ Message doesn't start with BTO/STC - not forwarding")
             return
         
         try:
