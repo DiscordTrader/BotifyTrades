@@ -1,0 +1,715 @@
+{% extends "base.html" %}
+
+{% block title %}Signal Routing (Admin){% endblock %}
+
+{% block extra_css %}
+<style>
+    :root {
+        --mint: #0FF0B3;
+        --violet: #7C3AED;
+        --charcoal: #0E1117;
+        --card-bg: rgba(20, 24, 33, 0.85);
+        --card-border: rgba(255, 255, 255, 0.08);
+        --text-primary: #FFFFFF;
+        --text-secondary: rgba(255, 255, 255, 0.6);
+        --text-muted: rgba(255, 255, 255, 0.4);
+        --success: #10B981;
+        --warning: #F59E0B;
+        --danger: #EF4444;
+    }
+
+    .routing-container {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 0 20px;
+    }
+
+    .page-header {
+        text-align: center;
+        margin-bottom: 40px;
+        padding: 30px 0;
+    }
+
+    .page-header h1 {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 2.5rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, var(--violet) 0%, var(--mint) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 10px;
+    }
+
+    .page-header .admin-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, var(--violet), #9333EA);
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-left: 10px;
+        vertical-align: middle;
+    }
+
+    .page-header p {
+        color: var(--text-secondary);
+        font-size: 1.1rem;
+    }
+
+    .tabs-container {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 30px;
+        justify-content: center;
+    }
+
+    .tab-btn {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        color: var(--text-secondary);
+        padding: 12px 24px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+
+    .tab-btn:hover {
+        border-color: var(--violet);
+        color: var(--text-primary);
+    }
+
+    .tab-btn.active {
+        background: linear-gradient(135deg, var(--violet), #9333EA);
+        color: white;
+        border-color: var(--violet);
+    }
+
+    .tab-content {
+        display: none;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+
+    .card {
+        background: var(--card-bg);
+        backdrop-filter: blur(20px);
+        border: 1px solid var(--card-border);
+        border-radius: 20px;
+        padding: 30px;
+        margin-bottom: 20px;
+    }
+
+    .card h3 {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.3rem;
+        color: var(--mint);
+        margin-bottom: 25px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        display: block;
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        margin-bottom: 8px;
+        font-weight: 500;
+    }
+
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: 12px 16px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--card-border);
+        border-radius: 10px;
+        color: var(--text-primary);
+        font-size: 0.95rem;
+        transition: all 0.3s ease;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+        outline: none;
+        border-color: var(--mint);
+        box-shadow: 0 0 0 3px rgba(15, 240, 179, 0.1);
+    }
+
+    .btn {
+        padding: 12px 24px;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border: none;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, var(--mint), #06B6D4);
+        color: var(--charcoal);
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 30px rgba(15, 240, 179, 0.3);
+    }
+
+    .btn-danger {
+        background: linear-gradient(135deg, var(--danger), #DC2626);
+        color: white;
+    }
+
+    .btn-sm {
+        padding: 8px 16px;
+        font-size: 0.85rem;
+    }
+
+    .mappings-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0 10px;
+    }
+
+    .mappings-table th {
+        text-align: left;
+        padding: 12px 16px;
+        color: var(--text-secondary);
+        font-weight: 500;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .mappings-table td {
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.02);
+        border-top: 1px solid var(--card-border);
+        border-bottom: 1px solid var(--card-border);
+    }
+
+    .mappings-table td:first-child {
+        border-left: 1px solid var(--card-border);
+        border-radius: 10px 0 0 10px;
+    }
+
+    .mappings-table td:last-child {
+        border-right: 1px solid var(--card-border);
+        border-radius: 0 10px 10px 0;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .status-badge.active {
+        background: rgba(16, 185, 129, 0.2);
+        color: var(--success);
+    }
+
+    .status-badge.inactive {
+        background: rgba(239, 68, 68, 0.2);
+        color: var(--danger);
+    }
+
+    .positions-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 20px;
+    }
+
+    .position-card {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--card-border);
+        border-radius: 15px;
+        padding: 20px;
+        transition: all 0.3s ease;
+    }
+
+    .position-card:hover {
+        border-color: var(--mint);
+        transform: translateY(-2px);
+    }
+
+    .position-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+
+    .position-symbol {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .position-details {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .position-detail {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .position-detail .label {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+    }
+
+    .position-detail .value {
+        font-size: 0.95rem;
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    .pnl-positive { color: var(--success) !important; }
+    .pnl-negative { color: var(--danger) !important; }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--text-secondary);
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
+
+    .risk-settings {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 15px;
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid var(--card-border);
+    }
+
+    .toggle-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .toggle {
+        position: relative;
+        width: 50px;
+        height: 26px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 13px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .toggle.active {
+        background: var(--mint);
+    }
+
+    .toggle::after {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 20px;
+        height: 20px;
+        background: white;
+        border-radius: 50%;
+        transition: all 0.3s ease;
+    }
+
+    .toggle.active::after {
+        left: 27px;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="routing-container">
+    <div class="page-header">
+        <h1>Signal Routing <span class="admin-badge">ADMIN</span></h1>
+        <p>Configure source-to-destination channel mappings with real-time position monitoring</p>
+    </div>
+
+    <div class="tabs-container">
+        <button class="tab-btn active" data-tab="mappings">
+            <i class="fas fa-route"></i> Mappings
+        </button>
+        <button class="tab-btn" data-tab="positions">
+            <i class="fas fa-chart-line"></i> Live Positions
+        </button>
+        <button class="tab-btn" data-tab="pnl">
+            <i class="fas fa-dollar-sign"></i> P&L Summary
+        </button>
+    </div>
+
+    <div id="mappings-tab" class="tab-content active">
+        <div class="card">
+            <h3><i class="fas fa-plus-circle"></i> Add New Mapping</h3>
+            <form id="add-mapping-form">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Mapping Name</label>
+                        <input type="text" id="mapping-name" placeholder="e.g., Spy-Sniper Alerts" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Source Channel ID</label>
+                        <input type="text" id="source-channel-id" placeholder="Discord Channel ID" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Source Channel Name</label>
+                        <input type="text" id="source-channel-name" placeholder="Channel name (optional)">
+                    </div>
+                    <div class="form-group">
+                        <label>Destination Type</label>
+                        <select id="destination-type" required>
+                            <option value="webhook">Webhook URL</option>
+                            <option value="channel">Discord Channel</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="webhook-url-group">
+                        <label>Webhook URL</label>
+                        <input type="url" id="destination-url" placeholder="https://discord.com/api/webhooks/...">
+                    </div>
+                    <div class="form-group" id="dest-channel-group" style="display:none;">
+                        <label>Destination Channel ID</label>
+                        <input type="text" id="destination-channel-id" placeholder="Discord Channel ID">
+                    </div>
+                    <div class="form-group">
+                        <label>Default Quantity</label>
+                        <input type="number" id="default-quantity" value="1" min="1">
+                    </div>
+                </div>
+
+                <div class="risk-settings">
+                    <div class="toggle-container">
+                        <div class="toggle active" id="toggle-forwarding"></div>
+                        <label>Enable Forwarding</label>
+                    </div>
+                    <div class="toggle-container">
+                        <div class="toggle" id="toggle-execution"></div>
+                        <label>Enable Execution</label>
+                    </div>
+                    <div class="toggle-container">
+                        <div class="toggle active" id="toggle-risk"></div>
+                        <label>Risk Management</label>
+                    </div>
+                    <div class="toggle-container">
+                        <div class="toggle active" id="toggle-monitor"></div>
+                        <label>Price Monitor</label>
+                    </div>
+                </div>
+
+                <div class="form-grid" style="margin-top: 20px;">
+                    <div class="form-group">
+                        <label>Stop Loss %</label>
+                        <input type="number" id="stop-loss-pct" value="25" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>PT1 %</label>
+                        <input type="number" id="pt1-pct" value="25" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>PT2 %</label>
+                        <input type="number" id="pt2-pct" value="50" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>PT3 %</label>
+                        <input type="number" id="pt3-pct" value="75" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>PT4 %</label>
+                        <input type="number" id="pt4-pct" value="100" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>Trailing Stop %</label>
+                        <input type="number" id="trailing-stop-pct" value="0" step="0.1">
+                    </div>
+                </div>
+
+                <div style="margin-top: 25px; text-align: right;">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Mapping
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <h3><i class="fas fa-list"></i> Active Mappings</h3>
+            <table class="mappings-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Source</th>
+                        <th>Destination</th>
+                        <th>Settings</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="mappings-tbody">
+                    <tr>
+                        <td colspan="6" class="empty-state">
+                            <i class="fas fa-route"></i>
+                            <p>No mappings configured yet</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="positions-tab" class="tab-content">
+        <div class="card">
+            <h3><i class="fas fa-chart-line"></i> Live Positions</h3>
+            <div id="positions-grid" class="positions-grid">
+                <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <p>No active positions from signal routing</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="pnl-tab" class="tab-content">
+        <div class="card">
+            <h3><i class="fas fa-calculator"></i> P&L Summary</h3>
+            <div id="pnl-summary">
+                <div class="empty-state">
+                    <i class="fas fa-chart-pie"></i>
+                    <p>P&L data will appear after trades are closed</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            tabContents.forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById(btn.dataset.tab + '-tab').classList.add('active');
+
+            if (btn.dataset.tab === 'positions') {
+                loadPositions();
+            }
+        });
+    });
+
+    const destType = document.getElementById('destination-type');
+    destType.addEventListener('change', () => {
+        document.getElementById('webhook-url-group').style.display = 
+            destType.value === 'webhook' ? 'block' : 'none';
+        document.getElementById('dest-channel-group').style.display = 
+            destType.value === 'channel' ? 'block' : 'none';
+    });
+
+    document.querySelectorAll('.toggle').forEach(toggle => {
+        toggle.addEventListener('click', () => {
+            toggle.classList.toggle('active');
+        });
+    });
+
+    document.getElementById('add-mapping-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const data = {
+            name: document.getElementById('mapping-name').value,
+            source_channel_id: document.getElementById('source-channel-id').value,
+            source_channel_name: document.getElementById('source-channel-name').value,
+            destination_type: document.getElementById('destination-type').value,
+            destination_url: document.getElementById('destination-url').value,
+            destination_channel_id: document.getElementById('destination-channel-id').value,
+            default_quantity: parseInt(document.getElementById('default-quantity').value) || 1,
+            enable_forwarding: document.getElementById('toggle-forwarding').classList.contains('active'),
+            enable_execution: document.getElementById('toggle-execution').classList.contains('active'),
+            enable_risk_management: document.getElementById('toggle-risk').classList.contains('active'),
+            price_monitor_enabled: document.getElementById('toggle-monitor').classList.contains('active'),
+            stop_loss_pct: parseFloat(document.getElementById('stop-loss-pct').value) || 25,
+            pt1_pct: parseFloat(document.getElementById('pt1-pct').value) || 25,
+            pt2_pct: parseFloat(document.getElementById('pt2-pct').value) || 50,
+            pt3_pct: parseFloat(document.getElementById('pt3-pct').value) || 75,
+            pt4_pct: parseFloat(document.getElementById('pt4-pct').value) || 100,
+            trailing_stop_pct: parseFloat(document.getElementById('trailing-stop-pct').value) || 0
+        };
+
+        try {
+            const resp = await fetch('/api/admin/signal-routing', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await resp.json();
+            
+            if (result.success) {
+                alert('Mapping created successfully!');
+                document.getElementById('add-mapping-form').reset();
+                loadMappings();
+            } else {
+                alert('Error: ' + result.error);
+            }
+        } catch (err) {
+            alert('Error creating mapping: ' + err.message);
+        }
+    });
+
+    async function loadMappings() {
+        try {
+            const resp = await fetch('/api/admin/signal-routing');
+            const result = await resp.json();
+            
+            if (result.success && result.mappings.length > 0) {
+                const tbody = document.getElementById('mappings-tbody');
+                tbody.innerHTML = result.mappings.map(m => `
+                    <tr data-id="${m.id}">
+                        <td><strong>${m.name}</strong></td>
+                        <td>
+                            <span style="color: var(--text-muted); font-size: 0.85rem;">
+                                ${m.source_channel_name || m.source_channel_id}
+                            </span>
+                        </td>
+                        <td>
+                            ${m.destination_type === 'webhook' 
+                                ? '<i class="fas fa-link"></i> Webhook' 
+                                : '<i class="fab fa-discord"></i> ' + (m.destination_channel_name || m.destination_channel_id)}
+                        </td>
+                        <td>
+                            <span style="font-size: 0.85rem;">
+                                ${m.enable_forwarding ? '✓ Fwd' : ''} 
+                                ${m.enable_execution ? '✓ Exec' : ''} 
+                                ${m.enable_risk_management ? '✓ Risk' : ''}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="status-badge ${m.enabled ? 'active' : 'inactive'}">
+                                <i class="fas fa-circle" style="font-size: 8px;"></i>
+                                ${m.enabled ? 'Active' : 'Inactive'}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn btn-sm" onclick="toggleMapping(${m.id}, ${!m.enabled})">
+                                    ${m.enabled ? 'Disable' : 'Enable'}
+                                </button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteMapping(${m.id})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        } catch (err) {
+            console.error('Error loading mappings:', err);
+        }
+    }
+
+    async function loadPositions() {
+        try {
+            const resp = await fetch('/api/admin/signal-routing/positions');
+            const result = await resp.json();
+            
+            if (result.success && result.positions.length > 0) {
+                const grid = document.getElementById('positions-grid');
+                grid.innerHTML = result.positions.map(p => `
+                    <div class="position-card">
+                        <div class="position-header">
+                            <span class="position-symbol">${p.symbol} ${p.expiry} ${p.strike}${p.option_type}</span>
+                            <span class="status-badge active">${p.status}</span>
+                        </div>
+                        <div class="position-details">
+                            <div class="position-detail">
+                                <span class="label">Entry</span>
+                                <span class="value">$${p.entry_price.toFixed(2)}</span>
+                            </div>
+                            <div class="position-detail">
+                                <span class="label">Current</span>
+                                <span class="value">$${p.current_price.toFixed(2)}</span>
+                            </div>
+                            <div class="position-detail">
+                                <span class="label">Qty</span>
+                                <span class="value">${p.remaining_qty}/${p.entry_qty}</span>
+                            </div>
+                            <div class="position-detail">
+                                <span class="label">P&L</span>
+                                <span class="value ${p.unrealized_pnl_pct >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                                    ${p.unrealized_pnl_pct >= 0 ? '+' : ''}${p.unrealized_pnl_pct.toFixed(1)}% 
+                                    ($${p.unrealized_pnl_dollar.toFixed(2)})
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        } catch (err) {
+            console.error('Error loading positions:', err);
+        }
+    }
+
+    window.toggleMapping = async function(id, enabled) {
+        try {
+            const resp = await fetch(`/api/admin/signal-routing/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: enabled ? 1 : 0 })
+            });
+            if ((await resp.json()).success) loadMappings();
+        } catch (err) {
+            alert('Error updating mapping');
+        }
+    };
+
+    window.deleteMapping = async function(id) {
+        if (!confirm('Delete this mapping?')) return;
+        try {
+            const resp = await fetch(`/api/admin/signal-routing/${id}`, { method: 'DELETE' });
+            if ((await resp.json()).success) loadMappings();
+        } catch (err) {
+            alert('Error deleting mapping');
+        }
+    };
+
+    loadMappings();
+});
+</script>
+{% endblock %}

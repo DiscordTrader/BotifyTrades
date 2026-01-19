@@ -1727,6 +1727,17 @@ def register_routes(app):
         response.headers['Expires'] = '0'
         return response
     
+    @app.route('/admin/signal-routing')
+    @login_required
+    @admin_feature_required
+    def signal_routing():
+        """Admin-only Signal Routing page - source to destination channel mappings"""
+        response = make_response(render_template('signal_routing.html'))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    
     @app.route('/telegram')
     @login_required
     def telegram():
@@ -1938,6 +1949,154 @@ def register_routes(app):
                 return jsonify({'success': False, 'error': 'User not found in allowed list'}), 404
         except Exception as e:
             return jsonify({'error': str(e)}), 500
+    
+    # ============ SIGNAL ROUTING API (Admin Only) ============
+    
+    @app.route('/api/admin/signal-routing', methods=['GET'])
+    @login_required
+    @admin_feature_required
+    def api_get_signal_routing_mappings():
+        """Get all signal routing mappings (admin only)"""
+        try:
+            enabled_only = request.args.get('enabled_only', 'false').lower() == 'true'
+            mappings = db.get_signal_routing_mappings(enabled_only=enabled_only)
+            return jsonify({'success': True, 'mappings': mappings})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/signal-routing', methods=['POST'])
+    @login_required
+    @admin_feature_required
+    def api_create_signal_routing_mapping():
+        """Create a new signal routing mapping (admin only)"""
+        try:
+            data = request.json
+            
+            required = ['name', 'source_channel_id', 'destination_type']
+            for field in required:
+                if not data.get(field):
+                    return jsonify({'success': False, 'error': f'Missing required field: {field}'}), 400
+            
+            if data['destination_type'] == 'webhook' and not data.get('destination_url'):
+                return jsonify({'success': False, 'error': 'Webhook URL required for webhook destination'}), 400
+            if data['destination_type'] == 'channel' and not data.get('destination_channel_id'):
+                return jsonify({'success': False, 'error': 'Destination channel ID required for channel destination'}), 400
+            
+            mapping_id = db.create_signal_routing_mapping(
+                name=data['name'],
+                source_channel_id=data['source_channel_id'],
+                destination_type=data['destination_type'],
+                source_channel_name=data.get('source_channel_name'),
+                destination_url=data.get('destination_url'),
+                destination_channel_id=data.get('destination_channel_id'),
+                destination_channel_name=data.get('destination_channel_name'),
+                broker_id=data.get('broker_id'),
+                account_id=data.get('account_id'),
+                default_quantity=data.get('default_quantity', 1),
+                default_dollar_amount=data.get('default_dollar_amount'),
+                enable_execution=data.get('enable_execution', False),
+                enable_forwarding=data.get('enable_forwarding', True),
+                enable_risk_management=data.get('enable_risk_management', True),
+                stop_loss_pct=data.get('stop_loss_pct', 25.0),
+                pt1_pct=data.get('pt1_pct', 25.0),
+                pt2_pct=data.get('pt2_pct', 50.0),
+                pt3_pct=data.get('pt3_pct', 75.0),
+                pt4_pct=data.get('pt4_pct', 100.0),
+                trailing_stop_pct=data.get('trailing_stop_pct', 0.0),
+                trailing_activation_pct=data.get('trailing_activation_pct', 15.0),
+                price_monitor_enabled=data.get('price_monitor_enabled', True),
+                price_monitor_interval_seconds=data.get('price_monitor_interval_seconds', 5)
+            )
+            
+            if mapping_id:
+                return jsonify({'success': True, 'mapping_id': mapping_id})
+            else:
+                return jsonify({'success': False, 'error': 'Source channel already has a mapping'}), 400
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/signal-routing/<int:mapping_id>', methods=['GET'])
+    @login_required
+    @admin_feature_required
+    def api_get_signal_routing_mapping(mapping_id):
+        """Get a single signal routing mapping (admin only)"""
+        try:
+            mapping = db.get_signal_routing_mapping(mapping_id)
+            if mapping:
+                return jsonify({'success': True, 'mapping': mapping})
+            else:
+                return jsonify({'success': False, 'error': 'Mapping not found'}), 404
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/signal-routing/<int:mapping_id>', methods=['PUT'])
+    @login_required
+    @admin_feature_required
+    def api_update_signal_routing_mapping(mapping_id):
+        """Update a signal routing mapping (admin only)"""
+        try:
+            data = request.json
+            success = db.update_signal_routing_mapping(mapping_id, **data)
+            if success:
+                return jsonify({'success': True, 'message': 'Mapping updated'})
+            else:
+                return jsonify({'success': False, 'error': 'Mapping not found or no changes'}), 404
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/signal-routing/<int:mapping_id>', methods=['DELETE'])
+    @login_required
+    @admin_feature_required
+    def api_delete_signal_routing_mapping(mapping_id):
+        """Delete a signal routing mapping (admin only)"""
+        try:
+            success = db.delete_signal_routing_mapping(mapping_id)
+            if success:
+                return jsonify({'success': True, 'message': 'Mapping deleted'})
+            else:
+                return jsonify({'success': False, 'error': 'Mapping not found'}), 404
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/signal-routing/positions', methods=['GET'])
+    @login_required
+    @admin_feature_required
+    def api_get_routing_positions():
+        """Get all positions tracked by signal routing mappings (admin only)"""
+        try:
+            from src.services.position_ledger import get_position_ledger
+            ledger = get_position_ledger()
+            positions = ledger.get_open_positions()
+            
+            positions_data = []
+            for pos in positions:
+                pnl_dollar, pnl_pct = ledger.calculate_running_pnl(pos)
+                positions_data.append({
+                    'id': pos.id,
+                    'option_key': pos.option_key,
+                    'symbol': pos.symbol,
+                    'expiry': pos.expiry,
+                    'strike': pos.strike,
+                    'option_type': pos.option_type,
+                    'channel_id': pos.channel_id,
+                    'broker_id': pos.broker_id,
+                    'entry_qty': pos.entry_qty,
+                    'remaining_qty': pos.remaining_qty,
+                    'entry_price': pos.entry_price,
+                    'current_price': pos.current_price,
+                    'price_updated_at': pos.price_updated_at,
+                    'status': pos.status,
+                    'entry_time': pos.entry_time,
+                    'unrealized_pnl_dollar': pnl_dollar,
+                    'unrealized_pnl_pct': pnl_pct,
+                    'pt_levels_hit': pos.pt_levels_hit,
+                    'max_pnl_seen': pos.max_pnl_seen,
+                    'trailing_stop_active': pos.trailing_stop_active
+                })
+            
+            return jsonify({'success': True, 'positions': positions_data})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
     
     # Dashboard stats
     @app.route('/api/stats', methods=['GET'])

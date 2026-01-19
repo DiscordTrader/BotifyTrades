@@ -1297,6 +1297,42 @@ def init_db():
         )
     ''')
     
+    # Signal routing mappings - admin-only source->destination channel mappings
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS signal_routing_mappings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            source_channel_id TEXT NOT NULL,
+            source_channel_name TEXT,
+            destination_type TEXT NOT NULL CHECK(destination_type IN ('webhook', 'channel')),
+            destination_url TEXT,
+            destination_channel_id TEXT,
+            destination_channel_name TEXT,
+            enabled INTEGER DEFAULT 1,
+            broker_id TEXT,
+            account_id TEXT,
+            default_quantity INTEGER DEFAULT 1,
+            default_dollar_amount REAL,
+            enable_execution INTEGER DEFAULT 0,
+            enable_forwarding INTEGER DEFAULT 1,
+            enable_risk_management INTEGER DEFAULT 1,
+            stop_loss_pct REAL DEFAULT 25.0,
+            pt1_pct REAL DEFAULT 25.0,
+            pt2_pct REAL DEFAULT 50.0,
+            pt3_pct REAL DEFAULT 75.0,
+            pt4_pct REAL DEFAULT 100.0,
+            trailing_stop_pct REAL DEFAULT 0.0,
+            trailing_activation_pct REAL DEFAULT 15.0,
+            price_monitor_enabled INTEGER DEFAULT 1,
+            price_monitor_interval_seconds INTEGER DEFAULT 5,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(source_channel_id)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_routing_source ON signal_routing_mappings(source_channel_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_routing_enabled ON signal_routing_mappings(enabled)')
+    
     # Trade monitor - track synced broker orders to prevent duplicate posts
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS synced_orders (
@@ -2373,6 +2409,147 @@ def delete_channel(channel_id: int):
     cursor = conn.cursor()
     cursor.execute('DELETE FROM channels WHERE id = ?', (channel_id,))
     conn.commit()
+
+
+# =============================================================================
+# Signal Routing Mappings (Admin-only)
+# =============================================================================
+
+def get_signal_routing_mappings(enabled_only: bool = False) -> List[Dict]:
+    """Get all signal routing mappings"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if enabled_only:
+        cursor.execute('SELECT * FROM signal_routing_mappings WHERE enabled = 1 ORDER BY name')
+    else:
+        cursor.execute('SELECT * FROM signal_routing_mappings ORDER BY name')
+    
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def get_signal_routing_mapping(mapping_id: int) -> Optional[Dict]:
+    """Get a single signal routing mapping by ID"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM signal_routing_mappings WHERE id = ?', (mapping_id,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+
+def get_signal_routing_by_source(source_channel_id: str) -> Optional[Dict]:
+    """Get signal routing mapping by source channel ID"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        'SELECT * FROM signal_routing_mappings WHERE source_channel_id = ? AND enabled = 1',
+        (source_channel_id,)
+    )
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+
+def create_signal_routing_mapping(
+    name: str,
+    source_channel_id: str,
+    destination_type: str,
+    source_channel_name: str = None,
+    destination_url: str = None,
+    destination_channel_id: str = None,
+    destination_channel_name: str = None,
+    broker_id: str = None,
+    account_id: str = None,
+    default_quantity: int = 1,
+    default_dollar_amount: float = None,
+    enable_execution: bool = False,
+    enable_forwarding: bool = True,
+    enable_risk_management: bool = True,
+    stop_loss_pct: float = 25.0,
+    pt1_pct: float = 25.0,
+    pt2_pct: float = 50.0,
+    pt3_pct: float = 75.0,
+    pt4_pct: float = 100.0,
+    trailing_stop_pct: float = 0.0,
+    trailing_activation_pct: float = 15.0,
+    price_monitor_enabled: bool = True,
+    price_monitor_interval_seconds: int = 5
+) -> Optional[int]:
+    """Create a new signal routing mapping"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO signal_routing_mappings (
+                name, source_channel_id, source_channel_name, destination_type,
+                destination_url, destination_channel_id, destination_channel_name,
+                broker_id, account_id, default_quantity, default_dollar_amount,
+                enable_execution, enable_forwarding, enable_risk_management,
+                stop_loss_pct, pt1_pct, pt2_pct, pt3_pct, pt4_pct,
+                trailing_stop_pct, trailing_activation_pct,
+                price_monitor_enabled, price_monitor_interval_seconds
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            name, source_channel_id, source_channel_name, destination_type,
+            destination_url, destination_channel_id, destination_channel_name,
+            broker_id, account_id, default_quantity, default_dollar_amount,
+            1 if enable_execution else 0, 1 if enable_forwarding else 0,
+            1 if enable_risk_management else 0,
+            stop_loss_pct, pt1_pct, pt2_pct, pt3_pct, pt4_pct,
+            trailing_stop_pct, trailing_activation_pct,
+            1 if price_monitor_enabled else 0, price_monitor_interval_seconds
+        ))
+        conn.commit()
+        print(f"[DATABASE] ✓ Created signal routing mapping: {name}")
+        return cursor.lastrowid
+    except sqlite3.IntegrityError as e:
+        print(f"[DATABASE] Signal routing mapping already exists: {e}")
+        return None
+
+
+def update_signal_routing_mapping(mapping_id: int, **kwargs) -> bool:
+    """Update a signal routing mapping"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    allowed_fields = [
+        'name', 'source_channel_id', 'source_channel_name', 'destination_type',
+        'destination_url', 'destination_channel_id', 'destination_channel_name',
+        'enabled', 'broker_id', 'account_id', 'default_quantity', 'default_dollar_amount',
+        'enable_execution', 'enable_forwarding', 'enable_risk_management',
+        'stop_loss_pct', 'pt1_pct', 'pt2_pct', 'pt3_pct', 'pt4_pct',
+        'trailing_stop_pct', 'trailing_activation_pct',
+        'price_monitor_enabled', 'price_monitor_interval_seconds'
+    ]
+    
+    updates = []
+    values = []
+    for field, value in kwargs.items():
+        if field in allowed_fields:
+            updates.append(f'{field} = ?')
+            values.append(value)
+    
+    if not updates:
+        return False
+    
+    updates.append('updated_at = CURRENT_TIMESTAMP')
+    values.append(mapping_id)
+    
+    cursor.execute(
+        f'UPDATE signal_routing_mappings SET {", ".join(updates)} WHERE id = ?',
+        values
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def delete_signal_routing_mapping(mapping_id: int) -> bool:
+    """Delete a signal routing mapping"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM signal_routing_mappings WHERE id = ?', (mapping_id,))
+    conn.commit()
+    return cursor.rowcount > 0
 
 
 def reset_channel_tracking(channel_id: int) -> Dict[str, int]:
