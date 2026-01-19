@@ -40,6 +40,7 @@ from src.services.exit_dispatcher import (
     ExitDispatcher,
     ExitRequest
 )
+from src.services.price_monitor_service import get_price_monitor, PriceMonitorService
 
 
 @dataclass
@@ -86,6 +87,7 @@ class SpySniperWebhookService:
         self.position_tracker = get_position_tracker()
         self.ledger = get_position_ledger()
         self.exit_dispatcher = get_exit_dispatcher()
+        self.price_monitor = get_price_monitor()
         self._session: Optional[aiohttp.ClientSession] = None
         self._running = False
         
@@ -160,6 +162,50 @@ class SpySniperWebhookService:
         except Exception as e:
             print(f"[SPY-SNIPER] Error loading config: {e}")
     
+    def load_config_from_routing_mapping(self, channel_id: str) -> bool:
+        """Load configuration from signal_routing_mappings table."""
+        try:
+            from gui_app import database as db
+            
+            mapping = db.get_signal_routing_by_source(channel_id)
+            if not mapping:
+                print(f"[SPY-SNIPER] No routing mapping for channel {channel_id}")
+                return False
+            
+            if not mapping.get('enabled', 0):
+                print(f"[SPY-SNIPER] Routing mapping disabled for channel {channel_id}")
+                return False
+            
+            webhook_url = ""
+            if mapping.get('destination_type') == 'webhook':
+                webhook_url = mapping.get('destination_url', '')
+            
+            self.config = SpySniperConfig(
+                channel_id=channel_id,
+                webhook_url=webhook_url,
+                default_quantity=mapping.get('default_quantity', 1) or 1,
+                default_dollar_amount=mapping.get('default_dollar_amount'),
+                enable_execution=bool(mapping.get('enable_execution', 0)),
+                enable_forwarding=bool(mapping.get('enable_forwarding', 1)),
+                enable_risk_management=bool(mapping.get('enable_risk_management', 1)),
+                stop_loss_pct=mapping.get('stop_loss_pct', 25.0) or 25.0,
+                pt1_pct=mapping.get('pt1_pct', 25.0) or 25.0,
+                pt2_pct=mapping.get('pt2_pct', 50.0) or 50.0,
+                pt3_pct=mapping.get('pt3_pct', 75.0) or 75.0,
+                pt4_pct=mapping.get('pt4_pct', 100.0) or 100.0,
+                trailing_stop_pct=mapping.get('trailing_stop_pct', 0.0) or 0.0,
+                trailing_activation_pct=mapping.get('trailing_activation_pct', 15.0) or 15.0,
+            )
+            
+            print(f"[SPY-SNIPER] ✓ Loaded from routing mapping: {mapping.get('name', 'unnamed')}")
+            print(f"[SPY-SNIPER]   qty={self.config.default_quantity}, "
+                  f"fwd={self.config.enable_forwarding}, exec={self.config.enable_execution}")
+            return True
+            
+        except Exception as e:
+            print(f"[SPY-SNIPER] Error loading from routing mapping: {e}")
+            return False
+    
     async def process_message(
         self,
         embed_title: str,
@@ -183,7 +229,8 @@ class SpySniperWebhookService:
             return None
         
         if channel_id and channel_id != self.config.channel_id:
-            self.load_config_from_db(channel_id)
+            if not self.load_config_from_routing_mapping(channel_id):
+                self.load_config_from_db(channel_id)
         
         result = process_spy_sniper_message(
             embed_title=embed_title,
@@ -254,6 +301,10 @@ class SpySniperWebhookService:
             position_id = self.ledger.create_position(position)
             result['ledger_position_id'] = position_id
             print(f"[SPY-SNIPER] ✓ Ledger position created: {option_key} (ID: {position_id})")
+            
+            if position_id and position_id > 0:
+                position.id = position_id
+                self.price_monitor.register_position(position)
             
         except Exception as e:
             print(f"[SPY-SNIPER] Error creating ledger position: {e}")
@@ -345,19 +396,50 @@ class SpySniperWebhookService:
         option_key: str,
         exit_reason: str,
         exit_price: float,
-        exit_pct: int = 100
+        exit_pct: int = 100,
+        broker_id: str = "",
+        account_id: str = ""
     ):
         """
         Trigger an exit based on risk management (PT/SL/trailing stop).
         
-        Called by position monitor when risk conditions are met.
+        Routes through ExitDispatcher for proper deduplication and ledger tracking.
         
         Args:
             option_key: The option position key
             exit_reason: Reason for exit (e.g., "PT1", "STOP_LOSS", "TRAILING")
             exit_price: Current price at exit
             exit_pct: Percentage of position to exit
+            broker_id: Optional broker ID for multi-broker support
+            account_id: Optional account ID
         """
+        ledger_position = self.ledger.get_position_by_key(option_key, broker_id, account_id)
+        
+        if ledger_position:
+            exit_qty = max(1, int(ledger_position.remaining_qty * exit_pct / 100))
+            exit_qty = min(exit_qty, ledger_position.remaining_qty)
+            
+            exit_result = await self.exit_dispatcher.dispatch_risk_exit(
+                option_key=option_key,
+                exit_pct=int(exit_qty * 100 / ledger_position.remaining_qty) if ledger_position.remaining_qty > 0 else 100,
+                exit_price=exit_price,
+                exit_reason=exit_reason,
+                broker_id=broker_id,
+                account_id=account_id,
+                destination_url=self.config.webhook_url if self.config.enable_forwarding else ""
+            )
+            
+            if exit_result.success:
+                print(f"[SPY-SNIPER] ✓ Risk exit dispatched: {option_key} ({exit_reason}) "
+                      f"P&L: ${exit_result.exit_pnl_dollar:.2f} ({exit_result.exit_pnl_pct:.1f}%)")
+                
+                if ledger_position.id and exit_result.exit_qty >= ledger_position.remaining_qty:
+                    self.price_monitor.unregister_position(ledger_position.id)
+            else:
+                print(f"[SPY-SNIPER] Risk exit failed: {exit_result.message}")
+            
+            return
+        
         position = self.position_tracker.get_position(option_key)
         if not position:
             print(f"[SPY-SNIPER] No position found for risk exit: {option_key}")
@@ -409,6 +491,16 @@ class SpySniperWebhookService:
     def get_position(self, option_key: str) -> Optional[Dict]:
         """Get a specific position."""
         return self.position_tracker.get_position(option_key)
+    
+    def startup_reconcile(self):
+        """Reconcile state on startup - sync ledger positions to price monitor."""
+        try:
+            synced = self.price_monitor.sync_from_ledger()
+            print(f"[SPY-SNIPER] ✓ Startup reconciliation: {synced} positions synced to price monitor")
+            return synced
+        except Exception as e:
+            print(f"[SPY-SNIPER] Startup reconciliation error: {e}")
+            return 0
 
 
 _service_instance: Optional[SpySniperWebhookService] = None

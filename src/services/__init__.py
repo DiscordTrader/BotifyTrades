@@ -28,6 +28,11 @@ from .exit_dispatcher import (
     ExitResult,
     get_exit_dispatcher,
 )
+from .price_monitor_service import (
+    PriceMonitorService,
+    MonitoredPosition,
+    get_price_monitor,
+)
 
 __all__ = [
     'ConditionalOrderService',
@@ -54,4 +59,7 @@ __all__ = [
     'ExitRequest',
     'ExitResult',
     'get_exit_dispatcher',
+    'PriceMonitorService',
+    'MonitoredPosition',
+    'get_price_monitor',
 ]
