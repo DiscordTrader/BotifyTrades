@@ -23,6 +23,17 @@ from .validator import (
     is_valid_expiry,
     is_valid_action,
 )
+from .spy_sniper_parser import (
+    is_spy_sniper_signal,
+    parse_spy_sniper_signal,
+    process_spy_sniper_message,
+    SpySniperSignal,
+    SpySniperSignalType,
+    SpySniperPositionTracker,
+    get_position_tracker,
+    format_as_bto,
+    format_as_stc,
+)
 
 __all__ = [
     'parse_option_signal',
@@ -39,4 +50,13 @@ __all__ = [
     'is_valid_strike',
     'is_valid_expiry',
     'is_valid_action',
+    'is_spy_sniper_signal',
+    'parse_spy_sniper_signal',
+    'process_spy_sniper_message',
+    'SpySniperSignal',
+    'SpySniperSignalType',
+    'SpySniperPositionTracker',
+    'get_position_tracker',
+    'format_as_bto',
+    'format_as_stc',
 ]

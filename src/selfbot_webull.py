@@ -145,6 +145,19 @@ except ImportError as e:
 # Import BrokerSyncService for real-time trade synchronization
 from src.services.broker_sync_service import BrokerSyncService
 
+# Import Spy-Sniper webhook service for signal automation
+try:
+    from src.services.spy_sniper_webhook_service import (
+        get_spy_sniper_service,
+        process_spy_sniper_embed,
+        SpySniperConfig
+    )
+    from src.signals.spy_sniper_parser import is_spy_sniper_signal
+    SPY_SNIPER_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARNING] Could not import SpySniperService: {e}")
+    SPY_SNIPER_AVAILABLE = False
+
 # Import webull_auth early to apply monkey-patch for Webull API v2 (rzone fix)
 try:
     from webull_auth import webull_auth as _webull_auth_patch
@@ -7682,6 +7695,26 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         embed_content_parts.append(f"{field.name}: {field.value}")
             if embed_content_parts:
                 print(f"[Discord] Embed content: {' | '.join(embed_content_parts)[:200]}")
+        
+        # SPY-SNIPER SIGNAL PROCESSING: Detect and forward Open/Trim/Close alerts
+        if SPY_SNIPER_AVAILABLE and hasattr(message, 'embeds') and message.embeds:
+            for embed in message.embeds:
+                embed_title = embed.title if embed.title else ""
+                embed_desc = embed.description if embed.description else ""
+                if is_spy_sniper_signal(embed_title, embed_desc):
+                    try:
+                        result = await process_spy_sniper_embed(
+                            embed_title=embed_title,
+                            embed_description=embed_desc,
+                            message_id=str(message.id),
+                            channel_id=str(message.channel.id)
+                        )
+                        if result:
+                            action = result.get('action', '')
+                            option_key = result.get('option_key', '')
+                            print(f"[SPY-SNIPER] ✓ Processed {action}: {option_key}")
+                    except Exception as e:
+                        print(f"[SPY-SNIPER] Error processing signal: {e}")
         
         # Create combined content for signal parsing (message.content + embed text)
         # This allows parsers to match patterns in embed title/description/fields
