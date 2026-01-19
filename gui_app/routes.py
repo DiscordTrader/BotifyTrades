@@ -2099,6 +2099,63 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/admin/signal-routing/risk/<channel_id>', methods=['GET'])
+    @login_required
+    @admin_feature_required
+    def api_get_routing_risk_settings(channel_id):
+        """Get risk settings for a signal routing mapping by source channel ID (admin only)"""
+        try:
+            mapping = db.get_signal_routing_by_source(channel_id)
+            if mapping:
+                settings = {
+                    'stop_loss_pct': mapping.get('stop_loss_pct', 0),
+                    'trailing_stop_pct': mapping.get('trailing_stop_pct', 0),
+                    'pt1_pct': mapping.get('pt1_pct', 0),
+                    'pt2_pct': mapping.get('pt2_pct', 0),
+                    'pt3_pct': mapping.get('pt3_pct', 0),
+                    'pt4_pct': mapping.get('pt4_pct', 0),
+                }
+                return jsonify({'success': True, 'settings': settings})
+            else:
+                return jsonify({'success': True, 'settings': {
+                    'stop_loss_pct': 25.0,
+                    'trailing_stop_pct': 0,
+                    'pt1_pct': 25.0,
+                    'pt2_pct': 50.0,
+                    'pt3_pct': 75.0,
+                    'pt4_pct': 100.0
+                }})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/admin/signal-routing/risk/<channel_id>', methods=['PUT'])
+    @login_required
+    @admin_feature_required
+    def api_update_routing_risk_settings(channel_id):
+        """Update risk settings for a signal routing mapping by source channel ID (admin only)"""
+        try:
+            data = request.json
+            mapping = db.get_signal_routing_by_source(channel_id)
+            if not mapping:
+                return jsonify({'success': False, 'error': 'Mapping not found for this channel'}), 404
+            
+            success = db.update_signal_routing_mapping(
+                mapping['id'],
+                stop_loss_pct=data.get('stop_loss_pct', 25.0),
+                trailing_stop_pct=data.get('trailing_stop_pct', 0),
+                pt1_pct=data.get('pt1_pct', 25.0),
+                pt2_pct=data.get('pt2_pct', 50.0),
+                pt3_pct=data.get('pt3_pct', 75.0),
+                pt4_pct=data.get('pt4_pct', 100.0)
+            )
+            
+            if success:
+                return jsonify({'success': True, 'message': 'Risk settings updated'})
+            else:
+                return jsonify({'success': False, 'error': 'Failed to update settings'}), 500
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     # Dashboard stats
     @app.route('/api/stats', methods=['GET'])
     def api_get_stats():

@@ -352,6 +352,92 @@
         display: flex;
         gap: 8px;
     }
+
+    .btn-icon {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(124, 58, 237, 0.15);
+        border: 1px solid rgba(124, 58, 237, 0.3);
+        padding: 6px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .btn-icon:hover {
+        background: rgba(124, 58, 237, 0.25);
+        border-color: var(--violet);
+    }
+
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        backdrop-filter: blur(4px);
+    }
+
+    .modal-content {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 16px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 25px;
+        border-bottom: 1px solid var(--card-border);
+    }
+
+    .modal-header h3 {
+        margin: 0;
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        color: var(--text-secondary);
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: 5px 10px;
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+
+    .modal-close:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text-primary);
+    }
+
+    .modal-body {
+        padding: 25px;
+    }
+
+    .btn-secondary {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid var(--card-border);
+        color: var(--text-primary);
+    }
+
+    .btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.15);
+    }
 </style>
 {% endblock %}
 
@@ -450,14 +536,15 @@
                         <th>Name</th>
                         <th>Source</th>
                         <th>Destination</th>
-                        <th>Settings</th>
+                        <th>Options</th>
+                        <th>Risk</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="mappings-tbody">
                     <tr>
-                        <td colspan="6" class="empty-state">
+                        <td colspan="7" class="empty-state">
                             <i class="fas fa-route"></i>
                             <p>No mappings configured yet</p>
                         </td>
@@ -491,9 +578,65 @@
         </div>
     </div>
 </div>
+
+<div id="riskSettingsModal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-shield-alt" style="color: var(--violet);"></i> Risk Settings - <span id="riskModalTitle"></span></h3>
+            <button class="modal-close" onclick="closeRiskModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="riskChannelId">
+            
+            <div class="form-grid" style="grid-template-columns: repeat(2, 1fr); gap: 20px;">
+                <div class="form-group">
+                    <label><i class="fas fa-stop-circle" style="color: var(--danger);"></i> Stop Loss %</label>
+                    <input type="number" id="risk-stop-loss" class="form-input" step="0.1" min="0" max="100" placeholder="e.g., 25">
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-arrow-trend-up" style="color: var(--success);"></i> Trailing Stop %</label>
+                    <input type="number" id="risk-trailing-stop" class="form-input" step="0.1" min="0" max="100" placeholder="e.g., 10">
+                </div>
+            </div>
+            
+            <h4 style="margin: 25px 0 15px; color: var(--text-secondary); font-size: 0.9rem;">Profit Targets</h4>
+            <div class="form-grid" style="grid-template-columns: repeat(4, 1fr); gap: 15px;">
+                <div class="form-group">
+                    <label>PT1 %</label>
+                    <input type="number" id="risk-pt1" class="form-input" step="0.1" min="0" placeholder="25">
+                </div>
+                <div class="form-group">
+                    <label>PT2 %</label>
+                    <input type="number" id="risk-pt2" class="form-input" step="0.1" min="0" placeholder="50">
+                </div>
+                <div class="form-group">
+                    <label>PT3 %</label>
+                    <input type="number" id="risk-pt3" class="form-input" step="0.1" min="0" placeholder="75">
+                </div>
+                <div class="form-group">
+                    <label>PT4 %</label>
+                    <input type="number" id="risk-pt4" class="form-input" step="0.1" min="0" placeholder="100">
+                </div>
+            </div>
+            
+            <div style="margin-top: 20px; padding: 15px; background: rgba(15, 240, 179, 0.1); border-radius: 10px;">
+                <p style="color: var(--text-secondary); margin: 0; font-size: 0.85rem;">
+                    <i class="fas fa-info-circle" style="color: var(--mint);"></i>
+                    These settings apply to all trades routed through this mapping. The Risk Management engine will monitor positions and execute exits automatically.
+                </p>
+            </div>
+        </div>
+        <div class="modal-footer" style="display: flex; gap: 15px; justify-content: flex-end; padding-top: 20px; border-top: 1px solid var(--card-border);">
+            <button class="btn btn-secondary" onclick="closeRiskModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveRiskSettings()">
+                <i class="fas fa-save"></i> Save Settings
+            </button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
-{% block extra_js %}
+{% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const tabBtns = document.querySelectorAll('.tab-btn');
@@ -569,25 +712,35 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (result.success && result.mappings.length > 0) {
                 const tbody = document.getElementById('mappings-tbody');
-                tbody.innerHTML = result.mappings.map(m => `
-                    <tr data-id="${m.id}">
-                        <td><strong>${m.name}</strong></td>
+                tbody.innerHTML = result.mappings.map(m => {
+                    const safeName = (m.name || '').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+                    const safeChannelName = (m.source_channel_name || m.source_channel_id || '').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+                    const slDisplay = (m.stop_loss_pct && m.stop_loss_pct > 0) ? 'SL:' + m.stop_loss_pct + '%' : 'Configure';
+                    return `
+                    <tr data-id="${m.id}" data-channel-id="${m.source_channel_id}" data-name="${safeName}">
+                        <td><strong>${safeName}</strong></td>
                         <td>
                             <span style="color: var(--text-muted); font-size: 0.85rem;">
-                                ${m.source_channel_name || m.source_channel_id}
+                                ${safeChannelName}
                             </span>
                         </td>
                         <td>
                             ${m.destination_type === 'webhook' 
                                 ? '<i class="fas fa-link"></i> Webhook' 
-                                : '<i class="fab fa-discord"></i> ' + (m.destination_channel_name || m.destination_channel_id)}
+                                : '<i class="fab fa-discord"></i> Channel'}
                         </td>
                         <td>
                             <span style="font-size: 0.85rem;">
                                 ${m.enable_forwarding ? '✓ Fwd' : ''} 
                                 ${m.enable_execution ? '✓ Exec' : ''} 
-                                ${m.enable_risk_management ? '✓ Risk' : ''}
+                                ${m.price_monitor_enabled ? '✓ Mon' : ''}
                             </span>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-icon risk-settings-btn" data-channel="${m.source_channel_id}" data-name="${safeName}" title="Configure Risk Settings">
+                                <i class="fas fa-cog" style="color: var(--violet);"></i>
+                                <span style="font-size: 0.75rem; margin-left: 5px;">${slDisplay}</span>
+                            </button>
                         </td>
                         <td>
                             <span class="status-badge ${m.enabled ? 'active' : 'inactive'}">
@@ -597,16 +750,26 @@ document.addEventListener('DOMContentLoaded', function() {
                         </td>
                         <td>
                             <div class="action-buttons">
-                                <button class="btn btn-sm" onclick="toggleMapping(${m.id}, ${!m.enabled})">
+                                <button class="btn btn-sm toggle-mapping-btn" data-id="${m.id}" data-enabled="${m.enabled ? '0' : '1'}">
                                     ${m.enabled ? 'Disable' : 'Enable'}
                                 </button>
-                                <button class="btn btn-sm btn-danger" onclick="deleteMapping(${m.id})">
+                                <button class="btn btn-sm btn-danger delete-mapping-btn" data-id="${m.id}">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
                         </td>
                     </tr>
-                `).join('');
+                `;}).join('');
+                
+                tbody.querySelectorAll('.risk-settings-btn').forEach(btn => {
+                    btn.addEventListener('click', () => openRiskSettings(btn.dataset.channel, btn.dataset.name));
+                });
+                tbody.querySelectorAll('.toggle-mapping-btn').forEach(btn => {
+                    btn.addEventListener('click', () => toggleMapping(parseInt(btn.dataset.id), btn.dataset.enabled === '1'));
+                });
+                tbody.querySelectorAll('.delete-mapping-btn').forEach(btn => {
+                    btn.addEventListener('click', () => deleteMapping(parseInt(btn.dataset.id)));
+                });
             }
         } catch (err) {
             console.error('Error loading mappings:', err);
@@ -677,6 +840,68 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Error deleting mapping');
         }
     };
+
+    window.openRiskSettings = async function(channelId, mappingName) {
+        document.getElementById('riskModalTitle').textContent = mappingName;
+        document.getElementById('riskChannelId').value = channelId;
+        
+        try {
+            const resp = await fetch(`/api/admin/signal-routing/risk/${channelId}`);
+            const result = await resp.json();
+            
+            if (result.success) {
+                document.getElementById('risk-stop-loss').value = result.settings.stop_loss_pct || '';
+                document.getElementById('risk-trailing-stop').value = result.settings.trailing_stop_pct || '';
+                document.getElementById('risk-pt1').value = result.settings.pt1_pct || '';
+                document.getElementById('risk-pt2').value = result.settings.pt2_pct || '';
+                document.getElementById('risk-pt3').value = result.settings.pt3_pct || '';
+                document.getElementById('risk-pt4').value = result.settings.pt4_pct || '';
+            }
+        } catch (err) {
+            console.error('Error loading risk settings:', err);
+        }
+        
+        document.getElementById('riskSettingsModal').style.display = 'flex';
+    };
+
+    window.closeRiskModal = function() {
+        document.getElementById('riskSettingsModal').style.display = 'none';
+    };
+
+    window.saveRiskSettings = async function() {
+        const channelId = document.getElementById('riskChannelId').value;
+        const data = {
+            stop_loss_pct: parseFloat(document.getElementById('risk-stop-loss').value) || 0,
+            trailing_stop_pct: parseFloat(document.getElementById('risk-trailing-stop').value) || 0,
+            pt1_pct: parseFloat(document.getElementById('risk-pt1').value) || 0,
+            pt2_pct: parseFloat(document.getElementById('risk-pt2').value) || 0,
+            pt3_pct: parseFloat(document.getElementById('risk-pt3').value) || 0,
+            pt4_pct: parseFloat(document.getElementById('risk-pt4').value) || 0
+        };
+        
+        try {
+            const resp = await fetch(`/api/admin/signal-routing/risk/${channelId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await resp.json();
+            
+            if (result.success) {
+                alert('Risk settings saved successfully!');
+                closeRiskModal();
+                loadMappings();
+            } else {
+                alert('Error: ' + result.error);
+            }
+        } catch (err) {
+            alert('Error saving risk settings: ' + err.message);
+        }
+    };
+
+    document.getElementById('riskSettingsModal').addEventListener('click', function(e) {
+        if (e.target === this) closeRiskModal();
+    });
 
     loadMappings();
 });
