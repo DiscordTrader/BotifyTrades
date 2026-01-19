@@ -792,7 +792,8 @@ def register_routes(app):
         """Make config variables available in all templates"""
         return {
             'config': {
-                'LICENSE_SERVER_MODE': os.getenv('LICENSE_SERVER_MODE', 'false').lower() == 'true'
+                'LICENSE_SERVER_MODE': os.getenv('LICENSE_SERVER_MODE', 'false').lower() == 'true',
+                'BUILD_TYPE': BUILD_TYPE
             },
             'is_admin_build': is_admin_build()
         }
