@@ -5966,7 +5966,28 @@ class SelfClient(discord.Client):
         except Exception as e:
             print(f"[VERIFY] ⚠️ Could not initialize real-time verification: {e}")
         
-        print("[BROKERS] ✓ Background broker initialization complete - Discord was never blocked")
+        try:
+            _original_print("[PRICE_MONITOR] Initializing price monitor service...", flush=True)
+            from src.services.price_monitor_service import get_price_monitor
+            price_monitor = get_price_monitor()
+            
+            if self.broker and hasattr(self.broker, 'wb') and self.broker.wb:
+                price_monitor.set_webull_client(self.broker.wb)
+            
+            if self.paper_broker and hasattr(self.paper_broker, 'connected') and self.paper_broker.connected:
+                price_monitor.set_alpaca_broker(self.paper_broker)
+            
+            price_monitor.start(self.loop)
+            _original_print("[PRICE_MONITOR] ✓ Started with event loop", flush=True)
+            
+            price_monitor.sync_from_ledger()
+            _original_print("[PRICE_MONITOR] ✓ Synced open positions from ledger", flush=True)
+        except Exception as e:
+            _original_print(f"[PRICE_MONITOR] ⚠️ Could not start price monitor: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+        
+        _original_print("[BROKERS] ✓ Background broker initialization complete - Discord was never blocked", flush=True)
     
     async def token_refresh_scheduler(self):
         """Automatically refresh Webull tokens every 12 hours"""
