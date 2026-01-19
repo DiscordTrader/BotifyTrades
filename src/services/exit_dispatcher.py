@@ -97,8 +97,9 @@ class ExitDispatcher:
             await self._session.close()
     
     def _get_dedupe_key(self, request: ExitRequest) -> str:
-        """Generate deduplication key for exit."""
-        return f"{request.option_key}_{request.exit_reason}_{request.message_id}"
+        """Generate deduplication key for exit with broker/account isolation."""
+        msg_or_ts = request.message_id if request.message_id else datetime.now().strftime('%Y%m%d%H%M%S')
+        return f"{request.option_key}_{request.broker_id}_{request.account_id}_{request.exit_reason}_{msg_or_ts}"
     
     def is_duplicate_exit(self, request: ExitRequest) -> bool:
         """Check if this exit was already processed."""
@@ -146,7 +147,9 @@ class ExitDispatcher:
             )
         
         try:
-            locked = await self.ledger.exit_arbiter.acquire_exit_lock(request.option_key)
+            locked = await self.ledger.exit_arbiter.acquire_exit_lock(
+                request.option_key, request.broker_id, request.account_id
+            )
             if not locked:
                 return ExitResult(
                     success=False,
@@ -205,7 +208,9 @@ class ExitDispatcher:
             )
             
         finally:
-            lock = self.ledger.exit_arbiter.get_lock(request.option_key)
+            lock = self.ledger.exit_arbiter.get_lock(
+                request.option_key, request.broker_id, request.account_id
+            )
             if lock.locked():
                 lock.release()
     

@@ -222,6 +222,15 @@ class SpySniperWebhookService:
             option_key = result.get('option_key', '')
             quantity = result.get('quantity', 1)
             
+            if not option_key or not signal.get('symbol'):
+                print(f"[SPY-SNIPER] ⏭️ Skipping ledger creation - missing option_key or symbol")
+                return
+            
+            entry_price = signal.get('entry_price', 0.0) or 0.0
+            if entry_price <= 0:
+                print(f"[SPY-SNIPER] ⏭️ Skipping ledger creation - invalid entry price: {entry_price}")
+                return
+            
             position = LedgerPosition(
                 option_key=option_key,
                 symbol=signal.get('symbol', ''),

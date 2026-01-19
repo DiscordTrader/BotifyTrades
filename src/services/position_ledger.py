@@ -132,7 +132,7 @@ class LedgerPosition:
 
 class ExitArbiter:
     """
-    Prevents double-exits by maintaining per-option locks.
+    Prevents double-exits by maintaining per-option+broker+account locks.
     Ensures only one exit operation runs at a time for each position.
     """
     
@@ -140,21 +140,27 @@ class ExitArbiter:
         self._locks: Dict[str, asyncio.Lock] = {}
         self._sync_lock = threading.Lock()
     
-    def get_lock(self, option_key: str) -> asyncio.Lock:
-        """Get or create a lock for the given option key."""
-        with self._sync_lock:
-            if option_key not in self._locks:
-                self._locks[option_key] = asyncio.Lock()
-            return self._locks[option_key]
+    def _get_lock_key(self, option_key: str, broker_id: str = "", account_id: str = "") -> str:
+        """Generate lock key with broker/account isolation."""
+        return f"{option_key}_{broker_id}_{account_id}"
     
-    def release_lock(self, option_key: str):
+    def get_lock(self, option_key: str, broker_id: str = "", account_id: str = "") -> asyncio.Lock:
+        """Get or create a lock for the given option key + broker + account."""
+        key = self._get_lock_key(option_key, broker_id, account_id)
+        with self._sync_lock:
+            if key not in self._locks:
+                self._locks[key] = asyncio.Lock()
+            return self._locks[key]
+    
+    def release_lock(self, option_key: str, broker_id: str = "", account_id: str = ""):
         """Remove lock when position is fully closed."""
+        key = self._get_lock_key(option_key, broker_id, account_id)
         with self._sync_lock:
-            self._locks.pop(option_key, None)
+            self._locks.pop(key, None)
     
-    async def acquire_exit_lock(self, option_key: str) -> bool:
+    async def acquire_exit_lock(self, option_key: str, broker_id: str = "", account_id: str = "") -> bool:
         """Attempt to acquire exit lock. Returns False if already locked."""
-        lock = self.get_lock(option_key)
+        lock = self.get_lock(option_key, broker_id, account_id)
         return await asyncio.wait_for(lock.acquire(), timeout=0.1)
 
 
