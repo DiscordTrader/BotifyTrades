@@ -7,7 +7,8 @@ Features:
 - Detects Open/Trim/Close alerts from spy-sniper channel
 - Forwards entries as BTO with configurable default quantity or $ amount
 - Forwards exits as STC with calculated proportional quantity
-- Integrates with position monitor for real-time price tracking
+- Integrates with PositionLedger for centralized trade tracking
+- Uses ExitDispatcher for unified exit routing
 - Triggers STC on risk management hits (PT/SL/trailing stop)
 """
 
@@ -27,6 +28,17 @@ from src.signals.spy_sniper_parser import (
     get_position_tracker,
     format_as_bto,
     format_as_stc,
+)
+
+from src.services.position_ledger import (
+    get_position_ledger,
+    LedgerPosition,
+    PositionLedger
+)
+from src.services.exit_dispatcher import (
+    get_exit_dispatcher,
+    ExitDispatcher,
+    ExitRequest
 )
 
 
@@ -72,6 +84,8 @@ class SpySniperWebhookService:
     def __init__(self, config: Optional[SpySniperConfig] = None):
         self.config = config or SpySniperConfig()
         self.position_tracker = get_position_tracker()
+        self.ledger = get_position_ledger()
+        self.exit_dispatcher = get_exit_dispatcher()
         self._session: Optional[aiohttp.ClientSession] = None
         self._running = False
         
@@ -182,7 +196,16 @@ class SpySniperWebhookService:
         if not result:
             return None
         
-        print(f"[SPY-SNIPER] Processed: {result['action']} {result.get('option_key', 'unknown')}")
+        action = result.get('action', '')
+        option_key = result.get('option_key', '')
+        signal = result.get('signal', {})
+        
+        print(f"[SPY-SNIPER] Processed: {action} {option_key}")
+        
+        if action == 'BTO':
+            self._create_ledger_position(result, channel_id or self.config.channel_id)
+        elif action == 'STC':
+            await self._process_exit_via_dispatcher(result)
         
         if self.config.enable_forwarding and self.config.webhook_url:
             await self._forward_to_webhook(result)
@@ -191,6 +214,69 @@ class SpySniperWebhookService:
             await self._trigger_execution(result)
         
         return result
+    
+    def _create_ledger_position(self, result: Dict[str, Any], channel_id: str):
+        """Create a position in the centralized ledger for BTO entries."""
+        try:
+            signal = result.get('signal', {})
+            option_key = result.get('option_key', '')
+            quantity = result.get('quantity', 1)
+            
+            position = LedgerPosition(
+                option_key=option_key,
+                symbol=signal.get('symbol', ''),
+                expiry=signal.get('expiry_normalized', ''),
+                strike=signal.get('strike', 0.0),
+                option_type=signal.get('option_type', ''),
+                channel_id=channel_id,
+                broker_id="",
+                account_id="",
+                entry_qty=quantity,
+                remaining_qty=quantity,
+                entry_price=signal.get('entry_price', 0.0) or 0.0,
+                current_price=signal.get('entry_price', 0.0) or 0.0,
+                price_updated_at=datetime.now().isoformat(),
+                status="open",
+                entry_time=datetime.now().isoformat(),
+                entry_message_id=result.get('signal', {}).get('message_id', ''),
+                source_type="spy_sniper"
+            )
+            
+            position_id = self.ledger.create_position(position)
+            result['ledger_position_id'] = position_id
+            print(f"[SPY-SNIPER] ✓ Ledger position created: {option_key} (ID: {position_id})")
+            
+        except Exception as e:
+            print(f"[SPY-SNIPER] Error creating ledger position: {e}")
+    
+    async def _process_exit_via_dispatcher(self, result: Dict[str, Any]):
+        """Process exit signal through the unified exit dispatcher."""
+        try:
+            option_key = result.get('option_key', '')
+            quantity = result.get('quantity', 1)
+            signal = result.get('signal', {})
+            exit_price = signal.get('current_price', 0.0) or 0.0
+            message_id = signal.get('message_id', '')
+            
+            exit_result = await self.exit_dispatcher.dispatch_signal_exit(
+                option_key=option_key,
+                exit_qty=quantity,
+                exit_price=exit_price,
+                message_id=message_id,
+                destination_url=self.config.webhook_url
+            )
+            
+            if exit_result.success:
+                result['ledger_exit'] = {
+                    'exit_qty': exit_result.exit_qty,
+                    'exit_pnl_dollar': exit_result.exit_pnl_dollar,
+                    'exit_pnl_pct': exit_result.exit_pnl_pct
+                }
+            else:
+                print(f"[SPY-SNIPER] Exit dispatcher: {exit_result.message}")
+                
+        except Exception as e:
+            print(f"[SPY-SNIPER] Error processing exit via dispatcher: {e}")
     
     async def _forward_to_webhook(self, result: Dict[str, Any]):
         """Forward the formatted signal to webhook. Only forwards valid BTO/STC signals."""

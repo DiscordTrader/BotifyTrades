@@ -1,0 +1,634 @@
+"""
+Position Ledger Service
+========================
+Single Source of Truth for all signal-based positions across channels and brokers.
+
+Features:
+- Unified position tracking across spy-sniper, manual signals, and broker positions
+- Per-broker/account position records with separate quantities
+- Partial exit tracking with running P&L calculations
+- Restart recovery with broker sync reconciliation
+- Exit Arbiter with per-option locks to prevent double-sells
+- Staleness tracking for live price data
+"""
+
+import asyncio
+import threading
+import sqlite3
+from datetime import datetime, timedelta
+from typing import Optional, Dict, List, Any, Tuple
+from dataclasses import dataclass, field, asdict
+from enum import Enum
+import json
+
+
+class PositionStatus(Enum):
+    """Position lifecycle status."""
+    PENDING = "pending"
+    OPEN = "open"
+    PARTIALLY_CLOSED = "partially_closed"
+    CLOSED = "closed"
+    EXPIRED = "expired"
+
+
+class ExitReason(Enum):
+    """Reason for position exit."""
+    SIGNAL = "signal"
+    PT1 = "pt1"
+    PT2 = "pt2"
+    PT3 = "pt3"
+    PT4 = "pt4"
+    STOP_LOSS = "stop_loss"
+    TRAILING_STOP = "trailing_stop"
+    GIVEBACK_GUARD = "giveback_guard"
+    MANUAL = "manual"
+    EXPIRED = "expired"
+
+
+@dataclass
+class PartialExit:
+    """Record of a partial or full exit from a position."""
+    id: Optional[int] = None
+    position_id: int = 0
+    exit_qty: int = 0
+    exit_price: float = 0.0
+    exit_reason: str = ""
+    exit_pnl_dollar: float = 0.0
+    exit_pnl_pct: float = 0.0
+    exit_time: str = ""
+    message_id: str = ""
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class LedgerPosition:
+    """A position tracked in the ledger."""
+    id: Optional[int] = None
+    option_key: str = ""
+    symbol: str = ""
+    expiry: str = ""
+    strike: float = 0.0
+    option_type: str = ""
+    
+    channel_id: str = ""
+    broker_id: str = ""
+    account_id: str = ""
+    
+    entry_qty: int = 0
+    remaining_qty: int = 0
+    entry_price: float = 0.0
+    current_price: float = 0.0
+    price_updated_at: str = ""
+    price_staleness_sec: int = 0
+    
+    realized_pnl: float = 0.0
+    unrealized_pnl: float = 0.0
+    total_pnl_pct: float = 0.0
+    
+    status: str = "open"
+    entry_time: str = ""
+    last_exit_time: str = ""
+    close_time: str = ""
+    
+    entry_message_id: str = ""
+    source_type: str = "spy_sniper"
+    
+    pt_levels_hit: str = "[]"
+    max_pnl_seen: float = 0.0
+    trailing_stop_active: bool = False
+    
+    partial_exits: List[PartialExit] = field(default_factory=list)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        d = asdict(self)
+        d['partial_exits'] = [e.to_dict() for e in self.partial_exits]
+        return d
+    
+    def calculate_unrealized_pnl(self) -> Tuple[float, float]:
+        """Calculate unrealized P&L based on current price."""
+        if self.remaining_qty <= 0 or self.current_price <= 0:
+            return 0.0, 0.0
+        
+        cost_basis = self.entry_price * self.remaining_qty * 100
+        current_value = self.current_price * self.remaining_qty * 100
+        
+        pnl_dollar = current_value - cost_basis
+        pnl_pct = (pnl_dollar / cost_basis * 100) if cost_basis > 0 else 0.0
+        
+        return pnl_dollar, pnl_pct
+    
+    def calculate_total_pnl(self) -> Tuple[float, float]:
+        """Calculate total P&L (realized + unrealized)."""
+        unrealized_dollar, _ = self.calculate_unrealized_pnl()
+        total_dollar = self.realized_pnl + unrealized_dollar
+        
+        total_cost = self.entry_price * self.entry_qty * 100
+        total_pct = (total_dollar / total_cost * 100) if total_cost > 0 else 0.0
+        
+        return total_dollar, total_pct
+
+
+class ExitArbiter:
+    """
+    Prevents double-exits by maintaining per-option locks.
+    Ensures only one exit operation runs at a time for each position.
+    """
+    
+    def __init__(self):
+        self._locks: Dict[str, asyncio.Lock] = {}
+        self._sync_lock = threading.Lock()
+    
+    def get_lock(self, option_key: str) -> asyncio.Lock:
+        """Get or create a lock for the given option key."""
+        with self._sync_lock:
+            if option_key not in self._locks:
+                self._locks[option_key] = asyncio.Lock()
+            return self._locks[option_key]
+    
+    def release_lock(self, option_key: str):
+        """Remove lock when position is fully closed."""
+        with self._sync_lock:
+            self._locks.pop(option_key, None)
+    
+    async def acquire_exit_lock(self, option_key: str) -> bool:
+        """Attempt to acquire exit lock. Returns False if already locked."""
+        lock = self.get_lock(option_key)
+        return await asyncio.wait_for(lock.acquire(), timeout=0.1)
+
+
+class PositionLedger:
+    """
+    Single Source of Truth for all positions.
+    
+    Provides:
+    - Position CRUD with SQLite persistence
+    - Partial exit tracking
+    - P&L calculations
+    - Broker sync reconciliation
+    - Exit arbitration
+    """
+    
+    def __init__(self, db_path: str = "botifytrades.db"):
+        self.db_path = db_path
+        self.exit_arbiter = ExitArbiter()
+        self._init_tables()
+    
+    def _get_conn(self) -> sqlite3.Connection:
+        """Get database connection with row factory."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+    
+    def _init_tables(self):
+        """Initialize ledger tables if they don't exist."""
+        conn = self._get_conn()
+        try:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS position_ledger (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    option_key TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    expiry TEXT,
+                    strike REAL,
+                    option_type TEXT,
+                    channel_id TEXT,
+                    broker_id TEXT,
+                    account_id TEXT,
+                    entry_qty INTEGER NOT NULL,
+                    remaining_qty INTEGER NOT NULL,
+                    entry_price REAL NOT NULL,
+                    current_price REAL DEFAULT 0,
+                    price_updated_at TEXT,
+                    price_staleness_sec INTEGER DEFAULT 0,
+                    realized_pnl REAL DEFAULT 0,
+                    unrealized_pnl REAL DEFAULT 0,
+                    total_pnl_pct REAL DEFAULT 0,
+                    status TEXT DEFAULT 'open',
+                    entry_time TEXT NOT NULL,
+                    last_exit_time TEXT,
+                    close_time TEXT,
+                    entry_message_id TEXT,
+                    source_type TEXT DEFAULT 'spy_sniper',
+                    pt_levels_hit TEXT DEFAULT '[]',
+                    max_pnl_seen REAL DEFAULT 0,
+                    trailing_stop_active INTEGER DEFAULT 0,
+                    UNIQUE(option_key, broker_id, account_id)
+                )
+            """)
+            
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS partial_exits (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    position_id INTEGER NOT NULL,
+                    exit_qty INTEGER NOT NULL,
+                    exit_price REAL NOT NULL,
+                    exit_reason TEXT,
+                    exit_pnl_dollar REAL DEFAULT 0,
+                    exit_pnl_pct REAL DEFAULT 0,
+                    exit_time TEXT NOT NULL,
+                    message_id TEXT,
+                    FOREIGN KEY (position_id) REFERENCES position_ledger(id)
+                )
+            """)
+            
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ledger_option_key 
+                ON position_ledger(option_key)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ledger_status 
+                ON position_ledger(status)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ledger_channel 
+                ON position_ledger(channel_id)
+            """)
+            
+            conn.commit()
+            print("[LEDGER] ✓ Position ledger tables initialized")
+        finally:
+            conn.close()
+    
+    def create_position(self, position: LedgerPosition) -> int:
+        """Create a new position in the ledger. Returns position ID."""
+        conn = self._get_conn()
+        try:
+            cursor = conn.execute("""
+                INSERT INTO position_ledger (
+                    option_key, symbol, expiry, strike, option_type,
+                    channel_id, broker_id, account_id,
+                    entry_qty, remaining_qty, entry_price,
+                    current_price, price_updated_at,
+                    status, entry_time, entry_message_id, source_type,
+                    pt_levels_hit, max_pnl_seen, trailing_stop_active
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                position.option_key, position.symbol, position.expiry,
+                position.strike, position.option_type,
+                position.channel_id, position.broker_id, position.account_id,
+                position.entry_qty, position.remaining_qty, position.entry_price,
+                position.current_price, position.price_updated_at,
+                position.status, position.entry_time, position.entry_message_id,
+                position.source_type, position.pt_levels_hit,
+                position.max_pnl_seen, 1 if position.trailing_stop_active else 0
+            ))
+            conn.commit()
+            position_id = cursor.lastrowid if cursor.lastrowid else 0
+            print(f"[LEDGER] ✓ Created position {position.option_key} (ID: {position_id})")
+            return position_id
+        except sqlite3.IntegrityError:
+            print(f"[LEDGER] Position already exists: {position.option_key}")
+            existing = self.get_position_by_key(
+                position.option_key, 
+                position.broker_id, 
+                position.account_id
+            )
+            return existing.id if existing and existing.id else 0
+        finally:
+            conn.close()
+    
+    def get_position(self, position_id: int) -> Optional[LedgerPosition]:
+        """Get position by ID."""
+        conn = self._get_conn()
+        try:
+            row = conn.execute(
+                "SELECT * FROM position_ledger WHERE id = ?",
+                (position_id,)
+            ).fetchone()
+            
+            if not row:
+                return None
+            
+            return self._row_to_position(row, conn)
+        finally:
+            conn.close()
+    
+    def get_position_by_key(
+        self, 
+        option_key: str, 
+        broker_id: str = "", 
+        account_id: str = ""
+    ) -> Optional[LedgerPosition]:
+        """Get position by option key and broker/account."""
+        conn = self._get_conn()
+        try:
+            row = conn.execute("""
+                SELECT * FROM position_ledger 
+                WHERE option_key = ? AND broker_id = ? AND account_id = ?
+                AND status IN ('open', 'partially_closed')
+            """, (option_key, broker_id, account_id)).fetchone()
+            
+            if not row:
+                return None
+            
+            return self._row_to_position(row, conn)
+        finally:
+            conn.close()
+    
+    def get_open_positions(
+        self, 
+        channel_id: Optional[str] = None,
+        broker_id: Optional[str] = None
+    ) -> List[LedgerPosition]:
+        """Get all open positions, optionally filtered by channel or broker."""
+        conn = self._get_conn()
+        try:
+            query = "SELECT * FROM position_ledger WHERE status IN ('open', 'partially_closed')"
+            params: List[Any] = []
+            
+            if channel_id:
+                query += " AND channel_id = ?"
+                params.append(channel_id)
+            
+            if broker_id:
+                query += " AND broker_id = ?"
+                params.append(broker_id)
+            
+            rows = conn.execute(query, params).fetchall()
+            return [self._row_to_position(row, conn) for row in rows]
+        finally:
+            conn.close()
+    
+    def _row_to_position(self, row: sqlite3.Row, conn: sqlite3.Connection) -> LedgerPosition:
+        """Convert database row to LedgerPosition."""
+        position = LedgerPosition(
+            id=row['id'],
+            option_key=row['option_key'],
+            symbol=row['symbol'],
+            expiry=row['expiry'] or "",
+            strike=row['strike'] or 0.0,
+            option_type=row['option_type'] or "",
+            channel_id=row['channel_id'] or "",
+            broker_id=row['broker_id'] or "",
+            account_id=row['account_id'] or "",
+            entry_qty=row['entry_qty'],
+            remaining_qty=row['remaining_qty'],
+            entry_price=row['entry_price'],
+            current_price=row['current_price'] or 0.0,
+            price_updated_at=row['price_updated_at'] or "",
+            price_staleness_sec=row['price_staleness_sec'] or 0,
+            realized_pnl=row['realized_pnl'] or 0.0,
+            unrealized_pnl=row['unrealized_pnl'] or 0.0,
+            total_pnl_pct=row['total_pnl_pct'] or 0.0,
+            status=row['status'],
+            entry_time=row['entry_time'],
+            last_exit_time=row['last_exit_time'] or "",
+            close_time=row['close_time'] or "",
+            entry_message_id=row['entry_message_id'] or "",
+            source_type=row['source_type'] or "spy_sniper",
+            pt_levels_hit=row['pt_levels_hit'] or "[]",
+            max_pnl_seen=row['max_pnl_seen'] or 0.0,
+            trailing_stop_active=bool(row['trailing_stop_active'])
+        )
+        
+        exit_rows = conn.execute(
+            "SELECT * FROM partial_exits WHERE position_id = ? ORDER BY exit_time",
+            (position.id,)
+        ).fetchall()
+        
+        position.partial_exits = [
+            PartialExit(
+                id=er['id'],
+                position_id=er['position_id'],
+                exit_qty=er['exit_qty'],
+                exit_price=er['exit_price'],
+                exit_reason=er['exit_reason'] or "",
+                exit_pnl_dollar=er['exit_pnl_dollar'] or 0.0,
+                exit_pnl_pct=er['exit_pnl_pct'] or 0.0,
+                exit_time=er['exit_time'],
+                message_id=er['message_id'] or ""
+            )
+            for er in exit_rows
+        ]
+        
+        return position
+    
+    def update_price(
+        self, 
+        position_id: int, 
+        current_price: float,
+        staleness_sec: int = 0
+    ):
+        """Update current price for a position."""
+        conn = self._get_conn()
+        try:
+            now = datetime.now().isoformat()
+            
+            row = conn.execute(
+                "SELECT entry_price, remaining_qty FROM position_ledger WHERE id = ?",
+                (position_id,)
+            ).fetchone()
+            
+            if not row:
+                return
+            
+            entry_price = row['entry_price']
+            remaining_qty = row['remaining_qty']
+            
+            cost_basis = entry_price * remaining_qty * 100
+            current_value = current_price * remaining_qty * 100
+            unrealized_pnl = current_value - cost_basis
+            
+            conn.execute("""
+                UPDATE position_ledger SET
+                    current_price = ?,
+                    price_updated_at = ?,
+                    price_staleness_sec = ?,
+                    unrealized_pnl = ?
+                WHERE id = ?
+            """, (current_price, now, staleness_sec, unrealized_pnl, position_id))
+            conn.commit()
+        finally:
+            conn.close()
+    
+    def record_partial_exit(
+        self,
+        position_id: int,
+        exit_qty: int,
+        exit_price: float,
+        exit_reason: str,
+        message_id: str = ""
+    ) -> Optional[PartialExit]:
+        """Record a partial or full exit from a position."""
+        conn = self._get_conn()
+        try:
+            row = conn.execute(
+                "SELECT * FROM position_ledger WHERE id = ?",
+                (position_id,)
+            ).fetchone()
+            
+            if not row:
+                print(f"[LEDGER] Position {position_id} not found")
+                return None
+            
+            remaining = row['remaining_qty']
+            entry_price = row['entry_price']
+            
+            actual_exit_qty = min(exit_qty, remaining)
+            if actual_exit_qty <= 0:
+                print(f"[LEDGER] No remaining quantity to exit for position {position_id}")
+                return None
+            
+            cost_basis = entry_price * actual_exit_qty * 100
+            exit_value = exit_price * actual_exit_qty * 100
+            exit_pnl_dollar = exit_value - cost_basis
+            exit_pnl_pct = (exit_pnl_dollar / cost_basis * 100) if cost_basis > 0 else 0.0
+            
+            now = datetime.now().isoformat()
+            
+            cursor = conn.execute("""
+                INSERT INTO partial_exits (
+                    position_id, exit_qty, exit_price, exit_reason,
+                    exit_pnl_dollar, exit_pnl_pct, exit_time, message_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                position_id, actual_exit_qty, exit_price, exit_reason,
+                exit_pnl_dollar, exit_pnl_pct, now, message_id
+            ))
+            
+            new_remaining = remaining - actual_exit_qty
+            new_realized = (row['realized_pnl'] or 0) + exit_pnl_dollar
+            new_status = "closed" if new_remaining <= 0 else "partially_closed"
+            close_time = now if new_remaining <= 0 else None
+            
+            conn.execute("""
+                UPDATE position_ledger SET
+                    remaining_qty = ?,
+                    realized_pnl = ?,
+                    status = ?,
+                    last_exit_time = ?,
+                    close_time = ?
+                WHERE id = ?
+            """, (new_remaining, new_realized, new_status, now, close_time, position_id))
+            
+            conn.commit()
+            
+            print(f"[LEDGER] ✓ Exit recorded: {actual_exit_qty} @ ${exit_price:.2f} ({exit_reason}) "
+                  f"P&L: ${exit_pnl_dollar:.2f} ({exit_pnl_pct:.1f}%)")
+            
+            if new_remaining <= 0:
+                self.exit_arbiter.release_lock(row['option_key'])
+            
+            return PartialExit(
+                id=cursor.lastrowid,
+                position_id=position_id,
+                exit_qty=actual_exit_qty,
+                exit_price=exit_price,
+                exit_reason=exit_reason,
+                exit_pnl_dollar=exit_pnl_dollar,
+                exit_pnl_pct=exit_pnl_pct,
+                exit_time=now,
+                message_id=message_id
+            )
+        finally:
+            conn.close()
+    
+    def update_pt_hit(self, position_id: int, pt_level: str):
+        """Record that a profit target level was hit."""
+        conn = self._get_conn()
+        try:
+            row = conn.execute(
+                "SELECT pt_levels_hit FROM position_ledger WHERE id = ?",
+                (position_id,)
+            ).fetchone()
+            
+            if not row:
+                return
+            
+            try:
+                levels = json.loads(row['pt_levels_hit'] or "[]")
+            except json.JSONDecodeError:
+                levels = []
+            
+            if pt_level not in levels:
+                levels.append(pt_level)
+                conn.execute(
+                    "UPDATE position_ledger SET pt_levels_hit = ? WHERE id = ?",
+                    (json.dumps(levels), position_id)
+                )
+                conn.commit()
+        finally:
+            conn.close()
+    
+    def update_max_pnl(self, position_id: int, current_pnl_pct: float):
+        """Update max P&L seen for giveback guard."""
+        conn = self._get_conn()
+        try:
+            conn.execute("""
+                UPDATE position_ledger SET max_pnl_seen = MAX(max_pnl_seen, ?)
+                WHERE id = ?
+            """, (current_pnl_pct, position_id))
+            conn.commit()
+        finally:
+            conn.close()
+    
+    def get_position_summary(self, position_id: int) -> Dict[str, Any]:
+        """Get a summary of position with all partial exits."""
+        position = self.get_position(position_id)
+        if not position:
+            return {}
+        
+        total_exited_qty = sum(e.exit_qty for e in position.partial_exits)
+        total_realized = sum(e.exit_pnl_dollar for e in position.partial_exits)
+        
+        unrealized_dollar, unrealized_pct = position.calculate_unrealized_pnl()
+        total_dollar, total_pct = position.calculate_total_pnl()
+        
+        return {
+            "position": position.to_dict(),
+            "summary": {
+                "entry_qty": position.entry_qty,
+                "remaining_qty": position.remaining_qty,
+                "total_exited_qty": total_exited_qty,
+                "entry_price": position.entry_price,
+                "current_price": position.current_price,
+                "realized_pnl": total_realized,
+                "unrealized_pnl": unrealized_dollar,
+                "total_pnl_dollar": total_dollar,
+                "total_pnl_pct": total_pct,
+                "num_exits": len(position.partial_exits),
+                "status": position.status
+            }
+        }
+    
+    def reconcile_with_broker(
+        self, 
+        broker_positions: List[Dict[str, Any]],
+        broker_id: str
+    ):
+        """
+        Reconcile ledger with broker positions on startup.
+        Handles positions that may have been opened/closed while bot was offline.
+        """
+        conn = self._get_conn()
+        try:
+            ledger_positions = self.get_open_positions(broker_id=broker_id)
+            
+            broker_keys = {p.get('option_key', p.get('symbol', '')) for p in broker_positions}
+            ledger_keys = {p.option_key for p in ledger_positions}
+            
+            orphaned = ledger_keys - broker_keys
+            for key in orphaned:
+                print(f"[LEDGER] ⚠️ Orphaned position (closed externally?): {key}")
+            
+            missing = broker_keys - ledger_keys
+            for key in missing:
+                print(f"[LEDGER] ⚠️ Untracked broker position: {key}")
+            
+            print(f"[LEDGER] Reconciliation complete: {len(ledger_positions)} ledger, "
+                  f"{len(broker_positions)} broker, {len(orphaned)} orphaned, {len(missing)} missing")
+        finally:
+            conn.close()
+
+
+_ledger_instance: Optional[PositionLedger] = None
+
+
+def get_position_ledger() -> PositionLedger:
+    """Get the global position ledger instance."""
+    global _ledger_instance
+    if _ledger_instance is None:
+        _ledger_instance = PositionLedger()
+    return _ledger_instance
