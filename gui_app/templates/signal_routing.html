@@ -422,40 +422,16 @@
                         <label>Enable Execution</label>
                     </div>
                     <div class="toggle-container">
-                        <div class="toggle active" id="toggle-risk"></div>
-                        <label>Risk Management</label>
-                    </div>
-                    <div class="toggle-container">
                         <div class="toggle active" id="toggle-monitor"></div>
                         <label>Price Monitor</label>
                     </div>
                 </div>
 
-                <div class="form-grid" style="margin-top: 20px;">
-                    <div class="form-group">
-                        <label>Stop Loss %</label>
-                        <input type="number" id="stop-loss-pct" value="25" step="0.1">
-                    </div>
-                    <div class="form-group">
-                        <label>PT1 %</label>
-                        <input type="number" id="pt1-pct" value="25" step="0.1">
-                    </div>
-                    <div class="form-group">
-                        <label>PT2 %</label>
-                        <input type="number" id="pt2-pct" value="50" step="0.1">
-                    </div>
-                    <div class="form-group">
-                        <label>PT3 %</label>
-                        <input type="number" id="pt3-pct" value="75" step="0.1">
-                    </div>
-                    <div class="form-group">
-                        <label>PT4 %</label>
-                        <input type="number" id="pt4-pct" value="100" step="0.1">
-                    </div>
-                    <div class="form-group">
-                        <label>Trailing Stop %</label>
-                        <input type="number" id="trailing-stop-pct" value="0" step="0.1">
-                    </div>
+                <div class="risk-notice" style="margin-top: 20px; padding: 15px; background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: 10px;">
+                    <p style="color: var(--text-secondary); margin: 0; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-shield-alt" style="color: var(--violet);"></i>
+                        <span>Risk Management uses your <strong>per-channel settings</strong>. <a href="/channels" style="color: var(--mint);">Configure risk settings per channel</a></span>
+                    </p>
                 </div>
 
                 <div style="margin-top: 25px; text-align: right;">
@@ -563,14 +539,7 @@ document.addEventListener('DOMContentLoaded', function() {
             default_quantity: parseInt(document.getElementById('default-quantity').value) || 1,
             enable_forwarding: document.getElementById('toggle-forwarding').classList.contains('active'),
             enable_execution: document.getElementById('toggle-execution').classList.contains('active'),
-            enable_risk_management: document.getElementById('toggle-risk').classList.contains('active'),
-            price_monitor_enabled: document.getElementById('toggle-monitor').classList.contains('active'),
-            stop_loss_pct: parseFloat(document.getElementById('stop-loss-pct').value) || 25,
-            pt1_pct: parseFloat(document.getElementById('pt1-pct').value) || 25,
-            pt2_pct: parseFloat(document.getElementById('pt2-pct').value) || 50,
-            pt3_pct: parseFloat(document.getElementById('pt3-pct').value) || 75,
-            pt4_pct: parseFloat(document.getElementById('pt4-pct').value) || 100,
-            trailing_stop_pct: parseFloat(document.getElementById('trailing-stop-pct').value) || 0
+            price_monitor_enabled: document.getElementById('toggle-monitor').classList.contains('active')
         };
 
         try {
