@@ -493,17 +493,11 @@ class SignalRoutingEngine:
         if success:
             self._webhook_delivered.add(msg_id)
             
-            entry_cost = position.entry_price * exit_qty * 100
-            exit_value = exit_price * exit_qty * 100
-            pnl_dollar = exit_value - entry_cost
-            
             self.ledger.record_partial_exit(
                 position_id=position.id or 0,
                 exit_qty=exit_qty,
                 exit_price=exit_price,
-                exit_reason=exit_reason.value,
-                exit_pnl_dollar=pnl_dollar,
-                exit_pnl_pct=pnl_pct
+                exit_reason=exit_reason.value
             )
             
             print(f"[ROUTING_ENGINE] ✓ STC posted: {stc_message}")

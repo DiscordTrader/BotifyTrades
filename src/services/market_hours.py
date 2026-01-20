@@ -5,7 +5,7 @@ Provides market status checking for risk management decisions.
 """
 
 from datetime import datetime, time, timedelta
-from typing import Tuple
+from typing import Tuple, Optional
 import pytz
 
 
@@ -48,7 +48,7 @@ def get_eastern_now() -> datetime:
     return datetime.now(US_EASTERN)
 
 
-def is_market_holiday(dt: datetime = None) -> bool:
+def is_market_holiday(dt: Optional[datetime] = None) -> bool:
     """Check if the given date is a US market holiday."""
     if dt is None:
         dt = get_eastern_now()
@@ -63,14 +63,14 @@ def is_market_holiday(dt: datetime = None) -> bool:
     return False
 
 
-def is_weekend(dt: datetime = None) -> bool:
+def is_weekend(dt: Optional[datetime] = None) -> bool:
     """Check if the given date is a weekend."""
     if dt is None:
         dt = get_eastern_now()
     return dt.weekday() >= 5
 
 
-def is_regular_market_hours(dt: datetime = None) -> bool:
+def is_regular_market_hours(dt: Optional[datetime] = None) -> bool:
     """
     Check if currently within regular market hours (9:30 AM - 4:00 PM ET).
     Returns False on weekends and holidays.
@@ -85,7 +85,7 @@ def is_regular_market_hours(dt: datetime = None) -> bool:
     return MARKET_OPEN <= current_time < MARKET_CLOSE
 
 
-def is_extended_hours(dt: datetime = None) -> bool:
+def is_extended_hours(dt: Optional[datetime] = None) -> bool:
     """
     Check if currently within extended hours (pre-market or after-hours).
     Pre-market: 4:00 AM - 9:30 AM ET
@@ -105,7 +105,7 @@ def is_extended_hours(dt: datetime = None) -> bool:
     return pre_market or after_hours
 
 
-def is_options_trading_hours(dt: datetime = None) -> bool:
+def is_options_trading_hours(dt: Optional[datetime] = None) -> bool:
     """
     Check if options are tradeable.
     Options typically only trade during regular market hours.
@@ -113,7 +113,7 @@ def is_options_trading_hours(dt: datetime = None) -> bool:
     return is_regular_market_hours(dt)
 
 
-def get_market_status(dt: datetime = None) -> Tuple[str, bool]:
+def get_market_status(dt: Optional[datetime] = None) -> Tuple[str, bool]:
     """
     Get detailed market status.
     

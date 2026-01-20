@@ -445,13 +445,17 @@ class PositionLedger:
         current_price: float,
         staleness_sec: int = 0
     ):
-        """Update current price for a position."""
+        """Update current price for a position.
+        
+        Also sets initial_mark_price on first price update (when it's 0).
+        This enables accurate P&L tracking using market price vs signal price.
+        """
         conn = self._get_conn()
         try:
             now = datetime.now().isoformat()
             
             row = conn.execute(
-                "SELECT entry_price, remaining_qty FROM position_ledger WHERE id = ?",
+                "SELECT entry_price, remaining_qty, initial_mark_price FROM position_ledger WHERE id = ?",
                 (position_id,)
             ).fetchone()
             
@@ -460,19 +464,32 @@ class PositionLedger:
             
             entry_price = row['entry_price']
             remaining_qty = row['remaining_qty']
+            initial_mark = row['initial_mark_price'] if 'initial_mark_price' in row.keys() else 0.0
             
             cost_basis = entry_price * remaining_qty * 100
             current_value = current_price * remaining_qty * 100
             unrealized_pnl = current_value - cost_basis
             
-            conn.execute("""
-                UPDATE position_ledger SET
-                    current_price = ?,
-                    price_updated_at = ?,
-                    price_staleness_sec = ?,
-                    unrealized_pnl = ?
-                WHERE id = ?
-            """, (current_price, now, staleness_sec, unrealized_pnl, position_id))
+            if initial_mark is None or initial_mark == 0:
+                conn.execute("""
+                    UPDATE position_ledger SET
+                        current_price = ?,
+                        price_updated_at = ?,
+                        price_staleness_sec = ?,
+                        unrealized_pnl = ?,
+                        initial_mark_price = ?
+                    WHERE id = ?
+                """, (current_price, now, staleness_sec, unrealized_pnl, current_price, position_id))
+                print(f"[LEDGER] ✓ Initial mark price set: ${current_price:.2f} for position {position_id}")
+            else:
+                conn.execute("""
+                    UPDATE position_ledger SET
+                        current_price = ?,
+                        price_updated_at = ?,
+                        price_staleness_sec = ?,
+                        unrealized_pnl = ?
+                    WHERE id = ?
+                """, (current_price, now, staleness_sec, unrealized_pnl, position_id))
             conn.commit()
         finally:
             conn.close()
