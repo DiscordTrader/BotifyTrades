@@ -266,10 +266,20 @@ class SignalRoutingEngine:
         Check if risk evaluation is allowed for this position.
         
         Checks:
-        1. Market hours (options only trade during regular hours)
-        2. Price freshness
-        3. Exit strategy mode
+        1. Exit strategy mode (signal mode = no automated exits)
+        2. Risk management enabled
+        3. Market hours (options only trade during regular hours)
+        4. Price freshness
         """
+        if position.routing_mapping_id:
+            config = self.get_routing_config(position.routing_mapping_id)
+            if config:
+                if config.exit_strategy_mode == 'signal':
+                    return False, "Exit strategy = signal only - no automated exits"
+                
+                if not config.enable_risk_management:
+                    return False, "Risk management disabled for this mapping"
+        
         market_status, risk_allowed = get_market_status()
         if not risk_allowed:
             return False, f"Market {market_status} - risk monitoring paused"

@@ -110,11 +110,17 @@ class LedgerPosition:
         return d
     
     def calculate_unrealized_pnl(self) -> Tuple[float, float]:
-        """Calculate unrealized P&L based on current price."""
+        """Calculate unrealized P&L based on current price.
+        
+        Uses initial_mark_price (first live quote) for P&L calculations,
+        NOT entry_price (signal price which is for forwarding only).
+        Falls back to entry_price if initial_mark_price not yet set.
+        """
         if self.remaining_qty <= 0 or self.current_price <= 0:
             return 0.0, 0.0
         
-        cost_basis = self.entry_price * self.remaining_qty * 100
+        cost_basis_price = self.initial_mark_price if self.initial_mark_price > 0 else self.entry_price
+        cost_basis = cost_basis_price * self.remaining_qty * 100
         current_value = self.current_price * self.remaining_qty * 100
         
         pnl_dollar = current_value - cost_basis
@@ -466,7 +472,8 @@ class PositionLedger:
             remaining_qty = row['remaining_qty']
             initial_mark = row['initial_mark_price'] if 'initial_mark_price' in row.keys() else 0.0
             
-            cost_basis = entry_price * remaining_qty * 100
+            cost_basis_price = initial_mark if (initial_mark and initial_mark > 0) else entry_price
+            cost_basis = cost_basis_price * remaining_qty * 100
             current_value = current_price * remaining_qty * 100
             unrealized_pnl = current_value - cost_basis
             
@@ -516,13 +523,15 @@ class PositionLedger:
             
             remaining = row['remaining_qty']
             entry_price = row['entry_price']
+            initial_mark = row['initial_mark_price'] if 'initial_mark_price' in row.keys() else 0.0
             
             actual_exit_qty = min(exit_qty, remaining)
             if actual_exit_qty <= 0:
                 print(f"[LEDGER] No remaining quantity to exit for position {position_id}")
                 return None
             
-            cost_basis = entry_price * actual_exit_qty * 100
+            cost_basis_price = initial_mark if (initial_mark and initial_mark > 0) else entry_price
+            cost_basis = cost_basis_price * actual_exit_qty * 100
             exit_value = exit_price * actual_exit_qty * 100
             exit_pnl_dollar = exit_value - cost_basis
             exit_pnl_pct = (exit_pnl_dollar / cost_basis * 100) if cost_basis > 0 else 0.0
