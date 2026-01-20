@@ -688,6 +688,34 @@
                 </div>
             </div>
             
+            <h4 style="margin: 25px 0 15px; color: var(--success); font-size: 0.95rem;">🎯 Exit Strategy Mode</h4>
+            <div style="padding: 15px; background: rgba(16, 185, 129, 0.08); border-radius: 8px; border-left: 3px solid var(--success);">
+                <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0 0 12px;">Choose how positions are exited when both trader signals and risk management are active.</p>
+                <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+                    <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; padding: 10px; border-radius: 6px; border: 2px solid transparent; background: rgba(255,255,255,0.03);" class="exit-mode-option">
+                        <input type="radio" name="exit-strategy-mode" value="signal" style="margin-top: 3px;">
+                        <div>
+                            <strong style="color: var(--text-secondary);">📢 Signal Only</strong>
+                            <p style="margin: 4px 0 0; font-size: 0.75rem; color: var(--text-muted);">Exit only when trader sends Close/Trim. Risk settings are ignored.</p>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; padding: 10px; border-radius: 6px; border: 2px solid var(--success); background: rgba(16, 185, 129, 0.08);" class="exit-mode-option">
+                        <input type="radio" name="exit-strategy-mode" value="risk" checked style="margin-top: 3px;">
+                        <div>
+                            <strong style="color: var(--text-secondary);">🛡️ Risk Only</strong>
+                            <p style="margin: 4px 0 0; font-size: 0.75rem; color: var(--text-muted);">Exit based on SL/PT/Trailing only. Ignore trader exit signals.</p>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; padding: 10px; border-radius: 6px; border: 2px solid transparent; background: rgba(255,255,255,0.03);" class="exit-mode-option">
+                        <input type="radio" name="exit-strategy-mode" value="hybrid" style="margin-top: 3px;">
+                        <div>
+                            <strong style="color: var(--text-secondary);">⚡ Hybrid</strong>
+                            <p style="margin: 4px 0 0; font-size: 0.75rem; color: var(--text-muted);">Use both: whichever triggers first wins. SL can never be lowered.</p>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            
             <h4 style="margin: 25px 0 15px; color: var(--warning); font-size: 0.95rem;">🔒 Dynamic Stop Loss Escalation</h4>
             <div style="padding: 15px; background: rgba(255, 193, 7, 0.08); border-radius: 8px; border-left: 3px solid var(--warning);">
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
@@ -969,6 +997,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('risk-sl-profile').value = s.sl_escalation_profile || 'standard';
                 document.getElementById('risk-giveback').checked = !!s.max_profit_giveback_enabled;
                 document.getElementById('risk-giveback-pct').value = s.max_profit_giveback_pct || 30;
+                const exitMode = s.exit_strategy_mode || 'risk';
+                document.querySelector(`input[name="exit-strategy-mode"][value="${exitMode}"]`).checked = true;
+                document.querySelectorAll('.exit-mode-option').forEach(opt => {
+                    const radio = opt.querySelector('input[type="radio"]');
+                    opt.style.border = radio.checked ? '2px solid var(--success)' : '2px solid transparent';
+                    opt.style.background = radio.checked ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255,255,255,0.03)';
+                });
             }
         } catch (err) {
             console.error('Error loading risk settings:', err);
@@ -1001,7 +1036,8 @@ document.addEventListener('DOMContentLoaded', function() {
             dynamic_sl_escalation_enabled: document.getElementById('risk-dynamic-sl').checked ? 1 : 0,
             sl_escalation_profile: document.getElementById('risk-sl-profile').value,
             max_profit_giveback_enabled: document.getElementById('risk-giveback').checked ? 1 : 0,
-            max_profit_giveback_pct: parseFloat(document.getElementById('risk-giveback-pct').value) || 30
+            max_profit_giveback_pct: parseFloat(document.getElementById('risk-giveback-pct').value) || 30,
+            exit_strategy_mode: document.querySelector('input[name="exit-strategy-mode"]:checked').value
         };
         
         try {

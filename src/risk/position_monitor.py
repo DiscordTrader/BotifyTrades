@@ -189,7 +189,7 @@ class RiskDBAdapter:
                        trim_order_type, leave_runner_enabled, leave_runner_size_pct,
                        dynamic_sl_escalation_enabled, sl_escalation_profile,
                        max_profit_giveback_enabled, max_profit_giveback_pct,
-                       price_monitor_enabled
+                       exit_strategy_mode, price_monitor_enabled
                 FROM signal_routing_mappings
                 WHERE id = ? AND enabled = 1
                 LIMIT 1
@@ -217,6 +217,7 @@ class RiskDBAdapter:
             sl_profile = row[18] or 'standard'
             giveback_enabled = bool(row[19]) if row[19] else False
             giveback_pct = row[20] or 30.0
+            exit_mode = row[21] or 'risk'
             
             has_any_risk_config = (sl > 0 or pt1 > 0 or pt2 > 0 or pt3 > 0 or pt4 > 0 or trail > 0)
             
@@ -241,7 +242,7 @@ class RiskDBAdapter:
                 leave_runner_pct=leave_runner_pct,
                 trim_order_mode=trim_order_type,
                 trim_limit_offset=0.01,
-                exit_strategy_mode='risk',
+                exit_strategy_mode=exit_mode,
                 enable_dynamic_sl=dynamic_sl_enabled,
                 dynamic_sl_profile=sl_profile,
                 enable_giveback_guard=giveback_enabled,

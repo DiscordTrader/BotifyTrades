@@ -2126,6 +2126,7 @@ def register_routes(app):
                     'sl_escalation_profile': mapping.get('sl_escalation_profile', 'standard'),
                     'max_profit_giveback_enabled': mapping.get('max_profit_giveback_enabled', 0),
                     'max_profit_giveback_pct': mapping.get('max_profit_giveback_pct', 30),
+                    'exit_strategy_mode': mapping.get('exit_strategy_mode', 'risk'),
                 }
                 return jsonify({'success': True, 'settings': settings})
             else:
@@ -2135,7 +2136,8 @@ def register_routes(app):
                     'stop_loss_pct': 25, 'trailing_stop_pct': 0, 'trailing_activation_pct': 15,
                     'trim_order_type': 'market', 'leave_runner_enabled': 0, 'leave_runner_size_pct': 25,
                     'dynamic_sl_escalation_enabled': 0, 'sl_escalation_profile': 'standard',
-                    'max_profit_giveback_enabled': 0, 'max_profit_giveback_pct': 30
+                    'max_profit_giveback_enabled': 0, 'max_profit_giveback_pct': 30,
+                    'exit_strategy_mode': 'risk'
                 }})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -2170,7 +2172,8 @@ def register_routes(app):
                 dynamic_sl_escalation_enabled=data.get('dynamic_sl_escalation_enabled', 0),
                 sl_escalation_profile=data.get('sl_escalation_profile', 'standard'),
                 max_profit_giveback_enabled=data.get('max_profit_giveback_enabled', 0),
-                max_profit_giveback_pct=data.get('max_profit_giveback_pct', 30)
+                max_profit_giveback_pct=data.get('max_profit_giveback_pct', 30),
+                exit_strategy_mode=data.get('exit_strategy_mode', 'risk')
             )
             
             if success:

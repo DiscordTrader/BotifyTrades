@@ -1343,6 +1343,7 @@ def init_db():
             sl_escalation_profile TEXT DEFAULT 'standard',
             max_profit_giveback_enabled INTEGER DEFAULT 0,
             max_profit_giveback_pct REAL DEFAULT 30.0,
+            exit_strategy_mode TEXT DEFAULT 'risk',
             price_monitor_enabled INTEGER DEFAULT 1,
             price_monitor_interval_seconds INTEGER DEFAULT 5,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1366,6 +1367,7 @@ def init_db():
         ('sl_escalation_profile', "TEXT DEFAULT 'standard'"),
         ('max_profit_giveback_enabled', 'INTEGER DEFAULT 0'),
         ('max_profit_giveback_pct', 'REAL DEFAULT 30.0'),
+        ('exit_strategy_mode', "TEXT DEFAULT 'risk'"),
     ]
     for col_name, col_type in migration_columns:
         try:
@@ -2563,7 +2565,7 @@ def update_signal_routing_mapping(mapping_id: int, **kwargs) -> bool:
         'trim_order_type', 'leave_runner_enabled', 'leave_runner_size_pct',
         'dynamic_sl_escalation_enabled', 'sl_escalation_profile',
         'max_profit_giveback_enabled', 'max_profit_giveback_pct',
-        'price_monitor_enabled', 'price_monitor_interval_seconds'
+        'exit_strategy_mode', 'price_monitor_enabled', 'price_monitor_interval_seconds'
     ]
     
     updates = []
