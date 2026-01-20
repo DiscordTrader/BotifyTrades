@@ -12,6 +12,9 @@ BotifyTrades is a cross-platform trading automation bot for Discord and Telegram
 - **Licensing**: All deployments require a valid license key (set via LICENSE_KEY environment variable or setup wizard)
 - **Authentication**: First-time users are guided through setup wizard to create admin account with email recovery
 
+## Recent Changes (January 2026)
+- **Logging Architecture Fixed**: Resolved duplicate console output where every message appeared twice. Root cause was `smart_print()` calling both `logger.info()` (with StreamHandler to stdout) AND `_original_print()` (direct stdout). Fixed by removing `_original_print()` calls from `smart_print()` - now routes ALL messages through logger with console output controlled by `CleanConsoleFormatter` whitelist in `src/logging_config.py`.
+
 ## System Architecture
 
 ### UI/UX Decisions

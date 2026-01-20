@@ -254,10 +254,12 @@ def reset_debug_mode_cache():
 def smart_print(*args, **kwargs):
     """
     Replacement for print() that:
-    - Shows ONLY essential messages in console (errors, key status)
+    - Routes ALL messages through the logger (console output handled by logging_config's StreamHandler)
     - Logs ALL messages to rotating files for admin debugging
-    - Verbose details ([CONFIG], [LICENSE]) only shown when debug mode ON
     - Captures to log monitor for AI chat assistant
+    
+    NOTE: Console output is controlled by CleanConsoleFormatter in logging_config.py
+    DO NOT call _original_print here - the logger's console handler already outputs to stdout
     """
     message = ' '.join(str(arg) for arg in args)
     
@@ -273,40 +275,16 @@ def smart_print(*args, **kwargs):
     except:
         pass
     
-    # Always log everything to file
+    # Route to appropriate log level - console output handled by logger's StreamHandler
     if any(tag in message for tag in ['[ERROR]', '[CRITICAL]']):
         logger.error(message)
-        _original_print(message)  # Errors always shown
     elif '[WARNING]' in message or '⚠️' in message:
         logger.warning(message)
-        _original_print(message)  # Warnings always shown
     elif any(tag in message for tag in ['[DEBUG]', '[API]', '[ROUTE]', '[DEDUP]', 
                                          '[LOT_MATCHER]', '[PNL_TRACKER]', '[SWING]', 
                                          '[PRE-TRADE]', '[FUNDS]']):
-        # Technical debug - only to file
         logger.debug(message)
-        if is_debug_mode():
-            _original_print(message)
-    elif any(tag in message for tag in ['[CONFIG]', '[LICENSE]']):
-        # Verbose config/license details - only when debug mode ON
-        logger.info(message)
-        if is_debug_mode():
-            _original_print(message)
-    elif any(tag in message for tag in ['[Init]', '[MAIN]', '[GUI]']):
-        # Essential startup status - always show (brief)
-        logger.info(message)
-        _original_print(message)
-    elif any(tag in message for tag in ['[ALPACA]', '[Discord]', '[Webull]', '[WORKER]', 
-                                         '[SYNC]', '[DATABASE]', '[STARTUP]', '[POSITION SIZE]',
-                                         '[SIGNAL PARSED]', '[QUEUE]', '[PAPER TRADE]',
-                                         '[ORDER', '[MULTI-BROKER]', '[RISK]', '[TASTYTRADE]',
-                                         '[ROBINHOOD]', '[IBKR]', '[OPTIONS API]', '[TELEGRAM]',
-                                         '[DHANQ]', '[ZERODHA]', '[UPSTOX]']):
-        # Trading/broker messages - show in console
-        logger.info(message)
-        _original_print(message)
     else:
-        # Other messages - only to log file
         logger.info(message)
 
 # Replace built-in print
@@ -4910,7 +4888,10 @@ class SelfClient(discord.Client):
         
         # Guard to prevent on_ready from running multiple times (Discord reconnects trigger on_ready)
         self._on_ready_completed = False
-        self._on_ready_lock = None  # Will be created in setup() when event loop is ready
+        self._on_ready_lock = None  # Will be created in on_ready when event loop is ready
+        # Thread-safe lock for creating the async lock (prevents race on lock creation)
+        import threading
+        self._on_ready_lock_creation_mutex = threading.Lock()
         
         # Note: Order-level deduplication is now implemented at WebullBroker class level
         # using class-level _order_dedupe_cache with thread-safe locking
@@ -7043,14 +7024,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         global _discord_ready_event  # Declare at function start for early signaling
         
         # Guard against duplicate on_ready calls (Discord reconnects can trigger this multiple times)
-        # Use lock-based double-checked guard to prevent race conditions
+        # First fast-path check (no locking needed if already completed)
         if self._on_ready_completed:
             print("[Discord] Reconnected - skipping duplicate on_ready initialization")
             return
         
-        # Lock-based guard: If lock not yet created, create it now (first on_ready call)
-        if self._on_ready_lock is None:
-            self._on_ready_lock = asyncio.Lock()
+        # Thread-safe lock creation using threading mutex (prevents race condition where
+        # two simultaneous on_ready calls each create their own asyncio.Lock)
+        with self._on_ready_lock_creation_mutex:
+            if self._on_ready_lock is None:
+                self._on_ready_lock = asyncio.Lock()
         
         async with self._on_ready_lock:
             # Double-check inside lock to prevent parallel execution

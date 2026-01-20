@@ -68,16 +68,28 @@ rotate_logs_on_startup()
 
 
 class CleanConsoleFormatter(logging.Formatter):
-    """Custom formatter for clean console output - ONLY signals, channels, balance"""
+    """Custom formatter for clean console output - trading signals, broker status, errors"""
     
     # STRICT WHITELIST - only these messages show in console
     CONSOLE_WHITELIST = [
-        '[Signal]', '[BTO]', '[STC]', '[EXECUTE]',
-        '[Channel]', '[Balance]', '[Position]', '[P&L]',
-        '[ORDER]', '[FILLED]', '[CANCELLED]',
-        '[ERROR]', '[CRITICAL]',
-        '[Webull]', '[PAPER]', '[LIVE]', '[ASYNC]', '[Init]', '[Discord]',  # Broker initialization
-        '[DEBUG]', '[API]', '[ROUTE]'  # Debug messages
+        # Trading signals
+        '[Signal]', '[BTO]', '[STC]', '[EXECUTE]', '[SIGNAL PARSED]',
+        # Position/PNL
+        '[Channel]', '[Balance]', '[Position]', '[P&L]', '[POSITION SIZE]',
+        # Order execution
+        '[ORDER]', '[FILLED]', '[CANCELLED]', '[QUEUE]',
+        # Errors/Warnings
+        '[ERROR]', '[CRITICAL]', '[WARNING]', '⚠️',
+        # Broker initialization
+        '[Webull]', '[PAPER]', '[LIVE]', '[ASYNC]', '[Init]', '[Discord]',
+        '[ALPACA]', '[TASTYTRADE]', '[ROBINHOOD]', '[IBKR]', '[SCHWAB]',
+        '[DHANQ]', '[ZERODHA]', '[UPSTOX]', '[OPTIONS API]',
+        # System status
+        '[MAIN]', '[GUI]', '[STARTUP]', '[CONFIG]', '[LICENSE]',
+        '[WORKER]', '[SYNC]', '[DATABASE]', '[RISK]', '[TELEGRAM]',
+        '[PAPER TRADE]', '[MULTI-BROKER]', '[ROUTER]', '[LIFECYCLE]',
+        # Debug (when enabled)
+        '[DEBUG]', '[API]', '[ROUTE]'
     ]
     
     def format(self, record):

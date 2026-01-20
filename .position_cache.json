@@ -7143,7 +7143,7 @@
     "entry_price": 1.12,
     "highest_price": 1.51,
     "trailing_activated": false,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
