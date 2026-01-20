@@ -46,6 +46,15 @@ Proportional Exit Logic calculates proportional exits for partial exit signals b
 
 Signal Routing with Per-Mapping Risk Settings enables source-to-destination Discord channel routing with independent risk management. The `routing_mapping_id` discriminator in the trades table allows the risk engine to apply mapping-specific SL%, PT targets, and trailing stop settings separately from regular channel-based risk settings. This enables routed trades to have different risk profiles than the source channel's settings.
 
+The Forwarding-Only Signal Routing Engine (`src/services/signal_routing_engine.py`) provides webhook-based signal forwarding with position tracking and real-time P&L monitoring. Key features include:
+- **Dual Entry Prices**: `signal_entry_price` (from signal, for forwarding) and `initial_mark_price` (first live quote, for P&L calculations)
+- **Position Ledger** (`src/services/position_ledger.py`): Tracks positions with FIFO-based partial exits, realized/unrealized P&L, and PT level tracking
+- **Stale Price Gating**: Risk exits blocked when price staleness exceeds 30 seconds
+- **Shared ExitArbiter**: Prevents duplicate STCs across signal and risk-driven exits
+- **Market Hours Utility** (`src/services/market_hours.py`): Pauses risk monitoring during weekends, holidays, and outside market hours
+- **Exit Strategy Mode Enforcement**: Signal mode = trader signals only, Risk mode = automated exits only, Hybrid mode = both active with ExitArbiter coordination
+- **Webhook Retry Queue**: Failed STC webhooks queued with exponential backoff and deduplication
+
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ. The License Validation System provides industry-standard license activation. The Discord bot runs in a dedicated thread. Broker credentials and all bot settings are GUI-manageable and stored in SQLite. Security features include admin password management, rate limiting on login attempts, session-based authentication, and local password recovery.
 
