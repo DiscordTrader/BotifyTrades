@@ -327,14 +327,15 @@
 
     .toggle {
         position: relative;
-        width: 50px;
-        min-width: 50px;
-        height: 26px;
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 13px;
+        width: 48px;
+        min-width: 48px;
+        height: 24px;
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition: background 0.3s ease;
         flex-shrink: 0;
+        box-sizing: border-box;
     }
 
     .toggle.active {
@@ -344,17 +345,18 @@
     .toggle::after {
         content: '';
         position: absolute;
-        top: 3px;
-        left: 3px;
+        top: 2px;
+        left: 2px;
         width: 20px;
         height: 20px;
         background: white;
         border-radius: 50%;
-        transition: all 0.3s ease;
+        transition: transform 0.3s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     }
 
     .toggle.active::after {
-        left: 27px;
+        transform: translateX(24px);
     }
 
     .action-buttons {
