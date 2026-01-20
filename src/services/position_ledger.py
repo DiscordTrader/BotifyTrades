@@ -79,6 +79,8 @@ class LedgerPosition:
     entry_qty: int = 0
     remaining_qty: int = 0
     entry_price: float = 0.0
+    signal_entry_price: float = 0.0
+    initial_mark_price: float = 0.0
     current_price: float = 0.0
     price_updated_at: str = ""
     price_staleness_sec: int = 0
@@ -254,12 +256,19 @@ class PositionLedger:
                 ON position_ledger(channel_id)
             """)
             
-            # Migration: Add routing_mapping_id column if missing (for existing tables)
-            try:
-                conn.execute("SELECT routing_mapping_id FROM position_ledger LIMIT 1")
-            except sqlite3.OperationalError:
-                print("[LEDGER] Adding routing_mapping_id column...")
-                conn.execute("ALTER TABLE position_ledger ADD COLUMN routing_mapping_id INTEGER")
+            # Migrations: Add columns if missing (for existing tables)
+            migrations = [
+                ("routing_mapping_id", "ALTER TABLE position_ledger ADD COLUMN routing_mapping_id INTEGER"),
+                ("signal_entry_price", "ALTER TABLE position_ledger ADD COLUMN signal_entry_price REAL DEFAULT 0"),
+                ("initial_mark_price", "ALTER TABLE position_ledger ADD COLUMN initial_mark_price REAL DEFAULT 0"),
+            ]
+            
+            for col_name, sql in migrations:
+                try:
+                    conn.execute(f"SELECT {col_name} FROM position_ledger LIMIT 1")
+                except sqlite3.OperationalError:
+                    print(f"[LEDGER] Adding {col_name} column...")
+                    conn.execute(sql)
             
             conn.commit()
             print("[LEDGER] ✓ Position ledger tables initialized")
@@ -275,15 +284,18 @@ class PositionLedger:
                     option_key, symbol, expiry, strike, option_type,
                     channel_id, broker_id, account_id,
                     entry_qty, remaining_qty, entry_price,
+                    signal_entry_price, initial_mark_price,
                     current_price, price_updated_at,
                     status, entry_time, entry_message_id, source_type,
                     routing_mapping_id, pt_levels_hit, max_pnl_seen, trailing_stop_active
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 position.option_key, position.symbol, position.expiry,
                 position.strike, position.option_type,
                 position.channel_id, position.broker_id, position.account_id,
                 position.entry_qty, position.remaining_qty, position.entry_price,
+                position.signal_entry_price or position.entry_price,
+                position.initial_mark_price or 0.0,
                 position.current_price, position.price_updated_at,
                 position.status, position.entry_time, position.entry_message_id,
                 position.source_type, position.routing_mapping_id, position.pt_levels_hit,
@@ -368,6 +380,10 @@ class PositionLedger:
     
     def _row_to_position(self, row: sqlite3.Row, conn: sqlite3.Connection) -> LedgerPosition:
         """Convert database row to LedgerPosition."""
+        signal_entry = row['signal_entry_price'] if 'signal_entry_price' in row.keys() else 0.0
+        initial_mark = row['initial_mark_price'] if 'initial_mark_price' in row.keys() else 0.0
+        routing_id = row['routing_mapping_id'] if 'routing_mapping_id' in row.keys() else None
+        
         position = LedgerPosition(
             id=row['id'],
             option_key=row['option_key'],
@@ -381,6 +397,8 @@ class PositionLedger:
             entry_qty=row['entry_qty'],
             remaining_qty=row['remaining_qty'],
             entry_price=row['entry_price'],
+            signal_entry_price=signal_entry or 0.0,
+            initial_mark_price=initial_mark or 0.0,
             current_price=row['current_price'] or 0.0,
             price_updated_at=row['price_updated_at'] or "",
             price_staleness_sec=row['price_staleness_sec'] or 0,
@@ -393,6 +411,7 @@ class PositionLedger:
             close_time=row['close_time'] or "",
             entry_message_id=row['entry_message_id'] or "",
             source_type=row['source_type'] or "spy_sniper",
+            routing_mapping_id=routing_id,
             pt_levels_hit=row['pt_levels_hit'] or "[]",
             max_pnl_seen=row['max_pnl_seen'] or 0.0,
             trailing_stop_active=bool(row['trailing_stop_active'])
