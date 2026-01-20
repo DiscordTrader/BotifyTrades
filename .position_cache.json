@@ -7330,7 +7330,7 @@
   },
   "ALPACA_PAPER_LLY_1085.0_2026-01-23_C": {
     "entry_price": 2.45,
-    "highest_price": 2.45,
+    "highest_price": 2.5,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
