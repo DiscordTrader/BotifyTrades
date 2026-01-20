@@ -9352,6 +9352,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 elif signal_qty:
                     # No channel settings - use signal's quantity as-is
                     print(f"[POSITION SIZE] ✓ Using signal quantity: {signal_qty} contracts (no channel override)")
+                    print(f"[DEBUG PATH A] Inside BTO position sizing branch at line 9354")
                 else:
                     # No channel settings and no signal qty - use global defaults
                     _current_trading_settings = get_trading_settings()
