@@ -7204,8 +7204,8 @@
   },
   "ALPACA_PAPER_QQQ_615.0_2026-01-20_C": {
     "entry_price": 0.66,
-    "highest_price": 0.7,
-    "trailing_activated": false,
+    "highest_price": 1.09,
+    "trailing_activated": true,
     "closing": false,
     "closing_cycles": 0,
     "stop_loss_price": null,
@@ -7216,11 +7216,20 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {},
+    "pending_orders": {
+      "f598b54b-1aa0-47a8-89f7-b1c97a79ee9b": {
+        "order_id": "f598b54b-1aa0-47a8-89f7-b1c97a79ee9b",
+        "tier": 1,
+        "qty_expected": 17,
+        "qty_filled": 0,
+        "status": "pending",
+        "created_at": "2026-01-20T15:21:45.512863"
+      }
+    },
     "created_at": "2026-01-20T15:14:13.821330",
-    "max_pnl_seen": 6.060606060606049,
+    "max_pnl_seen": 65.15151515151516,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.55
+    "last_evaluated_price": 1.09
   }
 }
