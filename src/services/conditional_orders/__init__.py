@@ -10,7 +10,7 @@ from .base import BaseConditionalOrderService, PriceMonitor, OrderStatus, RateLi
 from .us_service import USConditionalOrderService
 from .india_service import IndiaConditionalOrderService
 from .canada_service import CanadaConditionalOrderService
-from .router import ConditionalOrderRouter
+from .router import ConditionalOrderRouter, conditional_order_router
 
 __all__ = [
     'BaseConditionalOrderService',
@@ -21,4 +21,5 @@ __all__ = [
     'IndiaConditionalOrderService',
     'CanadaConditionalOrderService',
     'ConditionalOrderRouter',
+    'conditional_order_router',
 ]
