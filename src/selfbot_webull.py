@@ -9086,6 +9086,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     return
         
         # Parse trading signals - check Bullwinkle first, then India, then US format
+        print(f"[DEBUG FLOW] Reached signal parsing. bullwinkle_opt={bullwinkle_opt is not None}, india_stock_signal={india_stock_signal is not None}")
         opt = bullwinkle_opt  # Use Bullwinkle signal if already parsed
         
         if opt is None and is_india_signal(normalized_content):
