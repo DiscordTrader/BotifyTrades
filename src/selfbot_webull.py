@@ -9197,6 +9197,42 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if opt is None and india_stock_signal is None:
             opt = parse_option_signal(normalized_content)
         
+        # Extract conditional triggers from the FULL message content (including second line)
+        # The wrapper parse_option_signal doesn't extract triggers, so do it here
+        if opt and not opt.get('trigger_price'):
+            try:
+                from src.signals.parser import (
+                    CONDITIONAL_TRIGGER_PATTERN, CONDITIONAL_TRIGGER_UNDER_PATTERN,
+                    CONDITIONAL_TRIGGER_ABOVE_ALT_PATTERN, CONDITIONAL_TRIGGER_UNDER_ALT_PATTERN
+                )
+                # Use combined_content (full message) for trigger detection, not normalized_content
+                full_text = combined_content if combined_content else normalized_content
+                
+                trigger_match = CONDITIONAL_TRIGGER_PATTERN.search(full_text)
+                trigger_condition = 'above'
+                
+                if not trigger_match:
+                    trigger_match = CONDITIONAL_TRIGGER_ABOVE_ALT_PATTERN.search(full_text)
+                    trigger_condition = 'above'
+                
+                if not trigger_match:
+                    trigger_match = CONDITIONAL_TRIGGER_UNDER_PATTERN.search(full_text)
+                    trigger_condition = 'below'
+                
+                if not trigger_match:
+                    trigger_match = CONDITIONAL_TRIGGER_UNDER_ALT_PATTERN.search(full_text)
+                    trigger_condition = 'below'
+                
+                if trigger_match:
+                    trigger_symbol = trigger_match.group(1).upper()
+                    trigger_price = float(trigger_match.group(2))
+                    opt['trigger_symbol'] = trigger_symbol
+                    opt['trigger_price'] = trigger_price
+                    opt['trigger_condition'] = trigger_condition
+                    print(f"[SIGNAL] ✓ Conditional trigger detected: {trigger_symbol} {trigger_condition.upper()} ${trigger_price}")
+            except Exception as e:
+                print(f"[SIGNAL] ⚠️ Error extracting trigger: {e}")
+        
         # Check for bracket order signal (stock with targets and stop loss)
         bracket_signal = None
         from src.signals.parser import is_bracket_order_signal, parse_bracket_order_signal, is_jacob_signal, parse_jacob_signal, is_conditional_order_signal, parse_conditional_order_signal
