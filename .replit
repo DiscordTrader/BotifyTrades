@@ -7,15 +7,6 @@ integrations = ["python_openai_ai_integrations:1.0.0", "github:1.0.0", "google-m
 runButton = "Project"
 
 [[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "BotifyTrades"
-
-[[workflows.workflow]]
 name = "BotifyTrades"
 author = "agent"
 
