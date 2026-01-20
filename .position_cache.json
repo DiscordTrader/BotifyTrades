@@ -7057,7 +7057,7 @@
   },
   "ALPACA_PAPER_SOFI_27.0_2026-01-23_C": {
     "entry_price": 0.2,
-    "highest_price": 0.23,
+    "highest_price": 0.25,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -7078,7 +7078,7 @@
   },
   "ALPACA_PAPER_MU_350.0_2026-01-23_P": {
     "entry_price": 2.61,
-    "highest_price": 4.3,
+    "highest_price": 4.35,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -7204,9 +7204,9 @@
   },
   "ALPACA_PAPER_QQQ_615.0_2026-01-20_C": {
     "entry_price": 0.66,
-    "highest_price": 1.13,
+    "highest_price": 1.18,
     "trailing_activated": true,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -7217,24 +7217,24 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {
-      "f598b54b-1aa0-47a8-89f7-b1c97a79ee9b": {
-        "order_id": "f598b54b-1aa0-47a8-89f7-b1c97a79ee9b",
+      "82ddd4d9-68d9-4bb3-8d8d-fc67d4145573": {
+        "order_id": "82ddd4d9-68d9-4bb3-8d8d-fc67d4145573",
         "tier": 1,
-        "qty_expected": 17,
+        "qty_expected": 2,
         "qty_filled": 0,
         "status": "pending",
-        "created_at": "2026-01-20T15:21:45.512863"
+        "created_at": "2026-01-20T15:32:17.626366"
       }
     },
     "created_at": "2026-01-20T15:14:13.821330",
-    "max_pnl_seen": 71.21212121212119,
+    "max_pnl_seen": 78.78787878787877,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
     "last_evaluated_price": 1.11
   },
   "ALPACA_PAPER_POLA_stock": {
     "entry_price": 3.25,
-    "highest_price": 3.23,
+    "highest_price": 3.31,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -7248,6 +7248,27 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-20T15:25:30.896448",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
+  },
+  "ALPACA_PAPER_PLUG_2.5_2026-01-30_C": {
+    "entry_price": 0.08,
+    "highest_price": 0.07,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "PLUG260130C00002500",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-20T15:27:11.694310",
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
