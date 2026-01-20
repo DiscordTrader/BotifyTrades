@@ -1330,8 +1330,19 @@ def init_db():
             pt2_pct REAL DEFAULT 50.0,
             pt3_pct REAL DEFAULT 75.0,
             pt4_pct REAL DEFAULT 100.0,
+            pt1_qty INTEGER,
+            pt2_qty INTEGER,
+            pt3_qty INTEGER,
+            pt4_qty INTEGER,
             trailing_stop_pct REAL DEFAULT 0.0,
             trailing_activation_pct REAL DEFAULT 15.0,
+            trim_order_type TEXT DEFAULT 'market',
+            leave_runner_enabled INTEGER DEFAULT 0,
+            leave_runner_size_pct REAL DEFAULT 25.0,
+            dynamic_sl_escalation_enabled INTEGER DEFAULT 0,
+            sl_escalation_profile TEXT DEFAULT 'standard',
+            max_profit_giveback_enabled INTEGER DEFAULT 0,
+            max_profit_giveback_pct REAL DEFAULT 30.0,
             price_monitor_enabled INTEGER DEFAULT 1,
             price_monitor_interval_seconds INTEGER DEFAULT 5,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1341,6 +1352,26 @@ def init_db():
     ''')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_routing_source ON signal_routing_mappings(source_channel_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_signal_routing_enabled ON signal_routing_mappings(enabled)')
+    
+    # Migrate existing signal_routing_mappings - add new risk management columns
+    migration_columns = [
+        ('pt1_qty', 'INTEGER'),
+        ('pt2_qty', 'INTEGER'),
+        ('pt3_qty', 'INTEGER'),
+        ('pt4_qty', 'INTEGER'),
+        ('trim_order_type', "TEXT DEFAULT 'market'"),
+        ('leave_runner_enabled', 'INTEGER DEFAULT 0'),
+        ('leave_runner_size_pct', 'REAL DEFAULT 25.0'),
+        ('dynamic_sl_escalation_enabled', 'INTEGER DEFAULT 0'),
+        ('sl_escalation_profile', "TEXT DEFAULT 'standard'"),
+        ('max_profit_giveback_enabled', 'INTEGER DEFAULT 0'),
+        ('max_profit_giveback_pct', 'REAL DEFAULT 30.0'),
+    ]
+    for col_name, col_type in migration_columns:
+        try:
+            cursor.execute(f'ALTER TABLE signal_routing_mappings ADD COLUMN {col_name} {col_type}')
+        except:
+            pass
     
     # Trade monitor - track synced broker orders to prevent duplicate posts
     cursor.execute('''
@@ -2527,7 +2558,11 @@ def update_signal_routing_mapping(mapping_id: int, **kwargs) -> bool:
         'enabled', 'broker_id', 'account_id', 'default_quantity', 'default_dollar_amount',
         'enable_execution', 'enable_forwarding', 'enable_risk_management',
         'stop_loss_pct', 'pt1_pct', 'pt2_pct', 'pt3_pct', 'pt4_pct',
+        'pt1_qty', 'pt2_qty', 'pt3_qty', 'pt4_qty',
         'trailing_stop_pct', 'trailing_activation_pct',
+        'trim_order_type', 'leave_runner_enabled', 'leave_runner_size_pct',
+        'dynamic_sl_escalation_enabled', 'sl_escalation_profile',
+        'max_profit_giveback_enabled', 'max_profit_giveback_pct',
         'price_monitor_enabled', 'price_monitor_interval_seconds'
     ]
     

@@ -2108,22 +2108,34 @@ def register_routes(app):
             mapping = db.get_signal_routing_by_source(channel_id)
             if mapping:
                 settings = {
-                    'stop_loss_pct': mapping.get('stop_loss_pct', 0),
+                    'pt1_pct': mapping.get('pt1_pct', 15),
+                    'pt2_pct': mapping.get('pt2_pct', 25),
+                    'pt3_pct': mapping.get('pt3_pct', 35),
+                    'pt4_pct': mapping.get('pt4_pct', 55),
+                    'pt1_qty': mapping.get('pt1_qty'),
+                    'pt2_qty': mapping.get('pt2_qty'),
+                    'pt3_qty': mapping.get('pt3_qty'),
+                    'pt4_qty': mapping.get('pt4_qty'),
+                    'stop_loss_pct': mapping.get('stop_loss_pct', 25),
                     'trailing_stop_pct': mapping.get('trailing_stop_pct', 0),
-                    'pt1_pct': mapping.get('pt1_pct', 0),
-                    'pt2_pct': mapping.get('pt2_pct', 0),
-                    'pt3_pct': mapping.get('pt3_pct', 0),
-                    'pt4_pct': mapping.get('pt4_pct', 0),
+                    'trailing_activation_pct': mapping.get('trailing_activation_pct', 15),
+                    'trim_order_type': mapping.get('trim_order_type', 'market'),
+                    'leave_runner_enabled': mapping.get('leave_runner_enabled', 0),
+                    'leave_runner_size_pct': mapping.get('leave_runner_size_pct', 25),
+                    'dynamic_sl_escalation_enabled': mapping.get('dynamic_sl_escalation_enabled', 0),
+                    'sl_escalation_profile': mapping.get('sl_escalation_profile', 'standard'),
+                    'max_profit_giveback_enabled': mapping.get('max_profit_giveback_enabled', 0),
+                    'max_profit_giveback_pct': mapping.get('max_profit_giveback_pct', 30),
                 }
                 return jsonify({'success': True, 'settings': settings})
             else:
                 return jsonify({'success': True, 'settings': {
-                    'stop_loss_pct': 25.0,
-                    'trailing_stop_pct': 0,
-                    'pt1_pct': 25.0,
-                    'pt2_pct': 50.0,
-                    'pt3_pct': 75.0,
-                    'pt4_pct': 100.0
+                    'pt1_pct': 15, 'pt2_pct': 25, 'pt3_pct': 35, 'pt4_pct': 55,
+                    'pt1_qty': None, 'pt2_qty': None, 'pt3_qty': None, 'pt4_qty': None,
+                    'stop_loss_pct': 25, 'trailing_stop_pct': 0, 'trailing_activation_pct': 15,
+                    'trim_order_type': 'market', 'leave_runner_enabled': 0, 'leave_runner_size_pct': 25,
+                    'dynamic_sl_escalation_enabled': 0, 'sl_escalation_profile': 'standard',
+                    'max_profit_giveback_enabled': 0, 'max_profit_giveback_pct': 30
                 }})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -2141,12 +2153,24 @@ def register_routes(app):
             
             success = db.update_signal_routing_mapping(
                 mapping['id'],
-                stop_loss_pct=data.get('stop_loss_pct', 25.0),
+                pt1_pct=data.get('pt1_pct', 15),
+                pt2_pct=data.get('pt2_pct', 25),
+                pt3_pct=data.get('pt3_pct', 35),
+                pt4_pct=data.get('pt4_pct', 55),
+                pt1_qty=data.get('pt1_qty'),
+                pt2_qty=data.get('pt2_qty'),
+                pt3_qty=data.get('pt3_qty'),
+                pt4_qty=data.get('pt4_qty'),
+                stop_loss_pct=data.get('stop_loss_pct', 25),
                 trailing_stop_pct=data.get('trailing_stop_pct', 0),
-                pt1_pct=data.get('pt1_pct', 25.0),
-                pt2_pct=data.get('pt2_pct', 50.0),
-                pt3_pct=data.get('pt3_pct', 75.0),
-                pt4_pct=data.get('pt4_pct', 100.0)
+                trailing_activation_pct=data.get('trailing_activation_pct', 15),
+                trim_order_type=data.get('trim_order_type', 'market'),
+                leave_runner_enabled=data.get('leave_runner_enabled', 0),
+                leave_runner_size_pct=data.get('leave_runner_size_pct', 25),
+                dynamic_sl_escalation_enabled=data.get('dynamic_sl_escalation_enabled', 0),
+                sl_escalation_profile=data.get('sl_escalation_profile', 'standard'),
+                max_profit_giveback_enabled=data.get('max_profit_giveback_enabled', 0),
+                max_profit_giveback_pct=data.get('max_profit_giveback_pct', 30)
             )
             
             if success:

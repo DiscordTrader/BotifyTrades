@@ -591,56 +591,145 @@
 </div>
 
 <div id="riskSettingsModal" class="modal" style="display:none;">
-    <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-content" style="max-width: 750px; max-height: 90vh; overflow-y: auto;">
         <div class="modal-header">
-            <h3><i class="fas fa-shield-alt" style="color: var(--violet);"></i> Risk Settings - <span id="riskModalTitle"></span></h3>
+            <h3>🛡️ Risk Settings - <span id="riskModalTitle"></span></h3>
             <button class="modal-close" onclick="closeRiskModal()">&times;</button>
         </div>
         <div class="modal-body">
             <input type="hidden" id="riskChannelId">
             
-            <div class="form-grid" style="grid-template-columns: repeat(2, 1fr); gap: 20px;">
-                <div class="form-group">
-                    <label><i class="fas fa-stop-circle" style="color: var(--danger);"></i> Stop Loss %</label>
-                    <input type="number" id="risk-stop-loss" class="form-input" step="0.1" min="0" max="100" placeholder="e.g., 25">
-                </div>
-                <div class="form-group">
-                    <label><i class="fas fa-arrow-trend-up" style="color: var(--success);"></i> Trailing Stop %</label>
-                    <input type="number" id="risk-trailing-stop" class="form-input" step="0.1" min="0" max="100" placeholder="e.g., 10">
-                </div>
-            </div>
-            
-            <h4 style="margin: 25px 0 15px; color: var(--text-secondary); font-size: 0.9rem;">Profit Targets</h4>
-            <div class="form-grid" style="grid-template-columns: repeat(4, 1fr); gap: 15px;">
+            <h4 style="margin: 0 0 15px; color: var(--mint); font-size: 0.95rem;">📊 Profit Targets</h4>
+            <div class="form-grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
                 <div class="form-group">
                     <label>PT1 %</label>
-                    <input type="number" id="risk-pt1" class="form-input" step="0.1" min="0" placeholder="25">
+                    <input type="number" id="risk-pt1" class="form-input" step="0.1" min="0" placeholder="15">
                 </div>
                 <div class="form-group">
                     <label>PT2 %</label>
-                    <input type="number" id="risk-pt2" class="form-input" step="0.1" min="0" placeholder="50">
+                    <input type="number" id="risk-pt2" class="form-input" step="0.1" min="0" placeholder="25">
                 </div>
                 <div class="form-group">
                     <label>PT3 %</label>
-                    <input type="number" id="risk-pt3" class="form-input" step="0.1" min="0" placeholder="75">
+                    <input type="number" id="risk-pt3" class="form-input" step="0.1" min="0" placeholder="35">
                 </div>
                 <div class="form-group">
                     <label>PT4 %</label>
-                    <input type="number" id="risk-pt4" class="form-input" step="0.1" min="0" placeholder="100">
+                    <input type="number" id="risk-pt4" class="form-input" step="0.1" min="0" placeholder="55">
                 </div>
+            </div>
+            
+            <div style="margin-top: 15px; padding: 12px; background: rgba(124, 58, 237, 0.1); border-radius: 8px; border-left: 3px solid var(--violet);">
+                <p style="color: var(--violet); margin: 0 0 10px; font-weight: 600; font-size: 0.85rem;">Custom Trim Quantities (optional)</p>
+                <p style="color: var(--text-muted); margin: 0 0 10px; font-size: 0.8rem;">Specify exact contracts to trim at each target. Leave empty for auto-calculation.</p>
+                <div class="form-grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 0.75rem;">PT1 Qty</label>
+                        <input type="number" id="risk-pt1-qty" class="form-input" min="0" placeholder="Auto">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 0.75rem;">PT2 Qty</label>
+                        <input type="number" id="risk-pt2-qty" class="form-input" min="0" placeholder="Auto">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 0.75rem;">PT3 Qty</label>
+                        <input type="number" id="risk-pt3-qty" class="form-input" min="0" placeholder="Auto">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 0.75rem;">PT4 Qty</label>
+                        <input type="number" id="risk-pt4-qty" class="form-input" min="0" placeholder="Auto">
+                    </div>
+                </div>
+            </div>
+            
+            <h4 style="margin: 25px 0 15px; color: var(--danger); font-size: 0.95rem;">🛑 Stop Loss & Trailing</h4>
+            <div class="form-grid" style="grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                <div class="form-group">
+                    <label>Stop Loss %</label>
+                    <input type="number" id="risk-stop-loss" class="form-input" step="0.1" min="0" max="100" placeholder="25">
+                </div>
+                <div class="form-group">
+                    <label>Trailing Stop %</label>
+                    <input type="number" id="risk-trailing-stop" class="form-input" step="0.1" min="0" max="100" placeholder="15">
+                </div>
+                <div class="form-group">
+                    <label>Trailing Activation %</label>
+                    <input type="number" id="risk-trailing-activation" class="form-input" step="0.1" min="0" max="100" placeholder="35">
+                </div>
+            </div>
+            
+            <h4 style="margin: 25px 0 15px; color: var(--text-secondary); font-size: 0.95rem;">⚙️ Order Settings</h4>
+            <div class="form-grid" style="grid-template-columns: repeat(2, 1fr); gap: 15px; align-items: start;">
+                <div class="form-group">
+                    <label>Trim Order Type</label>
+                    <div style="display: flex; gap: 15px; margin-top: 8px;">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="radio" name="trim-order-type" value="market" checked>
+                            <span>Market</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="radio" name="trim-order-type" value="limit">
+                            <span>Limit</span>
+                        </label>
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 5px;">Market fills immediately. Limit uses psychological pricing (.04/.09).</p>
+                </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="risk-leave-runner">
+                        <span>⭐ Leave Runner</span>
+                    </label>
+                    <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 5px;">Keep a % of position after profit targets to capture additional gains.</p>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
+                        <span style="font-size: 0.8rem;">Runner Size:</span>
+                        <input type="number" id="risk-runner-size" class="form-input" style="width: 80px;" step="1" min="1" max="100" value="25">
+                        <span style="font-size: 0.8rem;">% of position</span>
+                    </div>
+                </div>
+            </div>
+            
+            <h4 style="margin: 25px 0 15px; color: var(--warning); font-size: 0.95rem;">🔒 Dynamic Stop Loss Escalation</h4>
+            <div style="padding: 15px; background: rgba(255, 193, 7, 0.08); border-radius: 8px; border-left: 3px solid var(--warning);">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <input type="checkbox" id="risk-dynamic-sl">
+                    <label for="risk-dynamic-sl" style="font-weight: 600;">Enable Dynamic SL Escalation</label>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0 0 10px;">Each time you hit a profit target (PT1, PT2, PT3, PT4), your stop loss automatically moves UP to lock in more gains.</p>
+                <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 0.85rem;">Profile</label>
+                    <select id="risk-sl-profile" class="form-input">
+                        <option value="conservative">Conservative (PT1: BE, PT2: +2%, PT3: +5%, PT4: +10%)</option>
+                        <option value="standard" selected>Standard - Balanced (PT1: BE, PT2: +5%, PT3: +15%, PT4: +25%)</option>
+                        <option value="aggressive">Aggressive (PT1: BE, PT2: +10%, PT3: +25%, PT4: +40%)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <h4 style="margin: 25px 0 15px; color: var(--info); font-size: 0.95rem;">📉 Max Profit Giveback Guard</h4>
+            <div style="padding: 15px; background: rgba(23, 162, 184, 0.08); border-radius: 8px; border-left: 3px solid var(--info);">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <input type="checkbox" id="risk-giveback">
+                    <label for="risk-giveback" style="font-weight: 600;">Enable Max Profit Giveback Guard</label>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0 0 10px;">Protects your gains by exiting if profit drops too much from its highest point.</p>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 0.85rem;">Max Giveback:</span>
+                    <input type="number" id="risk-giveback-pct" class="form-input" style="width: 80px;" step="1" min="10" max="90" value="30">
+                    <span style="font-size: 0.85rem;">% from peak profit</span>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 8px;">Example: With 30% giveback, if profit reaches +50% then drops to +35%, position auto-exits.</p>
             </div>
             
             <div style="margin-top: 20px; padding: 15px; background: rgba(15, 240, 179, 0.1); border-radius: 10px;">
                 <p style="color: var(--text-secondary); margin: 0; font-size: 0.85rem;">
-                    <i class="fas fa-info-circle" style="color: var(--mint);"></i>
-                    These settings apply to all trades routed through this mapping. The Risk Management engine will monitor positions and execute exits automatically.
+                    ℹ️ These settings apply to all trades routed through this mapping. The Risk Management engine will monitor positions and execute exits automatically.
                 </p>
             </div>
         </div>
         <div class="modal-footer" style="display: flex; gap: 15px; justify-content: flex-end; padding-top: 20px; border-top: 1px solid var(--card-border);">
             <button class="btn btn-secondary" onclick="closeRiskModal()">Cancel</button>
             <button class="btn btn-primary" onclick="saveRiskSettings()">
-                <i class="fas fa-save"></i> Save Settings
+                💾 Save Settings
             </button>
         </div>
     </div>
@@ -861,12 +950,25 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await resp.json();
             
             if (result.success) {
-                document.getElementById('risk-stop-loss').value = result.settings.stop_loss_pct || '';
-                document.getElementById('risk-trailing-stop').value = result.settings.trailing_stop_pct || '';
-                document.getElementById('risk-pt1').value = result.settings.pt1_pct || '';
-                document.getElementById('risk-pt2').value = result.settings.pt2_pct || '';
-                document.getElementById('risk-pt3').value = result.settings.pt3_pct || '';
-                document.getElementById('risk-pt4').value = result.settings.pt4_pct || '';
+                const s = result.settings;
+                document.getElementById('risk-pt1').value = s.pt1_pct || '';
+                document.getElementById('risk-pt2').value = s.pt2_pct || '';
+                document.getElementById('risk-pt3').value = s.pt3_pct || '';
+                document.getElementById('risk-pt4').value = s.pt4_pct || '';
+                document.getElementById('risk-pt1-qty').value = s.pt1_qty || '';
+                document.getElementById('risk-pt2-qty').value = s.pt2_qty || '';
+                document.getElementById('risk-pt3-qty').value = s.pt3_qty || '';
+                document.getElementById('risk-pt4-qty').value = s.pt4_qty || '';
+                document.getElementById('risk-stop-loss').value = s.stop_loss_pct || '';
+                document.getElementById('risk-trailing-stop').value = s.trailing_stop_pct || '';
+                document.getElementById('risk-trailing-activation').value = s.trailing_activation_pct || '';
+                document.querySelector(`input[name="trim-order-type"][value="${s.trim_order_type || 'market'}"]`).checked = true;
+                document.getElementById('risk-leave-runner').checked = !!s.leave_runner_enabled;
+                document.getElementById('risk-runner-size').value = s.leave_runner_size_pct || 25;
+                document.getElementById('risk-dynamic-sl').checked = !!s.dynamic_sl_escalation_enabled;
+                document.getElementById('risk-sl-profile').value = s.sl_escalation_profile || 'standard';
+                document.getElementById('risk-giveback').checked = !!s.max_profit_giveback_enabled;
+                document.getElementById('risk-giveback-pct').value = s.max_profit_giveback_pct || 30;
             }
         } catch (err) {
             console.error('Error loading risk settings:', err);
@@ -882,12 +984,24 @@ document.addEventListener('DOMContentLoaded', function() {
     window.saveRiskSettings = async function() {
         const channelId = document.getElementById('riskChannelId').value;
         const data = {
-            stop_loss_pct: parseFloat(document.getElementById('risk-stop-loss').value) || 0,
-            trailing_stop_pct: parseFloat(document.getElementById('risk-trailing-stop').value) || 0,
             pt1_pct: parseFloat(document.getElementById('risk-pt1').value) || 0,
             pt2_pct: parseFloat(document.getElementById('risk-pt2').value) || 0,
             pt3_pct: parseFloat(document.getElementById('risk-pt3').value) || 0,
-            pt4_pct: parseFloat(document.getElementById('risk-pt4').value) || 0
+            pt4_pct: parseFloat(document.getElementById('risk-pt4').value) || 0,
+            pt1_qty: parseInt(document.getElementById('risk-pt1-qty').value) || null,
+            pt2_qty: parseInt(document.getElementById('risk-pt2-qty').value) || null,
+            pt3_qty: parseInt(document.getElementById('risk-pt3-qty').value) || null,
+            pt4_qty: parseInt(document.getElementById('risk-pt4-qty').value) || null,
+            stop_loss_pct: parseFloat(document.getElementById('risk-stop-loss').value) || 0,
+            trailing_stop_pct: parseFloat(document.getElementById('risk-trailing-stop').value) || 0,
+            trailing_activation_pct: parseFloat(document.getElementById('risk-trailing-activation').value) || 15,
+            trim_order_type: document.querySelector('input[name="trim-order-type"]:checked').value,
+            leave_runner_enabled: document.getElementById('risk-leave-runner').checked ? 1 : 0,
+            leave_runner_size_pct: parseFloat(document.getElementById('risk-runner-size').value) || 25,
+            dynamic_sl_escalation_enabled: document.getElementById('risk-dynamic-sl').checked ? 1 : 0,
+            sl_escalation_profile: document.getElementById('risk-sl-profile').value,
+            max_profit_giveback_enabled: document.getElementById('risk-giveback').checked ? 1 : 0,
+            max_profit_giveback_pct: parseFloat(document.getElementById('risk-giveback-pct').value) || 30
         };
         
         try {
