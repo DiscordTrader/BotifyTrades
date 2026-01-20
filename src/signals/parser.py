@@ -183,6 +183,16 @@ BISHOP_EXIT_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# Bishop trimming exit pattern (structured, in embed title)
+# Examples:
+#   Trimming CAT 640 C 1/16 @$11.25
+#   Trimming JNJ 220 C 2/20 @$3.37
+#   Trimming TSLA 437.50 P 1/16 @$3.60
+BISHOP_TRIMMING_PATTERN = re.compile(
+    r'Trimming\s+([A-Z]+)\s+([\d.]+)\s*([CP])\s+(\d{1,2}/\d{1,2})\s*@\s*\$?([\d.]+)',
+    re.IGNORECASE
+)
+
 # ============ EVAPANDA FORMAT PATTERNS ============
 # Format: BTO SYMBOL MM/DD/YY STRIKE+C/P @ PRICE (notes)
 # Examples:
@@ -1768,11 +1778,14 @@ def is_bishop_signal(text: str) -> bool:
     Examples:
     - **Option:** TSLA 437.50 C 1/9\n**Entry:** 2.48
     - **Option:** HOOD 140 C 2/20\n**Entry:** 3.35-3.36
+    - Trimming CAT 640 C 1/16 @$11.25
     """
     if not text:
         return False
     
     if BISHOP_ENTRY_PATTERN.search(text):
+        return True
+    if BISHOP_TRIMMING_PATTERN.search(text):
         return True
     if BISHOP_EXIT_PATTERN.search(text):
         return True
@@ -1785,6 +1798,10 @@ def parse_bishop_signal(text: str) -> Optional[Dict[str, Any]]:
     
     Entry format:
     - **Option:** TSLA 437.50 C 1/9\n**Entry:** 2.48
+    
+    Exit formats:
+    - Trimming CAT 640 C 1/16 @$11.25
+    - Out of SNOW calls swing for -35%
     
     Returns structured dict with action, symbol, strike, opt_type, expiry, price.
     """
@@ -1807,6 +1824,29 @@ def parse_bishop_signal(text: str) -> Optional[Dict[str, Any]]:
             '_qty_from_signal': False,
             '_bishop': True,
             'is_exit': False,
+        }
+    
+    # Try trimming pattern: "Trimming CAT 640 C 1/16 @$11.25"
+    match = BISHOP_TRIMMING_PATTERN.search(text)
+    if match:
+        symbol, strike, opt_type, expiry, price = match.groups()
+        # Try to extract percentage from notes (e.g., "350% profit")
+        pct_match = re.search(r'([+-]?\d+(?:\.\d+)?)\s*%', text)
+        pct = float(pct_match.group(1)) if pct_match else None
+        
+        return {
+            'asset': 'option',
+            'action': 'STC',
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': opt_type.upper(),
+            'expiry': expiry,
+            'price': float(price),
+            'pct_gain': pct,
+            'qty': None,
+            '_bishop': True,
+            'is_exit': True,
+            'is_partial': True,
         }
     
     # Try exit pattern: "Out of SNOW calls swing for -35%"
