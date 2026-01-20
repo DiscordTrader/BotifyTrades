@@ -7183,7 +7183,7 @@
   },
   "ALPACA_PAPER_IVF_stock": {
     "entry_price": 4.0,
-    "highest_price": 3.97,
+    "highest_price": 4.095,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,

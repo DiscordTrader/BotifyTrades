@@ -843,6 +843,19 @@ class SignalRoutingEngine:
                     if position_id and position_id > 0:
                         position.id = position_id
                         self.price_monitor.register_position(position)
+                        
+                        try:
+                            initial_price = await self.price_monitor.get_option_price(
+                                symbol=symbol,
+                                strike=strike,
+                                expiry=expiry,
+                                option_type=option_type
+                            )
+                            if initial_price and initial_price > 0:
+                                self.ledger.update_price(position_id, initial_price, staleness_sec=0)
+                                print(f"[ROUTING_ENGINE] ✓ Initial mark price set: ${initial_price:.2f}")
+                        except Exception as mark_err:
+                            print(f"[ROUTING_ENGINE] ⚠️ Could not fetch initial mark price: {mark_err}")
                     
                     print(f"[ROUTING_ENGINE] ✓ BTO forwarded: {bto_message}")
                     return True, position_id
@@ -883,10 +896,24 @@ class SignalRoutingEngine:
             print(f"[ROUTING_ENGINE] ⏭️ Duplicate STC skipped: {msg_id}")
             return True
         
+        exit_label = ""
+        if exit_reason == ExitReason.STOP_LOSS:
+            exit_label = " [SL]"
+        elif exit_reason == ExitReason.PT1:
+            exit_label = " [PT1]"
+        elif exit_reason == ExitReason.PT2:
+            exit_label = " [PT2]"
+        elif exit_reason == ExitReason.PT3:
+            exit_label = " [PT3]"
+        elif exit_reason == ExitReason.PT4:
+            exit_label = " [PT4]"
+        elif exit_reason == ExitReason.TRAILING_STOP:
+            exit_label = " [TRAIL]"
+        
         stc_message = (
             f"@everyone\n"
             f"STC {position.symbol} {position.strike}{position.option_type} "
-            f"{position.expiry} @ {exit_price}\n"
+            f"{position.expiry} @ {exit_price}{exit_label}\n"
             f"*Not financial advice, for educational purposes only.*"
         )
         
