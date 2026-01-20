@@ -804,7 +804,7 @@ class SignalRoutingEngine:
         
         option_key = f"{symbol}_{expiry}_{strike}_{option_type}"
         
-        bto_message = f"BTO {quantity} {symbol} ${strike}{option_type} @ {entry_price:.2f}"
+        bto_message = f"BTO {symbol} {strike}{option_type} {expiry} @ {entry_price}"
         
         position = LedgerPosition(
             option_key=option_key,
@@ -883,15 +883,9 @@ class SignalRoutingEngine:
             print(f"[ROUTING_ENGINE] ⏭️ Duplicate STC skipped: {msg_id}")
             return True
         
-        pnl_str = f"+{pnl_pct:.1f}%" if pnl_pct >= 0 else f"{pnl_pct:.1f}%"
-        reason_str = ""
-        if exit_reason != ExitReason.SIGNAL:
-            reason_str = f" [{exit_reason.value.upper()}]"
-        
         stc_message = (
-            f"STC {exit_qty} {position.symbol} "
-            f"${position.strike}{position.option_type} "
-            f"@ {exit_price:.2f} ({pnl_str}){reason_str}"
+            f"STC {position.symbol} {position.strike}{position.option_type} "
+            f"{position.expiry} @ {exit_price}"
         )
         
         webhook_msg = WebhookMessage(
