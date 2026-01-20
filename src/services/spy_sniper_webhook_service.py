@@ -60,6 +60,7 @@ class SpySniperConfig:
     pt4_pct: float = 100.0
     trailing_stop_pct: float = 0.0
     trailing_activation_pct: float = 15.0
+    routing_mapping_id: Optional[int] = None  # Signal routing discriminator for risk engine
     exit_schedule: Dict[int, int] = field(default_factory=lambda: {
         15: 20,
         50: 20,
@@ -195,9 +196,10 @@ class SpySniperWebhookService:
                 pt4_pct=mapping.get('pt4_pct', 100.0) or 100.0,
                 trailing_stop_pct=mapping.get('trailing_stop_pct', 0.0) or 0.0,
                 trailing_activation_pct=mapping.get('trailing_activation_pct', 15.0) or 15.0,
+                routing_mapping_id=mapping.get('id'),  # Store mapping ID for risk engine discrimination
             )
             
-            print(f"[SPY-SNIPER] ✓ Loaded from routing mapping: {mapping.get('name', 'unnamed')}")
+            print(f"[SPY-SNIPER] ✓ Loaded from routing mapping: {mapping.get('name', 'unnamed')} (id={mapping.get('id')})")
             print(f"[SPY-SNIPER]   qty={self.config.default_quantity}, "
                   f"fwd={self.config.enable_forwarding}, exec={self.config.enable_execution}")
             return True
@@ -295,7 +297,8 @@ class SpySniperWebhookService:
                 status="open",
                 entry_time=datetime.now().isoformat(),
                 entry_message_id=result.get('signal', {}).get('message_id', ''),
-                source_type="spy_sniper"
+                source_type="spy_sniper",
+                routing_mapping_id=self.config.routing_mapping_id  # Pass through for risk engine
             )
             
             position_id = self.ledger.create_position(position)

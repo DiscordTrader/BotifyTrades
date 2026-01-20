@@ -94,6 +94,7 @@ class LedgerPosition:
     
     entry_message_id: str = ""
     source_type: str = "spy_sniper"
+    routing_mapping_id: Optional[int] = None  # Signal routing discriminator for risk engine
     
     pt_levels_hit: str = "[]"
     max_pnl_seen: float = 0.0
@@ -217,6 +218,7 @@ class PositionLedger:
                     close_time TEXT,
                     entry_message_id TEXT,
                     source_type TEXT DEFAULT 'spy_sniper',
+                    routing_mapping_id INTEGER,
                     pt_levels_hit TEXT DEFAULT '[]',
                     max_pnl_seen REAL DEFAULT 0,
                     trailing_stop_active INTEGER DEFAULT 0,
@@ -252,6 +254,13 @@ class PositionLedger:
                 ON position_ledger(channel_id)
             """)
             
+            # Migration: Add routing_mapping_id column if missing (for existing tables)
+            try:
+                conn.execute("SELECT routing_mapping_id FROM position_ledger LIMIT 1")
+            except sqlite3.OperationalError:
+                print("[LEDGER] Adding routing_mapping_id column...")
+                conn.execute("ALTER TABLE position_ledger ADD COLUMN routing_mapping_id INTEGER")
+            
             conn.commit()
             print("[LEDGER] ✓ Position ledger tables initialized")
         finally:
@@ -268,8 +277,8 @@ class PositionLedger:
                     entry_qty, remaining_qty, entry_price,
                     current_price, price_updated_at,
                     status, entry_time, entry_message_id, source_type,
-                    pt_levels_hit, max_pnl_seen, trailing_stop_active
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    routing_mapping_id, pt_levels_hit, max_pnl_seen, trailing_stop_active
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 position.option_key, position.symbol, position.expiry,
                 position.strike, position.option_type,
@@ -277,7 +286,7 @@ class PositionLedger:
                 position.entry_qty, position.remaining_qty, position.entry_price,
                 position.current_price, position.price_updated_at,
                 position.status, position.entry_time, position.entry_message_id,
-                position.source_type, position.pt_levels_hit,
+                position.source_type, position.routing_mapping_id, position.pt_levels_hit,
                 position.max_pnl_seen, 1 if position.trailing_stop_active else 0
             ))
             conn.commit()

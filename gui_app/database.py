@@ -740,6 +740,15 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Hide in UI column added")
     
+    # Migration: Add routing_mapping_id column for signal routing trade discrimination
+    try:
+        cursor.execute('SELECT routing_mapping_id FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding routing_mapping_id column to trades table...")
+        cursor.execute("ALTER TABLE trades ADD COLUMN routing_mapping_id INTEGER")
+        conn.commit()
+        print("[DATABASE] ✓ Routing mapping ID column added (for routed trade discrimination)")
+    
     # Signals table (all signals received, including tracked ones)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS signals (
@@ -2717,8 +2726,8 @@ def add_trade(signal_data: Dict) -> int:
             strike, expiry, call_put, quantity, intended_price,
             executed_price, executed_at, status, broker, order_id,
             stop_loss_price, profit_target_price, risk_trigger, origin_trade_id,
-            user_id, source, pnl, pnl_percent, conditional_order_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            user_id, source, pnl, pnl_percent, conditional_order_id, routing_mapping_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         signal_data.get('channel_id'),
         signal_data.get('message_id'),
@@ -2743,7 +2752,8 @@ def add_trade(signal_data: Dict) -> int:
         signal_data.get('source', 'discord'),
         pnl,
         pnl_percent,
-        signal_data.get('conditional_order_id')
+        signal_data.get('conditional_order_id'),
+        signal_data.get('routing_mapping_id')  # Signal routing discriminator
     ))
     
     conn.commit()

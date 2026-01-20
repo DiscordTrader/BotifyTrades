@@ -5131,6 +5131,16 @@ class SelfClient(discord.Client):
             if broker:
                 broker = broker.upper()
             
+            # Check if this channel has a signal routing mapping (for risk engine discrimination)
+            routing_mapping_id = signal.get('routing_mapping_id')
+            if not routing_mapping_id and channel_id:
+                try:
+                    mapping = self.db.get_signal_routing_by_source(str(channel_id))
+                    if mapping and mapping.get('enabled'):
+                        routing_mapping_id = mapping.get('id')
+                except Exception:
+                    pass  # Gracefully handle if routing lookup fails
+            
             # Build trade data dict matching add_trade() expected format
             trade_data = {
                 'symbol': signal['symbol'],
@@ -5147,7 +5157,8 @@ class SelfClient(discord.Client):
                 'expiry': signal.get('expiry'),
                 'call_put': signal.get('opt_type') or signal.get('call_put'),
                 'status': 'PENDING' if signal['action'] == 'BTO' else 'CLOSED',
-                'source': 'discord'
+                'source': 'discord',
+                'routing_mapping_id': routing_mapping_id  # Signal routing discriminator for risk engine
             }
             
             self.db.add_trade(trade_data)
@@ -10917,6 +10928,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 )
                                                 _original_print(f"[RISK] ✓ Signal saved to database for channel {signal['channel_id']}")
                                                 
+                                                # Lookup routing_mapping_id for signal routing risk discrimination
+                                                routing_mapping_id = signal.get('routing_mapping_id')
+                                                if not routing_mapping_id:
+                                                    try:
+                                                        mapping = db.get_signal_routing_by_source(str(signal['channel_id']))
+                                                        if mapping and mapping.get('enabled'):
+                                                            routing_mapping_id = mapping.get('id')
+                                                    except Exception:
+                                                        pass
+                                                
                                                 # Add trade record with risk_trigger
                                                 trade_data = {
                                                     'channel_id': str(signal['channel_id']),
@@ -10934,7 +10955,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                     'status': 'CLOSED',
                                                     'broker': 'ALPACA_PAPER',
                                                     'risk_trigger': signal.get('risk_trigger', 'risk_management'),
-                                                    'origin_trade_id': signal.get('origin_trade_id')
+                                                    'origin_trade_id': signal.get('origin_trade_id'),
+                                                    'routing_mapping_id': routing_mapping_id
                                                 }
                                                 stc_trade_id = db.add_trade(trade_data)
                                                 _original_print(f"[RISK] ✓ Trade #{stc_trade_id} saved with risk_trigger={signal.get('risk_trigger')}")
@@ -11770,6 +11792,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 if multi_broker_results:
                                     # Save ONE trade entry PER successful broker
                                     _original_print(f"[DATABASE] Multi-broker execution - saving {len([r for r in multi_broker_results if r.get('success') or 'orderId' in r])} trade entries")
+                                    # Lookup routing_mapping_id for signal routing risk discrimination
+                                    routing_mapping_id = signal.get('routing_mapping_id')
+                                    if not routing_mapping_id and channel_id_str:
+                                        try:
+                                            mapping = db.get_signal_routing_by_source(channel_id_str)
+                                            if mapping and mapping.get('enabled'):
+                                                routing_mapping_id = mapping.get('id')
+                                        except Exception:
+                                            pass
+                                    
                                     for broker_resp in multi_broker_results:
                                         if broker_resp.get('success') or 'orderId' in broker_resp:
                                             # Use executed_qty from broker response (position-sized), fallback to signal qty
@@ -11791,7 +11823,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 'order_id': broker_resp.get('orderId'),
                                                 'stop_loss_price': signal.get('stop_loss_price'),
                                                 'profit_target_price': signal.get('profit_target_price'),
-                                                'conditional_order_id': signal.get('_conditional_order_id')
+                                                'conditional_order_id': signal.get('_conditional_order_id'),
+                                                'routing_mapping_id': routing_mapping_id
                                             }
                                             trade_id = db.add_trade(trade_data)
                                             _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
@@ -11806,6 +11839,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 else:
                                     # Single broker execution - use executed_qty from response
                                     executed_qty = resp.get('executed_qty', signal['qty'])
+                                    # Lookup routing_mapping_id for signal routing risk discrimination
+                                    routing_mapping_id = signal.get('routing_mapping_id')
+                                    if not routing_mapping_id and channel_id_str:
+                                        try:
+                                            mapping = db.get_signal_routing_by_source(channel_id_str)
+                                            if mapping and mapping.get('enabled'):
+                                                routing_mapping_id = mapping.get('id')
+                                        except Exception:
+                                            pass
                                     trade_data = {
                                         'channel_id': channel_id_str,
                                         'message_id': str(signal.get('message_id', '')),
@@ -11823,7 +11865,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         'order_id': resp.get('orderId'),
                                         'stop_loss_price': signal.get('stop_loss_price'),
                                         'profit_target_price': signal.get('profit_target_price'),
-                                        'conditional_order_id': signal.get('_conditional_order_id')
+                                        'conditional_order_id': signal.get('_conditional_order_id'),
+                                        'routing_mapping_id': routing_mapping_id
                                     }
                                     trade_id = db.add_trade(trade_data)
                                     _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
@@ -11839,6 +11882,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             elif signal['action'] == 'STC':
                                 # Handle STC trades - especially for risk management exits
                                 from datetime import datetime
+                                # Lookup routing_mapping_id for signal routing risk discrimination
+                                routing_mapping_id = signal.get('routing_mapping_id')
+                                if not routing_mapping_id and channel_id_str:
+                                    try:
+                                        mapping = db.get_signal_routing_by_source(channel_id_str)
+                                        if mapping and mapping.get('enabled'):
+                                            routing_mapping_id = mapping.get('id')
+                                    except Exception:
+                                        pass
                                 trade_data = {
                                     'channel_id': channel_id_str,
                                     'message_id': str(signal.get('message_id', '')),
@@ -11856,7 +11908,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     'broker': resp.get('broker', 'UNKNOWN').upper(),
                                     'order_id': resp.get('orderId'),
                                     'risk_trigger': signal.get('risk_trigger'),
-                                    'origin_trade_id': signal.get('origin_trade_id')
+                                    'origin_trade_id': signal.get('origin_trade_id'),
+                                    'routing_mapping_id': routing_mapping_id
                                 }
                                 stc_trade_id = db.add_trade(trade_data)
                                 _original_print(f"[DATABASE] ✓ STC Trade #{stc_trade_id} saved broker={trade_data['broker']} channel={channel_id_str or 'NONE'}")

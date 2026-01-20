@@ -163,6 +163,70 @@ class RiskDBAdapter:
             print(f"[RISK] Warning: Could not count channels with risk: {e}")
             return 0
     
+    def _get_signal_routing_risk_settings(
+        self,
+        routing_mapping_id: int
+    ) -> Optional[ChannelRiskSettings]:
+        """
+        Fetch risk settings from signal_routing_mappings by routing_mapping_id.
+        Returns ChannelRiskSettings if mapping has explicit risk config, else None.
+        
+        This is ONLY called when the trade has a routing_mapping_id set (i.e., is a routed trade).
+        This ensures non-routed trades are never affected.
+        """
+        if not self._db or not routing_mapping_id:
+            return None
+        
+        try:
+            conn = self._db.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT id, name, source_channel_id, stop_loss_pct, pt1_pct, pt2_pct, pt3_pct, pt4_pct,
+                       trailing_stop_pct, trailing_activation_pct, price_monitor_enabled
+                FROM signal_routing_mappings
+                WHERE id = ? AND enabled = 1
+                LIMIT 1
+            ''', (routing_mapping_id,))
+            
+            row = cursor.fetchone()
+            if not row:
+                return None
+            
+            sl = row[3] or 0
+            pt1 = row[4] or 0
+            pt2 = row[5] or 0
+            pt3 = row[6] or 0
+            pt4 = row[7] or 0
+            trail = row[8] or 0
+            trail_activation = row[9] or 15.0
+            price_monitor = bool(row[10]) if row[10] else False
+            
+            has_any_risk_config = (sl > 0 or pt1 > 0 or pt2 > 0 or pt3 > 0 or pt4 > 0 or trail > 0)
+            
+            if not has_any_risk_config:
+                return None
+            
+            return ChannelRiskSettings(
+                channel_id=str(row[2]),
+                channel_name=row[1] or 'Signal Routing',
+                profit_target_1_pct=pt1,
+                profit_target_2_pct=pt2,
+                profit_target_3_pct=pt3,
+                profit_target_4_pct=pt4,
+                stop_loss_pct=sl,
+                trailing_stop_pct=trail,
+                trailing_activation_pct=trail_activation,
+                leave_runner_enabled=False,
+                leave_runner_pct=25.0,
+                trim_order_mode='market',
+                trim_limit_offset=0.01,
+                exit_strategy_mode='risk'
+            )
+        except Exception as e:
+            print(f"[RISK] Warning: Could not fetch signal routing risk settings: {e}")
+            return None
+
     def get_channel_risk_settings(
         self, 
         symbol: str, 
@@ -172,7 +236,18 @@ class RiskDBAdapter:
         call_put: Optional[str] = None,
         broker_name: Optional[str] = None
     ) -> Optional[ChannelRiskSettings]:
-        """Get per-channel risk settings for a position."""
+        """Get per-channel risk settings for a position.
+        
+        Priority order (routed-trade-aware - preserves existing behavior):
+        1. Signal routing mapping risk settings - ONLY if trade has routing_mapping_id set
+           (explicitly routed trades get mapping-level risk settings)
+        2. Channel-level risk settings - IF channel has risk_management_enabled=1 (unchanged)
+        3. Return None if neither applies
+        
+        The routing_mapping_id is set on trades created via signal routing.
+        Non-routed trades (routing_mapping_id = NULL) use channel settings only.
+        This ensures existing per-channel risk configurations are never affected.
+        """
         if not self._db:
             return None
         
@@ -198,6 +273,7 @@ class RiskDBAdapter:
                         expiry_variants.append(f"{year}-{parts[0].zfill(2)}-{parts[1].zfill(2)}")
                 
                 # Try each expiry variant - filter by broker to get correct channel settings
+                # Include routing_mapping_id (index 23) for routed trade discrimination
                 row = None
                 for exp_try in expiry_variants:
                     if broker_name:
@@ -208,7 +284,7 @@ class RiskDBAdapter:
                                    c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
                                    c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
                                    c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
-                                   c.giveback_allowed_pct, c.dynamic_sl_profile
+                                   c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -226,7 +302,7 @@ class RiskDBAdapter:
                                    c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
                                    c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
                                    c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
-                                   c.giveback_allowed_pct, c.dynamic_sl_profile
+                                   c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -243,6 +319,7 @@ class RiskDBAdapter:
                     return None
             else:
                 # For stocks, also filter by broker to get correct channel settings
+                # Include routing_mapping_id (index 23) for routed trade discrimination
                 if broker_name:
                     cursor.execute('''
                         SELECT t.channel_id, c.profit_target_1_pct, c.profit_target_2_pct, c.profit_target_3_pct,
@@ -251,7 +328,7 @@ class RiskDBAdapter:
                                c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
                                c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
                                c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
-                               c.giveback_allowed_pct, c.dynamic_sl_profile
+                               c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -269,7 +346,7 @@ class RiskDBAdapter:
                                c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
                                c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
                                c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
-                               c.giveback_allowed_pct, c.dynamic_sl_profile
+                               c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -283,6 +360,18 @@ class RiskDBAdapter:
                     return None
             
             if row[0] is not None:
+                # Extract routing_mapping_id (index 23) - only set for routed trades
+                routing_mapping_id = row[23] if len(row) > 23 else None
+                
+                # PRIORITY 1: Check if this is a routed trade with mapping-level risk settings
+                # This ONLY applies to trades that have routing_mapping_id set
+                if routing_mapping_id:
+                    routing_settings = self._get_signal_routing_risk_settings(routing_mapping_id)
+                    if routing_settings:
+                        print(f"[RISK] Using signal routing risk settings for routed trade (mapping_id={routing_mapping_id})")
+                        return routing_settings
+                
+                # PRIORITY 2: Channel-level risk settings (existing behavior - PRESERVED)
                 # Check if risk management is explicitly enabled for this channel
                 risk_enabled = row[8] if len(row) > 8 else 0
                 
