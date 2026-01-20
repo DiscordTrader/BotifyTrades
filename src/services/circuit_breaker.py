@@ -120,6 +120,10 @@ class CircuitBreaker:
         """Check if a specific channel is halted."""
         return self._global_halt.is_halted or self._channel_halts.get(channel_id, HaltState()).is_halted
     
+    def get_channel_state(self, channel_id: str) -> Optional[HaltState]:
+        """Get the halt state for a specific channel."""
+        return self._channel_halts.get(channel_id)
+    
     def get_halt_reason(self, channel_id: str = None) -> Optional[str]:
         """Get the reason for halt (global or channel)."""
         if self._global_halt.is_halted:

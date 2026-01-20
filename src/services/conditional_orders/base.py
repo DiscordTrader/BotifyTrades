@@ -100,6 +100,19 @@ class PriceMonitor(ABC):
         self.callback = callback
         self.is_running = False
         self.last_price = None
+        self._last_price_update_time: float = 0  # Universal staleness tracking
+    
+    def get_staleness_seconds(self) -> int:
+        """Get seconds since last successful price update."""
+        import time
+        if self._last_price_update_time == 0:
+            return 0  # No price yet, not considered stale
+        return int(time.time() - self._last_price_update_time)
+    
+    def _update_price_timestamp(self):
+        """Update the last price update timestamp. Call after successful price fetch."""
+        import time
+        self._last_price_update_time = time.time()
     
     @abstractmethod
     async def start(self):
@@ -138,6 +151,7 @@ class FinnhubPriceMonitor(PriceMonitor):
                                 sys.stderr.write(f"[FINNHUB] Poll #{poll_count} {self.symbol}: ${price}\n")
                                 sys.stderr.flush()
                             if price:
+                                self._update_price_timestamp()  # Track staleness
                                 if price != self.last_price:
                                     self.last_price = price
                                     await self.callback(self.symbol, float(price))
@@ -172,6 +186,7 @@ class YFinancePriceMonitor(PriceMonitor):
                     sys.stderr.write(f"[YFINANCE] Poll #{poll_count} {self.symbol}: ${price}\n")
                     sys.stderr.flush()
                 if price:
+                    self._update_price_timestamp()  # Track staleness
                     if price != self.last_price:
                         self.last_price = price
                         await self.callback(self.symbol, float(price))
@@ -269,6 +284,7 @@ class BrokerPriceMonitor(PriceMonitor):
                 
                 # Call callback on price change OR every 10 polls as heartbeat
                 if price:
+                    self._update_price_timestamp()  # Track staleness
                     if price != self.last_price:
                         self.last_price = price
                         await self.callback(self.symbol, price)
@@ -811,7 +827,55 @@ class BaseConditionalOrderService(ABC):
             await self._execute_order(order_id, order, price)
     
     async def _execute_order(self, order_id: int, order: Dict, trigger_price: float):
-        """Execute triggered order."""
+        """Execute triggered order with safety checks."""
+        symbol = order.get('symbol', 'UNKNOWN')
+        channel_id = order.get('channel_id')
+        
+        # SAFETY CHECK 1: Price staleness guard (30 second threshold)
+        monitor = self.monitors.get(order_id)
+        if monitor:
+            staleness_sec = monitor.get_staleness_seconds() if hasattr(monitor, 'get_staleness_seconds') else 0
+            if staleness_sec > 30:
+                self._log(f"⚠️ BLOCKED #{order_id} {symbol}: Price stale ({staleness_sec}s > 30s threshold)")
+                update_conditional_order_status(
+                    order_id,
+                    'PENDING_MONITOR',
+                    event='STALENESS_BLOCK',
+                    details=f"Price stale ({staleness_sec}s) - waiting for fresh data"
+                )
+                return  # Don't execute, wait for fresh price
+        
+        # SAFETY CHECK 2: Circuit breaker check
+        try:
+            from src.services.circuit_breaker import circuit_breaker
+            if circuit_breaker.is_halted:
+                self._log(f"⚠️ BLOCKED #{order_id} {symbol}: Global circuit breaker HALTED")
+                update_conditional_order_status(
+                    order_id,
+                    'PENDING_MONITOR',
+                    event='CIRCUIT_BREAKER_BLOCK',
+                    details="Global trading halted by circuit breaker"
+                )
+                return  # Don't execute, trading is halted
+            
+            # Check channel-specific halt
+            if channel_id:
+                channel_state = circuit_breaker.get_channel_state(str(channel_id))
+                if channel_state and channel_state.is_halted:
+                    self._log(f"⚠️ BLOCKED #{order_id} {symbol}: Channel {channel_id} halted")
+                    update_conditional_order_status(
+                        order_id,
+                        'PENDING_MONITOR',
+                        event='CHANNEL_HALT_BLOCK',
+                        details=f"Channel trading halted: {channel_state.reason}"
+                    )
+                    return
+        except ImportError:
+            pass  # Circuit breaker not available, continue with execution
+        except Exception as cb_err:
+            self._log(f"Circuit breaker check error: {cb_err}")
+        
+        # Stop the monitor (trigger condition met)
         if order_id in self.monitors:
             await self.monitors[order_id].stop()
             del self.monitors[order_id]
@@ -828,7 +892,7 @@ class BaseConditionalOrderService(ABC):
             'TRIGGERED',
             triggered_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             event='CONDITION_MET',
-            details=f"Price reached {trigger_price}"
+            details=f"Price reached {trigger_price} (staleness OK, circuit breaker OK)"
         )
         
         if self.execution_callback:

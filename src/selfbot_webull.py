@@ -7191,8 +7191,61 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             'channel_id': order.get('channel_id'),  # Critical for RiskManager tracking
                         }
                         
+                        # Handle US Options orders with Quote-on-Trigger (QOT)
+                        if market == 'US' and order.get('strike'):
+                            signal['asset'] = 'option'
+                            signal['asset_type'] = 'option'
+                            signal['strike'] = order['strike']
+                            signal['opt_type'] = order.get('opt_type', 'C')
+                            signal['call_put'] = order.get('opt_type', 'C')
+                            if order.get('expiry'):
+                                signal['expiry'] = order['expiry']
+                            
+                            # Quote-on-Trigger (QOT): Get real-time option quote before execution
+                            qot_price = None
+                            try:
+                                broker_lower = broker_name.lower()
+                                broker_instance = None
+                                
+                                if 'webull' in broker_lower and hasattr(self, 'broker') and self.broker:
+                                    broker_instance = self.broker
+                                elif 'alpaca' in broker_lower and hasattr(self, 'paper_broker') and self.paper_broker:
+                                    broker_instance = self.paper_broker
+                                elif 'robinhood' in broker_lower and hasattr(self, 'robinhood_broker') and self.robinhood_broker:
+                                    broker_instance = self.robinhood_broker
+                                elif 'tastytrade' in broker_lower and hasattr(self, 'tastytrade_broker') and self.tastytrade_broker:
+                                    broker_instance = self.tastytrade_broker
+                                
+                                if broker_instance and hasattr(broker_instance, 'get_option_quote'):
+                                    # Use broker's async get_option_quote method
+                                    quote_result = await broker_instance.get_option_quote(
+                                        symbol, 
+                                        float(order['strike']), 
+                                        order.get('expiry'),
+                                        order.get('opt_type', 'C')
+                                    )
+                                    # Extract price from result (may be dict or float)
+                                    if isinstance(quote_result, dict):
+                                        qot_price = quote_result.get('mid') or quote_result.get('last') or quote_result.get('ask')
+                                    elif isinstance(quote_result, (int, float)):
+                                        qot_price = float(quote_result)
+                                else:
+                                    # Fallback: Use market order with trigger price (most brokers)
+                                    sys.stderr.write(f"[CONDITIONAL QOT] No option quote API available for {broker_name}, using market order\n")
+                                    sys.stderr.flush()
+                                
+                                if qot_price and qot_price > 0:
+                                    sys.stderr.write(f"[CONDITIONAL QOT] Got option quote: ${qot_price:.2f} (trigger: ${triggered_price:.2f})\n")
+                                    sys.stderr.flush()
+                                    signal['price'] = qot_price  # Use live quote for execution
+                                    signal['_qot_price'] = qot_price
+                                    signal['_trigger_price'] = triggered_price
+                            except Exception as qot_err:
+                                sys.stderr.write(f"[CONDITIONAL QOT] Quote fetch failed, using market order: {qot_err}\n")
+                                sys.stderr.flush()
+                        
                         # Handle Indian options orders
-                        if market == 'INDIA':
+                        elif market == 'INDIA':
                             signal['market'] = 'INDIA'
                             signal['asset'] = 'option'
                             signal['asset_type'] = 'option'
