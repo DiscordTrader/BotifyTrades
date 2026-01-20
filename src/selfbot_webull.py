@@ -145,6 +145,14 @@ except ImportError as e:
 # Import BrokerSyncService for real-time trade synchronization
 from src.services.broker_sync_service import BrokerSyncService
 
+# Import Signal Routing Engine for forwarding-only architecture
+try:
+    from src.services.signal_routing_engine import get_signal_routing_engine, ExitStrategyMode
+    SIGNAL_ROUTING_ENGINE_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARNING] Could not import SignalRoutingEngine: {e}")
+    SIGNAL_ROUTING_ENGINE_AVAILABLE = False
+
 # Import Spy-Sniper webhook service for signal automation
 try:
     from src.services.spy_sniper_webhook_service import (
@@ -8273,6 +8281,31 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 # STC - Process partial or full exit and calculate PNL
                                 exit_price = parsed_signal.get('price', 0)
                                 exit_qty = parsed_signal.get('qty')  # Trader's exit qty from signal
+                                
+                                # === SIGNAL ROUTING ENGINE INTEGRATION ===
+                                # Forward STC to webhook if channel is routed (forwarding-only architecture)
+                                if SIGNAL_ROUTING_ENGINE_AVAILABLE:
+                                    try:
+                                        routing_engine = get_signal_routing_engine()
+                                        routing_config = routing_engine.get_or_load_config_for_channel(str(channel_id))
+                                        if routing_config:
+                                            routing_signal = {
+                                                'symbol': parsed_signal.get('symbol', ''),
+                                                'strike': parsed_signal.get('strike'),
+                                                'opt_type': parsed_signal.get('opt_type', 'C'),
+                                                'expiry': parsed_signal.get('expiry', ''),
+                                                'price': exit_price,
+                                                'qty': exit_qty or 0
+                                            }
+                                            stc_forwarded = await routing_engine.handle_signal_exit(
+                                                channel_id=str(channel_id),
+                                                signal=routing_signal,
+                                                message_id=str(message.id)
+                                            )
+                                            if stc_forwarded:
+                                                print(f"[SIGNAL_ROUTING] ✓ STC forwarded via routing engine for {parsed_signal.get('symbol')}")
+                                    except Exception as route_err:
+                                        print(f"[SIGNAL_ROUTING] ⚠️ STC forward error: {route_err}")
                                 
                                 # Find open position for this symbol in this channel
                                 open_pos = get_open_position_for_symbol(channel_id, symbol)

@@ -501,6 +501,39 @@ class PositionLedger:
         finally:
             conn.close()
     
+    def update_trailing_state(
+        self,
+        position_id: int,
+        trailing_active: bool,
+        max_pnl_seen: float
+    ):
+        """Update trailing stop state for a position."""
+        conn = self._get_conn()
+        try:
+            conn.execute("""
+                UPDATE position_ledger SET
+                    trailing_stop_active = ?,
+                    max_pnl_seen = ?
+                WHERE id = ?
+            """, (1 if trailing_active else 0, max_pnl_seen, position_id))
+            conn.commit()
+        finally:
+            conn.close()
+    
+    def update_pt_levels(self, position_id: int, pt_levels: list):
+        """Update profit target levels hit for a position."""
+        import json
+        conn = self._get_conn()
+        try:
+            conn.execute("""
+                UPDATE position_ledger SET
+                    pt_levels_hit = ?
+                WHERE id = ?
+            """, (json.dumps(pt_levels), position_id))
+            conn.commit()
+        finally:
+            conn.close()
+    
     def record_partial_exit(
         self,
         position_id: int,

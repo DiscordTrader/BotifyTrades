@@ -200,8 +200,10 @@ class SignalRoutingEngine:
         self._configs[config.source_channel_id] = config
         return config
     
-    def get_routing_config(self, routing_mapping_id: int) -> Optional[RoutingMappingConfig]:
+    def get_routing_config(self, routing_mapping_id: Optional[int]) -> Optional[RoutingMappingConfig]:
         """Get routing config by mapping ID."""
+        if routing_mapping_id is None:
+            return None
         for config in self._configs.values():
             if config.id == routing_mapping_id:
                 return config
@@ -314,7 +316,7 @@ class SignalRoutingEngine:
         if position.routing_mapping_id:
             config = self.get_routing_config(position.routing_mapping_id)
             if config:
-                if config.exit_strategy_mode == 'signal':
+                if config.exit_strategy_mode == ExitStrategyMode.SIGNAL:
                     return False, "Exit strategy = signal only - no automated exits"
                 
                 if not config.enable_risk_management:
@@ -329,6 +331,369 @@ class SignalRoutingEngine:
             return False, f"Price stale ({staleness}s old) - skipping risk check"
         
         return True, "OK"
+    
+    def evaluate_position_risk(
+        self,
+        position: LedgerPosition,
+        config: RoutingMappingConfig
+    ) -> Tuple[Optional[ExitReason], float]:
+        """
+        Evaluate risk conditions for a position.
+        
+        Returns:
+            Tuple of (exit_reason, current_pnl_pct) or (None, pnl_pct) if no exit triggered
+        
+        Exit Priority (first match wins):
+        1. Stop Loss (price below SL threshold)
+        2. Trailing Stop (if active and triggered)
+        3. Profit Targets (PT1 → PT4, checking which levels already hit)
+        """
+        if position.remaining_qty <= 0:
+            return None, 0.0
+        
+        cost_basis = position.initial_mark_price if position.initial_mark_price > 0 else position.entry_price
+        if cost_basis <= 0:
+            return None, 0.0
+        
+        current_price = position.current_price
+        if current_price <= 0:
+            return None, 0.0
+        
+        pnl_pct = ((current_price - cost_basis) / cost_basis) * 100
+        
+        pt_levels_hit = set()
+        try:
+            pt_levels_hit = set(json.loads(position.pt_levels_hit or "[]"))
+        except (json.JSONDecodeError, TypeError):
+            pass
+        
+        if pnl_pct <= -config.stop_loss_pct:
+            return ExitReason.STOP_LOSS, pnl_pct
+        
+        if position.trailing_stop_active and config.trailing_stop_pct > 0:
+            max_pnl = position.max_pnl_seen
+            trailing_threshold = max_pnl - config.trailing_stop_pct
+            if pnl_pct <= trailing_threshold and max_pnl > 0:
+                return ExitReason.TRAILING_STOP, pnl_pct
+        
+        pt_targets = [
+            (ExitReason.PT4, config.pt4_pct, "pt4"),
+            (ExitReason.PT3, config.pt3_pct, "pt3"),
+            (ExitReason.PT2, config.pt2_pct, "pt2"),
+            (ExitReason.PT1, config.pt1_pct, "pt1"),
+        ]
+        
+        for exit_reason, target_pct, level_key in pt_targets:
+            if level_key not in pt_levels_hit and pnl_pct >= target_pct:
+                return exit_reason, pnl_pct
+        
+        if position.id is not None:
+            if pnl_pct >= config.trailing_activation_pct and not position.trailing_stop_active:
+                self.ledger.update_trailing_state(
+                    position.id,
+                    trailing_active=True,
+                    max_pnl_seen=pnl_pct
+                )
+            elif position.trailing_stop_active and pnl_pct > position.max_pnl_seen:
+                self.ledger.update_trailing_state(
+                    position.id,
+                    trailing_active=True,
+                    max_pnl_seen=pnl_pct
+                )
+        
+        return None, pnl_pct
+    
+    async def _handle_risk_exit(
+        self,
+        position: LedgerPosition,
+        config: RoutingMappingConfig,
+        exit_reason: ExitReason,
+        pnl_pct: float
+    ) -> bool:
+        """
+        Handle a risk-triggered exit with ExitArbiter coordination.
+        
+        Flow:
+        1. Acquire exit lock (prevents signal exit race)
+        2. Calculate exit quantity
+        3. Post STC to webhook
+        4. Release lock
+        
+        Returns True if exit was successfully processed.
+        """
+        lock = self.exit_arbiter.get_lock(
+            position.option_key,
+            position.broker_id,
+            position.account_id
+        )
+        
+        acquired = False
+        try:
+            try:
+                await asyncio.wait_for(lock.acquire(), timeout=0.1)
+                acquired = True
+            except asyncio.TimeoutError:
+                print(f"[ROUTING_ENGINE] ⏭️ Exit already in progress for {position.option_key}")
+                return False
+            
+            exit_qty = self.calculate_exit_quantity(position, exit_reason, config)
+            if exit_qty <= 0:
+                print(f"[ROUTING_ENGINE] ⏭️ No exit qty for {position.option_key} - skipping")
+                return False
+            
+            success = await self.post_stc_signal(
+                config=config,
+                position=position,
+                exit_qty=exit_qty,
+                exit_price=position.current_price,
+                exit_reason=exit_reason,
+                pnl_pct=pnl_pct
+            )
+            
+            if success:
+                if exit_reason in (ExitReason.PT1, ExitReason.PT2, ExitReason.PT3, ExitReason.PT4):
+                    self._mark_pt_level_hit(position, exit_reason)
+                
+                print(f"[ROUTING_ENGINE] ✓ Risk exit: {exit_reason.value.upper()} for {position.option_key}")
+            
+            return success
+            
+        except Exception as e:
+            print(f"[ROUTING_ENGINE] ❌ Risk exit error for {position.option_key}: {e}")
+            return False
+        finally:
+            if acquired and lock.locked():
+                lock.release()
+    
+    def _mark_pt_level_hit(self, position: LedgerPosition, exit_reason: ExitReason):
+        """Mark a profit target level as hit in the position."""
+        if position.id is None:
+            return
+        
+        pt_map = {
+            ExitReason.PT1: "pt1",
+            ExitReason.PT2: "pt2",
+            ExitReason.PT3: "pt3",
+            ExitReason.PT4: "pt4",
+        }
+        level_key = pt_map.get(exit_reason)
+        if not level_key:
+            return
+        
+        try:
+            pt_levels_hit = set(json.loads(position.pt_levels_hit or "[]"))
+            pt_levels_hit.add(level_key)
+            self.ledger.update_pt_levels(position.id, list(pt_levels_hit))
+        except (json.JSONDecodeError, TypeError):
+            self.ledger.update_pt_levels(position.id, [level_key])
+    
+    async def _risk_monitor_loop(self):
+        """
+        Main risk monitoring loop.
+        
+        Polls positions every 3 seconds:
+        1. Get all open positions for routed signals
+        2. Fetch and update prices from price monitor
+        3. Evaluate risk conditions
+        4. Trigger STC webhooks when conditions met
+        """
+        print("[ROUTING_ENGINE] ✓ Risk monitoring loop started")
+        
+        while self._running:
+            try:
+                positions = self.ledger.get_open_positions()
+                
+                routed_positions = [
+                    p for p in positions if p.routing_mapping_id is not None
+                ]
+                
+                for position in routed_positions:
+                    if position.remaining_qty <= 0:
+                        continue
+                    
+                    if position.id is None:
+                        continue
+                    
+                    try:
+                        price = await self.price_monitor.get_option_price(
+                            symbol=position.symbol,
+                            strike=position.strike,
+                            expiry=position.expiry,
+                            option_type=position.option_type
+                        )
+                        if price and price > 0:
+                            self.ledger.update_price(position.id, price, staleness_sec=0)
+                            position.current_price = price
+                            position.price_staleness_sec = 0
+                    except Exception as price_err:
+                        print(f"[ROUTING_ENGINE] ⚠️ Price fetch failed for {position.option_key}: {price_err}")
+                        continue
+                    
+                    can_eval, reason = self.can_evaluate_risk(position)
+                    if not can_eval:
+                        continue
+                    
+                    config = self.get_routing_config(position.routing_mapping_id)
+                    if not config:
+                        continue
+                    
+                    exit_reason, pnl_pct = self.evaluate_position_risk(position, config)
+                    
+                    if exit_reason:
+                        await self._handle_risk_exit(position, config, exit_reason, pnl_pct)
+                
+                await self.process_webhook_retry_queue()
+                
+            except Exception as e:
+                print(f"[ROUTING_ENGINE] ⚠️ Risk monitor error: {e}")
+            
+            await asyncio.sleep(3)
+        
+        print("[ROUTING_ENGINE] ✗ Risk monitoring loop stopped")
+    
+    async def start_risk_monitor(self):
+        """Start the risk monitoring loop."""
+        if self._running:
+            return
+        
+        self._running = True
+        self._monitor_task = asyncio.create_task(self._risk_monitor_loop())
+        print("[ROUTING_ENGINE] ✓ Risk monitor started")
+    
+    async def stop_risk_monitor(self):
+        """Stop the risk monitoring loop."""
+        if not self._running:
+            return
+        
+        self._running = False
+        
+        if self._monitor_task:
+            self._monitor_task.cancel()
+            try:
+                await self._monitor_task
+            except asyncio.CancelledError:
+                pass
+            self._monitor_task = None
+        
+        print("[ROUTING_ENGINE] ✗ Risk monitor stopped")
+    
+    def get_or_load_config_for_channel(self, channel_id: str) -> Optional[RoutingMappingConfig]:
+        """
+        Get config from cache or load from database.
+        
+        Used by external callers (like selfbot) to check if a channel is routed.
+        """
+        if channel_id in self._configs:
+            return self._configs.get(channel_id)
+        
+        try:
+            from gui_app.database import get_signal_routing_by_source
+            mapping = get_signal_routing_by_source(channel_id)
+            if mapping and mapping.get('enabled'):
+                return self.load_mapping_config(mapping)
+        except Exception as e:
+            print(f"[ROUTING_ENGINE] ⚠️ Could not load mapping for channel {channel_id}: {e}")
+        
+        return None
+    
+    async def handle_signal_exit(
+        self,
+        channel_id: str,
+        signal: dict,
+        message_id: str = ""
+    ) -> bool:
+        """
+        Handle a signal-based STC exit with ExitArbiter coordination.
+        
+        Called when a trader STC signal (e.g., Bishop Trimming) is detected
+        from a routed source channel. This forwards the STC to the webhook
+        while coordinating with risk exits to prevent duplicates.
+        
+        Args:
+            channel_id: Source channel ID
+            signal: Parsed signal dict with symbol, strike, expiry, etc.
+            message_id: Original Discord message ID for dedupe
+        
+        Returns:
+            True if STC was forwarded, False otherwise
+        """
+        config = self.get_or_load_config_for_channel(channel_id)
+        if not config:
+            return False
+        
+        if not config.enable_forwarding or not config.destination_url:
+            return False
+        
+        if config.exit_strategy_mode == ExitStrategyMode.RISK:
+            print(f"[ROUTING_ENGINE] ⏭️ Signal exit skipped - exit_strategy = risk only")
+            return False
+        
+        symbol = signal.get('symbol', '').upper()
+        strike = signal.get('strike')
+        expiry = signal.get('expiry')
+        opt_type = signal.get('opt_type', '').upper()
+        exit_price = signal.get('price', 0.0)
+        exit_qty = signal.get('qty', 0)
+        
+        position = self.find_matching_position(
+            symbol=symbol,
+            routing_mapping_id=config.id,
+            strike=float(strike) if strike else None,
+            expiry=expiry,
+            option_type=opt_type
+        )
+        
+        if not position:
+            print(f"[ROUTING_ENGINE] ⚠️ No matching position for signal STC: {symbol}")
+            return False
+        
+        lock = self.exit_arbiter.get_lock(
+            position.option_key,
+            position.broker_id,
+            position.account_id
+        )
+        
+        acquired = False
+        try:
+            try:
+                await asyncio.wait_for(lock.acquire(), timeout=0.1)
+                acquired = True
+            except asyncio.TimeoutError:
+                print(f"[ROUTING_ENGINE] ⏭️ Exit already in progress for {position.option_key}")
+                return False
+            
+            actual_exit_qty = exit_qty if exit_qty > 0 else position.remaining_qty
+            actual_exit_qty = min(actual_exit_qty, position.remaining_qty)
+            
+            if actual_exit_qty <= 0:
+                return False
+            
+            if exit_price <= 0 and position.current_price > 0:
+                exit_price = position.current_price
+            
+            cost_basis = position.initial_mark_price if position.initial_mark_price > 0 else position.entry_price
+            pnl_pct = ((exit_price - cost_basis) / cost_basis * 100) if cost_basis > 0 else 0.0
+            
+            success = await self.post_stc_signal(
+                config=config,
+                position=position,
+                exit_qty=actual_exit_qty,
+                exit_price=exit_price,
+                exit_reason=ExitReason.SIGNAL,
+                pnl_pct=pnl_pct
+            )
+            
+            if success:
+                print(f"[ROUTING_ENGINE] ✓ Signal STC forwarded: {symbol} @ ${exit_price:.2f}")
+            
+            return success
+            
+        except Exception as e:
+            print(f"[ROUTING_ENGINE] ❌ Signal exit error: {e}")
+            return False
+        finally:
+            if acquired and lock.locked():
+                lock.release()
     
     def find_matching_position(
         self,
