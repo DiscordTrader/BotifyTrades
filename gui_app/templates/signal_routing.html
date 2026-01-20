@@ -304,18 +304,20 @@
     }
 
     .risk-settings {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 15px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 30px;
         margin-top: 20px;
         padding-top: 20px;
         border-top: 1px solid var(--card-border);
+        justify-content: flex-start;
     }
 
     .toggle-container {
         display: flex;
         align-items: center;
         gap: 10px;
+        min-width: 180px;
     }
 
     .toggle {
@@ -513,10 +515,10 @@
                     </div>
                 </div>
 
-                <div class="risk-notice" style="margin-top: 20px; padding: 15px; background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: 10px;">
+                <div class="risk-notice" style="margin-top: 20px; padding: 15px; background: rgba(0, 214, 182, 0.1); border: 1px solid rgba(0, 214, 182, 0.3); border-radius: 10px;">
                     <p style="color: var(--text-secondary); margin: 0; display: flex; align-items: center; gap: 10px;">
-                        <i class="fas fa-shield-alt" style="color: var(--violet);"></i>
-                        <span>Risk Management uses your <strong>per-channel settings</strong>. <a href="/channels" style="color: var(--mint);">Configure risk settings per channel</a></span>
+                        <i class="fas fa-shield-alt" style="color: var(--mint);"></i>
+                        <span>Risk Management can be configured <strong>per-mapping</strong>. After adding a mapping, click the <i class="fas fa-cog"></i> icon in the Risk column to set SL/PT/trailing stops.</span>
                     </p>
                 </div>
 
