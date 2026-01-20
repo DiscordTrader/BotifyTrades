@@ -316,18 +316,25 @@
     .toggle-container {
         display: flex;
         align-items: center;
-        gap: 10px;
-        min-width: 180px;
+        gap: 12px;
+    }
+
+    .toggle-container label {
+        white-space: nowrap;
+        color: var(--text-secondary);
+        font-size: 0.95rem;
     }
 
     .toggle {
         position: relative;
         width: 50px;
+        min-width: 50px;
         height: 26px;
         background: rgba(255, 255, 255, 0.1);
         border-radius: 13px;
         cursor: pointer;
         transition: all 0.3s ease;
+        flex-shrink: 0;
     }
 
     .toggle.active {
