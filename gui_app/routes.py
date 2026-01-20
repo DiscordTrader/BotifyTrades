@@ -7158,10 +7158,24 @@ def register_routes(app):
             
             if success:
                 order = db.get_conditional_order_by_id(order_id)
+                adjusted_price = order.get('adjusted_trigger_price') if order else None
+                
+                # Update in-memory pending_orders for the active monitor
+                try:
+                    from src.services.conditional_orders.base import conditional_order_services
+                    for market, service in conditional_order_services.items():
+                        if order_id in service.pending_orders:
+                            service.pending_orders[order_id]['adjusted_trigger_price'] = adjusted_price
+                            service.pending_orders[order_id]['trigger_offset'] = offset_percent
+                            print(f"[API] Updated in-memory order #{order_id} adjusted_trigger_price={adjusted_price}")
+                            break
+                except Exception as mem_err:
+                    print(f"[API] Warning: Could not update in-memory order: {mem_err}")
+                
                 return jsonify({
                     'success': True,
                     'message': f'Offset updated to {offset_percent:+.1f}%',
-                    'adjusted_trigger_price': order.get('adjusted_trigger_price') if order else None
+                    'adjusted_trigger_price': adjusted_price
                 })
             else:
                 return jsonify({'error': 'Failed to update offset'}), 500

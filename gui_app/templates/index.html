@@ -1840,11 +1840,15 @@ async function loadConditionalOrders() {
                             ${isActive ? `
                             <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
                                 <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Adjust Offset</div>
-                                <div style="display: flex; align-items: center; gap: 6px;">
-                                    <input type="range" id="offset-${order.id}" min="-10" max="10" step="0.5" value="${currentOffset.toFixed(1)}" 
-                                        style="width: 80px; accent-color: var(--accent-teal);"
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <button onclick="adjustOffset(${order.id}, -1)" style="background: #ef4444; border: none; color: white; width: 24px; height: 24px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 14px;">-</button>
+                                    <button onclick="adjustOffset(${order.id}, -0.1)" style="background: #f97316; border: none; color: white; width: 20px; height: 24px; border-radius: 4px; font-size: 10px; cursor: pointer;">-.1</button>
+                                    <input type="number" id="offset-${order.id}" step="0.1" value="${currentOffset.toFixed(1)}" 
+                                        style="width: 55px; text-align: center; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; padding: 2px; font-size: 0.8rem;"
                                         onchange="updateOffsetDisplay(${order.id}, this.value)">
-                                    <span id="offset-label-${order.id}" style="font-size: 0.8rem; font-weight: 600; color: var(--accent-teal); min-width: 45px;">${offsetSign}${currentOffset.toFixed(1)}%</span>
+                                    <span style="font-size: 0.75rem; color: var(--text-muted);">%</span>
+                                    <button onclick="adjustOffset(${order.id}, 0.1)" style="background: #22c55e; border: none; color: white; width: 20px; height: 24px; border-radius: 4px; font-size: 10px; cursor: pointer;">+.1</button>
+                                    <button onclick="adjustOffset(${order.id}, 1)" style="background: #10b981; border: none; color: white; width: 24px; height: 24px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 14px;">+</button>
                                 </div>
                                 <button onclick="applyOffset(${order.id})" class="btn btn-small" style="margin-top: 6px; background: linear-gradient(135deg, var(--accent-teal), var(--accent-blue)); border: none; color: white; padding: 4px 10px; font-size: 0.7rem; width: 100%;">
                                     Apply
@@ -1874,20 +1878,29 @@ async function loadConditionalOrders() {
 }
 
 function updateOffsetDisplay(orderId, value) {
-    const label = document.getElementById(`offset-label-${orderId}`);
-    if (label) {
+    const input = document.getElementById(`offset-${orderId}`);
+    if (input) {
         const v = parseFloat(value);
-        const sign = v >= 0 ? '+' : '';
-        label.textContent = `${sign}${v.toFixed(1)}%`;
-        label.style.color = v === 0 ? 'var(--accent-teal)' : (v > 0 ? '#22c55e' : '#ef4444');
+        input.value = v.toFixed(1);
     }
 }
 
-async function applyOffset(orderId) {
-    const slider = document.getElementById(`offset-${orderId}`);
-    if (!slider) return;
+function adjustOffset(orderId, delta) {
+    const input = document.getElementById(`offset-${orderId}`);
+    if (!input) return;
     
-    const offsetPercent = parseFloat(slider.value);
+    let currentValue = parseFloat(input.value) || 0;
+    let newValue = currentValue + delta;
+    // Clamp to reasonable range (-20% to +20%)
+    newValue = Math.max(-20, Math.min(20, newValue));
+    input.value = newValue.toFixed(1);
+}
+
+async function applyOffset(orderId) {
+    const input = document.getElementById(`offset-${orderId}`);
+    if (!input) return;
+    
+    const offsetPercent = parseFloat(input.value);
     
     try {
         const response = await fetch(`/api/conditional_orders/${orderId}/offset`, {

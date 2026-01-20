@@ -591,25 +591,10 @@ class BaseConditionalOrderService(ABC):
         trigger_price = parsed_signal.get('trigger_price', 0)
         trigger_type = parsed_signal.get('trigger_type', 'over')
         
-        # Get slippage/offset from channel settings
-        # slippage_protection_enabled + slippage_max_pct is the channel SLIP % setting
-        slippage_enabled = channel_settings.get('slippage_protection_enabled', 0)
-        slippage_pct = channel_settings.get('slippage_max_pct', 0.0) or 0.0
-        
-        # Apply slippage as trigger offset if enabled
-        trigger_offset = slippage_pct if slippage_enabled else 0.0
-        
-        if trigger_offset != 0:
-            if trigger_type == 'over':
-                # For "over" trigger, lower the adjusted price to trigger earlier
-                adjusted_price = trigger_price * (1 - trigger_offset / 100)
-                self._log(f"Applied slippage: trigger ${trigger_price} -> adjusted ${adjusted_price:.2f} (-{trigger_offset}%)")
-            else:
-                # For "under" trigger, raise the adjusted price to trigger earlier
-                adjusted_price = trigger_price * (1 + trigger_offset / 100)
-                self._log(f"Applied slippage: trigger ${trigger_price} -> adjusted ${adjusted_price:.2f} (+{trigger_offset}%)")
-        else:
-            adjusted_price = trigger_price
+        # ADJUST OFFSET: Manual trigger price adjustment (separate from slippage)
+        # This can be adjusted per-order via the UI slider/input
+        trigger_offset = 0.0  # Default: no offset, user can adjust via UI
+        adjusted_price = trigger_price  # Start with original trigger price
         
         timeout_minutes = channel_settings.get('order_timeout_minutes') or channel_settings.get('conditional_order_timeout_minutes')
         if timeout_minutes:
@@ -834,7 +819,9 @@ class BaseConditionalOrderService(ABC):
         if not order:
             return
         
-        trigger_price = order.get('trigger_price', 0)
+        # Use adjusted_trigger_price if offset has been applied, otherwise use original trigger_price
+        original_trigger = order.get('trigger_price', 0)
+        adjusted_trigger = order.get('adjusted_trigger_price') or original_trigger
         trigger_type = order.get('trigger_type', 'over')
         
         try:
@@ -843,12 +830,12 @@ class BaseConditionalOrderService(ABC):
         except Exception:
             pass
         
-        self._log(f"Price update #{order_id} {symbol} @ {price:.2f} (trigger: {trigger_type} {trigger_price})")
+        self._log(f"Price update #{order_id} {symbol} @ {price:.2f} (trigger: {trigger_type} {adjusted_trigger})")
         
         triggered = False
-        if trigger_type == 'over' and price >= trigger_price:
+        if trigger_type == 'over' and price >= adjusted_trigger:
             triggered = True
-        elif trigger_type == 'under' and price <= trigger_price:
+        elif trigger_type == 'under' and price <= adjusted_trigger:
             triggered = True
         
         if triggered:
@@ -903,6 +890,62 @@ class BaseConditionalOrderService(ABC):
             pass  # Circuit breaker not available, continue with execution
         except Exception as cb_err:
             self._log(f"Circuit breaker check error: {cb_err}")
+        
+        # SAFETY CHECK 3: Slippage protection (execution price guard)
+        slippage_enabled = order.get('slippage_protection_enabled', 0)
+        slippage_max_pct = order.get('slippage_max_pct', 0.0) or 0.0
+        original_trigger = order.get('trigger_price', 0)
+        trigger_type = order.get('trigger_type', 'over')
+        
+        if slippage_enabled and slippage_max_pct > 0 and original_trigger > 0:
+            # Calculate max allowed slippage from original trigger price
+            if trigger_type == 'over':
+                # For "over" trigger, block if price ran too far above trigger
+                max_allowed_price = original_trigger * (1 + slippage_max_pct / 100)
+                if trigger_price > max_allowed_price:
+                    slippage_pct = ((trigger_price - original_trigger) / original_trigger) * 100
+                    self._log(f"⚠️ BLOCKED #{order_id} {symbol}: Slippage too high ({slippage_pct:.1f}% > {slippage_max_pct}% max)")
+                    self._log(f"   Trigger: ${original_trigger:.2f}, Current: ${trigger_price:.2f}, Max: ${max_allowed_price:.2f}")
+                    update_conditional_order_status(
+                        order_id,
+                        'SLIPPAGE_BLOCKED',
+                        event='SLIPPAGE_EXCEEDED',
+                        details=f"Price ${trigger_price:.2f} exceeded {slippage_max_pct}% slippage (max ${max_allowed_price:.2f})"
+                    )
+                    # Stop monitoring - order failed due to slippage
+                    if order_id in self.monitors:
+                        await self.monitors[order_id].stop()
+                        del self.monitors[order_id]
+                    if order_id in self.monitor_tasks:
+                        self.monitor_tasks[order_id].cancel()
+                        del self.monitor_tasks[order_id]
+                    if order_id in self.pending_orders:
+                        del self.pending_orders[order_id]
+                    return
+            else:
+                # For "under" trigger, block if price fell too far below trigger
+                min_allowed_price = original_trigger * (1 - slippage_max_pct / 100)
+                if trigger_price < min_allowed_price:
+                    slippage_pct = ((original_trigger - trigger_price) / original_trigger) * 100
+                    self._log(f"⚠️ BLOCKED #{order_id} {symbol}: Slippage too high ({slippage_pct:.1f}% > {slippage_max_pct}% max)")
+                    self._log(f"   Trigger: ${original_trigger:.2f}, Current: ${trigger_price:.2f}, Min: ${min_allowed_price:.2f}")
+                    update_conditional_order_status(
+                        order_id,
+                        'SLIPPAGE_BLOCKED',
+                        event='SLIPPAGE_EXCEEDED',
+                        details=f"Price ${trigger_price:.2f} exceeded {slippage_max_pct}% slippage (min ${min_allowed_price:.2f})"
+                    )
+                    if order_id in self.monitors:
+                        await self.monitors[order_id].stop()
+                        del self.monitors[order_id]
+                    if order_id in self.monitor_tasks:
+                        self.monitor_tasks[order_id].cancel()
+                        del self.monitor_tasks[order_id]
+                    if order_id in self.pending_orders:
+                        del self.pending_orders[order_id]
+                    return
+            
+            self._log(f"✓ Slippage OK: ${trigger_price:.2f} within {slippage_max_pct}% of ${original_trigger:.2f}")
         
         # Stop the monitor (trigger condition met)
         if order_id in self.monitors:
