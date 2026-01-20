@@ -9674,6 +9674,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 conditional_order_enabled = channel_info.get('conditional_order_enabled', 0) if channel_info else 0
                 trigger_price = opt.get('trigger_price')
                 trigger_condition = opt.get('trigger_condition') or opt.get('trigger_type')
+                trigger_symbol = opt.get('trigger_symbol')
+                
+                print(f"[DEBUG] CONDITIONAL CHECK: enabled={conditional_order_enabled}, trigger_price={trigger_price}, trigger_condition={trigger_condition}, trigger_symbol={trigger_symbol}")
                 
                 if conditional_order_enabled and trigger_price and trigger_condition:
                     print(f"[CONDITIONAL] ✓ Detected trigger: {opt.get('symbol')} {trigger_condition.upper()} ${trigger_price}")
