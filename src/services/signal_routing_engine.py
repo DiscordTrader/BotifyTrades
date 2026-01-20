@@ -804,7 +804,7 @@ class SignalRoutingEngine:
         
         option_key = f"{symbol}_{expiry}_{strike}_{option_type}"
         
-        bto_message = f"📤 Forwarded\nBTO {symbol} {strike}{option_type} {expiry} @ {entry_price}"
+        bto_message = f"@everyone\nBTO {symbol} {strike}{option_type} {expiry} @ {entry_price}\n*Not financial advice, for educational purposes only.*"
         
         position = LedgerPosition(
             option_key=option_key,
@@ -884,9 +884,10 @@ class SignalRoutingEngine:
             return True
         
         stc_message = (
-            f"📤 Forwarded\n"
+            f"@everyone\n"
             f"STC {position.symbol} {position.strike}{position.option_type} "
-            f"{position.expiry} @ {exit_price}"
+            f"{position.expiry} @ {exit_price}\n"
+            f"*Not financial advice, for educational purposes only.*"
         )
         
         webhook_msg = WebhookMessage(
