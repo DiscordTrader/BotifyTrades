@@ -7411,5 +7411,26 @@
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
     "last_evaluated_price": null
+  },
+  "ALPACA_PAPER_NVO_65.0_2026-01-23_C": {
+    "entry_price": 0.6,
+    "highest_price": 0.56,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "NVO260123C00065000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-20T18:26:14.726232",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   }
 }
