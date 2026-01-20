@@ -182,8 +182,14 @@ class RiskDBAdapter:
             cursor = conn.cursor()
             
             cursor.execute('''
-                SELECT id, name, source_channel_id, stop_loss_pct, pt1_pct, pt2_pct, pt3_pct, pt4_pct,
-                       trailing_stop_pct, trailing_activation_pct, price_monitor_enabled
+                SELECT id, name, source_channel_id, stop_loss_pct, 
+                       pt1_pct, pt2_pct, pt3_pct, pt4_pct,
+                       pt1_qty, pt2_qty, pt3_qty, pt4_qty,
+                       trailing_stop_pct, trailing_activation_pct, 
+                       trim_order_type, leave_runner_enabled, leave_runner_size_pct,
+                       dynamic_sl_escalation_enabled, sl_escalation_profile,
+                       max_profit_giveback_enabled, max_profit_giveback_pct,
+                       price_monitor_enabled
                 FROM signal_routing_mappings
                 WHERE id = ? AND enabled = 1
                 LIMIT 1
@@ -198,9 +204,19 @@ class RiskDBAdapter:
             pt2 = row[5] or 0
             pt3 = row[6] or 0
             pt4 = row[7] or 0
-            trail = row[8] or 0
-            trail_activation = row[9] or 15.0
-            price_monitor = bool(row[10]) if row[10] else False
+            pt1_qty = row[8]
+            pt2_qty = row[9]
+            pt3_qty = row[10]
+            pt4_qty = row[11]
+            trail = row[12] or 0
+            trail_activation = row[13] or 15.0
+            trim_order_type = row[14] or 'market'
+            leave_runner_enabled = bool(row[15]) if row[15] else False
+            leave_runner_pct = row[16] or 25.0
+            dynamic_sl_enabled = bool(row[17]) if row[17] else False
+            sl_profile = row[18] or 'standard'
+            giveback_enabled = bool(row[19]) if row[19] else False
+            giveback_pct = row[20] or 30.0
             
             has_any_risk_config = (sl > 0 or pt1 > 0 or pt2 > 0 or pt3 > 0 or pt4 > 0 or trail > 0)
             
@@ -214,14 +230,22 @@ class RiskDBAdapter:
                 profit_target_2_pct=pt2,
                 profit_target_3_pct=pt3,
                 profit_target_4_pct=pt4,
+                profit_target_qty_1=pt1_qty,
+                profit_target_qty_2=pt2_qty,
+                profit_target_qty_3=pt3_qty,
+                profit_target_qty_4=pt4_qty,
                 stop_loss_pct=sl,
                 trailing_stop_pct=trail,
                 trailing_activation_pct=trail_activation,
-                leave_runner_enabled=False,
-                leave_runner_pct=25.0,
-                trim_order_mode='market',
+                leave_runner_enabled=leave_runner_enabled,
+                leave_runner_pct=leave_runner_pct,
+                trim_order_mode=trim_order_type,
                 trim_limit_offset=0.01,
-                exit_strategy_mode='risk'
+                exit_strategy_mode='risk',
+                enable_dynamic_sl=dynamic_sl_enabled,
+                dynamic_sl_profile=sl_profile,
+                enable_giveback_guard=giveback_enabled,
+                giveback_allowed_pct=giveback_pct
             )
         except Exception as e:
             print(f"[RISK] Warning: Could not fetch signal routing risk settings: {e}")
