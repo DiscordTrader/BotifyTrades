@@ -9518,7 +9518,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             # Extract conditional triggers from the FULL message content (for multi-line signals)
             # Example: "BTO 2 QQQ 608P 1/16 @m\nBELOW QQQ 607"
+            print(f"[DEBUG TRIGGER] action={opt.get('action')}, has_trigger_price={opt.get('trigger_price') is not None}")
             if opt.get('action') == 'BTO' and not opt.get('trigger_price'):
+                print(f"[DEBUG TRIGGER] Checking combined_content: {repr(combined_content[:200] if combined_content else 'NONE')}")
                 try:
                     from src.signals.parser import (
                         CONDITIONAL_TRIGGER_PATTERN, CONDITIONAL_TRIGGER_UNDER_PATTERN,
@@ -9546,8 +9548,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         opt['trigger_price'] = trigger_price
                         opt['trigger_condition'] = trigger_condition
                         print(f"[SIGNAL] ✓ Conditional trigger detected: {trigger_symbol} {trigger_condition.upper()} ${trigger_price}")
+                    else:
+                        print(f"[DEBUG TRIGGER] No pattern matched")
                 except Exception as e:
                     print(f"[SIGNAL] ⚠️ Error extracting trigger: {e}")
+                    import traceback
+                    traceback.print_exc()
             
             print(f"[SIGNAL PARSED] ✓ Option Signal: {opt['action']} {opt['qty']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ ${opt['price']}")
             print(f"[CHANNEL CONFIG] execute_enabled={execute_enabled}, track_enabled={track_enabled}, paper_trade_enabled={channel_info.get('paper_trade_enabled', 0) if channel_info else 0}")
