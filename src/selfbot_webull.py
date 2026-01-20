@@ -9670,12 +9670,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             print(f"[CONDITIONAL] ⚠️ Conditional order service DISABLED - executing immediately")
                         else:
                             # Build parsed_signal dict for the router
+                            # Map 'above'/'below' to 'over'/'under' for consistency with UI and backend
+                            mapped_trigger_type = 'over' if trigger_condition.lower() == 'above' else 'under'
                             parsed_signal = {
                                 'symbol': opt.get('symbol'),
                                 'action': opt.get('action', 'BTO'),
                                 'qty': opt.get('qty', 1),
                                 'asset': opt.get('asset', 'option'),
-                                'trigger_type': trigger_condition.lower(),
+                                'trigger_type': mapped_trigger_type,
                                 'trigger_price': float(trigger_price),
                                 'trigger_symbol': opt.get('trigger_symbol') or opt.get('symbol'),
                                 'channel_record_id': opt.get('channel_record_id'),
