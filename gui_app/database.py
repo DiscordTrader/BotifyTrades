@@ -2511,12 +2511,24 @@ def create_signal_routing_mapping(
     pt2_pct: float = 50.0,
     pt3_pct: float = 75.0,
     pt4_pct: float = 100.0,
+    pt1_qty: int = None,
+    pt2_qty: int = None,
+    pt3_qty: int = None,
+    pt4_qty: int = None,
     trailing_stop_pct: float = 0.0,
     trailing_activation_pct: float = 15.0,
+    trim_order_type: str = 'market',
+    leave_runner_enabled: bool = False,
+    leave_runner_size_pct: float = 25.0,
+    dynamic_sl_escalation_enabled: bool = False,
+    sl_escalation_profile: str = 'standard',
+    max_profit_giveback_enabled: bool = False,
+    max_profit_giveback_pct: float = 30.0,
+    exit_strategy_mode: str = 'risk',
     price_monitor_enabled: bool = True,
     price_monitor_interval_seconds: int = 5
 ) -> Optional[int]:
-    """Create a new signal routing mapping"""
+    """Create a new signal routing mapping with full risk settings"""
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -2528,9 +2540,13 @@ def create_signal_routing_mapping(
                 broker_id, account_id, default_quantity, default_dollar_amount,
                 enable_execution, enable_forwarding, enable_risk_management,
                 stop_loss_pct, pt1_pct, pt2_pct, pt3_pct, pt4_pct,
-                trailing_stop_pct, trailing_activation_pct,
-                price_monitor_enabled, price_monitor_interval_seconds
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                pt1_qty, pt2_qty, pt3_qty, pt4_qty,
+                trailing_stop_pct, trailing_activation_pct, trim_order_type,
+                leave_runner_enabled, leave_runner_size_pct,
+                dynamic_sl_escalation_enabled, sl_escalation_profile,
+                max_profit_giveback_enabled, max_profit_giveback_pct,
+                exit_strategy_mode, price_monitor_enabled, price_monitor_interval_seconds
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             name, source_channel_id, source_channel_name, destination_type,
             destination_url, destination_channel_id, destination_channel_name,
@@ -2538,8 +2554,12 @@ def create_signal_routing_mapping(
             1 if enable_execution else 0, 1 if enable_forwarding else 0,
             1 if enable_risk_management else 0,
             stop_loss_pct, pt1_pct, pt2_pct, pt3_pct, pt4_pct,
-            trailing_stop_pct, trailing_activation_pct,
-            1 if price_monitor_enabled else 0, price_monitor_interval_seconds
+            pt1_qty, pt2_qty, pt3_qty, pt4_qty,
+            trailing_stop_pct, trailing_activation_pct, trim_order_type,
+            1 if leave_runner_enabled else 0, leave_runner_size_pct,
+            1 if dynamic_sl_escalation_enabled else 0, sl_escalation_profile,
+            1 if max_profit_giveback_enabled else 0, max_profit_giveback_pct,
+            exit_strategy_mode, 1 if price_monitor_enabled else 0, price_monitor_interval_seconds
         ))
         conn.commit()
         print(f"[DATABASE] ✓ Created signal routing mapping: {name}")
