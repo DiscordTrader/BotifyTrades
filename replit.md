@@ -44,6 +44,8 @@ Position Sizing Priority: Channel QTY takes highest priority, followed by Channe
 
 Proportional Exit Logic calculates proportional exits for partial exit signals based on the trader's exit percentage. This logic is implemented in both PNL tracking and broker execution to ensure accuracy across all brokers and channels.
 
+Signal Routing with Per-Mapping Risk Settings enables source-to-destination Discord channel routing with independent risk management. The `routing_mapping_id` discriminator in the trades table allows the risk engine to apply mapping-specific SL%, PT targets, and trailing stop settings separately from regular channel-based risk settings. This enables routed trades to have different risk profiles than the source channel's settings.
+
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ. The License Validation System provides industry-standard license activation. The Discord bot runs in a dedicated thread. Broker credentials and all bot settings are GUI-manageable and stored in SQLite. Security features include admin password management, rate limiting on login attempts, session-based authentication, and local password recovery.
 
