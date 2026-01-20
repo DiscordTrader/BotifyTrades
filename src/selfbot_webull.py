@@ -9527,19 +9527,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         CONDITIONAL_TRIGGER_PATTERN, CONDITIONAL_TRIGGER_UNDER_PATTERN,
                         CONDITIONAL_TRIGGER_ABOVE_ALT_PATTERN, CONDITIONAL_TRIGGER_UNDER_ALT_PATTERN
                     )
+                    print(f"[DEBUG] TRIGGER Patterns imported successfully")
+                    print(f"[DEBUG] TRIGGER UNDER_ALT pattern: {CONDITIONAL_TRIGGER_UNDER_ALT_PATTERN.pattern}")
                     trigger_match = CONDITIONAL_TRIGGER_PATTERN.search(combined_content)
+                    print(f"[DEBUG] TRIGGER Pattern 1 (ABOVE): {trigger_match is not None}")
                     trigger_condition = 'above'
                     
                     if not trigger_match:
                         trigger_match = CONDITIONAL_TRIGGER_ABOVE_ALT_PATTERN.search(combined_content)
+                        print(f"[DEBUG] TRIGGER Pattern 2 (ABOVE_ALT): {trigger_match is not None}")
                         trigger_condition = 'above'
                     
                     if not trigger_match:
                         trigger_match = CONDITIONAL_TRIGGER_UNDER_PATTERN.search(combined_content)
+                        print(f"[DEBUG] TRIGGER Pattern 3 (UNDER): {trigger_match is not None}")
                         trigger_condition = 'below'
                     
                     if not trigger_match:
                         trigger_match = CONDITIONAL_TRIGGER_UNDER_ALT_PATTERN.search(combined_content)
+                        print(f"[DEBUG] TRIGGER Pattern 4 (UNDER_ALT): {trigger_match is not None}")
                         trigger_condition = 'below'
                     
                     if trigger_match:
