@@ -34,6 +34,7 @@ if sys.stdout and hasattr(sys.stdout, 'flush'):
 import re
 import json
 import asyncio
+import threading
 import configparser
 import time
 import hashlib
@@ -1920,12 +1921,50 @@ class SlippageDecision(Enum):
 
 # --------------------------------- WEBULL BROKER -------------------------------------
 class WebullBroker:
+    # Class-level order deduplication (shared across instances)
+    _order_dedupe_cache: dict = {}  # {dedupe_key: timestamp}
+    _order_dedupe_window = 60.0  # 60 seconds - block duplicate orders
+    _order_dedupe_lock = threading.Lock()  # Thread-safe access
+    
     def __init__(self, loop: asyncio.AbstractEventLoop):
         self.loop = loop
         self.name = "WEBULL"  # Add name attribute for multi-broker detection
         self._client = None
         self._logged_in = False
         self._use_paper_account = False  # Flag for paper trading
+    
+    def _check_order_dedupe(self, symbol: str, strike: float, opt_type: str, expiry: str, side: str, qty: int, price: float) -> bool:
+        """
+        Check if this order is a duplicate (same params within dedupe window).
+        Returns True if order should proceed, False if it's a duplicate.
+        """
+        import time
+        # Normalize floats to 2 decimal places to avoid float representation variance
+        strike_norm = f"{float(strike):.2f}"
+        price_norm = f"{float(price):.2f}"
+        # Normalize expiry (strip leading zeros, uppercase type)
+        expiry_norm = expiry.replace('/', '').strip() if expiry else ""
+        opt_type_norm = str(opt_type).upper() if opt_type else ""
+        dedupe_key = f"{symbol}_{strike_norm}_{opt_type_norm}_{expiry_norm}_{side}_{qty}_{price_norm}"
+        current_time = time.time()
+        
+        with WebullBroker._order_dedupe_lock:
+            # Clean expired entries
+            expired = [k for k, t in WebullBroker._order_dedupe_cache.items() 
+                      if current_time - t > WebullBroker._order_dedupe_window]
+            for k in expired:
+                del WebullBroker._order_dedupe_cache[k]
+            
+            # Check for duplicate
+            if dedupe_key in WebullBroker._order_dedupe_cache:
+                last_time = WebullBroker._order_dedupe_cache[dedupe_key]
+                print(f"[ORDER DEDUPE] ⚠️ DUPLICATE BLOCKED: {dedupe_key} (sent {current_time - last_time:.2f}s ago)")
+                return False
+            
+            # Add to cache
+            WebullBroker._order_dedupe_cache[dedupe_key] = current_time
+            print(f"[ORDER DEDUPE] ✓ Order permitted: {dedupe_key}")
+            return True
 
     def _patch_headers(self, wb):
         if hasattr(wb, "_session") and hasattr(wb, "_headers"):
@@ -2799,6 +2838,15 @@ class WebullBroker:
             # This is the SINGLE order submission path - no fallbacks to prevent duplicates
             import requests
             import uuid
+            
+            # ORDER-LEVEL DEDUPLICATION: Belt-and-suspenders to prevent duplicate API calls
+            if not self._check_order_dedupe(symbol, strike, opt_type, expiry_mmdd, side, adjusted_qty, limit_price):
+                print(f"[WEBULL] ❌ Order BLOCKED by order-level deduplication")
+                return {
+                    'success': False,
+                    'msg': 'Duplicate order blocked - same order was submitted within 60 seconds',
+                    'error': 'DUPLICATE_ORDER'
+                }
             
             headers = wb.build_req_headers(include_trade_token=True, include_time=True)
             api_payload = {
@@ -4862,6 +4910,10 @@ class SelfClient(discord.Client):
         
         # Guard to prevent on_ready from running multiple times (Discord reconnects trigger on_ready)
         self._on_ready_completed = False
+        self._on_ready_lock = None  # Will be created in setup() when event loop is ready
+        
+        # Note: Order-level deduplication is now implemented at WebullBroker class level
+        # using class-level _order_dedupe_cache with thread-safe locking
         
         # Initialize AI analyzers if enabled
         self.trade_analyzer = None
@@ -5220,7 +5272,9 @@ class SelfClient(discord.Client):
         self.processing_ready = asyncio.Event()
         self._send_lock = asyncio.Lock()
         self._message_dedupe_lock = asyncio.Lock()  # Protect message deduplication from race conditions
-        print("[ASYNC] ✓ Queue and events created in event loop")
+        self._on_ready_lock = asyncio.Lock()  # Protect on_ready from parallel execution
+        # Note: Order dedupe uses class-level threading.Lock in WebullBroker (not asyncio)
+        print("[ASYNC] ✓ Queue, events, and locks created in event loop")
         
         # Start broker initialization in background - Discord stays responsive
         asyncio.create_task(self._init_brokers_background())
@@ -6989,9 +7043,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         global _discord_ready_event  # Declare at function start for early signaling
         
         # Guard against duplicate on_ready calls (Discord reconnects can trigger this multiple times)
+        # Use lock-based double-checked guard to prevent race conditions
         if self._on_ready_completed:
             print("[Discord] Reconnected - skipping duplicate on_ready initialization")
             return
+        
+        # Lock-based guard: If lock not yet created, create it now (first on_ready call)
+        if self._on_ready_lock is None:
+            self._on_ready_lock = asyncio.Lock()
+        
+        async with self._on_ready_lock:
+            # Double-check inside lock to prevent parallel execution
+            if self._on_ready_completed:
+                print("[Discord] Reconnected (lock acquired) - skipping duplicate on_ready initialization")
+                return
+            # Mark as completed IMMEDIATELY to prevent any parallel execution
+            self._on_ready_completed = True
+            print("[Discord] ✓ on_ready lock acquired - initialization starting")
         
         if self.user:
             print(f"\n[Discord] ✓ Logged in as {self.user} (id={self.user.id})")
@@ -7340,8 +7408,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         except Exception:
             pass  # Event not needed in non-threaded mode
         
-        # Mark on_ready as completed to prevent duplicate initialization on reconnects
-        self._on_ready_completed = True
+        # Note: _on_ready_completed is set at the TOP of on_ready (inside lock) to prevent race conditions
     
     async def on_error(self, event_name: str, *args, **kwargs):
         """Log Discord gateway errors that would otherwise be silent"""
@@ -7600,17 +7667,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         trace_id = f"T{message.id % 100000:05d}"  # Short trace ID based on message ID
         
         # FIRST: Deduplicate messages BEFORE any processing (Discord self-bot sometimes delivers duplicate events)
-        # Ensure lock exists (create if needed)
-        if not self._message_dedupe_lock:
-            self._message_dedupe_lock = asyncio.Lock()
-        
-        # Check-and-add atomically using lock to prevent race condition
-        async with self._message_dedupe_lock:
-            if message.id in self._processed_messages:
-                print(f"[DEBUG DEDUPE] [{trace_id}] ⚠️ DUPLICATE BLOCKED - msg_id={message.id} already in cache (size={len(self._processed_messages)})")
-                return  # Silent skip for duplicates
-            self._processed_messages.add(message.id)
-            print(f"[DEBUG DEDUPE] [{trace_id}] ✓ NEW MESSAGE - msg_id={message.id} added to cache (size={len(self._processed_messages)})")
+        # Lock MUST be created in setup() - if not available, skip dedupe (edge case during startup)
+        if self._message_dedupe_lock:
+            # Check-and-add atomically using lock to prevent race condition
+            async with self._message_dedupe_lock:
+                if message.id in self._processed_messages:
+                    print(f"[DEBUG DEDUPE] [{trace_id}] ⚠️ DUPLICATE BLOCKED - msg_id={message.id} already in cache (size={len(self._processed_messages)})")
+                    return  # Silent skip for duplicates
+                self._processed_messages.add(message.id)
+                print(f"[DEBUG DEDUPE] [{trace_id}] ✓ NEW MESSAGE - msg_id={message.id} added to cache (size={len(self._processed_messages)})")
+        else:
+            # Fallback: lock not ready (should only happen during startup race)
+            print(f"[DEBUG DEDUPE] [{trace_id}] ⚠️ WARNING: Dedupe lock not ready - processing without dedupe")
         
         # Limit cache size to prevent memory growth (do this after dedupe check)
         if len(self._processed_messages) > self._max_processed_cache:

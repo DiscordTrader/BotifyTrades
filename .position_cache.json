@@ -7246,7 +7246,7 @@
   },
   "ALPACA_PAPER_PLUG_2.5_2026-01-30_C": {
     "entry_price": 0.08,
-    "highest_price": 0.08,
+    "highest_price": 0.09,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -7372,7 +7372,7 @@
   },
   "ALPACA_PAPER_IWM_265.0_2026-01-20_C": {
     "entry_price": 0.44,
-    "highest_price": 0.52,
+    "highest_price": 0.63,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -7393,7 +7393,7 @@
   },
   "ALPACA_PAPER_ONDS_16.0_2026-01-30_C": {
     "entry_price": 0.45,
-    "highest_price": 0.5,
+    "highest_price": 0.57,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
