@@ -6041,6 +6041,21 @@ class SelfClient(discord.Client):
             import traceback
             traceback.print_exc()
         
+        # Register brokers with Conditional Order Service (after all brokers connected)
+        try:
+            from src.services.conditional_orders.router import conditional_order_router
+            if self.broker:
+                conditional_order_router.set_broker_instance('Webull', self.broker)
+                _original_print("[CONDITIONAL] ✓ Webull registered for price monitoring", flush=True)
+            if self.paper_broker:
+                conditional_order_router.set_broker_instance('Alpaca', self.paper_broker)
+                _original_print("[CONDITIONAL] ✓ Alpaca registered for price monitoring", flush=True)
+            if self.robinhood_broker:
+                conditional_order_router.set_broker_instance('Robinhood', self.robinhood_broker)
+                _original_print("[CONDITIONAL] ✓ Robinhood registered for price monitoring", flush=True)
+        except Exception as e:
+            _original_print(f"[CONDITIONAL] ⚠️ Could not register brokers: {e}", flush=True)
+        
         _original_print("[BROKERS] ✓ Background broker initialization complete - Discord was never blocked", flush=True)
     
     async def token_refresh_scheduler(self):
@@ -7135,46 +7150,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             print(f"[STARTUP] Warning: Could not start Trade Monitor: {e}", flush=True)
             traceback.print_exc()
         
-        # Start Conditional Order Service if enabled (using market-isolated router)
+        # Set up Conditional Order execution callback (broker registration happens after brokers connect)
         try:
             from src.services.conditional_orders.router import conditional_order_router
             
+            # Only set up execution callback if global service is enabled
             if conditional_order_router.is_enabled():
-                # Register broker instances - router auto-routes to correct market service
-                # US Brokers
-                if self.broker:
-                    conditional_order_router.set_broker_instance('Webull', self.broker)
-                    print("[STARTUP] ✓ Webull registered for US conditional order monitoring", flush=True)
-                if hasattr(self, 'paper_broker') and self.paper_broker:
-                    conditional_order_router.set_broker_instance('Alpaca', self.paper_broker)
-                    print("[STARTUP] ✓ Alpaca registered for US conditional order monitoring", flush=True)
-                if hasattr(self, 'schwab_broker') and self.schwab_broker:
-                    conditional_order_router.set_broker_instance('Schwab', self.schwab_broker)
-                    print("[STARTUP] ✓ Schwab registered for US conditional order monitoring", flush=True)
-                if hasattr(self, 'ibkr_broker') and self.ibkr_broker:
-                    conditional_order_router.set_broker_instance('IBKR', self.ibkr_broker)
-                    print("[STARTUP] ✓ IBKR registered for US conditional order monitoring", flush=True)
-                if hasattr(self, 'tastytrade_broker') and self.tastytrade_broker:
-                    conditional_order_router.set_broker_instance('Tastytrade', self.tastytrade_broker)
-                    print("[STARTUP] ✓ Tastytrade registered for US conditional order monitoring", flush=True)
-                if hasattr(self, 'robinhood_broker') and self.robinhood_broker:
-                    conditional_order_router.set_broker_instance('Robinhood', self.robinhood_broker)
-                    print("[STARTUP] ✓ Robinhood registered for US conditional order monitoring", flush=True)
-                # India Brokers
-                if hasattr(self, 'upstox_broker') and self.upstox_broker:
-                    conditional_order_router.set_broker_instance('upstox', self.upstox_broker)
-                    print("[STARTUP] ✓ Upstox registered for INDIA conditional order monitoring", flush=True)
-                if hasattr(self, 'dhanq_broker') and self.dhanq_broker:
-                    conditional_order_router.set_broker_instance('dhanq', self.dhanq_broker)
-                    print("[STARTUP] ✓ DhanQ registered for INDIA conditional order monitoring", flush=True)
-                if hasattr(self, 'zerodha_broker') and self.zerodha_broker:
-                    conditional_order_router.set_broker_instance('zerodha', self.zerodha_broker)
-                    print("[STARTUP] ✓ Zerodha registered for INDIA conditional order monitoring", flush=True)
-                # Canada Brokers  
-                if hasattr(self, 'questrade_broker') and self.questrade_broker:
-                    conditional_order_router.set_broker_instance('questrade', self.questrade_broker)
-                    print("[STARTUP] ✓ Questrade registered for CANADA conditional order monitoring", flush=True)
-                
                 # Use the global sync signal queue (same as Telegram) for thread-safe handoff
                 global _telegram_signal_queue
                 
