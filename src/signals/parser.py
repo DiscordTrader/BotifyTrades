@@ -242,14 +242,15 @@ TOON_EXIT_PATTERN = re.compile(
 #   "AAPL over 250 10% of ACCOUNT PT 260 SL 240"
 #   "SPY under 680 stop loss 2% take profit 675"
 
-# Main conditional trigger pattern: SYMBOL over/under PRICE
+# Main conditional trigger pattern: SYMBOL over/under PRICE or PRICE-RANGE
+# Supports: "FRSX over 2.35" or "FRSX over 2.35-2.4" (uses first price as trigger)
 CONDITIONAL_TRIGGER_PATTERN = re.compile(
-    r'(?:^|\s)\$?([A-Z]{1,5})\s+(?:over|above)\s+\$?([\d.]+)',
+    r'(?:^|\s)\$?([A-Z]{1,5})\s+(?:over|above)\s+\$?([\d.]+)(?:\s*[-–—to]+\s*\$?[\d.]+)?',
     re.IGNORECASE
 )
 
 CONDITIONAL_TRIGGER_UNDER_PATTERN = re.compile(
-    r'(?:^|\s)\$?([A-Z]{1,5})\s+(?:under|below)\s+\$?([\d.]+)',
+    r'(?:^|\s)\$?([A-Z]{1,5})\s+(?:under|below)\s+\$?([\d.]+)(?:\s*[-–—to]+\s*\$?[\d.]+)?',
     re.IGNORECASE
 )
 

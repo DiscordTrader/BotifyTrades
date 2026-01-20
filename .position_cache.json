@@ -7456,7 +7456,7 @@
   },
   "ALPACA_PAPER_BBAI_6.0_2026-01-23_C": {
     "entry_price": 0.18,
-    "highest_price": 0.17,
+    "highest_price": 0.18,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
