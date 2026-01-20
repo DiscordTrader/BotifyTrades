@@ -88,6 +88,8 @@ class CleanConsoleFormatter(logging.Formatter):
         '[MAIN]', '[GUI]', '[STARTUP]', '[CONFIG]', '[LICENSE]',
         '[WORKER]', '[SYNC]', '[DATABASE]', '[RISK]', '[TELEGRAM]',
         '[PAPER TRADE]', '[MULTI-BROKER]', '[ROUTER]', '[LIFECYCLE]',
+        # Conditional orders
+        '[CONDITIONAL]',
         # Debug (when enabled)
         '[DEBUG]', '[API]', '[ROUTE]'
     ]
