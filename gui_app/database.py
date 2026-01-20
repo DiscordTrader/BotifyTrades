@@ -2266,7 +2266,8 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
                created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct,
                profit_target_4_pct, profit_target_qty_1, profit_target_qty_2, profit_target_qty_3,
                profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode, trade_summary_enabled,
-               slippage_protection_enabled, slippage_max_pct, signal_update_automation, signal_update_automation_override
+               slippage_protection_enabled, slippage_max_pct, signal_update_automation, signal_update_automation_override,
+               enable_dynamic_sl, enable_giveback_guard, giveback_allowed_pct, dynamic_sl_profile
         FROM channels WHERE id = ?
     ''', (channel_id,))
     
@@ -2310,7 +2311,11 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict]:
         'slippage_protection_enabled': bool(row[32]) if len(row) > 32 and row[32] is not None else False,
         'slippage_max_pct': row[33] if len(row) > 33 else None,
         'signal_update_automation': bool(row[34]) if len(row) > 34 and row[34] is not None else False,
-        'signal_update_automation_override': row[35] if len(row) > 35 else None
+        'signal_update_automation_override': row[35] if len(row) > 35 else None,
+        'enable_dynamic_sl': bool(row[36]) if len(row) > 36 and row[36] is not None else False,
+        'enable_giveback_guard': bool(row[37]) if len(row) > 37 and row[37] is not None else False,
+        'giveback_allowed_pct': row[38] if len(row) > 38 and row[38] is not None else 30.0,
+        'dynamic_sl_profile': row[39] if len(row) > 39 and row[39] else 'standard'
     }
 
 
@@ -2327,7 +2332,8 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
                created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct,
                profit_target_4_pct, profit_target_qty_1, profit_target_qty_2, profit_target_qty_3,
                profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode, trade_summary_enabled,
-               slippage_protection_enabled, slippage_max_pct, signal_update_automation, signal_update_automation_override
+               slippage_protection_enabled, slippage_max_pct, signal_update_automation, signal_update_automation_override,
+               enable_dynamic_sl, enable_giveback_guard, giveback_allowed_pct, dynamic_sl_profile
         FROM channels WHERE discord_channel_id = ?
     ''', (str(discord_channel_id),))
     
@@ -2371,7 +2377,11 @@ def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
         'slippage_protection_enabled': bool(row[32]) if len(row) > 32 and row[32] is not None else False,
         'slippage_max_pct': row[33] if len(row) > 33 else None,
         'signal_update_automation': bool(row[34]) if len(row) > 34 and row[34] is not None else False,
-        'signal_update_automation_override': row[35] if len(row) > 35 else None
+        'signal_update_automation_override': row[35] if len(row) > 35 else None,
+        'enable_dynamic_sl': bool(row[36]) if len(row) > 36 and row[36] is not None else False,
+        'enable_giveback_guard': bool(row[37]) if len(row) > 37 and row[37] is not None else False,
+        'giveback_allowed_pct': row[38] if len(row) > 38 and row[38] is not None else 30.0,
+        'dynamic_sl_profile': row[39] if len(row) > 39 and row[39] else 'standard'
     }
 
 
