@@ -2597,6 +2597,9 @@ def parse_option_signal(text: str) -> Optional[Dict[str, Any]]:
     Example: "BTO 5 AAPL 150 C 12/20 @ 2.50"
     Example: "STC TSLA 200 P 01/15 @ m" (market order)
     
+    Also supports conditional triggers in multi-line signals:
+    Example: "BTO 2 QQQ 608P 1/16 @m\nBELOW QQQ 607"
+    
     Args:
         text: Raw message text to parse
         
@@ -2630,7 +2633,7 @@ def parse_option_signal(text: str) -> Optional[Dict[str, Any]]:
         qty = int(qty_str)
         qty_from_signal = True
     
-    return {
+    result = {
         "asset": "option",
         "action": direction.upper(),
         "qty": qty,
@@ -2642,6 +2645,24 @@ def parse_option_signal(text: str) -> Optional[Dict[str, Any]]:
         "is_market_order": is_market_order,
         "_qty_from_signal": qty_from_signal
     }
+    
+    # Check for conditional triggers (ABOVE/BELOW SYMBOL PRICE) in full text
+    trigger_match = CONDITIONAL_TRIGGER_PATTERN.search(text)
+    trigger_condition = 'above'
+    
+    if not trigger_match:
+        trigger_match = CONDITIONAL_TRIGGER_UNDER_PATTERN.search(text)
+        trigger_condition = 'below'
+    
+    if trigger_match:
+        trigger_symbol = trigger_match.group(1).upper()
+        trigger_price = float(trigger_match.group(2))
+        result['trigger_symbol'] = trigger_symbol
+        result['trigger_price'] = trigger_price
+        result['trigger_condition'] = trigger_condition
+        print(f"[SIGNAL] ✓ Conditional trigger detected: {trigger_symbol} {trigger_condition.upper()} ${trigger_price}")
+    
+    return result
 
 
 def parse_stock_signal(text: str) -> Optional[Dict[str, Any]]:

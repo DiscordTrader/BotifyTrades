@@ -9623,6 +9623,59 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 except Exception as cb_err:
                     print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
                 
+                # Check for conditional order triggers (ABOVE/BELOW price triggers)
+                conditional_order_enabled = channel_info.get('conditional_order_enabled', 0) if channel_info else 0
+                trigger_price = opt.get('trigger_price')
+                trigger_condition = opt.get('trigger_condition') or opt.get('trigger_type')
+                
+                if conditional_order_enabled and trigger_price and trigger_condition:
+                    print(f"[CONDITIONAL] ✓ Detected trigger: {opt.get('symbol')} {trigger_condition.upper()} ${trigger_price}")
+                    print(f"[CONDITIONAL] Channel has conditional orders ENABLED - routing to conditional order service")
+                    
+                    try:
+                        from src.services.conditional_orders import conditional_order_router
+                        
+                        if not conditional_order_router.is_enabled():
+                            print(f"[CONDITIONAL] ⚠️ Conditional order service DISABLED - executing immediately")
+                        else:
+                            # Create conditional order - let the service handle price monitoring
+                            order_data = {
+                                'symbol': opt.get('symbol'),
+                                'action': opt.get('action', 'BTO'),
+                                'qty': opt.get('qty', 1),
+                                'asset': opt.get('asset', 'option'),
+                                'trigger_type': trigger_condition.lower(),
+                                'trigger_price': float(trigger_price),
+                                'trigger_symbol': opt.get('trigger_symbol') or opt.get('symbol'),
+                                'channel_id': str(message.channel.id),
+                                'channel_record_id': opt.get('channel_record_id'),
+                                'message_id': str(message.id),
+                                'enabled_brokers': opt.get('_enabled_brokers', []),
+                                'market': 'US',
+                                'original_signal': opt,
+                            }
+                            
+                            # Add option details if present
+                            if opt.get('strike'):
+                                order_data['strike'] = opt.get('strike')
+                                order_data['opt_type'] = opt.get('opt_type')
+                                order_data['expiry'] = opt.get('expiry')
+                            
+                            order_id = await conditional_order_router.create_order(order_data)
+                            
+                            if order_id:
+                                print(f"[CONDITIONAL] ✓ Created conditional order #{order_id}")
+                                print(f"[CONDITIONAL]   {opt.get('symbol')} {trigger_condition.upper()} ${trigger_price}")
+                                print(f"[CONDITIONAL]   Monitoring for trigger... (will execute when price condition met)")
+                                return  # Don't queue for immediate execution
+                            else:
+                                print(f"[CONDITIONAL] ❌ Failed to create conditional order - falling back to immediate execution")
+                    except Exception as cond_err:
+                        print(f"[CONDITIONAL] ❌ Error routing to conditional service: {cond_err}")
+                        import traceback
+                        traceback.print_exc()
+                        print(f"[CONDITIONAL] Falling back to immediate execution")
+                
                 await self.order_queue.put(opt)
                 print(f"[DEBUG] Queue size AFTER put: {self.order_queue.qsize()}", flush=True)
                 print(f"[QUEUE] ✅ Signal successfully queued for LIVE execution", flush=True)
