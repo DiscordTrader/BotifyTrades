@@ -804,7 +804,7 @@ class SignalRoutingEngine:
         
         option_key = f"{symbol}_{expiry}_{strike}_{option_type}"
         
-        bto_message = f"BTO {symbol} {strike}{option_type} {expiry} @ {entry_price}"
+        bto_message = f"📤 Forwarded\nBTO {symbol} {strike}{option_type} {expiry} @ {entry_price}"
         
         position = LedgerPosition(
             option_key=option_key,
@@ -884,6 +884,7 @@ class SignalRoutingEngine:
             return True
         
         stc_message = (
+            f"📤 Forwarded\n"
             f"STC {position.symbol} {position.strike}{position.option_type} "
             f"{position.expiry} @ {exit_price}"
         )
