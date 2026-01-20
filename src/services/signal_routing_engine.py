@@ -131,6 +131,39 @@ class SignalRoutingEngine:
         self._initialized = True
         print("[ROUTING_ENGINE] ✓ SignalRoutingEngine initialized (using shared ExitArbiter)")
     
+    async def fetch_initial_mark_price(self, position_id: int, position: LedgerPosition) -> bool:
+        """
+        Fetch and set initial_mark_price immediately after position creation.
+        
+        This eliminates the delay from waiting for the poll loop.
+        Called right after create_position() to get instant price data.
+        
+        Returns True if price was successfully fetched and set.
+        """
+        try:
+            if not self.price_monitor:
+                print(f"[ROUTING_ENGINE] ⚠️ Price monitor not available for immediate fetch")
+                return False
+            
+            price = await self.price_monitor.get_option_price(
+                symbol=position.symbol,
+                strike=position.strike,
+                expiry=position.expiry,
+                option_type=position.option_type
+            )
+            
+            if price and price > 0:
+                self.ledger.update_price(position_id, price, staleness_sec=0)
+                print(f"[ROUTING_ENGINE] ✓ Immediate mark price: ${price:.2f} for {position.option_key}")
+                return True
+            else:
+                print(f"[ROUTING_ENGINE] ⚠️ Could not fetch immediate price for {position.option_key}")
+                return False
+                
+        except Exception as e:
+            print(f"[ROUTING_ENGINE] ⚠️ Immediate price fetch failed: {e}")
+            return False
+    
     def load_mapping_config(self, mapping: Dict[str, Any]) -> RoutingMappingConfig:
         """Load configuration from database mapping dict."""
         exit_mode_str = mapping.get('exit_strategy_mode', 'risk')
@@ -166,6 +199,13 @@ class SignalRoutingEngine:
         
         self._configs[config.source_channel_id] = config
         return config
+    
+    def get_routing_config(self, routing_mapping_id: int) -> Optional[RoutingMappingConfig]:
+        """Get routing config by mapping ID."""
+        for config in self._configs.values():
+            if config.id == routing_mapping_id:
+                return config
+        return None
     
     def calculate_position_quantity(
         self,

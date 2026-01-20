@@ -300,6 +300,32 @@ class PriceMonitorService:
         
         return None
     
+    async def get_option_price(
+        self,
+        symbol: str,
+        strike: float,
+        expiry: str,
+        option_type: str
+    ) -> Optional[float]:
+        """
+        Public method to fetch option price immediately.
+        
+        Used for instant price fetch on position creation (no poll delay).
+        Tries Webull first, then Alpaca fallback.
+        """
+        for source_name, fetch_func in [
+            ('webull', self._fetch_option_price_webull),
+            ('alpaca', self._fetch_option_price_alpaca),
+        ]:
+            try:
+                price = await fetch_func(symbol, strike, expiry, option_type)
+                if price and price > 0:
+                    return price
+            except Exception:
+                continue
+        
+        return None
+    
     async def _update_position_prices(self):
         """Update prices for all monitored positions."""
         with self._positions_lock:
