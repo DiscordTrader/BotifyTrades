@@ -9086,7 +9086,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     return
         
         # Parse trading signals - check Bullwinkle first, then India, then US format
-        print(f"[DEBUG FLOW] Reached signal parsing. bullwinkle_opt={bullwinkle_opt is not None}, india_stock_signal={india_stock_signal is not None}")
         opt = bullwinkle_opt  # Use Bullwinkle signal if already parsed
         
         if opt is None and is_india_signal(normalized_content):
@@ -9198,43 +9197,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if opt is None and india_stock_signal is None:
             opt = parse_option_signal(normalized_content)
         
-        # Extract conditional triggers from the FULL message content (including second line)
-        # The wrapper parse_option_signal doesn't extract triggers, so do it here
-        print(f"[DEBUG TRIGGER] opt is set: {opt is not None}, has trigger_price: {opt.get('trigger_price') if opt else 'N/A'}")
-        if opt and not opt.get('trigger_price'):
-            try:
-                from src.signals.parser import (
-                    CONDITIONAL_TRIGGER_PATTERN, CONDITIONAL_TRIGGER_UNDER_PATTERN,
-                    CONDITIONAL_TRIGGER_ABOVE_ALT_PATTERN, CONDITIONAL_TRIGGER_UNDER_ALT_PATTERN
-                )
-                # Use combined_content (full message) for trigger detection, not normalized_content
-                full_text = combined_content if combined_content else normalized_content
-                print(f"[DEBUG TRIGGER] full_text: {repr(full_text[:100]) if full_text else 'None'}")
-                
-                trigger_match = CONDITIONAL_TRIGGER_PATTERN.search(full_text)
-                trigger_condition = 'above'
-                
-                if not trigger_match:
-                    trigger_match = CONDITIONAL_TRIGGER_ABOVE_ALT_PATTERN.search(full_text)
-                    trigger_condition = 'above'
-                
-                if not trigger_match:
-                    trigger_match = CONDITIONAL_TRIGGER_UNDER_PATTERN.search(full_text)
-                    trigger_condition = 'below'
-                
-                if not trigger_match:
-                    trigger_match = CONDITIONAL_TRIGGER_UNDER_ALT_PATTERN.search(full_text)
-                    trigger_condition = 'below'
-                
-                if trigger_match:
-                    trigger_symbol = trigger_match.group(1).upper()
-                    trigger_price = float(trigger_match.group(2))
-                    opt['trigger_symbol'] = trigger_symbol
-                    opt['trigger_price'] = trigger_price
-                    opt['trigger_condition'] = trigger_condition
-                    print(f"[SIGNAL] ✓ Conditional trigger detected: {trigger_symbol} {trigger_condition.upper()} ${trigger_price}")
-            except Exception as e:
-                print(f"[SIGNAL] ⚠️ Error extracting trigger: {e}")
         
         # Check for bracket order signal (stock with targets and stop loss)
         bracket_signal = None
@@ -9553,6 +9515,39 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     import traceback
                     traceback.print_exc()
                     return
+            
+            # Extract conditional triggers from the FULL message content (for multi-line signals)
+            # Example: "BTO 2 QQQ 608P 1/16 @m\nBELOW QQQ 607"
+            if opt.get('action') == 'BTO' and not opt.get('trigger_price'):
+                try:
+                    from src.signals.parser import (
+                        CONDITIONAL_TRIGGER_PATTERN, CONDITIONAL_TRIGGER_UNDER_PATTERN,
+                        CONDITIONAL_TRIGGER_ABOVE_ALT_PATTERN, CONDITIONAL_TRIGGER_UNDER_ALT_PATTERN
+                    )
+                    trigger_match = CONDITIONAL_TRIGGER_PATTERN.search(combined_content)
+                    trigger_condition = 'above'
+                    
+                    if not trigger_match:
+                        trigger_match = CONDITIONAL_TRIGGER_ABOVE_ALT_PATTERN.search(combined_content)
+                        trigger_condition = 'above'
+                    
+                    if not trigger_match:
+                        trigger_match = CONDITIONAL_TRIGGER_UNDER_PATTERN.search(combined_content)
+                        trigger_condition = 'below'
+                    
+                    if not trigger_match:
+                        trigger_match = CONDITIONAL_TRIGGER_UNDER_ALT_PATTERN.search(combined_content)
+                        trigger_condition = 'below'
+                    
+                    if trigger_match:
+                        trigger_symbol = trigger_match.group(1).upper()
+                        trigger_price = float(trigger_match.group(2))
+                        opt['trigger_symbol'] = trigger_symbol
+                        opt['trigger_price'] = trigger_price
+                        opt['trigger_condition'] = trigger_condition
+                        print(f"[SIGNAL] ✓ Conditional trigger detected: {trigger_symbol} {trigger_condition.upper()} ${trigger_price}")
+                except Exception as e:
+                    print(f"[SIGNAL] ⚠️ Error extracting trigger: {e}")
             
             print(f"[SIGNAL PARSED] ✓ Option Signal: {opt['action']} {opt['qty']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ ${opt['price']}")
             print(f"[CHANNEL CONFIG] execute_enabled={execute_enabled}, track_enabled={track_enabled}, paper_trade_enabled={channel_info.get('paper_trade_enabled', 0) if channel_info else 0}")
