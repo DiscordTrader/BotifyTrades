@@ -428,40 +428,41 @@ class BaseConditionalOrderService(ABC):
         sys.stderr.flush()
     
     def _calculate_expiry(self, expiry_setting: str) -> Optional[str]:
-        """Calculate expiry datetime based on legacy setting (end_of_day, 1_hour, 4_hours, 1_day)."""
+        """Calculate expiry datetime based on legacy setting (end_of_day, 1_hour, 4_hours, 1_day).
+        
+        All times are stored in UTC for consistency.
+        """
         if not expiry_setting:
             return None
         
-        now = datetime.now()
+        now_utc = datetime.utcnow()
         
         if expiry_setting == 'end_of_day':
-            # Set expiry to 4 PM EST market close
-            # Convert server time to EST for US markets
+            # Set expiry to 4 PM EST market close, stored as UTC (21:00 UTC or 20:00 UTC during DST)
             try:
                 from zoneinfo import ZoneInfo
                 est = ZoneInfo('America/New_York')
+                utc = ZoneInfo('UTC')
                 now_est = datetime.now(est)
                 expiry_est = now_est.replace(hour=16, minute=0, second=0, microsecond=0)
                 if expiry_est <= now_est:
                     # Already past 4 PM EST - set to next trading day
                     expiry_est = expiry_est + timedelta(days=1)
-                # Convert back to local/naive datetime for storage
-                expiry = expiry_est.replace(tzinfo=None)
+                # Convert to UTC for storage
+                expiry_utc = expiry_est.astimezone(utc)
+                expiry = expiry_utc.replace(tzinfo=None)
             except ImportError:
-                # Fallback for Python < 3.9: estimate EST as UTC-5
-                import os
-                utc_offset = -5  # EST is UTC-5, EDT is UTC-4
-                now_utc = datetime.utcnow()
-                now_est = now_utc + timedelta(hours=utc_offset)
-                expiry = now_est.replace(hour=16, minute=0, second=0, microsecond=0)
-                if expiry <= now_est:
+                # Fallback: 4 PM EST = 21:00 UTC (or 20:00 during DST)
+                # Using 21:00 UTC as conservative estimate
+                expiry = now_utc.replace(hour=21, minute=0, second=0, microsecond=0)
+                if expiry <= now_utc:
                     expiry = expiry + timedelta(days=1)
         elif expiry_setting == '1_hour':
-            expiry = now + timedelta(hours=1)
+            expiry = now_utc + timedelta(hours=1)
         elif expiry_setting == '4_hours':
-            expiry = now + timedelta(hours=4)
+            expiry = now_utc + timedelta(hours=4)
         elif expiry_setting == '1_day':
-            expiry = now + timedelta(days=1)
+            expiry = now_utc + timedelta(days=1)
         else:
             # Unknown setting - no expiry
             return None
@@ -601,7 +602,8 @@ class BaseConditionalOrderService(ABC):
         
         timeout_minutes = channel_settings.get('order_timeout_minutes') or channel_settings.get('conditional_order_timeout_minutes')
         if timeout_minutes:
-            expires_at = (datetime.now() + timedelta(minutes=timeout_minutes)).strftime('%Y-%m-%d %H:%M:%S')
+            # Use UTC for consistent timezone handling
+            expires_at = (datetime.utcnow() + timedelta(minutes=timeout_minutes)).strftime('%Y-%m-%d %H:%M:%S')
             self._log(f"Using channel timeout: {timeout_minutes} minutes")
         else:
             # Fall back to legacy expiry setting (end_of_day, 1_hour, 4_hours, 1_day)
