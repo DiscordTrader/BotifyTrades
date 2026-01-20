@@ -298,16 +298,33 @@ CONDITIONAL_TARGET_RANGE_PATTERN = re.compile(
 )
 
 # Partial exit patterns: "selling 80% MLTX", "selling 60%", "selling half", "selling 80% here EVTV"
+# Phoenix formats: "selling 80% here", "selling 10% more CRVS", "selling 80% here IBRX"
 PARTIAL_EXIT_PATTERN = re.compile(
     r'(?:selling|sold|trimm?(?:ing|ed)?|taking\s+(?:off|profit))\s+'
     r'(?:(?P<percent>\d+(?:\.\d+)?)\s*%|(?P<fraction>half|quarter|third))\s*'
     r'(?:of\s+)?(?:my\s+)?(?:position\s+)?(?:in\s+)?'
-    r'(?:here\s+|now\s+|on\s+)?'
-    r'(?:\$?(?P<symbol>[A-Z]{1,5}))?',
+    r'(?:(?:here|now|on|more)\s*)*'  # Location/continuation words (consume but don't capture)
+    r'(?:\$?(?P<symbol>(?!here|now|on|more)[A-Z]{1,5})(?![a-z]))?',  # Symbol - exclude reserved words
     re.IGNORECASE
 )
 
-# Leaving runner pattern: "leaving 10%", "leaving 20% MLTX"
+# Full exit without percentage: "out of POLA", "out of SEGG with remaining shares"
+FULL_EXIT_PATTERN = re.compile(
+    r'(?:out\s+of|exiting|exited|closed?\s+out|closing)\s+'
+    r'(?:\$?(?P<symbol>[A-Z]{1,5}))'
+    r'(?:\s+with\s+(?:the\s+)?remain(?:ing|der))?',
+    re.IGNORECASE
+)
+
+# Direct sell without percentage: "selling XTLB" (implies 100% exit)
+# Must exclude reserved words: here, now, on, more, all, half, quarter, third
+DIRECT_SELL_PATTERN = re.compile(
+    r'^(?:selling|sold)\s+(?!\d)'  # Must NOT be followed by a number (that's partial exit)
+    r'(?:\$?(?P<symbol>(?!here|now|on|more|all|half|quarter|third)[A-Z]{1,5}))(?:\s|$)',
+    re.IGNORECASE
+)
+
+# Leaving runner pattern: "leaving 10%", "leaving 20% MLTX", "leaving 10% IBRX moving my SL"
 LEAVING_RUNNER_PATTERN = re.compile(
     r'(?:leaving|keeping)\s+(?P<percent>\d+(?:\.\d+)?)\s*%\s*'
     r'(?:of\s+)?(?:my\s+)?(?:position\s+)?(?:in\s+)?'
@@ -928,9 +945,10 @@ def format_conditional_for_display(parsed: Dict[str, Any]) -> str:
 def parse_partial_exit_signal(text: str) -> Optional[Dict[str, Any]]:
     """
     Parse partial exit signals like "selling 80% MLTX", "selling 60%", "leaving 10%".
+    Also handles full exits: "out of POLA", "selling XTLB"
     
     Returns dict with:
-        - action: 'PARTIAL_EXIT' or 'LEAVE_RUNNER'
+        - action: 'PARTIAL_EXIT', 'LEAVE_RUNNER', or 'FULL_EXIT'
         - exit_percent: percentage to sell (or leave for runner)
         - symbol: optional ticker symbol
     """
@@ -978,6 +996,38 @@ def parse_partial_exit_signal(text: str) -> Optional[Dict[str, Any]]:
         
         print(f"[PARTIAL EXIT] Selling {exit_pct}%"
               f"{' of ' + symbol.upper() if symbol else ''}")
+        return result
+    
+    # Check for full exit patterns: "out of POLA", "out of SEGG with remaining shares"
+    full_exit_match = FULL_EXIT_PATTERN.search(text)
+    if full_exit_match:
+        symbol = full_exit_match.group('symbol')
+        
+        result = {
+            'format': 'FULL_EXIT',
+            'action': 'FULL_EXIT',
+            'exit_percent': 100.0,
+            'symbol': symbol.upper() if symbol else None,
+            '_original_message': text,
+        }
+        
+        print(f"[FULL EXIT] Closing 100% of {symbol.upper() if symbol else 'position'}")
+        return result
+    
+    # Check for direct sell without percentage: "selling XTLB" (implies 100%)
+    direct_sell_match = DIRECT_SELL_PATTERN.search(text)
+    if direct_sell_match:
+        symbol = direct_sell_match.group('symbol')
+        
+        result = {
+            'format': 'FULL_EXIT',
+            'action': 'FULL_EXIT',
+            'exit_percent': 100.0,
+            'symbol': symbol.upper() if symbol else None,
+            '_original_message': text,
+        }
+        
+        print(f"[FULL EXIT] Selling 100% of {symbol.upper() if symbol else 'position'}")
         return result
     
     return None
@@ -1058,11 +1108,11 @@ def parse_follow_up_update(text: str, context_symbol: str = None) -> Optional[Di
 
 def is_partial_exit_signal(text: str) -> bool:
     """
-    Check if text is a partial exit signal.
+    Check if text is a partial/full exit signal.
     
     IMPORTANT: This should NOT match standard STC signals like "STC 50% AAPL"
     to avoid intercepting normal exit signals. Only match natural language
-    partial exit phrases like "selling 50%", "leaving 10%", etc.
+    partial exit phrases like "selling 50%", "leaving 10%", "out of SYMBOL", etc.
     """
     text_upper = text.upper().strip()
     
@@ -1074,7 +1124,11 @@ def is_partial_exit_signal(text: str) -> bool:
     if re.match(r'^(?:BTO|STC|BTC|STO)\s+', text_upper):
         return False
     
-    return PARTIAL_EXIT_PATTERN.search(text) is not None or LEAVING_RUNNER_PATTERN.search(text) is not None
+    # Check all exit patterns
+    return (PARTIAL_EXIT_PATTERN.search(text) is not None or 
+            LEAVING_RUNNER_PATTERN.search(text) is not None or
+            FULL_EXIT_PATTERN.search(text) is not None or
+            DIRECT_SELL_PATTERN.search(text) is not None)
 
 
 def is_cancel_order_signal(text: str) -> bool:
