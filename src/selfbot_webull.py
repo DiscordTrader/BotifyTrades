@@ -9554,7 +9554,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         opt['trigger_symbol'] = trigger_symbol
                         opt['trigger_price'] = trigger_price
                         opt['trigger_condition'] = trigger_condition
-                        print(f"[SIGNAL] ✓ Conditional trigger detected: {trigger_symbol} {trigger_condition.upper()} ${trigger_price}")
+                        print(f"[Signal] ✓ Conditional trigger detected: {trigger_symbol} {trigger_condition.upper()} ${trigger_price}")
                     else:
                         print(f"[DEBUG] TRIGGER No pattern matched")
                 except Exception as e:
