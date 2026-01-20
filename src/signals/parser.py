@@ -198,6 +198,33 @@ EVAPANDA_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# ============ TOON FORMAT PATTERNS ============
+# Format: BTO/STC SYMBOL MM/DD STRIKE+C/P @ m [partial]
+# Examples:
+#   BTO spy 1/16 692p @ m gonna swing these
+#   BTO spy 1/23 692p @ m
+#   stc spy 1/16 692p @ m partial
+#   stc spy 1/16 692p @ m (full close)
+
+# Entry: BTO SYMBOL MM/DD STRIKE+C/P @ m
+TOON_ENTRY_PATTERN = re.compile(
+    r'\b(BTO)\s+([A-Z]+)\s+'        # BTO SYMBOL
+    r'(\d{1,2}/\d{1,2})\s+'         # Expiry: MM/DD (1/16)
+    r'([\d.]+)\s*([CP])\s*'         # Strike + type: 692p
+    r'@\s*m',                       # @ m (at market)
+    re.IGNORECASE
+)
+
+# Exit: STC SYMBOL MM/DD STRIKE+C/P @ m [partial]
+TOON_EXIT_PATTERN = re.compile(
+    r'\b(STC)\s+([A-Z]+)\s+'        # STC SYMBOL
+    r'(\d{1,2}/\d{1,2})\s+'         # Expiry: MM/DD
+    r'([\d.]+)\s*([CP])\s*'         # Strike + type
+    r'@\s*m'                        # @ m (at market)
+    r'(?:\s+(partial))?',           # Optional "partial"
+    re.IGNORECASE
+)
+
 # ============ CONDITIONAL ORDER PATTERNS ============
 # These patterns detect price-triggered conditional orders
 # Examples:
@@ -1859,6 +1886,85 @@ def parse_evapanda_signal(text: str) -> Optional[Dict[str, Any]]:
             '_qty_from_signal': False,
             '_evapanda': True,
             'is_exit': is_exit,
+        }
+    
+    return None
+
+
+def is_toon_signal(text: str) -> bool:
+    """
+    Check if text matches Toon format signals.
+    
+    Examples:
+    - BTO spy 1/16 692p @ m gonna swing these
+    - stc spy 1/16 692p @ m partial
+    """
+    if not text:
+        return False
+    
+    return bool(TOON_ENTRY_PATTERN.search(text) or TOON_EXIT_PATTERN.search(text))
+
+
+def parse_toon_signal(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse Toon format signals into structured dict.
+    
+    Format: BTO/STC SYMBOL MM/DD STRIKE+C/P @ m [partial]
+    
+    Examples:
+    - BTO spy 1/16 692p @ m gonna swing these
+    - BTO spy 1/23 692p @ m
+    - stc spy 1/16 692p @ m partial (partial exit)
+    - stc spy 1/16 692p @ m (full close)
+    
+    Returns structured dict with action, symbol, strike, opt_type, expiry.
+    Price is None since "@ m" means market order.
+    """
+    if not text:
+        return None
+    
+    # Try entry pattern first
+    match = TOON_ENTRY_PATTERN.search(text)
+    if match:
+        action, symbol, expiry, strike, opt_type = match.groups()
+        
+        return {
+            'asset': 'option',
+            'action': action.upper(),
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': opt_type.upper(),
+            'expiry': expiry,
+            'price': None,
+            'is_market_order': True,
+            'qty': None,
+            '_qty_from_signal': False,
+            '_toon': True,
+            'is_exit': False,
+        }
+    
+    # Try exit pattern
+    match = TOON_EXIT_PATTERN.search(text)
+    if match:
+        action, symbol, expiry, strike, opt_type, partial_flag = match.groups()
+        
+        is_partial = partial_flag is not None and partial_flag.lower() == 'partial'
+        
+        return {
+            'asset': 'option',
+            'action': action.upper(),
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': opt_type.upper(),
+            'expiry': expiry,
+            'price': None,
+            'is_market_order': True,
+            'qty': None,
+            '_qty_from_signal': False,
+            '_toon': True,
+            'is_exit': True,
+            'is_partial': is_partial,
+            '_needs_position_lookup': True,
         }
     
     return None

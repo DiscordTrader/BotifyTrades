@@ -7901,7 +7901,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     is_jake_signal, parse_jake_signal,
                     is_order_executed_signal, parse_order_executed_signal,
                     is_bishop_signal, parse_bishop_signal,
-                    is_evapanda_signal, parse_evapanda_signal
+                    is_evapanda_signal, parse_evapanda_signal,
+                    is_toon_signal, parse_toon_signal
                 )
                 is_bullwinkle = is_bullwinkle_signal(combined_content)
                 is_bracket_order = is_bracket_order_signal(combined_content)
@@ -7911,9 +7912,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 is_order_executed = is_order_executed_signal(combined_content)
                 is_bishop = is_bishop_signal(combined_content)
                 is_evapanda = is_evapanda_signal(combined_content)
+                is_toon = is_toon_signal(combined_content)
                 
-                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda:
-                    print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda})")
+                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda or is_toon:
+                    print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda}, toon={is_toon})")
                     
                     is_webhook_dest = destination_type == 'webhook' and target_execution_channel_id and target_execution_channel_id.startswith('https://')
                     is_channel_dest = destination_type == 'channel' and dest_channel_id
@@ -8038,6 +8040,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             else:
                                 forward_msg = combined_content.strip()
                                 print(f"[CHANNEL MAP] ⚠️ EvaPanda parse failed, forwarding raw")
+                        elif is_toon:
+                            print(f"[DEBUG] Taking TOON path", flush=True)
+                            toon_parsed = parse_toon_signal(combined_content)
+                            if toon_parsed:
+                                action = toon_parsed.get('action', 'BTO')
+                                symbol = toon_parsed.get('symbol', '')
+                                strike = toon_parsed.get('strike', '')
+                                opt_type = toon_parsed.get('opt_type', 'C')
+                                expiry = toon_parsed.get('expiry', '')
+                                is_partial = toon_parsed.get('is_partial', False)
+                                if action == 'STC' and is_partial:
+                                    forward_msg = f"STC {symbol} {strike}{opt_type} {expiry} @ m partial"
+                                else:
+                                    forward_msg = f"{action} {symbol} {strike}{opt_type} {expiry} @ m"
+                                print(f"[CHANNEL MAP] ✓ Formatted Toon: {forward_msg}")
+                            else:
+                                forward_msg = combined_content.strip()
+                                print(f"[CHANNEL MAP] ⚠️ Toon parse failed, forwarding raw")
                         elif format_as_bto_stc:
                             print(f"[DEBUG] Taking FORMAT_AS_BTO_STC path", flush=True)
                             # Convert any signal format to BTO/STC format for forwarding
@@ -8205,6 +8225,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     'asset_type': 'option'
                                 }
                                 print(f"[PNL TRACK] EvaPanda parsed: {parsed_signal}")
+                        elif is_toon:
+                            toon_parsed = parse_toon_signal(combined_content)
+                            if toon_parsed:
+                                is_exit = toon_parsed.get('is_exit', False)
+                                is_partial = toon_parsed.get('is_partial', False)
+                                parsed_signal = {
+                                    'symbol': toon_parsed.get('symbol', ''),
+                                    'strike': toon_parsed.get('strike', 0),
+                                    'opt_type': toon_parsed.get('opt_type', 'C'),
+                                    'expiry': toon_parsed.get('expiry', ''),
+                                    'price': None,
+                                    'qty': toon_parsed.get('qty', 1),
+                                    'is_exit': is_exit,
+                                    'is_partial': is_partial,
+                                    'is_market_order': True,
+                                    'asset_type': 'option'
+                                }
+                                print(f"[PNL TRACK] Toon parsed: {parsed_signal} (partial={is_partial})")
                         else:
                             # Use the unified parser which handles ALL formats (BTO/STC, Bishop, EvaPanda, DTE, etc.)
                             parsed_opt = parse_option_signal(combined_content)
