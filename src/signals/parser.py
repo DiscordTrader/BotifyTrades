@@ -254,6 +254,18 @@ CONDITIONAL_TRIGGER_UNDER_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# Alternative format: BELOW/UNDER SYMBOL PRICE (e.g., "BELOW QQQ 607")
+CONDITIONAL_TRIGGER_UNDER_ALT_PATTERN = re.compile(
+    r'(?:^|\s)(?:under|below)\s+\$?([A-Z]{1,5})\s+\$?([\d.]+)',
+    re.IGNORECASE
+)
+
+# Alternative format: ABOVE/OVER SYMBOL PRICE (e.g., "ABOVE SPY 500")
+CONDITIONAL_TRIGGER_ABOVE_ALT_PATTERN = re.compile(
+    r'(?:^|\s)(?:over|above)\s+\$?([A-Z]{1,5})\s+\$?([\d.]+)',
+    re.IGNORECASE
+)
+
 # Stop loss patterns for conditional orders
 CONDITIONAL_SL_PERCENT_PATTERN = re.compile(
     r'(?:SL|stop\s*loss|stop)\s*[:\s]*(\d+(?:\.\d+)?)\s*%',
@@ -2646,12 +2658,23 @@ def parse_option_signal(text: str) -> Optional[Dict[str, Any]]:
         "_qty_from_signal": qty_from_signal
     }
     
-    # Check for conditional triggers (ABOVE/BELOW SYMBOL PRICE) in full text
+    # Check for conditional triggers in full text
+    # Supports both formats:
+    #   "QQQ above 500" (SYMBOL above/below PRICE)
+    #   "ABOVE QQQ 500" (ABOVE/BELOW SYMBOL PRICE)
     trigger_match = CONDITIONAL_TRIGGER_PATTERN.search(text)
     trigger_condition = 'above'
     
     if not trigger_match:
+        trigger_match = CONDITIONAL_TRIGGER_ABOVE_ALT_PATTERN.search(text)
+        trigger_condition = 'above'
+    
+    if not trigger_match:
         trigger_match = CONDITIONAL_TRIGGER_UNDER_PATTERN.search(text)
+        trigger_condition = 'below'
+    
+    if not trigger_match:
+        trigger_match = CONDITIONAL_TRIGGER_UNDER_ALT_PATTERN.search(text)
         trigger_condition = 'below'
     
     if trigger_match:
