@@ -1771,7 +1771,6 @@ async function loadConditionalOrders() {
                 const expiresAt = new Date(expiresAtStr);
                 const now = new Date();
                 const diffMs = expiresAt - now;
-                console.log(`[DEBUG] Order ${order.id}: raw=${order.expires_at}, parsed=${expiresAtStr}, expiresAt=${expiresAt.toISOString()}, now=${now.toISOString()}, diffMs=${diffMs}`);
                 if (diffMs > 0) {
                     const hours = Math.floor(diffMs / (1000 * 60 * 60));
                     const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));

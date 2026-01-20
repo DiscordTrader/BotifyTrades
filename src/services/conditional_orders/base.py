@@ -590,13 +590,24 @@ class BaseConditionalOrderService(ABC):
         
         trigger_price = parsed_signal.get('trigger_price', 0)
         trigger_type = parsed_signal.get('trigger_type', 'over')
-        trigger_offset = channel_settings.get('trigger_offset_percent', 0.0) or 0.0
+        
+        # Get slippage/offset from channel settings
+        # slippage_protection_enabled + slippage_max_pct is the channel SLIP % setting
+        slippage_enabled = channel_settings.get('slippage_protection_enabled', 0)
+        slippage_pct = channel_settings.get('slippage_max_pct', 0.0) or 0.0
+        
+        # Apply slippage as trigger offset if enabled
+        trigger_offset = slippage_pct if slippage_enabled else 0.0
         
         if trigger_offset != 0:
             if trigger_type == 'over':
-                adjusted_price = trigger_price * (1 + trigger_offset / 100)
-            else:
+                # For "over" trigger, lower the adjusted price to trigger earlier
                 adjusted_price = trigger_price * (1 - trigger_offset / 100)
+                self._log(f"Applied slippage: trigger ${trigger_price} -> adjusted ${adjusted_price:.2f} (-{trigger_offset}%)")
+            else:
+                # For "under" trigger, raise the adjusted price to trigger earlier
+                adjusted_price = trigger_price * (1 + trigger_offset / 100)
+                self._log(f"Applied slippage: trigger ${trigger_price} -> adjusted ${adjusted_price:.2f} (+{trigger_offset}%)")
         else:
             adjusted_price = trigger_price
         
