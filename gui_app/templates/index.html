@@ -1764,7 +1764,11 @@ async function loadConditionalOrders() {
             // Calculate time remaining if expires_at exists
             let timeRemaining = '';
             if (order.expires_at) {
-                const expiresAt = new Date(order.expires_at);
+                // expires_at is stored in UTC - append 'Z' if not present to ensure correct parsing
+                const expiresAtStr = order.expires_at.includes('Z') || order.expires_at.includes('+') 
+                    ? order.expires_at 
+                    : order.expires_at.replace(' ', 'T') + 'Z';
+                const expiresAt = new Date(expiresAtStr);
                 const now = new Date();
                 const diffMs = expiresAt - now;
                 if (diffMs > 0) {
