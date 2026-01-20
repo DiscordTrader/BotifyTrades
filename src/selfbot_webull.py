@@ -9199,6 +9199,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         
         # Extract conditional triggers from the FULL message content (including second line)
         # The wrapper parse_option_signal doesn't extract triggers, so do it here
+        print(f"[DEBUG TRIGGER] opt is set: {opt is not None}, has trigger_price: {opt.get('trigger_price') if opt else 'N/A'}")
         if opt and not opt.get('trigger_price'):
             try:
                 from src.signals.parser import (
@@ -9207,6 +9208,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 )
                 # Use combined_content (full message) for trigger detection, not normalized_content
                 full_text = combined_content if combined_content else normalized_content
+                print(f"[DEBUG TRIGGER] full_text: {repr(full_text[:100]) if full_text else 'None'}")
                 
                 trigger_match = CONDITIONAL_TRIGGER_PATTERN.search(full_text)
                 trigger_condition = 'above'
