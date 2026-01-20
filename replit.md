@@ -15,6 +15,13 @@ BotifyTrades is a cross-platform trading automation bot for Discord and Telegram
 ## Recent Changes (January 2026)
 - **Logging Architecture Fixed**: Resolved duplicate console output where every message appeared twice. Root cause was `smart_print()` calling both `logger.info()` (with StreamHandler to stdout) AND `_original_print()` (direct stdout). Fixed by removing `_original_print()` calls from `smart_print()` - now routes ALL messages through logger with console output controlled by `CleanConsoleFormatter` whitelist in `src/logging_config.py`.
 
+- **Phoenix Channel Exit Patterns (Jan 2026)**: Added support for Phoenix channel exit signal formats in `src/signals/parser.py`:
+  - Partial exits: "selling 80% here", "selling 10% more CRVS"  
+  - Full exits: "out of POLA", "out of SEGG with remaining shares"
+  - Direct sells: "selling XTLB", "sold TSLA" (100% exit)
+  - Reserved word exclusion: "here", "more", "now", "on", "all", "half", "quarter", "third" cannot be captured as symbols to prevent false matches
+  - Price range triggers: "FRSX over 2.35-2.4" extracts first price (2.35) as trigger point
+
 ## System Architecture
 
 ### UI/UX Decisions
