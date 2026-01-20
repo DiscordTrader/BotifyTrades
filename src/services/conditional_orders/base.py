@@ -435,11 +435,27 @@ class BaseConditionalOrderService(ABC):
         now = datetime.now()
         
         if expiry_setting == 'end_of_day':
-            # Set expiry to 4 PM market close
-            expiry = now.replace(hour=16, minute=0, second=0, microsecond=0)
-            if expiry <= now:
-                # Already past 4 PM - set to next day
-                expiry = expiry + timedelta(days=1)
+            # Set expiry to 4 PM EST market close
+            # Convert server time to EST for US markets
+            try:
+                from zoneinfo import ZoneInfo
+                est = ZoneInfo('America/New_York')
+                now_est = datetime.now(est)
+                expiry_est = now_est.replace(hour=16, minute=0, second=0, microsecond=0)
+                if expiry_est <= now_est:
+                    # Already past 4 PM EST - set to next trading day
+                    expiry_est = expiry_est + timedelta(days=1)
+                # Convert back to local/naive datetime for storage
+                expiry = expiry_est.replace(tzinfo=None)
+            except ImportError:
+                # Fallback for Python < 3.9: estimate EST as UTC-5
+                import os
+                utc_offset = -5  # EST is UTC-5, EDT is UTC-4
+                now_utc = datetime.utcnow()
+                now_est = now_utc + timedelta(hours=utc_offset)
+                expiry = now_est.replace(hour=16, minute=0, second=0, microsecond=0)
+                if expiry <= now_est:
+                    expiry = expiry + timedelta(days=1)
         elif expiry_setting == '1_hour':
             expiry = now + timedelta(hours=1)
         elif expiry_setting == '4_hours':
