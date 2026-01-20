@@ -737,8 +737,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         </td>
                         <td>
                             ${m.destination_type === 'webhook' 
-                                ? '<i class="fas fa-link"></i> Webhook' 
-                                : '<i class="fab fa-discord"></i> Channel'}
+                                ? '🔗 Webhook' 
+                                : '💬 Channel'}
                         </td>
                         <td>
                             <span style="font-size: 0.85rem;">
@@ -748,14 +748,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             </span>
                         </td>
                         <td>
-                            <button class="btn btn-sm btn-icon risk-settings-btn" data-channel="${m.source_channel_id}" data-name="${safeName}" title="Configure Risk Settings">
-                                <i class="fas fa-cog" style="color: var(--violet);"></i>
-                                <span style="font-size: 0.75rem; margin-left: 5px;">${slDisplay}</span>
+                            <button class="btn btn-sm btn-icon risk-settings-btn" data-channel="${m.source_channel_id}" data-name="${safeName}" title="Configure Risk Settings" style="display: inline-flex; align-items: center; gap: 6px;">
+                                <span style="font-size: 1rem;">⚙️</span>
+                                <span style="font-size: 0.8rem;">${slDisplay}</span>
                             </button>
                         </td>
                         <td>
                             <span class="status-badge ${m.enabled ? 'active' : 'inactive'}">
-                                <i class="fas fa-circle" style="font-size: 8px;"></i>
+                                <span style="font-size: 8px;">●</span>
                                 ${m.enabled ? 'Active' : 'Inactive'}
                             </span>
                         </td>
@@ -764,8 +764,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <button class="btn btn-sm toggle-mapping-btn" data-id="${m.id}" data-enabled="${m.enabled ? '0' : '1'}">
                                     ${m.enabled ? 'Disable' : 'Enable'}
                                 </button>
-                                <button class="btn btn-sm btn-danger delete-mapping-btn" data-id="${m.id}">
-                                    <i class="fas fa-trash"></i>
+                                <button class="btn btn-sm btn-danger delete-mapping-btn" data-id="${m.id}" title="Delete Mapping">
+                                    🗑️
                                 </button>
                             </div>
                         </td>
