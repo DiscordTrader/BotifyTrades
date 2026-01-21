@@ -68,6 +68,7 @@ The Forwarding-Only Signal Routing Engine (`src/services/signal_routing_engine.p
 - **Position Ledger** (`src/services/position_ledger.py`): Tracks positions with FIFO-based partial exits, realized/unrealized P&L, and PT level tracking
 - **Stale Price Gating**: Risk exits blocked when price staleness exceeds 30 seconds
 - **Shared ExitArbiter**: Prevents duplicate STCs across signal and risk-driven exits
+- **Position State Gate**: Fresh position check after acquiring ExitArbiter lock prevents stale STC forwards when risk already closed the position
 - **Market Hours Utility** (`src/services/market_hours.py`): Pauses risk monitoring during weekends, holidays, and outside market hours
 - **Exit Strategy Mode Enforcement**: Signal mode = trader signals only, Risk mode = automated exits only, Hybrid mode = both active with ExitArbiter coordination
 - **Webhook Retry Queue**: Failed STC webhooks queued with exponential backoff and deduplication

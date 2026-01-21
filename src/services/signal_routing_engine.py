@@ -28,6 +28,7 @@ from src.services.position_ledger import (
     get_position_ledger,
     LedgerPosition,
     PositionLedger,
+    PositionStatus,
     ExitArbiter,
     ExitReason,
     PartialExit
@@ -661,6 +662,22 @@ class SignalRoutingEngine:
             except asyncio.TimeoutError:
                 print(f"[ROUTING_ENGINE] ⏭️ Exit already in progress for {position.option_key}")
                 return False
+            
+            # ===== POSITION STATE GATE =====
+            # Fresh check after acquiring lock to handle race conditions
+            # Risk manager may have closed position while we waited for lock
+            fresh_position = self.ledger.get_position(position.id)
+            if not fresh_position:
+                print(f"[ROUTING_ENGINE] ⏭️ Position no longer exists: {position.option_key}")
+                return False
+            
+            if fresh_position.status == PositionStatus.CLOSED.value or fresh_position.remaining_qty <= 0:
+                print(f"[ROUTING_ENGINE] ⏭️ Position already closed by risk settings: {symbol} - skipping signal STC")
+                return False
+            
+            # Use fresh position data for exit calculation
+            position = fresh_position
+            # ===== END POSITION STATE GATE =====
             
             actual_exit_qty = exit_qty if exit_qty > 0 else position.remaining_qty
             actual_exit_qty = min(actual_exit_qty, position.remaining_qty)
