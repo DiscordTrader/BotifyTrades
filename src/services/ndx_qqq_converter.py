@@ -348,17 +348,13 @@ class NDXtoQQQConverter:
         target_delta: float = 0.30
     ) -> Optional[float]:
         """
-        Fallback: Approximate strike to achieve target delta when Greeks unavailable.
+        Fallback: Select ATM +1 strike for delta ~0.30 when Greeks unavailable.
         
-        Delta approximation for near-term options:
-        - Delta 0.50 = ATM (at the money)
-        - Delta 0.40 = slightly OTM (~0.5% for calls above, puts below)
-        - Delta 0.30 = near ATM (~1% ITM for more delta)
+        For delta 0.30:
+        - CALLS: ATM +1 strike (1 point above current price = slightly OTM)
+        - PUTS: ATM -1 strike (1 point below current price = slightly OTM)
         
-        For CALLS: Lower strike = Higher delta (more ITM)
-        For PUTS: Higher strike = Higher delta (more ITM)
-        
-        To achieve delta 0.30, we target strikes slightly ITM (below price for calls).
+        This gives approximately 0.30-0.35 delta for near-term options.
         """
         try:
             qqq_price = await self._get_qqq_price(broker)
@@ -366,17 +362,14 @@ class NDXtoQQQConverter:
                 print(f"[NDX→QQQ] Could not get QQQ price for fallback")
                 return None
             
-            delta_diff = 0.50 - target_delta
-            itm_offset_pct = delta_diff * 0.02
+            atm_strike = round(qqq_price)
             
             if opt_type == 'C':
-                target_strike = qqq_price * (1 - itm_offset_pct)
-                strike = round(target_strike)
+                strike = atm_strike + 1
             else:
-                target_strike = qqq_price * (1 + itm_offset_pct)
-                strike = round(target_strike)
+                strike = atm_strike - 1
             
-            print(f"[NDX→QQQ] Fallback: QQQ=${qqq_price:.2f}, targeting δ={target_delta} → strike ${strike} ({itm_offset_pct*100:.1f}% ITM)")
+            print(f"[NDX→QQQ] Fallback: QQQ=${qqq_price:.2f}, ATM=${atm_strike}, using ATM+1 → strike ${strike}")
             return strike
             
         except Exception as e:
