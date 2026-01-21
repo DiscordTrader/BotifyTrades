@@ -2083,7 +2083,7 @@ def register_routes(app):
             
             positions_data = []
             for pos in positions:
-                pnl_dollar, pnl_pct = ledger.calculate_running_pnl(pos)
+                pnl_dollar, pnl_pct = pos.calculate_unrealized_pnl()
                 positions_data.append({
                     'id': pos.id,
                     'option_key': pos.option_key,
