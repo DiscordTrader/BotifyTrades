@@ -7158,7 +7158,7 @@
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": null
+    "last_evaluated_price": 0.77
   },
   "ALPACA_PAPER_CRVS_stock": {
     "entry_price": 15.932174,
