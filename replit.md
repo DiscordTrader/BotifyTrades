@@ -61,6 +61,13 @@ The Forwarding-Only Signal Routing Engine (`src/services/signal_routing_engine.p
 - **Dynamic SL Escalation**: After PT hits, stop loss moves up (PT1→breakeven, PT2→+5%, etc.) with Conservative/Standard/Aggressive profiles
 - **Max Profit Giveback Guard**: Exits position if profit drops X% from peak (default 30%), activated after PT1 threshold or PT2 hit
 
+The **NDX→QQQ Conversion Service** (`src/services/ndx_qqq_converter.py`) enables channels with limited NDX access to trade equivalent QQQ options:
+- Per-channel toggle with configurable target delta (default 0.3)
+- Multi-broker options chain lookup with Greeks (Webull→Alpaca→Finnhub fallback)
+- OTM +1/+2 strike approximation when Greeks unavailable
+- Preserves original NDX signal info in logs while executing derived QQQ contract
+- Note: QQQ is less volatile than NDX - expect ~60% of NDX gains
+
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ. The License Validation System provides industry-standard license activation. The Discord bot runs in a dedicated thread. Broker credentials and all bot settings are GUI-manageable and stored in SQLite. Security features include admin password management, rate limiting on login attempts, session-based authentication, and local password recovery.
 

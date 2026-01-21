@@ -7624,7 +7624,7 @@
   },
   "ALPACA_PAPER_OKLO_120.0_2026-02-20_C": {
     "entry_price": 2.75,
-    "highest_price": 3.7,
+    "highest_price": 3.75,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -7662,6 +7662,6 @@
     "max_pnl_seen": 2.3076923076923097,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.27
+    "last_evaluated_price": 1.2701
   }
 }
