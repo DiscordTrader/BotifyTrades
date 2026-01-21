@@ -802,15 +802,45 @@ class BrokerSyncService:
                 
                 # Transition PENDING → OPEN
                 if current_status == 'PENDING':
+                    fill_price = position['avg_price']
                     print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) filled: PENDING → OPEN")
                     self.db.update_trade(
                         trade_id,
                         status='OPEN',
-                        executed_price=position['avg_price'],
+                        executed_price=fill_price,
                         current_price=position.get('current_price'),
                         quantity=position['quantity'],
                         executed_at=datetime.now().isoformat()
                     )
+                    
+                    # For NDX→QQQ conversions: Update the lot's open_price with actual fill price
+                    # This ensures P&L is calculated using QQQ fill price, not NDX signal price
+                    try:
+                        from gui_app.database import get_connection
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        # Find lots linked to this trade's channel_record_id with executed_symbol
+                        channel_record_id = trade.get('channel_record_id')
+                        if channel_record_id:
+                            cursor.execute('''
+                                SELECT sl.id, sl.executed_symbol, sl.open_price
+                                FROM signal_lots sl
+                                JOIN signals s ON sl.signal_id = s.id
+                                WHERE s.channel_record_id = ?
+                                AND sl.executed_symbol IS NOT NULL
+                                AND sl.status = 'OPEN'
+                                LIMIT 1
+                            ''', (channel_record_id,))
+                            lot_row = cursor.fetchone()
+                            if lot_row and lot_row['executed_symbol']:
+                                old_price = lot_row['open_price']
+                                cursor.execute('''
+                                    UPDATE signal_lots SET open_price = ? WHERE id = ?
+                                ''', (fill_price, lot_row['id']))
+                                conn.commit()
+                                print(f"[SYNC] ✓ Updated lot #{lot_row['id']} open_price: ${old_price} → ${fill_price} (NDX→QQQ fill)")
+                    except Exception as lot_err:
+                        print(f"[SYNC] Warning: Could not update lot price: {lot_err}")
                 
                 # Update OPEN trade with current position data (UPDATE CURRENT PRICE, QUANTITY, AND P&L!)
                 elif current_status == 'OPEN':
