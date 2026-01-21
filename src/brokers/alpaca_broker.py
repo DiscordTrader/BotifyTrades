@@ -215,7 +215,8 @@ class AlpacaBroker(BrokerInterface):
         action: str,
         quantity: int,
         price: Optional[float] = None,
-        stop_price: Optional[float] = None
+        stop_price: Optional[float] = None,
+        channel_id: Optional[str] = None
     ) -> OrderResult:
         """Place a stock order
         
