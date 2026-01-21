@@ -140,6 +140,15 @@ class PositionCache:
                       f"SL: ${sl_price or 'N/A'} | Target: ${target_price or 'N/A'}")
             else:
                 print(f"[RISK] New position tracked: {pos_key} @ ${position.avg_cost:.2f}")
+        else:
+            # Position already cached - update entry_price if broker reports a different value
+            # This handles cases where a new position opens at the same strike as a closed one
+            cached_entry = self._cache[pos_key]
+            broker_entry_price = position.avg_cost
+            if broker_entry_price > 0 and abs(cached_entry.entry_price - broker_entry_price) > 0.001:
+                old_price = cached_entry.entry_price
+                cached_entry.entry_price = broker_entry_price
+                print(f"[RISK] ✓ Updated {pos_key} entry price: ${old_price:.2f} → ${broker_entry_price:.2f} (broker sync)")
         
         return self._cache[pos_key]
     

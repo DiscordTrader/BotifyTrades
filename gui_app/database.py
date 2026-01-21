@@ -2881,14 +2881,19 @@ def find_open_bto_trade(symbol: str, asset_type: str, broker: str = None,
     try:
         if asset_type == 'option':
             # Generate expiry format variants for matching
-            # Database may have: "12/17", "2025-12-17", "12/17/25", etc.
+            # Database may have: "12/17", "1/21", "2025-12-17", "12/17/25", etc.
             expiry_variants = [expiry] if expiry else []
             if expiry:
-                # If format is YYYY-MM-DD, also try MM/DD
+                # If format is YYYY-MM-DD, also try MM/DD variants
                 if '-' in expiry and len(expiry) == 10:
                     parts = expiry.split('-')
-                    expiry_variants.append(f"{parts[1]}/{parts[2]}")  # 12/17
-                    expiry_variants.append(f"{parts[1]}/{parts[2]}/{parts[0][2:]}")  # 12/17/25
+                    month = int(parts[1])
+                    day = int(parts[2])
+                    expiry_variants.append(f"{parts[1]}/{parts[2]}")  # 01/21
+                    expiry_variants.append(f"{month}/{day}")  # 1/21 (no leading zeros)
+                    expiry_variants.append(f"{month}/{parts[2]}")  # 1/21 (mixed)
+                    expiry_variants.append(f"{parts[1]}/{day}")  # 01/21 (mixed)
+                    expiry_variants.append(f"{parts[1]}/{parts[2]}/{parts[0][2:]}")  # 01/21/26
                 # If format is MM/DD, also try YYYY-MM-DD
                 elif '/' in expiry and len(expiry) <= 5:
                     parts = expiry.split('/')
