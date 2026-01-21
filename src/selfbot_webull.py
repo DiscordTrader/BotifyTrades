@@ -9766,11 +9766,57 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 opt['_ndx_converted'] = True
                                 print(f"[NDX→QQQ] ✓ Converted {original_symbol} {original_strike} → QQQ {opt.get('strike')}")
                             else:
-                                print(f"[NDX→QQQ] ⚠️ Conversion failed, executing original NDX signal")
+                                # Reject signal - no fallback to original NDX
+                                reject_reason = f"NDX→QQQ conversion failed: No suitable QQQ option found for {opt.get('symbol')} {opt.get('strike')}{opt.get('opt_type', '')}"
+                                print(f"[NDX→QQQ] ❌ {reject_reason}")
+                                try:
+                                    from gui_app.database import save_trade
+                                    save_trade({
+                                        'channel_id': str(message.channel.id),
+                                        'message_id': str(message.id),
+                                        'direction': action,
+                                        'asset_type': 'option',
+                                        'symbol': opt.get('symbol'),
+                                        'strike': opt.get('strike'),
+                                        'expiry': opt.get('expiry'),
+                                        'call_put': opt.get('opt_type'),
+                                        'quantity': opt.get('qty', 1),
+                                        'intended_price': opt.get('price'),
+                                        'status': 'REJECTED',
+                                        'broker': first_broker if first_broker else 'N/A',
+                                        'source': 'discord',
+                                        'risk_trigger': reject_reason
+                                    })
+                                    print(f"[NDX→QQQ] Signal rejected and saved to Dashboard")
+                                except Exception as save_err:
+                                    print(f"[NDX→QQQ] Failed to save rejection: {save_err}")
+                                opt['_ndx_rejected'] = True  # Flag to skip execution
                         except Exception as ndx_err:
-                            print(f"[NDX→QQQ] ❌ Error during conversion: {ndx_err}")
+                            reject_reason = f"NDX→QQQ conversion error: {ndx_err}"
+                            print(f"[NDX→QQQ] ❌ {reject_reason}")
                             import traceback
                             traceback.print_exc()
+                            try:
+                                from gui_app.database import save_trade
+                                save_trade({
+                                    'channel_id': str(message.channel.id),
+                                    'message_id': str(message.id),
+                                    'direction': action,
+                                    'asset_type': 'option',
+                                    'symbol': opt.get('symbol'),
+                                    'strike': opt.get('strike'),
+                                    'expiry': opt.get('expiry'),
+                                    'call_put': opt.get('opt_type'),
+                                    'quantity': opt.get('qty', 1),
+                                    'intended_price': opt.get('price'),
+                                    'status': 'REJECTED',
+                                    'broker': first_broker if first_broker else 'N/A',
+                                    'source': 'discord',
+                                    'risk_trigger': reject_reason
+                                })
+                            except Exception as save_err:
+                                print(f"[NDX→QQQ] Failed to save rejection: {save_err}")
+                            opt['_ndx_rejected'] = True  # Flag to skip execution
                     
                     elif is_ndx and action == 'STC':
                         # STC: Find converted QQQ position and update signal to close it
@@ -9884,6 +9930,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         import traceback
                         traceback.print_exc()
                         print(f"[CONDITIONAL] Falling back to immediate execution")
+                
+                # Check if signal was rejected (e.g., NDX→QQQ conversion failed)
+                if opt.get('_ndx_rejected'):
+                    print(f"[QUEUE] ⛔ Signal SKIPPED - already rejected (see Dashboard)")
+                    return
                 
                 await self.order_queue.put(opt)
                 print(f"[DEBUG] Queue size AFTER put: {self.order_queue.qsize()}", flush=True)
