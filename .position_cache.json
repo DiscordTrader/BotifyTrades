@@ -7263,7 +7263,7 @@
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": null
+    "last_evaluated_price": 0.08
   },
   "ALPACA_PAPER_IBRX_stock": {
     "entry_price": 7.48973,
@@ -7368,7 +7368,7 @@
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": null
+    "last_evaluated_price": 0.2
   },
   "ALPACA_PAPER_IWM_265.0_2026-01-20_C": {
     "entry_price": 0.44,
@@ -7473,7 +7473,7 @@
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": null
+    "last_evaluated_price": 0.18
   },
   "Webull_KO_72.0_02/20_C": {
     "entry_price": 1.6,
