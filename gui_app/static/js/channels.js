@@ -196,6 +196,23 @@ async function loadChannels() {
                                 <div style="padding: 12px; background: rgba(255, 165, 0, 0.1); border: 1px solid rgba(255, 165, 0, 0.3); border-radius: 8px; font-size: 12px; color: #ffb700; margin-bottom: 12px;">
                                     <strong>⚠️ Multi-Broker ${channelCategory === 'EXECUTE' ? 'Execution' : 'Tracking'}:</strong> When multiple brokers are selected, the same signal will ${channelCategory === 'EXECUTE' ? 'execute on ALL selected accounts' : 'be tracked across selected accounts'}. 🔴 LIVE = Real Money, 🟢 PAPER = Testing
                                 </div>
+                                <div style="padding: 12px; background: rgba(138, 43, 226, 0.1); border: 1px solid rgba(138, 43, 226, 0.3); border-radius: 8px; margin-bottom: 12px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🔄</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #b388ff;">NDX → QQQ Conversion</label>
+                                        </div>
+                                        <label class="toggle-switch" title="Convert NDX options to QQQ with target delta">
+                                            <input type="checkbox" id="ndx-to-qqq-${channel.id}" ${channel.ndx_to_qqq_enabled ? 'checked' : ''}>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">When enabled, NDX option signals are automatically converted to QQQ with ~0.3 delta (OTM +1/+2 strikes). QQQ is less volatile - expect ~60% of NDX gains.</p>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Target Delta:</label>
+                                        <input type="number" id="ndx-delta-${channel.id}" value="${channel.ndx_to_qqq_delta || 0.3}" placeholder="0.3" step="0.05" min="0.1" max="0.9" style="width: 70px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                    </div>
+                                </div>
                                 <button onclick="saveBrokerSelection(${channel.id})" style="padding: 8px 16px; background: var(--accent-gradient); border: none; border-radius: 6px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">💾 Save Broker Selection</button>
                             </td>
                         </tr>
@@ -935,12 +952,20 @@ async function saveBrokerSelection(channelId) {
         }
     });
     
+    // Collect NDX→QQQ conversion settings
+    const ndxToQqqCheckbox = document.getElementById(`ndx-to-qqq-${channelId}`);
+    const ndxDeltaInput = document.getElementById(`ndx-delta-${channelId}`);
+    const ndxToQqqEnabled = ndxToQqqCheckbox ? (ndxToQqqCheckbox.checked ? 1 : 0) : 0;
+    const ndxToQqqDelta = ndxDeltaInput ? parseFloat(ndxDeltaInput.value) || 0.3 : 0.3;
+    
     try {
         const response = await fetch(`/api/channels/${channelId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                enabled_brokers: brokers
+                enabled_brokers: brokers,
+                ndx_to_qqq_enabled: ndxToQqqEnabled,
+                ndx_to_qqq_delta: ndxToQqqDelta
             })
         });
         
