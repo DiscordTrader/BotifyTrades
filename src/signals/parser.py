@@ -133,6 +133,47 @@ JAKE_LEVELS_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# ============ JAKE/JOINT-CHALLENGE EXTENDED PATTERNS ============
+# Entry with quantity prefix: +2 **SNOW** @lim0.11 (stock) or +1 **$RGTI** $26c @lim0.80 (option)
+# Stock format: +QTY **SYMBOL** @limPRICE
+JAKE_QTY_STOCK_ENTRY = re.compile(
+    r'\+(\d+)\s+(?:\$?\*{0,2})([A-Z]+)(?:\*{0,2})\s+@\s*lim\s*([\d.]+)',
+    re.IGNORECASE
+)
+
+# Option with quantity: +QTY $SYMBOL $STRIKEc/p EXPIRY @limPRICE
+# Example: +2 $**BBAI** $8c 16JAN2026 @lim0.37
+JAKE_QTY_OPTION_ENTRY = re.compile(
+    r'\+(\d+)\s+\$?\*{0,2}([A-Z]+)\*{0,2}\s+\$?([\d.]+)\s*([cp])\s*'
+    r'(?:(\d{1,2}[A-Z]{3}(?:\d{2,4})?|\d{1,2}/\d{1,2}(?:/\d{2,4})?)\s*)?'  # Optional expiry
+    r'@\s*lim\s*([\d.]+)',
+    re.IGNORECASE
+)
+
+# Full exit: All out of **SYMBOL** @limPRICE for +XX% or -$XX
+JAKE_ALL_OUT_PATTERN = re.compile(
+    r'(?:all\s+)?out\s+of\s+\$?\*{0,2}([A-Z]+)\*{0,2}\s+@\s*lim\s*([\d.]+)',
+    re.IGNORECASE
+)
+
+# Exit with percentage gain header: ## $SYMBOL +XX% @limPRICE or **SYMBOL** +XX% @limPRICE
+JAKE_PCT_EXIT_EXTENDED = re.compile(
+    r'(?:#+\s*)?\$?\*{0,2}([A-Z]+)\*{0,2}\s+\+(\d+(?:\.\d+)?)\s*%\s*@\s*lim\s*([\d.]+)',
+    re.IGNORECASE
+)
+
+# Sell order initiated: Sell order @limPRICE or Can place sell order @limPRICE
+JAKE_SELL_ORDER_PATTERN = re.compile(
+    r'(?:sell\s+order|can\s+place\s+sell\s+order)\s+(?:already\s+)?(?:initiated\s+)?@\s*(?:here\s+)?@?\s*lim\s*([\d.]+)',
+    re.IGNORECASE
+)
+
+# Position update header pattern (for context, not execution)
+JAKE_POSITION_UPDATE_HEADER = re.compile(
+    r'(?:current\s+)?positions?|active\s+positions?|portfolio',
+    re.IGNORECASE
+)
+
 # ============ ORDER EXECUTED BROKER CONFIRMATION PATTERNS ============
 # Format: "Order Executed\nBought 5 Single SNDK 1/9/2026 360 CALL @4.80 [Buy Open]"
 # Format: "Order Executed\nSold -1 Single SNDK 1/9/2026 360 CALL @9.40 [Sell Close]"
@@ -1684,11 +1725,25 @@ def _parse_jake_expiry(expiry_text: str) -> str:
 
 def is_jake_signal(text: str) -> bool:
     """Check if text matches Jake signal format."""
+    # Skip position update headers (informational, not actionable)
+    if JAKE_POSITION_UPDATE_HEADER.search(text):
+        return False
     # Entry: **SYMBOL** $STRIKEc|p EXPIRY @lim PRICE
     if JAKE_ENTRY_PATTERN.search(text):
         return True
     # Exit: **SYMBOL** +XX% @limPRICE
     if JAKE_EXIT_PATTERN.search(text):
+        return True
+    # Extended patterns: +QTY entries, all out, sell orders
+    if JAKE_QTY_STOCK_ENTRY.search(text):
+        return True
+    if JAKE_QTY_OPTION_ENTRY.search(text):
+        return True
+    if JAKE_ALL_OUT_PATTERN.search(text):
+        return True
+    if JAKE_PCT_EXIT_EXTENDED.search(text):
+        return True
+    if JAKE_SELL_ORDER_PATTERN.search(text):
         return True
     return False
 
@@ -1701,20 +1756,32 @@ def parse_jake_signal(text: str) -> Optional[Dict[str, Any]]:
     - **MSTR** $188c 19DEC2025 @lim3.0
     - **COIN** $330p 27JUN @lim2.07
     - **IWM** $244p 09OCT2025 @ lim0.10-0.20
+    - +2 **SNOW** @lim0.11 (stock with qty)
+    - +1 **$RGTI** $26c @lim0.80 (option with qty)
+    - +2 $**BBAI** $8c 16JAN2026 @lim0.37 (option with qty and expiry)
     
     Exit/Update examples:
     - **IREN** +61% @lim2.29
     - **SNOW** +50% @lim5.2ish
+    - All out of **ONON** @lim1.07 for +52%
+    - ## $NBIS +100% @lim8.20
+    - Sell order already initiated @lim3.20
     
     Returns structured dict with symbol, strike, opt_type, expiry, price, qty, action.
     """
     if not text:
         return None
     
-    # Clean text - remove @everyone, @here, role mentions
-    clean_text = re.sub(r'@everyone|@here|<@&\d+>', '', text).strip()
+    # Skip position update headers (informational, not actionable)
+    if JAKE_POSITION_UPDATE_HEADER.search(text):
+        return None
     
-    # Try exit pattern first: **SYMBOL** +XX% @limPRICE
+    # Clean text - remove @everyone, @here, role mentions
+    clean_text = re.sub(r'@everyone|@here|<@&\d+>|<#\d+>', '', text).strip()
+    
+    # === EXIT PATTERNS (check first) ===
+    
+    # Try exit pattern: **SYMBOL** +XX% @limPRICE
     match = JAKE_EXIT_PATTERN.search(clean_text)
     if match:
         symbol, pct_gain, price = match.groups()
@@ -1729,7 +1796,85 @@ def parse_jake_signal(text: str) -> Optional[Dict[str, Any]]:
             '_needs_position_lookup': True,
         }
     
-    # Try entry pattern: **SYMBOL** $STRIKEc|p EXPIRY @lim PRICE
+    # Try extended exit pattern: ## $SYMBOL +XX% @limPRICE
+    match = JAKE_PCT_EXIT_EXTENDED.search(clean_text)
+    if match:
+        symbol, pct_gain, price = match.groups()
+        return {
+            'action': 'STC',
+            'symbol': symbol.upper(),
+            'price': float(price),
+            'pct_gain': float(pct_gain),
+            'qty': None,
+            'is_exit': True,
+            '_jake': True,
+            '_needs_position_lookup': True,
+        }
+    
+    # Try all out pattern: All out of **SYMBOL** @limPRICE
+    match = JAKE_ALL_OUT_PATTERN.search(clean_text)
+    if match:
+        symbol, price = match.groups()
+        return {
+            'action': 'STC',
+            'symbol': symbol.upper(),
+            'price': float(price),
+            'qty': None,  # Close all
+            'is_exit': True,
+            '_jake': True,
+            '_needs_position_lookup': True,
+        }
+    
+    # Try sell order pattern: Sell order @limPRICE
+    match = JAKE_SELL_ORDER_PATTERN.search(clean_text)
+    if match:
+        price = match.group(1)
+        return {
+            'action': 'STC',
+            'symbol': None,  # Needs position lookup
+            'price': float(price),
+            'qty': None,
+            'is_exit': True,
+            '_jake': True,
+            '_needs_position_lookup': True,
+            '_needs_symbol_lookup': True,
+        }
+    
+    # === ENTRY PATTERNS ===
+    
+    # Try option entry with quantity: +QTY $SYMBOL $STRIKEc/p EXPIRY @limPRICE
+    match = JAKE_QTY_OPTION_ENTRY.search(clean_text)
+    if match:
+        qty, symbol, strike, opt_type, expiry_text, price = match.groups()
+        expiry = _parse_jake_expiry(expiry_text) if expiry_text else None
+        return {
+            'asset': 'option',
+            'action': 'BTO',
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': opt_type.upper(),
+            'expiry': expiry,
+            'price': float(price),
+            'qty': int(qty),
+            '_qty_from_signal': True,
+            '_jake': True,
+        }
+    
+    # Try stock entry with quantity: +QTY **SYMBOL** @limPRICE
+    match = JAKE_QTY_STOCK_ENTRY.search(clean_text)
+    if match:
+        qty, symbol, price = match.groups()
+        return {
+            'asset': 'stock',
+            'action': 'BTO',
+            'symbol': symbol.upper(),
+            'price': float(price),
+            'qty': int(qty),
+            '_qty_from_signal': True,
+            '_jake': True,
+        }
+    
+    # Try original entry pattern: **SYMBOL** $STRIKEc|p EXPIRY @lim PRICE
     match = JAKE_ENTRY_PATTERN.search(clean_text)
     if match:
         symbol, strike, opt_type, expiry_text, price = match.groups()
