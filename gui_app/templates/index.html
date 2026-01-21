@@ -1837,21 +1837,30 @@ async function loadConditionalOrders() {
                                 <div style="font-size: 0.875rem; font-weight: 500; color: ${timeRemaining === 'Expired' ? '#ef4444' : timeRemaining ? '#f59e0b' : 'var(--text-muted)'};">${timeRemaining || 'No limit'}</div>
                             </div>
                             
+                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Slippage</div>
+                                <div style="font-size: 0.875rem; font-weight: 500; color: ${order.slippage_protection_enabled ? '#f59e0b' : 'var(--text-muted)'};">
+                                    ${order.slippage_protection_enabled ? (order.slippage_max_pct ? order.slippage_max_pct + '%' : 'Enabled') : 'Off'}
+                                </div>
+                            </div>
+                            
                             ${isActive ? `
                             <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Adjust Offset</div>
-                                <div style="display: flex; align-items: center; gap: 4px;">
-                                    <button onclick="adjustOffset(${order.id}, -1)" style="background: #ef4444; border: none; color: white; width: 24px; height: 24px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 14px;">-</button>
-                                    <button onclick="adjustOffset(${order.id}, -0.1)" style="background: #f97316; border: none; color: white; width: 20px; height: 24px; border-radius: 4px; font-size: 10px; cursor: pointer;">-.1</button>
-                                    <input type="number" id="offset-${order.id}" step="0.1" value="${currentOffset.toFixed(1)}" 
-                                        style="width: 55px; text-align: center; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; padding: 2px; font-size: 0.8rem;"
-                                        onchange="updateOffsetDisplay(${order.id}, this.value)">
-                                    <span style="font-size: 0.75rem; color: var(--text-muted);">%</span>
-                                    <button onclick="adjustOffset(${order.id}, 0.1)" style="background: #22c55e; border: none; color: white; width: 20px; height: 24px; border-radius: 4px; font-size: 10px; cursor: pointer;">+.1</button>
-                                    <button onclick="adjustOffset(${order.id}, 1)" style="background: #10b981; border: none; color: white; width: 24px; height: 24px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 14px;">+</button>
+                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase;">Adjust Offset</div>
+                                <div style="display: flex; align-items: center; justify-content: center; gap: 2px; margin-bottom: 8px;">
+                                    <button onclick="adjustOffset(${order.id}, -1)" style="background: linear-gradient(135deg, #dc2626, #b91c1c); border: none; color: white; width: 28px; height: 28px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">−</button>
+                                    <button onclick="adjustOffset(${order.id}, -0.1)" style="background: linear-gradient(135deg, #ea580c, #c2410c); border: none; color: white; width: 28px; height: 28px; border-radius: 6px; font-size: 9px; cursor: pointer; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">.1</button>
+                                    <div style="display: flex; align-items: center; background: rgba(0,0,0,0.4); border-radius: 6px; padding: 0 6px; border: 1px solid var(--border-color);">
+                                        <input type="number" id="offset-${order.id}" step="0.1" value="${currentOffset.toFixed(1)}" 
+                                            style="width: 42px; text-align: right; background: transparent; border: none; color: var(--text-primary); padding: 4px 0; font-size: 0.85rem; font-weight: 600;"
+                                            onchange="updateOffsetDisplay(${order.id}, this.value)">
+                                        <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 2px;">%</span>
+                                    </div>
+                                    <button onclick="adjustOffset(${order.id}, 0.1)" style="background: linear-gradient(135deg, #16a34a, #15803d); border: none; color: white; width: 28px; height: 28px; border-radius: 6px; font-size: 9px; cursor: pointer; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">.1</button>
+                                    <button onclick="adjustOffset(${order.id}, 1)" style="background: linear-gradient(135deg, #22c55e, #16a34a); border: none; color: white; width: 28px; height: 28px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">+</button>
                                 </div>
-                                <button onclick="applyOffset(${order.id})" class="btn btn-small" style="margin-top: 6px; background: linear-gradient(135deg, var(--accent-teal), var(--accent-blue)); border: none; color: white; padding: 4px 10px; font-size: 0.7rem; width: 100%;">
-                                    Apply
+                                <button onclick="applyOffset(${order.id})" style="width: 100%; background: linear-gradient(135deg, var(--accent-teal), var(--accent-blue)); border: none; color: white; padding: 6px 12px; font-size: 0.75rem; font-weight: 600; border-radius: 6px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                                    Apply Offset
                                 </button>
                             </div>
                             ` : ''}
