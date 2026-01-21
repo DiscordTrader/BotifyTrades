@@ -7798,15 +7798,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # FORWARD DEDUPE: Check if message was forwarded by BotifyTrades to prevent double execution
         # Messages forwarded by this bot contain a hidden marker: ║FWD:source_channel_id║
         # We skip EXECUTION for forwarded messages but still allow TRACKING
-        FORWARD_MARKER_PATTERN = r'║FWD:(\d+)║$'
+        # Pattern matches ║FWD:digits║ anywhere in the message (not just end) for multi-line support
+        FORWARD_MARKER_PATTERN = r'║FWD:(\d+)║'
         is_forwarded_message = False
         forward_source_channel = None
         import re
-        forward_match = re.search(FORWARD_MARKER_PATTERN, message.content)
+        forward_match = re.search(FORWARD_MARKER_PATTERN, message.content, re.MULTILINE)
         if forward_match:
             is_forwarded_message = True
             forward_source_channel = forward_match.group(1)
-            print(f"[DEDUPE] ⚠️ Forwarded message detected (source: {forward_source_channel}) - will TRACK but NOT EXECUTE")
+            print(f"[DEDUPE] ⚠️ Forwarded message detected (source: {forward_source_channel}) - SKIPPING entirely to prevent loops")
         
         # Handle webhook messages - conditionally allow based on ALLOW_SELF_MESSAGES setting
         # When ALLOW_SELF_MESSAGES is True, webhook messages from monitored channels are processed
@@ -7885,8 +7886,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         
         # Strip forward marker from combined_content before parsing to ensure accurate signal detection
         # The marker format is: ║FWD:source_channel_id║
+        # Also strip from content even if we're going to skip - keeps logs clean
+        combined_content = re.sub(FORWARD_MARKER_PATTERN, '', combined_content).strip()
+        
+        # CRITICAL: Early exit for forwarded messages to prevent re-forwarding
+        # This blocks all processing of forwarded signals to prevent infinite loops
         if is_forwarded_message:
-            combined_content = re.sub(FORWARD_MARKER_PATTERN, '', combined_content).strip()
+            print(f"[DEDUPE] ⛔ EARLY EXIT - Forwarded message from {forward_source_channel} will NOT be processed/forwarded")
+            return
         if ALLOWED_AUTHOR_IDS and message.author.id not in ALLOWED_AUTHOR_IDS:
             print(f"[SKIP] Author {message.author.id} not in allowed list")
             return
