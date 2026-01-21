@@ -905,12 +905,28 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function loadPositions() {
+        const grid = document.getElementById('positions-grid');
         try {
+            console.log('[loadPositions] Fetching positions...');
             const resp = await fetch('/api/admin/signal-routing/positions');
-            const result = await resp.json();
+            console.log('[loadPositions] Response status:', resp.status);
             
-            if (result.success && result.positions.length > 0) {
-                const grid = document.getElementById('positions-grid');
+            if (!resp.ok) {
+                console.error('[loadPositions] HTTP error:', resp.status);
+                grid.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error loading positions (${resp.status})</p></div>`;
+                return;
+            }
+            
+            const result = await resp.json();
+            console.log('[loadPositions] Result:', result);
+            
+            if (!result.success) {
+                console.error('[loadPositions] API error:', result.error);
+                grid.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>${result.error || 'Unknown error'}</p></div>`;
+                return;
+            }
+            
+            if (result.positions && result.positions.length > 0) {
                 grid.innerHTML = result.positions.map(p => `
                     <div class="position-card">
                         <div class="position-header">
@@ -920,11 +936,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="position-details">
                             <div class="position-detail">
                                 <span class="label">Entry</span>
-                                <span class="value">$${p.entry_price.toFixed(2)}</span>
+                                <span class="value">$${(p.entry_price || 0).toFixed(2)}</span>
                             </div>
                             <div class="position-detail">
                                 <span class="label">Current</span>
-                                <span class="value">$${p.current_price.toFixed(2)}</span>
+                                <span class="value">$${(p.current_price || 0).toFixed(2)}</span>
                             </div>
                             <div class="position-detail">
                                 <span class="label">Qty</span>
@@ -932,17 +948,20 @@ document.addEventListener('DOMContentLoaded', function() {
                             </div>
                             <div class="position-detail">
                                 <span class="label">P&L</span>
-                                <span class="value ${p.unrealized_pnl_pct >= 0 ? 'pnl-positive' : 'pnl-negative'}">
-                                    ${p.unrealized_pnl_pct >= 0 ? '+' : ''}${p.unrealized_pnl_pct.toFixed(1)}% 
-                                    ($${p.unrealized_pnl_dollar.toFixed(2)})
+                                <span class="value ${(p.unrealized_pnl_pct || 0) >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                                    ${(p.unrealized_pnl_pct || 0) >= 0 ? '+' : ''}${(p.unrealized_pnl_pct || 0).toFixed(1)}% 
+                                    ($${(p.unrealized_pnl_dollar || 0).toFixed(2)})
                                 </span>
                             </div>
                         </div>
                     </div>
                 `).join('');
+            } else {
+                grid.innerHTML = `<div class="empty-state"><i class="fas fa-inbox"></i><p>No active positions from signal routing</p></div>`;
             }
         } catch (err) {
-            console.error('Error loading positions:', err);
+            console.error('[loadPositions] Exception:', err);
+            grid.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Failed to load positions</p></div>`;
         }
     }
 
