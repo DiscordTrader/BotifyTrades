@@ -749,6 +749,16 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Routing mapping ID column added (for routed trade discrimination)")
     
+    # Migration: Add original_symbol for NDX→QQQ conversion tracking
+    try:
+        cursor.execute('SELECT original_symbol FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding original_symbol column for NDX→QQQ conversion tracking...")
+        cursor.execute("ALTER TABLE trades ADD COLUMN original_symbol TEXT")
+        cursor.execute("ALTER TABLE trades ADD COLUMN original_strike REAL")
+        conn.commit()
+        print("[DATABASE] ✓ Original symbol/strike columns added (for NDX→QQQ conversion)")
+    
     # Signals table (all signals received, including tracked ones)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS signals (
@@ -2794,8 +2804,9 @@ def add_trade(signal_data: Dict) -> int:
             strike, expiry, call_put, quantity, intended_price,
             executed_price, executed_at, status, broker, order_id,
             stop_loss_price, profit_target_price, risk_trigger, origin_trade_id,
-            user_id, source, pnl, pnl_percent, conditional_order_id, routing_mapping_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            user_id, source, pnl, pnl_percent, conditional_order_id, routing_mapping_id,
+            original_symbol, original_strike
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         signal_data.get('channel_id'),
         signal_data.get('message_id'),
@@ -2821,7 +2832,9 @@ def add_trade(signal_data: Dict) -> int:
         pnl,
         pnl_percent,
         signal_data.get('conditional_order_id'),
-        signal_data.get('routing_mapping_id')  # Signal routing discriminator
+        signal_data.get('routing_mapping_id'),  # Signal routing discriminator
+        signal_data.get('original_symbol'),  # NDX→QQQ conversion tracking
+        signal_data.get('original_strike')   # Original strike before conversion
     ))
     
     conn.commit()
@@ -3596,6 +3609,50 @@ def get_all_open_lots_for_channel(channel_id: int):
     ''', (channel_id,))
     
     return cursor.fetchall()
+
+
+def get_converted_position_by_original_symbol(channel_id: int, original_symbol: str, opt_type: str = None, strike: float = None) -> dict:
+    """Find a QQQ position that was converted from an NDX signal.
+    
+    Used for STC signals: when an NDX STC comes in, we need to find the 
+    corresponding QQQ position that was opened via NDX→QQQ conversion.
+    
+    Args:
+        channel_id: The Discord channel ID
+        original_symbol: The original symbol (e.g., 'NDX')
+        opt_type: Optional filter by option type ('C' or 'P')
+        strike: Optional filter by original strike price
+    
+    Returns:
+        The matching trade record with QQQ details, or None if not found
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT * FROM trades
+        WHERE channel_id = ? 
+        AND original_symbol = ?
+        AND status = 'OPEN'
+    '''
+    params = [str(channel_id), original_symbol.upper().replace('$', '')]
+    
+    if opt_type:
+        query += ' AND call_put = ?'
+        params.append(opt_type.upper())
+    
+    if strike:
+        query += ' AND original_strike = ?'
+        params.append(strike)
+    
+    query += ' ORDER BY executed_at DESC LIMIT 1'
+    
+    cursor.execute(query, params)
+    row = cursor.fetchone()
+    
+    if row:
+        return dict(row)
+    return None
 
 
 def close_lot(lot_id: int, channel_id: int, signal_id: int, close_qty: int, close_price: float, closed_at, exit_reason: str = None):

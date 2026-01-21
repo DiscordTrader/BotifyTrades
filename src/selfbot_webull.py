@@ -9730,36 +9730,73 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 # NDX→QQQ Conversion: Convert NDX options to QQQ with target delta
                 ndx_to_qqq_enabled = channel_info.get('ndx_to_qqq_enabled', 0) if channel_info else 0
-                if ndx_to_qqq_enabled and opt.get('symbol', '').upper() in ['NDX', '$NDX', 'NASDAQ', 'NQ']:
-                    try:
-                        from src.services.ndx_qqq_converter import convert_ndx_to_qqq, is_ndx_signal
-                        
-                        target_delta = channel_info.get('ndx_to_qqq_delta', 0.3) or 0.3
-                        enabled_brokers = opt.get('_enabled_brokers', [])
-                        first_broker = enabled_brokers[0] if enabled_brokers else None
-                        
-                        print(f"[NDX→QQQ] Converting NDX signal to QQQ with delta={target_delta}")
-                        
-                        # Run async conversion
-                        import asyncio
-                        converted = await convert_ndx_to_qqq(
-                            signal=opt,
-                            target_delta=target_delta,
-                            broker=first_broker,
-                            enabled_brokers=enabled_brokers
-                        )
-                        
-                        if converted:
-                            original_symbol = opt.get('symbol')
-                            original_strike = opt.get('strike')
-                            opt.update(converted)
-                            print(f"[NDX→QQQ] ✓ Converted {original_symbol} {original_strike} → QQQ {opt.get('strike')}")
-                        else:
-                            print(f"[NDX→QQQ] ⚠️ Conversion failed, executing original NDX signal")
-                    except Exception as ndx_err:
-                        print(f"[NDX→QQQ] ❌ Error during conversion: {ndx_err}")
-                        import traceback
-                        traceback.print_exc()
+                if ndx_to_qqq_enabled:
+                    # Check multiple symbol sources for NDX detection (robust pattern matching)
+                    symbol_raw = opt.get('symbol', '').upper().replace('$', '')
+                    underlying = opt.get('underlying', '').upper().replace('$', '') if opt.get('underlying') else ''
+                    is_ndx = symbol_raw in ['NDX', 'NASDAQ', 'NQ'] or underlying in ['NDX', 'NASDAQ', 'NQ']
+                    
+                    action = opt.get('action', 'BTO').upper()
+                    
+                    if is_ndx and action == 'BTO':
+                        # BTO: Convert NDX to QQQ
+                        try:
+                            from src.services.ndx_qqq_converter import convert_ndx_to_qqq
+                            
+                            target_delta = channel_info.get('ndx_to_qqq_delta', 0.3) or 0.3
+                            enabled_brokers = opt.get('_enabled_brokers', [])
+                            first_broker = enabled_brokers[0] if enabled_brokers else None
+                            
+                            print(f"[NDX→QQQ] Converting NDX BTO to QQQ with delta={target_delta}")
+                            
+                            converted = await convert_ndx_to_qqq(
+                                signal=opt,
+                                target_delta=target_delta,
+                                broker=first_broker,
+                                enabled_brokers=enabled_brokers
+                            )
+                            
+                            if converted:
+                                original_symbol = opt.get('symbol')
+                                original_strike = opt.get('strike')
+                                opt.update(converted)
+                                # Ensure original_symbol/strike are preserved for STC mapping
+                                opt['original_symbol'] = original_symbol.upper().replace('$', '')
+                                opt['original_strike'] = original_strike
+                                opt['_ndx_converted'] = True
+                                print(f"[NDX→QQQ] ✓ Converted {original_symbol} {original_strike} → QQQ {opt.get('strike')}")
+                            else:
+                                print(f"[NDX→QQQ] ⚠️ Conversion failed, executing original NDX signal")
+                        except Exception as ndx_err:
+                            print(f"[NDX→QQQ] ❌ Error during conversion: {ndx_err}")
+                            import traceback
+                            traceback.print_exc()
+                    
+                    elif is_ndx and action == 'STC':
+                        # STC: Find converted QQQ position and update signal to close it
+                        try:
+                            from gui_app.database import get_converted_position_by_original_symbol
+                            
+                            converted_pos = get_converted_position_by_original_symbol(
+                                channel_id=str(message.channel.id),
+                                original_symbol=symbol_raw,
+                                opt_type=opt.get('opt_type'),
+                                strike=opt.get('strike')
+                            )
+                            
+                            if converted_pos:
+                                print(f"[NDX→QQQ] Found converted position: {converted_pos.get('symbol')} {converted_pos.get('strike')}{converted_pos.get('call_put')}")
+                                # Update STC signal to target the QQQ position
+                                opt['symbol'] = converted_pos.get('symbol')
+                                opt['strike'] = converted_pos.get('strike')
+                                opt['original_symbol'] = symbol_raw
+                                opt['original_strike'] = opt.get('strike')
+                                opt['_ndx_stc_mapped'] = True
+                                print(f"[NDX→QQQ] ✓ Mapped NDX STC → QQQ {opt['symbol']} {opt['strike']}")
+                            else:
+                                print(f"[NDX→QQQ] ⚠️ No converted QQQ position found for NDX {symbol_raw} - executing as-is")
+                        except Exception as stc_err:
+                            print(f"[NDX→QQQ] ❌ Error mapping STC: {stc_err}")
                 
                 # Add channel_record_id and channel_id for database saving after execution
                 if channel_info:
