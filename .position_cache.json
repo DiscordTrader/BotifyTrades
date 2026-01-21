@@ -7855,10 +7855,10 @@
   },
   "ALPACA_PAPER_QQQ_613.0_2026-01-22_C": {
     "entry_price": 1.69,
-    "highest_price": 4.21,
+    "highest_price": 4.66,
     "trailing_activated": true,
-    "closing": false,
-    "closing_cycles": 0,
+    "closing": true,
+    "closing_cycles": 2,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "ALPACA_PAPER",
@@ -7868,19 +7868,40 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {
-      "ff36ea40-30d7-41d9-ae8b-78aaf017c5a3": {
-        "order_id": "ff36ea40-30d7-41d9-ae8b-78aaf017c5a3",
+      "c5f3a384-a778-4148-875f-e95b63fbec1f": {
+        "order_id": "c5f3a384-a778-4148-875f-e95b63fbec1f",
         "tier": 1,
-        "qty_expected": 12,
+        "qty_expected": 9,
         "qty_filled": 0,
         "status": "pending",
-        "created_at": "2026-01-21T19:27:42.659020"
+        "created_at": "2026-01-21T19:32:45.490763"
       }
     },
     "created_at": "2026-01-21T19:11:29.445870",
-    "max_pnl_seen": 149.11242603550298,
+    "max_pnl_seen": 175.73964497041422,
     "dynamic_sl_price": null,
     "giveback_guard_active": true,
-    "last_evaluated_price": 4.21
+    "last_evaluated_price": 3.96
+  },
+  "ALPACA_PAPER_QQQ_616.0_2026-01-21_C": {
+    "entry_price": 0.87,
+    "highest_price": 0.7,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "QQQ260121C00616000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-21T19:33:36.489319",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   }
 }
