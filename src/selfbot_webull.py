@@ -9779,6 +9779,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         if qqq_quote and qqq_quote.get('ask'):
                                             qqq_quote_price = float(qqq_quote.get('ask'))
                                             opt['price'] = qqq_quote_price
+                                            # Also update signal['price'] so trade saves use QQQ price
+                                            signal['price'] = qqq_quote_price
+                                            signal['_original_ndx_price'] = original_price  # Keep original for reference
                                             print(f"[NDX→QQQ] ✓ Updated price from NDX ${original_price} → QQQ ${qqq_quote_price}")
                                 except Exception as quote_err:
                                     print(f"[NDX→QQQ] Warning: Could not get QQQ quote: {quote_err}")
