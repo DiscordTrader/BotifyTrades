@@ -2402,7 +2402,8 @@ def update_channel(channel_id: int, **kwargs):
                    'trim_order_mode', 'trim_limit_offset', 'exit_strategy_mode', 'market', 'trade_summary_enabled',
                    'conditional_order_timeout_minutes', 'trigger_offset_percent', 'order_timeout_minutes',
                    'slippage_protection_enabled', 'slippage_max_pct', 'signal_update_automation', 'signal_update_automation_override',
-                   'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile']:
+                   'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
+                   'ndx_to_qqq_enabled', 'ndx_to_qqq_delta']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))
@@ -10057,6 +10058,14 @@ def migrate_channels_for_conditional_orders():
         if 'order_timeout_minutes' not in columns:
             cursor.execute('ALTER TABLE channels ADD COLUMN order_timeout_minutes INTEGER DEFAULT NULL')
             print("[DATABASE] ✓ Added order_timeout_minutes column to channels (applies to ALL orders)")
+        
+        if 'ndx_to_qqq_enabled' not in columns:
+            cursor.execute('ALTER TABLE channels ADD COLUMN ndx_to_qqq_enabled INTEGER DEFAULT 0')
+            print("[DATABASE] ✓ Added ndx_to_qqq_enabled column for NDX→QQQ delta conversion")
+        
+        if 'ndx_to_qqq_delta' not in columns:
+            cursor.execute('ALTER TABLE channels ADD COLUMN ndx_to_qqq_delta REAL DEFAULT 0.3')
+            print("[DATABASE] ✓ Added ndx_to_qqq_delta column (default 0.3)")
         
         conn.commit()
     except Exception as e:
