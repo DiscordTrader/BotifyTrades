@@ -887,6 +887,17 @@ def init_db():
         except:
             pass
     
+    # Add original_symbol and original_strike columns for NDX→QQQ STC mapping
+    try:
+        cursor.execute("SELECT original_symbol FROM signal_lots LIMIT 1")
+    except:
+        try:
+            cursor.execute("ALTER TABLE signal_lots ADD COLUMN original_symbol TEXT")
+            cursor.execute("ALTER TABLE signal_lots ADD COLUMN original_strike REAL")
+            print("[DATABASE] Added original_symbol/original_strike columns to signal_lots for NDX→QQQ mapping")
+        except:
+            pass
+    
     # Lot closures (STC matching records with PNL)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS lot_closures (
@@ -3516,11 +3527,16 @@ def get_open_trades_with_trailing_state():
 
 
 # Lot management functions for PNL tracking
-def create_signal_lot(channel_id: int, signal_id: int, asset_type: str, symbol: str, quantity: int, open_price: float, opened_at, strike: float = None, expiry: str = None, call_put: str = None, author_name: str = None, user_id: int = None):
+def create_signal_lot(channel_id: int, signal_id: int, asset_type: str, symbol: str, quantity: int, open_price: float, opened_at, strike: float = None, expiry: str = None, call_put: str = None, author_name: str = None, user_id: int = None, trade_id: int = None, original_symbol: str = None, original_strike: float = None):
     """Create a new signal lot from a BTO signal with author and user attribution.
     
     Idempotent: If a lot with the same signal_id already exists, returns the existing lot_id.
     This prevents duplicate lot creation from message retries or duplicate processing.
+    
+    Args:
+        trade_id: Links lot to specific trade for precise fill price updates
+        original_symbol: Original symbol before conversion (e.g., 'NDX' for NDX→QQQ)
+        original_strike: Original strike before conversion
     """
     conn = get_connection()
     cursor = conn.cursor()
@@ -3537,13 +3553,17 @@ def create_signal_lot(channel_id: int, signal_id: int, asset_type: str, symbol: 
     
     cursor.execute('''
         INSERT INTO signal_lots (
-            channel_id, signal_id, asset_type, symbol, strike, expiry, call_put,
-            original_qty, remaining_qty, open_price, opened_at, status, source, author_name, user_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', 'SIGNAL', ?, ?)
-    ''', (channel_id, signal_id, asset_type, symbol, strike, expiry, call_put, quantity, quantity, open_price, opened_at, author_name, user_id))
+            channel_id, signal_id, trade_id, asset_type, symbol, strike, expiry, call_put,
+            original_qty, remaining_qty, open_price, opened_at, status, source, author_name, user_id,
+            original_symbol, original_strike
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', 'SIGNAL', ?, ?, ?, ?)
+    ''', (channel_id, signal_id, trade_id, asset_type, symbol, strike, expiry, call_put, quantity, quantity, open_price, opened_at, author_name, user_id, original_symbol, original_strike))
     
     conn.commit()
-    return cursor.lastrowid
+    lot_id = cursor.lastrowid
+    if trade_id:
+        print(f"[DATABASE] ✓ Created lot #{lot_id} linked to trade_id={trade_id}")
+    return lot_id
 
 
 def update_lot_executed_symbol(lot_id: int, executed_symbol: str, executed_strike: float = None, executed_price: float = None):
@@ -3576,11 +3596,150 @@ def update_lot_executed_symbol(lot_id: int, executed_symbol: str, executed_strik
     return cursor.rowcount > 0
 
 
+def link_lot_to_trade(signal_id: int = None, message_id: str = None, trade_id: int = None):
+    """Link an existing lot to a trade for precise fill price updates.
+    
+    This should be called after a trade is created to establish the lot-trade linkage.
+    Uses signal_id or message_id to find the lot.
+    
+    Returns: True if lot was linked, False otherwise
+    """
+    if not trade_id:
+        return False
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if signal_id:
+        cursor.execute('''
+            UPDATE signal_lots SET trade_id = ?
+            WHERE signal_id = ? AND trade_id IS NULL
+        ''', (trade_id, signal_id))
+    elif message_id:
+        cursor.execute('''
+            UPDATE signal_lots SET trade_id = ?
+            WHERE signal_id IN (
+                SELECT id FROM signals WHERE message_id = ?
+            ) AND trade_id IS NULL
+        ''', (trade_id, message_id))
+    else:
+        return False
+    
+    if cursor.rowcount > 0:
+        conn.commit()
+        print(f"[DATABASE] ✓ Linked lot to trade_id={trade_id}")
+        return True
+    return False
+
+
+def cancel_lot(lot_id: int = None, trade_id: int = None, message_id: str = None, reason: str = None):
+    """Mark a lot as CLOSED with remaining_qty=0 when order is rejected/cancelled.
+    
+    This prevents orphaned lots from distorting P&L and live positions.
+    Uses CLOSED status (with remaining_qty=0) to comply with CHECK constraint.
+    The reason is stored in lot_closures for audit trail.
+    
+    Args:
+        lot_id: Direct lot ID to cancel
+        trade_id: Cancel lot linked to this trade
+        message_id: Cancel lot linked to signal with this message_id
+        reason: Optional reason for cancellation (e.g., 'ORDER_REJECTED', 'ORDER_CANCELLED')
+    
+    Returns: True if lot was cancelled, False otherwise
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cancelled = False
+    affected_lot_id = None
+    
+    if lot_id:
+        cursor.execute('''
+            UPDATE signal_lots SET status = 'CLOSED', remaining_qty = 0
+            WHERE id = ? AND status = 'OPEN'
+        ''', (lot_id,))
+        cancelled = cursor.rowcount > 0
+        affected_lot_id = lot_id
+    elif trade_id:
+        cursor.execute('SELECT id FROM signal_lots WHERE trade_id = ? AND status = \'OPEN\' LIMIT 1', (trade_id,))
+        row = cursor.fetchone()
+        if row:
+            affected_lot_id = row['id']
+        cursor.execute('''
+            UPDATE signal_lots SET status = 'CLOSED', remaining_qty = 0
+            WHERE trade_id = ? AND status = 'OPEN'
+        ''', (trade_id,))
+        cancelled = cursor.rowcount > 0
+    elif message_id:
+        cursor.execute('''
+            SELECT sl.id FROM signal_lots sl
+            JOIN signals s ON sl.signal_id = s.id
+            WHERE s.message_id = ? AND sl.status = 'OPEN' LIMIT 1
+        ''', (message_id,))
+        row = cursor.fetchone()
+        if row:
+            affected_lot_id = row['id']
+        cursor.execute('''
+            UPDATE signal_lots SET status = 'CLOSED', remaining_qty = 0
+            WHERE signal_id IN (
+                SELECT id FROM signals WHERE message_id = ?
+            ) AND status = 'OPEN'
+        ''', (message_id,))
+        cancelled = cursor.rowcount > 0
+    
+    if cancelled and affected_lot_id:
+        # Create a lot_closure entry with $0 P&L for audit trail
+        from datetime import datetime
+        exit_reason = reason or 'ORDER_CANCELLED'
+        try:
+            cursor.execute('''
+                INSERT INTO lot_closures (lot_id, channel_id, closed_qty, close_price, closed_at, pnl, pnl_percent, exit_reason)
+                SELECT id, channel_id, original_qty, 0, ?, 0, 0, ?
+                FROM signal_lots WHERE id = ?
+            ''', (datetime.now().isoformat(), exit_reason, affected_lot_id))
+        except Exception:
+            pass  # Closure record is optional for audit
+        conn.commit()
+        reason_str = f" ({reason})" if reason else ""
+        print(f"[DATABASE] ✓ Lot #{affected_lot_id} cancelled{reason_str}")
+        return True
+    return False
+
+
+def get_orphaned_lots(max_age_minutes: int = 30):
+    """Find lots that are OPEN but have no associated filled trade.
+    
+    These lots may need to be cancelled if the order was rejected/cancelled.
+    
+    Args:
+        max_age_minutes: Only return lots older than this (to avoid flagging pending orders)
+    
+    Returns: List of orphaned lot dicts
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT sl.*, s.message_id
+        FROM signal_lots sl
+        LEFT JOIN signals s ON sl.signal_id = s.id
+        LEFT JOIN trades t ON sl.trade_id = t.id
+        WHERE sl.status = 'OPEN'
+        AND sl.trade_id IS NOT NULL
+        AND (t.status IS NULL OR t.status IN ('CANCELLED', 'REJECTED', 'FAILED'))
+        AND datetime(sl.opened_at) < datetime('now', ?)
+    ''', (f'-{max_age_minutes} minutes',))
+    
+    return cursor.fetchall()
+
+
 def get_open_lots(channel_id: int, asset_type: str, symbol: str, strike: float = None, expiry: str = None, call_put: str = None, check_executed_symbol: bool = True):
     """Get open lots for a symbol (FIFO order).
     
-    If check_executed_symbol is True (default), also checks executed_symbol for matches.
-    This handles NDX→QQQ conversions where signal was NDX but execution was QQQ.
+    If check_executed_symbol is True (default), also checks executed_symbol and original_symbol for matches.
+    This handles NDX→QQQ conversions where:
+    - signal was NDX but execution was QQQ (check executed_symbol)
+    - STC signal is for NDX but lot is QQQ with original_symbol='NDX' (check original_symbol)
     """
     conn = get_connection()
     cursor = conn.cursor()
@@ -3604,21 +3763,29 @@ def get_open_lots(channel_id: int, asset_type: str, symbol: str, strike: float =
     # Remove duplicates
     expiry_variants = list(set(expiry_variants))
     
+    # Normalize symbol for comparison (strip $ prefix, uppercase)
+    symbol_normalized = symbol.upper().replace('$', '') if symbol else ''
+    
     if asset_type == 'option':
         # Build expiry IN clause for variant matching
         expiry_placeholders = ','.join(['?' for _ in expiry_variants])
         
         if check_executed_symbol:
+            # Check symbol, executed_symbol, AND original_symbol for NDX→QQQ STC mapping
             query = f'''
                 SELECT * FROM signal_lots
                 WHERE channel_id = ? AND asset_type = ?
-                AND (symbol = ? OR executed_symbol = ?)
-                AND (strike = ? OR executed_strike = ?)
+                AND (
+                    UPPER(REPLACE(symbol, '$', '')) = ?
+                    OR UPPER(REPLACE(executed_symbol, '$', '')) = ?
+                    OR UPPER(REPLACE(original_symbol, '$', '')) = ?
+                )
+                AND (strike = ? OR executed_strike = ? OR original_strike = ?)
                 AND expiry IN ({expiry_placeholders}) AND call_put = ?
                 AND status IN ('OPEN', 'PARTIAL')
                 ORDER BY opened_at ASC
             '''
-            params = [channel_id, asset_type, symbol, symbol, strike, strike] + expiry_variants + [call_put]
+            params = [channel_id, asset_type, symbol_normalized, symbol_normalized, symbol_normalized, strike, strike, strike] + expiry_variants + [call_put]
             cursor.execute(query, params)
         else:
             query = f'''
@@ -3635,10 +3802,14 @@ def get_open_lots(channel_id: int, asset_type: str, symbol: str, strike: float =
             cursor.execute('''
                 SELECT * FROM signal_lots
                 WHERE channel_id = ? AND asset_type = ?
-                AND (symbol = ? OR executed_symbol = ?)
+                AND (
+                    UPPER(REPLACE(symbol, '$', '')) = ?
+                    OR UPPER(REPLACE(executed_symbol, '$', '')) = ?
+                    OR UPPER(REPLACE(original_symbol, '$', '')) = ?
+                )
                 AND status IN ('OPEN', 'PARTIAL')
                 ORDER BY opened_at ASC
-            ''', (channel_id, asset_type, symbol, symbol))
+            ''', (channel_id, asset_type, symbol_normalized, symbol_normalized, symbol_normalized))
         else:
             cursor.execute('''
                 SELECT * FROM signal_lots

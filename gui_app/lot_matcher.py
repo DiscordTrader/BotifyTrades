@@ -44,7 +44,7 @@ class LotMatcher:
             
             channel_id = channel['id']
         
-        # Create lot (with author and user attribution)
+        # Create lot (with author and user attribution, plus trade linkage and original symbol for NDX→QQQ)
         lot_id = db.create_signal_lot(
             channel_id=channel_id,
             signal_id=signal.get('signal_id'),
@@ -57,7 +57,10 @@ class LotMatcher:
             expiry=signal.get('expiry'),
             call_put=signal.get('opt_type'),
             author_name=signal.get('author_name'),
-            user_id=signal.get('user_id')
+            user_id=signal.get('user_id'),
+            trade_id=signal.get('trade_id'),  # Links lot to trade for precise fill price updates
+            original_symbol=signal.get('original_symbol'),  # For NDX→QQQ STC mapping
+            original_strike=signal.get('original_strike')   # For NDX→QQQ STC mapping
         )
         
         print(f"[LOT_MATCHER] [{trace_id}] ✓ Created lot {lot_id} for {signal['symbol']} BTO {signal['qty']} @ ${signal['price']}")

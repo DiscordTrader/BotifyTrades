@@ -12325,6 +12325,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             trade_id = db.add_trade(trade_data)
                                             _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
                                             
+                                            # Link lot to trade for precise fill price updates (critical for NDX→QQQ)
+                                            try:
+                                                msg_id = str(signal.get('message_id', ''))
+                                                if msg_id and trade_id:
+                                                    db.link_lot_to_trade(message_id=msg_id, trade_id=trade_id)
+                                            except Exception as link_err:
+                                                _original_print(f"[DATABASE] Warning: Could not link lot to trade: {link_err}")
+                                            
                                             # Create position in position_ledger for Signal Routing tracking
                                             if routing_mapping_id and SIGNAL_ROUTING_ENGINE_AVAILABLE:
                                                 try:
@@ -12389,6 +12397,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     }
                                     trade_id = db.add_trade(trade_data)
                                     _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
+                                    
+                                    # Link lot to trade for precise fill price updates (critical for NDX→QQQ)
+                                    try:
+                                        msg_id = str(signal.get('message_id', ''))
+                                        if msg_id and trade_id:
+                                            db.link_lot_to_trade(message_id=msg_id, trade_id=trade_id)
+                                    except Exception as link_err:
+                                        _original_print(f"[DATABASE] Warning: Could not link lot to trade: {link_err}")
                                     
                                     # Create position in position_ledger for Signal Routing tracking
                                     if routing_mapping_id and SIGNAL_ROUTING_ENGINE_AVAILABLE:

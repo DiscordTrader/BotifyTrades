@@ -815,32 +815,53 @@ class BrokerSyncService:
                     
                     # For NDX→QQQ conversions: Update the lot's open_price with actual fill price
                     # This ensures P&L is calculated using QQQ fill price, not NDX signal price
+                    # Use trade_id linkage for precise lot identification (prevents cross-lot contamination)
                     try:
                         from gui_app.database import get_connection
                         conn = get_connection()
                         cursor = conn.cursor()
-                        # Find recent OPEN lots with executed_symbol matching this trade's symbol/strike
+                        trade_id = trade.get('id')
                         trade_symbol = trade.get('symbol', '')
                         trade_strike = trade.get('strike')
                         
-                        if trade_symbol and trade_strike:
+                        lot_row = None
+                        
+                        # Priority 1: Use trade_id linkage (most precise)
+                        if trade_id:
+                            cursor.execute('''
+                                SELECT id, executed_symbol, executed_strike, open_price
+                                FROM signal_lots
+                                WHERE trade_id = ?
+                                AND status = 'OPEN'
+                                LIMIT 1
+                            ''', (trade_id,))
+                            lot_row = cursor.fetchone()
+                            if lot_row:
+                                print(f"[SYNC] Found lot #{lot_row['id']} via trade_id={trade_id}")
+                        
+                        # Priority 2: Fallback to symbol/strike matching (legacy lots without trade_id)
+                        if not lot_row and trade_symbol and trade_strike:
                             cursor.execute('''
                                 SELECT id, executed_symbol, executed_strike, open_price
                                 FROM signal_lots
                                 WHERE executed_symbol = ?
                                 AND executed_strike = ?
                                 AND status = 'OPEN'
+                                AND trade_id IS NULL
                                 ORDER BY id DESC
                                 LIMIT 1
                             ''', (trade_symbol, float(trade_strike)))
                             lot_row = cursor.fetchone()
                             if lot_row:
-                                old_price = lot_row['open_price']
-                                cursor.execute('''
-                                    UPDATE signal_lots SET open_price = ? WHERE id = ?
-                                ''', (fill_price, lot_row['id']))
-                                conn.commit()
-                                print(f"[SYNC] ✓ Updated lot #{lot_row['id']} open_price: ${old_price} → ${fill_price} (NDX→QQQ fill)")
+                                print(f"[SYNC] Found lot #{lot_row['id']} via symbol/strike fallback (legacy)")
+                        
+                        if lot_row:
+                            old_price = lot_row['open_price']
+                            cursor.execute('''
+                                UPDATE signal_lots SET open_price = ? WHERE id = ?
+                            ''', (fill_price, lot_row['id']))
+                            conn.commit()
+                            print(f"[SYNC] ✓ Updated lot #{lot_row['id']} open_price: ${old_price} → ${fill_price} (NDX→QQQ fill)")
                     except Exception as lot_err:
                         print(f"[SYNC] Warning: Could not update lot price: {lot_err}")
                 
@@ -920,6 +941,37 @@ class BrokerSyncService:
                         closed_at=datetime.now().isoformat(),
                         close_reason='order_cancelled_or_rejected'
                     )
+                    
+                    # Cancel associated lot to prevent orphaned P&L entries
+                    try:
+                        from gui_app.database import cancel_lot
+                        if cancel_lot(trade_id=trade_id, reason='ORDER_CANCELLED'):
+                            print(f"[SYNC] ✓ Cancelled lot linked to trade #{trade_id}")
+                    except Exception as lot_err:
+                        print(f"[SYNC] Warning: Could not cancel lot: {lot_err}")
+                    
+                    # Clean up position cache/ledger to remove stale entries
+                    try:
+                        # Remove from risk position cache if exists
+                        if self.risk_manager:
+                            pos_key = f"{broker}_{symbol}_{asset_type}"
+                            if hasattr(self.risk_manager, 'position_cache') and self.risk_manager.position_cache:
+                                if pos_key in self.risk_manager.position_cache._cache:
+                                    del self.risk_manager.position_cache._cache[pos_key]
+                                    print(f"[SYNC] ✓ Removed {pos_key} from position cache (order cancelled)")
+                        
+                        # Remove from position ledger if exists
+                        try:
+                            from src.services.position_ledger import get_position_ledger
+                            ledger = get_position_ledger()
+                            # Find and close position by trade info
+                            message_id = trade.get('message_id')
+                            if message_id and hasattr(ledger, 'close_by_message_id'):
+                                ledger.close_by_message_id(message_id, exit_reason='ORDER_CANCELLED')
+                        except Exception:
+                            pass
+                    except Exception as cache_err:
+                        print(f"[SYNC] Warning: Could not clean up cache: {cache_err}")
                 elif current_status == 'OPEN':
                     # Open position no longer exists = broker closed it (manual close, stop/target hit, or liquidation)
                     print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) not in positions: OPEN → CLOSED (broker closed)")
