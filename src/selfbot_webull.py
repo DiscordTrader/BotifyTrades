@@ -9761,7 +9761,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 traceback.print_exc()
                                 raise
                             
-                            print(f"[NDX→QQQ] Converting NDX BTO to QQQ with delta={target_delta}")
+                            print(f"[DEBUG] NDX→QQQ: About to call converter function", flush=True)
+                            print(f"[NDX→QQQ] Converting NDX BTO to QQQ with delta={target_delta}", flush=True)
                             
                             converted = await convert_ndx_to_qqq(
                                 signal=opt,
