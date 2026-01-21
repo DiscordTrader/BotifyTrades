@@ -425,7 +425,8 @@ class SignalRoutingEngine:
         lock = self.exit_arbiter.get_lock(
             position.option_key,
             position.broker_id,
-            position.account_id
+            position.account_id,
+            routing_mapping_id=position.routing_mapping_id
         )
         
         acquired = False
@@ -651,7 +652,8 @@ class SignalRoutingEngine:
         lock = self.exit_arbiter.get_lock(
             position.option_key,
             position.broker_id,
-            position.account_id
+            position.account_id,
+            routing_mapping_id=position.routing_mapping_id
         )
         
         acquired = False
@@ -934,6 +936,25 @@ class SignalRoutingEngine:
             f"*Not financial advice, for educational purposes only.*"
         )
         
+        # ===== LEDGER-FIRST ORDERING =====
+        # Industry-grade approach: Update ledger BEFORE webhook to prevent duplicates
+        # If webhook fails, position is already updated; retries won't double-exit
+        
+        # Record exit in ledger first with dedupe_key
+        exit_record = self.ledger.record_partial_exit(
+            position_id=position.id or 0,
+            exit_qty=exit_qty,
+            exit_price=exit_price,
+            exit_reason=exit_reason.value,
+            dedupe_key=msg_id
+        )
+        
+        if not exit_record:
+            # Exit already recorded (idempotency) or position closed
+            print(f"[ROUTING_ENGINE] ⏭️ Exit already processed or position closed: {msg_id}")
+            return True  # Return True since exit is already handled
+        
+        # Now attempt webhook delivery
         webhook_msg = WebhookMessage(
             id=msg_id,
             url=config.destination_url,
@@ -947,20 +968,14 @@ class SignalRoutingEngine:
         
         if success:
             self._webhook_delivered.add(msg_id)
-            
-            self.ledger.record_partial_exit(
-                position_id=position.id or 0,
-                exit_qty=exit_qty,
-                exit_price=exit_price,
-                exit_reason=exit_reason.value
-            )
-            
             print(f"[ROUTING_ENGINE] ✓ STC posted: {stc_message}")
             return True
         else:
+            # Ledger already updated; queue webhook for retry only
             self._webhook_queue.append(webhook_msg)
-            print(f"[ROUTING_ENGINE] ⚠️ STC queued for retry: {stc_message}")
-            return False
+            print(f"[ROUTING_ENGINE] ⚠️ STC queued for retry (ledger already updated): {stc_message}")
+            return True  # Return True since exit was recorded
+        # ===== END LEDGER-FIRST ORDERING =====
     
     async def _deliver_webhook(self, msg: WebhookMessage) -> bool:
         """Attempt to deliver a webhook message."""
