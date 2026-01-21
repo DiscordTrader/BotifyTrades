@@ -350,12 +350,15 @@ class NDXtoQQQConverter:
         """
         Fallback: Approximate strike to achieve target delta when Greeks unavailable.
         
-        Delta approximation for options:
+        Delta approximation for near-term options:
         - Delta 0.50 = ATM (at the money)
-        - Delta 0.30 = ~1-2% OTM for near-term options
-        - Delta 0.20 = ~3-4% OTM
+        - Delta 0.40 = slightly OTM (~0.5% for calls above, puts below)
+        - Delta 0.30 = near ATM (~1% ITM for more delta)
         
-        For delta 0.30, we target strikes ~1% OTM from current price.
+        For CALLS: Lower strike = Higher delta (more ITM)
+        For PUTS: Higher strike = Higher delta (more ITM)
+        
+        To achieve delta 0.30, we target strikes slightly ITM (below price for calls).
         """
         try:
             qqq_price = await self._get_qqq_price(broker)
@@ -363,16 +366,17 @@ class NDXtoQQQConverter:
                 print(f"[NDX→QQQ] Could not get QQQ price for fallback")
                 return None
             
-            otm_offset_pct = (0.50 - target_delta) * 0.06
+            delta_diff = 0.50 - target_delta
+            itm_offset_pct = delta_diff * 0.02
             
             if opt_type == 'C':
-                target_strike = qqq_price * (1 + otm_offset_pct)
+                target_strike = qqq_price * (1 - itm_offset_pct)
                 strike = round(target_strike)
             else:
-                target_strike = qqq_price * (1 - otm_offset_pct)
+                target_strike = qqq_price * (1 + itm_offset_pct)
                 strike = round(target_strike)
             
-            print(f"[NDX→QQQ] Fallback: QQQ=${qqq_price:.2f}, targeting δ={target_delta} → strike ${strike} ({otm_offset_pct*100:.1f}% OTM)")
+            print(f"[NDX→QQQ] Fallback: QQQ=${qqq_price:.2f}, targeting δ={target_delta} → strike ${strike} ({itm_offset_pct*100:.1f}% ITM)")
             return strike
             
         except Exception as e:
