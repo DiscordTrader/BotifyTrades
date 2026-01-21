@@ -9768,13 +9768,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             print(f"[DEBUG] NDX→QQQ: LINE A - RIGHT AFTER flush", flush=True)
                             print(f"[DEBUG] NDX→QQQ: Converting BTO delta={target_delta}", flush=True)
                             print(f"[DEBUG] NDX→QQQ: LINE B - AFTER Converting message", flush=True)
+                            print(f"[DEBUG] NDX→QQQ: LINE C - About to await", flush=True)
                             
-                            converted = await convert_ndx_to_qqq(
-                                signal=opt,
-                                target_delta=target_delta,
-                                broker=first_broker,
-                                enabled_brokers=enabled_brokers
-                            )
+                            try:
+                                converted = await convert_ndx_to_qqq(
+                                    signal=opt,
+                                    target_delta=target_delta,
+                                    broker=first_broker,
+                                    enabled_brokers=enabled_brokers
+                                )
+                                print(f"[DEBUG] NDX→QQQ: LINE D - After await, result={converted is not None}", flush=True)
+                            except Exception as await_err:
+                                print(f"[DEBUG] NDX→QQQ: LINE D-ERR - Await exception: {await_err}", flush=True)
+                                import traceback
+                                traceback.print_exc()
+                                raise
                             
                             if converted:
                                 original_symbol = opt.get('symbol')
