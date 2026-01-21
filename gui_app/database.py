@@ -3529,26 +3529,70 @@ def create_signal_lot(channel_id: int, signal_id: int, asset_type: str, symbol: 
     return cursor.lastrowid
 
 
-def get_open_lots(channel_id: int, asset_type: str, symbol: str, strike: float = None, expiry: str = None, call_put: str = None):
-    """Get open lots for a symbol (FIFO order)"""
+def update_lot_executed_symbol(lot_id: int, executed_symbol: str, executed_strike: float = None):
+    """Update a lot with the actual executed symbol (used for NDX→QQQ conversion tracking).
+    
+    When a signal is for NDX but execution happens with QQQ, this updates the lot
+    so that STC signals for QQQ can find and close the lot.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        UPDATE signal_lots 
+        SET executed_symbol = ?, executed_strike = ?
+        WHERE id = ?
+    ''', (executed_symbol, executed_strike, lot_id))
+    
+    conn.commit()
+    print(f"[DATABASE] ✓ Updated lot {lot_id} with executed_symbol={executed_symbol}, executed_strike={executed_strike}")
+    return cursor.rowcount > 0
+
+
+def get_open_lots(channel_id: int, asset_type: str, symbol: str, strike: float = None, expiry: str = None, call_put: str = None, check_executed_symbol: bool = True):
+    """Get open lots for a symbol (FIFO order).
+    
+    If check_executed_symbol is True (default), also checks executed_symbol for matches.
+    This handles NDX→QQQ conversions where signal was NDX but execution was QQQ.
+    """
     conn = get_connection()
     cursor = conn.cursor()
     
     if asset_type == 'option':
-        cursor.execute('''
-            SELECT * FROM signal_lots
-            WHERE channel_id = ? AND asset_type = ? AND symbol = ?
-            AND strike = ? AND expiry = ? AND call_put = ?
-            AND status IN ('OPEN', 'PARTIAL')
-            ORDER BY opened_at ASC
-        ''', (channel_id, asset_type, symbol, strike, expiry, call_put))
+        if check_executed_symbol:
+            cursor.execute('''
+                SELECT * FROM signal_lots
+                WHERE channel_id = ? AND asset_type = ?
+                AND (symbol = ? OR executed_symbol = ?)
+                AND (strike = ? OR executed_strike = ?)
+                AND expiry = ? AND call_put = ?
+                AND status IN ('OPEN', 'PARTIAL')
+                ORDER BY opened_at ASC
+            ''', (channel_id, asset_type, symbol, symbol, strike, strike, expiry, call_put))
+        else:
+            cursor.execute('''
+                SELECT * FROM signal_lots
+                WHERE channel_id = ? AND asset_type = ? AND symbol = ?
+                AND strike = ? AND expiry = ? AND call_put = ?
+                AND status IN ('OPEN', 'PARTIAL')
+                ORDER BY opened_at ASC
+            ''', (channel_id, asset_type, symbol, strike, expiry, call_put))
     else:
-        cursor.execute('''
-            SELECT * FROM signal_lots
-            WHERE channel_id = ? AND asset_type = ? AND symbol = ?
-            AND status IN ('OPEN', 'PARTIAL')
-            ORDER BY opened_at ASC
-        ''', (channel_id, asset_type, symbol))
+        if check_executed_symbol:
+            cursor.execute('''
+                SELECT * FROM signal_lots
+                WHERE channel_id = ? AND asset_type = ?
+                AND (symbol = ? OR executed_symbol = ?)
+                AND status IN ('OPEN', 'PARTIAL')
+                ORDER BY opened_at ASC
+            ''', (channel_id, asset_type, symbol, symbol))
+        else:
+            cursor.execute('''
+                SELECT * FROM signal_lots
+                WHERE channel_id = ? AND asset_type = ? AND symbol = ?
+                AND status IN ('OPEN', 'PARTIAL')
+                ORDER BY opened_at ASC
+            ''', (channel_id, asset_type, symbol))
     
     return cursor.fetchall()
 

@@ -9765,6 +9765,30 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 opt['original_strike'] = original_strike
                                 opt['_ndx_converted'] = True
                                 print(f"[NDX→QQQ] ✓ Converted {original_symbol} {original_strike} → QQQ {opt.get('strike')}")
+                                
+                                # Update the lot with executed symbol for P&L tracking
+                                try:
+                                    from gui_app.database import update_lot_executed_symbol, get_connection
+                                    conn = get_connection()
+                                    cursor = conn.cursor()
+                                    # Find the lot for this signal (using message_id)
+                                    msg_id = str(message.id)
+                                    cursor.execute('''
+                                        SELECT sl.id FROM signal_lots sl
+                                        JOIN signals s ON sl.signal_id = s.id
+                                        WHERE s.message_id = ?
+                                        ORDER BY sl.id DESC LIMIT 1
+                                    ''', (msg_id,))
+                                    lot_row = cursor.fetchone()
+                                    if lot_row:
+                                        update_lot_executed_symbol(
+                                            lot_id=lot_row['id'],
+                                            executed_symbol=opt.get('symbol'),  # QQQ
+                                            executed_strike=opt.get('strike')
+                                        )
+                                        print(f"[NDX→QQQ] ✓ Updated P&L lot with executed symbol: QQQ {opt.get('strike')}")
+                                except Exception as lot_err:
+                                    print(f"[NDX→QQQ] Warning: Could not update lot: {lot_err}")
                             else:
                                 # Reject signal - no fallback to original NDX
                                 reject_reason = f"NDX→QQQ conversion failed: No suitable QQQ option found for {opt.get('symbol')} {opt.get('strike')}{opt.get('opt_type', '')}"
