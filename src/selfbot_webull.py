@@ -5231,7 +5231,7 @@ class SelfClient(discord.Client):
                         signal_entry_price=signal.get('price', 0) or 0,
                         initial_mark_price=signal.get('price', 0) or 0,
                         current_price=signal.get('price', 0) or 0,
-                        status='OPEN',
+                        status='open',
                         entry_message_id=signal.get('message_id', ''),
                         source_type='discord',
                         routing_mapping_id=routing_mapping_id
@@ -12152,7 +12152,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                         entry_qty=executed_qty, remaining_qty=executed_qty,
                                                         entry_price=signal.get('price', 0) or 0, signal_entry_price=signal.get('price', 0) or 0,
                                                         initial_mark_price=signal.get('price', 0) or 0, current_price=signal.get('price', 0) or 0,
-                                                        status='OPEN', entry_message_id=str(signal.get('message_id', '')),
+                                                        status='open', entry_message_id=str(signal.get('message_id', '')),
                                                         source_type='discord', routing_mapping_id=routing_mapping_id
                                                     )
                                                     position_id = ledger.create_position(position)
@@ -12217,7 +12217,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 entry_qty=executed_qty, remaining_qty=executed_qty,
                                                 entry_price=signal.get('price', 0) or 0, signal_entry_price=signal.get('price', 0) or 0,
                                                 initial_mark_price=signal.get('price', 0) or 0, current_price=signal.get('price', 0) or 0,
-                                                status='OPEN', entry_message_id=str(signal.get('message_id', '')),
+                                                status='open', entry_message_id=str(signal.get('message_id', '')),
                                                 source_type='discord', routing_mapping_id=routing_mapping_id
                                             )
                                             position_id = ledger.create_position(position)
