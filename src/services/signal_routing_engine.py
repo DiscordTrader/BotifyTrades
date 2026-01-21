@@ -438,6 +438,21 @@ class SignalRoutingEngine:
                 print(f"[ROUTING_ENGINE] ⏭️ Exit already in progress for {position.option_key}")
                 return False
             
+            # ===== POSITION STATE GATE (RISK FLOW) =====
+            # Fresh check after acquiring lock to handle race with signal exits
+            fresh_position = self.ledger.get_position(position.id)
+            if not fresh_position:
+                print(f"[ROUTING_ENGINE] ⏭️ Position no longer exists: {position.option_key}")
+                return False
+            
+            if fresh_position.status == PositionStatus.CLOSED.value or fresh_position.remaining_qty <= 0:
+                print(f"[ROUTING_ENGINE] ⏭️ Position already closed by signal exit: {position.option_key} - skipping risk exit")
+                return False
+            
+            # Use fresh position data for exit calculation
+            position = fresh_position
+            # ===== END POSITION STATE GATE =====
+            
             exit_qty = self.calculate_exit_quantity(position, exit_reason, config)
             if exit_qty <= 0:
                 print(f"[ROUTING_ENGINE] ⏭️ No exit qty for {position.option_key} - skipping")

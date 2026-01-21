@@ -294,6 +294,15 @@ class PositionLedger:
                 ON position_ledger(channel_id)
             """)
             
+            # ===== UNIQUE INDEX FOR EXIT IDEMPOTENCY =====
+            # Prevents race condition where two concurrent exits insert before either commits
+            # message_id stores the dedupe_key (position_id:exit_reason:exit_qty hash)
+            conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_partial_exits_dedupe
+                ON partial_exits(position_id, message_id)
+                WHERE message_id IS NOT NULL AND message_id != ''
+            """)
+            
             # Migrations: Add columns if missing (for existing tables)
             migrations = [
                 ("routing_mapping_id", "ALTER TABLE position_ledger ADD COLUMN routing_mapping_id INTEGER"),
@@ -634,15 +643,23 @@ class PositionLedger:
             # Use dedupe_key as message_id for idempotency tracking
             stored_message_id = dedupe_key if dedupe_key else message_id
             
-            cursor = conn.execute("""
-                INSERT INTO partial_exits (
-                    position_id, exit_qty, exit_price, exit_reason,
-                    exit_pnl_dollar, exit_pnl_pct, exit_time, message_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                position_id, actual_exit_qty, exit_price, exit_reason,
-                exit_pnl_dollar, exit_pnl_pct, now, stored_message_id
-            ))
+            # ===== RACE-SAFE INSERT WITH UNIQUE CONSTRAINT =====
+            # If unique index violation occurs, another thread already inserted
+            try:
+                cursor = conn.execute("""
+                    INSERT INTO partial_exits (
+                        position_id, exit_qty, exit_price, exit_reason,
+                        exit_pnl_dollar, exit_pnl_pct, exit_time, message_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    position_id, actual_exit_qty, exit_price, exit_reason,
+                    exit_pnl_dollar, exit_pnl_pct, now, stored_message_id
+                ))
+            except sqlite3.IntegrityError:
+                # Race condition: another thread already inserted this exit
+                print(f"[LEDGER] ⏭️ Duplicate exit blocked by unique constraint: {stored_message_id[:16] if stored_message_id else 'N/A'}...")
+                return None
+            # ===== END RACE-SAFE INSERT =====
             
             new_remaining = remaining - actual_exit_qty
             new_realized = (row['realized_pnl'] or 0) + exit_pnl_dollar
