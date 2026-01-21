@@ -8155,11 +8155,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 opt_type = bishop_parsed.get('opt_type', 'C')
                                 expiry = bishop_parsed.get('expiry', '')
                                 price = bishop_parsed.get('price')
+                                price_str = f"@ {price}" if price else "@ m"
                                 if action == 'BTO':
-                                    price_str = f"@ {price}" if price else "@ m"
-                                    forward_msg = f"BTO {symbol} {strike}{opt_type} {expiry} {price_str}"
+                                    forward_msg = f"BTO ${symbol} {strike}{opt_type} {expiry} {price_str}"
                                 else:
-                                    forward_msg = f"STC {symbol}"
+                                    # STC includes full details: STC $SYMBOL STRIKEc/p MM/DD @ PRICE
+                                    forward_msg = f"STC ${symbol} {strike}{opt_type} {expiry} {price_str}"
                                 print(f"[CHANNEL MAP] ✓ Formatted Bishop: {forward_msg}")
                             else:
                                 # Bishop detection matched but parsing failed - likely a Bishop's Ideas msg, NOT an entry
