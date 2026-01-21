@@ -5898,7 +5898,7 @@
     "max_pnl_seen": 0.13117514970060556,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 52.73
+    "last_evaluated_price": 52.851
   },
   "Alpaca_LVLU_stock": {
     "entry_price": 11.85,
@@ -7936,5 +7936,26 @@
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
     "last_evaluated_price": 0.38
+  },
+  "Webull_CARR_60.0_02/20_C": {
+    "entry_price": 1.8,
+    "highest_price": 1.775,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "Webull",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-21T20:59:58.842158",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null
   }
 }

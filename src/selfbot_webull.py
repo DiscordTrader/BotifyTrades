@@ -9738,6 +9738,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     is_ndx = symbol_raw in ['NDX', 'NASDAQ', 'NQ'] or underlying in ['NDX', 'NASDAQ', 'NQ']
                     
                     action = opt.get('action', 'BTO').upper()
+                    print(f"[DEBUG] NDX→QQQ inner: symbol_raw={symbol_raw}, is_ndx={is_ndx}, action={action}")
                     
                     if is_ndx and action == 'BTO':
                         # BTO: Convert NDX to QQQ
