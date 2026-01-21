@@ -540,11 +540,39 @@ class PositionLedger:
         exit_qty: int,
         exit_price: float,
         exit_reason: str,
-        message_id: str = ""
+        message_id: str = "",
+        dedupe_key: str = ""
     ) -> Optional[PartialExit]:
-        """Record a partial or full exit from a position."""
+        """
+        Record a partial or full exit from a position with idempotency.
+        
+        Uses dedupe_key to prevent duplicate exits. If dedupe_key is provided and
+        an exit with same key exists, returns the existing exit instead of creating new.
+        """
         conn = self._get_conn()
         try:
+            # ===== IDEMPOTENCY CHECK =====
+            # Check if exit with same dedupe_key already exists (prevents duplicates)
+            if dedupe_key:
+                existing = conn.execute(
+                    "SELECT * FROM partial_exits WHERE position_id = ? AND message_id = ?",
+                    (position_id, dedupe_key)
+                ).fetchone()
+                if existing:
+                    print(f"[LEDGER] ⏭️ Duplicate exit blocked (dedupe_key: {dedupe_key[:16]}...)")
+                    return PartialExit(
+                        id=existing['id'],
+                        position_id=existing['position_id'],
+                        exit_qty=existing['exit_qty'],
+                        exit_price=existing['exit_price'],
+                        exit_reason=existing['exit_reason'],
+                        exit_pnl_dollar=existing['exit_pnl_dollar'],
+                        exit_pnl_pct=existing['exit_pnl_pct'],
+                        exit_time=existing['exit_time'],
+                        message_id=existing['message_id']
+                    )
+            # ===== END IDEMPOTENCY CHECK =====
+            
             row = conn.execute(
                 "SELECT * FROM position_ledger WHERE id = ?",
                 (position_id,)
@@ -571,6 +599,9 @@ class PositionLedger:
             
             now = datetime.now().isoformat()
             
+            # Use dedupe_key as message_id for idempotency tracking
+            stored_message_id = dedupe_key if dedupe_key else message_id
+            
             cursor = conn.execute("""
                 INSERT INTO partial_exits (
                     position_id, exit_qty, exit_price, exit_reason,
@@ -578,7 +609,7 @@ class PositionLedger:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 position_id, actual_exit_qty, exit_price, exit_reason,
-                exit_pnl_dollar, exit_pnl_pct, now, message_id
+                exit_pnl_dollar, exit_pnl_pct, now, stored_message_id
             ))
             
             new_remaining = remaining - actual_exit_qty
