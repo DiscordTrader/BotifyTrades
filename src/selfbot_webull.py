@@ -9730,6 +9730,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 # NDX→QQQ Conversion: Convert NDX options to QQQ with target delta
                 ndx_to_qqq_enabled = channel_info.get('ndx_to_qqq_enabled', 0) if channel_info else 0
+                print(f"[DEBUG] NDX→QQQ check: enabled={ndx_to_qqq_enabled}, symbol={opt.get('symbol')}, channel={channel_info.get('name') if channel_info else 'None'}")
                 if ndx_to_qqq_enabled:
                     # Check multiple symbol sources for NDX detection (robust pattern matching)
                     symbol_raw = opt.get('symbol', '').upper().replace('$', '')
