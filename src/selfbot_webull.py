@@ -9773,13 +9773,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             print(f"[DEBUG] NDX→QQQ: Function module: {convert_ndx_to_qqq.__module__}", flush=True)
                             
                             try:
+                                print(f"[DEBUG] NDX→QQQ: About to call with opt={opt}", flush=True)
                                 converted = await convert_ndx_to_qqq(
                                     signal=opt,
                                     target_delta=target_delta,
                                     broker=first_broker,
                                     enabled_brokers=enabled_brokers
                                 )
-                                print(f"[DEBUG] NDX→QQQ: LINE D - After await, result={converted is not None}", flush=True)
+                                print(f"[DEBUG] NDX→QQQ: LINE D - After await", flush=True)
+                                print(f"[DEBUG] NDX→QQQ: converted type={type(converted)}", flush=True)
+                                print(f"[DEBUG] NDX→QQQ: converted value={converted}", flush=True)
+                                print(f"[DEBUG] NDX→QQQ: opt after call={opt}", flush=True)
                             except Exception as await_err:
                                 print(f"[DEBUG] NDX→QQQ: LINE D-ERR - Await exception: {await_err}", flush=True)
                                 import traceback
