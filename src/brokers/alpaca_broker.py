@@ -909,6 +909,50 @@ class AlpacaBroker(BrokerInterface):
             print(f"[{self.name}] Error getting quote for {symbol}: {e}")
             return None
     
+    async def get_option_quote(self, symbol: str, strike: float, opt_type: str, expiry: str) -> Optional[dict]:
+        """Get current quote for an option contract
+        
+        Returns dict with 'bid', 'ask', 'mid' prices or None if not available
+        """
+        try:
+            from alpaca.data.requests import OptionLatestQuoteRequest
+            
+            # Build the option symbol (e.g., QQQ260121C00619000)
+            from datetime import datetime
+            
+            # Parse expiry (e.g., "1/21" or "01/21")
+            if '/' in expiry:
+                parts = expiry.split('/')
+                month = int(parts[0])
+                day = int(parts[1])
+                year = datetime.now().year
+                if month < datetime.now().month:
+                    year += 1
+            else:
+                return None
+            
+            # Format: SYMBOL + YYMMDD + C/P + strike*1000 (8 digits)
+            opt_char = opt_type.upper()[0] if opt_type else 'C'
+            strike_formatted = int(float(strike) * 1000)
+            option_symbol = f"{symbol}{year % 100:02d}{month:02d}{day:02d}{opt_char}{strike_formatted:08d}"
+            
+            request = OptionLatestQuoteRequest(symbol_or_symbols=[option_symbol])
+            quotes = await asyncio.to_thread(
+                self.data_client.get_option_latest_quote,
+                request
+            )
+            
+            if option_symbol in quotes:
+                quote = quotes[option_symbol]
+                bid = float(quote.bid_price) if quote.bid_price else 0
+                ask = float(quote.ask_price) if quote.ask_price else 0
+                mid = (bid + ask) / 2 if bid and ask else (ask or bid)
+                return {'bid': bid, 'ask': ask, 'mid': mid, 'symbol': option_symbol}
+            return None
+        except Exception as e:
+            print(f"[{self.name}] Error getting option quote: {e}")
+            return None
+    
     async def close_position(self, symbol: str, quantity: Optional[int] = None, limit_price: Optional[float] = None) -> OrderResult:
         """Close a position (works for both LONG and SHORT positions)
         

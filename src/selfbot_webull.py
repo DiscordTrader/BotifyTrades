@@ -9759,14 +9759,33 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             if converted:
                                 original_symbol = opt.get('symbol')
                                 original_strike = opt.get('strike')
+                                original_price = opt.get('price')
                                 opt.update(converted)
                                 # Ensure original_symbol/strike are preserved for STC mapping
                                 opt['original_symbol'] = original_symbol.upper().replace('$', '')
                                 opt['original_strike'] = original_strike
                                 opt['_ndx_converted'] = True
-                                print(f"[NDX→QQQ] ✓ Converted {original_symbol} {original_strike} → QQQ {opt.get('strike')}")
                                 
-                                # Update the lot with executed symbol for P&L tracking
+                                # Get real QQQ option quote to replace NDX price
+                                qqq_quote_price = None
+                                try:
+                                    if alpaca_paper_broker and hasattr(alpaca_paper_broker, 'get_option_quote'):
+                                        qqq_quote = await alpaca_paper_broker.get_option_quote(
+                                            symbol='QQQ',
+                                            strike=opt.get('strike'),
+                                            opt_type=opt.get('opt_type'),
+                                            expiry=opt.get('expiry')
+                                        )
+                                        if qqq_quote and qqq_quote.get('ask'):
+                                            qqq_quote_price = float(qqq_quote.get('ask'))
+                                            opt['price'] = qqq_quote_price
+                                            print(f"[NDX→QQQ] ✓ Updated price from NDX ${original_price} → QQQ ${qqq_quote_price}")
+                                except Exception as quote_err:
+                                    print(f"[NDX→QQQ] Warning: Could not get QQQ quote: {quote_err}")
+                                
+                                print(f"[NDX→QQQ] ✓ Converted {original_symbol} {original_strike} → QQQ {opt.get('strike')} @ ${opt.get('price')}")
+                                
+                                # Update the lot with executed symbol and price for P&L tracking
                                 try:
                                     from gui_app.database import update_lot_executed_symbol, get_connection
                                     conn = get_connection()
@@ -9784,9 +9803,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         update_lot_executed_symbol(
                                             lot_id=lot_row['id'],
                                             executed_symbol=opt.get('symbol'),  # QQQ
-                                            executed_strike=opt.get('strike')
+                                            executed_strike=opt.get('strike'),
+                                            executed_price=qqq_quote_price  # Use actual QQQ price
                                         )
-                                        print(f"[NDX→QQQ] ✓ Updated P&L lot with executed symbol: QQQ {opt.get('strike')}")
+                                        print(f"[NDX→QQQ] ✓ Updated P&L lot with executed symbol: QQQ {opt.get('strike')} @ ${qqq_quote_price}")
                                 except Exception as lot_err:
                                     print(f"[NDX→QQQ] Warning: Could not update lot: {lot_err}")
                             else:
