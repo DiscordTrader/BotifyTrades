@@ -9782,16 +9782,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 except Exception as quote_err:
                                     print(f"[NDX→QQQ] Warning: Could not get QQQ quote: {quote_err}", flush=True)
                                 
-                                # Always update signal price - use quote if available, otherwise estimate
-                                # QQQ options are ~1/41 of NDX price (NDX ~41x QQQ)
-                                if qqq_quote_price is None:
-                                    qqq_quote_price = round(original_price / 41.0, 2)  # Rough estimate
-                                    print(f"[NDX→QQQ] ⚠️ Using estimated QQQ price: ${qqq_quote_price} (NDX ${original_price} / 41)", flush=True)
-                                
-                                opt['price'] = qqq_quote_price
-                                signal['price'] = qqq_quote_price
+                                # Update signal price - use quote if available
+                                # If no quote, set to None to trigger market order (broker fill becomes authoritative)
                                 signal['_original_ndx_price'] = original_price
-                                print(f"[NDX→QQQ] ✓ Updated price from NDX ${original_price} → QQQ ${qqq_quote_price}", flush=True)
+                                if qqq_quote_price is not None:
+                                    opt['price'] = qqq_quote_price
+                                    signal['price'] = qqq_quote_price
+                                    print(f"[NDX→QQQ] ✓ Updated price from NDX ${original_price} → QQQ ${qqq_quote_price}", flush=True)
+                                else:
+                                    # No quote available - use None to let broker determine price
+                                    # Lot open_price will be updated from broker fill via sync service
+                                    opt['price'] = None  # Will trigger market order
+                                    signal['price'] = None
+                                    signal['_await_broker_fill_price'] = True
+                                    print(f"[NDX→QQQ] ⚠️ No QQQ quote - will use market order (broker fill is authoritative)", flush=True)
                                 
                                 print(f"[NDX→QQQ] ✓ Converted {original_symbol} {original_strike} → QQQ {opt.get('strike')} @ ${opt.get('price')}")
                                 
@@ -9814,9 +9818,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             lot_id=lot_row['id'],
                                             executed_symbol=opt.get('symbol'),  # QQQ
                                             executed_strike=opt.get('strike'),
-                                            executed_price=qqq_quote_price  # Use actual QQQ price
+                                            executed_price=qqq_quote_price  # None if no quote - sync will update from fill
                                         )
-                                        print(f"[NDX→QQQ] ✓ Updated P&L lot with executed symbol: QQQ {opt.get('strike')} @ ${qqq_quote_price}")
+                                        if qqq_quote_price:
+                                            print(f"[NDX→QQQ] ✓ Updated P&L lot with executed symbol: QQQ {opt.get('strike')} @ ${qqq_quote_price}")
+                                        else:
+                                            print(f"[NDX→QQQ] ✓ Updated P&L lot with executed symbol: QQQ {opt.get('strike')} (price TBD from broker fill)")
                                 except Exception as lot_err:
                                     print(f"[NDX→QQQ] Warning: Could not update lot: {lot_err}")
                             else:
