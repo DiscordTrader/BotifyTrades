@@ -9769,6 +9769,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             print(f"[DEBUG] NDX→QQQ: Converting BTO delta={target_delta}", flush=True)
                             print(f"[DEBUG] NDX→QQQ: LINE B - AFTER Converting message", flush=True)
                             print(f"[DEBUG] NDX→QQQ: LINE C - About to await", flush=True)
+                            print(f"[DEBUG] NDX→QQQ: Function to call: {convert_ndx_to_qqq}", flush=True)
+                            print(f"[DEBUG] NDX→QQQ: Function module: {convert_ndx_to_qqq.__module__}", flush=True)
                             
                             try:
                                 converted = await convert_ndx_to_qqq(
