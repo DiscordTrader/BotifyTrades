@@ -8235,21 +8235,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             forward_msg = message.content.strip()
                         
                         try:
-                            # Add forward source marker to prevent double execution in destination
-                            # Format: ║FWD:source_channel_id║ (at end of message)
-                            source_channel_id = str(message.channel.id)
-                            forward_marker = f" ║FWD:{source_channel_id}║"
-                            forward_msg_with_marker = forward_msg + forward_marker
-                            
+                            # Forward clean BTO/STC message (no markers needed - early exit handles dedupe)
                             if is_webhook_dest:
                                 # Forward to webhook URL
                                 import aiohttp
                                 webhook_url = target_execution_channel_id
                                 print(f"[DEBUG] Posting to webhook: {webhook_url[:50]}...")
                                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
-                                    async with session.post(webhook_url, json={"content": forward_msg_with_marker}) as resp:
+                                    async with session.post(webhook_url, json={"content": forward_msg}) as resp:
                                         if resp.status in [200, 204]:
-                                            print(f"[CHANNEL MAP] ✓ Forwarded BTO/STC signal to webhook (with dedupe marker)")
+                                            print(f"[CHANNEL MAP] ✓ Forwarded BTO/STC signal to webhook")
                                         else:
                                             print(f"[CHANNEL MAP] ⚠️ Webhook returned status {resp.status}")
                             elif is_channel_dest:
@@ -8261,8 +8256,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         dest_channel = await self.fetch_channel(int(dest_channel_id))
                                     
                                     if dest_channel:
-                                        await dest_channel.send(forward_msg_with_marker)
-                                        print(f"[CHANNEL MAP] ✓ Forwarded BTO/STC signal to channel {dest_channel_id} (with dedupe marker)")
+                                        await dest_channel.send(forward_msg)
+                                        print(f"[CHANNEL MAP] ✓ Forwarded BTO/STC signal to channel {dest_channel_id}")
                                     else:
                                         print(f"[CHANNEL MAP] ❌ Could not find destination channel {dest_channel_id}")
                                 except Exception as ch_err:
