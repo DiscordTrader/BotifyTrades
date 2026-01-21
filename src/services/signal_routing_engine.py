@@ -47,6 +47,28 @@ class ExitStrategyMode(Enum):
     HYBRID = "hybrid"
 
 
+DYNAMIC_SL_PROFILES = {
+    'conservative': {
+        'pt1_sl_pct': 0,
+        'pt2_sl_pct': 3,
+        'pt3_sl_pct': 10,
+        'pt4_sl_pct': 20
+    },
+    'standard': {
+        'pt1_sl_pct': 0,
+        'pt2_sl_pct': 5,
+        'pt3_sl_pct': 15,
+        'pt4_sl_pct': 25
+    },
+    'aggressive': {
+        'pt1_sl_pct': -2,
+        'pt2_sl_pct': 0,
+        'pt3_sl_pct': 10,
+        'pt4_sl_pct': 20
+    }
+}
+
+
 @dataclass
 class RoutingMappingConfig:
     """Configuration for a signal routing mapping."""
@@ -76,6 +98,11 @@ class RoutingMappingConfig:
     trailing_activation_pct: float = 15.0
     leave_runner_enabled: bool = False
     leave_runner_size_pct: float = 25.0
+    
+    dynamic_sl_escalation_enabled: bool = False
+    sl_escalation_profile: str = "standard"
+    max_profit_giveback_enabled: bool = False
+    max_profit_giveback_pct: float = 30.0
 
 
 @dataclass
@@ -196,6 +223,10 @@ class SignalRoutingEngine:
             trailing_activation_pct=mapping.get('trailing_activation_pct', 15.0) or 15.0,
             leave_runner_enabled=bool(mapping.get('leave_runner_enabled', 0)),
             leave_runner_size_pct=mapping.get('leave_runner_size_pct', 25.0) or 25.0,
+            dynamic_sl_escalation_enabled=bool(mapping.get('dynamic_sl_escalation_enabled', 0)),
+            sl_escalation_profile=mapping.get('sl_escalation_profile', 'standard') or 'standard',
+            max_profit_giveback_enabled=bool(mapping.get('max_profit_giveback_enabled', 0)),
+            max_profit_giveback_pct=mapping.get('max_profit_giveback_pct', 30.0) or 30.0,
         )
         
         self._configs[config.source_channel_id] = config

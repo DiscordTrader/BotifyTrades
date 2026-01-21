@@ -102,6 +102,9 @@ class LedgerPosition:
     max_pnl_seen: float = 0.0
     trailing_stop_active: bool = False
     
+    dynamic_sl_price: Optional[float] = None
+    giveback_guard_active: bool = False
+    
     partial_exits: List[PartialExit] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
