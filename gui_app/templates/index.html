@@ -1788,92 +1788,111 @@ async function loadConditionalOrders() {
             }
             
             html += `
-                <div class="position-card" style="border-left: 3px solid ${statusColor};">
-                    <div class="position-main" style="display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: start;">
-                        <div class="position-symbol">
-                            <div style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">${order.symbol}</div>
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">${order.asset_type || 'stock'}</div>
-                            <div style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 10px; background: ${statusColor}20; color: ${statusColor}; font-size: 0.7rem; font-weight: 600; margin-top: 8px;">
-                                ${statusIcon} ${statusLabel}
+                <div class="conditional-order-card" style="background: linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.9)); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; margin-bottom: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                    <!-- Header Row -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: linear-gradient(90deg, ${statusColor}15, transparent); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="font-size: 1.5rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px;">${order.symbol}</div>
+                            <div style="padding: 4px 10px; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">${order.asset_type || 'stock'}</div>
+                            <div style="display: flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; background: ${statusColor}20; border: 1px solid ${statusColor}40;">
+                                <span style="font-size: 0.9rem;">${statusIcon}</span>
+                                <span style="color: ${statusColor}; font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">${statusLabel}</span>
                             </div>
                         </div>
-                        
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px;">
-                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Trigger</div>
-                                <div style="font-size: 1rem; font-weight: 600; color: var(--accent-teal);">${triggerDirection} $${triggerPrice.toFixed(2)}</div>
-                                <div style="font-size: 0.7rem; color: var(--text-muted);">${triggerText}</div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="text-align: right;">
+                                <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase;">Order #${order.id}</div>
                             </div>
-                            
-                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Current Price</div>
-                                <div style="font-size: 1rem; font-weight: 600; color: ${order.current_price ? (order.current_price >= triggerPrice ? '#22c55e' : '#ef4444') : 'var(--text-muted)'};">${order.current_price ? '$' + parseFloat(order.current_price).toFixed(2) : 'Loading...'}</div>
-                                <div style="font-size: 0.7rem; color: var(--text-muted);">${order.price_updated_at ? new Date(order.price_updated_at + (order.price_updated_at.includes('Z') || order.price_updated_at.includes('+') ? '' : 'Z')).toLocaleString('en-US', {timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true}) + ' EST' : ''}</div>
-                            </div>
-                            
-                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Adjusted</div>
-                                <div style="font-size: 1rem; font-weight: 600; color: ${currentOffset !== 0 ? '#f59e0b' : 'var(--text-primary)'};">$${adjustedPrice.toFixed(2)}</div>
-                                <div style="font-size: 0.7rem; color: ${currentOffset >= 0 ? '#22c55e' : '#ef4444'};">${offsetSign}${currentOffset.toFixed(1)}%</div>
-                            </div>
-                            
-                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Position</div>
-                                <div style="font-size: 0.875rem; font-weight: 500; color: var(--text-primary);">${sizeDisplay || '—'}</div>
-                            </div>
-                            
-                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Stop Loss</div>
-                                <div style="font-size: 0.875rem; font-weight: 500; color: ${slDisplay ? '#ef4444' : 'var(--text-muted)'};">${slDisplay || '—'}</div>
-                            </div>
-                            
-                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Profit Target</div>
-                                <div style="font-size: 0.875rem; font-weight: 500; color: ${ptDisplay ? '#22c55e' : 'var(--text-muted)'};">${ptDisplay || '—'}</div>
-                            </div>
-                            
-                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Timeout</div>
-                                <div style="font-size: 0.875rem; font-weight: 500; color: ${timeRemaining === 'Expired' ? '#ef4444' : timeRemaining ? '#f59e0b' : 'var(--text-muted)'};">${timeRemaining || 'No limit'}</div>
-                            </div>
-                            
-                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Slippage</div>
-                                <div style="font-size: 0.875rem; font-weight: 500; color: ${order.slippage_protection_enabled ? '#f59e0b' : 'var(--text-muted)'};">
-                                    ${order.slippage_protection_enabled ? (order.slippage_max_pct ? order.slippage_max_pct + '%' : 'Enabled') : 'Off'}
-                                </div>
-                            </div>
-                            
                             ${isActive ? `
-                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase;">Adjust Offset</div>
-                                <div style="display: flex; align-items: center; justify-content: center; gap: 2px; margin-bottom: 8px;">
-                                    <button onclick="adjustOffset(${order.id}, -1)" style="background: linear-gradient(135deg, #dc2626, #b91c1c); border: none; color: white; width: 28px; height: 28px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">−</button>
-                                    <button onclick="adjustOffset(${order.id}, -0.1)" style="background: linear-gradient(135deg, #ea580c, #c2410c); border: none; color: white; width: 28px; height: 28px; border-radius: 6px; font-size: 9px; cursor: pointer; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">.1</button>
-                                    <div style="display: flex; align-items: center; background: rgba(0,0,0,0.4); border-radius: 6px; padding: 0 6px; border: 1px solid var(--border-color);">
-                                        <input type="number" id="offset-${order.id}" step="0.1" value="${currentOffset.toFixed(1)}" 
-                                            style="width: 42px; text-align: right; background: transparent; border: none; color: var(--text-primary); padding: 4px 0; font-size: 0.85rem; font-weight: 600;"
-                                            onchange="updateOffsetDisplay(${order.id}, this.value)">
-                                        <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 2px;">%</span>
-                                    </div>
-                                    <button onclick="adjustOffset(${order.id}, 0.1)" style="background: linear-gradient(135deg, #16a34a, #15803d); border: none; color: white; width: 28px; height: 28px; border-radius: 6px; font-size: 9px; cursor: pointer; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">.1</button>
-                                    <button onclick="adjustOffset(${order.id}, 1)" style="background: linear-gradient(135deg, #22c55e, #16a34a); border: none; color: white; width: 28px; height: 28px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">+</button>
-                                </div>
-                                <button onclick="applyOffset(${order.id})" style="width: 100%; background: linear-gradient(135deg, var(--accent-teal), var(--accent-blue)); border: none; color: white; padding: 6px 12px; font-size: 0.75rem; font-weight: 600; border-radius: 6px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-                                    Apply Offset
-                                </button>
-                            </div>
-                            ` : ''}
-                            
-                            ${isActive ? `
-                            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                                <button onclick="cancelConditionalOrder(${order.id})" class="btn btn-small" style="background: linear-gradient(135deg, #ef4444, #dc2626); border: none; color: white; padding: 8px 16px; font-size: 0.75rem;">
-                                    Cancel Order
-                                </button>
-                            </div>
+                            <button onclick="cancelConditionalOrder(${order.id})" style="background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; padding: 6px 14px; font-size: 0.7rem; font-weight: 600; border-radius: 6px; cursor: pointer; transition: all 0.2s;">
+                                Cancel
+                            </button>
                             ` : ''}
                         </div>
                     </div>
+                    
+                    <!-- Main Data Grid -->
+                    <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 1px; background: rgba(255,255,255,0.03);">
+                        <!-- Trigger -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Trigger</div>
+                            <div style="font-size: 1.1rem; font-weight: 700; color: var(--accent-teal);">${triggerDirection} $${triggerPrice.toFixed(2)}</div>
+                            <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 2px;">${triggerText}</div>
+                        </div>
+                        
+                        <!-- Current Price -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Current</div>
+                            <div style="font-size: 1.1rem; font-weight: 700; color: ${order.current_price ? (order.current_price >= triggerPrice ? '#22c55e' : '#ef4444') : 'var(--text-muted)'};">${order.current_price ? '$' + parseFloat(order.current_price).toFixed(2) : '—'}</div>
+                            <div style="font-size: 0.6rem; color: var(--text-muted); margin-top: 2px;">${order.price_updated_at ? new Date(order.price_updated_at + (order.price_updated_at.includes('Z') || order.price_updated_at.includes('+') ? '' : 'Z')).toLocaleString('en-US', {timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: true}) : ''}</div>
+                        </div>
+                        
+                        <!-- Adjusted -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Adjusted</div>
+                            <div style="font-size: 1.1rem; font-weight: 700; color: ${currentOffset !== 0 ? '#f59e0b' : 'var(--text-primary)'};">$${adjustedPrice.toFixed(2)}</div>
+                            <div style="font-size: 0.65rem; color: ${currentOffset >= 0 ? '#22c55e' : '#ef4444'}; margin-top: 2px;">${offsetSign}${currentOffset.toFixed(1)}%</div>
+                        </div>
+                        
+                        <!-- Position -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Position</div>
+                            <div style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary);">${sizeDisplay || '—'}</div>
+                        </div>
+                        
+                        <!-- Stop Loss -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Stop Loss</div>
+                            <div style="font-size: 0.95rem; font-weight: 600; color: ${slDisplay ? '#ef4444' : 'var(--text-muted)'};">${slDisplay || '—'}</div>
+                        </div>
+                        
+                        <!-- Profit Target -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Profit Target</div>
+                            <div style="font-size: 0.85rem; font-weight: 600; color: ${ptDisplay ? '#22c55e' : 'var(--text-muted)'}; line-height: 1.3;">${ptDisplay || '—'}</div>
+                        </div>
+                        
+                        <!-- Timeout -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Timeout</div>
+                            <div style="font-size: 0.95rem; font-weight: 600; color: ${timeRemaining === 'Expired' ? '#ef4444' : timeRemaining ? '#f59e0b' : 'var(--text-muted)'};">${timeRemaining || 'No limit'}</div>
+                        </div>
+                        
+                        <!-- Slippage -->
+                        <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Slippage</div>
+                            <div style="font-size: 0.95rem; font-weight: 600; color: ${order.slippage_protection_enabled ? '#f59e0b' : 'var(--text-muted)'};">
+                                ${order.slippage_protection_enabled ? (order.slippage_max_pct ? order.slippage_max_pct + '%' : 'On') : 'Off'}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Adjust Offset Row (only for active orders) -->
+                    ${isActive ? `
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: linear-gradient(90deg, rgba(34,197,94,0.08), rgba(59,130,246,0.08)); border-top: 1px solid rgba(255,255,255,0.05);">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Adjust Trigger Offset</span>
+                            <div style="display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.3); padding: 4px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+                                <button onclick="adjustOffset(${order.id}, -1)" style="width: 32px; height: 32px; background: linear-gradient(135deg, #dc2626, #b91c1c); border: none; color: white; border-radius: 6px; font-size: 18px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(220,38,38,0.4);">−</button>
+                                <button onclick="adjustOffset(${order.id}, -0.1)" style="width: 32px; height: 32px; background: linear-gradient(135deg, #f97316, #ea580c); border: none; color: white; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(249,115,22,0.4);">−.1</button>
+                                <div style="display: flex; align-items: center; background: rgba(0,0,0,0.5); border-radius: 6px; padding: 0 8px; border: 1px solid rgba(255,255,255,0.15); margin: 0 4px;">
+                                    <input type="number" id="offset-${order.id}" step="0.1" value="${currentOffset.toFixed(1)}" 
+                                        style="width: 50px; text-align: center; background: transparent; border: none; color: var(--text-primary); padding: 6px 0; font-size: 1rem; font-weight: 700;"
+                                        onchange="updateOffsetDisplay(${order.id}, this.value)">
+                                    <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 500;">%</span>
+                                </div>
+                                <button onclick="adjustOffset(${order.id}, 0.1)" style="width: 32px; height: 32px; background: linear-gradient(135deg, #22c55e, #16a34a); border: none; color: white; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(34,197,94,0.4);">+.1</button>
+                                <button onclick="adjustOffset(${order.id}, 1)" style="width: 32px; height: 32px; background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; border-radius: 6px; font-size: 18px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(16,185,129,0.4);">+</button>
+                            </div>
+                            <button onclick="applyOffset(${order.id})" style="background: linear-gradient(135deg, var(--accent-teal), var(--accent-blue)); border: none; color: white; padding: 8px 20px; font-size: 0.8rem; font-weight: 600; border-radius: 8px; cursor: pointer; box-shadow: 0 2px 8px rgba(20,184,166,0.4); margin-left: 8px;">
+                                Apply
+                            </button>
+                        </div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">
+                            New trigger: <span style="color: var(--accent-teal); font-weight: 600;">$<span id="preview-${order.id}">${adjustedPrice.toFixed(2)}</span></span>
+                        </div>
+                    </div>
+                    ` : ''}
                 </div>
             `;
         }
@@ -1903,6 +1922,30 @@ function adjustOffset(orderId, delta) {
     // Clamp to reasonable range (-20% to +20%)
     newValue = Math.max(-20, Math.min(20, newValue));
     input.value = newValue.toFixed(1);
+    
+    // Update preview if exists
+    updateOffsetPreview(orderId, newValue);
+}
+
+function updateOffsetPreview(orderId, offsetPct) {
+    const preview = document.getElementById(`preview-${orderId}`);
+    if (!preview) return;
+    
+    // Get original trigger price from data attribute or recalculate
+    const card = preview.closest('.conditional-order-card');
+    if (!card) return;
+    
+    // Find trigger cell and extract price
+    const triggerCell = card.querySelector('[style*="Trigger"]');
+    if (!triggerCell) return;
+    
+    const triggerText = triggerCell.textContent;
+    const priceMatch = triggerText.match(/\$?([\d.]+)/);
+    if (!priceMatch) return;
+    
+    const basePrice = parseFloat(priceMatch[1]);
+    const newPrice = basePrice * (1 + offsetPct / 100);
+    preview.textContent = newPrice.toFixed(2);
 }
 
 async function applyOffset(orderId) {
