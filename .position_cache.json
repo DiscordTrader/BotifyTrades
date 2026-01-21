@@ -5898,7 +5898,7 @@
     "max_pnl_seen": 0.13117514970060556,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 53.43
+    "last_evaluated_price": 53.15
   },
   "Alpaca_LVLU_stock": {
     "entry_price": 11.85,
@@ -7900,7 +7900,7 @@
     "highest_price": 0.65,
     "trailing_activated": false,
     "closing": true,
-    "closing_cycles": 1,
+    "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "ALPACA_PAPER",
@@ -7920,7 +7920,7 @@
     "entry_price": 0.45,
     "highest_price": 0.98,
     "trailing_activated": false,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -7935,6 +7935,6 @@
     "max_pnl_seen": 10.52631578947368,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.39
+    "last_evaluated_price": 0.38
   }
 }

@@ -3585,25 +3585,51 @@ def get_open_lots(channel_id: int, asset_type: str, symbol: str, strike: float =
     conn = get_connection()
     cursor = conn.cursor()
     
+    # Generate expiry variants to handle format mismatches (1/21 vs 01/21 vs 2026-01-21)
+    expiry_variants = [expiry] if expiry else []
+    if expiry:
+        if '/' in expiry:
+            parts = expiry.split('/')
+            if len(parts) == 2:
+                month = int(parts[0])
+                day = int(parts[1])
+                expiry_variants.append(f"{month}/{day}")  # 1/21
+                expiry_variants.append(f"{parts[0].zfill(2)}/{parts[1].zfill(2)}")  # 01/21
+        elif '-' in expiry and len(expiry) == 10:
+            parts = expiry.split('-')
+            month = int(parts[1])
+            day = int(parts[2])
+            expiry_variants.append(f"{month}/{day}")  # 1/21
+            expiry_variants.append(f"{parts[1]}/{parts[2]}")  # 01/21
+    # Remove duplicates
+    expiry_variants = list(set(expiry_variants))
+    
     if asset_type == 'option':
+        # Build expiry IN clause for variant matching
+        expiry_placeholders = ','.join(['?' for _ in expiry_variants])
+        
         if check_executed_symbol:
-            cursor.execute('''
+            query = f'''
                 SELECT * FROM signal_lots
                 WHERE channel_id = ? AND asset_type = ?
                 AND (symbol = ? OR executed_symbol = ?)
                 AND (strike = ? OR executed_strike = ?)
-                AND expiry = ? AND call_put = ?
+                AND expiry IN ({expiry_placeholders}) AND call_put = ?
                 AND status IN ('OPEN', 'PARTIAL')
                 ORDER BY opened_at ASC
-            ''', (channel_id, asset_type, symbol, symbol, strike, strike, expiry, call_put))
+            '''
+            params = [channel_id, asset_type, symbol, symbol, strike, strike] + expiry_variants + [call_put]
+            cursor.execute(query, params)
         else:
-            cursor.execute('''
+            query = f'''
                 SELECT * FROM signal_lots
                 WHERE channel_id = ? AND asset_type = ? AND symbol = ?
-                AND strike = ? AND expiry = ? AND call_put = ?
+                AND strike = ? AND expiry IN ({expiry_placeholders}) AND call_put = ?
                 AND status IN ('OPEN', 'PARTIAL')
                 ORDER BY opened_at ASC
-            ''', (channel_id, asset_type, symbol, strike, expiry, call_put))
+            '''
+            params = [channel_id, asset_type, symbol, strike] + expiry_variants + [call_put]
+            cursor.execute(query, params)
     else:
         if check_executed_symbol:
             cursor.execute('''
