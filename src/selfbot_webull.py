@@ -8119,8 +8119,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     forward_msg = f"STC {symbol}"
                                 print(f"[CHANNEL MAP] ✓ Formatted Bishop: {forward_msg}")
                             else:
-                                forward_msg = combined_content.strip()
-                                print(f"[CHANNEL MAP] ⚠️ Bishop parse failed, forwarding raw")
+                                # Bishop detection matched but parsing failed - likely a Bishop's Ideas msg, NOT an entry
+                                # SKIP forwarding to prevent "@everyone" only messages from being forwarded
+                                print(f"[CHANNEL MAP] ⚠️ Bishop parse failed - NOT forwarding (likely Bishop's Ideas, not a trade signal)")
+                                should_forward = False
                         elif is_evapanda:
                             print(f"[DEBUG] Taking EVAPANDA path", flush=True)
                             panda_parsed = parse_evapanda_signal(combined_content)
