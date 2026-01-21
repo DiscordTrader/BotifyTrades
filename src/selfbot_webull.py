@@ -7978,11 +7978,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     format_as_bto_stc = mapping_config.get('format_as_bto_stc', True)
                     print(f"[DUAL-ACTION] Config: channel_execute={execute_enabled}, mapping_execute={mapping_execute}, combined={should_execute}, forward={should_forward}, bto_stc={format_as_bto_stc}")
                 
-                # DEDUPE: If this is a forwarded message, skip execution to prevent double trades
-                # Tracking (PNL) still happens, but broker execution is blocked
-                if is_forwarded_message and should_execute:
-                    print(f"[DEDUPE] ⚠️ BLOCKING execution for forwarded message (source: {forward_source_channel}) - will still track for PNL")
-                    should_execute = False
+                # DEDUPE: If this is a forwarded message, skip both execution AND re-forwarding to prevent loops
+                # Tracking (PNL) still happens, but broker execution and forwarding are blocked
+                if is_forwarded_message:
+                    if should_execute:
+                        print(f"[DEDUPE] ⚠️ BLOCKING execution for forwarded message (source: {forward_source_channel}) - will still track for PNL")
+                        should_execute = False
+                    if should_forward:
+                        print(f"[DEDUPE] ⚠️ BLOCKING re-forward for forwarded message (source: {forward_source_channel}) - prevents infinite loops")
+                        should_forward = False
                 
                 # Check for Bullwinkle format (needs emoji stripping)
                 from src.signals.parser import (
