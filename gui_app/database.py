@@ -869,11 +869,23 @@ def init_db():
             status TEXT DEFAULT 'OPEN' CHECK(status IN ('OPEN', 'CLOSED', 'PARTIAL')),
             source TEXT NOT NULL CHECK(source IN ('SIGNAL', 'TRADE')),
             author_name TEXT,
+            executed_symbol TEXT,
+            executed_strike REAL,
             FOREIGN KEY (channel_id) REFERENCES channels(id),
             FOREIGN KEY (signal_id) REFERENCES signals(id),
             FOREIGN KEY (trade_id) REFERENCES trades(id)
         )
     ''')
+    
+    # Add executed_symbol and executed_strike columns if they don't exist (for NDX→QQQ conversion)
+    try:
+        cursor.execute("SELECT executed_symbol FROM signal_lots LIMIT 1")
+    except:
+        try:
+            cursor.execute("ALTER TABLE signal_lots ADD COLUMN executed_symbol TEXT")
+            cursor.execute("ALTER TABLE signal_lots ADD COLUMN executed_strike REAL")
+        except:
+            pass
     
     # Lot closures (STC matching records with PNL)
     cursor.execute('''
