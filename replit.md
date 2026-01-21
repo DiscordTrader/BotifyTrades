@@ -57,6 +57,8 @@ The Forwarding-Only Signal Routing Engine (`src/services/signal_routing_engine.p
 - **Market Hours Utility** (`src/services/market_hours.py`): Pauses risk monitoring during weekends, holidays, and outside market hours
 - **Exit Strategy Mode Enforcement**: Signal mode = trader signals only, Risk mode = automated exits only, Hybrid mode = both active with ExitArbiter coordination
 - **Webhook Retry Queue**: Failed STC webhooks queued with exponential backoff and deduplication
+- **Dynamic SL Escalation**: After PT hits, stop loss moves up (PT1→breakeven, PT2→+5%, etc.) with Conservative/Standard/Aggressive profiles
+- **Max Profit Giveback Guard**: Exits position if profit drops X% from peak (default 30%), activated after PT1 threshold or PT2 hit
 
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials, with `config.ini` as a fallback. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ. The License Validation System provides industry-standard license activation. The Discord bot runs in a dedicated thread. Broker credentials and all bot settings are GUI-manageable and stored in SQLite. Security features include admin password management, rate limiting on login attempts, session-based authentication, and local password recovery.
