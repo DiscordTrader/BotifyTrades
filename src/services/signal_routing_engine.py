@@ -402,6 +402,16 @@ class SignalRoutingEngine:
         if pnl_pct <= -config.stop_loss_pct:
             return ExitReason.STOP_LOSS, pnl_pct
         
+        if config.dynamic_sl_escalation_enabled and position.dynamic_sl_price is not None:
+            if current_price <= position.dynamic_sl_price:
+                return ExitReason.STOP_LOSS, pnl_pct
+        
+        if config.max_profit_giveback_enabled and position.giveback_guard_active:
+            if position.max_pnl_seen > 0:
+                giveback_threshold = position.max_pnl_seen * (1 - config.max_profit_giveback_pct / 100)
+                if pnl_pct <= giveback_threshold:
+                    return ExitReason.GIVEBACK_GUARD, pnl_pct
+        
         if position.trailing_stop_active and config.trailing_stop_pct > 0:
             max_pnl = position.max_pnl_seen
             trailing_threshold = max_pnl - config.trailing_stop_pct
@@ -420,20 +430,82 @@ class SignalRoutingEngine:
                 return exit_reason, pnl_pct
         
         if position.id is not None:
-            if pnl_pct >= config.trailing_activation_pct and not position.trailing_stop_active:
-                self.ledger.update_trailing_state(
-                    position.id,
-                    trailing_active=True,
-                    max_pnl_seen=pnl_pct
-                )
-            elif position.trailing_stop_active and pnl_pct > position.max_pnl_seen:
-                self.ledger.update_trailing_state(
-                    position.id,
-                    trailing_active=True,
-                    max_pnl_seen=pnl_pct
-                )
+            self._update_enhanced_risk_state(position, config, pnl_pct, pt_levels_hit, cost_basis)
         
         return None, pnl_pct
+    
+    def _calculate_dynamic_sl_price(
+        self,
+        entry_price: float,
+        pt_levels_hit: set,
+        profile: str = 'standard'
+    ) -> Optional[float]:
+        """
+        Calculate dynamic stop loss price based on PT hits.
+        Returns new SL price or None if no escalation.
+        """
+        profile_config = DYNAMIC_SL_PROFILES.get(profile, DYNAMIC_SL_PROFILES['standard'])
+        
+        highest_tier_hit = 0
+        for tier in [4, 3, 2, 1]:
+            if f"pt{tier}" in pt_levels_hit:
+                highest_tier_hit = tier
+                break
+        
+        if highest_tier_hit == 0:
+            return None
+        
+        sl_pct = profile_config.get(f'pt{highest_tier_hit}_sl_pct', 0)
+        return entry_price * (1 + sl_pct / 100)
+    
+    def _update_enhanced_risk_state(
+        self,
+        position: LedgerPosition,
+        config: RoutingMappingConfig,
+        pnl_pct: float,
+        pt_levels_hit: set,
+        cost_basis: float
+    ):
+        """
+        Update Enhanced Risk Management V2.0 state:
+        - Dynamic SL Escalation (move SL after PT hits)
+        - Max Profit Giveback Guard (activate and track)
+        - Trailing Stop State
+        """
+        if config.dynamic_sl_escalation_enabled and len(pt_levels_hit) > 0:
+            new_dynamic_sl = self._calculate_dynamic_sl_price(
+                cost_basis,
+                pt_levels_hit,
+                config.sl_escalation_profile
+            )
+            
+            if new_dynamic_sl is not None:
+                if position.dynamic_sl_price is None or new_dynamic_sl > position.dynamic_sl_price:
+                    self.ledger.update_dynamic_sl(position.id, new_dynamic_sl)
+                    print(f"[ROUTING_ENGINE] 📈 Dynamic SL escalated to ${new_dynamic_sl:.2f} after PT hit")
+        
+        if config.max_profit_giveback_enabled:
+            pt2_activated = "pt2" in pt_levels_hit
+            activation_threshold = config.pt1_pct
+            
+            if not position.giveback_guard_active and (pt2_activated or pnl_pct >= activation_threshold):
+                self.ledger.update_giveback_guard(position.id, True, pnl_pct)
+                print(f"[ROUTING_ENGINE] 🛡️ Giveback guard activated at {pnl_pct:.1f}%")
+            elif position.giveback_guard_active and pnl_pct > position.max_pnl_seen:
+                self.ledger.update_giveback_guard(position.id, True, pnl_pct)
+        
+        if pnl_pct >= config.trailing_activation_pct and not position.trailing_stop_active:
+            self.ledger.update_trailing_state(
+                position.id,
+                trailing_active=True,
+                max_pnl_seen=pnl_pct
+            )
+        elif position.trailing_stop_active and pnl_pct > position.max_pnl_seen:
+            self.ledger.update_trailing_state(
+                position.id,
+                trailing_active=True,
+                max_pnl_seen=pnl_pct
+            )
     
     async def _handle_risk_exit(
         self,

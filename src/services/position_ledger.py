@@ -265,6 +265,8 @@ class PositionLedger:
                     pt_levels_hit TEXT DEFAULT '[]',
                     max_pnl_seen REAL DEFAULT 0,
                     trailing_stop_active INTEGER DEFAULT 0,
+                    dynamic_sl_price REAL,
+                    giveback_guard_active INTEGER DEFAULT 0,
                     UNIQUE(option_key, broker_id, account_id)
                 )
             """)
@@ -311,6 +313,8 @@ class PositionLedger:
                 ("routing_mapping_id", "ALTER TABLE position_ledger ADD COLUMN routing_mapping_id INTEGER"),
                 ("signal_entry_price", "ALTER TABLE position_ledger ADD COLUMN signal_entry_price REAL DEFAULT 0"),
                 ("initial_mark_price", "ALTER TABLE position_ledger ADD COLUMN initial_mark_price REAL DEFAULT 0"),
+                ("dynamic_sl_price", "ALTER TABLE position_ledger ADD COLUMN dynamic_sl_price REAL"),
+                ("giveback_guard_active", "ALTER TABLE position_ledger ADD COLUMN giveback_guard_active INTEGER DEFAULT 0"),
             ]
             
             for col_name, sql in migrations:
@@ -464,7 +468,9 @@ class PositionLedger:
             routing_mapping_id=routing_id,
             pt_levels_hit=row['pt_levels_hit'] or "[]",
             max_pnl_seen=row['max_pnl_seen'] or 0.0,
-            trailing_stop_active=bool(row['trailing_stop_active'])
+            trailing_stop_active=bool(row['trailing_stop_active']),
+            dynamic_sl_price=row['dynamic_sl_price'] if 'dynamic_sl_price' in row.keys() else None,
+            giveback_guard_active=bool(row['giveback_guard_active']) if 'giveback_guard_active' in row.keys() else False
         )
         
         exit_rows = conn.execute(
@@ -560,6 +566,32 @@ class PositionLedger:
                     max_pnl_seen = ?
                 WHERE id = ?
             """, (1 if trailing_active else 0, max_pnl_seen, position_id))
+            conn.commit()
+        finally:
+            conn.close()
+    
+    def update_dynamic_sl(self, position_id: int, dynamic_sl_price: float):
+        """Update dynamic stop loss price after PT hit."""
+        conn = self._get_conn()
+        try:
+            conn.execute("""
+                UPDATE position_ledger SET dynamic_sl_price = ?
+                WHERE id = ?
+            """, (dynamic_sl_price, position_id))
+            conn.commit()
+        finally:
+            conn.close()
+    
+    def update_giveback_guard(self, position_id: int, active: bool, max_pnl_seen: float):
+        """Update giveback guard state and max P&L seen."""
+        conn = self._get_conn()
+        try:
+            conn.execute("""
+                UPDATE position_ledger SET
+                    giveback_guard_active = ?,
+                    max_pnl_seen = MAX(max_pnl_seen, ?)
+                WHERE id = ?
+            """, (1 if active else 0, max_pnl_seen, position_id))
             conn.commit()
         finally:
             conn.close()
