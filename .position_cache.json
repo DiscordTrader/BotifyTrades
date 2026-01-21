@@ -7794,7 +7794,7 @@
     "entry_price": 0.45,
     "highest_price": 0.49,
     "trailing_activated": false,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -7809,7 +7809,7 @@
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.23
+    "last_evaluated_price": 0.24
   },
   "ALPACA_PAPER_QQQ_617.0_2026-01-21_C": {
     "entry_price": 0.03,
