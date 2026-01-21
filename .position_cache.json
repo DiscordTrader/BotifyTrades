@@ -7605,7 +7605,7 @@
     "entry_price": 0.7,
     "highest_price": 0.76,
     "trailing_activated": false,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -7620,7 +7620,7 @@
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": null
+    "last_evaluated_price": 0.23
   },
   "ALPACA_PAPER_OKLO_120.0_2026-02-20_C": {
     "entry_price": 2.75,
