@@ -440,6 +440,9 @@ class SignalRoutingEngine:
             
             # ===== POSITION STATE GATE (RISK FLOW) =====
             # Fresh check after acquiring lock to handle race with signal exits
+            if position.id is None:
+                print(f"[ROUTING_ENGINE] ⏭️ Position has no ID: {position.option_key}")
+                return False
             fresh_position = self.ledger.get_position(position.id)
             if not fresh_position:
                 print(f"[ROUTING_ENGINE] ⏭️ Position no longer exists: {position.option_key}")
@@ -683,6 +686,9 @@ class SignalRoutingEngine:
             # ===== POSITION STATE GATE =====
             # Fresh check after acquiring lock to handle race conditions
             # Risk manager may have closed position while we waited for lock
+            if position.id is None:
+                print(f"[ROUTING_ENGINE] ⏭️ Position has no ID: {position.option_key}")
+                return False
             fresh_position = self.ledger.get_position(position.id)
             if not fresh_position:
                 print(f"[ROUTING_ENGINE] ⏭️ Position no longer exists: {position.option_key}")

@@ -12,23 +12,6 @@ BotifyTrades is a cross-platform trading automation bot for Discord and Telegram
 - **Licensing**: All deployments require a valid license key (set via LICENSE_KEY environment variable or setup wizard)
 - **Authentication**: First-time users are guided through setup wizard to create admin account with email recovery
 
-## Recent Changes (January 2026)
-- **Options Conditional Orders with Quote-on-Trigger (QOT) (Jan 2026)**: Implemented industry-grade conditional order execution for options:
-  - **Universal Staleness Guards**: Base PriceMonitor class provides `get_staleness_seconds()` and `_update_price_timestamp()` methods. All monitors (Broker, Finnhub, YFinance) track price staleness with 30-second safety threshold.
-  - **Circuit Breaker Integration**: Global and per-channel trading halt checks before execution. Blocked orders return to PENDING_MONITOR state.
-  - **Quote-on-Trigger (QOT)**: Real-time option quotes fetched at trigger time from brokers with `get_option_quote()` (Robinhood, Tastytrade, Schwab, IBKR). Falls back to market order for brokers without option quote API.
-  - **Risk Engine Integration**: Execution callback applies SL/PT/trailing stops from signal or channel settings, links trades to channels for tracking.
-  - **Production Safety Flow**: Trigger → Staleness Check (30s) → Circuit Breaker Check → QOT Quote → Execute → Risk Monitor → P&L Track
-
-- **Logging Architecture Fixed**: Resolved duplicate console output where every message appeared twice. Root cause was `smart_print()` calling both `logger.info()` (with StreamHandler to stdout) AND `_original_print()` (direct stdout). Fixed by removing `_original_print()` calls from `smart_print()` - now routes ALL messages through logger with console output controlled by `CleanConsoleFormatter` whitelist in `src/logging_config.py`.
-
-- **Phoenix Channel Exit Patterns (Jan 2026)**: Added support for Phoenix channel exit signal formats in `src/signals/parser.py`:
-  - Partial exits: "selling 80% here", "selling 10% more CRVS"  
-  - Full exits: "out of POLA", "out of SEGG with remaining shares"
-  - Direct sells: "selling XTLB", "sold TSLA" (100% exit)
-  - Reserved word exclusion: "here", "more", "now", "on", "all", "half", "quarter", "third" cannot be captured as symbols to prevent false matches
-  - Price range triggers: "FRSX over 2.35-2.4" extracts first price (2.35) as trigger point
-
 ## System Architecture
 
 ### UI/UX Decisions
@@ -67,8 +50,10 @@ The Forwarding-Only Signal Routing Engine (`src/services/signal_routing_engine.p
 - **Dual Entry Prices**: `signal_entry_price` (from signal, for forwarding) and `initial_mark_price` (first live quote, for P&L calculations)
 - **Position Ledger** (`src/services/position_ledger.py`): Tracks positions with FIFO-based partial exits, realized/unrealized P&L, and PT level tracking
 - **Stale Price Gating**: Risk exits blocked when price staleness exceeds 30 seconds
-- **Shared ExitArbiter**: Prevents duplicate STCs across signal and risk-driven exits
-- **Position State Gate**: Fresh position check after acquiring ExitArbiter lock prevents stale STC forwards when risk already closed the position
+- **Shared ExitArbiter**: Prevents duplicate STCs across signal and risk-driven exits with routing_mapping_id isolation for multi-mapping scenarios
+- **Position State Gate**: Fresh position check after acquiring ExitArbiter lock prevents stale STC forwards when risk already closed the position (applied to both signal and risk flows)
+- **Ledger-First Exit Ordering**: Updates position ledger BEFORE webhook delivery to prevent duplicates on retry
+- **Race-Safe Exit Dedupe**: Unique constraint on (position_id, message_id) with IntegrityError handling prevents concurrent duplicate exits
 - **Market Hours Utility** (`src/services/market_hours.py`): Pauses risk monitoring during weekends, holidays, and outside market hours
 - **Exit Strategy Mode Enforcement**: Signal mode = trader signals only, Risk mode = automated exits only, Hybrid mode = both active with ExitArbiter coordination
 - **Webhook Retry Queue**: Failed STC webhooks queued with exponential backoff and deduplication
