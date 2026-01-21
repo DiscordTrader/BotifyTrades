@@ -9778,13 +9778,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         )
                                         if qqq_quote and qqq_quote.get('ask'):
                                             qqq_quote_price = float(qqq_quote.get('ask'))
-                                            opt['price'] = qqq_quote_price
-                                            # Also update signal['price'] so trade saves use QQQ price
-                                            signal['price'] = qqq_quote_price
-                                            signal['_original_ndx_price'] = original_price  # Keep original for reference
-                                            print(f"[NDX→QQQ] ✓ Updated price from NDX ${original_price} → QQQ ${qqq_quote_price}")
+                                            print(f"[NDX→QQQ] ✓ Got QQQ quote: ${qqq_quote_price}", flush=True)
                                 except Exception as quote_err:
-                                    print(f"[NDX→QQQ] Warning: Could not get QQQ quote: {quote_err}")
+                                    print(f"[NDX→QQQ] Warning: Could not get QQQ quote: {quote_err}", flush=True)
+                                
+                                # Always update signal price - use quote if available, otherwise estimate
+                                # QQQ options are ~1/41 of NDX price (NDX ~41x QQQ)
+                                if qqq_quote_price is None:
+                                    qqq_quote_price = round(original_price / 41.0, 2)  # Rough estimate
+                                    print(f"[NDX→QQQ] ⚠️ Using estimated QQQ price: ${qqq_quote_price} (NDX ${original_price} / 41)", flush=True)
+                                
+                                opt['price'] = qqq_quote_price
+                                signal['price'] = qqq_quote_price
+                                signal['_original_ndx_price'] = original_price
+                                print(f"[NDX→QQQ] ✓ Updated price from NDX ${original_price} → QQQ ${qqq_quote_price}", flush=True)
                                 
                                 print(f"[NDX→QQQ] ✓ Converted {original_symbol} {original_strike} → QQQ {opt.get('strike')} @ ${opt.get('price')}")
                                 
