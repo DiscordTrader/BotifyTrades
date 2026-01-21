@@ -819,18 +819,19 @@ class BrokerSyncService:
                         from gui_app.database import get_connection
                         conn = get_connection()
                         cursor = conn.cursor()
-                        # Find lots linked to this trade's channel_record_id with executed_symbol
-                        channel_record_id = trade.get('channel_record_id')
-                        if channel_record_id:
+                        # Find recent OPEN lots with executed_symbol set (NDX→QQQ conversion)
+                        # Match by channel_id and executed_symbol
+                        channel_id = trade.get('channel_id')
+                        if channel_id:
                             cursor.execute('''
-                                SELECT sl.id, sl.executed_symbol, sl.open_price
-                                FROM signal_lots sl
-                                JOIN signals s ON sl.signal_id = s.id
-                                WHERE s.channel_record_id = ?
-                                AND sl.executed_symbol IS NOT NULL
-                                AND sl.status = 'OPEN'
+                                SELECT id, executed_symbol, executed_strike, open_price
+                                FROM signal_lots
+                                WHERE channel_id = ?
+                                AND executed_symbol IS NOT NULL
+                                AND status = 'OPEN'
+                                ORDER BY id DESC
                                 LIMIT 1
-                            ''', (channel_record_id,))
+                            ''', (str(channel_id),))
                             lot_row = cursor.fetchone()
                             if lot_row and lot_row['executed_symbol']:
                                 old_price = lot_row['open_price']
