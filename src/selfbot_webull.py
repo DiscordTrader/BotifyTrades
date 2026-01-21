@@ -9742,8 +9742,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     
                     if is_ndx and action == 'BTO':
                         # BTO: Convert NDX to QQQ
+                        print(f"[DEBUG] NDX→QQQ: Entering BTO conversion block")
                         try:
+                            print(f"[DEBUG] NDX→QQQ: About to import converter")
                             from src.services.ndx_qqq_converter import convert_ndx_to_qqq
+                            print(f"[DEBUG] NDX→QQQ: Import successful")
                             
                             target_delta = channel_info.get('ndx_to_qqq_delta', 0.3) or 0.3
                             enabled_brokers = opt.get('_enabled_brokers', [])
