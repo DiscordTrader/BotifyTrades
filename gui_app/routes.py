@@ -6357,20 +6357,36 @@ def register_routes(app):
             
             # Alpaca positions are already synced to database by BrokerSyncService
             # No need to add live positions again from API - they would show as duplicates
-            # Only add Alpaca pending orders if broker filter matches
+            # Only add Alpaca pending orders if broker filter matches AND not already tracked
             if broker_filter in ['ALPACA', 'ALPACA_PAPER']:
                 import hashlib
                 if not status_filter or status_filter == 'PENDING':
+                    # Build set of already tracked order IDs and symbol+qty combinations
+                    tracked_order_ids = {str(trade.get('order_id')) for trade in merged if trade.get('order_id')}
+                    tracked_pending_symbols = {(trade.get('symbol'), trade.get('quantity')) 
+                                               for trade in merged 
+                                               if trade.get('status') == 'PENDING'}
+                    
                     for order in alpaca_orders:
                         order_id = str(order.get('order_id', ''))
+                        symbol = order['symbol']
+                        qty = int(float(order.get('quantity', 0)))
+                        symbol_qty_key = (symbol, qty)
+                        
+                        # Skip if already tracked by order_id OR by symbol+quantity
+                        if order_id in tracked_order_ids:
+                            continue
+                        if symbol_qty_key in tracked_pending_symbols:
+                            continue
+                        
                         stable_id = 'alpaca_order_' + hashlib.md5(order_id.encode()).hexdigest()[:12]
                         
                         merged.append({
                             'id': stable_id,
-                            'symbol': order['symbol'],
+                            'symbol': symbol,
                             'asset_type': 'stock',
                             'side': order.get('action', 'BUY'),
-                            'quantity': int(float(order.get('quantity', 0))),
+                            'quantity': qty,
                             'entry_price': float(order.get('price', 0)),
                             'current_price': float(order.get('price', 0)),
                             'pnl': 0,
