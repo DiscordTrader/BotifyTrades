@@ -7519,10 +7519,10 @@
   },
   "Webull_MRK_110.0_02/20_C": {
     "entry_price": 3.6,
-    "highest_price": 4.275,
+    "highest_price": 4.575,
     "trailing_activated": false,
-    "closing": false,
-    "closing_cycles": 0,
+    "closing": true,
+    "closing_cycles": 1,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "Webull",
@@ -7531,21 +7531,12 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {
-      "4AGAC7BS12212I03VPNMRNJ6IA": {
-        "order_id": "4AGAC7BS12212I03VPNMRNJ6IA",
-        "tier": 1,
-        "qty_expected": 1,
-        "qty_filled": 0,
-        "status": "pending",
-        "created_at": "2026-01-21T14:40:31.835687"
-      }
-    },
+    "pending_orders": {},
     "created_at": "2026-01-21T14:30:08.630660",
-    "max_pnl_seen": 18.750000000000007,
+    "max_pnl_seen": 25.694444444444454,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 4.25
+    "last_evaluated_price": 4.525
   },
   "ALPACA_PAPER_SLGB_stock": {
     "entry_price": 3.82,
@@ -7591,7 +7582,7 @@
   },
   "ALPACA_PAPER_QQQ_613.0_2026-01-21_C": {
     "entry_price": 0.79,
-    "highest_price": 0.8,
+    "highest_price": 0.81,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -7605,14 +7596,14 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-21T14:38:55.300195",
-    "max_pnl_seen": 1.2658227848101276,
+    "max_pnl_seen": 2.531645569620255,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
     "last_evaluated_price": 0.77
   },
   "ALPACA_PAPER_PDD_110.0_2026-01-23_C": {
     "entry_price": 0.7,
-    "highest_price": 0.67,
+    "highest_price": 0.75,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
