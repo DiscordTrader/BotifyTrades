@@ -9766,7 +9766,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             sys.stdout.flush()
                             sys.stderr.flush()
                             print(f"[DEBUG] NDX→QQQ: LINE A - RIGHT AFTER flush", flush=True)
-                            print(f"[NDX→QQQ] Converting NDX BTO to QQQ with delta={target_delta}", flush=True)
+                            print(f"[DEBUG] NDX→QQQ: Converting BTO delta={target_delta}", flush=True)
                             print(f"[DEBUG] NDX→QQQ: LINE B - AFTER Converting message", flush=True)
                             
                             converted = await convert_ndx_to_qqq(
