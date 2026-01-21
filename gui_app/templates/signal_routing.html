@@ -780,6 +780,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (btn.dataset.tab === 'positions') {
                 loadPositions();
             }
+            if (btn.dataset.tab === 'pnl') {
+                loadPnlSummary();
+            }
         });
     });
 
@@ -962,6 +965,89 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) {
             console.error('[loadPositions] Exception:', err);
             grid.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Failed to load positions</p></div>`;
+        }
+    }
+
+    async function loadPnlSummary() {
+        const container = document.getElementById('pnl-summary');
+        try {
+            console.log('[loadPnlSummary] Fetching P&L data...');
+            const resp = await fetch('/api/admin/signal-routing/pnl');
+            
+            if (!resp.ok) {
+                container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error loading P&L (${resp.status})</p></div>`;
+                return;
+            }
+            
+            const result = await resp.json();
+            console.log('[loadPnlSummary] Result:', result);
+            
+            if (!result.success) {
+                container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>${result.error || 'Unknown error'}</p></div>`;
+                return;
+            }
+            
+            const s = result.summary;
+            const trades = result.trades || [];
+            
+            if (trades.length === 0) {
+                container.innerHTML = `<div class="empty-state"><i class="fas fa-chart-pie"></i><p>No closed trades yet. P&L data will appear after positions are closed.</p></div>`;
+                return;
+            }
+            
+            let html = `
+                <div class="pnl-stats">
+                    <div class="stat-card">
+                        <div class="stat-label">Total P&L</div>
+                        <div class="stat-value ${s.total_realized >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                            ${s.total_realized >= 0 ? '+' : ''}$${s.total_realized.toFixed(2)}
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Win Rate</div>
+                        <div class="stat-value">${s.win_rate.toFixed(1)}%</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Total Trades</div>
+                        <div class="stat-value">${s.total_trades}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">W/L</div>
+                        <div class="stat-value">${s.winning_trades}/${s.losing_trades}</div>
+                    </div>
+                </div>
+                <div class="trades-list">
+                    <h4>Recent Closed Trades</h4>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Entry</th>
+                                <th>Exit</th>
+                                <th>Qty</th>
+                                <th>P&L</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${trades.map(t => `
+                                <tr>
+                                    <td>${t.symbol} ${t.strike}${t.option_type} ${t.expiry}</td>
+                                    <td>$${(t.entry_price || 0).toFixed(2)}</td>
+                                    <td>$${(t.exit_price || 0).toFixed(2)}</td>
+                                    <td>${t.entry_qty}</td>
+                                    <td class="${(t.realized_pnl || 0) >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                                        ${(t.realized_pnl || 0) >= 0 ? '+' : ''}$${(t.realized_pnl || 0).toFixed(2)}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            container.innerHTML = html;
+        } catch (err) {
+            console.error('[loadPnlSummary] Exception:', err);
+            container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Failed to load P&L data</p></div>`;
         }
     }
 

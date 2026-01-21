@@ -2111,6 +2111,60 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/admin/signal-routing/pnl', methods=['GET'])
+    @login_required
+    @admin_feature_required
+    def api_get_routing_pnl_summary():
+        """Get P&L summary for closed signal routing positions (admin only)"""
+        try:
+            from src.services.position_ledger import get_position_ledger
+            ledger = get_position_ledger()
+            closed_positions = ledger.get_closed_positions()
+            
+            pnl_data = []
+            total_realized = 0.0
+            total_trades = 0
+            winning_trades = 0
+            
+            for pos in closed_positions:
+                realized_pnl = pos.realized_pnl or 0
+                total_realized += realized_pnl
+                total_trades += 1
+                if realized_pnl > 0:
+                    winning_trades += 1
+                
+                pnl_data.append({
+                    'id': pos.id,
+                    'symbol': pos.symbol,
+                    'expiry': pos.expiry,
+                    'strike': pos.strike,
+                    'option_type': pos.option_type,
+                    'entry_qty': pos.entry_qty,
+                    'entry_price': pos.entry_price,
+                    'realized_pnl': realized_pnl,
+                    'entry_time': pos.entry_time,
+                    'exit_time': pos.partial_exits[-1].exit_time if pos.partial_exits else None,
+                    'exit_price': pos.partial_exits[-1].exit_price if pos.partial_exits else 0
+                })
+            
+            win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
+            
+            return jsonify({
+                'success': True, 
+                'trades': pnl_data,
+                'summary': {
+                    'total_realized': total_realized,
+                    'total_trades': total_trades,
+                    'winning_trades': winning_trades,
+                    'losing_trades': total_trades - winning_trades,
+                    'win_rate': win_rate
+                }
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/api/admin/signal-routing/risk/<channel_id>', methods=['GET'])
     @login_required
     @admin_feature_required

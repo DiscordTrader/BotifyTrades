@@ -432,6 +432,16 @@ class PositionLedger:
         finally:
             conn.close()
     
+    def get_closed_positions(self, limit: int = 100) -> List[LedgerPosition]:
+        """Get closed positions for P&L summary."""
+        conn = self._get_conn()
+        try:
+            query = "SELECT * FROM position_ledger WHERE status = 'closed' ORDER BY id DESC LIMIT ?"
+            rows = conn.execute(query, (limit,)).fetchall()
+            return [self._row_to_position(row, conn) for row in rows]
+        finally:
+            conn.close()
+    
     def _row_to_position(self, row: sqlite3.Row, conn: sqlite3.Connection) -> LedgerPosition:
         """Convert database row to LedgerPosition."""
         signal_entry = row['signal_entry_price'] if 'signal_entry_price' in row.keys() else 0.0
