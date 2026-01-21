@@ -5898,7 +5898,7 @@
     "max_pnl_seen": 0.13117514970060556,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 53.15
+    "last_evaluated_price": 53.12
   },
   "Alpaca_LVLU_stock": {
     "entry_price": 11.85,
@@ -7140,7 +7140,7 @@
     "last_evaluated_price": null
   },
   "ALPACA_PAPER_QQQ_619.0_2026-01-21_C": {
-    "entry_price": 1.12,
+    "entry_price": 0.36,
     "highest_price": 1.51,
     "trailing_activated": false,
     "closing": true,
@@ -7158,7 +7158,7 @@
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.77
+    "last_evaluated_price": 0.31
   },
   "ALPACA_PAPER_CRVS_stock": {
     "entry_price": 15.932174,
@@ -7900,7 +7900,7 @@
     "highest_price": 0.65,
     "trailing_activated": false,
     "closing": true,
-    "closing_cycles": 0,
+    "closing_cycles": 1,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "ALPACA_PAPER",
