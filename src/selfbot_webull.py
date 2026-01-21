@@ -9786,11 +9786,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             
                             if converted_pos:
                                 print(f"[NDX→QQQ] Found converted position: {converted_pos.get('symbol')} {converted_pos.get('strike')}{converted_pos.get('call_put')}")
+                                # Preserve original NDX strike before overwriting
+                                ndx_original_strike = opt.get('strike')
                                 # Update STC signal to target the QQQ position
                                 opt['symbol'] = converted_pos.get('symbol')
                                 opt['strike'] = converted_pos.get('strike')
                                 opt['original_symbol'] = symbol_raw
-                                opt['original_strike'] = opt.get('strike')
+                                opt['original_strike'] = ndx_original_strike  # NDX strike, not QQQ
                                 opt['_ndx_stc_mapped'] = True
                                 print(f"[NDX→QQQ] ✓ Mapped NDX STC → QQQ {opt['symbol']} {opt['strike']}")
                             else:
