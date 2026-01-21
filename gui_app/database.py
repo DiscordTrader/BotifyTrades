@@ -3529,23 +3529,33 @@ def create_signal_lot(channel_id: int, signal_id: int, asset_type: str, symbol: 
     return cursor.lastrowid
 
 
-def update_lot_executed_symbol(lot_id: int, executed_symbol: str, executed_strike: float = None):
+def update_lot_executed_symbol(lot_id: int, executed_symbol: str, executed_strike: float = None, executed_price: float = None):
     """Update a lot with the actual executed symbol (used for NDX→QQQ conversion tracking).
     
     When a signal is for NDX but execution happens with QQQ, this updates the lot
     so that STC signals for QQQ can find and close the lot.
+    
+    If executed_price is provided, also updates open_price to reflect actual QQQ price.
     """
     conn = get_connection()
     cursor = conn.cursor()
     
-    cursor.execute('''
-        UPDATE signal_lots 
-        SET executed_symbol = ?, executed_strike = ?
-        WHERE id = ?
-    ''', (executed_symbol, executed_strike, lot_id))
+    if executed_price is not None:
+        cursor.execute('''
+            UPDATE signal_lots 
+            SET executed_symbol = ?, executed_strike = ?, open_price = ?
+            WHERE id = ?
+        ''', (executed_symbol, executed_strike, executed_price, lot_id))
+        print(f"[DATABASE] ✓ Updated lot {lot_id} with executed_symbol={executed_symbol}, executed_strike={executed_strike}, open_price={executed_price}")
+    else:
+        cursor.execute('''
+            UPDATE signal_lots 
+            SET executed_symbol = ?, executed_strike = ?
+            WHERE id = ?
+        ''', (executed_symbol, executed_strike, lot_id))
+        print(f"[DATABASE] ✓ Updated lot {lot_id} with executed_symbol={executed_symbol}, executed_strike={executed_strike}")
     
     conn.commit()
-    print(f"[DATABASE] ✓ Updated lot {lot_id} with executed_symbol={executed_symbol}, executed_strike={executed_strike}")
     return cursor.rowcount > 0
 
 

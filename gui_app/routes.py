@@ -9139,6 +9139,8 @@ def register_routes(app):
                 SELECT 
                     sl.id as lot_id,
                     sl.symbol,
+                    sl.executed_symbol,
+                    sl.executed_strike,
                     sl.asset_type,
                     sl.strike,
                     sl.expiry,
@@ -9209,17 +9211,20 @@ def register_routes(app):
                 lot_id = row['lot_id']
                 
                 if lot_id not in positions:
-                    # Create position entry
+                    # Create position entry - use executed_symbol if available (for NDX→QQQ conversions)
+                    display_symbol = row['executed_symbol'] or row['symbol']
+                    display_strike = row['executed_strike'] or row['strike']
                     option_desc = ''
                     if row['asset_type'] == 'option':
-                        option_desc = f" {row['strike']}{row['call_put']} {row['expiry']}"
+                        option_desc = f" {display_strike}{row['call_put']} {row['expiry']}"
                     
                     positions[lot_id] = {
                         'lot_id': lot_id,
-                        'symbol': row['symbol'],
+                        'symbol': display_symbol,
+                        'original_symbol': row['symbol'] if row['executed_symbol'] else None,
                         'asset_type': row['asset_type'],
-                        'description': f"{row['symbol']}{option_desc}",
-                        'strike': row['strike'],
+                        'description': f"{display_symbol}{option_desc}",
+                        'strike': display_strike,
                         'expiry': row['expiry'],
                         'call_put': row['call_put'],
                         'bto_qty': row['original_qty'],
