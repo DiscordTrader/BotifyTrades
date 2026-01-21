@@ -7771,9 +7771,9 @@
   },
   "ALPACA_PAPER_QQQ_612.0_2026-01-21_C": {
     "entry_price": 0.36,
-    "highest_price": 0.59,
-    "trailing_activated": false,
-    "closing": false,
+    "highest_price": 0.89,
+    "trailing_activated": true,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -7783,12 +7783,21 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {},
+    "pending_orders": {
+      "4b1d42fb-6e32-4708-a63c-d9c2ed7e5c4e": {
+        "order_id": "4b1d42fb-6e32-4708-a63c-d9c2ed7e5c4e",
+        "tier": 1,
+        "qty_expected": 1,
+        "qty_filled": 0,
+        "status": "pending",
+        "created_at": "2026-01-21T18:54:28.715639"
+      }
+    },
     "created_at": "2026-01-21T18:22:10.297826",
-    "max_pnl_seen": 0.0,
+    "max_pnl_seen": 122.22222222222223,
     "dynamic_sl_price": null,
-    "giveback_guard_active": false,
-    "last_evaluated_price": null
+    "giveback_guard_active": true,
+    "last_evaluated_price": 0.65
   },
   "ALPACA_PAPER_QQQ_607.0_2026-01-21_P": {
     "entry_price": 0.45,
@@ -7815,7 +7824,7 @@
     "entry_price": 0.03,
     "highest_price": 0.02,
     "trailing_activated": false,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -7834,9 +7843,9 @@
   },
   "ALPACA_PAPER_QQQ_608.0_2026-01-21_C": {
     "entry_price": 2.78,
-    "highest_price": 3.19,
+    "highest_price": 3.91,
     "trailing_activated": false,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -7846,7 +7855,16 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {},
+    "pending_orders": {
+      "8d193576-83ea-4ac9-9687-d61b2a2c375d": {
+        "order_id": "8d193576-83ea-4ac9-9687-d61b2a2c375d",
+        "tier": 1,
+        "qty_expected": 2,
+        "qty_filled": 0,
+        "status": "pending",
+        "created_at": "2026-01-21T18:54:26.264597"
+      }
+    },
     "created_at": "2026-01-21T18:30:16.252191",
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,

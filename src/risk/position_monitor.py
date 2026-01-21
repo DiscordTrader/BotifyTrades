@@ -282,14 +282,18 @@ class RiskDBAdapter:
             
             if asset_type == 'option':
                 # Normalize expiry to multiple formats for matching
-                # Database may have: "12/17", "2025-12-17", "12/17/25", etc.
+                # Database may have: "12/17", "1/21", "2025-12-17", "12/17/25", etc.
                 expiry_variants = [expiry] if expiry else []
                 if expiry:
-                    # If format is YYYY-MM-DD, also try MM/DD
+                    # If format is YYYY-MM-DD, also try MM/DD (with and without leading zeros)
                     if '-' in expiry and len(expiry) == 10:
                         parts = expiry.split('-')
-                        expiry_variants.append(f"{parts[1]}/{parts[2]}")  # 12/17
-                        expiry_variants.append(f"{parts[1]}/{parts[2]}/{parts[0][2:]}")  # 12/17/25
+                        month = parts[1]
+                        day = parts[2]
+                        expiry_variants.append(f"{month}/{day}")  # 01/21 (with zeros)
+                        expiry_variants.append(f"{int(month)}/{int(day)}")  # 1/21 (without zeros)
+                        expiry_variants.append(f"{month}/{day}/{parts[0][2:]}")  # 01/21/26
+                        expiry_variants.append(f"{int(month)}/{int(day)}/{parts[0][2:]}")  # 1/21/26
                     # If format is MM/DD, also try YYYY-MM-DD
                     elif '/' in expiry and len(expiry) <= 5:
                         parts = expiry.split('/')
