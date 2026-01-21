@@ -149,6 +149,7 @@ from src.services.broker_sync_service import BrokerSyncService
 # Import Signal Routing Engine for forwarding-only architecture
 try:
     from src.services.signal_routing_engine import get_signal_routing_engine, ExitStrategyMode
+    from src.services.position_ledger import get_position_ledger, LedgerPosition
     SIGNAL_ROUTING_ENGINE_AVAILABLE = True
 except ImportError as e:
     print(f"[WARNING] Could not import SignalRoutingEngine: {e}")
@@ -5204,6 +5205,41 @@ class SelfClient(discord.Client):
             
             self.db.add_trade(trade_data)
             print(f"[DATABASE] ✓ Trade saved: {signal['symbol']} {signal['action']} qty={signal['qty']} order_id={trade_data.get('order_id')}")
+            
+            # Also create position in position_ledger for Signal Routing tracking
+            # This enables forwarded BTO signals to appear in Signal Routing Live Positions
+            if signal['action'] == 'BTO' and routing_mapping_id and SIGNAL_ROUTING_ENGINE_AVAILABLE:
+                try:
+                    ledger = get_position_ledger()
+                    opt_type = signal.get('opt_type') or signal.get('call_put') or 'C'
+                    expiry = signal.get('expiry', '')
+                    strike = signal.get('strike', 0)
+                    option_key = f"{signal['symbol']}_{expiry}_{strike}_{opt_type}"
+                    
+                    position = LedgerPosition(
+                        option_key=option_key,
+                        symbol=signal['symbol'],
+                        expiry=expiry,
+                        strike=float(strike) if strike else 0.0,
+                        option_type=opt_type,
+                        channel_id=str(channel_id),
+                        broker_id=broker,
+                        account_id="",
+                        entry_qty=signal['qty'],
+                        remaining_qty=signal['qty'],
+                        entry_price=signal.get('price', 0) or 0,
+                        signal_entry_price=signal.get('price', 0) or 0,
+                        initial_mark_price=signal.get('price', 0) or 0,
+                        current_price=signal.get('price', 0) or 0,
+                        status='OPEN',
+                        entry_message_id=signal.get('message_id', ''),
+                        source_type='discord',
+                        routing_mapping_id=routing_mapping_id
+                    )
+                    position_id = ledger.create_position(position)
+                    print(f"[POSITION_LEDGER] ✓ Position created: {option_key} (ID: {position_id}, mapping: {routing_mapping_id})")
+                except Exception as ledger_err:
+                    print(f"[POSITION_LEDGER] Warning: Could not create position: {ledger_err}")
         except Exception as e:
             print(f"[DATABASE] Error saving trade: {e}")
             import traceback
@@ -12101,6 +12137,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             trade_id = db.add_trade(trade_data)
                                             _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
                                             
+                                            # Create position in position_ledger for Signal Routing tracking
+                                            if routing_mapping_id and SIGNAL_ROUTING_ENGINE_AVAILABLE:
+                                                try:
+                                                    ledger = get_position_ledger()
+                                                    opt_type = signal.get('opt_type') or 'C'
+                                                    expiry = signal.get('expiry', '')
+                                                    strike = signal.get('strike', 0)
+                                                    option_key = f"{signal['symbol']}_{expiry}_{strike}_{opt_type}"
+                                                    position = LedgerPosition(
+                                                        option_key=option_key, symbol=signal['symbol'], expiry=expiry,
+                                                        strike=float(strike) if strike else 0.0, option_type=opt_type,
+                                                        channel_id=channel_id_str, broker_id=trade_data['broker'], account_id="",
+                                                        entry_qty=executed_qty, remaining_qty=executed_qty,
+                                                        entry_price=signal.get('price', 0) or 0, signal_entry_price=signal.get('price', 0) or 0,
+                                                        initial_mark_price=signal.get('price', 0) or 0, current_price=signal.get('price', 0) or 0,
+                                                        status='OPEN', entry_message_id=str(signal.get('message_id', '')),
+                                                        source_type='discord', routing_mapping_id=routing_mapping_id
+                                                    )
+                                                    position_id = ledger.create_position(position)
+                                                    _original_print(f"[POSITION_LEDGER] ✓ Position created: {option_key} (ID: {position_id}, broker: {trade_data['broker']})")
+                                                except Exception as ledger_err:
+                                                    _original_print(f"[POSITION_LEDGER] Warning: {ledger_err}")
+                                            
                                             # Update signal_lot with actual executed quantity for PNL tracking
                                             if executed_qty and executed_qty != signal.get('qty', 1):
                                                 db.update_signal_lot_executed_qty(
@@ -12142,6 +12201,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     }
                                     trade_id = db.add_trade(trade_data)
                                     _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
+                                    
+                                    # Create position in position_ledger for Signal Routing tracking
+                                    if routing_mapping_id and SIGNAL_ROUTING_ENGINE_AVAILABLE:
+                                        try:
+                                            ledger = get_position_ledger()
+                                            opt_type = signal.get('opt_type') or 'C'
+                                            expiry = signal.get('expiry', '')
+                                            strike = signal.get('strike', 0)
+                                            option_key = f"{signal['symbol']}_{expiry}_{strike}_{opt_type}"
+                                            position = LedgerPosition(
+                                                option_key=option_key, symbol=signal['symbol'], expiry=expiry,
+                                                strike=float(strike) if strike else 0.0, option_type=opt_type,
+                                                channel_id=channel_id_str, broker_id=trade_data['broker'], account_id="",
+                                                entry_qty=executed_qty, remaining_qty=executed_qty,
+                                                entry_price=signal.get('price', 0) or 0, signal_entry_price=signal.get('price', 0) or 0,
+                                                initial_mark_price=signal.get('price', 0) or 0, current_price=signal.get('price', 0) or 0,
+                                                status='OPEN', entry_message_id=str(signal.get('message_id', '')),
+                                                source_type='discord', routing_mapping_id=routing_mapping_id
+                                            )
+                                            position_id = ledger.create_position(position)
+                                            _original_print(f"[POSITION_LEDGER] ✓ Position created: {option_key} (ID: {position_id}, broker: {trade_data['broker']})")
+                                        except Exception as ledger_err:
+                                            _original_print(f"[POSITION_LEDGER] Warning: {ledger_err}")
                                     
                                     # Update signal_lot with actual executed quantity for PNL tracking
                                     if executed_qty and executed_qty != signal.get('qty', 1):
