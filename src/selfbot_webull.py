@@ -9748,9 +9748,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             from src.services.ndx_qqq_converter import convert_ndx_to_qqq
                             print(f"[DEBUG] NDX→QQQ: Import successful")
                             
-                            target_delta = channel_info.get('ndx_to_qqq_delta', 0.3) or 0.3
-                            enabled_brokers = opt.get('_enabled_brokers', [])
-                            first_broker = enabled_brokers[0] if enabled_brokers else None
+                            try:
+                                target_delta = channel_info.get('ndx_to_qqq_delta', 0.3) or 0.3
+                                print(f"[DEBUG] NDX→QQQ: target_delta={target_delta}")
+                                enabled_brokers = opt.get('_enabled_brokers', [])
+                                print(f"[DEBUG] NDX→QQQ: enabled_brokers={enabled_brokers}")
+                                first_broker = enabled_brokers[0] if enabled_brokers else None
+                                print(f"[DEBUG] NDX→QQQ: first_broker={first_broker}")
+                            except Exception as prep_err:
+                                print(f"[DEBUG] NDX→QQQ: PREP ERROR: {prep_err}")
+                                import traceback
+                                traceback.print_exc()
+                                raise
                             
                             print(f"[NDX→QQQ] Converting NDX BTO to QQQ with delta={target_delta}")
                             
