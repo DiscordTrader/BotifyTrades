@@ -177,9 +177,15 @@ BISHOP_ENTRY_PATTERN = re.compile(
 )
 
 # Bishop exit patterns (narrative style)
-# Examples: "Out of SNOW calls swing for -35%", "trimmed at 37%", "all out"
+# Examples: "Out of SNOW calls swing for -35%", "Out of AMZN for -27%", "Out of ABNB at 2.50"
+# Pattern 1: "out of SYMBOL calls/puts" (with calls/puts)
+# Pattern 2: "out of SYMBOL at/for/around PRICE/%" (with price or percentage)
+# Pattern 3: "out of these/the/rest SYMBOL calls/puts" (with article before symbol)
 BISHOP_EXIT_PATTERN = re.compile(
-    r'(?:out\s+of|trimmed?|all\s+out|exiting?)\s+([A-Z]+)\s+(?:calls?|puts?)',
+    r'(?:out\s+of|all\s+out\s+of?|exiting?)\s+'
+    r'(?:the\s+rest\s+of\s+|these\s+)?'  # Optional article/modifier
+    r'([A-Z]{1,5})\s*'  # Symbol (1-5 uppercase letters)
+    r'(?:calls?|puts?|(?:at|for|around)\s+[\d.]+%?)?',  # Optional: calls/puts OR at/for price
     re.IGNORECASE
 )
 
