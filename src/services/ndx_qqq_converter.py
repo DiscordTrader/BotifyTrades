@@ -459,8 +459,20 @@ async def convert_ndx_to_qqq(
     Returns:
         Converted signal dict, or None if not an NDX signal or conversion failed
     """
-    converter = get_ndx_qqq_converter()
-    return await converter.convert_signal(signal, target_delta, broker, enabled_brokers)
+    print(f"[NDX→QQQ WRAPPER] Entering convert_ndx_to_qqq function", flush=True)
+    print(f"[NDX→QQQ WRAPPER] signal={signal}", flush=True)
+    print(f"[NDX→QQQ WRAPPER] target_delta={target_delta}, broker={broker}", flush=True)
+    try:
+        converter = get_ndx_qqq_converter()
+        print(f"[NDX→QQQ WRAPPER] Got converter instance", flush=True)
+        result = await converter.convert_signal(signal, target_delta, broker, enabled_brokers)
+        print(f"[NDX→QQQ WRAPPER] Result: {result}", flush=True)
+        return result
+    except Exception as e:
+        print(f"[NDX→QQQ WRAPPER] ERROR: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 def is_ndx_signal(signal: Dict[str, Any]) -> bool:
