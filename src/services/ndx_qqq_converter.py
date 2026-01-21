@@ -79,7 +79,8 @@ class NDXtoQQQConverter:
         if qqq_strike is None:
             qqq_strike = await self._fallback_strike_approximation(
                 opt_type=opt_type,
-                broker=broker
+                broker=broker,
+                target_delta=target_delta
             )
         
         if qqq_strike is None:
@@ -343,11 +344,18 @@ class NDXtoQQQConverter:
     async def _fallback_strike_approximation(
         self,
         opt_type: str,
-        broker: str = None
+        broker: str = None,
+        target_delta: float = 0.30
     ) -> Optional[float]:
         """
-        Fallback: Approximate strike using OTM +1/+2 strikes when Greeks unavailable.
-        Gets current QQQ price and calculates OTM strikes.
+        Fallback: Approximate strike to achieve target delta when Greeks unavailable.
+        
+        Delta approximation for options:
+        - Delta 0.50 = ATM (at the money)
+        - Delta 0.30 = ~1-2% OTM for near-term options
+        - Delta 0.20 = ~3-4% OTM
+        
+        For delta 0.30, we target strikes ~1% OTM from current price.
         """
         try:
             qqq_price = await self._get_qqq_price(broker)
@@ -355,12 +363,16 @@ class NDXtoQQQConverter:
                 print(f"[NDX→QQQ] Could not get QQQ price for fallback")
                 return None
             
-            if opt_type == 'C':
-                strike = round(qqq_price + 2, 0)
-            else:
-                strike = round(qqq_price - 2, 0)
+            otm_offset_pct = (0.50 - target_delta) * 0.06
             
-            print(f"[NDX→QQQ] Fallback: QQQ=${qqq_price:.2f}, using OTM strike ${strike}")
+            if opt_type == 'C':
+                target_strike = qqq_price * (1 + otm_offset_pct)
+                strike = round(target_strike)
+            else:
+                target_strike = qqq_price * (1 - otm_offset_pct)
+                strike = round(target_strike)
+            
+            print(f"[NDX→QQQ] Fallback: QQQ=${qqq_price:.2f}, targeting δ={target_delta} → strike ${strike} ({otm_offset_pct*100:.1f}% OTM)")
             return strike
             
         except Exception as e:

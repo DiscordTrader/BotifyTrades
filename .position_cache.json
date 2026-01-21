@@ -7789,5 +7789,26 @@
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
     "last_evaluated_price": null
+  },
+  "ALPACA_PAPER_QQQ_607.0_2026-01-21_P": {
+    "entry_price": 0.45,
+    "highest_price": 0.49,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": "QQQ260121P00607000",
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-21T18:24:50.378209",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": 0.41
   }
 }
