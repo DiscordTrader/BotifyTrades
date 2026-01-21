@@ -7330,7 +7330,7 @@
   },
   "ALPACA_PAPER_LLY_1085.0_2026-01-23_C": {
     "entry_price": 2.45,
-    "highest_price": 4.5,
+    "highest_price": 5.1,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -7531,16 +7531,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {
-      "JUGMT0EJ7VL391LSUI60UNAKEA": {
-        "order_id": "JUGMT0EJ7VL391LSUI60UNAKEA",
-        "tier": 1,
-        "qty_expected": 1,
-        "qty_filled": 0,
-        "status": "pending",
-        "created_at": "2026-01-21T14:47:59.694104"
-      }
-    },
+    "pending_orders": {},
     "created_at": "2026-01-21T14:30:08.630660",
     "max_pnl_seen": 25.694444444444454,
     "dynamic_sl_price": null,
@@ -7642,7 +7633,7 @@
   },
   "ALPACA_PAPER_OKLO_120.0_2026-02-20_C": {
     "entry_price": 2.75,
-    "highest_price": 2.92,
+    "highest_price": 3.3,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -7660,5 +7651,26 @@
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
     "last_evaluated_price": null
+  },
+  "ALPACA_PAPER_NAMM_stock": {
+    "entry_price": 1.3,
+    "highest_price": 1.33,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-21T14:54:15.093969",
+    "max_pnl_seen": 2.3076923076923097,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": 1.3
   }
 }
