@@ -8895,10 +8895,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     webhook_msg = format_trade_idea_for_webhook(trade_idea)
                                     print(f"[CHANNEL MAP] ✓ Parsed TRADE IDEA: {trade_idea['ticker']} @ ${trade_idea['entry']}")
                             else:
-                                # Trade Summary, informational messages, etc. - forward as-is
-                                webhook_msg = message.content.strip()
-                                print(f"[CHANNEL MAP] ✓ Forwarding raw message to webhook (Trade Summary/Info)")
-                                print(f"[CHANNEL MAP]   Content: {webhook_msg[:100]}...")
+                                # NOT a trade signal - skip forwarding non-signal messages
+                                # This prevents commentary, "Bishop's Ideas", @everyone pings, etc. from being forwarded
+                                print(f"[CHANNEL MAP] ⚠️ Skipping forward - not a trade signal (commentary/info only)")
+                                print(f"[CHANNEL MAP]   Content: {message.content[:100]}...")
+                                return
                             
                             try:
                                 import aiohttp

@@ -7330,7 +7330,7 @@
   },
   "ALPACA_PAPER_LLY_1085.0_2026-01-23_C": {
     "entry_price": 2.45,
-    "highest_price": 5.1,
+    "highest_price": 5.5,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -7594,16 +7594,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {
-      "e57df0fa-d6c0-4160-bc4a-8aac253b5592": {
-        "order_id": "e57df0fa-d6c0-4160-bc4a-8aac253b5592",
-        "tier": 1,
-        "qty_expected": 1,
-        "qty_filled": 0,
-        "status": "pending",
-        "created_at": "2026-01-21T14:50:41.765655"
-      }
-    },
+    "pending_orders": {},
     "created_at": "2026-01-21T14:38:55.300195",
     "max_pnl_seen": 13.924050632911388,
     "dynamic_sl_price": null,
@@ -7633,7 +7624,7 @@
   },
   "ALPACA_PAPER_OKLO_120.0_2026-02-20_C": {
     "entry_price": 2.75,
-    "highest_price": 3.3,
+    "highest_price": 3.35,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -7671,6 +7662,6 @@
     "max_pnl_seen": 2.3076923076923097,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.3
+    "last_evaluated_price": 1.22
   }
 }
