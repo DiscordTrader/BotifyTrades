@@ -9728,6 +9728,39 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     except:
                         pass
                 
+                # NDX→QQQ Conversion: Convert NDX options to QQQ with target delta
+                ndx_to_qqq_enabled = channel_info.get('ndx_to_qqq_enabled', 0) if channel_info else 0
+                if ndx_to_qqq_enabled and opt.get('symbol', '').upper() in ['NDX', '$NDX', 'NASDAQ', 'NQ']:
+                    try:
+                        from src.services.ndx_qqq_converter import convert_ndx_to_qqq, is_ndx_signal
+                        
+                        target_delta = channel_info.get('ndx_to_qqq_delta', 0.3) or 0.3
+                        enabled_brokers = opt.get('_enabled_brokers', [])
+                        first_broker = enabled_brokers[0] if enabled_brokers else None
+                        
+                        print(f"[NDX→QQQ] Converting NDX signal to QQQ with delta={target_delta}")
+                        
+                        # Run async conversion
+                        import asyncio
+                        converted = await convert_ndx_to_qqq(
+                            signal=opt,
+                            target_delta=target_delta,
+                            broker=first_broker,
+                            enabled_brokers=enabled_brokers
+                        )
+                        
+                        if converted:
+                            original_symbol = opt.get('symbol')
+                            original_strike = opt.get('strike')
+                            opt.update(converted)
+                            print(f"[NDX→QQQ] ✓ Converted {original_symbol} {original_strike} → QQQ {opt.get('strike')}")
+                        else:
+                            print(f"[NDX→QQQ] ⚠️ Conversion failed, executing original NDX signal")
+                    except Exception as ndx_err:
+                        print(f"[NDX→QQQ] ❌ Error during conversion: {ndx_err}")
+                        import traceback
+                        traceback.print_exc()
+                
                 # Add channel_record_id and channel_id for database saving after execution
                 if channel_info:
                     opt['channel_record_id'] = channel_info.get('id')
