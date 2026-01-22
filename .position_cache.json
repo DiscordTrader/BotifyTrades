@@ -5898,7 +5898,7 @@
     "max_pnl_seen": 1.7045241197963628,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 53.8
+    "last_evaluated_price": 53.72
   },
   "Alpaca_LVLU_stock": {
     "entry_price": 11.85,
@@ -8019,7 +8019,7 @@
     "max_pnl_seen": 1.6831461225118693,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 4.62
+    "last_evaluated_price": 4.6
   },
   "ALPACA_PAPER_CMCT_stock": {
     "entry_price": 5.473523,
