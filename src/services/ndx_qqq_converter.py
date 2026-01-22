@@ -80,7 +80,8 @@ class NDXtoQQQConverter:
             qqq_strike = await self._fallback_strike_approximation(
                 opt_type=opt_type,
                 broker=broker,
-                target_delta=target_delta
+                target_delta=target_delta,
+                expiry_date=expiry_date
             )
         
         if qqq_strike is None:
@@ -345,16 +346,18 @@ class NDXtoQQQConverter:
         self,
         opt_type: str,
         broker: str = None,
-        target_delta: float = 0.30
+        target_delta: float = 0.30,
+        expiry_date: date = None
     ) -> Optional[float]:
         """
-        Fallback: Select ATM +1 strike for delta ~0.30 when Greeks unavailable.
+        Fallback: Select ATM +1/+2 strike for delta ~0.30 when Greeks unavailable.
         
         For delta 0.30:
-        - CALLS: ATM +1 strike (1 point above current price = slightly OTM)
-        - PUTS: ATM -1 strike (1 point below current price = slightly OTM)
+        - CALLS: ATM +1 or +2 strike (slightly OTM)
+        - PUTS: ATM -1 or -2 strike (slightly OTM)
         
         This gives approximately 0.30-0.35 delta for near-term options.
+        Now also validates the strike exists in Alpaca options chain.
         """
         try:
             qqq_price = await self._get_qqq_price(broker)
@@ -364,16 +367,76 @@ class NDXtoQQQConverter:
             
             atm_strike = round(qqq_price)
             
-            if opt_type == 'C':
-                strike = atm_strike + 1
-            else:
-                strike = atm_strike - 1
+            # Try to get available strikes from Alpaca and find nearest valid one
+            available_strikes = await self._get_available_qqq_strikes(opt_type, expiry_date)
             
-            print(f"[NDX→QQQ] Fallback: QQQ=${qqq_price:.2f}, ATM=${atm_strike}, using ATM+1 → strike ${strike}")
+            if available_strikes:
+                # For calls, find first strike above ATM (OTM)
+                # For puts, find first strike below ATM (OTM)
+                if opt_type == 'C':
+                    candidates = [s for s in available_strikes if s > atm_strike]
+                    candidates.sort()  # Ascending - closest OTM first
+                    strike = candidates[0] if candidates else atm_strike + 1
+                else:
+                    candidates = [s for s in available_strikes if s < atm_strike]
+                    candidates.sort(reverse=True)  # Descending - closest OTM first
+                    strike = candidates[0] if candidates else atm_strike - 1
+                
+                print(f"[NDX→QQQ] Fallback: QQQ=${qqq_price:.2f}, ATM=${atm_strike}, found valid strike ${strike} from chain")
+            else:
+                # No chain available - use simple +1/-1 offset
+                if opt_type == 'C':
+                    strike = atm_strike + 1
+                else:
+                    strike = atm_strike - 1
+                print(f"[NDX→QQQ] Fallback: QQQ=${qqq_price:.2f}, ATM=${atm_strike}, using ATM+1 → strike ${strike}")
+            
             return strike
             
         except Exception as e:
             print(f"[NDX→QQQ] Fallback strike error: {e}")
+            return None
+    
+    async def _get_available_qqq_strikes(
+        self,
+        opt_type: str,
+        expiry_date: date = None
+    ) -> Optional[List[float]]:
+        """Query Alpaca for available QQQ strikes for given expiry"""
+        try:
+            from alpaca.trading.client import TradingClient
+            from alpaca.trading.requests import GetOptionContractsRequest
+            from alpaca.trading.enums import ContractType
+            import os
+            
+            api_key = os.environ.get('ALPACA_PAPER_API_KEY', os.environ.get('APCA_API_KEY_ID', ''))
+            api_secret = os.environ.get('ALPACA_PAPER_API_SECRET', os.environ.get('APCA_API_SECRET_KEY', ''))
+            
+            if not api_key or not api_secret:
+                return None
+            
+            client = TradingClient(api_key, api_secret, paper=True)
+            
+            contract_type = ContractType.CALL if opt_type == 'C' else ContractType.PUT
+            
+            req = GetOptionContractsRequest(
+                underlying_symbols=['QQQ'],
+                type=contract_type,
+                expiration_date=expiry_date,
+                limit=100
+            )
+            
+            contracts = client.get_option_contracts(req)
+            
+            if contracts and contracts.option_contracts:
+                strikes = [float(c.strike_price) for c in contracts.option_contracts]
+                print(f"[NDX→QQQ] Found {len(strikes)} available QQQ {opt_type} strikes for {expiry_date}")
+                return sorted(set(strikes))
+            
+            return None
+            
+        except Exception as e:
+            print(f"[NDX→QQQ] Error getting available strikes: {e}")
             return None
     
     async def _get_qqq_price(self, broker: str = None) -> Optional[float]:
