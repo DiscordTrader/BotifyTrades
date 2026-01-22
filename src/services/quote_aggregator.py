@@ -93,8 +93,8 @@ BROKER_CAPABILITIES = {
     },
 }
 
-# Default priority order for quote fetching
-DEFAULT_PRIORITY = ['webull', 'alpaca', 'robinhood', 'ibkr', 'tastytrade', 'schwab']
+# Default priority order for quote fetching (Webull first, then Robinhood, then Alpaca)
+DEFAULT_PRIORITY = ['webull', 'robinhood', 'alpaca', 'ibkr', 'tastytrade', 'schwab']
 
 
 class QuoteCache:
@@ -155,13 +155,22 @@ class QuoteAggregator:
             if broker_name not in self._brokers:
                 continue
             broker = self._brokers[broker_name]
-            is_connected = getattr(broker, 'connected', False)
+            is_connected = getattr(broker, 'connected', False) or getattr(broker, '_logged_in', False)
             if not is_connected:
                 continue
             caps = BROKER_CAPABILITIES.get(broker_name, {})
             if caps.get(capability, False):
                 result.append(broker_name)
         return result
+    
+    def debug_broker_status(self):
+        """Debug method to show broker connection status"""
+        for broker_name in self._priority:
+            if broker_name in self._brokers:
+                broker = self._brokers[broker_name]
+                is_connected = getattr(broker, 'connected', False)
+                sys.stderr.write(f"[QUOTE_AGG] {broker_name}: connected={is_connected}\n")
+                sys.stderr.flush()
     
     def get_stock_price(self, symbol: str) -> QuoteResult:
         """
@@ -491,7 +500,7 @@ class QuoteAggregator:
                 )
                 if option_data and len(option_data) > 0:
                     opt = option_data[0]
-                    if opt:
+                    if opt and isinstance(opt, dict):
                         bid = float(opt.get('bid_price', 0) or 0)
                         ask = float(opt.get('ask_price', 0) or 0)
                         last = float(opt.get('last_trade_price', 0) or 0)
@@ -506,8 +515,7 @@ class QuoteAggregator:
                             broker=name
                         )
             except Exception as e:
-                sys.stderr.write(f"[QUOTE_AGG] Robinhood option quote error: {e}\n")
-                sys.stderr.flush()
+                pass
         
         return None
 
