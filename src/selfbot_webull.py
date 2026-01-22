@@ -11487,8 +11487,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 # LIVE TRADE ROUTING (Non-multi-broker fallback or manual override)
                 if not enabled_brokers:
-                    # If no multi-broker setting, check if we have a specific broker override (e.g. from risk management)
-                    risk_broker = signal.get('broker')
+                    # If no multi-broker setting, check if we have a specific broker override (e.g. from risk management or conditional orders)
+                    risk_broker = signal.get('broker') or signal.get('_broker_override')
                     if risk_broker:
                         # Map to instances
                         if str(risk_broker).upper() == 'ALPACA_PAPER' and self.paper_broker:
