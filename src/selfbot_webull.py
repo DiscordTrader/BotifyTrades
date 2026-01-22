@@ -8153,8 +8153,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             is_spy_sniper_embed = True
                             break
                 
-                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda or is_toon or is_spy_sniper_embed:
-                    print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda}, toon={is_toon}, spy_sniper={is_spy_sniper_embed})")
+                # Check for Sir Goldman embed format (ENTRY/EXIT/TRIM in embed.title)
+                is_sir_goldman = False
+                sir_goldman_parsed = None
+                if hasattr(message, 'embeds') and message.embeds:
+                    try:
+                        from src.signals.sir_goldman_parser import is_sir_goldman_message, parse_sir_goldman_signal, convert_to_standard_signal
+                        embeds_as_dicts = [{'title': e.title, 'description': e.description} for e in message.embeds if e.title or e.description]
+                        if is_sir_goldman_message(embeds_as_dicts):
+                            sg_signal = parse_sir_goldman_signal(embeds_as_dicts)
+                            if sg_signal:
+                                is_sir_goldman = True
+                                sir_goldman_parsed = sg_signal
+                                print(f"[SIR-GOLDMAN] ✓ Detected {sg_signal.signal_type.value}: {sg_signal.action} {sg_signal.symbol} {sg_signal.strike}{sg_signal.option_type or ''} @ {sg_signal.price}")
+                    except Exception as sg_err:
+                        print(f"[SIR-GOLDMAN] ⚠️ Parse error: {sg_err}")
+                
+                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda or is_toon or is_spy_sniper_embed or is_sir_goldman:
+                    print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda}, toon={is_toon}, spy_sniper={is_spy_sniper_embed}, sir_goldman={is_sir_goldman})")
                     
                     # === SIGNAL ROUTING ENGINE: Forward BTO via routing engine (creates position for risk monitoring) ===
                     if is_signal_routing_source and signal_routing_config and signal_routing_config.enable_forwarding:
@@ -8198,6 +8214,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         # Use spy-sniper parsed if available, otherwise try other parsers
                         if spy_sniper_parsed:
                             routing_parsed = spy_sniper_parsed
+                        elif is_sir_goldman and sir_goldman_parsed:
+                            # Convert Sir Goldman signal to routing format
+                            routing_parsed = {
+                                'action': sir_goldman_parsed.action,
+                                'symbol': sir_goldman_parsed.symbol,
+                                'strike': sir_goldman_parsed.strike,
+                                'opt_type': sir_goldman_parsed.option_type,
+                                'expiry': '',  # Sir Goldman doesn't include expiry
+                                'price': sir_goldman_parsed.price,
+                                'qty': 1,
+                                'is_trim': sir_goldman_parsed.signal_type.value == 'TRIM',
+                                'is_market_exit': sir_goldman_parsed.is_market_exit
+                            }
+                            print(f"[SIR-GOLDMAN] ✓ Converted to routing format: {routing_parsed}")
                         elif is_bishop:
                             routing_parsed = parse_bishop_signal(combined_content)
                         elif is_evapanda:
@@ -8441,6 +8471,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             else:
                                 forward_msg = combined_content.strip()
                                 print(f"[CHANNEL MAP] ⚠️ Toon parse failed, forwarding raw")
+                        elif is_sir_goldman and sir_goldman_parsed:
+                            print(f"[DEBUG] Taking SIR_GOLDMAN path", flush=True)
+                            from src.signals.sir_goldman_parser import format_forwarding_message
+                            forward_msg = format_forwarding_message(sir_goldman_parsed)
+                            if forward_msg:
+                                print(f"[CHANNEL MAP] ✓ Formatted Sir Goldman: {forward_msg[:80]}...")
+                            else:
+                                print(f"[CHANNEL MAP] ⚠️ Sir Goldman format failed - NOT forwarding")
+                                should_forward = False
                         elif format_as_bto_stc:
                             print(f"[DEBUG] Taking FORMAT_AS_BTO_STC path", flush=True)
                             # Convert any signal format to BTO/STC format for forwarding
