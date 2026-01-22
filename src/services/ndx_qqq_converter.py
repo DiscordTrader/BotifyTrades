@@ -426,6 +426,9 @@ class NDXtoQQQConverter:
         expiry_date: date = None
     ) -> Optional[List[float]]:
         """Query Alpaca for available QQQ strikes for given expiry"""
+        import sys
+        sys.stdout.write(f"[NDX→QQQ STRIKES] Entering _get_available_qqq_strikes opt_type={opt_type}, expiry={expiry_date}\n")
+        sys.stdout.flush()
         try:
             from alpaca.trading.client import TradingClient
             from alpaca.trading.requests import GetOptionContractsRequest
@@ -435,12 +438,20 @@ class NDXtoQQQConverter:
             api_key = os.environ.get('ALPACA_PAPER_API_KEY', os.environ.get('APCA_API_KEY_ID', ''))
             api_secret = os.environ.get('ALPACA_PAPER_API_SECRET', os.environ.get('APCA_API_SECRET_KEY', ''))
             
+            sys.stdout.write(f"[NDX→QQQ STRIKES] API key found: {bool(api_key)}, Secret found: {bool(api_secret)}\n")
+            sys.stdout.flush()
+            
             if not api_key or not api_secret:
+                sys.stdout.write(f"[NDX→QQQ STRIKES] Missing credentials, returning None\n")
+                sys.stdout.flush()
                 return None
             
             client = TradingClient(api_key, api_secret, paper=True)
             
             contract_type = ContractType.CALL if opt_type == 'C' else ContractType.PUT
+            
+            sys.stdout.write(f"[NDX→QQQ STRIKES] Creating request for QQQ {contract_type} expiry={expiry_date}\n")
+            sys.stdout.flush()
             
             req = GetOptionContractsRequest(
                 underlying_symbols=['QQQ'],
@@ -451,15 +462,22 @@ class NDXtoQQQConverter:
             
             contracts = client.get_option_contracts(req)
             
+            sys.stdout.write(f"[NDX→QQQ STRIKES] Alpaca returned: contracts={contracts is not None}, has_option_contracts={hasattr(contracts, 'option_contracts') if contracts else False}\n")
+            sys.stdout.flush()
+            
             if contracts and contracts.option_contracts:
                 strikes = [float(c.strike_price) for c in contracts.option_contracts]
-                print(f"[NDX→QQQ] Found {len(strikes)} available QQQ {opt_type} strikes for {expiry_date}")
+                sys.stdout.write(f"[NDX→QQQ STRIKES] Found {len(strikes)} strikes: {sorted(set(strikes))[:10]}...\n")
+                sys.stdout.flush()
                 return sorted(set(strikes))
             
+            sys.stdout.write(f"[NDX→QQQ STRIKES] No option_contracts in response\n")
+            sys.stdout.flush()
             return None
             
         except Exception as e:
-            print(f"[NDX→QQQ] Error getting available strikes: {e}")
+            sys.stdout.write(f"[NDX→QQQ STRIKES] Error: {e}\n")
+            sys.stdout.flush()
             return None
     
     async def _get_qqq_price(self, broker: str = None) -> Optional[float]:
