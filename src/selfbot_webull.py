@@ -2828,12 +2828,43 @@ class WebullBroker:
                 }
             
             headers = wb.build_req_headers(include_trade_token=True, include_time=True)
+            
+            # Handle market orders - get current quote if limit_price is None
+            effective_price = limit_price
+            if effective_price is None:
+                print(f"[WEBULL] Market order detected - fetching current option quote...")
+                try:
+                    # Get option quote using the option_id we already have
+                    quote_data = wb.get_option_quote(stock=symbol, optionId=option_id)
+                    if quote_data:
+                        # Use ask price for BTO, bid price for STC
+                        if side == 'BUY':
+                            effective_price = float(quote_data.get('askList', [{}])[0].get('price', 0))
+                        else:
+                            effective_price = float(quote_data.get('bidList', [{}])[0].get('price', 0))
+                        
+                        if effective_price and effective_price > 0:
+                            print(f"[WEBULL] Using market price: ${effective_price}")
+                        else:
+                            # Fallback to close price
+                            effective_price = float(quote_data.get('close', 0) or quote_data.get('lastPrice', 0))
+                            print(f"[WEBULL] Using last/close price: ${effective_price}")
+                except Exception as quote_err:
+                    print(f"[WEBULL] Could not get option quote: {quote_err}")
+                
+                if not effective_price or effective_price <= 0:
+                    return {
+                        'success': False,
+                        'msg': 'Webull options require a limit price. Could not determine market price.',
+                        'error': 'NO_PRICE'
+                    }
+            
             api_payload = {
                 'orderType': 'LMT',
                 'serialId': str(uuid.uuid4()),
                 'timeInForce': WB_ENFORCE,
                 'orders': [{'quantity': int(adjusted_qty), 'action': side, 'tickerId': int(option_id), 'tickerType': 'OPTION'}],
-                'lmtPrice': float(limit_price)
+                'lmtPrice': float(effective_price)
             }
             print(f"[WEBULL] Placing option order via direct API: {api_payload}")
             
