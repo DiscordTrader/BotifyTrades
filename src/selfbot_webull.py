@@ -2710,6 +2710,49 @@ class WebullBroker:
             
             adjusted_qty = qty
             
+            # Handle market orders EARLY - get quote before any calculations that need price
+            effective_price = limit_price
+            if effective_price is None:
+                print(f"[WEBULL] Market order detected - fetching current option quote...", flush=True)
+                try:
+                    quote_data = wb.get_option_quote(stock=symbol, optionId=option_id)
+                    print(f"[WEBULL] Quote data received: {type(quote_data)}", flush=True)
+                    if quote_data:
+                        # Use ask price for BUY, bid price for SELL
+                        if side == 'BUY':
+                            ask_list = quote_data.get('askList', [])
+                            if ask_list and len(ask_list) > 0:
+                                effective_price = float(ask_list[0].get('price', 0))
+                            else:
+                                effective_price = float(quote_data.get('askPrice', 0) or 0)
+                        else:
+                            bid_list = quote_data.get('bidList', [])
+                            if bid_list and len(bid_list) > 0:
+                                effective_price = float(bid_list[0].get('price', 0))
+                            else:
+                                effective_price = float(quote_data.get('bidPrice', 0) or 0)
+                        
+                        if effective_price and effective_price > 0:
+                            print(f"[WEBULL] Using market price: ${effective_price}", flush=True)
+                        else:
+                            # Fallback to close/last price
+                            effective_price = float(quote_data.get('close', 0) or quote_data.get('lastPrice', 0) or 0)
+                            if effective_price and effective_price > 0:
+                                print(f"[WEBULL] Using last/close price: ${effective_price}", flush=True)
+                    else:
+                        print(f"[WEBULL] No quote data returned", flush=True)
+                except Exception as quote_err:
+                    print(f"[WEBULL] Could not get option quote: {quote_err}", flush=True)
+                
+                if not effective_price or effective_price <= 0:
+                    return {
+                        'success': False,
+                        'msg': 'Webull options require a limit price. Could not determine market price.',
+                        'error': 'NO_PRICE'
+                    }
+                # Update limit_price for subsequent calculations
+                limit_price = effective_price
+            
             if side == 'BUY':
                 try:
                     account_info = wb.get_account()
@@ -2829,54 +2872,15 @@ class WebullBroker:
             
             headers = wb.build_req_headers(include_trade_token=True, include_time=True)
             
-            # Handle market orders - get current quote if limit_price is None
-            effective_price = limit_price
-            if effective_price is None:
-                print(f"[WEBULL] Market order detected - fetching current option quote...", flush=True)
-                try:
-                    # Get option quote using the option_id we already have
-                    quote_data = wb.get_option_quote(stock=symbol, optionId=option_id)
-                    print(f"[WEBULL] Quote data received: {quote_data}", flush=True)
-                    if quote_data:
-                        # Use ask price for BTO, bid price for STC
-                        if side == 'BUY':
-                            ask_list = quote_data.get('askList', [])
-                            if ask_list and len(ask_list) > 0:
-                                effective_price = float(ask_list[0].get('price', 0))
-                            else:
-                                effective_price = float(quote_data.get('askPrice', 0) or 0)
-                        else:
-                            bid_list = quote_data.get('bidList', [])
-                            if bid_list and len(bid_list) > 0:
-                                effective_price = float(bid_list[0].get('price', 0))
-                            else:
-                                effective_price = float(quote_data.get('bidPrice', 0) or 0)
-                        
-                        if effective_price and effective_price > 0:
-                            print(f"[WEBULL] Using market price: ${effective_price}", flush=True)
-                        else:
-                            # Fallback to close/last price
-                            effective_price = float(quote_data.get('close', 0) or quote_data.get('lastPrice', 0) or 0)
-                            if effective_price and effective_price > 0:
-                                print(f"[WEBULL] Using last/close price: ${effective_price}", flush=True)
-                    else:
-                        print(f"[WEBULL] No quote data returned", flush=True)
-                except Exception as quote_err:
-                    print(f"[WEBULL] Could not get option quote: {quote_err}", flush=True)
-                
-                if not effective_price or effective_price <= 0:
-                    return {
-                        'success': False,
-                        'msg': 'Webull options require a limit price. Could not determine market price.',
-                        'error': 'NO_PRICE'
-                    }
+            # Use the effective_price that was resolved earlier (handles market orders)
+            # limit_price is already populated from the early market order handling
             
             api_payload = {
                 'orderType': 'LMT',
                 'serialId': str(uuid.uuid4()),
                 'timeInForce': WB_ENFORCE,
                 'orders': [{'quantity': int(adjusted_qty), 'action': side, 'tickerId': int(option_id), 'tickerType': 'OPTION'}],
-                'lmtPrice': float(effective_price)
+                'lmtPrice': float(limit_price)
             }
             print(f"[WEBULL] Placing option order via direct API: {api_payload}")
             
