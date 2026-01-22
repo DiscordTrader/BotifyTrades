@@ -160,6 +160,32 @@ class SignalRoutingEngine:
         self._initialized = True
         print("[ROUTING_ENGINE] ✓ SignalRoutingEngine initialized (using shared ExitArbiter)")
     
+    def _preload_all_routing_configs(self) -> int:
+        """
+        Preload all enabled routing configs from database.
+        
+        Called at startup to ensure all configs are available for
+        risk evaluation of existing positions.
+        
+        Returns: Number of configs loaded
+        """
+        loaded = 0
+        try:
+            from gui_app.database import get_signal_routing_mappings
+            mappings = get_signal_routing_mappings(enabled_only=True)
+            
+            for mapping in mappings:
+                config = self.load_mapping_config(mapping)
+                loaded += 1
+                print(f"[ROUTING_ENGINE] Preloaded config id={config.id} for channel {config.source_channel_id}")
+            
+        except Exception as e:
+            import traceback
+            print(f"[ROUTING_ENGINE] ⚠️ Failed to preload routing configs: {e}")
+            traceback.print_exc()
+        
+        return loaded
+    
     async def fetch_initial_mark_price(self, position_id: int, position: LedgerPosition) -> bool:
         """
         Fetch and set initial_mark_price immediately after position creation.
@@ -625,6 +651,10 @@ class SignalRoutingEngine:
         sys.stderr.write("[ROUTING_ENGINE] ✓ Risk monitoring loop started\n")
         sys.stderr.flush()
         
+        loaded = self._preload_all_routing_configs()
+        sys.stderr.write(f"[ROUTING_ENGINE] ✓ Preloaded {loaded} routing configs from database\n")
+        sys.stderr.flush()
+        
         loop_count = 0
         while self._running:
             try:
@@ -680,13 +710,22 @@ class SignalRoutingEngine:
                     
                     can_eval, reason = self.can_evaluate_risk(position)
                     if not can_eval:
+                        if loop_count <= 3:
+                            sys.stderr.write(f"[ROUTING_ENGINE] {position.option_key}: SKIP risk eval - {reason}\n")
+                            sys.stderr.flush()
                         continue
                     
                     config = self.get_routing_config(position.routing_mapping_id)
                     if not config:
+                        if loop_count <= 3:
+                            sys.stderr.write(f"[ROUTING_ENGINE] {position.option_key}: SKIP - no config for mapping {position.routing_mapping_id}\n")
+                            sys.stderr.flush()
                         continue
                     
                     exit_reason, pnl_pct = self.evaluate_position_risk(position, config)
+                    if loop_count <= 3:
+                        sys.stderr.write(f"[ROUTING_ENGINE] {position.option_key}: pnl={pnl_pct:.1f}% exit_reason={exit_reason}\n")
+                        sys.stderr.flush()
                     
                     if exit_reason:
                         await self._handle_risk_exit(position, config, exit_reason, pnl_pct)
