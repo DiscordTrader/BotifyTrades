@@ -9804,6 +9804,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 opt['original_symbol'] = original_symbol.upper().replace('$', '')
                                 opt['original_strike'] = original_strike
                                 opt['_ndx_converted'] = True
+                                print(f"[DEBUG] NDX→QQQ: Set _ndx_converted=True, about to get quote", flush=True)
                                 
                                 # Get real QQQ option quote to replace NDX price
                                 qqq_quote_price = None
