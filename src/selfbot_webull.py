@@ -1919,8 +1919,8 @@ class WebullBroker:
         """
         import time
         # Normalize floats to 2 decimal places to avoid float representation variance
-        strike_norm = f"{float(strike):.2f}"
-        price_norm = f"{float(price):.2f}"
+        strike_norm = f"{float(strike):.2f}" if strike is not None else "0.00"
+        price_norm = f"{float(price):.2f}" if price is not None else "market"
         # Normalize expiry (strip leading zeros, uppercase type)
         expiry_norm = expiry.replace('/', '').strip() if expiry else ""
         opt_type_norm = str(opt_type).upper() if opt_type else ""
