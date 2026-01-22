@@ -364,7 +364,8 @@ class PositionLedger:
             existing = self.get_position_by_key(
                 position.option_key, 
                 position.broker_id, 
-                position.account_id
+                position.account_id,
+                routing_mapping_id=position.routing_mapping_id
             )
             return existing.id if existing and existing.id else 0
         finally:
@@ -390,16 +391,25 @@ class PositionLedger:
         self, 
         option_key: str, 
         broker_id: str = "", 
-        account_id: str = ""
+        account_id: str = "",
+        routing_mapping_id: Optional[int] = None
     ) -> Optional[LedgerPosition]:
-        """Get position by option key and broker/account."""
+        """Get position by option key and broker/account, optionally filtered by routing_mapping_id."""
         conn = self._get_conn()
         try:
-            row = conn.execute("""
-                SELECT * FROM position_ledger 
-                WHERE option_key = ? AND broker_id = ? AND account_id = ?
-                AND status IN ('open', 'partially_closed')
-            """, (option_key, broker_id, account_id)).fetchone()
+            if routing_mapping_id is not None:
+                row = conn.execute("""
+                    SELECT * FROM position_ledger 
+                    WHERE option_key = ? AND broker_id = ? AND account_id = ?
+                    AND routing_mapping_id = ?
+                    AND status IN ('open', 'partially_closed')
+                """, (option_key, broker_id, account_id, routing_mapping_id)).fetchone()
+            else:
+                row = conn.execute("""
+                    SELECT * FROM position_ledger 
+                    WHERE option_key = ? AND broker_id = ? AND account_id = ?
+                    AND status IN ('open', 'partially_closed')
+                """, (option_key, broker_id, account_id)).fetchone()
             
             if not row:
                 return None
