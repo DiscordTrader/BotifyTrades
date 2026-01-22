@@ -8459,9 +8459,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     price_str = f"@ {price}" if price else "@ m"
                                     # Only include qty in forward if source signal had it AND it's valid
                                     if qty_from_signal and qty is not None:
-                                        forward_msg = f"{action} {qty} {symbol} {strike}{opt_type} {expiry} {price_str}"
+                                        forward_msg = f"@everyone\n{action} {qty} {symbol} {strike}{opt_type} {expiry} {price_str}\n*Not financial advice, for educational purposes only.*"
                                     else:
-                                        forward_msg = f"{action} {symbol} {strike}{opt_type} {expiry} {price_str}"
+                                        forward_msg = f"@everyone\n{action} {symbol} {strike}{opt_type} {expiry} {price_str}\n*Not financial advice, for educational purposes only.*"
                                     print(f"[CHANNEL MAP] ✓ Converted to BTO/STC format: {forward_msg}", flush=True)
                                 except Exception as conv_err:
                                     print(f"[CHANNEL MAP] ❌ Conversion error: {conv_err}", flush=True)
