@@ -1170,6 +1170,14 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     loadMappings();
+    
+    // Auto-refresh positions every 5 seconds when positions tab is active
+    setInterval(() => {
+        const positionsTab = document.getElementById('positions-tab');
+        if (positionsTab && positionsTab.classList.contains('active')) {
+            loadPositions();
+        }
+    }, 5000);
 });
 </script>
 {% endblock %}
