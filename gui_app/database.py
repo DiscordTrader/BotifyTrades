@@ -2287,135 +2287,47 @@ def get_channels(category: Optional[str] = None, market: Optional[str] = None) -
 
 
 def get_channel_by_id(channel_id: int) -> Optional[Dict]:
-    """Get a single channel by its internal ID with risk settings"""
+    """Get a single channel by its internal ID with all settings"""
     conn = get_connection()
     cursor = conn.cursor()
     
-    cursor.execute('''
-        SELECT id, discord_channel_id, name, category, execute_enabled, track_enabled,
-               broker_override, is_active, paper_trade_enabled, enabled_brokers,
-               profit_target_pct, profit_target_1_pct, profit_target_2_pct, profit_target_3_pct,
-               stop_loss_pct, trailing_stop_pct, trailing_activation_pct, position_size_pct,
-               created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct,
-               profit_target_4_pct, profit_target_qty_1, profit_target_qty_2, profit_target_qty_3,
-               profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode, trade_summary_enabled,
-               slippage_protection_enabled, slippage_max_pct, signal_update_automation, signal_update_automation_override,
-               enable_dynamic_sl, enable_giveback_guard, giveback_allowed_pct, dynamic_sl_profile
-        FROM channels WHERE id = ?
-    ''', (channel_id,))
+    cursor.execute('SELECT * FROM channels WHERE id = ?', (channel_id,))
     
     row = cursor.fetchone()
     if not row:
         return None
     
-    return {
-        'id': row[0],
-        'discord_channel_id': row[1],
-        'name': row[2],
-        'category': row[3],
-        'execute_enabled': row[4],
-        'track_enabled': row[5],
-        'broker_override': row[6],
-        'is_active': row[7],
-        'paper_trade_enabled': row[8],
-        'enabled_brokers': json.loads(row[9]) if row[9] else [],
-        'profit_target_pct': row[10],
-        'profit_target_1_pct': row[11] if row[11] is not None else 20,
-        'profit_target_2_pct': row[12] if row[12] is not None else 50,
-        'profit_target_3_pct': row[13] if row[13] is not None else 100,
-        'stop_loss_pct': row[14] if row[14] is not None else 10,
-        'trailing_stop_pct': row[15],
-        'trailing_activation_pct': row[16],
-        'position_size_pct': row[17],
-        'created_at': row[18],
-        'updated_at': row[19],
-        'default_quantity': row[20],
-        'leave_runner_enabled': bool(row[21]) if row[21] is not None else False,
-        'leave_runner_pct': row[22] if row[22] is not None else 25.0,
-        'profit_target_4_pct': row[23],
-        'profit_target_qty_1': row[24],
-        'profit_target_qty_2': row[25],
-        'profit_target_qty_3': row[26],
-        'profit_target_qty_4': row[27],
-        'trim_order_mode': row[28] if row[28] else 'market',
-        'trim_limit_offset': row[29] if row[29] is not None else 0.01,
-        'exit_strategy_mode': row[30] if row[30] else 'signal',
-        'trade_summary_enabled': bool(row[31]) if len(row) > 31 and row[31] is not None else True,
-        'slippage_protection_enabled': bool(row[32]) if len(row) > 32 and row[32] is not None else False,
-        'slippage_max_pct': row[33] if len(row) > 33 else None,
-        'signal_update_automation': bool(row[34]) if len(row) > 34 and row[34] is not None else False,
-        'signal_update_automation_override': row[35] if len(row) > 35 else None,
-        'enable_dynamic_sl': bool(row[36]) if len(row) > 36 and row[36] is not None else False,
-        'enable_giveback_guard': bool(row[37]) if len(row) > 37 and row[37] is not None else False,
-        'giveback_allowed_pct': row[38] if len(row) > 38 and row[38] is not None else 30.0,
-        'dynamic_sl_profile': row[39] if len(row) > 39 and row[39] else 'standard'
-    }
+    result = dict(row)
+    if result.get('enabled_brokers'):
+        try:
+            result['enabled_brokers'] = json.loads(result['enabled_brokers'])
+        except (json.JSONDecodeError, TypeError):
+            result['enabled_brokers'] = []
+    else:
+        result['enabled_brokers'] = []
+    return result
 
 
 def get_channel_by_discord_id(discord_channel_id: str) -> Optional[Dict]:
-    """Get a single channel by its Discord channel ID with risk settings"""
+    """Get a single channel by its Discord channel ID with all settings"""
     conn = get_connection()
     cursor = conn.cursor()
     
-    cursor.execute('''
-        SELECT id, discord_channel_id, name, category, execute_enabled, track_enabled,
-               broker_override, is_active, paper_trade_enabled, enabled_brokers,
-               profit_target_pct, profit_target_1_pct, profit_target_2_pct, profit_target_3_pct,
-               stop_loss_pct, trailing_stop_pct, trailing_activation_pct, position_size_pct,
-               created_at, updated_at, default_quantity, leave_runner_enabled, leave_runner_pct,
-               profit_target_4_pct, profit_target_qty_1, profit_target_qty_2, profit_target_qty_3,
-               profit_target_qty_4, trim_order_mode, trim_limit_offset, exit_strategy_mode, trade_summary_enabled,
-               slippage_protection_enabled, slippage_max_pct, signal_update_automation, signal_update_automation_override,
-               enable_dynamic_sl, enable_giveback_guard, giveback_allowed_pct, dynamic_sl_profile
-        FROM channels WHERE discord_channel_id = ?
-    ''', (str(discord_channel_id),))
+    cursor.execute('SELECT * FROM channels WHERE discord_channel_id = ?', (str(discord_channel_id),))
     
     row = cursor.fetchone()
     if not row:
         return None
     
-    return {
-        'id': row[0],
-        'discord_channel_id': row[1],
-        'name': row[2],
-        'category': row[3],
-        'execute_enabled': row[4],
-        'track_enabled': row[5],
-        'broker_override': row[6],
-        'is_active': row[7],
-        'paper_trade_enabled': row[8],
-        'enabled_brokers': json.loads(row[9]) if row[9] else [],
-        'profit_target_pct': row[10],
-        'profit_target_1_pct': row[11] if row[11] is not None else 20,
-        'profit_target_2_pct': row[12] if row[12] is not None else 50,
-        'profit_target_3_pct': row[13] if row[13] is not None else 100,
-        'stop_loss_pct': row[14] if row[14] is not None else 10,
-        'trailing_stop_pct': row[15],
-        'trailing_activation_pct': row[16],
-        'position_size_pct': row[17],
-        'created_at': row[18],
-        'updated_at': row[19],
-        'default_quantity': row[20],
-        'leave_runner_enabled': bool(row[21]) if row[21] is not None else False,
-        'leave_runner_pct': row[22] if row[22] is not None else 25.0,
-        'profit_target_4_pct': row[23],
-        'profit_target_qty_1': row[24],
-        'profit_target_qty_2': row[25],
-        'profit_target_qty_3': row[26],
-        'profit_target_qty_4': row[27],
-        'trim_order_mode': row[28] if row[28] else 'market',
-        'trim_limit_offset': row[29] if row[29] is not None else 0.01,
-        'exit_strategy_mode': row[30] if len(row) > 30 and row[30] else 'signal',
-        'trade_summary_enabled': bool(row[31]) if len(row) > 31 and row[31] is not None else True,
-        'slippage_protection_enabled': bool(row[32]) if len(row) > 32 and row[32] is not None else False,
-        'slippage_max_pct': row[33] if len(row) > 33 else None,
-        'signal_update_automation': bool(row[34]) if len(row) > 34 and row[34] is not None else False,
-        'signal_update_automation_override': row[35] if len(row) > 35 else None,
-        'enable_dynamic_sl': bool(row[36]) if len(row) > 36 and row[36] is not None else False,
-        'enable_giveback_guard': bool(row[37]) if len(row) > 37 and row[37] is not None else False,
-        'giveback_allowed_pct': row[38] if len(row) > 38 and row[38] is not None else 30.0,
-        'dynamic_sl_profile': row[39] if len(row) > 39 and row[39] else 'standard'
-    }
+    result = dict(row)
+    if result.get('enabled_brokers'):
+        try:
+            result['enabled_brokers'] = json.loads(result['enabled_brokers'])
+        except (json.JSONDecodeError, TypeError):
+            result['enabled_brokers'] = []
+    else:
+        result['enabled_brokers'] = []
+    return result
 
 
 def update_channel(channel_id: int, **kwargs):
@@ -2432,10 +2344,12 @@ def update_channel(channel_id: int, **kwargs):
                    'profit_target_4_pct', 'profit_target_qty_1', 'profit_target_qty_2', 'profit_target_qty_3', 'profit_target_qty_4',
                    'stop_loss_pct', 'trailing_stop_pct', 'trailing_activation_pct', 'enabled_brokers', 'position_size_pct', 'tracking_position_size_pct',
                    'default_quantity', 'tracking_default_quantity', 'channel_max_position_size', 'risk_management_enabled', 'leave_runner_enabled', 'leave_runner_pct',
-                   'trim_order_mode', 'trim_limit_offset', 'exit_strategy_mode', 'market', 'trade_summary_enabled',
+                   'trim_order_mode', 'trim_limit_offset', 'exit_strategy_mode', 'exit_strategy_mode_override', 'market', 'trade_summary_enabled',
+                   'conditional_order_enabled', 'conditional_auto_execute', 'conditional_order_expiry',
                    'conditional_order_timeout_minutes', 'trigger_offset_percent', 'order_timeout_minutes',
                    'slippage_protection_enabled', 'slippage_max_pct', 'signal_update_automation', 'signal_update_automation_override',
                    'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
+                   'use_global_risk_settings', 'circuit_breaker_enabled', 'channel_daily_loss_limit', 'channel_max_positions',
                    'ndx_to_qqq_enabled', 'ndx_to_qqq_delta']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):

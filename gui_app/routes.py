@@ -1864,7 +1864,8 @@ def register_routes(app):
                        'profit_target_3_pct', 'profit_target_4_pct', 'stop_loss_pct', 
                        'trailing_stop_pct', 'trailing_activation_pct', 'leave_runner_enabled',
                        'leave_runner_pct', 'profit_target_qty_1', 'profit_target_qty_2',
-                       'profit_target_qty_3', 'profit_target_qty_4', 'exit_strategy_mode'}
+                       'profit_target_qty_3', 'profit_target_qty_4', 'exit_strategy_mode',
+                       'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile'}
         cache_warning = None
         if any(field in data for field in risk_fields):
             try:
