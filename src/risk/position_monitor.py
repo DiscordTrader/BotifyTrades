@@ -1272,7 +1272,7 @@ class RiskManager:
                 call_put,
                 position.broker
             )
-            self.cache.set_channel_settings(pos_key, channel_settings)
+            self.cache.apply_settings_with_versioning(pos_key, channel_settings)
             
             if channel_settings:
                 print(f"[RISK] Using per-channel settings from '{channel_settings.channel_name}': "

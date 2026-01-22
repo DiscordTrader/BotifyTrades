@@ -262,6 +262,14 @@ class BrokerSyncService:
                 traceback.print_exc()
         
         print("[SYNC] ✓ Sync cycle complete", flush=True)
+        
+        if hasattr(self, '_risk_manager') and self._risk_manager:
+            try:
+                count = self._risk_manager.cache.populate_trade_id_mappings()
+                if count > 0:
+                    print(f"[SYNC] ✓ Mapped {count} trades to position cache for persistence")
+            except Exception as e:
+                print(f"[SYNC] Warning: Could not populate trade_id mappings: {e}")
     
     async def _sync_broker(self, broker_name: str, broker_instance):
         """Sync trades for a specific broker"""
@@ -953,11 +961,11 @@ class BrokerSyncService:
                     # Clean up position cache/ledger to remove stale entries
                     try:
                         # Remove from risk position cache if exists
-                        if self.risk_manager:
+                        if hasattr(self, '_risk_manager') and self._risk_manager:
                             pos_key = f"{broker}_{symbol}_{asset_type}"
-                            if hasattr(self.risk_manager, 'position_cache') and self.risk_manager.position_cache:
-                                if pos_key in self.risk_manager.position_cache._cache:
-                                    del self.risk_manager.position_cache._cache[pos_key]
+                            if hasattr(self._risk_manager, 'position_cache') and self._risk_manager.position_cache:
+                                if pos_key in self._risk_manager.position_cache._cache:
+                                    del self._risk_manager.position_cache._cache[pos_key]
                                     print(f"[SYNC] ✓ Removed {pos_key} from position cache (order cancelled)")
                         
                         # Remove from position ledger if exists

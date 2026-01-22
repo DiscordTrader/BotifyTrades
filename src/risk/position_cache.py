@@ -4,6 +4,7 @@ Position Cache Management
 Handles persistence and state management for monitored positions.
 """
 import json
+import threading
 from pathlib import Path
 from typing import Dict, Optional, Any
 from datetime import datetime
@@ -20,6 +21,7 @@ class PositionCache:
         self.cache_file = cache_file or Path.cwd() / '.position_cache.json'
         self._cache: Dict[str, PositionCacheEntry] = {}
         self._trade_id_map: Dict[str, int] = {}  # position_key -> trade_id for database persistence
+        self._persist_lock = threading.Lock()  # Concurrency safety for DB writes
     
     def restore_trailing_state_from_db(self) -> int:
         """Restore trailing stop state from database for all open trades. 
@@ -330,12 +332,13 @@ class PositionCache:
             if tier_field:
                 trade_id = self.get_trade_id(position_key)
                 if trade_id:
-                    try:
-                        from gui_app.database import save_risk_state
-                        save_risk_state(trade_id, **{tier_field: True})
-                        print(f"[RISK] ✓ Persisted tier {tier} hit for trade #{trade_id}")
-                    except Exception as e:
-                        print(f"[RISK] Warning: Could not persist tier hit: {e}")
+                    with self._persist_lock:  # Thread-safe DB write
+                        try:
+                            from gui_app.database import save_risk_state
+                            save_risk_state(trade_id, **{tier_field: True})
+                            print(f"[RISK] ✓ Persisted tier {tier} hit for trade #{trade_id}")
+                        except Exception as e:
+                            print(f"[RISK] Warning: Could not persist tier hit: {e}")
     
     def add_pending_order(self, position_key: str, order_id: str, tier: int, qty: int) -> bool:
         """Track a pending risk order awaiting fill confirmation."""
@@ -460,11 +463,87 @@ class PositionCache:
         
         trade_id = self.get_trade_id(position_key)
         if trade_id:
-            try:
-                from gui_app.database import save_risk_state
-                save_risk_state(trade_id, **kwargs)
-            except Exception as e:
-                print(f"[RISK] Warning: Could not persist enhanced risk state: {e}")
+            with self._persist_lock:  # Thread-safe DB write
+                try:
+                    from gui_app.database import save_risk_state
+                    save_risk_state(trade_id, **kwargs)
+                except Exception as e:
+                    print(f"[RISK] Warning: Could not persist enhanced risk state: {e}")
+    
+    def apply_settings_with_versioning(self, position_key: str, settings) -> bool:
+        """
+        Apply channel settings to a position with versioning support.
+        Implements prospective-only policy: if settings changed, previously hit
+        tiers remain hit; only new thresholds apply going forward.
+        
+        Returns True if settings were applied (new or compatible), False if rejected.
+        """
+        entry = self._cache.get(position_key)
+        if not entry:
+            return False
+        
+        new_hash = settings.compute_settings_hash()
+        
+        if entry.risk_settings_hash is None:
+            entry.risk_settings_hash = new_hash
+            entry.channel_settings = settings
+            trade_id = self.get_trade_id(position_key)
+            if trade_id:
+                with self._persist_lock:
+                    try:
+                        from gui_app.database import save_risk_state
+                        save_risk_state(trade_id, risk_settings_hash=new_hash)
+                    except Exception as e:
+                        print(f"[RISK] Warning: Could not persist settings hash: {e}")
+            return True
+        
+        if entry.risk_settings_hash != new_hash:
+            tier_status = f"PT1={entry.tier1_hit} PT2={entry.tier2_hit} PT3={entry.tier3_hit} PT4={entry.tier4_hit}"
+            print(f"[RISK] Settings changed for {position_key}: old={entry.risk_settings_hash[:8]}... new={new_hash[:8]}... "
+                  f"| Applying prospective-only (existing tiers: {tier_status})")
+            entry.risk_settings_hash = new_hash
+            trade_id = self.get_trade_id(position_key)
+            if trade_id:
+                with self._persist_lock:
+                    try:
+                        from gui_app.database import save_risk_state
+                        save_risk_state(trade_id, risk_settings_hash=new_hash)
+                    except Exception as e:
+                        print(f"[RISK] Warning: Could not persist settings hash: {e}")
+        
+        entry.channel_settings = settings
+        return True
+    
+    def populate_trade_id_mappings(self) -> int:
+        """
+        Populate trade_id mappings for all open trades from database.
+        Call this after broker sync to ensure all positions can persist state.
+        Returns count of mappings added.
+        """
+        try:
+            from gui_app.database import get_open_trades_with_risk_state
+            trades = get_open_trades_with_risk_state()
+            added = 0
+            
+            for trade in trades:
+                broker = trade['broker'] or 'UNKNOWN'
+                asset_type = trade['asset_type'] or 'stock'
+                
+                if asset_type == 'option' and trade['strike']:
+                    pos_key = f"{broker}_{trade['symbol']}_{trade['strike']}_{trade['expiry']}_{trade['call_put']}"
+                else:
+                    pos_key = f"{broker}_{trade['symbol']}_stock"
+                
+                if pos_key not in self._trade_id_map:
+                    self._trade_id_map[pos_key] = trade['id']
+                    added += 1
+            
+            if added > 0:
+                print(f"[RISK] ✓ Added {added} new trade_id mappings after broker sync")
+            return added
+        except Exception as e:
+            print(f"[RISK] Warning: Could not populate trade_id mappings: {e}")
+            return 0
     
     def set_channel_settings(self, position_key: str, settings) -> None:
         """Cache channel settings for a position."""
