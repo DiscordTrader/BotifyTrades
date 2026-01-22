@@ -9809,8 +9809,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 # Get real QQQ option quote to replace NDX price
                                 qqq_quote_price = None
                                 try:
-                                    print(f"[DEBUG] NDX→QQQ: Checking broker - has self.alpaca_paper_broker={hasattr(self, 'alpaca_paper_broker')}", flush=True)
-                                    broker_for_quote = getattr(self, 'alpaca_paper_broker', None)
+                                    # Try multiple broker access patterns
+                                    broker_for_quote = None
+                                    if hasattr(self, 'paper_broker') and self.paper_broker:
+                                        broker_for_quote = self.paper_broker
+                                    elif hasattr(self, 'alpaca_paper_broker') and self.alpaca_paper_broker:
+                                        broker_for_quote = self.alpaca_paper_broker
                                     print(f"[DEBUG] NDX→QQQ: broker_for_quote={broker_for_quote}", flush=True)
                                     if broker_for_quote and hasattr(broker_for_quote, 'get_option_quote'):
                                         print(f"[DEBUG] NDX→QQQ: About to call get_option_quote", flush=True)
