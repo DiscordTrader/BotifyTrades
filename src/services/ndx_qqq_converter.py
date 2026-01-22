@@ -425,21 +425,35 @@ class NDXtoQQQConverter:
         opt_type: str,
         expiry_date: date = None
     ) -> Optional[List[float]]:
-        """Query Alpaca for available QQQ strikes for given expiry"""
+        """Query available QQQ strikes using multi-broker fallback via QuoteAggregator"""
         import sys
         sys.stdout.write(f"[NDX→QQQ STRIKES] Entering _get_available_qqq_strikes opt_type={opt_type}, expiry={expiry_date}\n")
         sys.stdout.flush()
+        
+        # Try QuoteAggregator first (multi-broker with priority fallback)
+        try:
+            from src.services.quote_aggregator import get_quote_aggregator
+            aggregator = get_quote_aggregator()
+            expiry_str = expiry_date.strftime('%Y-%m-%d') if expiry_date else None
+            result = aggregator.get_options_chain('QQQ', opt_type, expiry_str)
+            if result.success and result.strikes:
+                sys.stdout.write(f"[NDX→QQQ STRIKES] Got {len(result.strikes)} strikes from {result.broker}\n")
+                sys.stdout.flush()
+                return result.strikes
+        except Exception as e:
+            sys.stdout.write(f"[NDX→QQQ STRIKES] QuoteAggregator error: {e}\n")
+            sys.stdout.flush()
+        
+        # Fallback to direct Alpaca call
         try:
             from alpaca.trading.client import TradingClient
             from alpaca.trading.requests import GetOptionContractsRequest
             from alpaca.trading.enums import ContractType
             import os
             
-            # Try environment variables first
             api_key = os.environ.get('ALPACA_PAPER_API_KEY', os.environ.get('APCA_API_KEY_ID', ''))
             api_secret = os.environ.get('ALPACA_PAPER_API_SECRET', os.environ.get('APCA_API_SECRET_KEY', ''))
             
-            # If not in env, load from database (same as AlpacaBroker does)
             if not api_key or not api_secret:
                 sys.stdout.write(f"[NDX→QQQ STRIKES] No env vars, loading from database...\n")
                 sys.stdout.flush()
@@ -452,58 +466,38 @@ class NDXtoQQQConverter:
                     sys.stdout.write(f"[NDX→QQQ STRIKES] Database load error: {db_err}\n")
                     sys.stdout.flush()
             
-            sys.stdout.write(f"[NDX→QQQ STRIKES] API key found: {bool(api_key)}, Secret found: {bool(api_secret)}\n")
-            sys.stdout.flush()
-            
             if not api_key or not api_secret:
-                sys.stdout.write(f"[NDX→QQQ STRIKES] Missing credentials, returning None\n")
+                sys.stdout.write(f"[NDX→QQQ STRIKES] Missing credentials\n")
                 sys.stdout.flush()
                 return None
             
             client = TradingClient(api_key, api_secret, paper=True)
-            
             contract_type = ContractType.CALL if opt_type == 'C' else ContractType.PUT
             
-            sys.stdout.write(f"[NDX→QQQ STRIKES] Creating request for QQQ {contract_type} expiry={expiry_date}\n")
-            sys.stdout.flush()
-            
-            # Try with specific expiry first
             req = GetOptionContractsRequest(
                 underlying_symbols=['QQQ'],
                 type=contract_type,
                 expiration_date=expiry_date,
                 limit=100
             )
-            
             contracts = client.get_option_contracts(req)
             
             contract_count = len(contracts.option_contracts) if contracts and contracts.option_contracts else 0
-            sys.stdout.write(f"[NDX→QQQ STRIKES] Alpaca returned {contract_count} contracts for expiry={expiry_date}\n")
-            sys.stdout.flush()
             
-            # If no contracts for that expiry, try without expiry filter to get any available strikes
             if contract_count == 0:
-                sys.stdout.write(f"[NDX→QQQ STRIKES] No contracts for {expiry_date}, trying without expiry filter...\n")
-                sys.stdout.flush()
                 req = GetOptionContractsRequest(
                     underlying_symbols=['QQQ'],
                     type=contract_type,
                     limit=100
                 )
                 contracts = client.get_option_contracts(req)
-                contract_count = len(contracts.option_contracts) if contracts and contracts.option_contracts else 0
-                sys.stdout.write(f"[NDX→QQQ STRIKES] Alpaca returned {contract_count} contracts (no expiry filter)\n")
-                sys.stdout.flush()
             
             if contracts and contracts.option_contracts:
-                strikes = [float(c.strike_price) for c in contracts.option_contracts]
-                unique_strikes = sorted(set(strikes))
-                sys.stdout.write(f"[NDX→QQQ STRIKES] Found {len(unique_strikes)} unique strikes: {unique_strikes[:10]}...\n")
+                strikes = sorted(set(float(c.strike_price) for c in contracts.option_contracts))
+                sys.stdout.write(f"[NDX→QQQ STRIKES] Found {len(strikes)} strikes via Alpaca fallback\n")
                 sys.stdout.flush()
-                return unique_strikes
+                return strikes
             
-            sys.stdout.write(f"[NDX→QQQ STRIKES] No option_contracts in response\n")
-            sys.stdout.flush()
             return None
             
         except Exception as e:
@@ -512,7 +506,23 @@ class NDXtoQQQConverter:
             return None
     
     async def _get_qqq_price(self, broker: str = None) -> Optional[float]:
-        """Get current QQQ price from broker or Finnhub"""
+        """Get current QQQ price using multi-broker fallback via QuoteAggregator"""
+        import sys
+        
+        # Try QuoteAggregator first (multi-broker with priority fallback)
+        try:
+            from src.services.quote_aggregator import get_quote_aggregator
+            aggregator = get_quote_aggregator()
+            result = aggregator.get_stock_price('QQQ')
+            if result.success and result.price:
+                sys.stdout.write(f"[NDX→QQQ] QQQ price ${result.price:.2f} from {result.broker}\n")
+                sys.stdout.flush()
+                return result.price
+        except Exception as e:
+            sys.stdout.write(f"[NDX→QQQ] QuoteAggregator error: {e}\n")
+            sys.stdout.flush()
+        
+        # Fallback to direct broker call if aggregator unavailable
         try:
             if broker and 'WEBULL' in broker.upper():
                 from webull import webull
@@ -523,6 +533,7 @@ class NDXtoQQQConverter:
         except Exception as e:
             print(f"[NDX→QQQ] Webull quote error: {e}")
         
+        # Finnhub fallback
         try:
             if self.finnhub_api_key:
                 url = f"https://finnhub.io/api/v1/quote"
@@ -536,6 +547,7 @@ class NDXtoQQQConverter:
         except Exception as e:
             print(f"[NDX→QQQ] Finnhub quote error: {e}")
         
+        # yfinance fallback
         try:
             import yfinance as yf
             ticker = yf.Ticker('QQQ')

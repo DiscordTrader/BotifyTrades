@@ -6092,6 +6092,26 @@ class SelfClient(discord.Client):
         except Exception as e:
             _original_print(f"[CONDITIONAL] ⚠️ Could not register brokers: {e}", flush=True)
         
+        # Register brokers with QuoteAggregator for multi-broker quote fallback
+        try:
+            from src.services.quote_aggregator import register_broker_with_aggregator
+            # Webull: check for _client attribute or _logged_in status
+            if self.broker and (getattr(self.broker, '_logged_in', False) or getattr(self.broker, 'wb', None)):
+                register_broker_with_aggregator('webull', self.broker)
+            if self.paper_broker and getattr(self.paper_broker, 'connected', False):
+                register_broker_with_aggregator('alpaca', self.paper_broker)
+            if self.robinhood_broker and getattr(self.robinhood_broker, 'connected', False):
+                register_broker_with_aggregator('robinhood', self.robinhood_broker)
+            if self.ibkr_broker and getattr(self.ibkr_broker, 'connected', False):
+                register_broker_with_aggregator('ibkr', self.ibkr_broker)
+            if self.tastytrade_broker and getattr(self.tastytrade_broker, 'connected', False):
+                register_broker_with_aggregator('tastytrade', self.tastytrade_broker)
+            if self.schwab_broker and getattr(self.schwab_broker, 'connected', False):
+                register_broker_with_aggregator('schwab', self.schwab_broker)
+            _original_print("[QUOTE_AGG] ✓ Registered connected brokers with QuoteAggregator", flush=True)
+        except Exception as e:
+            _original_print(f"[QUOTE_AGG] ⚠️ Could not register brokers: {e}", flush=True)
+        
         _original_print("[BROKERS] ✓ Background broker initialization complete - Discord was never blocked", flush=True)
     
     async def token_refresh_scheduler(self):
