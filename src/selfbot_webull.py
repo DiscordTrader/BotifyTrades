@@ -7836,6 +7836,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             except Exception as e:
                 pass
         
+        # Check if this channel is a source in signal_routing_mappings (forwarding-only routing)
+        is_signal_routing_source = False
+        signal_routing_config = None
+        if SIGNAL_ROUTING_ENGINE_AVAILABLE and not is_mapped_source_channel:
+            try:
+                routing_engine = get_signal_routing_engine()
+                signal_routing_config = routing_engine.get_or_load_config_for_channel(str(message.channel.id))
+                if signal_routing_config:
+                    is_signal_routing_source = True
+                    print(f"[Discord] ✓ Signal Routing source: {signal_routing_config.name} (fwd={signal_routing_config.enable_forwarding}, risk={signal_routing_config.enable_risk_management})")
+            except Exception as e:
+                pass
+        
         # Allow admin commands from ANY channel (before channel filter)
         # !extractraw and !extracthistory work from any channel for admin use
         if self.user and message.author.id == self.user.id:
@@ -7859,8 +7872,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 await self.handle_extract_history(message, channel_id, limit)
                 return
         
-        # If not in database, not in legacy CHANNEL_IDS list, AND not a mapped source, ignore
-        if not channel_info and message.channel.id not in CHANNEL_IDS and not is_mapped_source_channel:
+        # If not in database, not in legacy CHANNEL_IDS list, AND not a mapped/routing source, ignore
+        if not channel_info and message.channel.id not in CHANNEL_IDS and not is_mapped_source_channel and not is_signal_routing_source:
             return
         
         print(f"[DEBUG FLOW] [{trace_id}] ========== SIGNAL LIFECYCLE START ==========")
@@ -8065,11 +8078,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 active_conversion_channel_id = int(db_conversion_channel_id)
             target_execution_channel_id = conversion_settings.get('target_execution_channel_id', '').strip()
         
-        # Check if this is a mapped source channel OR the single conversion channel
-        should_convert = (is_mapped_source_channel or 
+        # Check if this is a mapped source channel, signal routing source, OR the single conversion channel
+        should_convert = (is_mapped_source_channel or is_signal_routing_source or
                          (ENABLE_SIGNAL_CONVERSION and active_conversion_channel_id and message.channel.id == active_conversion_channel_id))
         
-        print(f"[DEBUG] should_convert={should_convert}, starts_with_bang={message.content.strip().startswith('!')}")
+        print(f"[DEBUG] should_convert={should_convert}, is_signal_routing_source={is_signal_routing_source}, starts_with_bang={message.content.strip().startswith('!')}")
         
         if should_convert:
             # Don't process commands, only natural language text
@@ -8133,6 +8146,60 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda or is_toon:
                     print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda}, toon={is_toon})")
+                    
+                    # === SIGNAL ROUTING ENGINE: Forward BTO via routing engine (creates position for risk monitoring) ===
+                    if is_signal_routing_source and signal_routing_config and signal_routing_config.enable_forwarding:
+                        # Parse the signal to get details
+                        routing_parsed = None
+                        if is_bishop:
+                            routing_parsed = parse_bishop_signal(combined_content)
+                        elif is_evapanda:
+                            routing_parsed = parse_evapanda_signal(combined_content)
+                        elif is_bullwinkle:
+                            routing_parsed = parse_bullwinkle_signal(combined_content)
+                        elif is_jacob:
+                            routing_parsed = parse_jacob_signal(combined_content)
+                        elif is_zscalps:
+                            routing_parsed = parse_zscalps_signal(combined_content)
+                        elif is_jake:
+                            routing_parsed = parse_jake_signal(combined_content)
+                        else:
+                            routing_parsed = parse_option_signal(combined_content)
+                        
+                        if routing_parsed and routing_parsed.get('action') == 'BTO':
+                            try:
+                                routing_engine = get_signal_routing_engine()
+                                symbol = routing_parsed.get('symbol', '')
+                                strike = float(routing_parsed.get('strike', 0) or 0)
+                                opt_type = routing_parsed.get('opt_type', 'C')
+                                expiry = routing_parsed.get('expiry', '')
+                                price = float(routing_parsed.get('price', 0) or 0)
+                                qty = int(routing_parsed.get('qty', 1) or 1)
+                                
+                                if symbol and (strike > 0 or routing_parsed.get('asset') == 'stock'):
+                                    success, position_id = await routing_engine.post_bto_signal(
+                                        config=signal_routing_config,
+                                        symbol=symbol,
+                                        strike=strike,
+                                        option_type=opt_type,
+                                        expiry=expiry,
+                                        entry_price=price if price > 0 else 0,
+                                        quantity=qty,
+                                        message_id=str(message.id)
+                                    )
+                                    if success:
+                                        print(f"[SIGNAL_ROUTING] ✓ BTO forwarded and position created (id={position_id}): {symbol} {strike}{opt_type} {expiry}")
+                                    else:
+                                        print(f"[SIGNAL_ROUTING] ⚠️ BTO forward failed for {symbol}")
+                            except Exception as route_err:
+                                print(f"[SIGNAL_ROUTING] ❌ BTO forward error: {route_err}")
+                                import traceback
+                                traceback.print_exc()
+                        elif routing_parsed and routing_parsed.get('action') == 'STC':
+                            # STC signals are handled separately (already integrated)
+                            pass
+                        # Skip regular channel_mappings forwarding for signal routing sources
+                        should_forward = False
                     
                     is_webhook_dest = destination_type == 'webhook' and target_execution_channel_id and target_execution_channel_id.startswith('https://')
                     is_channel_dest = destination_type == 'channel' and dest_channel_id
