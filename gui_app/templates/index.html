@@ -1808,13 +1808,14 @@ async function loadConditionalOrders() {
             const sizeMode = order.size_mode || '';
             const qtyValue = order.qty_value ? parseFloat(order.qty_value) : null;
             const calcQty = order.calculated_qty ? parseInt(order.calculated_qty) : null;
+            const unitLabel = order.asset_type === 'option' ? 'contracts' : 'shares';
             let sizeDisplay = '';
             if (sizeMode === 'percent_account' && qtyValue) {
                 sizeDisplay = `${qtyValue}% of account`;
             } else if (sizeMode === 'fixed_qty' && qtyValue) {
-                sizeDisplay = `${parseInt(qtyValue)} shares`;
+                sizeDisplay = `${parseInt(qtyValue)} ${unitLabel}`;
             } else if (calcQty) {
-                sizeDisplay = `${calcQty} shares`;
+                sizeDisplay = `${calcQty} ${unitLabel}`;
             }
             
             const isActive = statusLower === 'active_monitoring' || statusLower === 'pending' || statusLower === 'tracking' || statusLower === 'fallback_monitoring';
