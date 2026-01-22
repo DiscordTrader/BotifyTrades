@@ -731,6 +731,23 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Trailing stop state columns added (trailing_activated, highest_price, trailing_activated_at)")
     
+    # Migration: Add risk state columns for tier hit persistence
+    try:
+        cursor.execute('SELECT pt1_hit FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding risk state columns to trades table...")
+        cursor.execute("ALTER TABLE trades ADD COLUMN pt1_hit INTEGER DEFAULT 0")
+        cursor.execute("ALTER TABLE trades ADD COLUMN pt2_hit INTEGER DEFAULT 0")
+        cursor.execute("ALTER TABLE trades ADD COLUMN pt3_hit INTEGER DEFAULT 0")
+        cursor.execute("ALTER TABLE trades ADD COLUMN pt4_hit INTEGER DEFAULT 0")
+        cursor.execute("ALTER TABLE trades ADD COLUMN dynamic_sl_price REAL")
+        cursor.execute("ALTER TABLE trades ADD COLUMN giveback_guard_active INTEGER DEFAULT 0")
+        cursor.execute("ALTER TABLE trades ADD COLUMN max_pnl_seen REAL DEFAULT 0")
+        cursor.execute("ALTER TABLE trades ADD COLUMN trailing_stop_price REAL")
+        cursor.execute("ALTER TABLE trades ADD COLUMN risk_settings_hash TEXT")
+        conn.commit()
+        print("[DATABASE] ✓ Risk state columns added (pt1-4_hit, dynamic_sl_price, giveback_guard_active, max_pnl_seen, trailing_stop_price, risk_settings_hash)")
+    
     # Migration: Add hide_in_ui column for hiding trades from UI
     try:
         cursor.execute('SELECT hide_in_ui FROM trades LIMIT 1')
@@ -3406,6 +3423,130 @@ def get_trailing_state(trade_id: int) -> dict:
             'trailing_activated_at': row[2]
         }
     return {'trailing_activated': False, 'highest_price': None, 'trailing_activated_at': None}
+
+
+def save_risk_state(trade_id: int, **kwargs):
+    """
+    Save risk state to database for persistence across restarts.
+    
+    Supported fields:
+        pt1_hit, pt2_hit, pt3_hit, pt4_hit: bool - tier hit flags
+        dynamic_sl_price: float - current dynamic stop loss price
+        giveback_guard_active: bool - whether giveback guard is active
+        max_pnl_seen: float - maximum P&L percentage seen
+        trailing_stop_price: float - current trailing stop price
+        risk_settings_hash: str - hash of settings when trade opened (for versioning)
+    """
+    if not kwargs:
+        return
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Build dynamic UPDATE query
+    set_parts = []
+    values = []
+    for key, value in kwargs.items():
+        if key in ['pt1_hit', 'pt2_hit', 'pt3_hit', 'pt4_hit', 'giveback_guard_active']:
+            set_parts.append(f"{key} = ?")
+            values.append(1 if value else 0)
+        elif key in ['dynamic_sl_price', 'max_pnl_seen', 'trailing_stop_price', 'risk_settings_hash']:
+            set_parts.append(f"{key} = ?")
+            values.append(value)
+    
+    if set_parts:
+        values.append(trade_id)
+        query = f"UPDATE trades SET {', '.join(set_parts)} WHERE id = ?"
+        cursor.execute(query, values)
+        conn.commit()
+
+
+def load_risk_state(trade_id: int) -> dict:
+    """
+    Load risk state from database for cache restoration.
+    
+    Returns:
+        dict with all risk state fields, or empty values if trade not found
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT pt1_hit, pt2_hit, pt3_hit, pt4_hit, 
+               dynamic_sl_price, giveback_guard_active, max_pnl_seen,
+               trailing_stop_price, trailing_activated, highest_price,
+               risk_settings_hash
+        FROM trades
+        WHERE id = ?
+    ''', (trade_id,))
+    
+    row = cursor.fetchone()
+    if row:
+        return {
+            'pt1_hit': bool(row[0]) if row[0] else False,
+            'pt2_hit': bool(row[1]) if row[1] else False,
+            'pt3_hit': bool(row[2]) if row[2] else False,
+            'pt4_hit': bool(row[3]) if row[3] else False,
+            'dynamic_sl_price': row[4],
+            'giveback_guard_active': bool(row[5]) if row[5] else False,
+            'max_pnl_seen': row[6] or 0.0,
+            'trailing_stop_price': row[7],
+            'trailing_activated': bool(row[8]) if row[8] else False,
+            'highest_price': row[9],
+            'risk_settings_hash': row[10]
+        }
+    return {
+        'pt1_hit': False, 'pt2_hit': False, 'pt3_hit': False, 'pt4_hit': False,
+        'dynamic_sl_price': None, 'giveback_guard_active': False, 'max_pnl_seen': 0.0,
+        'trailing_stop_price': None, 'trailing_activated': False, 'highest_price': None,
+        'risk_settings_hash': None
+    }
+
+
+def get_open_trades_with_risk_state():
+    """Get all open trades with full risk state for RiskManager initialization."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT id, symbol, broker, strike, expiry, call_put, asset_type,
+               executed_price, quantity, channel_id, 
+               trailing_activated, highest_price, trailing_activated_at,
+               pt1_hit, pt2_hit, pt3_hit, pt4_hit,
+               dynamic_sl_price, giveback_guard_active, max_pnl_seen,
+               trailing_stop_price, risk_settings_hash
+        FROM trades
+        WHERE status = 'OPEN' AND direction = 'BTO'
+    ''')
+    
+    trades = []
+    for row in cursor.fetchall():
+        trades.append({
+            'id': row[0],
+            'symbol': row[1],
+            'broker': row[2],
+            'strike': row[3],
+            'expiry': row[4],
+            'call_put': row[5],
+            'asset_type': row[6],
+            'entry_price': row[7],
+            'quantity': row[8],
+            'channel_id': row[9],
+            'trailing_activated': bool(row[10]) if row[10] else False,
+            'highest_price': row[11],
+            'trailing_activated_at': row[12],
+            'pt1_hit': bool(row[13]) if row[13] else False,
+            'pt2_hit': bool(row[14]) if row[14] else False,
+            'pt3_hit': bool(row[15]) if row[15] else False,
+            'pt4_hit': bool(row[16]) if row[16] else False,
+            'dynamic_sl_price': row[17],
+            'giveback_guard_active': bool(row[18]) if row[18] else False,
+            'max_pnl_seen': row[19] or 0.0,
+            'trailing_stop_price': row[20],
+            'risk_settings_hash': row[21]
+        })
+    
+    return trades
 
 
 def get_open_trades_with_trailing_state():
