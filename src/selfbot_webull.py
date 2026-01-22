@@ -2832,25 +2832,37 @@ class WebullBroker:
             # Handle market orders - get current quote if limit_price is None
             effective_price = limit_price
             if effective_price is None:
-                print(f"[WEBULL] Market order detected - fetching current option quote...")
+                print(f"[WEBULL] Market order detected - fetching current option quote...", flush=True)
                 try:
                     # Get option quote using the option_id we already have
                     quote_data = wb.get_option_quote(stock=symbol, optionId=option_id)
+                    print(f"[WEBULL] Quote data received: {quote_data}", flush=True)
                     if quote_data:
                         # Use ask price for BTO, bid price for STC
                         if side == 'BUY':
-                            effective_price = float(quote_data.get('askList', [{}])[0].get('price', 0))
+                            ask_list = quote_data.get('askList', [])
+                            if ask_list and len(ask_list) > 0:
+                                effective_price = float(ask_list[0].get('price', 0))
+                            else:
+                                effective_price = float(quote_data.get('askPrice', 0) or 0)
                         else:
-                            effective_price = float(quote_data.get('bidList', [{}])[0].get('price', 0))
+                            bid_list = quote_data.get('bidList', [])
+                            if bid_list and len(bid_list) > 0:
+                                effective_price = float(bid_list[0].get('price', 0))
+                            else:
+                                effective_price = float(quote_data.get('bidPrice', 0) or 0)
                         
                         if effective_price and effective_price > 0:
-                            print(f"[WEBULL] Using market price: ${effective_price}")
+                            print(f"[WEBULL] Using market price: ${effective_price}", flush=True)
                         else:
-                            # Fallback to close price
-                            effective_price = float(quote_data.get('close', 0) or quote_data.get('lastPrice', 0))
-                            print(f"[WEBULL] Using last/close price: ${effective_price}")
+                            # Fallback to close/last price
+                            effective_price = float(quote_data.get('close', 0) or quote_data.get('lastPrice', 0) or 0)
+                            if effective_price and effective_price > 0:
+                                print(f"[WEBULL] Using last/close price: ${effective_price}", flush=True)
+                    else:
+                        print(f"[WEBULL] No quote data returned", flush=True)
                 except Exception as quote_err:
-                    print(f"[WEBULL] Could not get option quote: {quote_err}")
+                    print(f"[WEBULL] Could not get option quote: {quote_err}", flush=True)
                 
                 if not effective_price or effective_price <= 0:
                     return {
