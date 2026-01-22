@@ -444,9 +444,10 @@ class NDXtoQQQConverter:
                 sys.stdout.write(f"[NDX→QQQ STRIKES] No env vars, loading from database...\n")
                 sys.stdout.flush()
                 try:
-                    from gui_app.database import get_setting
-                    api_key = get_setting('alpaca_paper_api_key', '')
-                    api_secret = get_setting('alpaca_paper_api_secret', '')
+                    from gui_app.database import get_alpaca_settings
+                    settings = get_alpaca_settings()
+                    api_key = settings.get('alpaca_api_key', '')
+                    api_secret = settings.get('alpaca_secret_key', '')
                 except Exception as db_err:
                     sys.stdout.write(f"[NDX→QQQ STRIKES] Database load error: {db_err}\n")
                     sys.stdout.flush()
