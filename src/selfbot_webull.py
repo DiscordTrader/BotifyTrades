@@ -9830,19 +9830,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 except Exception as quote_err:
                                     print(f"[NDX→QQQ] Warning: Could not get QQQ quote: {quote_err}", flush=True)
                                 
+                                print(f"[DEBUG] NDX→QQQ: Quote attempt done, qqq_quote_price={qqq_quote_price}", flush=True)
+                                
                                 # Update signal price - use quote if available
                                 # If no quote, set to None to trigger market order (broker fill becomes authoritative)
-                                signal['_original_ndx_price'] = original_price
+                                print(f"[DEBUG] NDX→QQQ: About to set price, opt defined={opt is not None}", flush=True)
+                                # Store original price for reference
+                                opt['_original_ndx_price'] = original_price
                                 if qqq_quote_price is not None:
                                     opt['price'] = qqq_quote_price
-                                    signal['price'] = qqq_quote_price
                                     print(f"[NDX→QQQ] ✓ Updated price from NDX ${original_price} → QQQ ${qqq_quote_price}", flush=True)
                                 else:
                                     # No quote available - use None to let broker determine price
                                     # Lot open_price will be updated from broker fill via sync service
                                     opt['price'] = None  # Will trigger market order
-                                    signal['price'] = None
-                                    signal['_await_broker_fill_price'] = True
+                                    opt['_await_broker_fill_price'] = True
                                     print(f"[NDX→QQQ] ⚠️ No QQQ quote - will use market order (broker fill is authoritative)", flush=True)
                                 
                                 print(f"[NDX→QQQ] ✓ Converted {original_symbol} {original_strike} → QQQ {opt.get('strike')} @ ${opt.get('price')}")
