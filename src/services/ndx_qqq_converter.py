@@ -116,6 +116,9 @@ class NDXtoQQQConverter:
         enabled_brokers: List[str] = None
     ) -> Optional[float]:
         """Find strike with delta closest to target using broker data"""
+        import sys
+        sys.stdout.write(f"[NDX→QQQ DELTA] Entering _find_strike_by_delta for {symbol} {opt_type} {expiry_date}\n")
+        sys.stdout.flush()
         
         brokers_to_try = []
         if broker:
@@ -366,16 +369,29 @@ class NDXtoQQQConverter:
         This gives approximately 0.30-0.35 delta for near-term options.
         Now also validates the strike exists in Alpaca options chain.
         """
+        import sys
+        sys.stdout.write(f"[NDX→QQQ FALLBACK] Entering _fallback_strike_approximation opt_type={opt_type} expiry={expiry_date}\n")
+        sys.stdout.flush()
         try:
+            sys.stdout.write(f"[NDX→QQQ FALLBACK] About to call _get_qqq_price with broker={broker}\n")
+            sys.stdout.flush()
             qqq_price = await self._get_qqq_price(broker)
+            sys.stdout.write(f"[NDX→QQQ FALLBACK] _get_qqq_price returned: {qqq_price}\n")
+            sys.stdout.flush()
             if not qqq_price:
                 print(f"[NDX→QQQ] Could not get QQQ price for fallback")
                 return None
             
             atm_strike = round(qqq_price)
+            sys.stdout.write(f"[NDX→QQQ FALLBACK] ATM strike = {atm_strike}\n")
+            sys.stdout.flush()
             
             # Try to get available strikes from Alpaca and find nearest valid one
+            sys.stdout.write(f"[NDX→QQQ FALLBACK] Calling _get_available_qqq_strikes\n")
+            sys.stdout.flush()
             available_strikes = await self._get_available_qqq_strikes(opt_type, expiry_date)
+            sys.stdout.write(f"[NDX→QQQ FALLBACK] available_strikes count = {len(available_strikes) if available_strikes else 0}\n")
+            sys.stdout.flush()
             
             if available_strikes:
                 # For calls, find first strike above ATM (OTM)
