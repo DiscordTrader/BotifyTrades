@@ -64,6 +64,82 @@ class PositionCache:
             print(f"[RISK] Warning: Could not restore trailing state from DB: {e}")
             return 0
     
+    def restore_full_risk_state_from_db(self) -> int:
+        """
+        Restore complete risk state from database for all open trades.
+        This includes tier hits, dynamic SL, giveback guard, max P&L seen, and trailing state.
+        Returns count of positions with restored risk state.
+        """
+        try:
+            from gui_app.database import get_open_trades_with_risk_state
+            trades = get_open_trades_with_risk_state()
+            restored = 0
+            mapped = 0
+            
+            for trade in trades:
+                broker = trade['broker'] or 'UNKNOWN'
+                asset_type = trade['asset_type'] or 'stock'
+                
+                if asset_type == 'option' and trade['strike']:
+                    pos_key = f"{broker}_{trade['symbol']}_{trade['strike']}_{trade['expiry']}_{trade['call_put']}"
+                else:
+                    pos_key = f"{broker}_{trade['symbol']}_stock"
+                
+                self._trade_id_map[pos_key] = trade['id']
+                mapped += 1
+                
+                if pos_key in self._cache:
+                    entry = self._cache[pos_key]
+                    has_state = False
+                    
+                    if trade.get('pt1_hit'):
+                        entry.tier1_hit = True
+                        has_state = True
+                    if trade.get('pt2_hit'):
+                        entry.tier2_hit = True
+                        has_state = True
+                    if trade.get('pt3_hit'):
+                        entry.tier3_hit = True
+                        has_state = True
+                    if trade.get('pt4_hit'):
+                        entry.tier4_hit = True
+                        has_state = True
+                    if trade.get('dynamic_sl_price'):
+                        entry.dynamic_sl_price = trade['dynamic_sl_price']
+                        has_state = True
+                    if trade.get('giveback_guard_active'):
+                        entry.giveback_guard_active = True
+                        has_state = True
+                    if trade.get('max_pnl_seen'):
+                        entry.max_pnl_seen = trade['max_pnl_seen']
+                        has_state = True
+                    if trade.get('trailing_stop_price'):
+                        entry.trailing_stop_price = trade['trailing_stop_price']
+                        has_state = True
+                    if trade.get('trailing_activated'):
+                        entry.trailing_activated = True
+                        has_state = True
+                        if trade.get('highest_price'):
+                            entry.highest_price = trade['highest_price']
+                    if trade.get('risk_settings_hash'):
+                        entry.risk_settings_hash = trade['risk_settings_hash']
+                    
+                    if has_state:
+                        tier_hits = f"PT1={trade.get('pt1_hit')} PT2={trade.get('pt2_hit')} PT3={trade.get('pt3_hit')} PT4={trade.get('pt4_hit')}"
+                        print(f"[RISK] ✓ Restored full risk state: {pos_key} | {tier_hits}")
+                        restored += 1
+            
+            if mapped > 0:
+                print(f"[RISK] Mapped {mapped} open trades to position cache for risk persistence")
+            if restored > 0:
+                print(f"[RISK] ✓ Restored full risk state for {restored} positions from database")
+            return restored
+        except Exception as e:
+            print(f"[RISK] Warning: Could not restore risk state from DB: {e}")
+            import traceback
+            traceback.print_exc()
+            return 0
+    
     def get_trade_id(self, position_key: str) -> Optional[int]:
         """Get trade_id for a position key, used for database persistence."""
         return self._trade_id_map.get(position_key)
@@ -135,6 +211,47 @@ class PositionCache:
             )
             self._cache[pos_key] = entry
             
+            trade_id = self._trade_id_map.get(pos_key)
+            if trade_id:
+                try:
+                    from gui_app.database import load_risk_state
+                    saved_state = load_risk_state(trade_id)
+                    if saved_state:
+                        has_state = False
+                        if saved_state.get('pt1_hit'):
+                            entry.tier1_hit = True
+                            has_state = True
+                        if saved_state.get('pt2_hit'):
+                            entry.tier2_hit = True
+                            has_state = True
+                        if saved_state.get('pt3_hit'):
+                            entry.tier3_hit = True
+                            has_state = True
+                        if saved_state.get('pt4_hit'):
+                            entry.tier4_hit = True
+                            has_state = True
+                        if saved_state.get('dynamic_sl_price'):
+                            entry.dynamic_sl_price = saved_state['dynamic_sl_price']
+                            has_state = True
+                        if saved_state.get('giveback_guard_active'):
+                            entry.giveback_guard_active = True
+                            has_state = True
+                        if saved_state.get('max_pnl_seen'):
+                            entry.max_pnl_seen = saved_state['max_pnl_seen']
+                            has_state = True
+                        if saved_state.get('trailing_activated'):
+                            entry.trailing_activated = True
+                            has_state = True
+                        if saved_state.get('highest_price'):
+                            entry.highest_price = max(entry.highest_price, saved_state['highest_price'])
+                        if saved_state.get('risk_settings_hash'):
+                            entry.risk_settings_hash = saved_state['risk_settings_hash']
+                        if has_state:
+                            tier_str = f"PT1={entry.tier1_hit} PT2={entry.tier2_hit} PT3={entry.tier3_hit} PT4={entry.tier4_hit}"
+                            print(f"[RISK] ✓ Restored risk state on cache creation: {pos_key} | {tier_str}")
+                except Exception as e:
+                    print(f"[RISK] Warning: Could not load risk state for {pos_key}: {e}")
+            
             if sl_price or target_price:
                 print(f"[RISK] New position tracked: {pos_key} @ ${position.avg_cost:.2f} | "
                       f"SL: ${sl_price or 'N/A'} | Target: ${target_price or 'N/A'}")
@@ -193,17 +310,32 @@ class PositionCache:
             self._cache[position_key].reset_closing()
     
     def mark_tier_hit(self, position_key: str, tier: int) -> None:
-        """Mark a profit tier as hit (only call after confirmed fill)."""
+        """Mark a profit tier as hit (only call after confirmed fill) and persist to database."""
         entry = self._cache.get(position_key)
         if entry:
+            tier_field = None
             if tier == 1:
                 entry.tier1_hit = True
+                tier_field = 'pt1_hit'
             elif tier == 2:
                 entry.tier2_hit = True
+                tier_field = 'pt2_hit'
             elif tier == 3:
                 entry.tier3_hit = True
+                tier_field = 'pt3_hit'
             elif tier == 4:
                 entry.tier4_hit = True
+                tier_field = 'pt4_hit'
+            
+            if tier_field:
+                trade_id = self.get_trade_id(position_key)
+                if trade_id:
+                    try:
+                        from gui_app.database import save_risk_state
+                        save_risk_state(trade_id, **{tier_field: True})
+                        print(f"[RISK] ✓ Persisted tier {tier} hit for trade #{trade_id}")
+                    except Exception as e:
+                        print(f"[RISK] Warning: Could not persist tier hit: {e}")
     
     def add_pending_order(self, position_key: str, order_id: str, tier: int, qty: int) -> bool:
         """Track a pending risk order awaiting fill confirmation."""
@@ -307,6 +439,32 @@ class PositionCache:
                     save_trailing_state(trade_id, True, entry.highest_price)
                 except Exception as e:
                     print(f"[RISK] Warning: Could not persist highest price: {e}")
+    
+    def update_enhanced_risk_state(self, position_key: str, **kwargs) -> None:
+        """
+        Update enhanced risk state and persist to database.
+        
+        Supported kwargs:
+            dynamic_sl_price: float - current dynamic stop loss price
+            giveback_guard_active: bool - whether giveback guard is active
+            max_pnl_seen: float - maximum P&L percentage seen
+            trailing_stop_price: float - current trailing stop price
+        """
+        entry = self._cache.get(position_key)
+        if not entry:
+            return
+        
+        for key, value in kwargs.items():
+            if hasattr(entry, key):
+                setattr(entry, key, value)
+        
+        trade_id = self.get_trade_id(position_key)
+        if trade_id:
+            try:
+                from gui_app.database import save_risk_state
+                save_risk_state(trade_id, **kwargs)
+            except Exception as e:
+                print(f"[RISK] Warning: Could not persist enhanced risk state: {e}")
     
     def set_channel_settings(self, position_key: str, settings) -> None:
         """Cache channel settings for a position."""

@@ -96,6 +96,26 @@ class ChannelRiskSettings:
         return (self.has_tiered_targets or 
                 self.stop_loss_pct > 0 or 
                 self.trailing_stop_pct > 0)
+    
+    def compute_settings_hash(self) -> str:
+        """
+        Compute a hash of the risk settings for versioning.
+        Used to detect when settings change mid-position.
+        """
+        import hashlib
+        key_fields = (
+            self.profit_target_1_pct, self.profit_target_2_pct,
+            self.profit_target_3_pct, self.profit_target_4_pct,
+            self.profit_target_qty_1, self.profit_target_qty_2,
+            self.profit_target_qty_3, self.profit_target_qty_4,
+            self.stop_loss_pct, self.trailing_stop_pct,
+            self.trailing_activation_pct, self.leave_runner_enabled,
+            self.leave_runner_pct, self.exit_strategy_mode,
+            self.enable_dynamic_sl, self.enable_giveback_guard,
+            self.giveback_allowed_pct, self.dynamic_sl_profile
+        )
+        hash_input = str(key_fields).encode()
+        return hashlib.md5(hash_input).hexdigest()[:12]
 
 
 @dataclass
@@ -207,6 +227,8 @@ class PositionCacheEntry:
     dynamic_sl_price: Optional[float] = None  # Current dynamic SL after PT escalation
     giveback_guard_active: bool = False  # Giveback guard activated (after PT2)
     last_evaluated_price: Optional[float] = None  # For idempotency checks
+    trailing_stop_price: Optional[float] = None  # Current trailing stop price
+    risk_settings_hash: Optional[str] = None  # Hash of settings when position opened
     
     # Pending risk orders awaiting fill confirmation
     pending_orders: Dict[str, Any] = field(default_factory=dict)  # order_id -> PendingRiskOrder dict

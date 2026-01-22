@@ -5898,7 +5898,7 @@
     "max_pnl_seen": 1.7045241197963628,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 54.21
+    "last_evaluated_price": 54.16
   },
   "Alpaca_LVLU_stock": {
     "entry_price": 11.85,
@@ -7494,7 +7494,7 @@
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.42
+    "last_evaluated_price": 1.435
   },
   "ALPACA_PAPER_KO_72.0_2026-02-20_C": {
     "entry_price": 1.6,
@@ -7977,7 +7977,7 @@
     "max_pnl_seen": 1.0204081632653024,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.425
+    "last_evaluated_price": 1.475
   },
   "Webull_AMZN_235.0_01/23_C": {
     "entry_price": 1.14,
@@ -8002,7 +8002,7 @@
   },
   "ALPACA_PAPER_HIMZ_stock": {
     "entry_price": 4.589725,
-    "highest_price": 4.82,
+    "highest_price": 4.8373,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -8016,10 +8016,10 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-22T15:07:35.922121",
-    "max_pnl_seen": 5.017185125470496,
+    "max_pnl_seen": 5.3941140264394996,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 4.81
+    "last_evaluated_price": 4.8373
   },
   "ALPACA_PAPER_CMCT_stock": {
     "entry_price": 5.473523,
@@ -8082,7 +8082,7 @@
     "max_pnl_seen": 1.544545454545456,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 11.1201
+    "last_evaluated_price": 11.11
   },
   "ALPACA_PAPER_ASTI_stock": {
     "entry_price": 7.0,
@@ -8103,6 +8103,27 @@
     "max_pnl_seen": 2.142857142857148,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 6.793
+    "last_evaluated_price": 6.9707
+  },
+  "ALPACA_PAPER_IOBT_stock": {
+    "entry_price": 0.498277,
+    "highest_price": 0.4985,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "ALPACA_PAPER",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-22T19:20:14.660733",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": 0.4949
   }
 }

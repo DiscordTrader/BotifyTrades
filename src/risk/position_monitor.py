@@ -745,9 +745,9 @@ class RiskManager:
         if cached_count > 0:
             print(f"[RISK] Loaded {cached_count} cached positions")
         
-        trailing_restored = self.cache.restore_trailing_state_from_db()
-        if trailing_restored > 0:
-            print(f"[RISK] ✓ Restored trailing stop state for {trailing_restored} positions from database")
+        risk_restored = self.cache.restore_full_risk_state_from_db()
+        if risk_restored > 0:
+            print(f"[RISK] ✓ Restored full risk state (tier hits, dynamic SL, giveback) for {risk_restored} positions")
         
         self._load_db_price_targets()
         
@@ -1375,12 +1375,26 @@ class RiskManager:
         
         actions, updated_state = evaluate_exit_actions(state, channel_settings, verbose=False)
         
+        old_max_pnl = cache.max_pnl_seen
+        old_dsl = cache.dynamic_sl_price
+        old_giveback = cache.giveback_guard_active
+        
         cache.max_pnl_seen = updated_state.max_pnl_seen
         cache.dynamic_sl_price = updated_state.dynamic_sl_price
         cache.giveback_guard_active = updated_state.giveback_guard_active
         cache.last_evaluated_price = updated_state.last_evaluated_price
         if updated_state.highest_price > cache.highest_price:
             cache.highest_price = updated_state.highest_price
+        
+        persist_updates = {}
+        if updated_state.max_pnl_seen > old_max_pnl:
+            persist_updates['max_pnl_seen'] = updated_state.max_pnl_seen
+        if updated_state.dynamic_sl_price != old_dsl:
+            persist_updates['dynamic_sl_price'] = updated_state.dynamic_sl_price
+        if updated_state.giveback_guard_active and not old_giveback:
+            persist_updates['giveback_guard_active'] = True
+        if persist_updates:
+            self.cache.update_enhanced_risk_state(position.position_key, **persist_updates)
         
         for action in actions:
             if action.action_type == ActionType.SELL_ALL:
