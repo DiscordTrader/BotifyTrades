@@ -836,12 +836,16 @@ async function switchTab(tab) {
     conditionalContainer.style.display = 'none';
     filledContainer.style.display = 'none';
     
+    // Stop conditional orders auto-refresh when leaving the tab
+    stopConditionalOrdersAutoRefresh();
+    
     if (tab === 'bot-trades') {
         botTradesContainer.style.display = 'block';
         await loadBotTrades();
     } else if (tab === 'conditional') {
         conditionalContainer.style.display = 'block';
         await loadConditionalOrders();
+        startConditionalOrdersAutoRefresh();
     } else if (tab === 'filled') {
         filledContainer.style.display = 'block';
         await loadFilledOrders();
@@ -1666,6 +1670,60 @@ async function loadStats() {
 }
 
 // ============ CONDITIONAL ORDERS TAB FUNCTIONS ============
+let conditionalOrdersRefreshInterval = null;
+
+function startConditionalOrdersAutoRefresh() {
+    stopConditionalOrdersAutoRefresh();
+    conditionalOrdersRefreshInterval = setInterval(async () => {
+        await refreshConditionalOrderPrices();
+    }, 5000); // Refresh prices every 5 seconds
+    console.log('[ConditionalOrders] Auto-refresh started (5s interval)');
+}
+
+function stopConditionalOrdersAutoRefresh() {
+    if (conditionalOrdersRefreshInterval) {
+        clearInterval(conditionalOrdersRefreshInterval);
+        conditionalOrdersRefreshInterval = null;
+        console.log('[ConditionalOrders] Auto-refresh stopped');
+    }
+}
+
+async function refreshConditionalOrderPrices() {
+    try {
+        const response = await fetch('/api/conditional_orders?active_only=true');
+        const data = await response.json();
+        const orders = data.orders || [];
+        
+        orders.forEach(order => {
+            const priceEl = document.querySelector(`[data-order-id="${order.id}"] .current-price-value`);
+            const timeEl = document.querySelector(`[data-order-id="${order.id}"] .current-price-time`);
+            
+            if (priceEl && order.current_price) {
+                const triggerPrice = parseFloat(order.adjusted_trigger_price || order.trigger_price);
+                const currentPrice = parseFloat(order.current_price);
+                const color = currentPrice >= triggerPrice ? '#22c55e' : '#ef4444';
+                priceEl.textContent = '$' + currentPrice.toFixed(2);
+                priceEl.style.color = color;
+            }
+            
+            if (timeEl && order.price_updated_at) {
+                const timeStr = order.price_updated_at.includes('Z') || order.price_updated_at.includes('+') 
+                    ? order.price_updated_at 
+                    : order.price_updated_at + 'Z';
+                timeEl.textContent = new Date(timeStr).toLocaleString('en-US', {
+                    timeZone: 'America/New_York', 
+                    hour: '2-digit', 
+                    minute: '2-digit', 
+                    second: '2-digit',
+                    hour12: true
+                });
+            }
+        });
+    } catch (err) {
+        console.error('[ConditionalOrders] Price refresh error:', err);
+    }
+}
+
 async function loadConditionalOrders() {
     console.log('[loadConditionalOrders] Starting...');
     const container = document.getElementById('conditional-orders-table');
@@ -1788,7 +1846,7 @@ async function loadConditionalOrders() {
             }
             
             html += `
-                <div class="conditional-order-card" style="background: linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.9)); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; margin-bottom: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                <div class="conditional-order-card" data-order-id="${order.id}" style="background: linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.9)); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; margin-bottom: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
                     <!-- Header Row -->
                     <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: linear-gradient(90deg, ${statusColor}15, transparent); border-bottom: 1px solid rgba(255,255,255,0.05);">
                         <div style="display: flex; align-items: center; gap: 12px;">
@@ -1823,8 +1881,8 @@ async function loadConditionalOrders() {
                         <!-- Current Price -->
                         <div style="background: rgba(15,23,42,0.8); padding: 14px 12px; text-align: center;">
                             <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Current</div>
-                            <div style="font-size: 1.1rem; font-weight: 700; color: ${order.current_price ? (order.current_price >= triggerPrice ? '#22c55e' : '#ef4444') : 'var(--text-muted)'};">${order.current_price ? '$' + parseFloat(order.current_price).toFixed(2) : '—'}</div>
-                            <div style="font-size: 0.6rem; color: var(--text-muted); margin-top: 2px;">${order.price_updated_at ? new Date(order.price_updated_at + (order.price_updated_at.includes('Z') || order.price_updated_at.includes('+') ? '' : 'Z')).toLocaleString('en-US', {timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: true}) : ''}</div>
+                            <div class="current-price-value" style="font-size: 1.1rem; font-weight: 700; color: ${order.current_price ? (parseFloat(order.current_price) >= triggerPrice ? '#22c55e' : '#ef4444') : 'var(--text-muted)'};">${order.current_price ? '$' + parseFloat(order.current_price).toFixed(2) : '—'}</div>
+                            <div class="current-price-time" style="font-size: 0.6rem; color: var(--text-muted); margin-top: 2px;">${order.price_updated_at ? new Date(order.price_updated_at + (order.price_updated_at.includes('Z') || order.price_updated_at.includes('+') ? '' : 'Z')).toLocaleString('en-US', {timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true}) : ''}</div>
                         </div>
                         
                         <!-- Adjusted -->
