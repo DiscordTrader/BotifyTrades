@@ -9790,11 +9790,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 traceback.print_exc()
                                 raise
                             
+                            print(f"[DEBUG] NDX→QQQ: About to check if converted...", flush=True)
+                            print(f"[DEBUG] NDX→QQQ: bool(converted)={bool(converted)}", flush=True)
                             if converted:
+                                print(f"[DEBUG] NDX→QQQ: INSIDE IF BLOCK - converted is truthy", flush=True)
                                 original_symbol = opt.get('symbol')
                                 original_strike = opt.get('strike')
                                 original_price = opt.get('price')
+                                print(f"[DEBUG] NDX→QQQ: original={original_symbol} {original_strike} @ {original_price}", flush=True)
                                 opt.update(converted)
+                                print(f"[DEBUG] NDX→QQQ: After opt.update, opt={opt}", flush=True)
                                 # Ensure original_symbol/strike are preserved for STC mapping
                                 opt['original_symbol'] = original_symbol.upper().replace('$', '')
                                 opt['original_strike'] = original_strike
