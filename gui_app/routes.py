@@ -1730,9 +1730,8 @@ def register_routes(app):
     
     @app.route('/admin/signal-routing')
     @login_required
-    @admin_feature_required
     def signal_routing():
-        """Admin-only Signal Routing page - source to destination channel mappings"""
+        """Signal Routing page - source to destination channel mappings"""
         response = make_response(render_template('signal_routing.html'))
         response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
         response.headers['Pragma'] = 'no-cache'
@@ -1956,9 +1955,8 @@ def register_routes(app):
     
     @app.route('/api/admin/signal-routing', methods=['GET'])
     @login_required
-    @admin_feature_required
     def api_get_signal_routing_mappings():
-        """Get all signal routing mappings (admin only)"""
+        """Get all signal routing mappings"""
         try:
             enabled_only = request.args.get('enabled_only', 'false').lower() == 'true'
             mappings = db.get_signal_routing_mappings(enabled_only=enabled_only)
@@ -1968,9 +1966,8 @@ def register_routes(app):
     
     @app.route('/api/admin/signal-routing', methods=['POST'])
     @login_required
-    @admin_feature_required
     def api_create_signal_routing_mapping():
-        """Create a new signal routing mapping (admin only)"""
+        """Create a new signal routing mapping"""
         try:
             data = request.json
             
@@ -2031,9 +2028,8 @@ def register_routes(app):
     
     @app.route('/api/admin/signal-routing/<int:mapping_id>', methods=['GET'])
     @login_required
-    @admin_feature_required
     def api_get_signal_routing_mapping(mapping_id):
-        """Get a single signal routing mapping (admin only)"""
+        """Get a single signal routing mapping"""
         try:
             mapping = db.get_signal_routing_mapping(mapping_id)
             if mapping:
@@ -2045,9 +2041,8 @@ def register_routes(app):
     
     @app.route('/api/admin/signal-routing/<int:mapping_id>', methods=['PUT'])
     @login_required
-    @admin_feature_required
     def api_update_signal_routing_mapping(mapping_id):
-        """Update a signal routing mapping (admin only)"""
+        """Update a signal routing mapping"""
         try:
             data = request.json
             success = db.update_signal_routing_mapping(mapping_id, **data)
@@ -2060,9 +2055,8 @@ def register_routes(app):
     
     @app.route('/api/admin/signal-routing/<int:mapping_id>', methods=['DELETE'])
     @login_required
-    @admin_feature_required
     def api_delete_signal_routing_mapping(mapping_id):
-        """Delete a signal routing mapping (admin only)"""
+        """Delete a signal routing mapping"""
         try:
             success = db.delete_signal_routing_mapping(mapping_id)
             if success:
@@ -2074,9 +2068,8 @@ def register_routes(app):
     
     @app.route('/api/admin/signal-routing/positions', methods=['GET'])
     @login_required
-    @admin_feature_required
     def api_get_routing_positions():
-        """Get all positions tracked by signal routing mappings (admin only)"""
+        """Get all positions tracked by signal routing mappings"""
         try:
             from src.services.position_ledger import get_position_ledger
             ledger = get_position_ledger()
@@ -2114,9 +2107,8 @@ def register_routes(app):
     
     @app.route('/api/admin/signal-routing/pnl', methods=['GET'])
     @login_required
-    @admin_feature_required
     def api_get_routing_pnl_summary():
-        """Get P&L summary for closed signal routing positions (admin only)"""
+        """Get P&L summary for closed signal routing positions"""
         try:
             from src.services.position_ledger import get_position_ledger
             ledger = get_position_ledger()
@@ -2168,9 +2160,8 @@ def register_routes(app):
     
     @app.route('/api/admin/signal-routing/risk/<channel_id>', methods=['GET'])
     @login_required
-    @admin_feature_required
     def api_get_routing_risk_settings(channel_id):
-        """Get risk settings for a signal routing mapping by source channel ID (admin only)"""
+        """Get risk settings for a signal routing mapping by source channel ID"""
         try:
             mapping = db.get_signal_routing_by_source(channel_id)
             if mapping:
@@ -2211,9 +2202,8 @@ def register_routes(app):
     
     @app.route('/api/admin/signal-routing/risk/<channel_id>', methods=['PUT'])
     @login_required
-    @admin_feature_required
     def api_update_routing_risk_settings(channel_id):
-        """Update risk settings for a signal routing mapping by source channel ID (admin only)"""
+        """Update risk settings for a signal routing mapping by source channel ID"""
         try:
             data = request.json
             mapping = db.get_signal_routing_by_source(channel_id)
