@@ -51,16 +51,23 @@ class NDXtoQQQConverter:
         Returns:
             Converted signal dict with QQQ symbol and new strike, or None if conversion failed
         """
+        import sys
         symbol = signal.get('symbol', '').upper()
         
+        sys.stdout.write(f"[NDX→QQQ CONVERT] symbol={symbol}, target_delta={target_delta}\n")
+        sys.stdout.flush()
+        
         if symbol not in ['NDX', '$NDX', 'NASDAQ', 'NQ']:
+            sys.stdout.write(f"[NDX→QQQ CONVERT] Not NDX symbol, returning None\n")
+            sys.stdout.flush()
             return None
         
         opt_type = signal.get('opt_type', 'C').upper()
         expiry = signal.get('expiry', '')
         original_strike = signal.get('strike')
         
-        print(f"[NDX→QQQ] Converting {symbol} {original_strike}{opt_type} {expiry} to QQQ with δ={target_delta}")
+        sys.stdout.write(f"[NDX→QQQ CONVERT] Converting {symbol} {original_strike}{opt_type} {expiry} to QQQ with δ={target_delta}\n")
+        sys.stdout.flush()
         
         expiry_date = self._parse_expiry(expiry)
         if not expiry_date:
