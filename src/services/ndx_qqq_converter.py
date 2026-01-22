@@ -435,8 +435,21 @@ class NDXtoQQQConverter:
             from alpaca.trading.enums import ContractType
             import os
             
+            # Try environment variables first
             api_key = os.environ.get('ALPACA_PAPER_API_KEY', os.environ.get('APCA_API_KEY_ID', ''))
             api_secret = os.environ.get('ALPACA_PAPER_API_SECRET', os.environ.get('APCA_API_SECRET_KEY', ''))
+            
+            # If not in env, load from database (same as AlpacaBroker does)
+            if not api_key or not api_secret:
+                sys.stdout.write(f"[NDX→QQQ STRIKES] No env vars, loading from database...\n")
+                sys.stdout.flush()
+                try:
+                    from gui_app.database import get_setting
+                    api_key = get_setting('alpaca_paper_api_key', '')
+                    api_secret = get_setting('alpaca_paper_api_secret', '')
+                except Exception as db_err:
+                    sys.stdout.write(f"[NDX→QQQ STRIKES] Database load error: {db_err}\n")
+                    sys.stdout.flush()
             
             sys.stdout.write(f"[NDX→QQQ STRIKES] API key found: {bool(api_key)}, Secret found: {bool(api_secret)}\n")
             sys.stdout.flush()
