@@ -29,7 +29,8 @@ from alpaca.trading.enums import (
     PositionIntent,
 )
 from alpaca.data.historical import StockHistoricalDataClient
-from alpaca.data.requests import StockLatestQuoteRequest
+from alpaca.data.historical.option import OptionHistoricalDataClient
+from alpaca.data.requests import StockLatestQuoteRequest, OptionLatestQuoteRequest
 
 # Add parent directory to path for absolute imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -48,6 +49,7 @@ class AlpacaBroker(BrokerInterface):
         self.name = "ALPACA"
         self.trading_client = None
         self.data_client = None
+        self.option_data_client = None
         self.paper_trade = config.get('paper_trade', True)
     
     async def connect(self) -> bool:
@@ -74,6 +76,12 @@ class AlpacaBroker(BrokerInterface):
             
             # Initialize data client
             self.data_client = StockHistoricalDataClient(
+                api_key=api_key,
+                secret_key=api_secret
+            )
+            
+            # Initialize option data client for option quotes
+            self.option_data_client = OptionHistoricalDataClient(
                 api_key=api_key,
                 secret_key=api_secret
             )
@@ -938,7 +946,7 @@ class AlpacaBroker(BrokerInterface):
             
             request = OptionLatestQuoteRequest(symbol_or_symbols=[option_symbol])
             quotes = await asyncio.to_thread(
-                self.data_client.get_option_latest_quote,
+                self.option_data_client.get_option_latest_quote,
                 request
             )
             

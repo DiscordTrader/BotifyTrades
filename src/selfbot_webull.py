@@ -7251,6 +7251,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             print(f"[STARTUP] Warning: Could not start Trade Monitor: {e}", flush=True)
             traceback.print_exc()
         
+        # Start Signal Routing Engine risk monitor (for position_ledger price monitoring)
+        try:
+            if SIGNAL_ROUTING_ENGINE_AVAILABLE:
+                from src.services.signal_routing_engine import get_signal_routing_engine
+                routing_engine = get_signal_routing_engine()
+                await routing_engine.start_risk_monitor()
+                print("[STARTUP] ✓ Signal Routing Engine risk monitor started", flush=True)
+            else:
+                print("[STARTUP] Signal Routing Engine not available", flush=True)
+        except Exception as e:
+            print(f"[STARTUP] Warning: Could not start Signal Routing Engine: {e}", flush=True)
+        
         # Set up Conditional Order execution callback (broker registration happens after brokers connect)
         try:
             from src.services.conditional_orders.router import conditional_order_router

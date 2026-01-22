@@ -155,7 +155,8 @@ class QuoteAggregator:
             if broker_name not in self._brokers:
                 continue
             broker = self._brokers[broker_name]
-            if not getattr(broker, 'connected', False):
+            is_connected = getattr(broker, 'connected', False)
+            if not is_connected:
                 continue
             caps = BROKER_CAPABILITIES.get(broker_name, {})
             if caps.get(capability, False):
@@ -422,6 +423,7 @@ class QuoteAggregator:
                                        strike: float, opt_type: str, 
                                        expiry: str) -> Optional[OptionQuoteResult]:
         """Get option quote from specific broker"""
+        import asyncio
         
         if name == 'webull':
             wb_client = getattr(broker, '_client', None) or getattr(broker, 'wb', None)
@@ -444,30 +446,68 @@ class QuoteAggregator:
                                 broker=name
                             )
         
-        elif name == 'robinhood':
+        elif name == 'alpaca':
             try:
-                import robin_stocks.robinhood as rh
-                option_data = rh.options.find_options_by_strike(
-                    symbol, strike,
-                    expirationDate=expiry,
-                    optionType=('call' if opt_type == 'C' else 'put')
-                )
-                if option_data:
-                    opt = option_data[0]
-                    bid = float(opt.get('bid_price', 0) or 0)
-                    ask = float(opt.get('ask_price', 0) or 0)
-                    last = float(opt.get('last_trade_price', 0) or 0)
-                    mid = (bid + ask) / 2 if bid and ask else last
+                alpaca_expiry = expiry
+                if '-' in expiry:
+                    parts = expiry.split('-')
+                    if len(parts) == 3:
+                        alpaca_expiry = f"{int(parts[1])}/{int(parts[2])}"
+                
+                async def fetch_alpaca():
+                    return await broker.get_option_quote(symbol, strike, opt_type, alpaca_expiry)
+                
+                try:
+                    loop = asyncio.get_running_loop()
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        future = pool.submit(asyncio.run, fetch_alpaca())
+                        quote = future.result(timeout=5)
+                except RuntimeError:
+                    quote = asyncio.run(fetch_alpaca())
+                
+                if quote:
+                    bid = float(quote.get('bid', 0) or 0)
+                    ask = float(quote.get('ask', 0) or 0)
+                    mid = float(quote.get('mid', 0) or 0)
                     return OptionQuoteResult(
                         success=True,
                         bid=bid,
                         ask=ask,
-                        last=last,
+                        last=mid,
                         mid=mid,
                         broker=name
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                sys.stderr.write(f"[QUOTE_AGG] Alpaca option quote error: {e}\n")
+                sys.stderr.flush()
+        
+        elif name == 'robinhood':
+            try:
+                import robin_stocks.robinhood as rh
+                opt_type_str = 'call' if opt_type.upper() == 'C' else 'put'
+                option_data = rh.options.get_option_market_data(
+                    symbol, expiry, str(strike), opt_type_str
+                )
+                if option_data and len(option_data) > 0:
+                    opt = option_data[0]
+                    if opt:
+                        bid = float(opt.get('bid_price', 0) or 0)
+                        ask = float(opt.get('ask_price', 0) or 0)
+                        last = float(opt.get('last_trade_price', 0) or 0)
+                        adjusted_mark = float(opt.get('adjusted_mark_price', 0) or 0)
+                        mid = adjusted_mark if adjusted_mark else ((bid + ask) / 2 if bid and ask else last)
+                        return OptionQuoteResult(
+                            success=True,
+                            bid=bid,
+                            ask=ask,
+                            last=last,
+                            mid=mid,
+                            broker=name
+                        )
+            except Exception as e:
+                sys.stderr.write(f"[QUOTE_AGG] Robinhood option quote error: {e}\n")
+                sys.stderr.flush()
         
         return None
 

@@ -34,6 +34,7 @@ from src.services.position_ledger import (
     PartialExit
 )
 from src.services.price_monitor_service import get_price_monitor, PriceMonitorService
+from src.services.quote_aggregator import get_quote_aggregator
 from src.services.market_hours import (
     get_market_status,
     is_options_trading_hours,
@@ -620,15 +621,23 @@ class SignalRoutingEngine:
         3. Evaluate risk conditions
         4. Trigger STC webhooks when conditions met
         """
-        print("[ROUTING_ENGINE] ✓ Risk monitoring loop started")
+        import sys
+        sys.stderr.write("[ROUTING_ENGINE] ✓ Risk monitoring loop started\n")
+        sys.stderr.flush()
         
+        loop_count = 0
         while self._running:
             try:
+                loop_count += 1
                 positions = self.ledger.get_open_positions()
                 
                 routed_positions = [
                     p for p in positions if p.routing_mapping_id is not None
                 ]
+                
+                if loop_count <= 3 or loop_count % 20 == 0:
+                    sys.stderr.write(f"[ROUTING_ENGINE] Loop #{loop_count}: {len(positions)} positions, {len(routed_positions)} routed\n")
+                    sys.stderr.flush()
                 
                 for position in routed_positions:
                     if position.remaining_qty <= 0:
@@ -638,18 +647,35 @@ class SignalRoutingEngine:
                         continue
                     
                     try:
-                        price = await self.price_monitor.get_option_price(
+                        quote_agg = get_quote_aggregator()
+                        expiry_fmt = position.expiry
+                        if '/' in expiry_fmt:
+                            parts = expiry_fmt.split('/')
+                            if len(parts) == 2:
+                                year = datetime.now().year
+                                expiry_fmt = f"{year}-{int(parts[0]):02d}-{int(parts[1]):02d}"
+                        
+                        from src.services.quote_aggregator import BrokerCapability
+                        connected_brokers = quote_agg.get_connected_brokers(BrokerCapability.OPTION_QUOTE)
+                        
+                        quote_result = quote_agg.get_option_quote(
                             symbol=position.symbol,
                             strike=position.strike,
-                            expiry=position.expiry,
-                            option_type=position.option_type
+                            opt_type=position.option_type,
+                            expiry=expiry_fmt
                         )
+                        price = quote_result.mid if quote_result.success else None
+                        if loop_count <= 3:
+                            error_info = quote_result.error if not quote_result.success else ""
+                            sys.stderr.write(f"[ROUTING_ENGINE] {position.symbol} {position.strike}{position.option_type} {expiry_fmt}: price={price} (entry={position.entry_price}) brokers={connected_brokers} {error_info}\n")
+                            sys.stderr.flush()
                         if price and price > 0:
                             self.ledger.update_price(position.id, price, staleness_sec=0)
                             position.current_price = price
                             position.price_staleness_sec = 0
                     except Exception as price_err:
-                        print(f"[ROUTING_ENGINE] ⚠️ Price fetch failed for {position.option_key}: {price_err}")
+                        sys.stderr.write(f"[ROUTING_ENGINE] ⚠️ Price fetch failed for {position.option_key}: {price_err}\n")
+                        sys.stderr.flush()
                         continue
                     
                     can_eval, reason = self.can_evaluate_risk(position)
@@ -676,12 +702,43 @@ class SignalRoutingEngine:
     
     async def start_risk_monitor(self):
         """Start the risk monitoring loop."""
+        import sys
+        sys.stderr.write(f"[ROUTING_ENGINE] start_risk_monitor called, _running={self._running}\n")
+        sys.stderr.flush()
+        
         if self._running:
+            sys.stderr.write("[ROUTING_ENGINE] Already running, skipping\n")
+            sys.stderr.flush()
             return
         
         self._running = True
-        self._monitor_task = asyncio.create_task(self._risk_monitor_loop())
-        print("[ROUTING_ENGINE] ✓ Risk monitor started")
+        try:
+            self._monitor_task = asyncio.create_task(self._risk_monitor_loop())
+            
+            def task_done_callback(task):
+                try:
+                    exc = task.exception()
+                    if exc:
+                        import traceback
+                        sys.stderr.write(f"[ROUTING_ENGINE] ❌ Task error: {exc}\n")
+                        sys.stderr.write(f"[ROUTING_ENGINE] Traceback: {traceback.format_exception(type(exc), exc, exc.__traceback__)}\n")
+                        sys.stderr.flush()
+                except asyncio.CancelledError:
+                    sys.stderr.write("[ROUTING_ENGINE] Task was cancelled\n")
+                    sys.stderr.flush()
+            
+            self._monitor_task.add_done_callback(task_done_callback)
+            sys.stderr.write(f"[ROUTING_ENGINE] Task created: {self._monitor_task}\n")
+            sys.stderr.flush()
+            await asyncio.sleep(0.5)
+            sys.stderr.write(f"[ROUTING_ENGINE] Task state after 0.5s: {self._monitor_task}\n")
+            sys.stderr.flush()
+            print("[ROUTING_ENGINE] ✓ Risk monitor started", flush=True)
+        except Exception as e:
+            sys.stderr.write(f"[ROUTING_ENGINE] Error creating task: {e}\n")
+            import traceback
+            sys.stderr.write(f"{traceback.format_exc()}\n")
+            sys.stderr.flush()
     
     async def stop_risk_monitor(self):
         """Stop the risk monitoring loop."""
