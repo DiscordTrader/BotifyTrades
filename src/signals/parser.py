@@ -225,8 +225,8 @@ BISHOP_ENTRY_PATTERN = re.compile(
 BISHOP_EXIT_PATTERN = re.compile(
     r'(?:out\s+of|all\s+out\s+of?|exiting?)\s+'
     r'(?:the\s+rest\s+of\s+|these\s+)?'  # Optional article/modifier
-    r'([A-Z]{1,5})\s*'  # Symbol (1-5 uppercase letters)
-    r'(?:calls?|puts?|(?:at|for|around)\s+[\d.]+%?)?',  # Optional: calls/puts OR at/for price
+    r'([A-Z]{1,5})\s+'  # Symbol (1-5 uppercase letters) followed by space
+    r'(?:calls?|puts?|(?:at|for|around|swing)\s+[-\d.]+%?)',  # REQUIRED: calls/puts OR price/pct to distinguish from casual text
     re.IGNORECASE
 )
 
