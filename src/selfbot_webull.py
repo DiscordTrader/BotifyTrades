@@ -8144,14 +8144,61 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 is_evapanda = is_evapanda_signal(combined_content)
                 is_toon = is_toon_signal(combined_content)
                 
-                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda or is_toon:
-                    print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda}, toon={is_toon})")
+                # Check for spy-sniper embed format (Open Alert / Trim Alert / Close Alert)
+                is_spy_sniper_embed = False
+                if SPY_SNIPER_AVAILABLE and hasattr(message, 'embeds') and message.embeds:
+                    for embed in message.embeds:
+                        embed_title = embed.title if embed.title else ""
+                        if is_spy_sniper_signal(embed_title, embed.description if embed.description else ""):
+                            is_spy_sniper_embed = True
+                            break
+                
+                if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda or is_toon or is_spy_sniper_embed:
+                    print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda}, toon={is_toon}, spy_sniper={is_spy_sniper_embed})")
                     
                     # === SIGNAL ROUTING ENGINE: Forward BTO via routing engine (creates position for risk monitoring) ===
                     if is_signal_routing_source and signal_routing_config and signal_routing_config.enable_forwarding:
                         # Parse the signal to get details
                         routing_parsed = None
-                        if is_bishop:
+                        
+                        # Check for spy-sniper embed format first
+                        spy_sniper_parsed = None
+                        if SPY_SNIPER_AVAILABLE and hasattr(message, 'embeds') and message.embeds:
+                            from src.signals.spy_sniper_parser import parse_spy_sniper_signal, SpySniperSignalType
+                            for embed in message.embeds:
+                                embed_title = embed.title if embed.title else ""
+                                embed_desc = embed.description if embed.description else ""
+                                spy_signal = parse_spy_sniper_signal(embed_title, embed_desc, str(message.id))
+                                if spy_signal:
+                                    # Convert spy-sniper signal to routing_parsed format
+                                    if spy_signal.signal_type == SpySniperSignalType.ENTRY:
+                                        spy_sniper_parsed = {
+                                            'action': 'BTO',
+                                            'symbol': spy_signal.symbol,
+                                            'strike': spy_signal.strike,
+                                            'opt_type': spy_signal.option_type,
+                                            'expiry': spy_signal.expiry_date,
+                                            'price': spy_signal.entry_price,
+                                            'qty': 1
+                                        }
+                                        print(f"[SIGNAL_ROUTING] ✓ Detected spy-sniper Open Alert: {spy_signal.symbol} {spy_signal.strike}{spy_signal.option_type} @ {spy_signal.entry_price}")
+                                    elif spy_signal.signal_type in [SpySniperSignalType.TRIM, SpySniperSignalType.CLOSE]:
+                                        spy_sniper_parsed = {
+                                            'action': 'STC',
+                                            'symbol': spy_signal.symbol,
+                                            'strike': spy_signal.strike,
+                                            'opt_type': spy_signal.option_type,
+                                            'expiry': spy_signal.expiry_date,
+                                            'price': spy_signal.current_price,
+                                            'is_full_exit': spy_signal.is_full_exit
+                                        }
+                                        print(f"[SIGNAL_ROUTING] ✓ Detected spy-sniper {'Close' if spy_signal.is_full_exit else 'Trim'} Alert: {spy_signal.symbol}")
+                                    break
+                        
+                        # Use spy-sniper parsed if available, otherwise try other parsers
+                        if spy_sniper_parsed:
+                            routing_parsed = spy_sniper_parsed
+                        elif is_bishop:
                             routing_parsed = parse_bishop_signal(combined_content)
                         elif is_evapanda:
                             routing_parsed = parse_evapanda_signal(combined_content)
@@ -8196,8 +8243,35 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 import traceback
                                 traceback.print_exc()
                         elif routing_parsed and routing_parsed.get('action') == 'STC':
-                            # STC signals are handled separately (already integrated)
-                            pass
+                            # STC signals: forward via routing engine
+                            try:
+                                routing_engine = get_signal_routing_engine()
+                                symbol = routing_parsed.get('symbol', '')
+                                strike = float(routing_parsed.get('strike', 0) or 0)
+                                opt_type = routing_parsed.get('opt_type', 'C')
+                                expiry = routing_parsed.get('expiry', '')
+                                exit_price = float(routing_parsed.get('price', 0) or 0)
+                                is_full_exit = routing_parsed.get('is_full_exit', True)
+                                
+                                if symbol:
+                                    success = await routing_engine.post_stc_signal(
+                                        config=signal_routing_config,
+                                        symbol=symbol,
+                                        strike=strike,
+                                        option_type=opt_type,
+                                        expiry=expiry,
+                                        exit_price=exit_price if exit_price > 0 else None,
+                                        exit_percentage=100 if is_full_exit else 50,
+                                        message_id=str(message.id)
+                                    )
+                                    if success:
+                                        print(f"[SIGNAL_ROUTING] ✓ STC forwarded: {symbol} {strike}{opt_type}")
+                                    else:
+                                        print(f"[SIGNAL_ROUTING] ⚠️ STC forward failed for {symbol} (no matching position)")
+                            except Exception as route_err:
+                                print(f"[SIGNAL_ROUTING] ❌ STC forward error: {route_err}")
+                                import traceback
+                                traceback.print_exc()
                         # Skip regular channel_mappings forwarding for signal routing sources
                         should_forward = False
                     
