@@ -8660,6 +8660,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     'asset_type': 'option'
                                 }
                                 print(f"[PNL TRACK] Toon parsed: {parsed_signal} (partial={is_partial})")
+                        elif is_sir_goldman and sir_goldman_parsed:
+                            is_exit = sir_goldman_parsed.action == 'STC'
+                            is_partial = sir_goldman_parsed.signal_type.value == 'TRIM'
+                            parsed_signal = {
+                                'symbol': sir_goldman_parsed.symbol,
+                                'strike': sir_goldman_parsed.strike,
+                                'opt_type': sir_goldman_parsed.option_type or 'C',
+                                'expiry': '',  # Sir Goldman doesn't include expiry
+                                'price': sir_goldman_parsed.price,
+                                'qty': 1,
+                                'is_exit': is_exit,
+                                'is_partial': is_partial,
+                                'is_market_order': sir_goldman_parsed.is_market_exit,
+                                'asset_type': 'option'
+                            }
+                            print(f"[PNL TRACK] Sir Goldman parsed: {parsed_signal} (partial={is_partial})")
                         else:
                             # Use the unified parser which handles ALL formats (BTO/STC, Bishop, EvaPanda, DTE, etc.)
                             parsed_opt = parse_option_signal(combined_content)
