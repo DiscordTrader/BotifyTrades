@@ -8286,6 +8286,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 expiry = routing_parsed.get('expiry', '')
                                 exit_price = float(routing_parsed.get('price', 0) or 0)
                                 is_full_exit = routing_parsed.get('is_full_exit', True)
+                                is_trim = routing_parsed.get('is_trim', False)
+                                
+                                # Handle Sir Goldman EXIT/TRIM without symbol - find most recent open position
+                                if not symbol:
+                                    open_positions = ledger.get_open_positions(channel_id=str(signal_routing_config.id))
+                                    if open_positions:
+                                        # Get most recent open position (sorted by entry_time desc)
+                                        most_recent = sorted(open_positions, key=lambda p: p.entry_time or '', reverse=True)[0]
+                                        symbol = most_recent.symbol
+                                        strike = most_recent.strike
+                                        opt_type = most_recent.option_type
+                                        expiry = most_recent.expiry or ''
+                                        is_full_exit = not is_trim  # TRIM = partial, EXIT = full
+                                        print(f"[SIGNAL_ROUTING] ✓ Resolved STC to most recent position: {symbol} {strike}{opt_type}")
+                                    else:
+                                        print(f"[SIGNAL_ROUTING] ⏭️ STC skipped - no symbol and no open positions for routing config {signal_routing_config.id}")
                                 
                                 if symbol:
                                     # Build option key to find matching position
@@ -8663,10 +8679,42 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elif is_sir_goldman and sir_goldman_parsed:
                             is_exit = sir_goldman_parsed.action == 'STC'
                             is_partial = sir_goldman_parsed.signal_type.value == 'TRIM'
+                            
+                            # Sir Goldman EXIT/TRIM signals may lack symbol - look up from open position
+                            sg_symbol = sir_goldman_parsed.symbol
+                            sg_strike = sir_goldman_parsed.strike
+                            sg_opt_type = sir_goldman_parsed.option_type or 'C'
+                            
+                            if is_exit and not sg_symbol:
+                                # Look up most recent open position for this channel
+                                try:
+                                    from gui_app.database import get_connection
+                                    conn = get_connection()
+                                    cursor = conn.cursor()
+                                    cursor.execute('''
+                                        SELECT symbol, strike, call_put, expiry 
+                                        FROM trades 
+                                        WHERE channel_id = ? 
+                                        AND direction = 'BTO' 
+                                        AND status IN ('OPEN', 'PENDING', 'open', 'pending')
+                                        ORDER BY created_at DESC 
+                                        LIMIT 1
+                                    ''', (str(channel_id),))
+                                    open_pos = cursor.fetchone()
+                                    if open_pos:
+                                        sg_symbol = open_pos['symbol']
+                                        sg_strike = open_pos['strike']
+                                        sg_opt_type = open_pos['call_put'] or 'C'
+                                        print(f"[SIR-GOLDMAN] ✓ Resolved EXIT to open position: {sg_symbol} ${sg_strike}{sg_opt_type}")
+                                    else:
+                                        print(f"[SIR-GOLDMAN] ⚠️ No open position found for EXIT signal in channel {channel_id}")
+                                except Exception as e:
+                                    print(f"[SIR-GOLDMAN] ⚠️ Error looking up open position: {e}")
+                            
                             parsed_signal = {
-                                'symbol': sir_goldman_parsed.symbol,
-                                'strike': sir_goldman_parsed.strike,
-                                'opt_type': sir_goldman_parsed.option_type or 'C',
+                                'symbol': sg_symbol,
+                                'strike': sg_strike,
+                                'opt_type': sg_opt_type,
                                 'expiry': '',  # Sir Goldman doesn't include expiry
                                 'price': sir_goldman_parsed.price,
                                 'qty': 1,
