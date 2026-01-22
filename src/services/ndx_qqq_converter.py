@@ -467,6 +467,7 @@ class NDXtoQQQConverter:
             sys.stdout.write(f"[NDX→QQQ STRIKES] Creating request for QQQ {contract_type} expiry={expiry_date}\n")
             sys.stdout.flush()
             
+            # Try with specific expiry first
             req = GetOptionContractsRequest(
                 underlying_symbols=['QQQ'],
                 type=contract_type,
@@ -476,14 +477,30 @@ class NDXtoQQQConverter:
             
             contracts = client.get_option_contracts(req)
             
-            sys.stdout.write(f"[NDX→QQQ STRIKES] Alpaca returned: contracts={contracts is not None}, has_option_contracts={hasattr(contracts, 'option_contracts') if contracts else False}\n")
+            contract_count = len(contracts.option_contracts) if contracts and contracts.option_contracts else 0
+            sys.stdout.write(f"[NDX→QQQ STRIKES] Alpaca returned {contract_count} contracts for expiry={expiry_date}\n")
             sys.stdout.flush()
+            
+            # If no contracts for that expiry, try without expiry filter to get any available strikes
+            if contract_count == 0:
+                sys.stdout.write(f"[NDX→QQQ STRIKES] No contracts for {expiry_date}, trying without expiry filter...\n")
+                sys.stdout.flush()
+                req = GetOptionContractsRequest(
+                    underlying_symbols=['QQQ'],
+                    type=contract_type,
+                    limit=100
+                )
+                contracts = client.get_option_contracts(req)
+                contract_count = len(contracts.option_contracts) if contracts and contracts.option_contracts else 0
+                sys.stdout.write(f"[NDX→QQQ STRIKES] Alpaca returned {contract_count} contracts (no expiry filter)\n")
+                sys.stdout.flush()
             
             if contracts and contracts.option_contracts:
                 strikes = [float(c.strike_price) for c in contracts.option_contracts]
-                sys.stdout.write(f"[NDX→QQQ STRIKES] Found {len(strikes)} strikes: {sorted(set(strikes))[:10]}...\n")
+                unique_strikes = sorted(set(strikes))
+                sys.stdout.write(f"[NDX→QQQ STRIKES] Found {len(unique_strikes)} unique strikes: {unique_strikes[:10]}...\n")
                 sys.stdout.flush()
-                return sorted(set(strikes))
+                return unique_strikes
             
             sys.stdout.write(f"[NDX→QQQ STRIKES] No option_contracts in response\n")
             sys.stdout.flush()
