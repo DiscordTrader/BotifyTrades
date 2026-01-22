@@ -2750,8 +2750,6 @@ class WebullBroker:
                         'msg': 'Webull options require a limit price. Could not determine market price.',
                         'error': 'NO_PRICE'
                     }
-                # Update limit_price for subsequent calculations
-                limit_price = effective_price
             
             if side == 'BUY':
                 try:
@@ -2780,7 +2778,7 @@ class WebullBroker:
                             except (ValueError, TypeError):
                                 continue
                     
-                    order_cost = qty * limit_price * 100
+                    order_cost = qty * effective_price * 100
                     
                     net_liq = float(account_data.get('netLiquidation', 0))
                     print(f"[FUNDS] Buying power: ${buying_power:.2f}, Order cost: ${order_cost:.2f} (Net liquidation: ${net_liq:.2f})")
@@ -2793,11 +2791,11 @@ class WebullBroker:
                         }
                     
                     if order_cost > buying_power:
-                        max_affordable_qty = int(buying_power / (limit_price * 100))
+                        max_affordable_qty = int(buying_power / (effective_price * 100))
                         if max_affordable_qty > 0:
                             print(f"[FUNDS] ⚠️ Insufficient funds for {qty} contracts")
                             print(f"[FUNDS] ✓ Adjusting quantity: {qty} → {max_affordable_qty} contracts")
-                            print(f"[FUNDS] Adjusted cost: ${max_affordable_qty * limit_price * 100:.2f}")
+                            print(f"[FUNDS] Adjusted cost: ${max_affordable_qty * effective_price * 100:.2f}")
                             adjusted_qty = max_affordable_qty
                         else:
                             return {
@@ -2880,7 +2878,7 @@ class WebullBroker:
                 'serialId': str(uuid.uuid4()),
                 'timeInForce': WB_ENFORCE,
                 'orders': [{'quantity': int(adjusted_qty), 'action': side, 'tickerId': int(option_id), 'tickerType': 'OPTION'}],
-                'lmtPrice': float(limit_price)
+                'lmtPrice': float(effective_price)
             }
             print(f"[WEBULL] Placing option order via direct API: {api_payload}")
             
