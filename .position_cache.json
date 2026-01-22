@@ -5880,7 +5880,7 @@
     "last_evaluated_price": null
   },
   "ALPACA_PAPER_TQQQ_stock": {
-    "entry_price": 53.449933,
+    "entry_price": 53.682425,
     "highest_price": 56.48,
     "trailing_activated": false,
     "closing": false,
@@ -5895,10 +5895,10 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-12T15:35:16.327462",
-    "max_pnl_seen": 0.13117514970060556,
+    "max_pnl_seen": 1.7045241197963628,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 52.73
+    "last_evaluated_price": 53.95
   },
   "Alpaca_LVLU_stock": {
     "entry_price": 11.85,
