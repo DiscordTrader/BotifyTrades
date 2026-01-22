@@ -8243,9 +8243,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 import traceback
                                 traceback.print_exc()
                         elif routing_parsed and routing_parsed.get('action') == 'STC':
-                            # STC signals: forward via routing engine
+                            # STC signals: forward via routing engine (only if open position exists)
                             try:
+                                from src.services.position_ledger import get_position_ledger, ExitReason
+                                
                                 routing_engine = get_signal_routing_engine()
+                                ledger = get_position_ledger()
+                                
                                 symbol = routing_parsed.get('symbol', '')
                                 strike = float(routing_parsed.get('strike', 0) or 0)
                                 opt_type = routing_parsed.get('opt_type', 'C')
@@ -8254,20 +8258,38 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 is_full_exit = routing_parsed.get('is_full_exit', True)
                                 
                                 if symbol:
-                                    success = await routing_engine.post_stc_signal(
-                                        config=signal_routing_config,
-                                        symbol=symbol,
-                                        strike=strike,
-                                        option_type=opt_type,
-                                        expiry=expiry,
-                                        exit_price=exit_price if exit_price > 0 else None,
-                                        exit_percentage=100 if is_full_exit else 50,
-                                        message_id=str(message.id)
-                                    )
-                                    if success:
-                                        print(f"[SIGNAL_ROUTING] ✓ STC forwarded: {symbol} {strike}{opt_type}")
+                                    # Build option key to find matching position
+                                    option_key = f"{symbol}_{expiry}_{strike}_{opt_type}"
+                                    
+                                    # Find open position for this routing config
+                                    open_positions = ledger.get_open_positions(channel_id=str(signal_routing_config.id))
+                                    matching_position = None
+                                    for pos in open_positions:
+                                        if (pos.symbol == symbol and 
+                                            abs(pos.strike - strike) < 0.01 and 
+                                            pos.option_type == opt_type):
+                                            matching_position = pos
+                                            break
+                                    
+                                    if matching_position and matching_position.remaining_qty > 0:
+                                        # Calculate exit qty
+                                        exit_qty = matching_position.remaining_qty if is_full_exit else max(1, matching_position.remaining_qty // 2)
+                                        actual_price = exit_price if exit_price > 0 else (matching_position.current_price or matching_position.entry_price)
+                                        
+                                        success = await routing_engine.post_stc_signal(
+                                            config=signal_routing_config,
+                                            position=matching_position,
+                                            exit_qty=exit_qty,
+                                            exit_price=actual_price,
+                                            exit_reason=ExitReason.SIGNAL,
+                                            pnl_pct=0.0
+                                        )
+                                        if success:
+                                            print(f"[SIGNAL_ROUTING] ✓ STC forwarded: {symbol} {strike}{opt_type} qty={exit_qty}")
+                                        else:
+                                            print(f"[SIGNAL_ROUTING] ⚠️ STC forward failed for {symbol}")
                                     else:
-                                        print(f"[SIGNAL_ROUTING] ⚠️ STC forward failed for {symbol} (no matching position)")
+                                        print(f"[SIGNAL_ROUTING] ⏭️ STC skipped - no open position for {symbol} {strike}{opt_type} {expiry}")
                             except Exception as route_err:
                                 print(f"[SIGNAL_ROUTING] ❌ STC forward error: {route_err}")
                                 import traceback
