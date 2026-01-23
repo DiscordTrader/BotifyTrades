@@ -6738,7 +6738,7 @@
     "max_pnl_seen": 2.5754704635641845,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 54.38,
+    "last_evaluated_price": 54.32,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9315,7 +9315,7 @@
     "entry_price": 3.3,
     "highest_price": 4.1,
     "trailing_activated": false,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -9325,7 +9325,16 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {},
+    "pending_orders": {
+      "FSIE8KPM7FCK7S1QJIB7FG278A": {
+        "order_id": "FSIE8KPM7FCK7S1QJIB7FG278A",
+        "tier": 1,
+        "qty_expected": 1,
+        "qty_filled": 0,
+        "status": "pending",
+        "created_at": "2026-01-23T19:39:40.209663"
+      }
+    },
     "created_at": "2026-01-22T20:58:28.629686",
     "max_pnl_seen": 24.24242424242424,
     "dynamic_sl_price": null,

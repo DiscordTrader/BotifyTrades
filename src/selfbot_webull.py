@@ -11771,6 +11771,32 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         # Add multi-broker info to response
                         resp['_multi_broker_results'] = responses
+                        
+                        # Track exit orders for unfilled order chasing (multi-broker)
+                        if signal.get('_risk_management_order') and signal.get('action', '').upper() in ('STC', 'SELL'):
+                            for success_resp in successes:
+                                order_id = success_resp.get('orderId') or success_resp.get('order_id')
+                                broker_name = success_resp.get('broker', 'UNKNOWN')
+                                if order_id:
+                                    try:
+                                        order_chaser = get_order_chaser()
+                                        if order_chaser:
+                                            await order_chaser.track_exit_order(
+                                                order_id=str(order_id),
+                                                broker_id=broker_name,
+                                                symbol=signal.get('symbol', ''),
+                                                asset_type=signal.get('asset', 'option'),
+                                                quantity=signal.get('qty', 1),
+                                                price=signal.get('price', 0),
+                                                action='STC',
+                                                position_key=signal.get('_position_key', ''),
+                                                strike=signal.get('strike'),
+                                                expiry=signal.get('expiry'),
+                                                call_put=signal.get('opt_type')
+                                            )
+                                            _original_print(f"[ORDER_CHASER] ✓ Tracking {broker_name} exit order: {order_id}")
+                                    except Exception as chase_err:
+                                        _original_print(f"[ORDER_CHASER] ⚠️ Track error: {chase_err}")
                     else:
                         _original_print(f"[MULTI-BROKER] ❌ All brokers failed")
                         resp = {

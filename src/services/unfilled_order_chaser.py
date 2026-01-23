@@ -105,7 +105,7 @@ class UnfilledOrderChaser:
         print("[ORDER_CHASER] ✓ Monitoring loop started")
     
     async def stop(self):
-        """Stop the order chaser"""
+        """Stop the order chaser and clear tracked orders"""
         self._running = False
         if self._task:
             self._task.cancel()
@@ -113,7 +113,12 @@ class UnfilledOrderChaser:
                 await self._task
             except asyncio.CancelledError:
                 pass
-        print("[ORDER_CHASER] Stopped")
+        
+        async with self._lock:
+            tracked_count = len(self._tracked_orders)
+            self._tracked_orders.clear()
+        
+        print(f"[ORDER_CHASER] Stopped (cleared {tracked_count} tracked orders)")
     
     async def track_exit_order(
         self,
