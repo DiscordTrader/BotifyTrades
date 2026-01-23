@@ -7974,6 +7974,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if embed_content_parts:
             combined_content = message.content + "\n" + "\n".join(embed_content_parts)
         
+        # Early Sir Goldman detection (at top-level scope for broker execution access)
+        is_sir_goldman = False
+        sir_goldman_parsed = None
+        if hasattr(message, 'embeds') and message.embeds:
+            try:
+                from src.signals.sir_goldman_parser import is_sir_goldman_message, parse_sir_goldman_signal
+                embeds_as_dicts = [{'title': e.title, 'description': e.description} for e in message.embeds if e.title or e.description]
+                if is_sir_goldman_message(embeds_as_dicts):
+                    sg_signal = parse_sir_goldman_signal(embeds_as_dicts)
+                    if sg_signal:
+                        is_sir_goldman = True
+                        sir_goldman_parsed = sg_signal
+                        print(f"[SIR-GOLDMAN] ✓ Early detect: {sg_signal.signal_type.value} {sg_signal.action} {sg_signal.symbol} {sg_signal.strike}{sg_signal.option_type or ''} @ {sg_signal.price}")
+            except Exception as sg_err:
+                print(f"[SIR-GOLDMAN] ⚠️ Early detect error: {sg_err}")
+        
         # Strip forward marker from combined_content before parsing to ensure accurate signal detection
         # The marker format is: ║FWD:source_channel_id║
         # Also strip from content even if we're going to skip - keeps logs clean
@@ -8153,21 +8169,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             is_spy_sniper_embed = True
                             break
                 
-                # Check for Sir Goldman embed format (ENTRY/EXIT/TRIM in embed.title)
-                is_sir_goldman = False
-                sir_goldman_parsed = None
-                if hasattr(message, 'embeds') and message.embeds:
-                    try:
-                        from src.signals.sir_goldman_parser import is_sir_goldman_message, parse_sir_goldman_signal, convert_to_standard_signal
-                        embeds_as_dicts = [{'title': e.title, 'description': e.description} for e in message.embeds if e.title or e.description]
-                        if is_sir_goldman_message(embeds_as_dicts):
-                            sg_signal = parse_sir_goldman_signal(embeds_as_dicts)
-                            if sg_signal:
-                                is_sir_goldman = True
-                                sir_goldman_parsed = sg_signal
-                                print(f"[SIR-GOLDMAN] ✓ Detected {sg_signal.signal_type.value}: {sg_signal.action} {sg_signal.symbol} {sg_signal.strike}{sg_signal.option_type or ''} @ {sg_signal.price}")
-                    except Exception as sg_err:
-                        print(f"[SIR-GOLDMAN] ⚠️ Parse error: {sg_err}")
+                # Sir Goldman already detected at top-level scope (lines 7980-7994)
+                # Use the is_sir_goldman and sir_goldman_parsed variables from there
                 
                 if is_bto_stc_signal or is_bullwinkle or is_jacob or is_zscalps or is_jake or is_order_executed or is_bishop or is_evapanda or is_toon or is_spy_sniper_embed or is_sir_goldman:
                     print(f"[DEBUG] Trading signal detected (bto_stc={is_bto_stc_signal}, bullwinkle={is_bullwinkle}, jacob={is_jacob}, zscalps={is_zscalps}, jake={is_jake}, order_executed={is_order_executed}, bishop={is_bishop}, evapanda={is_evapanda}, toon={is_toon}, spy_sniper={is_spy_sniper_embed}, sir_goldman={is_sir_goldman})")
@@ -9618,7 +9621,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         
         # Fall back to US format parser if not India signal or India parser failed
         if opt is None and india_stock_signal is None:
-            opt = parse_option_signal(normalized_content)
+            # Check for Sir Goldman embed signals FIRST before fallback parser
+            if is_sir_goldman and sir_goldman_parsed and sir_goldman_parsed.symbol:
+                opt = {
+                    'action': sir_goldman_parsed.action,
+                    'symbol': sir_goldman_parsed.symbol,
+                    'strike': sir_goldman_parsed.strike,
+                    'opt_type': sir_goldman_parsed.option_type or 'C',
+                    'expiry': '',  # Sir Goldman doesn't include expiry - will be resolved later
+                    'price': sir_goldman_parsed.price,
+                    'qty': 1,
+                    'asset': 'option',
+                    'is_market_order': sir_goldman_parsed.is_market_exit,
+                    '_sir_goldman': True  # Mark for special handling
+                }
+                print(f"[SIR-GOLDMAN] ✓ Created opt for broker execution: {opt['action']} {opt['symbol']} {opt['strike']}{opt['opt_type']} @ {opt['price']}")
+            else:
+                opt = parse_option_signal(normalized_content)
         
         
         # Check for bracket order signal (stock with targets and stop loss)
