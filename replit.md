@@ -55,6 +55,17 @@ The Bot Lifecycle Manager provides centralized control via system tray and web G
 
 The Order Management System (OMS) and Risk Management System (RMS) provide dynamic SL/PT management via Discord message edits. The Exit Order Arbiter arbitrates between signal-driven and risk-driven exit requests. A Circuit Breaker provides emergency trading halt controls. Exit Strategy Modes include Signal, Risk, and Hybrid. Industry-grade Risk State Persistence ensures all risk state (Tier Hit, Dynamic SL Price, Giveback Guard, Trailing Stop, Settings Versioning) survives bot restarts with startup reconciliation. Enhanced Risk Management v2.0 provides Dynamic SL Escalation and Max Profit Giveback Guard.
 
+**Early Trailing Stop** (`src/risk/early_trailing.py`): Percentage-based trailing stop with breakeven-first approach:
+- State machine: INACTIVE → BREAKEVEN_LOCKED → PROFIT_LOCKED
+- Moves stop to entry (breakeven) after X% gain (default 5%), then locks profit in Y% steps (default 3%)
+- Mutually exclusive with legacy Trailing Stop (enforced in UI and RiskEngine)
+- Broker-aware price monitoring using position.broker_id for API routing
+- Adaptive polling: 1s near stop, 5s mid-range, 10s far buffer
+
+**Broker-Aware Price Monitoring** (`src/services/price_monitor_service.py`): Routes quote requests to position's connected broker with fallback chain:
+- Position broker → Other connected brokers → Finnhub → yfinance
+- Broker capability map in `src/services/broker_capabilities.py` (Alpaca/Schwab/IBKR/Robinhood support both stocks and options)
+
 A PriceMonitorService provides real-time price monitoring for open positions with multi-broker data source fallback. A Service Orchestrator manages priority-based background services with dynamic activation, API budget allocation, and broker-specific rate limiting. Order-Level Deduplication prevents duplicate order execution. Startup Settings Validation flags critical configuration issues. Position Sizing Priority is hierarchical. Proportional Exit Logic calculates proportional exits for partial exit signals. Signal Routing with Per-Mapping Risk Settings enables source-to-destination Discord channel routing with independent risk management. The Forwarding-Only Signal Routing Engine (`src/services/signal_routing_engine.py`) provides webhook-based signal forwarding with position tracking and real-time P&L monitoring, featuring a Position Ledger, Stale Price Gating, Shared ExitArbiter, and a Webhook Retry Queue. The NDX→QQQ Conversion Service (`src/services/ndx_qqq_converter.py`) enables channels with limited NDX access to trade equivalent QQQ options. The Sir Goldman Signal Parser (`src/signals/sir_goldman_parser.py`) parses embed-based trading signals, supporting ENTRY/EXIT/TRIM signals.
 
 ### System Design Choices

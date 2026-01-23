@@ -35,6 +35,13 @@ from .position_cache import PositionCache
 from .tiered_targets import evaluate_tiered_targets
 from .global_risk import evaluate_global_risk
 from .trailing_stop import evaluate_trailing_stop
+from .early_trailing import (
+    evaluate_early_trailing,
+    get_early_trailing_status,
+    validate_early_trailing_settings,
+    EarlyTrailingState,
+    EarlyTrailingResult
+)
 from .position_monitor import RiskManager, RiskDBAdapter
 from .risk_engine import (
     RiskAction,
@@ -57,6 +64,11 @@ __all__ = [
     'evaluate_tiered_targets',
     'evaluate_global_risk',
     'evaluate_trailing_stop',
+    'evaluate_early_trailing',
+    'get_early_trailing_status',
+    'validate_early_trailing_settings',
+    'EarlyTrailingState',
+    'EarlyTrailingResult',
     'RiskAction',
     'ActionType',
     'TradeState',

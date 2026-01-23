@@ -8,7 +8,8 @@ Features:
 - Deactivates on close (position fully exited)
 - Uses RateLimitManager to respect broker API limits
 - Updates PositionLedger with current prices
-- Priority-based data source fallback (Webull → Alpaca → Finnhub)
+- Broker-aware price fetching with dynamic fallback chain
+- Adaptive polling based on % distance to stop (1s near, 5s mid, 10s far)
 """
 
 import asyncio
@@ -16,11 +17,18 @@ import threading
 import time
 import os
 from datetime import datetime, timedelta
-from typing import Dict, Optional, List, Any, Set
+from typing import Dict, Optional, List, Any, Set, Callable
 from dataclasses import dataclass, field
 
 from src.services.rate_limit_manager import RateLimitManager, BROKER_LIMITS
 from src.services.position_ledger import get_position_ledger, LedgerPosition
+from src.services.broker_capabilities import (
+    get_fallback_brokers,
+    can_fetch_quotes,
+    get_rate_limit_key,
+    AssetType,
+    BrokerCapability
+)
 
 
 @dataclass
@@ -38,6 +46,9 @@ class MonitoredPosition:
     last_update: float = 0.0
     failed_attempts: int = 0
     preferred_data_source: str = "webull"
+    entry_price: float = 0.0
+    early_stop_price: Optional[float] = None
+    asset_type: str = "option"
 
 
 class PriceMonitorService:
@@ -76,7 +87,13 @@ class PriceMonitorService:
         self._alpaca_broker = None
         self._finnhub_key = os.getenv('FINNHUB_API_KEY', '')
         
+        self._brokers: Dict[str, Any] = {}
+        self._connected_broker_ids: List[str] = []
+        
         self._default_interval = 5.0
+        self._near_stop_interval = 1.0
+        self._mid_buffer_interval = 3.0
+        self._far_buffer_interval = 5.0
         self._max_failed_attempts = 5
         self._price_stale_threshold = 120
         
@@ -86,12 +103,25 @@ class PriceMonitorService:
     def set_webull_client(self, client):
         """Set the Webull client for price fetching."""
         self._webull_client = client
+        self.register_broker('WEBULL', client)
         print("[PRICE_MONITOR] ✓ Webull client registered")
     
     def set_alpaca_broker(self, broker):
         """Set the Alpaca broker for price fetching."""
         self._alpaca_broker = broker
+        self.register_broker('ALPACA', broker)
         print("[PRICE_MONITOR] ✓ Alpaca broker registered")
+    
+    def register_broker(self, broker_id: str, broker_instance: Any):
+        """Register a broker for price fetching."""
+        self._brokers[broker_id.upper()] = broker_instance
+        if broker_id.upper() not in self._connected_broker_ids:
+            self._connected_broker_ids.append(broker_id.upper())
+        print(f"[PRICE_MONITOR] ✓ Broker registered: {broker_id}")
+    
+    def get_connected_brokers(self) -> List[str]:
+        """Get list of connected broker IDs."""
+        return self._connected_broker_ids.copy()
     
     def register_position(self, position: LedgerPosition) -> bool:
         """Register a position for price monitoring."""
@@ -103,6 +133,8 @@ class PriceMonitorService:
             if position.id in self._positions:
                 return True
             
+            asset_type = "option" if position.strike and position.expiry else "stock"
+            
             monitored = MonitoredPosition(
                 position_id=position.id,
                 option_key=position.option_key,
@@ -113,12 +145,43 @@ class PriceMonitorService:
                 channel_id=position.channel_id,
                 broker_id=position.broker_id,
                 last_price=position.entry_price,
-                last_update=time.time()
+                last_update=time.time(),
+                entry_price=position.entry_price,
+                asset_type=asset_type
             )
             
             self._positions[position.id] = monitored
-            print(f"[PRICE_MONITOR] ✓ Registered: {position.option_key} (ID: {position.id})")
+            print(f"[PRICE_MONITOR] ✓ Registered: {position.option_key} (ID: {position.id}, broker: {position.broker_id})")
             return True
+    
+    def update_early_stop(self, position_id: int, early_stop_price: float):
+        """Update the early trailing stop price for adaptive polling."""
+        with self._positions_lock:
+            if position_id in self._positions:
+                self._positions[position_id].early_stop_price = early_stop_price
+    
+    def get_adaptive_interval(self, pos: MonitoredPosition) -> float:
+        """
+        Calculate adaptive polling interval based on % distance to early stop.
+        
+        Near stop (<2% buffer): 1 second
+        Mid buffer (2-5%): 3 seconds  
+        Far buffer (>5%): 5 seconds
+        """
+        if not pos.early_stop_price or pos.early_stop_price <= 0:
+            return self._default_interval
+        
+        if pos.last_price <= 0 or pos.entry_price <= 0:
+            return self._default_interval
+        
+        pct_above_stop = ((pos.last_price - pos.early_stop_price) / pos.entry_price) * 100
+        
+        if pct_above_stop < 2.0:
+            return self._near_stop_interval
+        elif pct_above_stop < 5.0:
+            return self._mid_buffer_interval
+        else:
+            return self._far_buffer_interval
     
     def unregister_position(self, position_id: int) -> bool:
         """Unregister a position from price monitoring."""
@@ -277,26 +340,89 @@ class PriceMonitorService:
             print(f"[PRICE_MONITOR] Alpaca error for {symbol}: {e}")
             return None
     
-    async def _fetch_price(self, pos: MonitoredPosition) -> Optional[float]:
-        """Fetch price using fallback data sources."""
-        sources = [
-            ('webull', self._fetch_option_price_webull),
-            ('alpaca', self._fetch_option_price_alpaca),
-        ]
+    async def _fetch_price_from_broker(
+        self,
+        broker_id: str,
+        symbol: str,
+        strike: float,
+        expiry: str,
+        option_type: str,
+        asset_type: str = "option"
+    ) -> Optional[float]:
+        """Fetch price from a specific broker."""
+        broker = self._brokers.get(broker_id.upper())
+        if not broker:
+            return None
         
-        for source_name, fetch_func in sources:
+        rate_key = get_rate_limit_key(broker_id)
+        can_request, _ = self.rate_limiter.can_make_request(rate_key)
+        if not can_request:
+            return None
+        
+        try:
+            if asset_type == "option":
+                if hasattr(broker, 'get_option_quote'):
+                    quote = await broker.get_option_quote(symbol, strike, expiry, option_type)
+                    self.rate_limiter.record_request(rate_key)
+                    if quote:
+                        bid = quote.get('bid', 0)
+                        ask = quote.get('ask', 0)
+                        last = quote.get('last', 0)
+                        if bid > 0 and ask > 0:
+                            return (bid + ask) / 2
+                        elif last > 0:
+                            return last
+            else:
+                if hasattr(broker, 'get_quote'):
+                    price = await broker.get_quote(symbol)
+                    self.rate_limiter.record_request(rate_key)
+                    if price and price > 0:
+                        return price
+            return None
+        except Exception as e:
+            print(f"[PRICE_MONITOR] {broker_id} error for {symbol}: {e}")
+            return None
+    
+    async def _fetch_price(self, pos: MonitoredPosition) -> Optional[float]:
+        """Fetch price using broker-aware fallback chain."""
+        asset_type_enum = AssetType.OPTION if pos.asset_type == "option" else AssetType.STOCK
+        
+        fallback_brokers = get_fallback_brokers(
+            pos.broker_id,
+            self._connected_broker_ids,
+            asset_type_enum
+        )
+        
+        for broker_id in fallback_brokers:
             try:
-                price = await fetch_func(
-                    pos.symbol, 
-                    pos.strike, 
-                    pos.expiry, 
-                    pos.option_type
+                price = await self._fetch_price_from_broker(
+                    broker_id,
+                    pos.symbol,
+                    pos.strike,
+                    pos.expiry,
+                    pos.option_type,
+                    pos.asset_type
                 )
                 if price and price > 0:
-                    pos.preferred_data_source = source_name
+                    pos.preferred_data_source = broker_id.lower()
                     return price
-            except Exception as e:
+            except Exception:
                 continue
+        
+        if pos.asset_type == "option":
+            price = await self._fetch_option_price_webull(
+                pos.symbol, pos.strike, pos.expiry, pos.option_type
+            )
+            if price and price > 0:
+                pos.preferred_data_source = "webull_legacy"
+                return price
+            
+            price = await self._fetch_option_price_alpaca(
+                pos.symbol, pos.strike, pos.expiry, pos.option_type
+            )
+            if price and price > 0:
+                pos.preferred_data_source = "alpaca_legacy"
+                return price
         
         return None
     

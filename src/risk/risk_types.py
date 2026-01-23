@@ -84,6 +84,11 @@ class ChannelRiskSettings:
     giveback_allowed_pct: float = 30.0  # Max giveback % before forced exit
     dynamic_sl_profile: str = 'standard'  # 'conservative', 'standard', 'aggressive'
     
+    # Early Trailing Stop Settings (percentage-based breakeven + profit locking)
+    enable_early_trailing: bool = False  # Enable early trailing stop
+    early_trailing_activation_pct: float = 5.0  # Move to breakeven at this % gain
+    early_trailing_step_pct: float = 3.0  # Lock profit in this % increments
+    
     @property
     def has_tiered_targets(self) -> bool:
         """Check if tiered profit targets are configured."""
@@ -95,7 +100,8 @@ class ChannelRiskSettings:
         """Check if any risk settings are configured."""
         return (self.has_tiered_targets or 
                 self.stop_loss_pct > 0 or 
-                self.trailing_stop_pct > 0)
+                self.trailing_stop_pct > 0 or
+                self.enable_early_trailing)
     
     def compute_settings_hash(self) -> str:
         """
@@ -112,7 +118,9 @@ class ChannelRiskSettings:
             self.trailing_activation_pct, self.leave_runner_enabled,
             self.leave_runner_pct, self.exit_strategy_mode,
             self.enable_dynamic_sl, self.enable_giveback_guard,
-            self.giveback_allowed_pct, self.dynamic_sl_profile
+            self.giveback_allowed_pct, self.dynamic_sl_profile,
+            self.enable_early_trailing, self.early_trailing_activation_pct,
+            self.early_trailing_step_pct
         )
         hash_input = str(key_fields).encode()
         return hashlib.md5(hash_input).hexdigest()[:12]
@@ -230,6 +238,11 @@ class PositionCacheEntry:
     trailing_stop_price: Optional[float] = None  # Current trailing stop price
     risk_settings_hash: Optional[str] = None  # Hash of settings when position opened
     
+    # Early Trailing Stop state
+    early_trailing_active: bool = False  # True once breakeven locked
+    early_stop_price: Optional[float] = None  # Current early trailing stop price
+    early_steps_locked: int = 0  # Number of profit steps locked (0=breakeven, 1=+step%, 2=+2*step%, ...)
+    
     # Pending risk orders awaiting fill confirmation
     pending_orders: Dict[str, Any] = field(default_factory=dict)  # order_id -> PendingRiskOrder dict
     
@@ -256,7 +269,10 @@ class PositionCacheEntry:
             'max_pnl_seen': self.max_pnl_seen,
             'dynamic_sl_price': self.dynamic_sl_price,
             'giveback_guard_active': self.giveback_guard_active,
-            'last_evaluated_price': self.last_evaluated_price
+            'last_evaluated_price': self.last_evaluated_price,
+            'early_trailing_active': self.early_trailing_active,
+            'early_stop_price': self.early_stop_price,
+            'early_steps_locked': self.early_steps_locked
         }
     
     @classmethod
@@ -278,7 +294,7 @@ class PositionCacheEntry:
         self.closing = False
         self.closing_cycles = 0
     
-    def update_highest_price(self, current_price: float, position_key: str = None, verbose: bool = False) -> bool:
+    def update_highest_price(self, current_price: float, position_key: Optional[str] = None, verbose: bool = False) -> bool:
         """Track highest price for trailing stop. Returns True if new high was set."""
         if current_price > self.highest_price:
             old_high = self.highest_price

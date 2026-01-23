@@ -247,8 +247,8 @@ async function loadChannels() {
                                 </div>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 12px;">
                                     <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Stop Loss %</label><input type="number" id="risk-stop-loss-${channel.id}" value="${channel.stop_loss_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
-                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Stop %</label><input type="number" id="risk-trailing-stop-${channel.id}" value="${channel.trailing_stop_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="100" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
-                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Activation %</label><input type="number" id="risk-trailing-activation-${channel.id}" value="${channel.trailing_activation_pct || ''}" placeholder="Leave empty for default" step="0.01" min="0" max="500" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;"></div>
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Stop % <span id="trailing-disabled-note-${channel.id}" style="color: #ff6b6b; font-size: 10px; display: ${channel.enable_early_trailing ? 'inline' : 'none'};">(disabled - Early Trailing active)</span></label><input type="number" id="risk-trailing-stop-${channel.id}" value="${channel.trailing_stop_pct || ''}" placeholder="${channel.enable_early_trailing ? 'Disabled' : 'Leave empty for default'}" step="0.01" min="0" max="100" ${channel.enable_early_trailing ? 'disabled' : ''} style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: ${channel.enable_early_trailing ? '#2A2A2C' : '#1C1C1E'}; color: ${channel.enable_early_trailing ? '#666' : 'white'}; opacity: ${channel.enable_early_trailing ? '0.6' : '1'};"></div>
+                                    <div><label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Trailing Activation %</label><input type="number" id="risk-trailing-activation-${channel.id}" value="${channel.trailing_activation_pct || ''}" placeholder="${channel.enable_early_trailing ? 'Disabled' : 'Leave empty for default'}" step="0.01" min="0" max="500" ${channel.enable_early_trailing ? 'disabled' : ''} style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: ${channel.enable_early_trailing ? '#2A2A2C' : '#1C1C1E'}; color: ${channel.enable_early_trailing ? '#666' : 'white'}; opacity: ${channel.enable_early_trailing ? '0.6' : '1'};"></div>
                                 </div>
                                 <div style="margin-top: 12px; padding: 12px; background: rgba(255, 165, 0, 0.05); border: 1px solid rgba(255, 165, 0, 0.2); border-radius: 8px;">
                                     <label style="display: block; font-size: 12px; font-weight: 600; color: #ffb700; margin-bottom: 8px;">Trim Order Type</label>
@@ -327,6 +327,33 @@ async function loadChannels() {
                                         <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Max Giveback:</label>
                                         <input type="number" id="risk-giveback-pct-${channel.id}" value="${channel.giveback_allowed_pct || 30}" placeholder="30" step="1" min="5" max="80" style="width: 80px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
                                         <span style="font-size: 12px; color: #8E8E93;">% from peak profit</span>
+                                    </div>
+                                </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(0, 200, 150, 0.05); border: 1px solid rgba(0, 200, 150, 0.2); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 16px;">🔒</span>
+                                            <label style="font-size: 13px; font-weight: 600; color: #00c896;">Early Trailing Stop</label>
+                                        </div>
+                                        <label class="toggle-switch" title="Move to breakeven after X% gain, then lock profit in steps">
+                                            <input type="checkbox" id="risk-early-trailing-${channel.id}" ${channel.enable_early_trailing ? 'checked' : ''} onchange="toggleEarlyTrailingExclusion(${channel.id}, this.checked)">
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">What it does:</strong> Move stop to breakeven (zero risk) after price gains your activation %, then lock profit in step increments.</p>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 6px 0;"><strong style="color: #ccc;">Example:</strong> With 5%/3%: At +5% gain, stop moves to entry (breakeven). At +8%, stop locks +3% profit. At +11%, stop locks +6% profit.</p>
+                                    <p style="font-size: 10px; color: #666; margin: 0 0 10px 0; font-style: italic;">Note: Mutually exclusive with legacy Trailing Stop - enable only one.</p>
+                                    <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Breakeven at:</label>
+                                            <input type="number" id="risk-early-activation-${channel.id}" value="${channel.early_trailing_activation_pct || 5}" placeholder="5" step="0.5" min="1" max="20" style="width: 60px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                            <span style="font-size: 12px; color: #8E8E93;">% gain</span>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <label style="font-size: 11px; color: #8E8E93; white-space: nowrap;">Lock profit every:</label>
+                                            <input type="number" id="risk-early-step-${channel.id}" value="${channel.early_trailing_step_pct || 3}" placeholder="3" step="0.5" min="1" max="10" style="width: 60px; padding: 6px 10px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white; text-align: center;">
+                                            <span style="font-size: 12px; color: #8E8E93;">% more</span>
+                                        </div>
                                     </div>
                                 </div>
                                 <div style="margin-top: 16px; padding: 12px; background: rgba(138, 43, 226, 0.05); border: 1px solid rgba(138, 43, 226, 0.2); border-radius: 8px;">
@@ -1043,6 +1070,44 @@ async function toggleChannelRisk(channelId, enabled) {
     }
 }
 
+function toggleEarlyTrailingExclusion(channelId, enabled) {
+    const trailingStopInput = document.getElementById(`risk-trailing-stop-${channelId}`);
+    const trailingActivationInput = document.getElementById(`risk-trailing-activation-${channelId}`);
+    const disabledNote = document.getElementById(`trailing-disabled-note-${channelId}`);
+    
+    if (enabled) {
+        trailingStopInput.disabled = true;
+        trailingStopInput.value = '';
+        trailingStopInput.placeholder = 'Disabled';
+        trailingStopInput.style.background = '#2A2A2C';
+        trailingStopInput.style.color = '#666';
+        trailingStopInput.style.opacity = '0.6';
+        
+        trailingActivationInput.disabled = true;
+        trailingActivationInput.value = '';
+        trailingActivationInput.placeholder = 'Disabled';
+        trailingActivationInput.style.background = '#2A2A2C';
+        trailingActivationInput.style.color = '#666';
+        trailingActivationInput.style.opacity = '0.6';
+        
+        if (disabledNote) disabledNote.style.display = 'inline';
+    } else {
+        trailingStopInput.disabled = false;
+        trailingStopInput.placeholder = 'Leave empty for default';
+        trailingStopInput.style.background = '#1C1C1E';
+        trailingStopInput.style.color = 'white';
+        trailingStopInput.style.opacity = '1';
+        
+        trailingActivationInput.disabled = false;
+        trailingActivationInput.placeholder = 'Leave empty for default';
+        trailingActivationInput.style.background = '#1C1C1E';
+        trailingActivationInput.style.color = 'white';
+        trailingActivationInput.style.opacity = '1';
+        
+        if (disabledNote) disabledNote.style.display = 'none';
+    }
+}
+
 async function saveRiskManagement(channelId) {
     try {
         const riskEnabled = document.getElementById(`risk-enabled-${channelId}`)?.checked ? 1 : 0;
@@ -1069,6 +1134,17 @@ async function saveRiskManagement(channelId) {
         const enableGivebackGuard = document.getElementById(`risk-giveback-guard-${channelId}`)?.checked ? 1 : 0;
         const givebackAllowedPct = document.getElementById(`risk-giveback-pct-${channelId}`).value;
         
+        // Early Trailing Stop settings
+        const enableEarlyTrailing = document.getElementById(`risk-early-trailing-${channelId}`)?.checked ? 1 : 0;
+        const earlyTrailingActivationPct = document.getElementById(`risk-early-activation-${channelId}`).value;
+        const earlyTrailingStepPct = document.getElementById(`risk-early-step-${channelId}`).value;
+        
+        // Mutual exclusion validation: Early Trailing and Legacy Trailing cannot both be active
+        if (enableEarlyTrailing && trailingStop && parseFloat(trailingStop) > 0) {
+            showMessage('⚠️ Early Trailing and Legacy Trailing Stop are mutually exclusive. Please disable one.', 'error');
+            return;
+        }
+        
         const response = await fetch(`/api/channels/${channelId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -1093,7 +1169,10 @@ async function saveRiskManagement(channelId) {
                 enable_dynamic_sl: enableDynamicSl,
                 dynamic_sl_profile: dynamicSlProfile,
                 enable_giveback_guard: enableGivebackGuard,
-                giveback_allowed_pct: givebackAllowedPct ? parseFloat(givebackAllowedPct) : 30.0
+                giveback_allowed_pct: givebackAllowedPct ? parseFloat(givebackAllowedPct) : 30.0,
+                enable_early_trailing: enableEarlyTrailing,
+                early_trailing_activation_pct: earlyTrailingActivationPct ? parseFloat(earlyTrailingActivationPct) : 5.0,
+                early_trailing_step_pct: earlyTrailingStepPct ? parseFloat(earlyTrailingStepPct) : 3.0
             })
         });
         

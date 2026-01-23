@@ -4,6 +4,7 @@ Risk Engine - Enhanced Exit Evaluation
 Industry-grade risk management with:
 - Dynamic SL escalation after PT hits
 - Max Profit Giveback Guard
+- Early Trailing Stop (percentage-based breakeven + profit locking)
 - Priority-ordered exit evaluation
 - Idempotent pure function design
 
@@ -11,8 +12,9 @@ Exit Priority Order:
 1. Hard SL (immediate protection)
 2. Dynamic SL (after PT hits)
 3. Giveback Guard (max profit protection)
-4. Trailing Stop (after activation)
-5. Runner Exit (trailing manages remainder)
+4. Early Trailing Stop (breakeven + profit locking) - NEW
+5. Tiered Profit Targets (partial exits)
+6. Legacy Trailing Stop (after activation)
 """
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Tuple
@@ -30,6 +32,8 @@ class ActionType(Enum):
     ACTIVATE_TRAIL = "activate_trail"
     UPDATE_TRAIL_STOP = "update_trail_stop"
     ACTIVATE_GIVEBACK = "activate_giveback"
+    ACTIVATE_EARLY_TRAIL = "activate_early_trail"
+    UPDATE_EARLY_STOP = "update_early_stop"
 
 
 @dataclass
@@ -83,6 +87,11 @@ class TradeState:
     current_stop_price: Optional[float] = None
     dynamic_sl_price: Optional[float] = None
     trailing_stop_price: Optional[float] = None
+    
+    # Early Trailing Stop state
+    early_trailing_active: bool = False
+    early_stop_price: Optional[float] = None
+    early_steps_locked: int = 0
     
     last_evaluated_price: Optional[float] = None
     
@@ -201,8 +210,9 @@ def evaluate_exit_actions(
     1. Hard SL
     2. Dynamic SL (after PTs)
     3. Giveback Guard
-    4. Trailing Stop
-    5. Runner Exit via trailing
+    4. Early Trailing Stop (breakeven + profit locking)
+    5. Tiered Profit Targets
+    6. Legacy Trailing Stop
     
     Returns:
         Tuple of (list of actions to execute, updated state)
@@ -285,6 +295,52 @@ def evaluate_exit_actions(
                 ))
                 return actions, state
     
+    # 4. Early Trailing Stop (percentage-based breakeven + profit locking)
+    # Mutually exclusive with legacy trailing stop
+    if config.enable_early_trailing and config.early_trailing_activation_pct > 0:
+        activation_pct = config.early_trailing_activation_pct
+        step_pct = config.early_trailing_step_pct if config.early_trailing_step_pct > 0 else 3.0
+        
+        if not state.early_trailing_active:
+            # Check if we should activate (move to breakeven)
+            if pnl_pct >= activation_pct:
+                state.early_trailing_active = True
+                state.early_stop_price = state.entry_price
+                state.early_steps_locked = 0
+                actions.append(RiskAction(
+                    action_type=ActionType.ACTIVATE_EARLY_TRAIL,
+                    reason=f"Early trailing activated at +{pnl_pct:.1f}% (breakeven locked)",
+                    new_stop_price=state.entry_price,
+                    priority=4
+                ))
+        else:
+            # Check if early stop hit
+            if state.early_stop_price and state.current_price <= state.early_stop_price:
+                steps_desc = f"+{state.early_steps_locked * step_pct:.1f}%" if state.early_steps_locked > 0 else "breakeven"
+                actions.append(RiskAction(
+                    action_type=ActionType.SELL_ALL,
+                    reason=f"Early trailing stop hit at ${state.early_stop_price:.2f} ({steps_desc})",
+                    qty=state.remaining_qty,
+                    priority=4
+                ))
+                return actions, state
+            
+            # Check if we should lock more profit
+            expected_steps = int((pnl_pct - activation_pct) / step_pct)
+            expected_steps = max(0, expected_steps)
+            
+            if expected_steps > state.early_steps_locked:
+                new_stop_pct = expected_steps * step_pct
+                new_stop_price = state.entry_price * (1 + new_stop_pct / 100)
+                state.early_steps_locked = expected_steps
+                state.early_stop_price = new_stop_price
+                actions.append(RiskAction(
+                    action_type=ActionType.UPDATE_EARLY_STOP,
+                    reason=f"Early trailing: +{new_stop_pct:.1f}% locked (Step {expected_steps})",
+                    new_stop_price=new_stop_price,
+                    priority=4
+                ))
+    
     enabled_tiers = []
     tier_thresholds = {}
     
@@ -318,7 +374,8 @@ def evaluate_exit_actions(
                     ))
                     state.remaining_qty -= sell_qty
     
-    if config.trailing_stop_pct > 0:
+    # 6. Legacy Trailing Stop - SKIP if Early Trailing is enabled (mutually exclusive)
+    if config.trailing_stop_pct > 0 and not config.enable_early_trailing:
         if not state.trailing_active and pnl_pct >= config.trailing_activation_pct:
             state.trailing_active = True
             actions.append(RiskAction(
@@ -368,6 +425,9 @@ def apply_actions_to_cache(
     cache.giveback_guard_active = state.giveback_guard_active
     cache.dynamic_sl_price = state.dynamic_sl_price
     cache.last_evaluated_price = state.last_evaluated_price
+    cache.early_trailing_active = state.early_trailing_active
+    cache.early_stop_price = state.early_stop_price
+    cache.early_steps_locked = state.early_steps_locked
     return cache
 
 
@@ -386,4 +446,8 @@ def format_action_log(action: RiskAction, symbol: str, channel_name: str = "") -
         return f"{prefix}{symbol}: TRAIL → ${action.new_stop_price:.2f}"
     elif action.action_type == ActionType.ACTIVATE_GIVEBACK:
         return f"{prefix}{symbol}: GIVEBACK GUARD ARMED - {action.reason}"
+    elif action.action_type == ActionType.ACTIVATE_EARLY_TRAIL:
+        return f"{prefix}{symbol}: ✓ BREAKEVEN LOCKED - {action.reason}"
+    elif action.action_type == ActionType.UPDATE_EARLY_STOP:
+        return f"{prefix}{symbol}: 📈 EARLY TRAIL → ${action.new_stop_price:.2f} - {action.reason}"
     return f"{prefix}{symbol}: {action.action_type.value} - {action.reason}"

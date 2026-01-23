@@ -532,6 +532,16 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added enhanced risk columns: dynamic_sl, giveback_guard, giveback_pct, dynamic_sl_profile")
     
+    # Migrate: Add Early Trailing Stop columns (percentage-based breakeven + profit locking)
+    try:
+        cursor.execute('SELECT enable_early_trailing FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN enable_early_trailing INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN early_trailing_activation_pct REAL DEFAULT 5.0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN early_trailing_step_pct REAL DEFAULT 3.0')
+        conn.commit()
+        print("[DATABASE] ✓ Added Early Trailing Stop columns: enable_early_trailing, activation_pct, step_pct")
+    
     # Migrate: Add channel-level max position size for per-channel dollar cap
     try:
         cursor.execute('SELECT channel_max_position_size FROM channels LIMIT 1')
@@ -2387,6 +2397,7 @@ def update_channel(channel_id: int, **kwargs):
                    'conditional_order_timeout_minutes', 'trigger_offset_percent', 'order_timeout_minutes',
                    'slippage_protection_enabled', 'slippage_max_pct', 'signal_update_automation', 'signal_update_automation_override',
                    'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
+                   'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
                    'use_global_risk_settings', 'circuit_breaker_enabled', 'channel_daily_loss_limit', 'channel_max_positions',
                    'ndx_to_qqq_enabled', 'ndx_to_qqq_delta']:
             fields.append(f"{key} = ?")

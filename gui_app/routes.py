@@ -1820,6 +1820,23 @@ def register_routes(app):
         """Update a channel with save-and-verify for critical settings"""
         data = request.json
         
+        # Mutual exclusivity enforcement: Early Trailing vs Legacy Trailing Stop
+        # Load current channel state to properly enforce exclusivity
+        current_channel = db.get_channel_by_id(channel_id) or {}
+        
+        # Determine effective values after update
+        enable_early = data.get('enable_early_trailing', current_channel.get('enable_early_trailing', 0))
+        trailing_stop = data.get('trailing_stop_pct', current_channel.get('trailing_stop_pct'))
+        
+        # Normalize: Early Trailing takes precedence when enabled
+        if enable_early:
+            # If early trailing is active, clear legacy trailing values
+            data['trailing_stop_pct'] = None
+            data['trailing_activation_pct'] = None
+        elif trailing_stop and float(trailing_stop) > 0:
+            # If legacy trailing is being set, disable early trailing
+            data['enable_early_trailing'] = 0
+        
         # Perform the update
         db.update_channel(channel_id, **data)
         
@@ -1865,7 +1882,8 @@ def register_routes(app):
                        'trailing_stop_pct', 'trailing_activation_pct', 'leave_runner_enabled',
                        'leave_runner_pct', 'profit_target_qty_1', 'profit_target_qty_2',
                        'profit_target_qty_3', 'profit_target_qty_4', 'exit_strategy_mode',
-                       'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile'}
+                       'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
+                       'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct'}
         cache_warning = None
         if any(field in data for field in risk_fields):
             try:
@@ -7783,6 +7801,18 @@ def register_routes(app):
         """Update a Telegram channel (uses same update_channel as Discord)"""
         try:
             data = request.json
+            
+            # Mutual exclusivity enforcement: Early Trailing vs Legacy Trailing Stop
+            current_channel = db.get_channel_by_id(channel_id) or {}
+            enable_early = data.get('enable_early_trailing', current_channel.get('enable_early_trailing', 0))
+            trailing_stop = data.get('trailing_stop_pct', current_channel.get('trailing_stop_pct'))
+            
+            if enable_early:
+                data['trailing_stop_pct'] = None
+                data['trailing_activation_pct'] = None
+            elif trailing_stop and float(trailing_stop) > 0:
+                data['enable_early_trailing'] = 0
+            
             success = db.update_channel(channel_id, **data)
             
             if success:
