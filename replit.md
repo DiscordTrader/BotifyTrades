@@ -18,7 +18,26 @@ BotifyTrades is a cross-platform trading automation bot for Discord and Telegram
 The bot features a Flask-based web control panel with a dark theme, real-time dashboards, dynamic channel management, and live trade monitoring. Broker-specific Live Analytics pages and an integrated AI chat assistant are included. The options trading interface is optimized for strike-targeted lookup and detailed order inputs with Greeks. A PySide6-based setup wizard guides first-time users.
 
 ### Technical Implementations
-Core technologies include `discord.py-self` for Discord and `webull` for brokerage. It utilizes a true dual-broker architecture for live and paper trading, with platform-specific credential encryption and an asynchronous, queue-based order execution system. Signal parsing uses a multi-layer approach supporting learned formats, regex, and AI fallback. Risk management features GUI-configurable automated profit targets, stop losses, trailing stops, intelligent price slippage protection, and auto-quantity calculation, all stored in SQLite. The system includes pre-trade analysis with technical indicators, post-execution analysis with OpenAI GPT models, real-time market data integration, and interactive Discord commands. An error monitoring system provides automatic detection, logging, and AI assistant contextual help.
+Core technologies include `discord.py-self` for Discord and `webull` for brokerage. It utilizes a true dual-broker architecture for live and paper trading, with platform-specific credential encryption and an asynchronous, queue-based order execution system. 
+
+**Unified Signal Parsing Pipeline** (`src/services/signal_parsing_pipeline.py`): A 5-tier architecture for signal detection with security gating:
+- Tier 1: Embed parsers (Spy-Sniper, Sir Goldman)
+- Tier 2: SignalFormatRegistry (Jake, Slem, STACK$, Foxtrades, Learned Patterns)
+- Tier 3: Trader-specific parsers (Bishop, EvaPanda, etc.)
+- Tier 4: Standard BTO/STC regex
+- Tier 5: AI Fallback (OpenAI, async, confidence-gated)
+
+**Foxtrades Natural Language Parser** (`src/signals/foxtrades_parser.py`): Detects natural language stock signals like "Taking a position in $SYMBOL average $PRICE", "All out of $SYMBOL", with 8 registered patterns covering ENTRY/EXIT/TRIM actions.
+
+**AI Signal Parser** (`src/services/ai_signal_parser.py`): OpenAI-powered fallback with async processing, rate limiting (3 concurrent max), result caching, and confidence scoring. AI signals are blocked by default until admin approval.
+
+**Learned Patterns System**: Database-stored patterns (`learned_patterns` table) with governance workflow (pending → active status). Admin approval required before learned patterns can execute trades. Patterns store action, asset_type, confidence metadata.
+
+**Security Gating**: All AI and learned-pattern signals include `execution_allowed`, `requires_approval`, `admin_approved` flags. The pipeline blocks unapproved signals before they reach any execution path. Confidence threshold (≥0.8) enforced via `can_execute()` method.
+
+**Signal Deduplication**: 5-minute TTL using message hash to prevent duplicate signal processing.
+
+Risk management features GUI-configurable automated profit targets, stop losses, trailing stops, intelligent price slippage protection, and auto-quantity calculation, all stored in SQLite. The system includes pre-trade analysis with technical indicators, post-execution analysis with OpenAI GPT models, real-time market data integration, and interactive Discord commands. An error monitoring system provides automatic detection, logging, and AI assistant contextual help.
 
 The system supports a dual-mode channel system for simultaneous execution and signal forwarding, FIFO-based P&L tracking, and Multi-Broker Execution across multiple accounts with per-channel broker selection. A strict routing architecture ensures signals only route to channel-configured brokers. Per-channel risk settings allow independent operation, supporting 4-tier profit targets, trailing stops, and Leave Runner functionality. An Exit Strategy Mode is configurable per channel. Position Matching for Ambiguous Exit Signals links exit signals to open positions, and Trade Monitor automatically detects and posts broker-executed trades as Discord signals.
 
