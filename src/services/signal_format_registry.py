@@ -98,6 +98,16 @@ class SignalFormatRegistry:
             key=lambda f: f.priority
         )
     
+    def _strip_discord_mentions(self, text: str) -> str:
+        """Strip Discord mentions from text to allow pattern matching."""
+        # Strip role mentions: <@&123456789>
+        text = re.sub(r'<@&\d+>\s*', '', text)
+        # Strip user mentions: <@123456789> or <@!123456789>
+        text = re.sub(r'<@!?\d+>\s*', '', text)
+        # Strip channel mentions: <#123456789>
+        text = re.sub(r'<#\d+>\s*', '', text)
+        return text.strip()
+    
     def parse(self, text: str) -> Optional[Dict[str, Any]]:
         """
         Parse text using registered formats in priority order.
@@ -106,7 +116,8 @@ class SignalFormatRegistry:
             Parsed signal dict with '_format_name' indicating which format matched,
             or None if no format matched.
         """
-        clean_text = text.strip()
+        # Strip Discord mentions to allow patterns to match
+        clean_text = self._strip_discord_mentions(text.strip())
         
         for fmt in self._sorted_formats:
             if not fmt.enabled:
