@@ -294,12 +294,16 @@ class RiskDBAdapter:
                         expiry_variants.append(f"{int(month)}/{int(day)}")  # 1/21 (without zeros)
                         expiry_variants.append(f"{month}/{day}/{parts[0][2:]}")  # 01/21/26
                         expiry_variants.append(f"{int(month)}/{int(day)}/{parts[0][2:]}")  # 1/21/26
-                    # If format is MM/DD, also try YYYY-MM-DD
+                    # If format is MM/DD, also try variants
                     elif '/' in expiry and len(expiry) <= 5:
                         parts = expiry.split('/')
                         from datetime import datetime
                         year = datetime.now().year
-                        expiry_variants.append(f"{year}-{parts[0].zfill(2)}-{parts[1].zfill(2)}")
+                        month = parts[0]
+                        day = parts[1]
+                        expiry_variants.append(f"{year}-{month.zfill(2)}-{day.zfill(2)}")  # YYYY-MM-DD
+                        expiry_variants.append(f"{int(month)}/{int(day)}")  # M/D (without leading zeros)
+                        expiry_variants.append(f"{month.zfill(2)}/{day.zfill(2)}")  # MM/DD (with leading zeros)
                 
                 # Try each expiry variant - filter by broker to get correct channel settings
                 # Include routing_mapping_id (index 23) for routed trade discrimination

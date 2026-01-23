@@ -6738,7 +6738,7 @@
     "max_pnl_seen": 1.7045241197963628,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 53.674,
+    "last_evaluated_price": 53.835,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9090,7 +9090,7 @@
     "max_pnl_seen": 1.388888888888884,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.5,
+    "last_evaluated_price": 1.525,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9162,7 +9162,7 @@
     "max_pnl_seen": 9.37474467424519,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 4.795,
+    "last_evaluated_price": 4.81,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9330,7 +9330,7 @@
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": null,
+    "last_evaluated_price": 3.3,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9385,9 +9385,9 @@
   },
   "Webull_TSLA_447.5_01/23_C": {
     "entry_price": 2.35,
-    "highest_price": 3.475,
+    "highest_price": 3.85,
     "trailing_activated": false,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -9397,7 +9397,16 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {},
+    "pending_orders": {
+      "TQHE3MKDGD7G4P8HMNRQVF30UB": {
+        "order_id": "TQHE3MKDGD7G4P8HMNRQVF30UB",
+        "tier": 1,
+        "qty_expected": 1,
+        "qty_filled": 0,
+        "status": "pending",
+        "created_at": "2026-01-23T14:55:55.543506"
+      }
+    },
     "created_at": "2026-01-23T14:36:43.906633",
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
