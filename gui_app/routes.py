@@ -2094,11 +2094,12 @@ def register_routes(app):
     @login_required
     @admin_feature_required
     def api_get_routing_positions():
-        """Get all positions tracked by signal routing mappings (admin only)"""
+        """Get positions tracked by signal routing (excludes broker-executed positions)"""
         try:
             from src.services.position_ledger import get_position_ledger
             ledger = get_position_ledger()
-            positions = ledger.get_open_positions()
+            # Only show positions from signal routing, not broker executions
+            positions = ledger.get_open_positions(source_type='signal_routing')
             
             positions_data = []
             for pos in positions:

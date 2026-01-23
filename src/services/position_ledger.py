@@ -421,9 +421,10 @@ class PositionLedger:
     def get_open_positions(
         self, 
         channel_id: Optional[str] = None,
-        broker_id: Optional[str] = None
+        broker_id: Optional[str] = None,
+        source_type: Optional[str] = None
     ) -> List[LedgerPosition]:
-        """Get all open positions, optionally filtered by channel or broker."""
+        """Get all open positions, optionally filtered by channel, broker, or source_type."""
         conn = self._get_conn()
         try:
             query = "SELECT * FROM position_ledger WHERE status IN ('open', 'partially_closed')"
@@ -436,6 +437,10 @@ class PositionLedger:
             if broker_id:
                 query += " AND broker_id = ?"
                 params.append(broker_id)
+            
+            if source_type:
+                query += " AND source_type = ?"
+                params.append(source_type)
             
             rows = conn.execute(query, params).fetchall()
             return [self._row_to_position(row, conn) for row in rows]
