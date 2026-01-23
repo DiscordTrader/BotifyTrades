@@ -1300,7 +1300,30 @@ class BrokerSyncService:
                         'call_put': call_put
                     })
                 
-                self.db.add_trade(trade_data)
+                # DUPLICATE PREVENTION: Check database for existing open position before inserting
+                # This prevents duplicates across sync cycles and signal execution races
+                existing_open = self.db.get_trades(status='OPEN', limit=1000)
+                has_duplicate = False
+                for existing in existing_open:
+                    existing_broker = (existing.get('broker') or '').upper()
+                    trade_broker = trade_data['broker'].upper()
+                    # Match by symbol + broker (for stocks) or full position key (for options)
+                    if existing['symbol'] == symbol and existing_broker == trade_broker:
+                        if asset_type == 'stock':
+                            # Stock: same symbol + broker = duplicate
+                            print(f"[SYNC] ⚠️ Skipping duplicate: {symbol} already has open position (ID={existing['id']}, broker={trade_broker})")
+                            has_duplicate = True
+                            break
+                        elif asset_type == 'option':
+                            # Option: check strike/expiry/call_put
+                            if (existing.get('strike') == strike and 
+                                existing.get('call_put') == call_put):
+                                print(f"[SYNC] ⚠️ Skipping duplicate: {symbol} {strike}{call_put} already has open position (ID={existing['id']})")
+                                has_duplicate = True
+                                break
+                
+                if not has_duplicate:
+                    self.db.add_trade(trade_data)
                 # Add to tracked keys so we don't import duplicates in same cycle
                 tracked_keys.add(pos_key)
             else:
