@@ -6738,7 +6738,7 @@
     "max_pnl_seen": 2.5754704635641845,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 54.21,
+    "last_evaluated_price": 54.16,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -8562,7 +8562,7 @@
     "max_pnl_seen": 9.687499999999988,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.71,
+    "last_evaluated_price": 1.665,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9313,7 +9313,7 @@
   },
   "Webull_TTWO_260.0_02/20_C": {
     "entry_price": 3.3,
-    "highest_price": 3.6,
+    "highest_price": 3.7,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -9327,10 +9327,10 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-22T20:58:28.629686",
-    "max_pnl_seen": 9.090909090909099,
+    "max_pnl_seen": 12.121212121212132,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 3.6,
+    "last_evaluated_price": 3.65,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
