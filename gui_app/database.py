@@ -2435,7 +2435,7 @@ def update_channel(channel_id: int, **kwargs):
                    'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
                    'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
                    'use_global_risk_settings', 'circuit_breaker_enabled', 'channel_daily_loss_limit', 'channel_max_positions',
-                   'ndx_to_qqq_enabled', 'ndx_to_qqq_delta']:
+                   'ndx_to_qqq_enabled', 'ndx_to_qqq_delta', 'order_chase_enabled']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))
