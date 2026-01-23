@@ -1105,6 +1105,8 @@ class BrokerSyncService:
         
         IMPORTANT: When importing, try to find the origin Discord trade and inherit its channel_id.
         This allows per-channel risk settings to work for positions that were opened via Discord signals.
+        
+        Also repairs orphaned trades (OPEN trades with no channel_id) by linking them to matching Discord signals.
         """
         
         broker_positions = normalized_data.get('positions', [])
@@ -1112,7 +1114,37 @@ class BrokerSyncService:
             return
         
         # Get all tracked trades for this broker (handle case-insensitive broker names)
-        all_db_trades = self.db.get_trades(status='OPEN', limit=1000)
+        # FIX: Include PENDING trades too - they may be awaiting fill confirmation
+        all_db_trades_open = self.db.get_trades(status='OPEN', limit=1000)
+        all_db_trades_pending = self.db.get_trades(status='PENDING', limit=1000)
+        all_db_trades = all_db_trades_open + all_db_trades_pending
+        
+        # RECOVERY: Find orphaned trades (OPEN, no channel_id) for this broker and try to link them
+        broker_lower = broker_name.lower()
+        orphaned_trades_by_key = {}
+        for t in all_db_trades_open:
+            if t.get('channel_id'):
+                continue  # Already has channel, not orphaned
+            trade_broker = (t.get('broker') or '').lower()
+            is_broker_match = False
+            if broker_lower == 'webull' and 'webull' in trade_broker:
+                is_broker_match = True
+            elif broker_lower == 'alpaca_paper' and 'alpaca' in trade_broker:
+                is_broker_match = True
+            elif broker_lower == 'robinhood' and 'robinhood' in trade_broker:
+                is_broker_match = True
+            elif trade_broker == broker_lower:
+                is_broker_match = True
+            
+            if is_broker_match:
+                key = self._build_position_key(
+                    t['symbol'],
+                    t.get('asset_type', 'stock'),
+                    t.get('strike'),
+                    t.get('expiry'),
+                    t.get('call_put')
+                )
+                orphaned_trades_by_key[key] = t
         
         # Also get recently closed Discord trades to find origin channel_id for positions
         all_discord_trades = self.db.get_trades(limit=1000)  # Get all trades to find origins
@@ -1120,16 +1152,33 @@ class BrokerSyncService:
         # Filter for this broker (case-insensitive)
         broker_lower = broker_name.lower()
         db_trades = []
+        pending_trades_by_key = {}  # Track pending trades for promotion to OPEN
         for t in all_db_trades:
             trade_broker = (t.get('broker') or '').lower()
+            is_broker_match = False
             if broker_lower == 'webull' and 'webull' in trade_broker:
-                db_trades.append(t)
+                is_broker_match = True
             elif broker_lower == 'alpaca_paper' and 'alpaca' in trade_broker:
-                db_trades.append(t)
+                is_broker_match = True
+            elif broker_lower == 'robinhood' and 'robinhood' in trade_broker:
+                is_broker_match = True
             elif trade_broker == broker_lower:
+                is_broker_match = True
+            
+            if is_broker_match:
                 db_trades.append(t)
+                # Index PENDING trades by key for promotion lookup
+                if t.get('status') == 'PENDING':
+                    key = self._build_position_key(
+                        t['symbol'],
+                        t.get('asset_type', 'stock'),
+                        t.get('strike'),
+                        t.get('expiry'),
+                        t.get('call_put')
+                    )
+                    pending_trades_by_key[key] = t
         
-        # Build normalized keys for existing trades
+        # Build normalized keys for existing trades (both OPEN and PENDING)
         tracked_keys = set()
         for t in db_trades:
             key = self._build_position_key(
@@ -1145,11 +1194,36 @@ class BrokerSyncService:
         # Priority: Match by order_id first, then by position_key with closest timestamp
         # This allows imported positions to maintain their Discord channel association
         
-        # Collect all Discord trades with channel_id, sorted by recency (higher ID = more recent)
+        # Collect all trades with channel_id, sorted by recency (higher ID = more recent)
+        # FIX: Include ANY trade with channel_id, not just those with source='discord'
         discord_trades_with_channel = [
             t for t in sorted(all_discord_trades, key=lambda x: x.get('id', 0), reverse=True)
-            if t.get('channel_id') and (t.get('source') == 'discord' or t.get('message_id'))
+            if t.get('channel_id')
         ]
+        
+        # RECOVERY: Try to repair orphaned trades by linking them to matching Discord signals
+        if orphaned_trades_by_key:
+            print(f"[SYNC] 🔧 Found {len(orphaned_trades_by_key)} orphaned {broker_name} trades - attempting recovery...")
+            for orphan_key, orphan_trade in orphaned_trades_by_key.items():
+                # Try to find a matching Discord trade with channel_id
+                for discord_trade in discord_trades_with_channel:
+                    discord_key = self._build_position_key(
+                        discord_trade['symbol'],
+                        discord_trade.get('asset_type', 'stock'),
+                        discord_trade.get('strike'),
+                        discord_trade.get('expiry'),
+                        discord_trade.get('call_put')
+                    )
+                    if discord_key == orphan_key and discord_trade.get('channel_id'):
+                        # Found a matching Discord trade - link the orphan to its channel
+                        orphan_id = orphan_trade.get('id')
+                        channel_id = discord_trade.get('channel_id')
+                        print(f"[SYNC] ✓ Recovered orphan #{orphan_id} ({orphan_trade['symbol']}) → channel_id={channel_id}")
+                        try:
+                            self.db.update_trade(orphan_id, channel_id=channel_id, source='sync_discord', hide_in_ui=0)
+                        except Exception as e:
+                            print(f"[SYNC] ⚠️ Failed to update orphan #{orphan_id}: {e}")
+                        break
         
         # Build broker_override lookup for Pass 3 fallback
         # Maps broker_name -> [(channel_discord_id, channel_db_id), ...]
@@ -1327,8 +1401,22 @@ class BrokerSyncService:
                 # Add to tracked keys so we don't import duplicates in same cycle
                 tracked_keys.add(pos_key)
             else:
-                # Position already tracked - skip import
-                pass
+                # Position already tracked - check if it's a PENDING trade that needs promotion
+                if pos_key in pending_trades_by_key:
+                    pending_trade = pending_trades_by_key[pos_key]
+                    trade_id = pending_trade.get('id')
+                    fill_price = position['avg_price']
+                    print(f"[SYNC] ✓ Promoting PENDING trade #{trade_id} ({symbol}) → OPEN via import_manual_trades")
+                    self.db.update_trade(
+                        trade_id,
+                        status='OPEN',
+                        executed_price=fill_price,
+                        current_price=position.get('current_price'),
+                        quantity=position['quantity'],
+                        executed_at=datetime.now().isoformat()
+                    )
+                    # Remove from pending lookup to prevent re-promotion
+                    del pending_trades_by_key[pos_key]
 
     async def _sync_filled_orders(self, broker_name: str, broker_instance):
         """Sync filled orders from broker to database"""
