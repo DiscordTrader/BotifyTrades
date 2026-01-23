@@ -29,6 +29,12 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 
 **Foxtrades Natural Language Parser** (`src/signals/foxtrades_parser.py`): Detects natural language stock signals like "Taking a position in $SYMBOL average $PRICE", "All out of $SYMBOL", with 8 registered patterns covering ENTRY/EXIT/TRIM actions.
 
+**Bronze Swings Natural Language Parser** (`src/signals/bronze_swings_parser.py`): Detects swing trading stock signals with 10 patterns:
+- ENTRY: "Taken a starter position on", "Taken a position on", "Entered", "Long swing"
+- ADD: "Added to SYMBOL", "SYMBOL added average price"
+- EXIT: "Closed position on", "SYMBOL position closed", "Closed SYMBOL"
+- TRIM: "taken profits", "secured profits"
+
 **AI Signal Parser** (`src/services/ai_signal_parser.py`): OpenAI-powered fallback with async processing, rate limiting (3 concurrent max), result caching, and confidence scoring. AI signals are blocked by default until admin approval.
 
 **Learned Patterns System**: Database-stored patterns (`learned_patterns` table) with governance workflow (pending → active status). Admin approval required before learned patterns can execute trades. Patterns store action, asset_type, confidence metadata.

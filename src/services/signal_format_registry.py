@@ -359,6 +359,105 @@ class SignalFormatRegistry:
             examples=["Securing some profits on BEAT"]
         )
         
+        # BRONZE SWINGS NATURAL LANGUAGE FORMAT (Stock swing signals)
+        # Priority 45-55 - after Foxtrades, before learned patterns
+        
+        # Entry patterns
+        self.register(
+            name="bronze_starter_position",
+            description="Bronze Swings starter position entry",
+            priority=45,
+            pattern=r'(?:taken\s+a\s+)?starter\s+position\s+on\s+\$?([A-Z]{1,5})\s*(?:@?\s*\$?([\d.]+))?',
+            parser=self._parse_bronze_entry,
+            examples=["Taken a starter position on DUOL $177.69", "Starter position on SRFM"]
+        )
+        self.register(
+            name="bronze_position_on",
+            description="Bronze Swings position entry",
+            priority=46,
+            pattern=r'taken\s+a\s+(?:swing\s+)?position\s+on\s+\$?([A-Z]{1,5})\s*(?:@?\s*\$?([\d.]+))?',
+            parser=self._parse_bronze_entry,
+            examples=["Taken a position on VTEX @3.94", "Taken a swing position on OLO"]
+        )
+        self.register(
+            name="bronze_entered",
+            description="Bronze Swings entered position",
+            priority=47,
+            pattern=r'entered\s+\$?([A-Z]{1,5})\s*(?:@?\s*\$?([\d.]+))?\s*(?:average\s+price)?',
+            parser=self._parse_bronze_entry,
+            examples=["Entered LFST @$6.02 average price"]
+        )
+        self.register(
+            name="bronze_long_swing",
+            description="Bronze Swings long swing entry",
+            priority=48,
+            pattern=r'\$?([A-Z]{1,5})\s+(?:long\s+swing|for\s+a\s+long\s+swing)',
+            parser=self._parse_bronze_entry,
+            examples=["CYBN long swing probably to Q1 2026"]
+        )
+        
+        # Add patterns
+        self.register(
+            name="bronze_added_to",
+            description="Bronze Swings adding to position",
+            priority=49,
+            pattern=r'added\s+to\s+\$?([A-Z]{1,5})\s*(?:@?\s*\$?([\d.]+))?(?:\s*average\s+price)?',
+            parser=self._parse_bronze_add,
+            examples=["Added to SRFM average price $1.97", "Added to DUOL $177.46"]
+        )
+        self.register(
+            name="bronze_symbol_added",
+            description="Bronze Swings symbol added",
+            priority=50,
+            pattern=r'\$?([A-Z]{1,5})\s+added\s+(?:average\s+price\s*)?\$?([\d.]+)?',
+            parser=self._parse_bronze_add,
+            examples=["BGC added average price $9.28"]
+        )
+        
+        # Exit patterns
+        self.register(
+            name="bronze_closed_position",
+            description="Bronze Swings closed position",
+            priority=51,
+            pattern=r'closed\s+(?:his\s+)?position\s+(?:now\s+)?(?:on|in)\s+\$?([A-Z]{1,5})',
+            parser=self._parse_bronze_exit,
+            examples=["Closed position now on SRFM", "Closed position in CYBN"]
+        )
+        self.register(
+            name="bronze_position_closed",
+            description="Bronze Swings position closed",
+            priority=52,
+            pattern=r'\$?([A-Z]{1,5})\s+position\s+closed',
+            parser=self._parse_bronze_exit,
+            examples=["CYBN position closed", "VTEX position closed"]
+        )
+        self.register(
+            name="bronze_closed_symbol",
+            description="Bronze Swings closed symbol",
+            priority=53,
+            pattern=r'closed\s+\$?([A-Z]{1,5})\s*(?:position)?\s*(?:@?\s*\$?([\d.]+))?',
+            parser=self._parse_bronze_exit,
+            examples=["Closed LCID position at $2.32", "Closed SLDE $14.83"]
+        )
+        
+        # Trim patterns
+        self.register(
+            name="bronze_taken_profits",
+            description="Bronze Swings taking profits",
+            priority=54,
+            pattern=r'\$?([A-Z]{1,5})\s+taken\s+profits?\s*(?:@?\s*(\d+)%)?',
+            parser=self._parse_bronze_trim,
+            examples=["SRFM taken profits @55%", "SRFM taken profits"]
+        )
+        self.register(
+            name="bronze_secured_profits",
+            description="Bronze Swings secured profits",
+            priority=55,
+            pattern=r'secured\s+profits?\s*(?:on\s+)?\$?([A-Z]{1,5})',
+            parser=self._parse_bronze_trim,
+            examples=["secured profits on BITF", "Secured profits RXRX"]
+        )
+        
         # Load learned patterns from database
         self._learned_pattern_metadata: Dict[str, Dict] = {}  # Store metadata by pattern name
         self._load_learned_patterns()
@@ -674,6 +773,151 @@ class SignalFormatRegistry:
             "is_full_exit": False,
             "confidence": 0.9,  # Slightly lower for trims
             "_foxtrades_trim": True
+        }
+    
+    # =========================================================================
+    # BRONZE SWINGS PARSER IMPLEMENTATIONS
+    # =========================================================================
+    
+    def _parse_bronze_entry(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Bronze Swings entry signals (starter position, entered, long swing)."""
+        groups = match.groups()
+        symbol = None
+        price = None
+        
+        for g in groups:
+            if g:
+                if g.isalpha() and len(g) <= 5:
+                    symbol = g.upper()
+                elif g.replace('.', '').replace('$', '').isdigit():
+                    try:
+                        price = float(g.replace('$', ''))
+                    except ValueError:
+                        pass
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "BTO",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": price,
+            "is_market_order": price is None,
+            "confidence": 0.95,
+            "_bronze_swings_entry": True
+        }
+    
+    def _parse_bronze_add(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Bronze Swings add-to-position signals."""
+        groups = match.groups()
+        symbol = None
+        price = None
+        
+        for g in groups:
+            if g:
+                if g.isalpha() and len(g) <= 5:
+                    symbol = g.upper()
+                elif g.replace('.', '').replace('$', '').isdigit():
+                    try:
+                        price = float(g.replace('$', ''))
+                    except ValueError:
+                        pass
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "BTO",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": price,
+            "is_market_order": price is None,
+            "is_add": True,
+            "confidence": 0.95,
+            "_bronze_swings_add": True
+        }
+    
+    def _parse_bronze_exit(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Bronze Swings exit signals (closed position)."""
+        groups = match.groups()
+        symbol = None
+        price = None
+        
+        for g in groups:
+            if g:
+                if g.isalpha() and len(g) <= 5:
+                    symbol = g.upper()
+                elif g.replace('.', '').replace('$', '').isdigit():
+                    try:
+                        price = float(g.replace('$', ''))
+                    except ValueError:
+                        pass
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": price,
+            "is_market_order": True,
+            "is_full_exit": True,
+            "confidence": 0.95,
+            "_bronze_swings_exit": True
+        }
+    
+    def _parse_bronze_trim(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Bronze Swings trim/profit-taking signals."""
+        groups = match.groups()
+        symbol = None
+        percentage = None
+        
+        for g in groups:
+            if g:
+                if g.isalpha() and len(g) <= 5:
+                    symbol = g.upper()
+                elif g.isdigit():
+                    try:
+                        percentage = float(g)
+                    except ValueError:
+                        pass
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_trim": True,
+            "is_full_exit": False,
+            "trim_percentage": percentage,
+            "confidence": 0.9,
+            "_bronze_swings_trim": True
         }
     
     def _parse_learned_pattern_with_metadata(self, match: re.Match, text: str, pattern_name: str) -> Optional[Dict]:
