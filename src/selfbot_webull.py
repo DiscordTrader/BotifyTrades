@@ -11261,8 +11261,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 # Track STC orders from risk management for unfilled order chasing
                 if order_id and signal.get('_risk_management_order') and signal.get('action', '').upper() in ('STC', 'SELL'):
                     try:
+                        # Check if order chase is enabled for this channel
+                        order_chase_enabled = True  # Default to enabled
+                        channel_id = signal.get('channel_id')
+                        if channel_id and DATABASE_MODULE_AVAILABLE:
+                            try:
+                                from gui_app import database as db
+                                order_chase_enabled = db.get_channel_order_chase_enabled(channel_id)
+                            except Exception:
+                                pass  # Fall back to enabled
+                        
                         order_chaser = get_order_chaser()
-                        if order_chaser:
+                        if order_chaser and order_chase_enabled:
                             await order_chaser.track_exit_order(
                                 order_id=str(order_id),
                                 broker_id=broker_name,
@@ -11276,6 +11286,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 expiry=signal.get('expiry'),
                                 call_put=signal.get('opt_type')
                             )
+                        elif order_chaser and not order_chase_enabled:
+                            _original_print(f"[ORDER_CHASER] ℹ️ Skipped tracking - order chase disabled for channel")
                     except Exception as chase_err:
                         _original_print(f"[ORDER_CHASER] ⚠️ Track error: {chase_err}")
             
@@ -11774,29 +11786,42 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         # Track exit orders for unfilled order chasing (multi-broker)
                         if signal.get('_risk_management_order') and signal.get('action', '').upper() in ('STC', 'SELL'):
-                            for success_resp in successes:
-                                order_id = success_resp.get('orderId') or success_resp.get('order_id')
-                                broker_name = success_resp.get('broker', 'UNKNOWN')
-                                if order_id:
-                                    try:
-                                        order_chaser = get_order_chaser()
-                                        if order_chaser:
-                                            await order_chaser.track_exit_order(
-                                                order_id=str(order_id),
-                                                broker_id=broker_name,
-                                                symbol=signal.get('symbol', ''),
-                                                asset_type=signal.get('asset', 'option'),
-                                                quantity=signal.get('qty', 1),
-                                                price=signal.get('price', 0),
-                                                action='STC',
-                                                position_key=signal.get('_position_key', ''),
-                                                strike=signal.get('strike'),
-                                                expiry=signal.get('expiry'),
-                                                call_put=signal.get('opt_type')
-                                            )
-                                            _original_print(f"[ORDER_CHASER] ✓ Tracking {broker_name} exit order: {order_id}")
-                                    except Exception as chase_err:
-                                        _original_print(f"[ORDER_CHASER] ⚠️ Track error: {chase_err}")
+                            # Check if order chase is enabled for this channel
+                            order_chase_enabled = True  # Default to enabled
+                            channel_id = signal.get('channel_id')
+                            if channel_id and DATABASE_MODULE_AVAILABLE:
+                                try:
+                                    from gui_app import database as db
+                                    order_chase_enabled = db.get_channel_order_chase_enabled(channel_id)
+                                except Exception:
+                                    pass  # Fall back to enabled
+                            
+                            if order_chase_enabled:
+                                for success_resp in successes:
+                                    order_id = success_resp.get('orderId') or success_resp.get('order_id')
+                                    broker_name = success_resp.get('broker', 'UNKNOWN')
+                                    if order_id:
+                                        try:
+                                            order_chaser = get_order_chaser()
+                                            if order_chaser:
+                                                await order_chaser.track_exit_order(
+                                                    order_id=str(order_id),
+                                                    broker_id=broker_name,
+                                                    symbol=signal.get('symbol', ''),
+                                                    asset_type=signal.get('asset', 'option'),
+                                                    quantity=signal.get('qty', 1),
+                                                    price=signal.get('price', 0),
+                                                    action='STC',
+                                                    position_key=signal.get('_position_key', ''),
+                                                    strike=signal.get('strike'),
+                                                    expiry=signal.get('expiry'),
+                                                    call_put=signal.get('opt_type')
+                                                )
+                                                _original_print(f"[ORDER_CHASER] ✓ Tracking {broker_name} exit order: {order_id}")
+                                        except Exception as chase_err:
+                                            _original_print(f"[ORDER_CHASER] ⚠️ Track error: {chase_err}")
+                            else:
+                                _original_print(f"[ORDER_CHASER] ℹ️ Skipped tracking - order chase disabled for channel")
                     else:
                         _original_print(f"[MULTI-BROKER] ❌ All brokers failed")
                         resp = {
@@ -11852,8 +11877,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         order_success = True
                                         
                                         # Track exit order for unfilled order chasing
+                                        # Check if order chase is enabled for this channel
+                                        order_chase_enabled = True  # Default to enabled
+                                        channel_id = signal.get('channel_id')
+                                        if channel_id and DATABASE_MODULE_AVAILABLE:
+                                            try:
+                                                from gui_app import database as db
+                                                order_chase_enabled = db.get_channel_order_chase_enabled(channel_id)
+                                            except Exception:
+                                                pass  # Fall back to enabled
+                                        
                                         order_chaser = get_order_chaser()
-                                        if order_chaser and result.order_id:
+                                        if order_chaser and result.order_id and order_chase_enabled:
                                             try:
                                                 await order_chaser.track_exit_order(
                                                     order_id=str(result.order_id),
@@ -11870,6 +11905,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 )
                                             except Exception as chase_err:
                                                 _original_print(f"[ORDER_CHASER] ⚠️ Track error: {chase_err}")
+                                        elif order_chaser and result.order_id and not order_chase_enabled:
+                                            _original_print(f"[ORDER_CHASER] ℹ️ Skipped tracking - order chase disabled for channel")
                                         
                                         # Save risk-triggered STC trade to database for PNL tracking
                                         if DATABASE_MODULE_AVAILABLE and signal.get('channel_id'):
