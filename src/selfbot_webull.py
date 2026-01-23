@@ -11261,13 +11261,32 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 # Track STC orders from risk management for unfilled order chasing
                 if order_id and signal.get('_risk_management_order') and signal.get('action', '').upper() in ('STC', 'SELL'):
                     try:
-                        # Check if order chase is enabled for this channel
+                        # Check if order chase is enabled: mapping → channel → global
                         order_chase_enabled = True  # Default to enabled
-                        channel_id = signal.get('channel_id')
-                        if channel_id and DATABASE_MODULE_AVAILABLE:
+                        if DATABASE_MODULE_AVAILABLE:
                             try:
                                 from gui_app import database as db
-                                order_chase_enabled = db.get_channel_order_chase_enabled(channel_id)
+                                resolved = False
+                                
+                                # Priority 1: Check signal routing mapping override
+                                source_channel = signal.get('_routing_source_channel') or signal.get('source_channel_id')
+                                if source_channel:
+                                    mapping = db.get_signal_routing_by_source(str(source_channel))
+                                    if mapping and mapping.get('order_chase_enabled') is not None:
+                                        order_chase_enabled = bool(mapping.get('order_chase_enabled'))
+                                        resolved = True
+                                
+                                # Priority 2: Fall back to channel setting
+                                if not resolved and signal.get('channel_id'):
+                                    channel_id = signal.get('channel_id')
+                                    ch = db.get_channel_by_discord_id(str(channel_id)) or db.get_channel_by_telegram_id(str(channel_id))
+                                    if ch and ch.get('order_chase_enabled') is not None:
+                                        order_chase_enabled = bool(ch.get('order_chase_enabled'))
+                                        resolved = True
+                                
+                                # Priority 3: Fall back to global setting
+                                if not resolved:
+                                    order_chase_enabled = db.get_order_chase_settings().get('enabled', True)
                             except Exception:
                                 pass  # Fall back to enabled
                         
@@ -11786,13 +11805,32 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         # Track exit orders for unfilled order chasing (multi-broker)
                         if signal.get('_risk_management_order') and signal.get('action', '').upper() in ('STC', 'SELL'):
-                            # Check if order chase is enabled for this channel
+                            # Check if order chase is enabled: mapping → channel → global
                             order_chase_enabled = True  # Default to enabled
-                            channel_id = signal.get('channel_id')
-                            if channel_id and DATABASE_MODULE_AVAILABLE:
+                            if DATABASE_MODULE_AVAILABLE:
                                 try:
                                     from gui_app import database as db
-                                    order_chase_enabled = db.get_channel_order_chase_enabled(channel_id)
+                                    resolved = False
+                                    
+                                    # Priority 1: Check signal routing mapping override
+                                    source_channel = signal.get('_routing_source_channel') or signal.get('source_channel_id')
+                                    if source_channel:
+                                        mapping = db.get_signal_routing_by_source(str(source_channel))
+                                        if mapping and mapping.get('order_chase_enabled') is not None:
+                                            order_chase_enabled = bool(mapping.get('order_chase_enabled'))
+                                            resolved = True
+                                    
+                                    # Priority 2: Fall back to channel setting
+                                    if not resolved and signal.get('channel_id'):
+                                        channel_id = signal.get('channel_id')
+                                        ch = db.get_channel_by_discord_id(str(channel_id)) or db.get_channel_by_telegram_id(str(channel_id))
+                                        if ch and ch.get('order_chase_enabled') is not None:
+                                            order_chase_enabled = bool(ch.get('order_chase_enabled'))
+                                            resolved = True
+                                    
+                                    # Priority 3: Fall back to global setting
+                                    if not resolved:
+                                        order_chase_enabled = db.get_order_chase_settings().get('enabled', True)
                                 except Exception:
                                     pass  # Fall back to enabled
                             
@@ -11877,13 +11915,32 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         order_success = True
                                         
                                         # Track exit order for unfilled order chasing
-                                        # Check if order chase is enabled for this channel
+                                        # Check if order chase is enabled: mapping → channel → global
                                         order_chase_enabled = True  # Default to enabled
-                                        channel_id = signal.get('channel_id')
-                                        if channel_id and DATABASE_MODULE_AVAILABLE:
+                                        if DATABASE_MODULE_AVAILABLE:
                                             try:
                                                 from gui_app import database as db
-                                                order_chase_enabled = db.get_channel_order_chase_enabled(channel_id)
+                                                resolved = False
+                                                
+                                                # Priority 1: Check signal routing mapping override
+                                                source_channel = signal.get('_routing_source_channel') or signal.get('source_channel_id')
+                                                if source_channel:
+                                                    mapping = db.get_signal_routing_by_source(str(source_channel))
+                                                    if mapping and mapping.get('order_chase_enabled') is not None:
+                                                        order_chase_enabled = bool(mapping.get('order_chase_enabled'))
+                                                        resolved = True
+                                                
+                                                # Priority 2: Fall back to channel setting
+                                                if not resolved and signal.get('channel_id'):
+                                                    channel_id = signal.get('channel_id')
+                                                    ch = db.get_channel_by_discord_id(str(channel_id)) or db.get_channel_by_telegram_id(str(channel_id))
+                                                    if ch and ch.get('order_chase_enabled') is not None:
+                                                        order_chase_enabled = bool(ch.get('order_chase_enabled'))
+                                                        resolved = True
+                                                
+                                                # Priority 3: Fall back to global setting
+                                                if not resolved:
+                                                    order_chase_enabled = db.get_order_chase_settings().get('enabled', True)
                                             except Exception:
                                                 pass  # Fall back to enabled
                                         
