@@ -1443,6 +1443,26 @@ class RiskManager:
             elif action.action_type == ActionType.ACTIVATE_GIVEBACK:
                 cache.giveback_guard_active = True
                 print(f"[RISK] Giveback Guard activated ({action.reason})")
+            
+            elif action.action_type == ActionType.ACTIVATE_EARLY_TRAIL:
+                cache.early_trailing_active = True
+                if action.new_stop_price is not None:
+                    cache.early_stop_price = action.new_stop_price
+                cache.early_steps_locked = 0
+                stop_display = f"${cache.early_stop_price:.2f}" if cache.early_stop_price else "entry"
+                print(f"[RISK] ✓ Early Trailing ACTIVATED - Breakeven locked at {stop_display}")
+                self.cache.persist_early_trailing_state(position.position_key)
+            
+            elif action.action_type == ActionType.UPDATE_EARLY_STOP and action.new_stop_price is not None:
+                old_stop = cache.early_stop_price
+                cache.early_stop_price = action.new_stop_price
+                if hasattr(action, 'steps_locked'):
+                    cache.early_steps_locked = action.steps_locked
+                else:
+                    cache.early_steps_locked = (cache.early_steps_locked or 0) + 1
+                old_display = f"${old_stop:.2f}" if old_stop else "entry"
+                print(f"[RISK] 📈 Early Trail PROFIT LOCKED: {old_display} → ${action.new_stop_price:.2f} (step {cache.early_steps_locked})")
+                self.cache.persist_early_trailing_state(position.position_key)
         
         return None
     

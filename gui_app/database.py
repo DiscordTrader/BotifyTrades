@@ -758,17 +758,29 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Risk state columns added (pt1-4_hit, dynamic_sl_price, giveback_guard_active, max_pnl_seen, trailing_stop_price, risk_settings_hash)")
     
-    # Migration: Add early trailing stop state columns
+    # Migration: Add early trailing stop state columns (check each individually)
+    columns_added = []
     try:
         cursor.execute('SELECT early_trailing_active FROM trades LIMIT 1')
     except sqlite3.OperationalError:
-        print("[DATABASE] Adding early trailing stop state columns to trades table...")
         cursor.execute("ALTER TABLE trades ADD COLUMN early_trailing_active INTEGER DEFAULT 0")
+        columns_added.append("early_trailing_active")
+    
+    try:
+        cursor.execute('SELECT early_stop_price FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE trades ADD COLUMN early_stop_price REAL")
+        columns_added.append("early_stop_price")
+    
+    try:
+        cursor.execute('SELECT early_steps_locked FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE trades ADD COLUMN early_steps_locked INTEGER DEFAULT 0")
-        cursor.execute("ALTER TABLE trades ADD COLUMN highest_price REAL DEFAULT 0")
+        columns_added.append("early_steps_locked")
+    
+    if columns_added:
         conn.commit()
-        print("[DATABASE] ✓ Early trailing stop columns added (early_trailing_active, early_stop_price, early_steps_locked, highest_price)")
+        print(f"[DATABASE] ✓ Early trailing stop columns added: {', '.join(columns_added)}")
     
     # Migration: Add hide_in_ui column for hiding trades from UI
     try:
@@ -3483,6 +3495,10 @@ def save_risk_state(trade_id: int, **kwargs):
         max_pnl_seen: float - maximum P&L percentage seen
         trailing_stop_price: float - current trailing stop price
         risk_settings_hash: str - hash of settings when trade opened (for versioning)
+        early_trailing_active: bool - early trailing activated (breakeven locked)
+        early_stop_price: float - current early trailing stop price
+        early_steps_locked: int - number of profit steps locked
+        highest_price: float - highest price seen for trailing calculations
     """
     if not kwargs:
         return

@@ -126,9 +126,22 @@ class PositionCache:
                     if trade.get('risk_settings_hash'):
                         entry.risk_settings_hash = trade['risk_settings_hash']
                     
+                    if trade.get('early_trailing_active'):
+                        entry.early_trailing_active = True
+                        has_state = True
+                    if trade.get('early_stop_price') is not None:
+                        entry.early_stop_price = trade['early_stop_price']
+                        has_state = True
+                    if trade.get('early_steps_locked') is not None and trade.get('early_steps_locked') >= 0:
+                        entry.early_steps_locked = trade['early_steps_locked']
+                        has_state = True
+                    if trade.get('highest_price') is not None and trade['highest_price'] > 0:
+                        entry.highest_price = trade['highest_price']
+                    
                     if has_state:
                         tier_hits = f"PT1={trade.get('pt1_hit')} PT2={trade.get('pt2_hit')} PT3={trade.get('pt3_hit')} PT4={trade.get('pt4_hit')}"
-                        print(f"[RISK] ✓ Restored full risk state: {pos_key} | {tier_hits}")
+                        early_info = f" | Early={'ON' if trade.get('early_trailing_active') else 'OFF'} steps={trade.get('early_steps_locked', 0)}" if trade.get('early_trailing_active') else ""
+                        print(f"[RISK] ✓ Restored full risk state: {pos_key} | {tier_hits}{early_info}")
                         restored += 1
             
             if mapped > 0:
@@ -469,6 +482,30 @@ class PositionCache:
                     save_risk_state(trade_id, **kwargs)
                 except Exception as e:
                     print(f"[RISK] Warning: Could not persist enhanced risk state: {e}")
+    
+    def persist_early_trailing_state(self, position_key: str) -> None:
+        """
+        Persist early trailing stop state to database for restart resilience.
+        Called when breakeven is locked or profit step is advanced.
+        """
+        entry = self._cache.get(position_key)
+        if not entry:
+            return
+        
+        trade_id = self.get_trade_id(position_key)
+        if trade_id:
+            with self._persist_lock:
+                try:
+                    from gui_app.database import save_risk_state
+                    save_risk_state(
+                        trade_id,
+                        early_trailing_active=entry.early_trailing_active,
+                        early_stop_price=entry.early_stop_price,
+                        early_steps_locked=entry.early_steps_locked,
+                        highest_price=entry.highest_price
+                    )
+                except Exception as e:
+                    print(f"[RISK] Warning: Could not persist early trailing state: {e}")
     
     def apply_settings_with_versioning(self, position_key: str, settings) -> bool:
         """
