@@ -66,6 +66,14 @@ The Order Management System (OMS) and Risk Management System (RMS) provide dynam
 - Position broker → Other connected brokers → Finnhub → yfinance
 - Broker capability map in `src/services/broker_capabilities.py` (Alpaca/Schwab/IBKR/Robinhood support both stocks and options)
 
+**Unfilled Order Chaser** (`src/services/unfilled_order_chaser.py`): Industry-grade exit order management:
+- Monitors pending exit orders for stale status (unfilled beyond timeout threshold)
+- Calculates mid-price from current bid/ask spread for better fills
+- Cancels stale orders and replaces with mid-price limit orders
+- Configurable chase timeout (default 30s), max attempts (default 3), poll interval (5s)
+- Integrates with risk management STC orders for automatic tracking
+- Database settings: `order_chase_enabled`, `order_chase_timeout_seconds`, `order_chase_max_attempts`, `order_chase_poll_interval`
+
 A PriceMonitorService provides real-time price monitoring for open positions with multi-broker data source fallback. A Service Orchestrator manages priority-based background services with dynamic activation, API budget allocation, and broker-specific rate limiting. Order-Level Deduplication prevents duplicate order execution. Startup Settings Validation flags critical configuration issues. Position Sizing Priority is hierarchical. Proportional Exit Logic calculates proportional exits for partial exit signals. Signal Routing with Per-Mapping Risk Settings enables source-to-destination Discord channel routing with independent risk management. The Forwarding-Only Signal Routing Engine (`src/services/signal_routing_engine.py`) provides webhook-based signal forwarding with position tracking and real-time P&L monitoring, featuring a Position Ledger, Stale Price Gating, Shared ExitArbiter, and a Webhook Retry Queue.
 
 **Isolated Execution Flows** (Critical Architecture):
