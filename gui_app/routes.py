@@ -2216,6 +2216,7 @@ def register_routes(app):
                     'enable_early_trailing': mapping.get('enable_early_trailing', 0),
                     'early_trailing_activation_pct': mapping.get('early_trailing_activation_pct', 5.0),
                     'early_trailing_step_pct': mapping.get('early_trailing_step_pct', 3.0),
+                    'order_chase_enabled': mapping.get('order_chase_enabled'),
                 }
                 return jsonify({'success': True, 'settings': settings})
             else:
@@ -2227,7 +2228,8 @@ def register_routes(app):
                     'dynamic_sl_escalation_enabled': 0, 'sl_escalation_profile': 'standard',
                     'max_profit_giveback_enabled': 0, 'max_profit_giveback_pct': 30,
                     'exit_strategy_mode': 'risk',
-                    'enable_early_trailing': 0, 'early_trailing_activation_pct': 5.0, 'early_trailing_step_pct': 3.0
+                    'enable_early_trailing': 0, 'early_trailing_activation_pct': 5.0, 'early_trailing_step_pct': 3.0,
+                    'order_chase_enabled': None
                 }})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -2274,7 +2276,8 @@ def register_routes(app):
                 exit_strategy_mode=data.get('exit_strategy_mode', 'risk'),
                 enable_early_trailing=data.get('enable_early_trailing', 0),
                 early_trailing_activation_pct=data.get('early_trailing_activation_pct', 5.0),
-                early_trailing_step_pct=data.get('early_trailing_step_pct', 3.0)
+                early_trailing_step_pct=data.get('early_trailing_step_pct', 3.0),
+                order_chase_enabled=data.get('order_chase_enabled')
             )
             
             if success:

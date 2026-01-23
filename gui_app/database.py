@@ -2628,7 +2628,9 @@ def update_signal_routing_mapping(mapping_id: int, **kwargs) -> bool:
         'trim_order_type', 'leave_runner_enabled', 'leave_runner_size_pct',
         'dynamic_sl_escalation_enabled', 'sl_escalation_profile',
         'max_profit_giveback_enabled', 'max_profit_giveback_pct',
-        'exit_strategy_mode', 'price_monitor_enabled', 'price_monitor_interval_seconds'
+        'exit_strategy_mode', 'price_monitor_enabled', 'price_monitor_interval_seconds',
+        'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
+        'order_chase_enabled'
     ]
     
     updates = []
