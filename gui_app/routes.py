@@ -2213,6 +2213,9 @@ def register_routes(app):
                     'max_profit_giveback_enabled': mapping.get('max_profit_giveback_enabled', 0),
                     'max_profit_giveback_pct': mapping.get('max_profit_giveback_pct', 30),
                     'exit_strategy_mode': mapping.get('exit_strategy_mode', 'risk'),
+                    'enable_early_trailing': mapping.get('enable_early_trailing', 0),
+                    'early_trailing_activation_pct': mapping.get('early_trailing_activation_pct', 5.0),
+                    'early_trailing_step_pct': mapping.get('early_trailing_step_pct', 3.0),
                 }
                 return jsonify({'success': True, 'settings': settings})
             else:
@@ -2223,7 +2226,8 @@ def register_routes(app):
                     'trim_order_type': 'market', 'leave_runner_enabled': 0, 'leave_runner_size_pct': 25,
                     'dynamic_sl_escalation_enabled': 0, 'sl_escalation_profile': 'standard',
                     'max_profit_giveback_enabled': 0, 'max_profit_giveback_pct': 30,
-                    'exit_strategy_mode': 'risk'
+                    'exit_strategy_mode': 'risk',
+                    'enable_early_trailing': 0, 'early_trailing_activation_pct': 5.0, 'early_trailing_step_pct': 3.0
                 }})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -2238,6 +2242,14 @@ def register_routes(app):
             mapping = db.get_signal_routing_by_source(channel_id)
             if not mapping:
                 return jsonify({'success': False, 'error': 'Mapping not found for this channel'}), 404
+            
+            enable_early = data.get('enable_early_trailing', mapping.get('enable_early_trailing', 0))
+            enable_legacy = data.get('trailing_stop_pct', mapping.get('trailing_stop_pct', 0)) or 0
+            if enable_early and enable_legacy > 0:
+                data['trailing_stop_pct'] = 0
+                data['trailing_activation_pct'] = None
+            elif enable_legacy > 0:
+                data['enable_early_trailing'] = 0
             
             success = db.update_signal_routing_mapping(
                 mapping['id'],
@@ -2259,7 +2271,10 @@ def register_routes(app):
                 sl_escalation_profile=data.get('sl_escalation_profile', 'standard'),
                 max_profit_giveback_enabled=data.get('max_profit_giveback_enabled', 0),
                 max_profit_giveback_pct=data.get('max_profit_giveback_pct', 30),
-                exit_strategy_mode=data.get('exit_strategy_mode', 'risk')
+                exit_strategy_mode=data.get('exit_strategy_mode', 'risk'),
+                enable_early_trailing=data.get('enable_early_trailing', 0),
+                early_trailing_activation_pct=data.get('early_trailing_activation_pct', 5.0),
+                early_trailing_step_pct=data.get('early_trailing_step_pct', 3.0)
             )
             
             if success:

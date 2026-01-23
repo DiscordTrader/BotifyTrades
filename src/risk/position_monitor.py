@@ -189,7 +189,8 @@ class RiskDBAdapter:
                        trim_order_type, leave_runner_enabled, leave_runner_size_pct,
                        dynamic_sl_escalation_enabled, sl_escalation_profile,
                        max_profit_giveback_enabled, max_profit_giveback_pct,
-                       exit_strategy_mode, price_monitor_enabled
+                       exit_strategy_mode, price_monitor_enabled,
+                       enable_early_trailing, early_trailing_activation_pct, early_trailing_step_pct
                 FROM signal_routing_mappings
                 WHERE id = ? AND enabled = 1
                 LIMIT 1
@@ -218,8 +219,11 @@ class RiskDBAdapter:
             giveback_enabled = bool(row[19]) if row[19] else False
             giveback_pct = row[20] or 30.0
             exit_mode = row[21] or 'risk'
+            enable_early_trailing = bool(row[23]) if len(row) > 23 and row[23] else False
+            early_trailing_activation_pct = row[24] if len(row) > 24 and row[24] is not None else 5.0
+            early_trailing_step_pct = row[25] if len(row) > 25 and row[25] is not None else 3.0
             
-            has_any_risk_config = (sl > 0 or pt1 > 0 or pt2 > 0 or pt3 > 0 or pt4 > 0 or trail > 0)
+            has_any_risk_config = (sl > 0 or pt1 > 0 or pt2 > 0 or pt3 > 0 or pt4 > 0 or trail > 0 or enable_early_trailing)
             
             if not has_any_risk_config:
                 return None
@@ -246,7 +250,10 @@ class RiskDBAdapter:
                 enable_dynamic_sl=dynamic_sl_enabled,
                 dynamic_sl_profile=sl_profile,
                 enable_giveback_guard=giveback_enabled,
-                giveback_allowed_pct=giveback_pct
+                giveback_allowed_pct=giveback_pct,
+                enable_early_trailing=enable_early_trailing,
+                early_trailing_activation_pct=early_trailing_activation_pct,
+                early_trailing_step_pct=early_trailing_step_pct
             )
         except Exception as e:
             print(f"[RISK] Warning: Could not fetch signal routing risk settings: {e}")

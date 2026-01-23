@@ -1449,6 +1449,9 @@ def init_db():
         ('max_profit_giveback_enabled', 'INTEGER DEFAULT 0'),
         ('max_profit_giveback_pct', 'REAL DEFAULT 30.0'),
         ('exit_strategy_mode', "TEXT DEFAULT 'risk'"),
+        ('enable_early_trailing', 'INTEGER DEFAULT 0'),
+        ('early_trailing_activation_pct', 'REAL DEFAULT 5.0'),
+        ('early_trailing_step_pct', 'REAL DEFAULT 3.0'),
     ]
     for col_name, col_type in migration_columns:
         try:
