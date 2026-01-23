@@ -313,7 +313,8 @@ class RiskDBAdapter:
                                    c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
                                    c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
                                    c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
-                                   c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id
+                                   c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
+                                   c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -331,7 +332,8 @@ class RiskDBAdapter:
                                    c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
                                    c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
                                    c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
-                                   c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id
+                                   c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
+                                   c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -357,7 +359,8 @@ class RiskDBAdapter:
                                c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
                                c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
                                c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
-                               c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id
+                               c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
+                               c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -375,7 +378,8 @@ class RiskDBAdapter:
                                c.profit_target_4_pct, c.profit_target_qty_1, c.profit_target_qty_2,
                                c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
                                c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
-                               c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id
+                               c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
+                               c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -436,6 +440,11 @@ class RiskDBAdapter:
                 giveback_allowed_pct = row[21] if len(row) > 21 and row[21] is not None else 30.0
                 dynamic_sl_profile = row[22] if len(row) > 22 and row[22] else 'standard'
                 
+                # Extract Early Trailing settings (indices 24-26, after routing_mapping_id at 23)
+                enable_early_trailing = bool(row[24]) if len(row) > 24 and row[24] else False
+                early_trailing_activation_pct = row[25] if len(row) > 25 and row[25] is not None else 5.0
+                early_trailing_step_pct = row[26] if len(row) > 26 and row[26] is not None else 3.0
+                
                 # Risk management is enabled - return settings
                 return ChannelRiskSettings(
                     channel_id=str(row[0]),
@@ -459,7 +468,10 @@ class RiskDBAdapter:
                     enable_dynamic_sl=enable_dynamic_sl,
                     enable_giveback_guard=enable_giveback_guard,
                     giveback_allowed_pct=giveback_allowed_pct,
-                    dynamic_sl_profile=dynamic_sl_profile
+                    dynamic_sl_profile=dynamic_sl_profile,
+                    enable_early_trailing=enable_early_trailing,
+                    early_trailing_activation_pct=early_trailing_activation_pct,
+                    early_trailing_step_pct=early_trailing_step_pct
                 )
             
             return None
@@ -1771,8 +1783,30 @@ class RiskManager:
         trailing_active = cache.trailing_activated
         high_price = cache.highest_price
         
+        # Check if Early Trailing is enabled (mutually exclusive with legacy trailing)
+        early_trailing_enabled = channel_settings.enable_early_trailing if channel_settings else False
+        early_trailing_activation = channel_settings.early_trailing_activation_pct if channel_settings else 5.0
+        early_trailing_step = channel_settings.early_trailing_step_pct if channel_settings else 3.0
+        early_trailing_active = cache.early_trailing_active
+        
         trailing_status = ""
-        if trailing_pct > 0:
+        trailing_display = ""
+        
+        if early_trailing_enabled:
+            # Early Trailing display
+            trailing_display = f"EarlyTrail: {early_trailing_activation}%/{early_trailing_step}%"
+            if early_trailing_active:
+                stop_price = cache.early_stop_price if hasattr(cache, 'early_stop_price') and cache.early_stop_price else entry
+                trailing_status = f" | [EARLY-TRAIL ✓] Stop: ${stop_price:.2f}"
+            else:
+                remaining = early_trailing_activation - pct_change
+                if remaining > 0:
+                    trailing_status = f" | [EARLY-TRAIL] Breakeven at +{early_trailing_activation}% (need +{remaining:.1f}%)"
+                else:
+                    trailing_status = f" | [EARLY-TRAIL] Ready for breakeven lock"
+        elif trailing_pct > 0:
+            # Legacy Trailing display
+            trailing_display = f"Trail: {trailing_pct}%@{activation_pct}%"
             if trailing_active:
                 stop_price = high_price * (1 - trailing_pct / 100)
                 trailing_status = f" | [TRAIL ✓] High: ${high_price:.2f}, Stop: ${stop_price:.2f}"
@@ -1782,6 +1816,8 @@ class RiskManager:
                     trailing_status = f" | [TRAIL] Activate at +{activation_pct}% (need +{remaining:.1f}%)"
                 else:
                     trailing_status = f" | [TRAIL] Ready to activate"
+        else:
+            trailing_display = "Trail: Off"
         
         enhanced_status = ""
         if channel_settings:
@@ -1807,7 +1843,7 @@ class RiskManager:
             print(f"[RISK] [{channel_name}] {pos_key}: ${current:.2f} ({pct_change:+.2f}%) | "
                   f"Entry: ${entry:.2f} | Targets: {channel_settings.profit_target_1_pct}/"
                   f"{channel_settings.profit_target_2_pct}/{channel_settings.profit_target_3_pct}% | "
-                  f"SL: {channel_settings.stop_loss_pct}% | Trail: {trailing_pct}%@{activation_pct}% | Qty: {qty}{trailing_status}{enhanced_status}")
+                  f"SL: {channel_settings.stop_loss_pct}% | {trailing_display} | Qty: {qty}{trailing_status}{enhanced_status}")
         else:
             print(f"[RISK] [Global] {pos_key}: ${current:.2f} ({pct_change:+.2f}%) | "
                   f"Entry: ${entry:.2f} | Qty: {qty}{trailing_status}")
