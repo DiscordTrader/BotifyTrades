@@ -1133,6 +1133,27 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_risk_events_type ON risk_events(event_type)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_risk_events_created ON risk_events(created_at)')
     
+    # Learned signal patterns - Admin-curated patterns for natural language signals
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS learned_patterns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            description TEXT,
+            pattern TEXT NOT NULL,
+            action TEXT DEFAULT 'BTO',
+            asset_type TEXT DEFAULT 'stock',
+            example_text TEXT,
+            status TEXT DEFAULT 'pending',
+            confidence REAL DEFAULT 0.85,
+            approved_by TEXT,
+            approved_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_learned_patterns_status ON learned_patterns(status)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_learned_patterns_name ON learned_patterns(name)')
+    
     # Application Users (login credentials for control panel)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS app_users (
@@ -12090,6 +12111,115 @@ def record_broker_rate_limit_hit(broker_name: str) -> bool:
         return True
     except Exception as e:
         print(f"[DATABASE] Error recording rate limit hit: {e}")
+        return False
+
+
+# ============================================================================
+# LEARNED PATTERNS - Signal pattern learning and management
+# ============================================================================
+
+def add_learned_pattern(name: str, pattern: str, example_text: str, 
+                       action: str = 'BTO', asset_type: str = 'stock',
+                       description: str = None) -> Optional[int]:
+    """Add a new learned pattern (pending approval)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO learned_patterns (name, pattern, example_text, action, asset_type, description, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending')
+        ''', (name, pattern, example_text, action, asset_type, description))
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"[DATABASE] Error adding learned pattern: {e}")
+        return None
+
+
+def approve_learned_pattern(pattern_id: int, approved_by: str) -> bool:
+    """Approve a learned pattern for use."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            UPDATE learned_patterns SET 
+                status = 'active',
+                approved_by = ?,
+                approved_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (approved_by, pattern_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error approving learned pattern: {e}")
+        return False
+
+
+def disable_learned_pattern(pattern_id: int) -> bool:
+    """Disable a learned pattern."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            UPDATE learned_patterns SET 
+                status = 'disabled',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (pattern_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error disabling learned pattern: {e}")
+        return False
+
+
+def get_active_learned_patterns() -> List[Dict[str, Any]]:
+    """Get all active learned patterns for signal parsing."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT * FROM learned_patterns 
+            WHERE status = 'active'
+            ORDER BY id
+        ''')
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DATABASE] Error getting active learned patterns: {e}")
+        return []
+
+
+def get_all_learned_patterns() -> List[Dict[str, Any]]:
+    """Get all learned patterns (for admin view)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT * FROM learned_patterns ORDER BY created_at DESC')
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DATABASE] Error getting all learned patterns: {e}")
+        return []
+
+
+def delete_learned_pattern(pattern_id: int) -> bool:
+    """Delete a learned pattern."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('DELETE FROM learned_patterns WHERE id = ?', (pattern_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error deleting learned pattern: {e}")
         return False
 
 

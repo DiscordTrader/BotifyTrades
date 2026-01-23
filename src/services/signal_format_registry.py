@@ -263,6 +263,123 @@ class SignalFormatRegistry:
             parser=self._parse_stack_tickerless,
             examples=["STC 1 6935c @ 1.50"]
         )
+        
+        # =====================================================================
+        # FOXTRADES NATURAL LANGUAGE FORMAT (Stock signals)
+        # =====================================================================
+        
+        # Foxtrades entry: Taking a position in $SYMBOL average $PRICE
+        self.register(
+            name="foxtrades_entry",
+            description="Foxtrades natural language entry (stocks)",
+            priority=35,
+            pattern=r'[Tt]aking\s+a\s+(?:small\s+)?position\s+in\s+\$?([A-Za-z]+).*?average\s+\$?([0-9.]+)',
+            parser=self._parse_foxtrades_entry,
+            examples=["Taking a position in $NAMM average $2.38", "Taking a small position in LAZR average 0.49"]
+        )
+        
+        # Foxtrades add: Adding more to SYMBOL + Average is now PRICE
+        self.register(
+            name="foxtrades_add",
+            description="Foxtrades adding to position",
+            priority=36,
+            pattern=r'[Aa]dding\s+(?:more\s+)?(?:to\s+)?\$?([A-Za-z]+).*?[Aa]verage\s+(?:is\s+now\s+)?\$?([0-9.]+)',
+            parser=self._parse_foxtrades_add,
+            examples=["Adding more to IBRX. Average is now 6.65", "Adding to $GPUS average 0.32"],
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        
+        # Foxtrades buy: Buying SYMBOL average PRICE
+        self.register(
+            name="foxtrades_buy",
+            description="Foxtrades buying entry",
+            priority=37,
+            pattern=r'[Bb]uying\s+\$?([A-Za-z]+).*?average\s+\$?([0-9.]+)',
+            parser=self._parse_foxtrades_entry,
+            examples=["Buying SIDU average 2.30", "Buying $BEAT average 3.2"]
+        )
+        
+        # Foxtrades back in: Back in on SYMBOL average PRICE
+        self.register(
+            name="foxtrades_backin",
+            description="Foxtrades re-entry",
+            priority=38,
+            pattern=r'[Bb]ack\s+in\s+on\s+\$?([A-Za-z]+).*?average\s+\$?([0-9.]+)',
+            parser=self._parse_foxtrades_entry,
+            examples=["Back in on ROLR average 18.59"]
+        )
+        
+        # Foxtrades exit: All out of $SYMBOL
+        self.register(
+            name="foxtrades_exit",
+            description="Foxtrades full exit",
+            priority=39,
+            pattern=r'[Aa]ll\s+out\s+of\s+\$?([A-Za-z]+)',
+            parser=self._parse_foxtrades_exit,
+            examples=["All out of $ROLR now with profits", "All out of DBRG with 15.78% profit"]
+        )
+        
+        # Foxtrades out: Out of $SYMBOL
+        self.register(
+            name="foxtrades_out",
+            description="Foxtrades exit (out of)",
+            priority=40,
+            pattern=r'[Oo]ut\s+of\s+\$?([A-Za-z]+)',
+            parser=self._parse_foxtrades_exit,
+            examples=["Out of LAZR at a loss", "Out of $VMAR with small profit"]
+        )
+        
+        # Foxtrades stopped out: Stopped out of SYMBOL
+        self.register(
+            name="foxtrades_stoppedout",
+            description="Foxtrades stopped out exit",
+            priority=41,
+            pattern=r'[Ss]topped\s+out\s+of\s+\$?([A-Za-z]+)',
+            parser=self._parse_foxtrades_exit,
+            examples=["Stopped out of IRBT long with a loss"]
+        )
+        
+        # Foxtrades trim: Taking profits on SYMBOL
+        self.register(
+            name="foxtrades_trim",
+            description="Foxtrades taking profits (trim)",
+            priority=42,
+            pattern=r'[Tt]aking\s+(?:some\s+)?profits\s+on\s+\$?([A-Za-z]+)',
+            parser=self._parse_foxtrades_trim,
+            examples=["Taking some profits on SIDU", "Taking profits on IRBT"]
+        )
+        
+        # Foxtrades securing: Securing profits on SYMBOL
+        self.register(
+            name="foxtrades_secure",
+            description="Foxtrades securing profits",
+            priority=43,
+            pattern=r'[Ss]ecuring\s+(?:some\s+)?profits\s+on\s+\$?([A-Za-z]+)',
+            parser=self._parse_foxtrades_trim,
+            examples=["Securing some profits on BEAT"]
+        )
+        
+        # Load learned patterns from database
+        self._load_learned_patterns()
+    
+    def _load_learned_patterns(self) -> None:
+        """Load learned patterns from database."""
+        try:
+            from gui_app.database import get_active_learned_patterns
+            patterns = get_active_learned_patterns()
+            for p in patterns:
+                if p.get('pattern') and p.get('name'):
+                    self.register(
+                        name=f"learned_{p['name']}",
+                        description=p.get('description', 'Learned pattern'),
+                        priority=50 + p.get('id', 0),  # Lower priority than built-in
+                        pattern=p['pattern'],
+                        parser=self._parse_learned_pattern,
+                        examples=[p.get('example_text', '')]
+                    )
+                    print(f"[FORMAT REGISTRY] ✓ Loaded learned pattern: {p['name']}")
+        except Exception as e:
+            pass  # Database not available or no patterns
     
     # =========================================================================
     # PARSER IMPLEMENTATIONS
@@ -444,6 +561,151 @@ class SignalFormatRegistry:
             "price": float(price),
             "is_market_order": False,
             "_stack_tickerless": True
+        }
+    
+    # =========================================================================
+    # FOXTRADES PARSER IMPLEMENTATIONS
+    # =========================================================================
+    
+    def _parse_foxtrades_entry(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Foxtrades entry: Taking a position in $NAMM average $2.38"""
+        groups = match.groups()
+        symbol = groups[0].upper() if groups else None
+        price = float(groups[1]) if len(groups) > 1 and groups[1] else None
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "BTO",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": price,
+            "is_market_order": price is None,
+            "confidence": 1.0,
+            "_foxtrades_entry": True
+        }
+    
+    def _parse_foxtrades_add(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Foxtrades add: Adding more to IBRX. Average is now 6.65"""
+        groups = match.groups()
+        symbol = groups[0].upper() if groups else None
+        price = float(groups[1]) if len(groups) > 1 and groups[1] else None
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "BTO",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": price,
+            "is_market_order": price is None,
+            "is_add": True,  # Flag for adding to existing position
+            "confidence": 1.0,
+            "_foxtrades_add": True
+        }
+    
+    def _parse_foxtrades_exit(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Foxtrades exit: All out of $ROLR"""
+        groups = match.groups()
+        symbol = groups[0].upper() if groups else None
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_full_exit": True,
+            "confidence": 1.0,
+            "_foxtrades_exit": True
+        }
+    
+    def _parse_foxtrades_trim(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Foxtrades trim: Taking some profits on SIDU"""
+        groups = match.groups()
+        symbol = groups[0].upper() if groups else None
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_trim": True,
+            "is_full_exit": False,
+            "confidence": 0.9,  # Slightly lower for trims
+            "_foxtrades_trim": True
+        }
+    
+    def _parse_learned_pattern(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse signals using learned patterns from database."""
+        groups = match.groups()
+        symbol = None
+        price = None
+        action = "BTO"  # Default
+        
+        # Try to extract symbol and price from groups
+        for g in groups:
+            if g:
+                # Check if it looks like a ticker
+                if g.isalpha() and len(g) <= 5:
+                    symbol = g.upper()
+                # Check if it looks like a price
+                elif g.replace('.', '').isdigit():
+                    try:
+                        price = float(g)
+                    except ValueError:
+                        pass
+        
+        # Detect action from text
+        text_upper = text.upper()
+        if any(kw in text_upper for kw in ['OUT OF', 'SOLD', 'EXIT', 'STC', 'CLOSE']):
+            action = "STC"
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": action,
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": price,
+            "is_market_order": price is None,
+            "confidence": 0.85,  # Learned patterns have slightly lower confidence
+            "_learned_pattern": True
         }
     
     def _month_name_to_num(self, month_name: str) -> str:
