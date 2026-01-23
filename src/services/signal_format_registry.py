@@ -360,24 +360,35 @@ class SignalFormatRegistry:
         )
         
         # Load learned patterns from database
+        self._learned_pattern_metadata: Dict[str, Dict] = {}  # Store metadata by pattern name
         self._load_learned_patterns()
     
     def _load_learned_patterns(self) -> None:
-        """Load learned patterns from database."""
+        """Load learned patterns from database with full metadata."""
         try:
             from gui_app.database import get_active_learned_patterns
             patterns = get_active_learned_patterns()
             for p in patterns:
                 if p.get('pattern') and p.get('name'):
+                    pattern_name = f"learned_{p['name']}"
+                    # Store metadata for use in parser
+                    self._learned_pattern_metadata[pattern_name] = {
+                        'action': p.get('action', 'BTO'),
+                        'asset_type': p.get('asset_type', 'stock'),
+                        'confidence': p.get('confidence', 0.85),
+                        'approved_by': p.get('approved_by'),
+                        'approved_at': p.get('approved_at'),
+                        'admin_approved': p.get('approved_by') is not None
+                    }
                     self.register(
-                        name=f"learned_{p['name']}",
+                        name=pattern_name,
                         description=p.get('description', 'Learned pattern'),
                         priority=50 + p.get('id', 0),  # Lower priority than built-in
                         pattern=p['pattern'],
-                        parser=self._parse_learned_pattern,
+                        parser=lambda m, t, pn=pattern_name: self._parse_learned_pattern_with_metadata(m, t, pn),
                         examples=[p.get('example_text', '')]
                     )
-                    print(f"[FORMAT REGISTRY] ✓ Loaded learned pattern: {p['name']}")
+                    print(f"[FORMAT REGISTRY] ✓ Loaded learned pattern: {p['name']} (action={p.get('action', 'BTO')}, approved={p.get('approved_by') is not None})")
         except Exception as e:
             pass  # Database not available or no patterns
     
@@ -665,12 +676,18 @@ class SignalFormatRegistry:
             "_foxtrades_trim": True
         }
     
-    def _parse_learned_pattern(self, match: re.Match, text: str) -> Optional[Dict]:
-        """Parse signals using learned patterns from database."""
+    def _parse_learned_pattern_with_metadata(self, match: re.Match, text: str, pattern_name: str) -> Optional[Dict]:
+        """Parse signals using learned patterns with database metadata."""
         groups = match.groups()
         symbol = None
         price = None
-        action = "BTO"  # Default
+        
+        # Get metadata from stored database config
+        metadata = self._learned_pattern_metadata.get(pattern_name, {})
+        action = metadata.get('action', 'BTO')
+        asset_type = metadata.get('asset_type', 'stock')
+        confidence = metadata.get('confidence', 0.85)
+        admin_approved = metadata.get('admin_approved', False)
         
         # Try to extract symbol and price from groups
         for g in groups:
@@ -685,16 +702,11 @@ class SignalFormatRegistry:
                     except ValueError:
                         pass
         
-        # Detect action from text
-        text_upper = text.upper()
-        if any(kw in text_upper for kw in ['OUT OF', 'SOLD', 'EXIT', 'STC', 'CLOSE']):
-            action = "STC"
-        
         if not symbol:
             return None
         
         return {
-            "asset": "stock",
+            "asset": asset_type,
             "action": action,
             "qty": 1,
             "qty_specified": False,
@@ -704,9 +716,16 @@ class SignalFormatRegistry:
             "expiry": None,
             "price": price,
             "is_market_order": price is None,
-            "confidence": 0.85,  # Learned patterns have slightly lower confidence
-            "_learned_pattern": True
+            "confidence": confidence,
+            "_learned_pattern": True,
+            "_admin_approved": admin_approved,
+            "_requires_approval": True,  # Security: learned patterns require approval for execution
+            "_execution_allowed": admin_approved  # Only execute if admin approved
         }
+    
+    def _parse_learned_pattern(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Legacy parser for learned patterns (fallback)."""
+        return self._parse_learned_pattern_with_metadata(match, text, 'unknown')
     
     def _month_name_to_num(self, month_name: str) -> str:
         """Convert month name to number."""

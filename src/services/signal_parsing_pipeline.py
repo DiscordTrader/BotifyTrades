@@ -60,6 +60,10 @@ class ParsedSignal:
     message_id: str = ""
     channel_id: str = ""
     timestamp: datetime = field(default_factory=datetime.now)
+    # Security flags for execution gating
+    execution_allowed: bool = True  # False for AI/learned unless admin-approved
+    requires_approval: bool = False  # True for AI/learned signals
+    admin_approved: bool = False  # True if admin has approved this pattern/source
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -77,8 +81,19 @@ class ParsedSignal:
             'is_full_exit': self.is_full_exit,
             'is_market_order': self.is_market_order,
             'message_id': self.message_id,
-            'channel_id': self.channel_id
+            'channel_id': self.channel_id,
+            'execution_allowed': self.execution_allowed,
+            'requires_approval': self.requires_approval,
+            'admin_approved': self.admin_approved
         }
+    
+    def can_execute(self) -> bool:
+        """Check if this signal can be executed (security gate)."""
+        # AI/learned signals require admin approval for execution
+        if self.source in (SignalSource.AI_FALLBACK, SignalSource.REGISTRY_LEARNED):
+            return self.admin_approved and self.execution_allowed
+        # All other sources can execute if confidence >= 0.8
+        return self.execution_allowed and self.confidence >= 0.8
     
     def dedupe_key(self) -> str:
         """Generate unique key for deduplication."""
@@ -201,6 +216,20 @@ class SignalParsingPipeline:
                     print(f"[PIPELINE] ⚠️ AI confidence too low ({result.confidence:.2f} < {self._ai_min_confidence})")
                     result = None
         
+        # SECURITY GATE: Block AI/learned signals that aren't approved for execution
+        if result and result.requires_approval and not result.admin_approved:
+            print(f"[PIPELINE] ⛔ SECURITY: {result.source.value} signal blocked - requires admin approval")
+            print(f"[PIPELINE]    Symbol: {result.symbol}, Action: {result.action}")
+            print(f"[PIPELINE]    execution_allowed={result.execution_allowed}, can_execute={result.can_execute()}")
+            # Return None to prevent any downstream execution
+            return None
+        
+        # Confidence gate: Block low-confidence signals
+        if result and not result.can_execute():
+            print(f"[PIPELINE] ⛔ SECURITY: Signal blocked - confidence too low or not allowed")
+            print(f"[PIPELINE]    confidence={result.confidence:.2f}, execution_allowed={result.execution_allowed}")
+            return None
+        
         # Dedupe check
         if result and check_dedupe:
             if await self._deduplicator.is_duplicate(result):
@@ -271,6 +300,11 @@ class SignalParsingPipeline:
             from src.services.signal_format_registry import parse_with_registry
             result = parse_with_registry(text)
             if result and result.get('action') in ['BTO', 'STC']:
+                # Security: Check for learned pattern flags
+                is_learned = result.get('_learned_pattern', False)
+                admin_approved = result.get('_admin_approved', False)
+                requires_approval = result.get('_requires_approval', False)
+                
                 return ParsedSignal(
                     action=result['action'],
                     asset=result.get('asset', 'option'),
@@ -281,7 +315,11 @@ class SignalParsingPipeline:
                     price=result.get('price'),
                     qty=result.get('qty', 1),
                     confidence=result.get('confidence', 1.0),
-                    source=self._map_registry_source(result.get('_format_name', '')),
+                    source=SignalSource.REGISTRY_LEARNED if is_learned else self._map_registry_source(result.get('_format_name', '')),
+                    # Security: Set execution gating for learned patterns
+                    execution_allowed=result.get('_execution_allowed', not is_learned),
+                    requires_approval=requires_approval or is_learned,
+                    admin_approved=admin_approved,
                     message_id=message_id,
                     channel_id=channel_id
                 )
@@ -346,11 +384,12 @@ class SignalParsingPipeline:
                     confidence=confidence,
                     source=SignalSource.AI_FALLBACK,
                     message_id=message_id,
-                    channel_id=channel_id
+                    channel_id=channel_id,
+                    # Security: AI signals cannot execute without admin approval
+                    execution_allowed=self._ai_execution_allowed,
+                    requires_approval=True,
+                    admin_approved=False  # AI signals are never pre-approved
                 )
-                # Security: Mark AI signals as non-executable unless explicitly allowed
-                if not self._ai_execution_allowed:
-                    signal.confidence = min(signal.confidence, 0.79)  # Force below threshold
                 return signal
         except Exception as e:
             print(f"[PIPELINE] AI fallback error: {e}")
