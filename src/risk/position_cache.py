@@ -66,6 +66,34 @@ class PositionCache:
             print(f"[RISK] Warning: Could not restore trailing state from DB: {e}")
             return 0
     
+    def _normalize_broker_name(self, broker: str) -> str:
+        """Normalize broker name to match cache format (e.g., WEBULL -> Webull)."""
+        broker_map = {
+            'WEBULL': 'Webull',
+            'ALPACA_PAPER': 'ALPACA_PAPER',
+            'ALPACA_LIVE': 'ALPACA_LIVE',
+            'ROBINHOOD': 'Robinhood',
+            'SCHWAB': 'Schwab',
+            'IBKR': 'IBKR',
+            'TASTYTRADE': 'Tastytrade',
+            'QUESTRADE': 'Questrade',
+            'UPSTOX': 'Upstox',
+            'ZERODHA': 'Zerodha',
+            'DHANQ': 'DhanQ',
+        }
+        return broker_map.get(broker.upper(), broker)
+    
+    def _normalize_expiry(self, expiry: str) -> str:
+        """Normalize expiry format to match cache format (e.g., 2/20 -> 02/20)."""
+        if not expiry:
+            return expiry
+        parts = expiry.replace('-', '/').split('/')
+        if len(parts) >= 2:
+            month = parts[0].zfill(2)
+            day = parts[1].zfill(2)
+            return f"{month}/{day}"
+        return expiry
+    
     def restore_full_risk_state_from_db(self) -> int:
         """
         Restore complete risk state from database for all open trades.
@@ -79,11 +107,13 @@ class PositionCache:
             mapped = 0
             
             for trade in trades:
-                broker = trade['broker'] or 'UNKNOWN'
+                raw_broker = trade['broker'] or 'UNKNOWN'
+                broker = self._normalize_broker_name(raw_broker)
                 asset_type = trade['asset_type'] or 'stock'
                 
                 if asset_type == 'option' and trade['strike']:
-                    pos_key = f"{broker}_{trade['symbol']}_{trade['strike']}_{trade['expiry']}_{trade['call_put']}"
+                    expiry = self._normalize_expiry(trade['expiry'] or '')
+                    pos_key = f"{broker}_{trade['symbol']}_{trade['strike']}_{expiry}_{trade['call_put']}"
                 else:
                     pos_key = f"{broker}_{trade['symbol']}_stock"
                 
