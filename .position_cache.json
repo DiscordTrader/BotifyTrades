@@ -6738,7 +6738,7 @@
     "max_pnl_seen": 2.5754704635641845,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 54.375,
+    "last_evaluated_price": 54.48,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9325,16 +9325,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {
-      "FSIE8KPM7FCK7S1QJIB7FG278A": {
-        "order_id": "FSIE8KPM7FCK7S1QJIB7FG278A",
-        "tier": 1,
-        "qty_expected": 1,
-        "qty_filled": 0,
-        "status": "pending",
-        "created_at": "2026-01-23T19:39:40.209663"
-      }
-    },
+    "pending_orders": {},
     "created_at": "2026-01-22T20:58:28.629686",
     "max_pnl_seen": 24.24242424242424,
     "dynamic_sl_price": null,

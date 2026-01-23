@@ -551,6 +551,14 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added channel_max_position_size and tracking_default_quantity columns")
     
+    # Migrate: Add per-channel order chase enabled column for unfilled order management
+    try:
+        cursor.execute('SELECT order_chase_enabled FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN order_chase_enabled INTEGER DEFAULT NULL')
+        conn.commit()
+        print("[DATABASE] ✓ Added order_chase_enabled column for per-channel unfilled order chasing")
+    
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -1476,6 +1484,7 @@ def init_db():
         ('enable_early_trailing', 'INTEGER DEFAULT 0'),
         ('early_trailing_activation_pct', 'REAL DEFAULT 5.0'),
         ('early_trailing_step_pct', 'REAL DEFAULT 3.0'),
+        ('order_chase_enabled', 'INTEGER DEFAULT NULL'),
     ]
     for col_name, col_type in migration_columns:
         try:
@@ -12359,6 +12368,100 @@ def save_order_chase_settings(settings: Dict[str, Any]) -> bool:
         return True
     except Exception as e:
         print(f"[DATABASE] Error saving order chase settings: {e}")
+        return False
+
+
+def get_channel_order_chase_enabled(channel_id: str) -> bool:
+    """
+    Get order chase enabled status for a channel.
+    Falls back to global setting if channel setting is NULL.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT order_chase_enabled FROM channels
+            WHERE discord_channel_id = ? OR telegram_chat_id = ?
+        ''', (str(channel_id), str(channel_id)))
+        row = cursor.fetchone()
+        
+        if row and row['order_chase_enabled'] is not None:
+            return bool(row['order_chase_enabled'])
+        
+        global_settings = get_order_chase_settings()
+        return global_settings.get('enabled', True)
+    except Exception as e:
+        print(f"[DATABASE] Error getting channel order chase: {e}")
+        global_settings = get_order_chase_settings()
+        return global_settings.get('enabled', True)
+
+
+def set_channel_order_chase_enabled(channel_id: str, enabled: Optional[bool]) -> bool:
+    """
+    Set order chase enabled status for a channel.
+    Pass None to use global setting (fallback behavior).
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        value = None if enabled is None else (1 if enabled else 0)
+        cursor.execute('''
+            UPDATE channels SET order_chase_enabled = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE discord_channel_id = ? OR telegram_chat_id = ?
+        ''', (value, str(channel_id), str(channel_id)))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error setting channel order chase: {e}")
+        return False
+
+
+def get_routing_mapping_order_chase_enabled(mapping_id: int) -> bool:
+    """
+    Get order chase enabled status for a signal routing mapping.
+    Falls back to global setting if mapping setting is NULL.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT order_chase_enabled FROM signal_routing_mappings
+            WHERE id = ?
+        ''', (mapping_id,))
+        row = cursor.fetchone()
+        
+        if row and row['order_chase_enabled'] is not None:
+            return bool(row['order_chase_enabled'])
+        
+        global_settings = get_order_chase_settings()
+        return global_settings.get('enabled', True)
+    except Exception as e:
+        print(f"[DATABASE] Error getting mapping order chase: {e}")
+        global_settings = get_order_chase_settings()
+        return global_settings.get('enabled', True)
+
+
+def set_routing_mapping_order_chase_enabled(mapping_id: int, enabled: Optional[bool]) -> bool:
+    """
+    Set order chase enabled status for a signal routing mapping.
+    Pass None to use global setting (fallback behavior).
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        value = None if enabled is None else (1 if enabled else 0)
+        cursor.execute('''
+            UPDATE signal_routing_mappings SET order_chase_enabled = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (value, mapping_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error setting mapping order chase: {e}")
         return False
 
 
