@@ -347,6 +347,64 @@ class WebullBroker(BrokerInterface):
             traceback.print_exc()
             return []
     
+    async def cancel_order(self, order_id: str) -> Dict[str, Any]:
+        """Cancel a pending order by order ID
+        
+        Args:
+            order_id: The order ID to cancel
+            
+        Returns:
+            Dict with 'success' and optional 'error' keys
+        """
+        try:
+            result = await asyncio.to_thread(self.wb.cancel_order, order_id)
+            if result:
+                print(f"[{self.name}] ✓ Order {order_id} cancelled successfully")
+                return {'success': True, 'order_id': order_id}
+            else:
+                print(f"[{self.name}] ❌ Failed to cancel order {order_id}")
+                return {'success': False, 'error': 'Cancel returned False'}
+        except Exception as e:
+            print(f"[{self.name}] Error cancelling order {order_id}: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    async def get_option_quote(self, symbol: str, strike: float, expiry: str, call_put: str) -> Optional[Dict[str, Any]]:
+        """Get current bid/ask quote for an option
+        
+        Args:
+            symbol: Underlying symbol (e.g., 'AAPL')
+            strike: Strike price
+            expiry: Expiration date (YYYY-MM-DD format)
+            call_put: 'C' or 'P'
+            
+        Returns:
+            Dict with bid, ask, mid, last prices or None if not found
+        """
+        try:
+            chain = await self.get_option_chain(symbol, expiry)
+            if not chain:
+                return None
+            
+            options_list = chain.get('calls' if call_put.upper() == 'C' else 'puts', [])
+            
+            for opt in options_list:
+                if abs(opt.get('strike', 0) - strike) < 0.01:
+                    bid = opt.get('bid', 0)
+                    ask = opt.get('ask', 0)
+                    mid = (bid + ask) / 2 if bid and ask else opt.get('last', 0)
+                    return {
+                        'bid': bid,
+                        'ask': ask,
+                        'mid': round(mid, 2),
+                        'last': opt.get('last', 0),
+                        'spread': round(ask - bid, 2) if bid and ask else 0
+                    }
+            
+            return None
+        except Exception as e:
+            print(f"[{self.name}] Error getting option quote for {symbol} {strike}{call_put}: {e}")
+            return None
+    
     async def get_order_history(self, count: int = 50) -> list:
         """Get filled/completed order history from Webull
         

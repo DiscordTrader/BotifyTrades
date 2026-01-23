@@ -12274,6 +12274,94 @@ def delete_learned_pattern(pattern_id: int) -> bool:
         return False
 
 
+def init_order_chase_settings():
+    """Initialize order chase settings in bot_settings"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    default_settings = [
+        ('order_chase_enabled', 'true'),
+        ('order_chase_timeout_seconds', '30'),
+        ('order_chase_max_attempts', '3'),
+        ('order_chase_poll_interval', '5'),
+    ]
+    
+    try:
+        for key, value in default_settings:
+            cursor.execute('''
+                INSERT OR IGNORE INTO settings (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            ''', (key, value))
+        
+        conn.commit()
+        print("[DATABASE] ✓ Order chase settings initialized")
+    except Exception as e:
+        print(f"[DATABASE] Error initializing order chase settings: {e}")
+
+
+def get_order_chase_settings() -> Dict[str, Any]:
+    """Get order chase settings"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT key, value FROM settings
+            WHERE key LIKE 'order_chase_%'
+        ''')
+        
+        rows = cursor.fetchall()
+        settings = {
+            'enabled': True,
+            'timeout_seconds': 30,
+            'max_attempts': 3,
+            'poll_interval': 5
+        }
+        
+        for row in rows:
+            key = row['key'].replace('order_chase_', '')
+            value = row['value']
+            if value == 'true':
+                settings[key] = True
+            elif value == 'false':
+                settings[key] = False
+            elif value.isdigit():
+                settings[key] = int(value)
+            else:
+                settings[key] = value
+        
+        return settings
+    except Exception as e:
+        print(f"[DATABASE] Error getting order chase settings: {e}")
+        return {'enabled': True, 'timeout_seconds': 30, 'max_attempts': 3, 'poll_interval': 5}
+
+
+def save_order_chase_settings(settings: Dict[str, Any]) -> bool:
+    """Save order chase settings"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        for key, value in settings.items():
+            full_key = f'order_chase_{key}'
+            if isinstance(value, bool):
+                str_value = 'true' if value else 'false'
+            else:
+                str_value = str(value)
+            
+            cursor.execute('''
+                INSERT INTO settings (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP
+            ''', (full_key, str_value, str_value))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE] Error saving order chase settings: {e}")
+        return False
+
+
 # Initialize tables
 init_channel_messages_table()
 init_signal_formats_table()
@@ -12284,5 +12372,6 @@ init_conditional_order_settings()
 init_upstox_pending_orders_table()
 init_upstox_settings()
 init_service_orchestrator_tables()
+init_order_chase_settings()
 
 init_db()

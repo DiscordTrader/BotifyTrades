@@ -145,6 +145,7 @@ except ImportError as e:
 
 # Import BrokerSyncService for real-time trade synchronization
 from src.services.broker_sync_service import BrokerSyncService
+from src.services.unfilled_order_chaser import UnfilledOrderChaser, init_order_chaser, get_order_chaser
 
 # Import Signal Routing Engine for forwarding-only architecture
 try:
@@ -5960,6 +5961,27 @@ class SelfClient(discord.Client):
                 await self.sync_service.start()
                 await asyncio.sleep(0)  # Yield to event loop so sync task can start
                 _original_print("[SYNC] ✓ Trade synchronization service started (30s interval)", flush=True)
+                
+                # Initialize Unfilled Order Chaser for mid-price replacement of stale exit orders
+                try:
+                    from gui_app.database import get_order_chase_settings
+                    chase_settings = get_order_chase_settings()
+                    
+                    if chase_settings.get('enabled', True):
+                        self.order_chaser = init_order_chaser(
+                            broker_manager,
+                            chase_timeout_seconds=chase_settings.get('timeout_seconds', 30),
+                            max_chase_attempts=chase_settings.get('max_attempts', 3),
+                            poll_interval_seconds=chase_settings.get('poll_interval', 5)
+                        )
+                        await self.order_chaser.start()
+                        _original_print("[ORDER_CHASER] ✓ Unfilled order chaser started")
+                    else:
+                        _original_print("[ORDER_CHASER] ⏸️ Order chaser DISABLED (Settings)")
+                        self.order_chaser = None
+                except Exception as chase_err:
+                    _original_print(f"[ORDER_CHASER] ⚠️ Failed to start: {chase_err}")
+                    self.order_chaser = None
             except Exception as e:
                 _original_print(f"[SYNC] ⚠️ Sync service initialization failed: {e}", flush=True)
                 import traceback
@@ -11235,6 +11257,27 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         )
                     except Exception as meta_err:
                         _original_print(f"[EXEC] Warning: Could not save order metadata: {meta_err}")
+                
+                # Track STC orders from risk management for unfilled order chasing
+                if order_id and signal.get('_risk_management_order') and signal.get('action', '').upper() in ('STC', 'SELL'):
+                    try:
+                        order_chaser = get_order_chaser()
+                        if order_chaser:
+                            await order_chaser.track_exit_order(
+                                order_id=str(order_id),
+                                broker_id=broker_name,
+                                symbol=signal.get('symbol', ''),
+                                asset_type=signal.get('asset', 'option'),
+                                quantity=signal.get('qty', 1),
+                                price=signal.get('price', 0),
+                                action='STC',
+                                position_key=signal.get('_position_key', ''),
+                                strike=signal.get('strike'),
+                                expiry=signal.get('expiry'),
+                                call_put=signal.get('opt_type')
+                            )
+                    except Exception as chase_err:
+                        _original_print(f"[ORDER_CHASER] ⚠️ Track error: {chase_err}")
             
             return resp
         
@@ -11781,6 +11824,26 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         _original_print(f"[RISK] ✅ Alpaca exit order placed: {result}")
                                         resp = {'success': True, 'orderId': result.order_id, 'broker': 'ALPACA_PAPER'}
                                         order_success = True
+                                        
+                                        # Track exit order for unfilled order chasing
+                                        order_chaser = get_order_chaser()
+                                        if order_chaser and result.order_id:
+                                            try:
+                                                await order_chaser.track_exit_order(
+                                                    order_id=str(result.order_id),
+                                                    broker_id='ALPACA_PAPER',
+                                                    symbol=signal['symbol'],
+                                                    asset_type=signal['asset'],
+                                                    quantity=signal['qty'],
+                                                    price=signal.get('price', 0),
+                                                    action='STC',
+                                                    position_key=signal.get('_position_key', ''),
+                                                    strike=signal.get('strike'),
+                                                    expiry=signal.get('expiry'),
+                                                    call_put=signal.get('opt_type')
+                                                )
+                                            except Exception as chase_err:
+                                                _original_print(f"[ORDER_CHASER] ⚠️ Track error: {chase_err}")
                                         
                                         # Save risk-triggered STC trade to database for PNL tracking
                                         if DATABASE_MODULE_AVAILABLE and signal.get('channel_id'):
