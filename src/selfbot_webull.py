@@ -10472,20 +10472,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 else:
                     print(f"[ROUTE] TRACK-only channel (paper trading disabled) - signal saved for performance analysis")
             
-            # Legacy fallback - channel in config.ini CHANNEL_IDS list
-            if not execute_enabled and not track_enabled and message.channel.id in CHANNEL_IDS:
-                print(f"[ROUTE] Legacy channel - adding to order queue")
-                # GAP FIX: Check circuit breaker before legacy execution
-                try:
-                    from gui_app.database import is_circuit_breaker_tripped
-                    circuit_status = is_circuit_breaker_tripped()
-                    if circuit_status.get('tripped'):
-                        reason = circuit_status.get('reason', 'Circuit breaker tripped')
-                        print(f"[CIRCUIT BREAKER] ⛔ BLOCKED (legacy): {reason}")
-                        return
-                except Exception as cb_err:
-                    print(f"[CIRCUIT BREAKER] ⚠️ Check failed (continuing): {cb_err}")
-                await self.order_queue.put(opt)
+            # Legacy fallback REMOVED - all channels must be properly configured via GUI
+            # This prevents unintended order execution from unconfigured channels
             
             return
         
@@ -10712,11 +10700,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             elif track_enabled and execute_enabled:
                 print(f"[ROUTE] DUAL mode - executing trade AND tracking performance")
             
-            # Legacy fallback - channel in config.ini CHANNEL_IDS list
-            if not execute_enabled and not track_enabled and message.channel.id in CHANNEL_IDS:
-                print(f"[ROUTE] Legacy channel - adding to order queue")
-                await self.order_queue.put(stk)
-                print(f"[QUEUE] ✓ Signal queued (legacy mode)")
+            # Legacy fallback REMOVED - all channels must be properly configured via GUI
+            # This prevents unintended order execution from unconfigured channels
             
             return
         
