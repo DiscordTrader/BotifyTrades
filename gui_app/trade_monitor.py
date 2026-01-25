@@ -436,7 +436,10 @@ class TradeMonitor:
         
         if asset_type == 'option' and strike and strike > 0:
             expiry = order.get('expiry', '')
-            direction = order.get('direction', 'C').upper()
+            direction = (order.get('direction') or 'C').upper()
+            # Ensure direction is valid (C or P only)
+            if direction not in ['C', 'P']:
+                direction = 'C'
             
             if expiry and '-' in expiry:
                 try:

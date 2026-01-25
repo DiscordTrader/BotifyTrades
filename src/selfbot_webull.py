@@ -8502,25 +8502,39 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     qty_from_signal = parsed_opt.get('_qty_from_signal', False)
                                     symbol = parsed_opt.get('symbol', '')
                                     strike = parsed_opt.get('strike', '')
-                                    opt_type = parsed_opt.get('opt_type', 'C')
+                                    opt_type = parsed_opt.get('opt_type', '') or 'C'
                                     expiry = parsed_opt.get('expiry', '')
                                     price = parsed_opt.get('price')
-                                    price_str = f"@ {price}" if price else "@ m"
-                                    # Only include qty in forward if source signal had it AND it's valid
-                                    if qty_from_signal and qty is not None:
-                                        forward_msg = f"@everyone\n{action} {qty} {symbol} {strike}{opt_type} {expiry} {price_str}\n*Not financial advice, for educational purposes only.*"
-                                    else:
-                                        forward_msg = f"@everyone\n{action} {symbol} {strike}{opt_type} {expiry} {price_str}\n*Not financial advice, for educational purposes only.*"
-                                    print(f"[CHANNEL MAP] ✓ Converted to BTO/STC format: {forward_msg}", flush=True)
+                                    
+                                    # VALIDATION: Ensure option signals have required fields
+                                    is_valid_signal = True
+                                    if parsed_opt.get('asset') == 'option':
+                                        if not strike or not opt_type or not expiry:
+                                            print(f"[CHANNEL MAP] ❌ REJECTED incomplete option: symbol={symbol} strike={strike} opt_type={opt_type} expiry={expiry}")
+                                            should_forward = False
+                                            is_valid_signal = False
+                                    
+                                    if is_valid_signal:
+                                        # Ensure opt_type is valid (C or P only)
+                                        if opt_type and opt_type.upper() not in ['C', 'P']:
+                                            opt_type = 'C'
+                                        
+                                        price_str = f"@ {price}" if price else "@ m"
+                                        # Only include qty in forward if source signal had it AND it's valid
+                                        if qty_from_signal and qty is not None:
+                                            forward_msg = f"@everyone\n{action} {qty} {symbol} {strike}{opt_type} {expiry} {price_str}\n*Not financial advice, for educational purposes only.*"
+                                        else:
+                                            forward_msg = f"@everyone\n{action} {symbol} {strike}{opt_type} {expiry} {price_str}\n*Not financial advice, for educational purposes only.*"
+                                        print(f"[CHANNEL MAP] ✓ Converted to BTO/STC format: {forward_msg}", flush=True)
                                 except Exception as conv_err:
                                     print(f"[CHANNEL MAP] ❌ Conversion error: {conv_err}", flush=True)
                                     import traceback
                                     traceback.print_exc()
-                                    forward_msg = message.content.strip()
+                                    should_forward = False
                             else:
-                                # Couldn't parse, forward as-is
-                                forward_msg = message.content.strip()
-                                print(f"[CHANNEL MAP] ⚠️ Could not parse signal, forwarding raw: {forward_msg[:50]}...")
+                                # Couldn't parse - DO NOT forward raw unparseable signals
+                                print(f"[CHANNEL MAP] ❌ REJECTED: Could not parse signal, NOT forwarding: {message.content[:50]}...")
+                                should_forward = False
                         else:
                             forward_msg = message.content.strip()
                         
