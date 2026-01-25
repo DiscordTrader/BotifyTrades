@@ -323,7 +323,8 @@ def get_schwab_credentials():
             return {
                 'client_id': creds.get('client_id', ''),
                 'client_secret': creds.get('client_secret', ''),
-                'redirect_uri': creds.get('redirect_uri', get_default_redirect_uri())
+                'redirect_uri': creds.get('redirect_uri', get_default_redirect_uri()),
+                'dry_run': creds.get('dry_run', False)  # Default to LIVE mode
             }
     except Exception as e:
         print(f"[SCHWAB AUTH] Error getting credentials: {e}")
