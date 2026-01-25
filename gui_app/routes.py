@@ -12619,37 +12619,48 @@ def register_routes(app):
                                     # Log full response for first few polls
                                     if poll_count <= 3:
                                         print(f"[API] Robinhood: Poll #{poll_count} response keys: {list(inq_data.keys())}")
-                                        if 'context' in inq_data:
-                                            print(f"[API] Robinhood: context keys: {list(inq_data.get('context', {}).keys())}")
+                                        ctx_debug = inq_data.get('context')
+                                        if ctx_debug and isinstance(ctx_debug, dict):
+                                            print(f"[API] Robinhood: context keys: {list(ctx_debug.keys())}")
                                     
                                     # Check multiple possible approval indicators
-                                    # Method 1: type_context.result
-                                    if "type_context" in inq_data:
-                                        result = inq_data["type_context"].get("result", "")
-                                        if "approved" in result.lower():
+                                    # Method 1: type_context.result (check for None)
+                                    type_context = inq_data.get("type_context")
+                                    if type_context and isinstance(type_context, dict):
+                                        result = type_context.get("result", "")
+                                        if result and "approved" in result.lower():
                                             approved = True
                                             print(f"[API] Robinhood: Approved via type_context.result")
                                             break
                                     
                                     # Method 2: verification_workflow.workflow_status
-                                    vw_status = inq_data.get("verification_workflow", {}).get("workflow_status", "")
-                                    if "approved" in vw_status.lower():
+                                    vw = inq_data.get("verification_workflow")
+                                    vw_status = vw.get("workflow_status", "") if vw and isinstance(vw, dict) else ""
+                                    if vw_status and "approved" in vw_status.lower():
                                         approved = True
                                         print(f"[API] Robinhood: Approved via verification_workflow.workflow_status")
                                         break
                                     
-                                    # Method 3: Check context.workflow_status
-                                    ctx_status = inq_data.get("context", {}).get("workflow_status", "")
-                                    if "approved" in ctx_status.lower():
+                                    # Method 3: Check context.workflow_status (check for None)
+                                    ctx = inq_data.get("context")
+                                    ctx_status = ctx.get("workflow_status", "") if ctx and isinstance(ctx, dict) else ""
+                                    if ctx_status and "approved" in ctx_status.lower():
                                         approved = True
                                         print(f"[API] Robinhood: Approved via context.workflow_status")
                                         break
                                     
                                     # Method 4: Check if we have a successful state
-                                    state = inq_data.get("state", "")
+                                    state = inq_data.get("state", "") or ""
                                     if state == "completed" or state == "approved":
                                         approved = True
                                         print(f"[API] Robinhood: Approved via state={state}")
+                                        break
+                                    
+                                    # Method 5: Check state_name for approval indicators
+                                    state_name = inq_data.get("state_name", "") or ""
+                                    if state_name and ("approved" in state_name.lower() or "success" in state_name.lower() or "complete" in state_name.lower()):
+                                        approved = True
+                                        print(f"[API] Robinhood: Approved via state_name={state_name}")
                                         break
                                     
                                     status_display = vw_status or ctx_status or state or "unknown"
