@@ -132,6 +132,27 @@ def verify_signed_token(token_str: str, expected_machine_id: str) -> Tuple[bool,
             print(f"[LICENSE] Machine ID mismatch - token for different machine")
             return False, {}
         
+        # CRITICAL: Check if the license itself has expired
+        if 'expires' in payload:
+            try:
+                expires_str = payload['expires']
+                if 'T' in expires_str:
+                    license_expires = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
+                else:
+                    license_expires = datetime.strptime(expires_str, '%Y-%m-%d %H:%M:%S')
+                
+                # Handle timezone-aware datetime comparison
+                now = datetime.now()
+                if license_expires.tzinfo is not None:
+                    from datetime import timezone
+                    now = datetime.now(timezone.utc)
+                
+                if now >= license_expires:
+                    print("[LICENSE] License has EXPIRED - please renew your subscription")
+                    return False, {}
+            except Exception as exp_err:
+                print(f"[LICENSE] Error checking license expiry: {exp_err}")
+        
         # Check offline grace expiration
         if 'offline_grace_expires' in payload:
             grace_expires = datetime.fromisoformat(payload['offline_grace_expires'])
