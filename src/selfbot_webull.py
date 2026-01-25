@@ -5862,7 +5862,7 @@ class SelfClient(discord.Client):
         try:
             _original_print("[SCHWAB] Starting broker initialization...", flush=True)
             
-            from gui_app.broker_credentials_service import get_schwab_credentials
+            from gui_app.schwab_auth import get_schwab_credentials
             from src.brokers.schwab_broker import SchwabBroker
             
             schwab_creds = get_schwab_credentials()
