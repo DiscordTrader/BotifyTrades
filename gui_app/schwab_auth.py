@@ -366,7 +366,7 @@ def schwab_login():
     """Initiate Schwab OAuth login flow with automatic callback handling."""
     if not is_schwab_configured():
         flash("Schwab is not configured. Please add Client ID and Secret in Settings.", "error")
-        return redirect(url_for('settings_page'))
+        return redirect(url_for('settings'))
     
     try:
         import urllib.parse
@@ -375,7 +375,7 @@ def schwab_login():
         creds = get_schwab_credentials()
         if not creds:
             flash("Schwab credentials not found", "error")
-            return redirect(url_for('settings_page'))
+            return redirect(url_for('settings'))
         
         # Determine if we're running locally (can use automatic callback)
         is_local = not os.environ.get("REPLIT_DEV_DOMAIN")
@@ -440,7 +440,7 @@ def schwab_login():
         import traceback
         traceback.print_exc()
         flash(f"Failed to connect to Schwab: {str(e)}", "error")
-        return redirect(url_for('settings_page'))
+        return redirect(url_for('settings'))
 
 
 def _render_oauth_waiting_page(callback_url: str) -> str:
@@ -701,12 +701,12 @@ def schwab_callback():
         if error:
             print(f"[SCHWAB CALLBACK] Error from Schwab: {error} - {error_description}")
             flash(f"Schwab authorization failed: {error} - {error_description}", "error")
-            return redirect(url_for('settings_page'))
+            return redirect(url_for('settings'))
         
         if not code:
             print(f"[SCHWAB CALLBACK] No authorization code in request")
             flash("No authorization code received from Schwab", "error")
-            return redirect(url_for('settings_page'))
+            return redirect(url_for('settings'))
         
         print(f"[SCHWAB CALLBACK] Got authorization code (first 20 chars): {code[:20]}...")
         
@@ -714,7 +714,7 @@ def schwab_callback():
         if not creds:
             print(f"[SCHWAB CALLBACK] No credentials found in database!")
             flash("Schwab credentials not found. Please save your Client ID and Secret first.", "error")
-            return redirect(url_for('settings_page'))
+            return redirect(url_for('settings'))
         
         print(f"[SCHWAB CALLBACK] Found credentials, client_id: {creds.get('client_id', '')[:8]}...")
         
@@ -733,14 +733,14 @@ def schwab_callback():
             print(f"[SCHWAB CALLBACK] ✗ Token exchange failed: {last_error}")
             flash(f"Failed to exchange authorization code: {last_error or 'Unknown error'}", "error")
         
-        return redirect(url_for('settings_page'))
+        return redirect(url_for('settings'))
         
     except Exception as e:
         print(f"[SCHWAB AUTH] Callback error: {e}")
         import traceback
         traceback.print_exc()
         flash(f"Authentication failed: {str(e)}", "error")
-        return redirect(url_for('settings_page'))
+        return redirect(url_for('settings'))
 
 
 _last_exchange_error = None
