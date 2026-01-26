@@ -2,6 +2,13 @@
 Broker Health Monitor Service
 Centralized monitoring for broker connection status, buying power validation,
 and dashboard notifications.
+
+Industry-grade implementation with:
+- Thread-safe singleton with locking on all shared state
+- Fail-safe pre-trade validation (blocks on missing cache)
+- Normalized broker name handling
+- Cache invalidation on disconnect
+- Comprehensive error handling
 """
 import time
 import threading
@@ -58,8 +65,8 @@ BROKER_BUYING_POWER_FIELDS = {
         'fallback': 'availableFunds'
     },
     'IBKR': {
-        'options': ['AvailableFunds', 'BuyingPower'],
-        'stocks': ['AvailableFunds', 'BuyingPower'],
+        'options': ['AvailableFunds', 'BuyingPower', 'availableFunds', 'buyingPower'],
+        'stocks': ['AvailableFunds', 'BuyingPower', 'availableFunds', 'buyingPower'],
         'fallback': 'AvailableFunds'
     },
     'TASTYTRADE': {
@@ -78,8 +85,8 @@ BROKER_BUYING_POWER_FIELDS = {
         'fallback': 'available_margin'
     },
     'UPSTOX': {
-        'options': ['available_margin', 'used_margin'],
-        'stocks': ['available_margin'],
+        'options': ['available_margin', 'equity'],
+        'stocks': ['available_margin', 'equity'],
         'fallback': 'available_margin'
     },
     'DHAN': {
@@ -91,7 +98,14 @@ BROKER_BUYING_POWER_FIELDS = {
 
 
 class BrokerHealthMonitor:
-    """Centralized broker health and buying power monitoring."""
+    """
+    Centralized broker health and buying power monitoring.
+    
+    Thread-safe singleton with fail-safe defaults:
+    - All state access is protected by locks
+    - Missing cache = trade blocked (fail-safe)
+    - Any error = broker marked disconnected
+    """
     
     _instance = None
     _lock = threading.Lock()
@@ -109,6 +123,7 @@ class BrokerHealthMonitor:
             return
         self._initialized = True
         
+        self._state_lock = threading.RLock()
         self._broker_states: Dict[str, Dict] = {}
         self._account_cache: Dict[str, Dict] = {}
         self._cache_ttl = 30
@@ -117,74 +132,112 @@ class BrokerHealthMonitor:
         self._last_notification: Dict[str, float] = {}
         self._notification_cooldown = 300
         
-        print("[HEALTH] BrokerHealthMonitor initialized")
+        print("[HEALTH] BrokerHealthMonitor initialized (thread-safe)")
+    
+    def _normalize_broker_name(self, broker_name: str) -> str:
+        """Normalize broker name to uppercase for consistent lookups."""
+        return broker_name.upper().strip() if broker_name else ""
     
     def register_disconnect_callback(self, callback: callable):
         """Register callback for disconnect notifications."""
-        self._disconnect_callbacks.append(callback)
+        with self._state_lock:
+            self._disconnect_callbacks.append(callback)
     
     def register_reconnect_callback(self, callback: callable):
         """Register callback for reconnect notifications."""
-        self._reconnect_callbacks.append(callback)
+        with self._state_lock:
+            self._reconnect_callbacks.append(callback)
     
     def update_broker_status(self, broker_name: str, is_connected: bool, 
                              reason: Optional[str] = None, 
                              account_info: Optional[Dict] = None,
                              error_code: Optional[str] = None) -> None:
-        """Update broker connection status and cache account info."""
-        previous_state = self._broker_states.get(broker_name, {})
-        was_connected = previous_state.get('is_connected', False)
+        """
+        Update broker connection status and cache account info.
         
-        current_status = BrokerStatus.CONNECTED if is_connected else BrokerStatus.DISCONNECTED
+        CRITICAL: Any error_code forces is_connected=False for safety.
+        Cache is cleared on disconnect to prevent stale data usage.
+        """
+        broker_key = self._normalize_broker_name(broker_name)
+        if not broker_key:
+            return
         
-        if error_code:
-            error_str = str(error_code).lower()
-            if '401' in str(error_code) or 'token' in error_str or 'expired' in error_str:
-                current_status = BrokerStatus.TOKEN_EXPIRED
-                reason = DisconnectReason.TOKEN_EXPIRED.value
+        with self._state_lock:
+            previous_state = self._broker_states.get(broker_key, {})
+            was_connected = previous_state.get('is_connected', False)
+            
+            current_status = BrokerStatus.CONNECTED if is_connected else BrokerStatus.DISCONNECTED
+            
+            if error_code:
                 is_connected = False
-            elif '429' in str(error_code) or 'rate' in error_str:
-                current_status = BrokerStatus.RATE_LIMITED
-                reason = DisconnectReason.RATE_LIMITED.value
-                is_connected = False
-            elif '403' in str(error_code) or 'auth' in error_str or 'permission' in error_str:
-                current_status = BrokerStatus.ERROR
-                reason = DisconnectReason.INSUFFICIENT_PERMISSIONS.value
-                is_connected = False
-        
-        self._broker_states[broker_name] = {
-            'is_connected': is_connected,
-            'status': current_status.value,
-            'reason': reason,
-            'error_code': error_code,
-            'last_check': datetime.now().isoformat(),
-            'account_info': account_info
-        }
-        
-        if account_info:
-            self._account_cache[broker_name] = {
-                'data': account_info,
-                'timestamp': time.time()
+                error_str = str(error_code).lower()
+                
+                if '401' in str(error_code) or 'token' in error_str or 'expired' in error_str:
+                    current_status = BrokerStatus.TOKEN_EXPIRED
+                    reason = DisconnectReason.TOKEN_EXPIRED.value
+                elif '429' in str(error_code) or 'rate' in error_str or 'limit' in error_str:
+                    current_status = BrokerStatus.RATE_LIMITED
+                    reason = DisconnectReason.RATE_LIMITED.value
+                elif '403' in str(error_code) or 'auth' in error_str or 'permission' in error_str:
+                    current_status = BrokerStatus.ERROR
+                    reason = DisconnectReason.INSUFFICIENT_PERMISSIONS.value
+                elif '5' in str(error_code)[:1] or 'server' in error_str or 'internal' in error_str:
+                    current_status = BrokerStatus.ERROR
+                    reason = DisconnectReason.API_ERROR.value
+                elif 'network' in error_str or 'connection' in error_str or 'timeout' in error_str:
+                    current_status = BrokerStatus.ERROR
+                    reason = DisconnectReason.NETWORK_ERROR.value
+                else:
+                    current_status = BrokerStatus.ERROR
+                    reason = reason or DisconnectReason.UNKNOWN.value
+            
+            self._broker_states[broker_key] = {
+                'is_connected': is_connected,
+                'status': current_status.value,
+                'reason': reason,
+                'error_code': error_code,
+                'last_check': datetime.now().isoformat(),
+                'account_info': account_info if is_connected else None
             }
+            
+            if is_connected and account_info:
+                self._account_cache[broker_key] = {
+                    'data': account_info,
+                    'timestamp': time.time()
+                }
+            elif not is_connected:
+                if broker_key in self._account_cache:
+                    del self._account_cache[broker_key]
+            
+            callback_action = None
+            callback_broker = broker_key
+            callback_reason = reason or "Connection lost"
+            
+            if was_connected and not is_connected:
+                callback_action = 'disconnect'
+            elif not was_connected and is_connected:
+                if broker_key in self._last_notification:
+                    del self._last_notification[broker_key]
+                callback_action = 'reconnect'
         
-        if was_connected and not is_connected:
-            self._trigger_disconnect_notification(broker_name, reason or "Connection lost")
-        elif not was_connected and is_connected:
-            self._trigger_reconnect_notification(broker_name)
+        if callback_action == 'disconnect':
+            self._trigger_disconnect_notification(callback_broker, callback_reason)
+        elif callback_action == 'reconnect':
+            self._trigger_reconnect_notification(callback_broker)
         
         try:
             from gui_app.database import update_broker_state
-            country_code = self._get_broker_country(broker_name)
+            country_code = self._get_broker_country(broker_key)
             state = {
                 'is_connected': is_connected,
                 'balance': account_info.get('portfolio_value', 0) if account_info else 0,
-                'buying_power': self._extract_buying_power(broker_name, account_info, 'stocks') if account_info else 0,
+                'buying_power': self._extract_buying_power(broker_key, account_info, 'stocks') if account_info else 0,
                 'sync_error': reason if not is_connected else None,
                 'account_id': account_info.get('account_id') if account_info else None,
                 'extra': {
                     'status': current_status.value,
                     'error_code': error_code,
-                    'options_buying_power': self._extract_buying_power(broker_name, account_info, 'options') if account_info else 0
+                    'options_buying_power': self._extract_buying_power(broker_key, account_info, 'options') if account_info else 0
                 }
             }
             update_broker_state(broker_name, country_code, state)
@@ -196,21 +249,26 @@ class BrokerHealthMonitor:
         india_brokers = ['ZERODHA', 'UPSTOX', 'DHAN']
         canada_brokers = ['QUESTRADE']
         
-        if broker_name.upper() in india_brokers:
+        broker_upper = self._normalize_broker_name(broker_name)
+        if broker_upper in india_brokers:
             return 'IN'
-        elif broker_name.upper() in canada_brokers:
+        elif broker_upper in canada_brokers:
             return 'CA'
         return 'US'
     
     def _trigger_disconnect_notification(self, broker_name: str, reason: str):
-        """Trigger disconnect notification to dashboard."""
+        """Trigger disconnect notification to dashboard with cooldown."""
+        broker_key = self._normalize_broker_name(broker_name)
         current_time = time.time()
-        last_notified = self._last_notification.get(broker_name, 0)
         
-        if current_time - last_notified < self._notification_cooldown:
-            return
-        
-        self._last_notification[broker_name] = current_time
+        with self._state_lock:
+            last_notified = self._last_notification.get(broker_key, 0)
+            
+            if current_time - last_notified < self._notification_cooldown:
+                return
+            
+            self._last_notification[broker_key] = current_time
+            callbacks = self._disconnect_callbacks.copy()
         
         notification = {
             'type': 'broker_disconnect',
@@ -222,7 +280,7 @@ class BrokerHealthMonitor:
         
         print(f"[HEALTH] ⚠️ BROKER DISCONNECTED: {broker_name} - {reason}")
         
-        for callback in self._disconnect_callbacks:
+        for callback in callbacks:
             try:
                 callback(notification)
             except Exception as e:
@@ -235,6 +293,9 @@ class BrokerHealthMonitor:
     
     def _trigger_reconnect_notification(self, broker_name: str):
         """Trigger reconnect notification."""
+        with self._state_lock:
+            callbacks = self._reconnect_callbacks.copy()
+        
         notification = {
             'type': 'broker_reconnect',
             'broker': broker_name,
@@ -244,7 +305,7 @@ class BrokerHealthMonitor:
         
         print(f"[HEALTH] ✅ BROKER RECONNECTED: {broker_name}")
         
-        for callback in self._reconnect_callbacks:
+        for callback in callbacks:
             try:
                 callback(notification)
             except Exception as e:
@@ -284,15 +345,28 @@ class BrokerHealthMonitor:
     
     def get_broker_status(self, broker_name: str) -> Dict:
         """Get current status for a broker."""
-        return self._broker_states.get(broker_name, {
-            'is_connected': False,
-            'status': BrokerStatus.UNKNOWN.value,
-            'reason': 'No status available'
-        })
+        broker_key = self._normalize_broker_name(broker_name)
+        with self._state_lock:
+            return self._broker_states.get(broker_key, {
+                'is_connected': False,
+                'status': BrokerStatus.UNKNOWN.value,
+                'reason': 'No status available - broker not tracked'
+            })
     
     def get_all_broker_statuses(self) -> Dict[str, Dict]:
         """Get status for all tracked brokers."""
-        return self._broker_states.copy()
+        with self._state_lock:
+            return self._broker_states.copy()
+    
+    def is_broker_healthy(self, broker_name: str) -> bool:
+        """Check if broker is connected and healthy."""
+        broker_key = self._normalize_broker_name(broker_name)
+        with self._state_lock:
+            state = self._broker_states.get(broker_key, {})
+            if not state.get('is_connected', False):
+                return False
+            status = state.get('status', '')
+            return status == BrokerStatus.CONNECTED.value
     
     def _extract_buying_power(self, broker_name: str, account_info: Dict, 
                               asset_type: str = 'stocks') -> float:
@@ -300,14 +374,17 @@ class BrokerHealthMonitor:
         if not account_info:
             return 0.0
         
-        broker_key = broker_name.upper()
+        broker_key = self._normalize_broker_name(broker_name)
         if broker_key not in BROKER_BUYING_POWER_FIELDS:
-            for key in ['buying_power', 'buyingPower', 'available_margin', 'cash']:
+            for key in ['buying_power', 'buyingPower', 'available_margin', 'cash', 
+                       'availableFunds', 'equity', 'cashBalance']:
                 if key in account_info:
                     try:
-                        return float(account_info[key] or 0)
-                    except:
-                        pass
+                        value = float(account_info[key] or 0)
+                        if value > 0:
+                            return value
+                    except (ValueError, TypeError):
+                        continue
             return 0.0
         
         field_config = BROKER_BUYING_POWER_FIELDS[broker_key]
@@ -325,18 +402,22 @@ class BrokerHealthMonitor:
         fallback_field = field_config.get('fallback')
         if fallback_field and fallback_field in account_info:
             try:
-                return float(account_info[fallback_field] or 0)
-            except:
+                value = float(account_info[fallback_field] or 0)
+                if value > 0:
+                    return value
+            except (ValueError, TypeError):
                 pass
         
         return 0.0
     
     def get_cached_account_info(self, broker_name: str) -> Optional[Dict]:
         """Get cached account info if still valid."""
-        cache_entry = self._account_cache.get(broker_name)
-        if cache_entry:
-            if time.time() - cache_entry['timestamp'] < self._cache_ttl:
-                return cache_entry['data']
+        broker_key = self._normalize_broker_name(broker_name)
+        with self._state_lock:
+            cache_entry = self._account_cache.get(broker_key)
+            if cache_entry:
+                if time.time() - cache_entry['timestamp'] < self._cache_ttl:
+                    return cache_entry['data']
         return None
     
     def validate_buying_power(self, broker_name: str, required_amount: float,
@@ -344,18 +425,22 @@ class BrokerHealthMonitor:
         """
         Validate if broker has sufficient buying power for a trade.
         
+        FAIL-SAFE: Missing cache returns False (blocks trade).
+        
         Returns:
             Tuple of (is_valid, reason_if_invalid)
         """
-        cached_info = self.get_cached_account_info(broker_name)
+        broker_key = self._normalize_broker_name(broker_name)
+        cached_info = self.get_cached_account_info(broker_key)
         
         if not cached_info:
-            return True, ""
+            reason = f"No recent account data for {broker_name} - cannot verify buying power"
+            return False, reason
         
-        buying_power = self._extract_buying_power(broker_name, cached_info, asset_type)
+        buying_power = self._extract_buying_power(broker_key, cached_info, asset_type)
         
         if buying_power <= 0:
-            reason = f"No buying power available (${buying_power:.2f})"
+            reason = f"No buying power available for {broker_name} (${buying_power:.2f})"
             return False, reason
         
         if buying_power < required_amount:
@@ -366,36 +451,71 @@ class BrokerHealthMonitor:
     
     def pre_trade_validation(self, broker_name: str, signal: Dict) -> Tuple[bool, str]:
         """
-        Perform pre-trade validation including buying power check.
+        Perform pre-trade validation including connection and buying power check.
+        
+        FAIL-SAFE defaults:
+        - Unknown broker = blocked
+        - Missing cache = blocked  
+        - Any error status = blocked
+        - Missing price/qty = blocked
         
         Returns:
             Tuple of (can_proceed, rejection_reason)
         """
-        broker_status = self.get_broker_status(broker_name)
+        broker_key = self._normalize_broker_name(broker_name)
+        if not broker_key:
+            return False, "Invalid broker name"
+        
+        broker_status = self.get_broker_status(broker_key)
+        
+        if broker_status.get('status') == BrokerStatus.UNKNOWN.value:
+            reason = f"Broker {broker_name} not tracked - waiting for first sync"
+            return False, reason
         
         if not broker_status.get('is_connected', False):
             reason = f"Broker {broker_name} is disconnected: {broker_status.get('reason', 'Unknown')}"
             return False, reason
         
         status_value = broker_status.get('status', '')
-        error_statuses = [BrokerStatus.TOKEN_EXPIRED.value, BrokerStatus.RATE_LIMITED.value, 
-                         BrokerStatus.ERROR.value, BrokerStatus.DISCONNECTED.value]
+        error_statuses = [
+            BrokerStatus.TOKEN_EXPIRED.value, 
+            BrokerStatus.RATE_LIMITED.value, 
+            BrokerStatus.ERROR.value, 
+            BrokerStatus.DISCONNECTED.value,
+            BrokerStatus.UNKNOWN.value
+        ]
         if status_value in error_statuses:
             reason = f"Broker {broker_name} in error state: {broker_status.get('reason', status_value)}"
             return False, reason
         
         price = signal.get('price') or signal.get('intended_price') or 0
         qty = signal.get('qty', 1)
+        
+        try:
+            price = float(price)
+            qty = float(qty)
+        except (ValueError, TypeError):
+            return False, f"Invalid price ({price}) or quantity ({qty}) in signal"
+        
+        if price <= 0:
+            return False, f"Invalid or missing price in signal: {price}"
+        
+        if qty <= 0:
+            return False, f"Invalid or missing quantity in signal: {qty}"
+        
         asset_type = signal.get('asset_type', 'option')
         
-        if asset_type == 'option':
+        if asset_type in ('option', 'options'):
+            if qty != int(qty):
+                return False, f"Option contracts must be whole numbers, got: {qty}"
+            qty = int(qty)
             required_amount = price * 100 * qty
             bp_type = 'options'
         else:
             required_amount = price * qty
             bp_type = 'stocks'
         
-        is_valid, reason = self.validate_buying_power(broker_name, required_amount, bp_type)
+        is_valid, reason = self.validate_buying_power(broker_key, required_amount, bp_type)
         
         if not is_valid:
             return False, reason
@@ -403,8 +523,12 @@ class BrokerHealthMonitor:
         return True, ""
     
     def record_trade_rejection(self, signal: Dict, broker_name: str, 
-                               rejection_reason: str, channel_id: str = None):
-        """Record a trade rejection in the database."""
+                               rejection_reason: str, channel_id: str = None) -> Optional[int]:
+        """
+        Record a trade rejection in the database.
+        
+        Returns the trade ID if successful, None otherwise.
+        """
         try:
             from gui_app.database import get_connection
             conn = get_connection()
@@ -429,8 +553,9 @@ class BrokerHealthMonitor:
                 rejection_reason
             ))
             conn.commit()
-            print(f"[HEALTH] ❌ Trade rejected and recorded: {signal.get('symbol')} - {rejection_reason}")
-            return cursor.lastrowid
+            trade_id = cursor.lastrowid
+            print(f"[HEALTH] ❌ Trade rejected and recorded (ID={trade_id}): {signal.get('symbol')} - {rejection_reason}")
+            return trade_id
         except Exception as e:
             print(f"[HEALTH] Error recording rejection: {e}")
             return None
@@ -471,13 +596,24 @@ class BrokerHealthMonitor:
             conn.commit()
         except Exception as e:
             print(f"[HEALTH] Error marking notifications read: {e}")
+    
+    def force_refresh(self, broker_name: str) -> None:
+        """Force clear cache for a broker to trigger fresh data fetch."""
+        broker_key = self._normalize_broker_name(broker_name)
+        with self._state_lock:
+            if broker_key in self._account_cache:
+                del self._account_cache[broker_key]
+        print(f"[HEALTH] Forced cache refresh for {broker_name}")
 
 
 _health_monitor = None
+_module_lock = threading.Lock()
 
 def get_health_monitor() -> BrokerHealthMonitor:
-    """Get the singleton health monitor instance."""
+    """Get the singleton health monitor instance (thread-safe)."""
     global _health_monitor
     if _health_monitor is None:
-        _health_monitor = BrokerHealthMonitor()
+        with _module_lock:
+            if _health_monitor is None:
+                _health_monitor = BrokerHealthMonitor()
     return _health_monitor
