@@ -4412,6 +4412,11 @@ def register_routes(app):
             wb = _bot_instance.broker._client
             if not wb:
                 print("[API] Webull client not available")
+                try:
+                    from gui_app.broker_health_monitor import check_broker_health
+                    check_broker_health("Webull", False, "Client not initialized")
+                except Exception as health_err:
+                    print(f"[API] Health monitor error: {health_err}")
                 return None
             
             # Get account data

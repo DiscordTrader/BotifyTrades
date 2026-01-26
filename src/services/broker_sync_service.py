@@ -260,6 +260,12 @@ class BrokerSyncService:
                 print(f"[SYNC] Error syncing {broker_name}: {e}")
                 import traceback
                 traceback.print_exc()
+                
+                try:
+                    from gui_app.broker_health_monitor import check_broker_health
+                    check_broker_health(broker_name, False, str(e))
+                except Exception:
+                    pass
         
         print("[SYNC] ✓ Sync cycle complete", flush=True)
         
@@ -299,6 +305,12 @@ class BrokerSyncService:
             await self.reconcile_risk_orders(self._risk_manager)
         
         print(f"[SYNC] ✓ {broker_name} sync complete")
+        
+        try:
+            from gui_app.broker_health_monitor import check_broker_health
+            check_broker_health(broker_name, True)
+        except Exception:
+            pass
     
     async def _fetch_and_normalize(self, broker_name: str, broker_instance) -> Dict[str, Any]:
         """

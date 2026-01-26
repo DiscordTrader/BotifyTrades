@@ -8,10 +8,154 @@ Trade Monitor provides a more robust signal posting system with @everyone suppor
 import requests
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Set
 from .config_service import get_discord_notifications
 
 logger = logging.getLogger(__name__)
+
+# Track last alert time per broker to avoid spam (cooldown in seconds)
+_last_alert_time: Dict[str, datetime] = {}
+_alert_cooldown_seconds = 300  # 5 minute cooldown between same alerts
+_alerted_brokers: Set[str] = set()  # Track which brokers have been alerted as disconnected
+
+
+def send_system_alert(
+    alert_type: str,
+    message: str,
+    severity: str = "warning",  # "info", "warning", "error", "critical"
+    broker_name: Optional[str] = None
+):
+    """
+    Send system alert notification to Discord
+    
+    Args:
+        alert_type: Type of alert (broker_disconnect, broker_reconnect, error, etc.)
+        message: Alert message
+        severity: Alert severity level
+        broker_name: Optional broker name for broker-specific alerts
+    
+    Returns:
+        bool: True if notification was sent, False otherwise
+    """
+    global _last_alert_time, _alerted_brokers
+    
+    try:
+        # Get notification settings
+        settings = get_discord_notifications()
+        
+        if not settings.get('enabled', True):
+            logger.info("Discord notifications disabled - skipping system alert")
+            return False
+        
+        # Check for system alerts webhook (prefer dedicated webhook, fall back to main)
+        webhook_url = settings.get('system_webhook_url') or settings.get('webhook_url', '')
+        if not webhook_url:
+            logger.warning("Discord webhook URL not configured - cannot send system alert")
+            return False
+        
+        # Apply cooldown to prevent spam
+        alert_key = f"{alert_type}:{broker_name}" if broker_name else alert_type
+        now = datetime.now()
+        
+        if alert_key in _last_alert_time:
+            elapsed = (now - _last_alert_time[alert_key]).total_seconds()
+            if elapsed < _alert_cooldown_seconds:
+                logger.debug(f"Alert cooldown active for {alert_key} ({elapsed:.0f}s < {_alert_cooldown_seconds}s)")
+                return False
+        
+        # Update last alert time
+        _last_alert_time[alert_key] = now
+        
+        # Severity emoji mapping
+        severity_emoji = {
+            "info": "ℹ️",
+            "warning": "⚠️",
+            "error": "❌",
+            "critical": "🚨"
+        }
+        
+        emoji = severity_emoji.get(severity, "📢")
+        
+        # Format the message
+        formatted_message = f"{emoji} **[SYSTEM ALERT]** {message}"
+        
+        if broker_name:
+            formatted_message = f"{emoji} **[{broker_name.upper()}]** {message}"
+        
+        # Send notification
+        payload = {
+            "content": formatted_message,
+            "username": "BotifyTrades System"
+        }
+        
+        response = requests.post(webhook_url, json=payload, timeout=5)
+        
+        if response.status_code == 204:
+            logger.info(f"System alert sent: {message}")
+            return True
+        else:
+            logger.error(f"Discord system alert failed: {response.status_code} - {response.text}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Failed to send system alert: {e}")
+        return False
+
+
+def notify_broker_disconnected(broker_name: str, error_message: Optional[str] = None):
+    """
+    Notify when a broker connection is lost
+    Only sends one alert per broker until it reconnects
+    """
+    global _alerted_brokers
+    
+    # Only alert once per broker until reconnection
+    if broker_name in _alerted_brokers:
+        return False
+    
+    _alerted_brokers.add(broker_name)
+    
+    message = f"Connection lost to {broker_name}"
+    if error_message:
+        message += f": {error_message}"
+    message += ". Trading for this broker is paused until reconnection."
+    
+    return send_system_alert(
+        alert_type="broker_disconnect",
+        message=message,
+        severity="error",
+        broker_name=broker_name
+    )
+
+
+def notify_broker_reconnected(broker_name: str):
+    """
+    Notify when a broker connection is restored
+    """
+    global _alerted_brokers
+    
+    # Only send reconnection notice if we previously alerted about disconnection
+    if broker_name not in _alerted_brokers:
+        return False
+    
+    _alerted_brokers.discard(broker_name)
+    
+    return send_system_alert(
+        alert_type="broker_reconnect",
+        message=f"Connection restored to {broker_name}. Trading resumed.",
+        severity="info",
+        broker_name=broker_name
+    )
+
+
+def is_broker_alerted(broker_name: str) -> bool:
+    """Check if a broker has been alerted as disconnected"""
+    return broker_name in _alerted_brokers
+
+
+def clear_broker_alert(broker_name: str):
+    """Clear the alert status for a broker without sending notification"""
+    _alerted_brokers.discard(broker_name)
 
 
 def _is_trade_monitor_enabled() -> bool:
