@@ -1221,15 +1221,33 @@ class BrokerSyncService:
         
         return expiry
 
+    def _normalize_symbol(self, symbol: str) -> str:
+        """Normalize symbol for matching across brokers
+        
+        Handles broker-specific symbol variations:
+        - SPXW (Robinhood weekly) -> SPX
+        - NDXW (weekly) -> NDX
+        - XSP stays as XSP
+        """
+        if not symbol:
+            return symbol
+        symbol_upper = symbol.upper()
+        if symbol_upper == 'SPXW':
+            return 'SPX'
+        if symbol_upper == 'NDXW':
+            return 'NDX'
+        return symbol_upper
+
     def _build_position_key(self, symbol: str, asset_type: str, strike=None, expiry=None, call_put=None) -> str:
         """Build a normalized position key for matching between broker and database"""
+        normalized_symbol = self._normalize_symbol(symbol)
         if asset_type == 'option' and strike and expiry and call_put:
             normalized_expiry = self._normalize_expiry(expiry)
             # Round strike to avoid float precision issues (0.5 increments for most options)
             normalized_strike = round(float(strike) * 2) / 2 if strike else 0
-            return f"{symbol}_{normalized_strike}_{normalized_expiry}_{call_put}"
+            return f"{normalized_symbol}_{normalized_strike}_{normalized_expiry}_{call_put}"
         else:
-            return f"{symbol}_stock"
+            return f"{normalized_symbol}_stock"
     
     async def _import_manual_trades(self, broker_name: str, normalized_data: Dict[str, Any]):
         """Import broker positions that aren't tracked in database as synthetic trades
