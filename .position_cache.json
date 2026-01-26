@@ -6738,7 +6738,7 @@
     "max_pnl_seen": 3.5769897114578946,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 55.4808,
+    "last_evaluated_price": 55.3999,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9457,10 +9457,10 @@
   },
   "Webull_GM_78.0_01/30_P": {
     "entry_price": 1.55,
-    "highest_price": 1.805,
+    "highest_price": 1.815,
     "trailing_activated": false,
-    "closing": false,
-    "closing_cycles": 0,
+    "closing": true,
+    "closing_cycles": 1,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "Webull",
@@ -9469,23 +9469,14 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {
-      "74G2QS7IPT5T80UAQDL226A679": {
-        "order_id": "74G2QS7IPT5T80UAQDL226A679",
-        "tier": 1,
-        "qty_expected": 1,
-        "qty_filled": 0,
-        "status": "pending",
-        "created_at": "2026-01-26T17:39:55.684986"
-      }
-    },
+    "pending_orders": {},
     "created_at": "2026-01-26T15:32:19.524424",
     "max_pnl_seen": 14.516129032258055,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
     "last_evaluated_price": 1.745,
     "early_trailing_active": true,
-    "early_stop_price": 1.6895000000000002,
-    "early_steps_locked": 3
+    "early_stop_price": 1.7360000000000002,
+    "early_steps_locked": 4
   }
 }
