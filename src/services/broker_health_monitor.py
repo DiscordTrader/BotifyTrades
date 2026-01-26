@@ -138,14 +138,19 @@ class BrokerHealthMonitor:
         current_status = BrokerStatus.CONNECTED if is_connected else BrokerStatus.DISCONNECTED
         
         if error_code:
-            if '401' in str(error_code) or 'token' in str(error_code).lower() or 'expired' in str(error_code).lower():
+            error_str = str(error_code).lower()
+            if '401' in str(error_code) or 'token' in error_str or 'expired' in error_str:
                 current_status = BrokerStatus.TOKEN_EXPIRED
                 reason = DisconnectReason.TOKEN_EXPIRED.value
-            elif '429' in str(error_code) or 'rate' in str(error_code).lower():
+                is_connected = False
+            elif '429' in str(error_code) or 'rate' in error_str:
                 current_status = BrokerStatus.RATE_LIMITED
                 reason = DisconnectReason.RATE_LIMITED.value
-            elif '403' in str(error_code):
+                is_connected = False
+            elif '403' in str(error_code) or 'auth' in error_str or 'permission' in error_str:
+                current_status = BrokerStatus.ERROR
                 reason = DisconnectReason.INSUFFICIENT_PERMISSIONS.value
+                is_connected = False
         
         self._broker_states[broker_name] = {
             'is_connected': is_connected,
@@ -367,8 +372,16 @@ class BrokerHealthMonitor:
             Tuple of (can_proceed, rejection_reason)
         """
         broker_status = self.get_broker_status(broker_name)
+        
         if not broker_status.get('is_connected', False):
             reason = f"Broker {broker_name} is disconnected: {broker_status.get('reason', 'Unknown')}"
+            return False, reason
+        
+        status_value = broker_status.get('status', '')
+        error_statuses = [BrokerStatus.TOKEN_EXPIRED.value, BrokerStatus.RATE_LIMITED.value, 
+                         BrokerStatus.ERROR.value, BrokerStatus.DISCONNECTED.value]
+        if status_value in error_statuses:
+            reason = f"Broker {broker_name} in error state: {broker_status.get('reason', status_value)}"
             return False, reason
         
         price = signal.get('price') or signal.get('intended_price') or 0
