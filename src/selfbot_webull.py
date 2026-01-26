@@ -9816,24 +9816,37 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[POSITION SIZE] ✓ Channel max position size: ${channel_max_position_size}")
                 
                 if channel_default_qty:
-                    # Channel fixed QTY takes highest priority - overrides signal quantity
-                    old_qty = opt.get('qty')
-                    opt['qty'] = int(channel_default_qty)
-                    if old_qty and old_qty != opt['qty']:
-                        print(f"[POSITION SIZE] ✓ Channel QTY={opt['qty']} OVERRIDES signal qty={old_qty}")
+                    # Channel fixed QTY - use as CAP if signal has qty, otherwise use channel qty
+                    signal_qty_val = opt.get('qty')
+                    channel_qty_val = int(channel_default_qty)
+                    if signal_qty_val and signal_qty_val > 0:
+                        # Signal has qty - use minimum (signal intent, capped by channel limit)
+                        final_qty = min(signal_qty_val, channel_qty_val)
+                        opt['qty'] = final_qty
+                        if final_qty < signal_qty_val:
+                            print(f"[POSITION SIZE] ✓ Signal qty={signal_qty_val} CAPPED to channel limit={channel_qty_val} → executing {final_qty}")
+                        else:
+                            print(f"[POSITION SIZE] ✓ Using signal qty={signal_qty_val} (within channel limit={channel_qty_val})")
                     else:
-                        print(f"[POSITION SIZE] ✓ Using channel fixed QTY: {opt['qty']} contracts")
+                        # No signal qty - use channel default
+                        opt['qty'] = channel_qty_val
+                        print(f"[POSITION SIZE] ✓ Using channel fixed QTY: {opt['qty']} contracts (no signal qty)")
                 elif channel_position_size_pct:
-                    # Channel percentage-based sizing - overrides signal quantity
-                    old_qty = opt.get('qty')
-                    opt['qty'] = 1  # Placeholder - will be recalculated by worker
+                    # Channel percentage-based sizing - calculate max and cap signal qty
+                    signal_qty_val = opt.get('qty')
                     opt['_position_size_pct'] = float(channel_position_size_pct)
-                    opt['_calculate_qty'] = True  # Enable position sizing calculation in worker
                     opt['_pct_from_channel'] = True
-                    if old_qty:
-                        print(f"[POSITION SIZE] ✓ Channel Size%={channel_position_size_pct}% OVERRIDES signal qty={old_qty}")
+                    
+                    if signal_qty_val and signal_qty_val > 0:
+                        # Signal has qty - pass it through for capping in worker
+                        opt['_signal_qty_to_cap'] = signal_qty_val
+                        opt['_calculate_qty'] = True  # Worker will calculate channel max and use min()
+                        print(f"[POSITION SIZE] ✓ Signal qty={signal_qty_val} will be capped by channel {channel_position_size_pct}% limit")
                     else:
-                        print(f"[POSITION SIZE] ✓ Using channel position_size_pct: {channel_position_size_pct}% (will calculate from buying power)")
+                        # No signal qty - use full channel percentage
+                        opt['qty'] = 1  # Placeholder - will be recalculated by worker
+                        opt['_calculate_qty'] = True
+                        print(f"[POSITION SIZE] ✓ Using channel position_size_pct: {channel_position_size_pct}% (no signal qty, will calculate from buying power)")
                 elif signal_qty:
                     # No channel settings - use signal's quantity as-is
                     print(f"[POSITION SIZE] ✓ Using signal quantity: {signal_qty} contracts (no channel override)")
@@ -10957,13 +10970,30 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     pct_from_channel = signal.get('_pct_from_channel', False)  # Channel wants calculated sizing
                                     
                                     if calculate_qty or pct_from_signal or pct_from_channel:
-                                        # Calculate qty from position sizing percentage
-                                        new_qty = min(pct_qty, affordable_qty)
-                                        if new_qty == 0:
-                                            _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 contract (cost: ${actual_cost:.0f}, budget: ${position_dollars:.0f}, buying power: ${effective_bp:.0f})")
-                                            return {'success': False, 'error': f'Insufficient funds for 1 contract (need ${actual_cost:.0f}, have ${effective_bp:.0f})'}
-                                        signal['qty'] = new_qty
-                                        _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Calculated qty: {new_qty} contracts ({position_size_pct}% = ${position_dollars:.0f} budget, ${actual_cost:.0f}/contract)")
+                                        # Calculate channel max qty from position sizing percentage
+                                        channel_max_qty = min(pct_qty, affordable_qty)
+                                        
+                                        # Check if we have a signal qty to cap (signal intent should be respected)
+                                        signal_qty_to_cap = signal.get('_signal_qty_to_cap')
+                                        if signal_qty_to_cap and signal_qty_to_cap > 0:
+                                            # Signal has qty - use min(signal, channel_max) to respect trader intent
+                                            new_qty = min(signal_qty_to_cap, channel_max_qty)
+                                            if new_qty == 0:
+                                                _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 contract (cost: ${actual_cost:.0f}, budget: ${position_dollars:.0f}, buying power: ${effective_bp:.0f})")
+                                                return {'success': False, 'error': f'Insufficient funds for 1 contract (need ${actual_cost:.0f}, have ${effective_bp:.0f})'}
+                                            signal['qty'] = new_qty
+                                            if new_qty < signal_qty_to_cap:
+                                                _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Signal qty={signal_qty_to_cap} CAPPED by channel {position_size_pct}% limit → executing {new_qty} contracts")
+                                            else:
+                                                _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Using signal qty={new_qty} (within channel {position_size_pct}% limit of {channel_max_qty})")
+                                        else:
+                                            # No signal qty - use full channel percentage
+                                            new_qty = channel_max_qty
+                                            if new_qty == 0:
+                                                _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 contract (cost: ${actual_cost:.0f}, budget: ${position_dollars:.0f}, buying power: ${effective_bp:.0f})")
+                                                return {'success': False, 'error': f'Insufficient funds for 1 contract (need ${actual_cost:.0f}, have ${effective_bp:.0f})'}
+                                            signal['qty'] = new_qty
+                                            _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Calculated qty: {new_qty} contracts ({position_size_pct}% = ${position_dollars:.0f} budget, ${actual_cost:.0f}/contract)")
                                     else:
                                         # FIXED LOGIC: If position size budget can't afford 1 contract but 
                                         # buying power CAN afford it, execute at least 1 contract
@@ -11012,13 +11042,30 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     pct_from_channel = signal.get('_pct_from_channel', False)  # Channel wants calculated sizing
                                     
                                     if calculate_qty or pct_from_signal or pct_from_channel:
-                                        # TRADE IDEA: Calculate qty from position sizing, don't cap at signal default
-                                        new_qty = min(pct_qty, affordable_qty)
-                                        if new_qty == 0:
-                                            _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 share (price: ${price:.2f}, budget: ${position_dollars:.0f}, buying power: ${buying_power:.0f})")
-                                            return {'success': False, 'error': f'Insufficient funds for 1 share (need ${price:.2f}, have ${buying_power:.0f})'}
-                                        signal['qty'] = new_qty
-                                        _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Calculated qty: {new_qty} shares ({position_size_pct}% = ${position_dollars:.0f} budget, ${price:.2f}/share)")
+                                        # Calculate channel max qty from position sizing percentage
+                                        channel_max_qty = min(pct_qty, affordable_qty)
+                                        
+                                        # Check if we have a signal qty to cap (signal intent should be respected)
+                                        signal_qty_to_cap = signal.get('_signal_qty_to_cap')
+                                        if signal_qty_to_cap and signal_qty_to_cap > 0:
+                                            # Signal has qty - use min(signal, channel_max) to respect trader intent
+                                            new_qty = min(signal_qty_to_cap, channel_max_qty)
+                                            if new_qty == 0:
+                                                _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 share (price: ${price:.2f}, budget: ${position_dollars:.0f}, buying power: ${buying_power:.0f})")
+                                                return {'success': False, 'error': f'Insufficient funds for 1 share (need ${price:.2f}, have ${buying_power:.0f})'}
+                                            signal['qty'] = new_qty
+                                            if new_qty < signal_qty_to_cap:
+                                                _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Signal qty={signal_qty_to_cap} CAPPED by channel {position_size_pct}% limit → executing {new_qty} shares")
+                                            else:
+                                                _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Using signal qty={new_qty} (within channel {position_size_pct}% limit of {channel_max_qty})")
+                                        else:
+                                            # No signal qty - use full channel percentage
+                                            new_qty = channel_max_qty
+                                            if new_qty == 0:
+                                                _original_print(f"[{broker_name}] [POSITION SIZE] ❌ SKIPPING - Cannot afford 1 share (price: ${price:.2f}, budget: ${position_dollars:.0f}, buying power: ${buying_power:.0f})")
+                                                return {'success': False, 'error': f'Insufficient funds for 1 share (need ${price:.2f}, have ${buying_power:.0f})'}
+                                            signal['qty'] = new_qty
+                                            _original_print(f"[{broker_name}] [POSITION SIZE] ✓ Calculated qty: {new_qty} shares ({position_size_pct}% = ${position_dollars:.0f} budget, ${price:.2f}/share)")
                                     else:
                                         # FIXED LOGIC: If position size budget can't afford 1 share but 
                                         # buying power CAN afford it, execute at least 1 share
