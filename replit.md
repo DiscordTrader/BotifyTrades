@@ -66,6 +66,15 @@ The Order Management System (OMS) and Risk Management System (RMS) provide dynam
 - Position broker → Other connected brokers → Finnhub → yfinance
 - Broker capability map in `src/services/broker_capabilities.py` (Alpaca/Schwab/IBKR/Robinhood support both stocks and options)
 
+**Broker Health Monitor** (`src/services/broker_health_monitor.py`): Centralized broker connection and buying power monitoring:
+- Real-time connection status tracking with disconnect reason classification (TOKEN_EXPIRED, API_ERROR, AUTH_FAILED, RATE_LIMITED, etc.)
+- Pre-trade buying power validation before order submission
+- Broker-specific buying power field mapping for 11+ brokers (Webull, Alpaca, Robinhood, Schwab, IBKR, Tastytrade, Questrade, Zerodha, Upstox, Dhan)
+- Trade rejection recording with reason (rejection_reason and rejected_at columns in trades table)
+- Dashboard notifications for broker disconnects with cooldown (5 min) to prevent spam
+- API endpoints: `/api/brokers/health`, `/api/brokers/notifications`, `/api/trades/rejected`
+- Integrated with BrokerSyncService for automatic status updates during sync cycles
+
 **Unfilled Order Chaser** (`src/services/unfilled_order_chaser.py`): Industry-grade exit order management:
 - Monitors pending exit orders for stale status (unfilled beyond timeout threshold)
 - Calculates mid-price from current bid/ask spread for better fills
