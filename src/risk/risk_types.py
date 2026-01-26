@@ -358,8 +358,11 @@ class PositionCacheEntry:
         return failed_tiers
     
     # Industry-grade retry management
-    MAX_EXIT_RETRIES = 5
+    MAX_FAST_RETRIES = 5  # Fast retries with exponential backoff
     MARKET_ORDER_THRESHOLD = 3  # Switch to market after N limit order failures
+    EXTENDED_RETRY_INTERVAL = 300  # 5 minutes between extended retries
+    extended_retry_mode: bool = False  # Persistent retry after fast retries exhausted
+    exhausted_notified: bool = False  # Track if Discord notification was sent
     
     def record_exit_failure(self, reason: str) -> None:
         """Record a failed exit attempt with exponential backoff."""
@@ -367,24 +370,34 @@ class PositionCacheEntry:
         self.exit_retry_count += 1
         self.last_exit_failure_reason = reason
         
-        # Exponential backoff: 30s, 60s, 120s, 240s, 480s
-        backoff_seconds = min(30 * (2 ** (self.exit_retry_count - 1)), 480)
+        if self.exit_retry_count <= self.MAX_FAST_RETRIES:
+            # Fast retry phase: Exponential backoff 30s, 60s, 120s, 240s, 480s
+            backoff_seconds = min(30 * (2 ** (self.exit_retry_count - 1)), 480)
+            phase = "FAST"
+        else:
+            # Extended retry phase: Fixed 5-minute intervals, keep trying forever
+            self.extended_retry_mode = True
+            backoff_seconds = self.EXTENDED_RETRY_INTERVAL
+            phase = "EXTENDED"
+        
         self.exit_retry_cooldown_until = datetime.now() + timedelta(seconds=backoff_seconds)
         
         # Switch to market order after threshold
         if self.exit_retry_count >= self.MARKET_ORDER_THRESHOLD:
             self.use_market_order = True
         
-        print(f"[RISK-RETRY] Exit failed (attempt {self.exit_retry_count}/{self.MAX_EXIT_RETRIES}): {reason}")
-        print(f"[RISK-RETRY] Next retry in {backoff_seconds}s, market_order={self.use_market_order}")
+        if phase == "FAST":
+            print(f"[RISK-RETRY] Exit failed (attempt {self.exit_retry_count}/{self.MAX_FAST_RETRIES}): {reason}")
+            print(f"[RISK-RETRY] Next retry in {backoff_seconds}s, market_order={self.use_market_order}")
+        else:
+            print(f"[RISK-RETRY] EXTENDED MODE - Exit failed (attempt {self.exit_retry_count}): {reason}")
+            print(f"[RISK-RETRY] Will retry in {backoff_seconds // 60} minutes (persistent until success)")
     
     def can_retry_exit(self) -> bool:
-        """Check if retry is allowed (within limits and cooldown expired)."""
-        if self.exit_retry_count >= self.MAX_EXIT_RETRIES:
-            return False
+        """Check if retry is allowed (cooldown expired). Never stops in extended mode."""
         if self.exit_retry_cooldown_until and datetime.now() < self.exit_retry_cooldown_until:
             return False
-        return True
+        return True  # Always allow retry - extended mode never gives up
     
     def retry_cooldown_remaining(self) -> float:
         """Get seconds remaining in cooldown, or 0 if ready."""
@@ -399,7 +412,16 @@ class PositionCacheEntry:
         self.exit_retry_cooldown_until = None
         self.last_exit_failure_reason = None
         self.use_market_order = False
+        self.extended_retry_mode = False
+        self.exhausted_notified = False
     
-    def exhausted_retries(self) -> bool:
-        """Check if all retries are exhausted (needs manual intervention)."""
-        return self.exit_retry_count >= self.MAX_EXIT_RETRIES
+    def in_extended_retry_mode(self) -> bool:
+        """Check if position is in extended retry mode (persistent retries every 5 min)."""
+        return self.exit_retry_count >= self.MAX_FAST_RETRIES
+    
+    def needs_extended_notification(self) -> bool:
+        """Check if Discord notification needed for entering extended mode."""
+        if self.exit_retry_count == self.MAX_FAST_RETRIES and not self.exhausted_notified:
+            self.exhausted_notified = True
+            return True
+        return False

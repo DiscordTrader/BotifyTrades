@@ -374,13 +374,13 @@ class PositionCache:
         """Get retry state for debugging/logging."""
         entry = self._cache.get(position_key)
         if not entry:
-            return {'retry_count': 0, 'cooldown_remaining': 0, 'use_market': False}
+            return {'retry_count': 0, 'cooldown_remaining': 0, 'use_market': False, 'extended_mode': False}
         return {
             'retry_count': entry.exit_retry_count,
-            'max_retries': entry.MAX_EXIT_RETRIES,
+            'max_retries': entry.MAX_FAST_RETRIES,
             'cooldown_remaining': entry.retry_cooldown_remaining(),
             'use_market': entry.use_market_order,
-            'exhausted': entry.exhausted_retries(),
+            'extended_mode': entry.in_extended_retry_mode(),
             'last_failure': entry.last_exit_failure_reason
         }
     
@@ -395,10 +395,15 @@ class PositionCache:
         entry = self._cache.get(position_key)
         return entry.use_market_order if entry else False
     
-    def is_retry_exhausted(self, position_key: str) -> bool:
-        """Check if all retries exhausted (needs manual intervention)."""
+    def is_in_extended_mode(self, position_key: str) -> bool:
+        """Check if position is in extended retry mode (persistent 5-min retries)."""
         entry = self._cache.get(position_key)
-        return entry.exhausted_retries() if entry else False
+        return entry.in_extended_retry_mode() if entry else False
+    
+    def needs_extended_notification(self, position_key: str) -> bool:
+        """Check if Discord notification needed for entering extended mode."""
+        entry = self._cache.get(position_key)
+        return entry.needs_extended_notification() if entry else False
     
     def mark_tier_hit(self, position_key: str, tier: int) -> None:
         """Mark a profit tier as hit (only call after confirmed fill) and persist to database."""

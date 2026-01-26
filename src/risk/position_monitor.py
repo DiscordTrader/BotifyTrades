@@ -1494,19 +1494,22 @@ class RiskManager:
         pos_key = position.position_key
         timestamp = datetime.now().strftime("%H:%M:%S")
         
-        # Check retry state - respect cooldown and max retries
-        if self.cache.is_retry_exhausted(pos_key):
-            retry_state = self.cache.get_retry_state(pos_key)
-            print(f"[RISK] ❌ EXIT BLOCKED - Max retries exhausted for {pos_key}")
-            print(f"[RISK]   Last failure: {retry_state.get('last_failure')}")
-            print(f"[RISK]   ⚠️ MANUAL INTERVENTION REQUIRED - Close position manually")
-            return
+        # Check if entering extended retry mode - send Discord notification once
+        if self.cache.needs_extended_notification(pos_key):
+            await self._send_extended_mode_notification(position, channel_settings)
         
+        # Check retry cooldown (respects both fast and extended mode intervals)
         if not self.cache.can_retry_exit(pos_key):
             retry_state = self.cache.get_retry_state(pos_key)
             cooldown = retry_state.get('cooldown_remaining', 0)
-            print(f"[RISK] ⏳ EXIT DEFERRED - Retry cooldown active for {pos_key}")
-            print(f"[RISK]   Retry {retry_state.get('retry_count')}/{retry_state.get('max_retries')} - wait {cooldown:.0f}s")
+            is_extended = self.cache.is_in_extended_mode(pos_key)
+            
+            if is_extended:
+                print(f"[RISK] ⏳ EXTENDED RETRY MODE - Waiting for {pos_key}")
+                print(f"[RISK]   Attempt #{retry_state.get('retry_count')} - next retry in {cooldown:.0f}s (5-min intervals)")
+            else:
+                print(f"[RISK] ⏳ EXIT DEFERRED - Retry cooldown active for {pos_key}")
+                print(f"[RISK]   Retry {retry_state.get('retry_count')}/5 - wait {cooldown:.0f}s")
             return
         
         print(f"\n{'='*60}")
@@ -1655,6 +1658,38 @@ class RiskManager:
             stc_signal['option_id'] = position.option_id or 0
         
         return stc_signal
+    
+    async def _send_extended_mode_notification(
+        self, 
+        position: PositionSnapshot,
+        channel_settings: Optional[ChannelRiskSettings]
+    ) -> None:
+        """Send Discord notification when entering extended retry mode."""
+        retry_state = self.cache.get_retry_state(position.position_key)
+        
+        notification = {
+            'action': 'NOTIFICATION',
+            '_notification_type': 'extended_retry_mode',
+            '_position_key': position.position_key,
+            '_message': (
+                f"⚠️ **EXTENDED RETRY MODE**\n\n"
+                f"**Position:** {position.position_key}\n"
+                f"**Broker:** {position.broker}\n"
+                f"**Current P/L:** {position.pct_change:+.1f}%\n"
+                f"**Retry Attempts:** {retry_state.get('retry_count', 5)}\n\n"
+                f"Broker API repeatedly failed. Bot will keep retrying every 5 minutes.\n"
+                f"You may want to close this position manually if urgent."
+            ),
+            'broker': position.broker,
+            'symbol': position.symbol,
+            'asset': position.asset
+        }
+        
+        try:
+            await self.order_queue.put(notification)
+            print(f"[RISK] 📢 Discord notification sent for extended retry mode: {position.position_key}")
+        except Exception as e:
+            print(f"[RISK] ⚠️ Failed to send extended mode notification: {e}")
     
     def _get_risk_settings(self) -> RiskSettings:
         """Get current risk settings."""

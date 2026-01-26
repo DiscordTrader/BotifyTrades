@@ -6197,6 +6197,44 @@ class SelfClient(discord.Client):
             
             await asyncio.sleep(SENTIMENT_INTERVAL)
     
+    async def _handle_notification(self, signal: dict):
+        """Handle notification signals (not orders - just messages to user)."""
+        notification_type = signal.get('_notification_type')
+        message = signal.get('_message', '')
+        position_key = signal.get('_position_key', 'Unknown')
+        
+        print(f"[NOTIFICATION] 📢 Handling notification: {notification_type}")
+        
+        if notification_type == 'extended_retry_mode':
+            try:
+                from gui_app.database import get_connection
+                
+                conn = get_connection()
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT discord_channel_id FROM channels 
+                    WHERE execution_enabled = 1 
+                    LIMIT 1
+                ''')
+                row = cursor.fetchone()
+                conn.close()
+                
+                if row and row[0]:
+                    channel_id = int(row[0])
+                    channel = self.get_channel(channel_id)
+                    if channel:
+                        await self._safe_send(channel, message)
+                        print(f"[NOTIFICATION] ✅ Sent extended retry notification to channel {channel_id}")
+                    else:
+                        print(f"[NOTIFICATION] ⚠️ Could not find channel {channel_id}")
+                else:
+                    print(f"[NOTIFICATION] ⚠️ No execution-enabled channels found for notification")
+                    
+            except Exception as e:
+                print(f"[NOTIFICATION] ❌ Failed to send notification: {e}")
+        else:
+            print(f"[NOTIFICATION] ⚠️ Unknown notification type: {notification_type}")
+    
     async def _safe_send(self, channel, content: str):
         """
         Send message with deduplication to prevent discord.py-self bug that sends duplicates.
@@ -11534,6 +11572,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 _original_print(f"[WORKER] ⏳ Waiting for signal from queue... (size={self.order_queue.qsize()})", flush=True)
                 signal = await self.order_queue.get()
                 _original_print(f"[WORKER] ✅ Got signal from queue: {signal.get('action')} {signal.get('symbol')}", flush=True)
+                
+                # Handle NOTIFICATION signals (not orders - just messages)
+                if signal.get('action') == 'NOTIFICATION':
+                    await self._handle_notification(signal)
+                    self.order_queue.task_done()
+                    continue
                 
                 # ORDER-LEVEL DEDUPLICATION: Prevent duplicate order execution
                 # - Discord/Telegram signals (with message_id): PERMANENT blocking
