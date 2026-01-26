@@ -12643,6 +12643,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         error_type = 'ORDER_FAILED'
                     _original_print(f"[ORDER FAILED] ❌ {signal['action']} {signal['symbol']} - {error_msg}", flush=True)
                     
+                    # Record failure for risk management orders (enables retry with backoff)
+                    if signal.get('_risk_management_order') and signal.get('_position_key'):
+                        try:
+                            from src.risk.position_cache import PositionCache
+                            # Get the global risk manager's cache
+                            if 'risk_manager' in globals() and hasattr(globals()['risk_manager'], 'cache'):
+                                cache = globals()['risk_manager'].cache
+                                can_retry = cache.record_exit_failure(signal['_position_key'], error_msg)
+                                if not can_retry:
+                                    _original_print(f"[RISK-RETRY] ⚠️ Max retries exhausted for {signal['_position_key']}", flush=True)
+                                    _original_print(f"[RISK-RETRY] ⚠️ MANUAL INTERVENTION REQUIRED", flush=True)
+                        except Exception as retry_err:
+                            _original_print(f"[RISK-RETRY] Could not record failure: {retry_err}", flush=True)
+                    
                     # Update conditional order status to ERROR if this was a conditional order
                     cond_order_id = signal.get('_conditional_order_id')
                     if cond_order_id:
@@ -12726,6 +12740,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             )
                         except Exception as e:
                             _original_print(f"[DATABASE] ⚠️ Could not update signal status: {e}")
+                    
+                    # Reset retry state on successful risk order
+                    if signal.get('_risk_management_order') and signal.get('_position_key'):
+                        try:
+                            if 'risk_manager' in globals() and hasattr(globals()['risk_manager'], 'cache'):
+                                globals()['risk_manager'].cache.reset_exit_retry_state(signal['_position_key'])
+                                _original_print(f"[RISK-RETRY] ✓ Reset retry state for {signal['_position_key']}", flush=True)
+                        except Exception as reset_err:
+                            _original_print(f"[RISK-RETRY] Could not reset state: {reset_err}", flush=True)
                     
                     # Track pending risk order - tier will be marked after fill confirmation
                     if signal.get('_risk_management_order') and signal.get('_tier_to_mark'):

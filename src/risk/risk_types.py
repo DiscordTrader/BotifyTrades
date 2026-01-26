@@ -246,6 +246,12 @@ class PositionCacheEntry:
     # Pending risk orders awaiting fill confirmation
     pending_orders: Dict[str, Any] = field(default_factory=dict)  # order_id -> PendingRiskOrder dict
     
+    # Failed order retry tracking (industry-grade)
+    exit_retry_count: int = 0  # Number of failed exit attempts
+    exit_retry_cooldown_until: Optional[datetime] = None  # When retry is allowed
+    last_exit_failure_reason: Optional[str] = None  # Last failure message
+    use_market_order: bool = False  # Switch to market after limit fails
+    
     created_at: datetime = field(default_factory=datetime.now)
     
     def to_dict(self) -> Dict[str, Any]:
@@ -350,3 +356,50 @@ class PositionCacheEntry:
         for order_id in to_remove:
             del self.pending_orders[order_id]
         return failed_tiers
+    
+    # Industry-grade retry management
+    MAX_EXIT_RETRIES = 5
+    MARKET_ORDER_THRESHOLD = 3  # Switch to market after N limit order failures
+    
+    def record_exit_failure(self, reason: str) -> None:
+        """Record a failed exit attempt with exponential backoff."""
+        from datetime import timedelta
+        self.exit_retry_count += 1
+        self.last_exit_failure_reason = reason
+        
+        # Exponential backoff: 30s, 60s, 120s, 240s, 480s
+        backoff_seconds = min(30 * (2 ** (self.exit_retry_count - 1)), 480)
+        self.exit_retry_cooldown_until = datetime.now() + timedelta(seconds=backoff_seconds)
+        
+        # Switch to market order after threshold
+        if self.exit_retry_count >= self.MARKET_ORDER_THRESHOLD:
+            self.use_market_order = True
+        
+        print(f"[RISK-RETRY] Exit failed (attempt {self.exit_retry_count}/{self.MAX_EXIT_RETRIES}): {reason}")
+        print(f"[RISK-RETRY] Next retry in {backoff_seconds}s, market_order={self.use_market_order}")
+    
+    def can_retry_exit(self) -> bool:
+        """Check if retry is allowed (within limits and cooldown expired)."""
+        if self.exit_retry_count >= self.MAX_EXIT_RETRIES:
+            return False
+        if self.exit_retry_cooldown_until and datetime.now() < self.exit_retry_cooldown_until:
+            return False
+        return True
+    
+    def retry_cooldown_remaining(self) -> float:
+        """Get seconds remaining in cooldown, or 0 if ready."""
+        if not self.exit_retry_cooldown_until:
+            return 0.0
+        remaining = (self.exit_retry_cooldown_until - datetime.now()).total_seconds()
+        return max(0.0, remaining)
+    
+    def reset_exit_retry_state(self) -> None:
+        """Reset retry state after successful exit."""
+        self.exit_retry_count = 0
+        self.exit_retry_cooldown_until = None
+        self.last_exit_failure_reason = None
+        self.use_market_order = False
+    
+    def exhausted_retries(self) -> bool:
+        """Check if all retries are exhausted (needs manual intervention)."""
+        return self.exit_retry_count >= self.MAX_EXIT_RETRIES

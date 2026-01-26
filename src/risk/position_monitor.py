@@ -1494,12 +1494,34 @@ class RiskManager:
         pos_key = position.position_key
         timestamp = datetime.now().strftime("%H:%M:%S")
         
+        # Check retry state - respect cooldown and max retries
+        if self.cache.is_retry_exhausted(pos_key):
+            retry_state = self.cache.get_retry_state(pos_key)
+            print(f"[RISK] ❌ EXIT BLOCKED - Max retries exhausted for {pos_key}")
+            print(f"[RISK]   Last failure: {retry_state.get('last_failure')}")
+            print(f"[RISK]   ⚠️ MANUAL INTERVENTION REQUIRED - Close position manually")
+            return
+        
+        if not self.cache.can_retry_exit(pos_key):
+            retry_state = self.cache.get_retry_state(pos_key)
+            cooldown = retry_state.get('cooldown_remaining', 0)
+            print(f"[RISK] ⏳ EXIT DEFERRED - Retry cooldown active for {pos_key}")
+            print(f"[RISK]   Retry {retry_state.get('retry_count')}/{retry_state.get('max_retries')} - wait {cooldown:.0f}s")
+            return
+        
         print(f"\n{'='*60}")
         print(f"[RISK] [{timestamp}] ✓ EXIT TRIGGERED")
         print(f"[RISK]   Position: {pos_key}")
         print(f"[RISK]   Reason: {decision.reason}")
         print(f"[RISK]   Qty: {decision.exit_qty} | Price: ${position.current_price:.2f}")
         print(f"[RISK]   Broker: {position.broker}")
+        
+        # Show retry state if retrying
+        retry_state = self.cache.get_retry_state(pos_key)
+        if retry_state.get('retry_count', 0) > 0:
+            print(f"[RISK]   ↻ Retry attempt {retry_state['retry_count'] + 1}/{retry_state['max_retries']}")
+            if retry_state.get('use_market'):
+                print(f"[RISK]   📊 Using MARKET order (limit orders failed)")
         print(f"{'='*60}")
         
         is_stop_exit = 'STOP LOSS' in decision.reason or 'TRAILING STOP' in decision.reason
@@ -1573,6 +1595,12 @@ class RiskManager:
                       f"(trade #{origin_trade.get('id')})")
             else:
                 print(f"[RISK] ⚠️ No origin BTO trade found in database for {pos_key}")
+            
+            # Add market order flag if limit orders have failed multiple times
+            if self.cache.should_use_market_order(pos_key):
+                stc_signal['_use_market_order'] = True
+                stc_signal['price'] = None  # Market order doesn't need price
+                print(f"[RISK] 📊 Market order mode - limit orders failed previously")
             
             await self.order_queue.put(stc_signal)
             print(f"[RISK] STC order queued for {pos_key} via {position.broker}: {stc_signal}")

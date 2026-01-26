@@ -354,6 +354,52 @@ class PositionCache:
         if position_key in self._cache:
             self._cache[position_key].reset_closing()
     
+    def record_exit_failure(self, position_key: str, reason: str) -> bool:
+        """Record a failed exit attempt. Returns True if more retries allowed."""
+        entry = self._cache.get(position_key)
+        if entry:
+            entry.record_exit_failure(reason)
+            entry.reset_closing()  # Allow retry after cooldown
+            return entry.can_retry_exit()
+        return False
+    
+    def can_retry_exit(self, position_key: str) -> bool:
+        """Check if position can retry exit (within limits and cooldown expired)."""
+        entry = self._cache.get(position_key)
+        if not entry:
+            return True  # New position, can try
+        return entry.can_retry_exit()
+    
+    def get_retry_state(self, position_key: str) -> dict:
+        """Get retry state for debugging/logging."""
+        entry = self._cache.get(position_key)
+        if not entry:
+            return {'retry_count': 0, 'cooldown_remaining': 0, 'use_market': False}
+        return {
+            'retry_count': entry.exit_retry_count,
+            'max_retries': entry.MAX_EXIT_RETRIES,
+            'cooldown_remaining': entry.retry_cooldown_remaining(),
+            'use_market': entry.use_market_order,
+            'exhausted': entry.exhausted_retries(),
+            'last_failure': entry.last_exit_failure_reason
+        }
+    
+    def reset_exit_retry_state(self, position_key: str) -> None:
+        """Reset retry state after successful exit."""
+        entry = self._cache.get(position_key)
+        if entry:
+            entry.reset_exit_retry_state()
+    
+    def should_use_market_order(self, position_key: str) -> bool:
+        """Check if should use market order (after limit failures)."""
+        entry = self._cache.get(position_key)
+        return entry.use_market_order if entry else False
+    
+    def is_retry_exhausted(self, position_key: str) -> bool:
+        """Check if all retries exhausted (needs manual intervention)."""
+        entry = self._cache.get(position_key)
+        return entry.exhausted_retries() if entry else False
+    
     def mark_tier_hit(self, position_key: str, tier: int) -> None:
         """Mark a profit tier as hit (only call after confirmed fill) and persist to database."""
         entry = self._cache.get(position_key)
