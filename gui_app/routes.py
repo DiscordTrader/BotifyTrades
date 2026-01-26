@@ -11577,6 +11577,88 @@ def register_routes(app):
             print(f"[API] Error getting broker status: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
     
+    @app.route('/api/brokers/health', methods=['GET'])
+    def api_get_broker_health():
+        """Get broker health status with buying power and connection details"""
+        try:
+            from src.services.broker_health_monitor import get_health_monitor
+            
+            health_monitor = get_health_monitor()
+            statuses = health_monitor.get_all_broker_statuses()
+            
+            # Also get from database for persistence
+            from gui_app.database import get_all_broker_states
+            db_states = get_all_broker_states()
+            
+            return jsonify({
+                'success': True,
+                'live_status': statuses,
+                'db_states': db_states
+            })
+        except Exception as e:
+            print(f"[API] Error getting broker health: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/notifications', methods=['GET'])
+    def api_get_broker_notifications():
+        """Get unread broker notifications for dashboard"""
+        try:
+            from src.services.broker_health_monitor import get_health_monitor
+            
+            health_monitor = get_health_monitor()
+            notifications = health_monitor.get_unread_notifications(limit=20)
+            
+            return jsonify({
+                'success': True,
+                'notifications': notifications
+            })
+        except Exception as e:
+            print(f"[API] Error getting broker notifications: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/brokers/notifications/mark-read', methods=['POST'])
+    def api_mark_notifications_read():
+        """Mark broker notifications as read"""
+        try:
+            from src.services.broker_health_monitor import get_health_monitor
+            
+            data = request.get_json() or {}
+            notification_ids = data.get('notification_ids')
+            
+            health_monitor = get_health_monitor()
+            health_monitor.mark_notifications_read(notification_ids)
+            
+            return jsonify({'success': True})
+        except Exception as e:
+            print(f"[API] Error marking notifications read: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/trades/rejected', methods=['GET'])
+    def api_get_rejected_trades():
+        """Get trades rejected due to validation failures"""
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT id, channel_id, symbol, strike, expiry, call_put, quantity, 
+                       intended_price, broker, rejection_reason, rejected_at, direction
+                FROM trades 
+                WHERE status = 'FAILED' AND rejection_reason IS NOT NULL
+                ORDER BY rejected_at DESC
+                LIMIT 50
+            ''')
+            
+            trades = [dict(row) for row in cursor.fetchall()]
+            
+            return jsonify({
+                'success': True,
+                'rejected_trades': trades
+            })
+        except Exception as e:
+            print(f"[API] Error getting rejected trades: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
     @app.route('/api/brokers/credentials/discord', methods=['GET'])
     def api_get_discord_credentials():
         """Get Discord credentials (token masked)"""

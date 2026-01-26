@@ -307,10 +307,12 @@ class BrokerSyncService:
         print(f"[SYNC] ✓ {broker_name} sync complete")
         
         try:
-            from gui_app.broker_health_monitor import check_broker_health
-            check_broker_health(broker_name, True)
-        except Exception:
-            pass
+            from src.services.broker_health_monitor import get_health_monitor
+            health_monitor = get_health_monitor()
+            account_info = await self._fetch_account_info(broker_name, broker_instance)
+            health_monitor.update_broker_status(broker_name, True, account_info=account_info)
+        except Exception as e:
+            print(f"[SYNC] Health monitor update failed: {e}")
     
     async def _fetch_and_normalize(self, broker_name: str, broker_instance) -> Dict[str, Any]:
         """
@@ -712,7 +714,124 @@ class BrokerSyncService:
             print(f"[SYNC] Error fetching from {broker_name}: {e}")
             import traceback
             traceback.print_exc()
+            
+            try:
+                from src.services.broker_health_monitor import get_health_monitor
+                health_monitor = get_health_monitor()
+                error_code = str(e)
+                health_monitor.update_broker_status(broker_name, False, reason=str(e), error_code=error_code)
+            except Exception:
+                pass
+            
             return {'positions': [], 'pending_orders': []}
+    
+    async def _fetch_account_info(self, broker_name: str, broker_instance) -> Dict[str, Any]:
+        """Fetch account info for health monitor cache (buying power, balance, etc)."""
+        try:
+            account_info = {}
+            
+            if broker_name == 'Webull':
+                if hasattr(broker_instance, 'get_account_info'):
+                    raw = await broker_instance.get_account_info()
+                    if raw:
+                        account_info = {
+                            'portfolio_value': raw.get('netLiquidation', 0),
+                            'buying_power': raw.get('dayBuyingPower', 0),
+                            'cashBalance': raw.get('cashBalance', 0),
+                            'optionBuyingPower': raw.get('optionBuyingPower', 0),
+                            'dayBuyingPower': raw.get('dayBuyingPower', 0),
+                            'overnightBuyingPower': raw.get('overnightBuyingPower', 0),
+                            'account_id': raw.get('accountId')
+                        }
+            
+            elif broker_name.startswith('ALPACA'):
+                if hasattr(broker_instance, 'get_account'):
+                    raw = await broker_instance.get_account()
+                    if raw:
+                        account_info = {
+                            'portfolio_value': float(getattr(raw, 'portfolio_value', 0) or 0),
+                            'buying_power': float(getattr(raw, 'buying_power', 0) or 0),
+                            'cash': float(getattr(raw, 'cash', 0) or 0),
+                            'options_buying_power': float(getattr(raw, 'options_buying_power', 0) or getattr(raw, 'buying_power', 0) or 0),
+                            'account_id': getattr(raw, 'account_number', None)
+                        }
+            
+            elif broker_name == 'SCHWAB':
+                if hasattr(broker_instance, 'get_account_info'):
+                    raw = await broker_instance.get_account_info()
+                    if raw:
+                        account_info = {
+                            'portfolio_value': raw.get('securitiesAccount', {}).get('currentBalances', {}).get('liquidationValue', 0),
+                            'buying_power': raw.get('securitiesAccount', {}).get('currentBalances', {}).get('buyingPower', 0),
+                            'availableFunds': raw.get('securitiesAccount', {}).get('currentBalances', {}).get('availableFunds', 0),
+                            'optionBuyingPower': raw.get('securitiesAccount', {}).get('currentBalances', {}).get('optionBuyingPower', 0)
+                        }
+            
+            elif broker_name == 'ROBINHOOD':
+                if hasattr(broker_instance, 'get_account_info'):
+                    raw = await broker_instance.get_account_info()
+                    if raw:
+                        account_info = {
+                            'portfolio_value': float(raw.get('portfolio_cash', 0) or 0),
+                            'buying_power': float(raw.get('buying_power', 0) or 0),
+                            'options_buying_power': float(raw.get('options_buying_power', 0) or raw.get('buying_power', 0) or 0),
+                            'margin_buying_power': float(raw.get('margin_buying_power', 0) or 0)
+                        }
+            
+            elif broker_name.startswith('IBKR'):
+                if hasattr(broker_instance, 'get_account_summary'):
+                    raw = await broker_instance.get_account_summary()
+                    if raw:
+                        account_info = {
+                            'portfolio_value': float(raw.get('NetLiquidation', 0) or 0),
+                            'AvailableFunds': float(raw.get('AvailableFunds', 0) or 0),
+                            'BuyingPower': float(raw.get('BuyingPower', 0) or 0)
+                        }
+            
+            elif broker_name.startswith('TASTYTRADE'):
+                if hasattr(broker_instance, 'get_account_balances'):
+                    raw = await broker_instance.get_account_balances()
+                    if raw:
+                        account_info = {
+                            'portfolio_value': float(raw.get('net-liquidating-value', 0) or 0),
+                            'buying_power': float(raw.get('buying-power', 0) or raw.get('derivative-buying-power', 0) or 0),
+                            'option_buying_power': float(raw.get('derivative-buying-power', 0) or 0),
+                            'cash_balance': float(raw.get('cash-balance', 0) or 0)
+                        }
+            
+            elif broker_name == 'ZERODHA':
+                if hasattr(broker_instance, 'margins'):
+                    raw = broker_instance.margins()
+                    if raw and 'equity' in raw:
+                        eq = raw['equity']
+                        account_info = {
+                            'available_margin': float(eq.get('available', {}).get('live_balance', 0) or 0),
+                            'net': float(eq.get('net', 0) or 0)
+                        }
+            
+            elif broker_name == 'UPSTOX':
+                if hasattr(broker_instance, 'get_fund_and_margin'):
+                    raw = await broker_instance.get_fund_and_margin()
+                    if raw and 'data' in raw:
+                        account_info = {
+                            'available_margin': float(raw['data'].get('available_margin', 0) or 0),
+                            'used_margin': float(raw['data'].get('used_margin', 0) or 0)
+                        }
+            
+            elif broker_name == 'DHAN':
+                if hasattr(broker_instance, 'get_fund_limits'):
+                    raw = await broker_instance.get_fund_limits()
+                    if raw and 'data' in raw:
+                        account_info = {
+                            'availableBalance': float(raw['data'].get('availableBalance', 0) or 0),
+                            'allocatedBalance': float(raw['data'].get('allocatedBalance', 0) or 0)
+                        }
+            
+            return account_info
+            
+        except Exception as e:
+            print(f"[SYNC] Error fetching account info for {broker_name}: {e}")
+            return {}
     
     async def _reconcile_trades(self, broker_name: str, normalized_data: Dict[str, Any]):
         """

@@ -10902,6 +10902,35 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
     async def execute_on_single_broker(self, signal: dict, broker_name: str, broker_instance) -> dict:
         """Execute order on a single broker instance"""
         try:
+            # Pre-trade validation: Check broker health and buying power
+            try:
+                from src.services.broker_health_monitor import get_health_monitor
+                health_monitor = get_health_monitor()
+                
+                # Only validate for BTO (buy) orders - STC uses existing positions
+                if signal.get('action') == 'BTO':
+                    can_proceed, rejection_reason = health_monitor.pre_trade_validation(broker_name, signal)
+                    
+                    if not can_proceed:
+                        _original_print(f"[{broker_name}] ❌ Pre-trade validation FAILED: {rejection_reason}")
+                        
+                        # Record the rejection
+                        health_monitor.record_trade_rejection(
+                            signal=signal,
+                            broker_name=broker_name,
+                            rejection_reason=rejection_reason,
+                            channel_id=signal.get('channel_id')
+                        )
+                        
+                        return {
+                            'success': False,
+                            'message': rejection_reason,
+                            'rejection_reason': rejection_reason,
+                            'broker': broker_name
+                        }
+            except Exception as e:
+                _original_print(f"[{broker_name}] Pre-trade validation error (continuing): {e}")
+            
             # Check if we need to recalculate quantity based on position_size_pct
             position_size_pct = signal.get('_position_size_pct')
             original_qty = signal['qty']
