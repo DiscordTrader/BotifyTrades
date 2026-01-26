@@ -6738,7 +6738,7 @@
     "max_pnl_seen": 3.1951648078281756,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 55.2106,
+    "last_evaluated_price": 55.285,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9474,7 +9474,7 @@
     "max_pnl_seen": 14.516129032258055,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.775,
+    "last_evaluated_price": 1.74,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
