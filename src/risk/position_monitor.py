@@ -1602,8 +1602,9 @@ class RiskManager:
             # Add market order flag if limit orders have failed multiple times
             if self.cache.should_use_market_order(pos_key):
                 stc_signal['_use_market_order'] = True
-                stc_signal['price'] = None  # Market order doesn't need price
-                print(f"[RISK] 📊 Market order mode - limit orders failed previously")
+                # Keep the current position price for options (Webull doesn't support market orders for options)
+                # For stocks, we could set to None for true market order but keeping price is safer
+                print(f"[RISK] 📊 Market order mode - using current price ${position.current_price:.2f}")
             
             await self.order_queue.put(stc_signal)
             print(f"[RISK] STC order queued for {pos_key} via {position.broker}: {stc_signal}")
