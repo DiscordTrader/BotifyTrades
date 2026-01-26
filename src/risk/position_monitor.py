@@ -24,6 +24,7 @@ from .position_cache import PositionCache
 from .tiered_targets import evaluate_tiered_targets, format_tier_reason, evaluate_channel_stop_loss
 from .global_risk import evaluate_global_risk, evaluate_price_based_stops
 from .trailing_stop import evaluate_trailing_stop, get_effective_trailing_settings
+from .early_trailing import evaluate_early_trailing, EarlyTrailingState
 from .risk_engine import (
     evaluate_exit_actions, 
     TradeState, 
@@ -1351,6 +1352,21 @@ class RiskManager:
             engine_decision = self._evaluate_enhanced_risk(position, cache, channel_settings)
             if engine_decision and engine_decision.should_exit:
                 return engine_decision
+        
+        if channel_settings and channel_settings.enable_early_trailing:
+            early_result, updated_cache = evaluate_early_trailing(
+                position, cache, channel_settings, verbose=True
+            )
+            if early_result.should_update_stop:
+                self.cache.persist_early_trailing_state(position.position_key)
+            if early_result.should_exit:
+                channel_name = channel_settings.channel_name
+                return ExitDecision(
+                    should_exit=True,
+                    reason=early_result.reason,
+                    exit_qty=int(position.quantity),
+                    channel_name=channel_name
+                )
         
         trailing_pct, activation_pct, stop_pct = get_effective_trailing_settings(
             channel_settings, risk_settings, self.trailing_activation_pct
