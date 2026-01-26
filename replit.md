@@ -66,10 +66,15 @@ The Order Management System (OMS) and Risk Management System (RMS) provide dynam
 - Position broker → Other connected brokers → Finnhub → yfinance
 - Broker capability map in `src/services/broker_capabilities.py` (Alpaca/Schwab/IBKR/Robinhood support both stocks and options)
 
-**Broker Health Monitor** (`src/services/broker_health_monitor.py`): Centralized broker connection and buying power monitoring:
-- Real-time connection status tracking with disconnect reason classification (TOKEN_EXPIRED, API_ERROR, AUTH_FAILED, RATE_LIMITED, etc.)
-- Pre-trade buying power validation before order submission
+**Broker Health Monitor** (`src/services/broker_health_monitor.py`): Industry-grade centralized broker connection and buying power monitoring:
+- Thread-safe singleton with RLock protection on all shared state (broker states, cache, notifications, callbacks)
+- Real-time connection status tracking with disconnect reason classification (TOKEN_EXPIRED, API_ERROR, AUTH_FAILED, RATE_LIMITED, NETWORK_ERROR, etc.)
+- Fail-safe pre-trade validation: blocks on unknown brokers, missing cache, any error status, invalid price/qty
+- Integer quantity enforcement for options contracts (prevents fractional contract orders)
+- Any error_code automatically forces is_connected=False for defensive trading protection
+- Cache invalidation on disconnect, notification cooldown reset on reconnect
 - Broker-specific buying power field mapping for 11+ brokers (Webull, Alpaca, Robinhood, Schwab, IBKR, Tastytrade, Questrade, Zerodha, Upstox, Dhan)
+- Normalized broker name handling (uppercase) for consistent lookups across all methods
 - Trade rejection recording with reason (rejection_reason and rejected_at columns in trades table)
 - Dashboard notifications for broker disconnects with cooldown (5 min) to prevent spam
 - API endpoints: `/api/brokers/health`, `/api/brokers/notifications`, `/api/trades/rejected`
