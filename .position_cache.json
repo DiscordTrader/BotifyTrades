@@ -6738,7 +6738,7 @@
     "max_pnl_seen": 3.1951648078281756,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 55.2742,
+    "last_evaluated_price": 55.2106,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9457,7 +9457,7 @@
   },
   "Webull_GM_78.0_01/30_P": {
     "entry_price": 1.55,
-    "highest_price": 1.73,
+    "highest_price": 1.775,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -9471,10 +9471,10 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-26T15:32:19.524424",
-    "max_pnl_seen": 11.612903225806448,
+    "max_pnl_seen": 14.516129032258055,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.72,
+    "last_evaluated_price": 1.775,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
