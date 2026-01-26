@@ -6738,7 +6738,7 @@
     "max_pnl_seen": 3.5769897114578946,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 55.4,
+    "last_evaluated_price": 55.39,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9460,7 +9460,7 @@
     "highest_price": 1.815,
     "trailing_activated": false,
     "closing": true,
-    "closing_cycles": 1,
+    "closing_cycles": 2,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "Webull",
