@@ -12646,14 +12646,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # Record failure for risk management orders (enables retry with backoff)
                     if signal.get('_risk_management_order') and signal.get('_position_key'):
                         try:
-                            from src.risk.position_cache import PositionCache
-                            # Get the global risk manager's cache
-                            if 'risk_manager' in globals() and hasattr(globals()['risk_manager'], 'cache'):
-                                cache = globals()['risk_manager'].cache
-                                can_retry = cache.record_exit_failure(signal['_position_key'], error_msg)
-                                if not can_retry:
-                                    _original_print(f"[RISK-RETRY] ⚠️ Max retries exhausted for {signal['_position_key']}", flush=True)
-                                    _original_print(f"[RISK-RETRY] ⚠️ MANUAL INTERVENTION REQUIRED", flush=True)
+                            from src.risk.position_monitor import risk_manager_instance
+                            if risk_manager_instance and hasattr(risk_manager_instance, 'cache'):
+                                cache = risk_manager_instance.cache
+                                cache.record_exit_failure(signal['_position_key'], error_msg)
+                                retry_state = cache.get_retry_state(signal['_position_key'])
+                                _original_print(f"[RISK-RETRY] ⚠️ Exit failed - attempt {retry_state['retry_count']}/{retry_state['max_retries']} | Cooldown: {retry_state['cooldown_remaining']:.0f}s", flush=True)
+                                
+                                if retry_state.get('exhausted'):
+                                    _original_print(f"[RISK-RETRY] ❌ Max retries exhausted for {signal['_position_key']}", flush=True)
+                                    _original_print(f"[RISK-RETRY] ❌ MANUAL INTERVENTION REQUIRED - Close position manually", flush=True)
+                                elif retry_state.get('use_market'):
+                                    _original_print(f"[RISK-RETRY] 📊 Next attempt will use MARKET order", flush=True)
+                            else:
+                                _original_print(f"[RISK-RETRY] ⚠️ Risk manager not available to record failure", flush=True)
                         except Exception as retry_err:
                             _original_print(f"[RISK-RETRY] Could not record failure: {retry_err}", flush=True)
                     
@@ -12744,8 +12750,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # Reset retry state on successful risk order
                     if signal.get('_risk_management_order') and signal.get('_position_key'):
                         try:
-                            if 'risk_manager' in globals() and hasattr(globals()['risk_manager'], 'cache'):
-                                globals()['risk_manager'].cache.reset_exit_retry_state(signal['_position_key'])
+                            from src.risk.position_monitor import risk_manager_instance
+                            if risk_manager_instance and hasattr(risk_manager_instance, 'cache'):
+                                risk_manager_instance.cache.reset_exit_retry_state(signal['_position_key'])
                                 _original_print(f"[RISK-RETRY] ✓ Reset retry state for {signal['_position_key']}", flush=True)
                         except Exception as reset_err:
                             _original_print(f"[RISK-RETRY] Could not reset state: {reset_err}", flush=True)
