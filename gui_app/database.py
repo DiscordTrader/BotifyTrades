@@ -818,6 +818,16 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Original symbol/strike columns added (for NDX→QQQ conversion)")
     
+    # Migration: Add rejection_reason for pre-trade validation failures
+    try:
+        cursor.execute('SELECT rejection_reason FROM trades LIMIT 1')
+    except sqlite3.OperationalError:
+        print("[DATABASE] Adding rejection_reason column for pre-trade validation...")
+        cursor.execute("ALTER TABLE trades ADD COLUMN rejection_reason TEXT")
+        cursor.execute("ALTER TABLE trades ADD COLUMN rejected_at TEXT")
+        conn.commit()
+        print("[DATABASE] ✓ Rejection reason tracking columns added")
+    
     # Signals table (all signals received, including tracked ones)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS signals (
