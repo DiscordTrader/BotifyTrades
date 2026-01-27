@@ -572,8 +572,9 @@ class SchwabBroker(BrokerInterface):
     
     def _build_option_symbol(self, underlying: str, expiry: str, strike: float, call_put: str) -> str:
         """Build OCC option symbol format
-        Format: SYMBOL + YYMMDD + C/P + strike*1000 (8 digits)
-        Example: AAPL 240119C00150000 = AAPL Jan 19 2024 $150 Call
+        Format: SYMBOL (6 chars, left-padded) + YYMMDD + C/P + strike*1000 (8 digits)
+        Example: AAPL  240119C00150000 = AAPL Jan 19 2024 $150 Call
+        Note: Underlying symbol must be left-justified and space-padded to 6 characters
         """
         parts = expiry.split("-")
         if len(parts) == 3:
@@ -583,10 +584,13 @@ class SchwabBroker(BrokerInterface):
         else:
             return f"{underlying}_INVALID_EXPIRY"
         
+        # OCC format requires underlying to be 6 characters, left-justified, space-padded
+        underlying_padded = underlying.upper().ljust(6)
+        
         strike_int = int(strike * 1000)
         strike_str = f"{strike_int:08d}"
         
-        return f"{underlying.upper()}{year}{month}{day}{call_put.upper()}{strike_str}"
+        return f"{underlying_padded}{year}{month}{day}{call_put.upper()}{strike_str}"
     
     async def get_quote(self, symbol: str) -> Optional[float]:
         """Get current price for a symbol"""
