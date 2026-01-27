@@ -16893,11 +16893,8 @@ def register_routes(app):
                     if health:
                         is_connected = health.get('is_connected', is_connected)
                     
-                    # Only show brokers that are connected OR have a disconnect reason
-                    # This filters out unconfigured brokers
-                    if not is_connected and not health.get('reason'):
-                        continue
-                    
+                    # Show any broker that has an instance (means it's configured)
+                    # Connected brokers show, disconnected brokers show with their error reason
                     state = {
                         'broker_name': broker_name,
                         'region': region,
