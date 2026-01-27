@@ -35,6 +35,11 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 - EXIT: "Closed position on", "SYMBOL position closed", "Closed SYMBOL"
 - TRIM: "taken profits", "secured profits"
 
+**Phoenix Natural Language Parser** (`src/services/signal_format_registry.py`): Detects Phoenix stock signals with 7 patterns:
+- ENTRY: "<@&role> SYMBOL over PRICE SL PRICE", "<@&role> SYMBOL PRICE SL X%"
+- TRIM: "selling X% here SYMBOL", "selling X% more SYMBOL", "leaving X% here SYMBOL"
+- EXIT: "hit SL", "got a loss with SYMBOL"
+
 **AI Signal Parser** (`src/services/ai_signal_parser.py`): OpenAI-powered fallback with async processing, rate limiting (3 concurrent max), result caching, and confidence scoring. AI signals are blocked by default until admin approval.
 
 **Learned Patterns System**: Database-stored patterns (`learned_patterns` table) with governance workflow (pending → active status). Admin approval required before learned patterns can execute trades. Patterns store action, asset_type, confidence metadata.

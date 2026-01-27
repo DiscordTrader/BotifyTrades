@@ -469,6 +469,83 @@ class SignalFormatRegistry:
             examples=["secured profits on BITF", "Secured profits RXRX"]
         )
         
+        # =====================================================================
+        # PHOENIX NATURAL LANGUAGE FORMAT (Stock signals)
+        # Priority 56-62 - after Bronze Swings, before learned patterns
+        # =====================================================================
+        
+        # Phoenix entry: <@&role> SYMBOL over PRICE + SL PRICE
+        self.register(
+            name="phoenix_entry_over",
+            description="Phoenix entry with 'over' price trigger and stop loss",
+            priority=56,
+            pattern=r'<@&\d+>\s+\$?([A-Z]{1,5})\s+over\s+\$?([\d.]+)\s*\n?\s*SL\s+\$?([\d.]+)',
+            parser=self._parse_phoenix_entry,
+            examples=["<@&role> PAVM over 21.50 SL 20", "<@&role> AMZE over 0.67 SL 0.62"],
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        
+        # Phoenix entry: <@&role> SYMBOL PRICE + SL X%
+        self.register(
+            name="phoenix_entry_price",
+            description="Phoenix entry with direct price and percentage stop loss",
+            priority=57,
+            pattern=r'<@&\d+>\s+\$?([A-Z]{1,5})\s+\$?([\d.]+)\s*\n?\s*SL\s+(\d+)%',
+            parser=self._parse_phoenix_entry_pct_sl,
+            examples=["<@&role> GITS 2.50 SL 9%"],
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        
+        # Phoenix trim: selling X% here SYMBOL
+        self.register(
+            name="phoenix_trim_here",
+            description="Phoenix partial exit - selling X% here",
+            priority=58,
+            pattern=r'selling\s+(\d+)%\s+here\s+\$?([A-Z]{1,5})',
+            parser=self._parse_phoenix_trim,
+            examples=["selling 80% here PAVM", "selling 80% here IBRX"]
+        )
+        
+        # Phoenix trim: selling X% more SYMBOL
+        self.register(
+            name="phoenix_trim_more",
+            description="Phoenix partial exit - selling X% more",
+            priority=59,
+            pattern=r'selling\s+(\d+)%\s+more\s+\$?([A-Z]{1,5})',
+            parser=self._parse_phoenix_trim,
+            examples=["selling 10% more GITS", "selling 10% more CRVS"]
+        )
+        
+        # Phoenix trim: leaving X% here SYMBOL
+        self.register(
+            name="phoenix_leaving",
+            description="Phoenix partial exit - leaving X% (meaning selling rest)",
+            priority=60,
+            pattern=r'leaving\s+(\d+)%\s+(?:here\s+)?\$?([A-Z]{1,5})',
+            parser=self._parse_phoenix_leaving,
+            examples=["leaving 10% here GITS", "leaving 20% PAVM"]
+        )
+        
+        # Phoenix exit: hit SL
+        self.register(
+            name="phoenix_hit_sl",
+            description="Phoenix stop loss hit (full exit)",
+            priority=61,
+            pattern=r'hit\s+SL',
+            parser=self._parse_phoenix_hit_sl,
+            examples=["hit SL"]
+        )
+        
+        # Phoenix exit: got a loss with SYMBOL
+        self.register(
+            name="phoenix_loss",
+            description="Phoenix loss exit",
+            priority=62,
+            pattern=r'got\s+a\s+loss\s+with\s+\$?([A-Z]{1,5})',
+            parser=self._parse_phoenix_exit,
+            examples=["got a loss with ADTX"]
+        )
+        
         # Load learned patterns from database
         self._learned_pattern_metadata: Dict[str, Dict] = {}  # Store metadata by pattern name
         self._load_learned_patterns()
@@ -929,6 +1006,172 @@ class SignalFormatRegistry:
             "trim_percentage": percentage,
             "confidence": 0.9,
             "_bronze_swings_trim": True
+        }
+    
+    # =========================================================================
+    # PHOENIX PARSER IMPLEMENTATIONS
+    # =========================================================================
+    
+    def _parse_phoenix_entry(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix entry: <@&role> PAVM over 21.50 SL 20"""
+        groups = match.groups()
+        symbol = groups[0].upper() if groups else None
+        price = float(groups[1]) if len(groups) > 1 and groups[1] else None
+        stop_loss = float(groups[2]) if len(groups) > 2 and groups[2] else None
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "BTO",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": price,
+            "stop_loss": stop_loss,
+            "is_market_order": price is None,
+            "confidence": 1.0,
+            "_phoenix_entry": True
+        }
+    
+    def _parse_phoenix_entry_pct_sl(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix entry with percentage SL: <@&role> GITS 2.50 SL 9%"""
+        groups = match.groups()
+        symbol = groups[0].upper() if groups else None
+        price = float(groups[1]) if len(groups) > 1 and groups[1] else None
+        stop_loss_pct = float(groups[2]) if len(groups) > 2 and groups[2] else None
+        
+        if not symbol:
+            return None
+        
+        # Calculate SL price from percentage
+        stop_loss = None
+        if price and stop_loss_pct:
+            stop_loss = price * (1 - stop_loss_pct / 100)
+        
+        return {
+            "asset": "stock",
+            "action": "BTO",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": price,
+            "stop_loss": stop_loss,
+            "stop_loss_pct": stop_loss_pct,
+            "is_market_order": price is None,
+            "confidence": 1.0,
+            "_phoenix_entry": True
+        }
+    
+    def _parse_phoenix_trim(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix trim: selling 80% here PAVM"""
+        groups = match.groups()
+        percentage = float(groups[0]) if groups else None
+        symbol = groups[1].upper() if len(groups) > 1 and groups[1] else None
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_trim": True,
+            "is_full_exit": False,
+            "trim_percentage": percentage,
+            "confidence": 1.0,
+            "_phoenix_trim": True
+        }
+    
+    def _parse_phoenix_leaving(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix leaving: leaving 10% here GITS (means selling 90%)"""
+        groups = match.groups()
+        leaving_pct = float(groups[0]) if groups else None
+        symbol = groups[1].upper() if len(groups) > 1 and groups[1] else None
+        
+        if not symbol:
+            return None
+        
+        # "Leaving 10%" means selling 90%
+        sell_pct = 100 - leaving_pct if leaving_pct else None
+        
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_trim": True,
+            "is_full_exit": False,
+            "trim_percentage": sell_pct,
+            "leaving_percentage": leaving_pct,
+            "confidence": 1.0,
+            "_phoenix_trim": True
+        }
+    
+    def _parse_phoenix_hit_sl(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix stop loss hit: hit SL (requires context for symbol)"""
+        # This needs position context to determine symbol
+        # Return a special flag so pipeline can check open positions
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": None,  # Needs context from open positions
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_full_exit": True,
+            "stop_loss_hit": True,
+            "confidence": 0.7,  # Lower confidence since no symbol
+            "_phoenix_exit": True,
+            "_needs_position_context": True
+        }
+    
+    def _parse_phoenix_exit(self, match: re.Match, text: str) -> Optional[Dict]:
+        """Parse Phoenix exit: got a loss with ADTX"""
+        groups = match.groups()
+        symbol = groups[0].upper() if groups else None
+        
+        if not symbol:
+            return None
+        
+        return {
+            "asset": "stock",
+            "action": "STC",
+            "qty": 1,
+            "qty_specified": False,
+            "symbol": symbol,
+            "strike": None,
+            "opt_type": None,
+            "expiry": None,
+            "price": None,
+            "is_market_order": True,
+            "is_full_exit": True,
+            "confidence": 1.0,
+            "_phoenix_exit": True
         }
     
     def _parse_learned_pattern_with_metadata(self, match: re.Match, text: str, pattern_name: str) -> Optional[Dict]:
