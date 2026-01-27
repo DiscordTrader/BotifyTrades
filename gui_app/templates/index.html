@@ -30,45 +30,59 @@
 <div class="table-container" style="margin-bottom: 16px;">
     <div class="table-header">
         <h3 class="table-title">🌍 Multi-Broker Dashboard</h3>
-        <div style="display: flex; gap: 8px; align-items: center;">
-            <select id="region-selector" onchange="switchRegion(this.value)" class="form-control" 
-                style="width: auto; padding: 6px 12px; font-size: 0.875rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px;">
-                <option value="USA">🇺🇸 USA</option>
-                <option value="Canada">🇨🇦 Canada</option>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <select id="region-selector" onchange="switchRegion(this.value)" 
+                style="width: auto; min-width: 120px; padding: 8px 16px; font-size: 0.875rem; font-weight: 500;
+                    background: linear-gradient(135deg, #1e293b, #334155); 
+                    border: 1px solid rgba(99, 102, 241, 0.4); border-radius: 8px;
+                    color: #e2e8f0; cursor: pointer; 
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    appearance: none; -webkit-appearance: none;
+                    background-image: url('data:image/svg+xml;utf8,<svg fill=\"%23e2e8f0\" height=\"24\" viewBox=\"0 0 24 24\" width=\"24\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M7 10l5 5 5-5z\"/></svg>');
+                    background-repeat: no-repeat; background-position: right 8px center; background-size: 16px;
+                    padding-right: 32px;">
+                <option value="USA" style="background: #1e293b; color: #e2e8f0;">🇺🇸 USA</option>
+                <option value="Canada" style="background: #1e293b; color: #e2e8f0;">🇨🇦 Canada</option>
             </select>
-            <button onclick="refreshBrokerDashboard()" class="btn btn-small" style="background: linear-gradient(135deg, #10b981, #059669);">
+            <button onclick="refreshBrokerDashboard()" 
+                style="padding: 8px 16px; font-size: 0.875rem; font-weight: 600;
+                    background: linear-gradient(135deg, #10b981, #059669); 
+                    border: none; border-radius: 8px;
+                    color: white; cursor: pointer; 
+                    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+                    transition: all 0.2s ease;">
                 🔄 Refresh
             </button>
         </div>
     </div>
     <div id="multi-broker-selector" style="padding: 16px 0;">
-        <!-- Dynamic broker dashboard - rendered by JavaScript -->
+        <!-- Dynamic broker dashboard - only selected region shows -->
         <div id="broker-region-content">
-            <!-- Initial server-side render for USA -->
+            <!-- USA region -->
             <div id="region-USA" class="region-brokers">
                 {% if broker_states and broker_states.USA and broker_states.USA|length > 0 %}
-                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
                     {% for broker in broker_states.USA %}
-                        <div class="broker-card" data-broker="{{ broker.broker_name }}" style="padding: 12px 20px; border-radius: 8px; display: flex; align-items: center; gap: 10px; cursor: pointer;
-                            background: {% if broker.is_connected %}rgba(16, 185, 129, 0.15){% else %}rgba(239, 68, 68, 0.15){% endif %}; 
-                            border: 1px solid {% if broker.is_connected %}rgba(16, 185, 129, 0.3){% else %}rgba(239, 68, 68, 0.3){% endif %};
-                            transition: all 0.2s ease;">
+                        <div class="broker-card" data-broker="{{ broker.broker_name }}" style="padding: 14px 24px; border-radius: 10px; display: flex; align-items: center; gap: 12px; cursor: pointer;
+                            background: {% if broker.is_connected %}rgba(16, 185, 129, 0.12){% else %}rgba(239, 68, 68, 0.12){% endif %}; 
+                            border: 1px solid {% if broker.is_connected %}rgba(16, 185, 129, 0.35){% else %}rgba(239, 68, 68, 0.35){% endif %};
+                            transition: all 0.2s ease; min-width: 140px;">
                             <span style="width: 10px; height: 10px; border-radius: 50%; 
                                 background: {% if broker.is_connected %}#10b981{% else %}#ef4444{% endif %};
-                                box-shadow: 0 0 6px {% if broker.is_connected %}rgba(16, 185, 129, 0.5){% else %}rgba(239, 68, 68, 0.5){% endif %};"></span>
-                            <span style="color: var(--text-primary); font-weight: 600;">{{ broker.broker_name }}</span>
+                                box-shadow: 0 0 8px {% if broker.is_connected %}rgba(16, 185, 129, 0.6){% else %}rgba(239, 68, 68, 0.6){% endif %};"></span>
+                            <span style="color: #f1f5f9; font-weight: 600; font-size: 0.9rem;">{{ broker.broker_name }}</span>
                             {% if broker.is_paper %}
-                                <span style="font-size: 0.7rem; padding: 2px 8px; background: rgba(59, 130, 246, 0.25); 
-                                    border-radius: 4px; color: #60a5fa; font-weight: 600;">PAPER</span>
+                                <span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(59, 130, 246, 0.3); 
+                                    border-radius: 4px; color: #93c5fd; font-weight: 600;">PAPER</span>
                             {% else %}
-                                <span style="font-size: 0.7rem; padding: 2px 8px; background: rgba(239, 68, 68, 0.25); 
-                                    border-radius: 4px; color: #f87171; font-weight: 600;">LIVE</span>
+                                <span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(239, 68, 68, 0.3); 
+                                    border-radius: 4px; color: #fca5a5; font-weight: 600;">LIVE</span>
                             {% endif %}
                         </div>
                     {% endfor %}
                     </div>
                 {% else %}
-                    <div style="color: var(--text-muted); font-size: 0.875rem; padding: 16px; background: var(--bg-secondary); border-radius: 8px; text-align: center;">
+                    <div style="color: #94a3b8; font-size: 0.9rem; padding: 20px; background: rgba(30, 41, 59, 0.5); border-radius: 10px; text-align: center; border: 1px solid rgba(71, 85, 105, 0.3);">
                         No brokers configured for USA
                     </div>
                 {% endif %}
@@ -76,28 +90,28 @@
             <!-- Canada region (hidden by default) -->
             <div id="region-Canada" class="region-brokers" style="display: none;">
                 {% if broker_states and broker_states.Canada and broker_states.Canada|length > 0 %}
-                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
                     {% for broker in broker_states.Canada %}
-                        <div class="broker-card" data-broker="{{ broker.broker_name }}" style="padding: 12px 20px; border-radius: 8px; display: flex; align-items: center; gap: 10px; cursor: pointer;
-                            background: {% if broker.is_connected %}rgba(16, 185, 129, 0.15){% else %}rgba(239, 68, 68, 0.15){% endif %}; 
-                            border: 1px solid {% if broker.is_connected %}rgba(16, 185, 129, 0.3){% else %}rgba(239, 68, 68, 0.3){% endif %};
-                            transition: all 0.2s ease;">
+                        <div class="broker-card" data-broker="{{ broker.broker_name }}" style="padding: 14px 24px; border-radius: 10px; display: flex; align-items: center; gap: 12px; cursor: pointer;
+                            background: {% if broker.is_connected %}rgba(16, 185, 129, 0.12){% else %}rgba(239, 68, 68, 0.12){% endif %}; 
+                            border: 1px solid {% if broker.is_connected %}rgba(16, 185, 129, 0.35){% else %}rgba(239, 68, 68, 0.35){% endif %};
+                            transition: all 0.2s ease; min-width: 140px;">
                             <span style="width: 10px; height: 10px; border-radius: 50%; 
                                 background: {% if broker.is_connected %}#10b981{% else %}#ef4444{% endif %};
-                                box-shadow: 0 0 6px {% if broker.is_connected %}rgba(16, 185, 129, 0.5){% else %}rgba(239, 68, 68, 0.5){% endif %};"></span>
-                            <span style="color: var(--text-primary); font-weight: 600;">{{ broker.broker_name }}</span>
+                                box-shadow: 0 0 8px {% if broker.is_connected %}rgba(16, 185, 129, 0.6){% else %}rgba(239, 68, 68, 0.6){% endif %};"></span>
+                            <span style="color: #f1f5f9; font-weight: 600; font-size: 0.9rem;">{{ broker.broker_name }}</span>
                             {% if broker.is_paper %}
-                                <span style="font-size: 0.7rem; padding: 2px 8px; background: rgba(59, 130, 246, 0.25); 
-                                    border-radius: 4px; color: #60a5fa; font-weight: 600;">PAPER</span>
+                                <span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(59, 130, 246, 0.3); 
+                                    border-radius: 4px; color: #93c5fd; font-weight: 600;">PAPER</span>
                             {% else %}
-                                <span style="font-size: 0.7rem; padding: 2px 8px; background: rgba(239, 68, 68, 0.25); 
-                                    border-radius: 4px; color: #f87171; font-weight: 600;">LIVE</span>
+                                <span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(239, 68, 68, 0.3); 
+                                    border-radius: 4px; color: #fca5a5; font-weight: 600;">LIVE</span>
                             {% endif %}
                         </div>
                     {% endfor %}
                     </div>
                 {% else %}
-                    <div style="color: var(--text-muted); font-size: 0.875rem; padding: 16px; background: var(--bg-secondary); border-radius: 8px; text-align: center;">
+                    <div style="color: #94a3b8; font-size: 0.9rem; padding: 20px; background: rgba(30, 41, 59, 0.5); border-radius: 10px; text-align: center; border: 1px solid rgba(71, 85, 105, 0.3);">
                         No brokers configured for Canada
                     </div>
                 {% endif %}
@@ -903,28 +917,28 @@ function renderRegionBrokers() {
         
         if (brokers.length === 0) {
             container.innerHTML = `
-                <div style="color: var(--text-muted); font-size: 0.875rem; padding: 16px; background: var(--bg-secondary); border-radius: 8px; text-align: center;">
+                <div style="color: #94a3b8; font-size: 0.9rem; padding: 20px; background: rgba(30, 41, 59, 0.5); border-radius: 10px; text-align: center; border: 1px solid rgba(71, 85, 105, 0.3);">
                     No brokers configured for ${region}
                 </div>`;
             return;
         }
         
-        let html = '<div style="display: flex; flex-wrap: wrap; gap: 8px;">';
+        let html = '<div style="display: flex; flex-wrap: wrap; gap: 12px;">';
         brokers.forEach(broker => {
             const isConnected = broker.is_connected;
-            const bgColor = isConnected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
-            const borderColor = isConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)';
+            const bgColor = isConnected ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)';
+            const borderColor = isConnected ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)';
             const dotColor = isConnected ? '#10b981' : '#ef4444';
-            const shadowColor = isConnected ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)';
+            const shadowColor = isConnected ? 'rgba(16, 185, 129, 0.6)' : 'rgba(239, 68, 68, 0.6)';
             
             html += `
-                <div class="broker-card" data-broker="${broker.broker_name}" style="padding: 12px 20px; border-radius: 8px; display: flex; align-items: center; gap: 10px; cursor: pointer;
-                    background: ${bgColor}; border: 1px solid ${borderColor}; transition: all 0.2s ease;">
-                    <span style="width: 10px; height: 10px; border-radius: 50%; background: ${dotColor}; box-shadow: 0 0 6px ${shadowColor};"></span>
-                    <span style="color: var(--text-primary); font-weight: 600;">${broker.broker_name}</span>
+                <div class="broker-card" data-broker="${broker.broker_name}" style="padding: 14px 24px; border-radius: 10px; display: flex; align-items: center; gap: 12px; cursor: pointer;
+                    background: ${bgColor}; border: 1px solid ${borderColor}; transition: all 0.2s ease; min-width: 140px;">
+                    <span style="width: 10px; height: 10px; border-radius: 50%; background: ${dotColor}; box-shadow: 0 0 8px ${shadowColor};"></span>
+                    <span style="color: #f1f5f9; font-weight: 600; font-size: 0.9rem;">${broker.broker_name}</span>
                     ${broker.is_paper 
-                        ? '<span style="font-size: 0.7rem; padding: 2px 8px; background: rgba(59, 130, 246, 0.25); border-radius: 4px; color: #60a5fa; font-weight: 600;">PAPER</span>'
-                        : '<span style="font-size: 0.7rem; padding: 2px 8px; background: rgba(239, 68, 68, 0.25); border-radius: 4px; color: #f87171; font-weight: 600;">LIVE</span>'
+                        ? '<span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(59, 130, 246, 0.3); border-radius: 4px; color: #93c5fd; font-weight: 600;">PAPER</span>'
+                        : '<span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(239, 68, 68, 0.3); border-radius: 4px; color: #fca5a5; font-weight: 600;">LIVE</span>'
                     }
                 </div>`;
         });
