@@ -6738,7 +6738,7 @@
     "max_pnl_seen": 5.290545376527872,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 56.46,
+    "last_evaluated_price": 56.3999,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9525,6 +9525,30 @@
     "last_evaluated_price": 0.658411214953271,
     "early_trailing_active": true,
     "early_stop_price": 0.6049,
+    "early_steps_locked": 0
+  },
+  "Webull_NVO_62.0_01/30_P": {
+    "entry_price": 1.03,
+    "highest_price": 1.045,
+    "trailing_activated": false,
+    "closing": false,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "Webull",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-27T15:15:36.195038",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": null,
+    "early_trailing_active": false,
+    "early_stop_price": null,
     "early_steps_locked": 0
   }
 }
