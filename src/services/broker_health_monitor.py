@@ -435,7 +435,12 @@ class BrokerHealthMonitor:
         cached_info = self.get_cached_account_info(broker_key)
         
         if not cached_info:
-            reason = f"No recent account data for {broker_name} - cannot verify buying power"
+            # RELAXED: Allow trade if broker is connected, even without cached data
+            broker_status = self.get_broker_status(broker_key)
+            if broker_status.get('is_connected', False):
+                print(f"[HEALTH] ⚠️  No cached account data for {broker_name}, but broker is connected - allowing trade")
+                return True, ""
+            reason = f"No recent account data for {broker_name} and broker not connected"
             return False, reason
         
         buying_power = self._extract_buying_power(broker_key, cached_info, asset_type)
