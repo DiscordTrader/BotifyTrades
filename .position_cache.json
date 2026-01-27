@@ -6738,7 +6738,7 @@
     "max_pnl_seen": 4.564146779378643,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 56.03,
+    "last_evaluated_price": 56.02,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9505,7 +9505,7 @@
   },
   "Webull_XTKG_stock": {
     "entry_price": 0.6049,
-    "highest_price": 0.6408941176470588,
+    "highest_price": 0.6432,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -9519,12 +9519,12 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-27T13:46:19.169370",
-    "max_pnl_seen": 5.950424474633633,
+    "max_pnl_seen": 6.3316250619937176,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.6151058823529412,
-    "early_trailing_active": false,
-    "early_stop_price": null,
+    "last_evaluated_price": 0.6432,
+    "early_trailing_active": true,
+    "early_stop_price": 0.6049,
     "early_steps_locked": 0
   }
 }
