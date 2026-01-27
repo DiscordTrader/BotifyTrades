@@ -248,6 +248,44 @@ class SchwabBroker(BrokerInterface):
             print(f"[{self.name}] ❌ Verification error: {e}")
             return False
     
+    def _parse_occ_symbol(self, occ_symbol: str) -> Optional[Dict[str, Any]]:
+        """Parse OCC option symbol format into components.
+        
+        OCC format: UNDERLYING + YYMMDD + C/P + STRIKE*1000 (8 digits, zero-padded)
+        Example: "QQQ   260128P00630000" -> QQQ, 2026-01-28, P, 630.00
+        """
+        import re
+        
+        if not occ_symbol:
+            return None
+        
+        occ_symbol = occ_symbol.strip()
+        
+        pattern = r'^([A-Z]+)\s*(\d{6})([CP])(\d{8})$'
+        match = re.match(pattern, occ_symbol)
+        
+        if match:
+            underlying = match.group(1)
+            date_str = match.group(2)
+            option_type = match.group(3)
+            strike_raw = match.group(4)
+            
+            year = int('20' + date_str[:2])
+            month = int(date_str[2:4])
+            day = int(date_str[4:6])
+            expiry = f"{year:04d}-{month:02d}-{day:02d}"
+            
+            strike = int(strike_raw) / 1000.0
+            
+            return {
+                'underlying': underlying,
+                'expiry': expiry,
+                'option_type': option_type,
+                'strike': strike
+            }
+        
+        return None
+    
     async def _ensure_valid_token(self) -> bool:
         """Ensure we have a valid access token"""
         if self.token_expiry and datetime.now().timestamp() >= (self.token_expiry - 60):
@@ -874,7 +912,14 @@ class SchwabBroker(BrokerInterface):
                             continue
                         
                         avg_price = pos.get('averagePrice', 0)
-                        current_price = pos.get('marketValue', 0) / qty if qty else 0
+                        market_value = pos.get('marketValue', 0)
+                        
+                        # For options, marketValue is total position value; divide by 100 to get per-contract price
+                        if asset_type == 'option':
+                            current_price = market_value / (qty * 100) if qty else 0
+                        else:
+                            current_price = market_value / qty if qty else 0
+                        
                         unrealized_pnl = pos.get('longOpenProfitLoss', 0) + pos.get('shortOpenProfitLoss', 0)
                         
                         position_data = {
@@ -889,10 +934,30 @@ class SchwabBroker(BrokerInterface):
                         
                         # Parse option details if applicable
                         if asset_type == 'option':
-                            position_data['strike'] = float(instrument.get('strikePrice', 0))
-                            position_data['expiry'] = instrument.get('expirationDate', '')[:10] if instrument.get('expirationDate') else ''
-                            position_data['direction'] = instrument.get('putCall', '')[0] if instrument.get('putCall') else ''
-                            position_data['symbol'] = instrument.get('underlyingSymbol', symbol)
+                            # Debug: log the full instrument for troubleshooting
+                            print(f"[{self.name}] Option instrument data: {instrument}")
+                            
+                            # Schwab option symbol format: e.g., "QQQ   260128P00630000"
+                            # Parse from symbol if individual fields not available
+                            strike_price = instrument.get('strikePrice', 0)
+                            expiration = instrument.get('expirationDate', '')
+                            put_call = instrument.get('putCall', '')
+                            underlying = instrument.get('underlyingSymbol', '')
+                            
+                            # If strike/expiry not in instrument, parse from OCC symbol
+                            if (not strike_price or strike_price == 0) and symbol:
+                                parsed = self._parse_occ_symbol(symbol)
+                                if parsed:
+                                    underlying = parsed.get('underlying', underlying) or underlying
+                                    strike_price = parsed.get('strike', 0)
+                                    expiration = parsed.get('expiry', '')
+                                    put_call = parsed.get('option_type', put_call)
+                                    print(f"[{self.name}] Parsed OCC symbol {symbol}: {parsed}")
+                            
+                            position_data['strike'] = float(strike_price) if strike_price else 0.0
+                            position_data['expiry'] = expiration[:10] if expiration else ''
+                            position_data['direction'] = put_call[0].upper() if put_call else ''
+                            position_data['symbol'] = underlying or symbol.split()[0] if symbol else symbol
                         
                         result.append(position_data)
                     
