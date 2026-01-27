@@ -7197,6 +7197,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         print(f"[Discord] ✓ Monitoring {len(CHANNEL_IDS)} channels:")
         for cid in CHANNEL_IDS:
             channel = self.get_channel(cid)
+            fetch_error = None
+            if not channel:
+                try:
+                    channel = await self.fetch_channel(cid)
+                except Exception as e:
+                    fetch_error = str(e)
             if channel:
                 if hasattr(channel, 'guild') and channel.guild:
                     channel_name = getattr(channel, 'name', str(channel))
@@ -7206,7 +7212,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 else:
                     print(f"[Discord]   - Channel: {channel}")
             else:
-                print(f"[Discord]   - Channel ID {cid} (not accessible)")
+                if fetch_error:
+                    print(f"[Discord]   - Channel ID {cid} (not accessible: {fetch_error})")
+                else:
+                    print(f"[Discord]   - Channel ID {cid} (not accessible)")
         print("[Discord] Ready to process signals")
         
         # Signal Discord ready IMMEDIATELY (before broker init) so main thread doesn't timeout
