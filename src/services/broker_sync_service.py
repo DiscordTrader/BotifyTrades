@@ -755,18 +755,18 @@ class BrokerSyncService:
                 if hasattr(broker_instance, 'get_account_info'):
                     raw = await broker_instance.get_account_info()
                     if raw:
-                        # Log raw account data for debugging
-                        print(f"[SYNC] Webull raw account info keys: {list(raw.keys())[:10]}")
+                        # Log account data for debugging - NOTE: get_account_info returns normalized snake_case keys
+                        print(f"[SYNC] Webull account info keys: {list(raw.keys())[:10]}")
+                        # Use the normalized keys returned by get_account_info (snake_case)
                         account_info = {
-                            'portfolio_value': raw.get('netLiquidation', 0),
-                            'buying_power': raw.get('dayBuyingPower', 0),
-                            'cashBalance': raw.get('cashBalance', 0),
-                            'optionBuyingPower': raw.get('optionBuyingPower', 0),
-                            'dayBuyingPower': raw.get('dayBuyingPower', 0),
-                            'overnightBuyingPower': raw.get('overnightBuyingPower', 0),
-                            'account_id': raw.get('accountId')
+                            'portfolio_value': raw.get('portfolio_value', 0),
+                            'buying_power': raw.get('buying_power', 0),
+                            'cash': raw.get('cash', 0),
+                            'options_buying_power': raw.get('options_buying_power', 0),
+                            'account_type': raw.get('account_type', 'Unknown'),
+                            'account_id': raw.get('account_id')
                         }
-                        print(f"[SYNC] Webull account info: buying_power={account_info.get('buying_power')}, portfolio={account_info.get('portfolio_value')}")
+                        print(f"[SYNC] Webull account info: buying_power=${account_info.get('buying_power')}, options_bp=${account_info.get('options_buying_power')}, portfolio=${account_info.get('portfolio_value')}")
                     else:
                         print(f"[SYNC] Webull get_account_info returned None/empty")
             

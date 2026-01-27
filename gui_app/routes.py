@@ -16921,12 +16921,13 @@ def register_routes(app):
         try:
             from datetime import datetime
             
-            # Get live status from BrokerHealthMonitor for real-time updates
+            # Get live status from BrokerHealthMonitor singleton for real-time updates
             # BrokerHealthMonitor uses UPPERCASE normalized keys
             health_states = {}
+            health_monitor = None
             try:
-                from src.services.broker_health_monitor import BrokerHealthMonitor
-                health_monitor = BrokerHealthMonitor()
+                from src.services.broker_health_monitor import get_health_monitor
+                health_monitor = get_health_monitor()  # Use singleton instance
                 # Use uppercase keys to match health monitor's normalization
                 for broker_key in ['WEBULL', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'QUESTRADE']:
                     state = health_monitor.get_broker_state(broker_key)
@@ -16977,12 +16978,23 @@ def register_routes(app):
                     
                     # Show any broker that has an instance (means it's configured)
                     # Connected brokers show, disconnected brokers show with their error reason
+                    
+                    # Get buying power from health monitor cache
+                    buying_power = 0
+                    balance = 0
+                    if health_monitor and is_connected:
+                        cached_info = health_monitor.get_cached_account_info(health_key)
+                        if cached_info:
+                            # Extract buying power using health monitor's method
+                            buying_power = health_monitor._extract_buying_power(health_key, cached_info, 'options')
+                            balance = cached_info.get('portfolio_value', cached_info.get('balance', 0))
+                    
                     state = {
                         'broker_name': broker_name,
                         'region': region,
                         'is_connected': is_connected,
-                        'balance': 0,
-                        'buying_power': 0,
+                        'balance': balance,
+                        'buying_power': buying_power,
                         'currency': currency,
                         'is_paper': is_paper or getattr(broker_instance, 'paper_trade', False),
                         'status': health.get('status', 'connected' if is_connected else 'disconnected'),
