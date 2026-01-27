@@ -1779,7 +1779,7 @@ def register_routes(app):
     @app.route('/channels')
     def channels():
         """Channel management page"""
-        return render_template('channels.html')
+        return render_template('channels.html', is_admin_build=is_admin_build())
     
     @app.route('/channels/india')
     def channels_india():
