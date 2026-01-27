@@ -1,4 +1,7 @@
+console.log('[BrokerStore] Script loading...');
+
 const BrokerStore = (function() {
+    console.log('[BrokerStore] Module initializing...');
     const STORAGE_KEY = 'botify_selected_broker';
     const REFRESH_INTERVAL = 30000;
     
@@ -15,6 +18,7 @@ const BrokerStore = (function() {
     let refreshTimer = null;
     
     function init() {
+        console.log('[BrokerStore] init() called');
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
             try {
@@ -40,10 +44,20 @@ const BrokerStore = (function() {
     async function loadBrokerStates() {
         state.isLoading = true;
         notifyListeners('loading');
+        console.log('[BrokerStore] Loading broker states...');
         
         try {
             const response = await fetch('/api/v2/broker-states');
             const data = await response.json();
+            
+            console.log('[BrokerStore] API response:', data);
+            
+            // Handle auth error
+            if (data.error) {
+                console.error('[BrokerStore] API error:', data.error);
+                notifyListeners('error', data.error);
+                return;
+            }
             
             if (data.success) {
                 state.brokers = data.states || [];
@@ -51,6 +65,8 @@ const BrokerStore = (function() {
                 const byRegion = data.by_region || { USA: [], Canada: [] };
                 state.byRegion = { USA: byRegion.USA || [], Canada: byRegion.Canada || [] };
                 state.lastRefresh = new Date();
+                
+                console.log('[BrokerStore] Loaded', state.brokers.length, 'brokers:', state.byRegion);
                 
                 // Auto-refresh if no broker states found (first load)
                 if (state.brokers.length === 0) {
@@ -60,6 +76,8 @@ const BrokerStore = (function() {
                 }
                 
                 notifyListeners('data_loaded');
+            } else {
+                console.warn('[BrokerStore] API returned success=false');
             }
         } catch (error) {
             console.error('[BrokerStore] Failed to load states:', error);
