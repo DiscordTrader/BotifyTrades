@@ -16955,16 +16955,25 @@ def register_routes(app):
                     if broker_instance is None:
                         continue
                     
-                    # Check if broker is connected (configured and active)
-                    is_connected = getattr(broker_instance, 'connected', False)
+                    # Check if broker is connected (different brokers use different properties)
+                    # Webull uses _logged_in, others use connected
+                    instance_connected = (
+                        getattr(broker_instance, 'connected', False) or 
+                        getattr(broker_instance, '_logged_in', False)
+                    )
                     
                     # Get real-time status from health monitor (uses uppercase keys)
                     health_key = broker_name.upper()
                     health = health_states.get(health_key, {})
                     
-                    # Override with health monitor status if available
-                    if health:
-                        is_connected = health.get('is_connected', is_connected)
+                    # Priority: broker instance status > health monitor (instance is more current)
+                    # Only use health monitor if instance status is unknown/False
+                    if instance_connected:
+                        is_connected = True
+                    elif health:
+                        is_connected = health.get('is_connected', False)
+                    else:
+                        is_connected = False
                     
                     # Show any broker that has an instance (means it's configured)
                     # Connected brokers show, disconnected brokers show with their error reason
