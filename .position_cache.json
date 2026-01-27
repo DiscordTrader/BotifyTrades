@@ -6721,7 +6721,7 @@
   },
   "ALPACA_PAPER_TQQQ_stock": {
     "entry_price": 53.689531,
-    "highest_price": 56.53,
+    "highest_price": 56.5789,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -6735,10 +6735,10 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-12T15:35:16.327462",
-    "max_pnl_seen": 5.290545376527872,
+    "max_pnl_seen": 5.381624585247345,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 56.365,
+    "last_evaluated_price": 56.535,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9529,7 +9529,7 @@
   },
   "Webull_NVO_62.0_01/30_P": {
     "entry_price": 1.03,
-    "highest_price": 1.045,
+    "highest_price": 1.06,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
