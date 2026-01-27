@@ -6069,6 +6069,7 @@ class SelfClient(discord.Client):
                     db_adapter=risk_adapter,
                     alpaca_broker=self.paper_broker,
                     schwab_broker=self.schwab_broker,
+                    robinhood_broker=self.robinhood_broker,
                     loop=self.loop
                 )
                 
