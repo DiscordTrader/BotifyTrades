@@ -9058,20 +9058,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 # Map uppercase names to proper broker names
                                                 broker_map = {
                                                     'WEBULL': 'Webull', 
-                                                    'ALPACA': 'Alpaca',
-                                                    'ALPACA_PAPER': 'Alpaca',
-                                                    'TASTYTRADE': 'Tastytrade',
-                                                    'TASTYTRADE_PAPER': 'Tastytrade',
+                                                    'ALPACA': 'ALPACA_PAPER',
+                                                    'ALPACA_PAPER': 'ALPACA_PAPER',
+                                                    'TASTYTRADE': 'TASTYTRADE',
+                                                    'TASTYTRADE_PAPER': 'TASTYTRADE_PAPER',
                                                     'IBKR': 'IBKR',
-                                                    'IBKR_PAPER': 'IBKR',
-                                                    'SCHWAB': 'Schwab',
-                                                    'UPSTOX': 'upstox',
-                                                    'ZERODHA': 'zerodha',
-                                                    'DHANQ': 'dhanq',
-                                                    'QUESTRADE': 'questrade'
+                                                    'IBKR_PAPER': 'IBKR_PAPER',
+                                                    'SCHWAB': 'SCHWAB',
+                                                    'ROBINHOOD': 'ROBINHOOD',
+                                                    'UPSTOX': 'UPSTOX',
+                                                    'ZERODHA': 'ZERODHA',
+                                                    'DHANQ': 'DHANQ',
+                                                    'QUESTRADE': 'QUESTRADE'
                                                 }
                                                 first_broker = enabled[0].upper()
-                                                cond_broker = broker_map.get(first_broker, enabled[0])
+                                                cond_broker = broker_map.get(first_broker, enabled[0].upper())
                                                 print(f"[COND ORDER] Using channel enabled_brokers[0]: {enabled[0]} -> {cond_broker}")
                                         except Exception as e:
                                             print(f"[COND ORDER] Error parsing enabled_brokers: {e}")
@@ -9745,20 +9746,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         # Map uppercase names to proper broker names (including paper accounts)
                                         broker_map = {
                                             'WEBULL': 'Webull', 
-                                            'ALPACA': 'Alpaca',
-                                            'ALPACA_PAPER': 'Alpaca',
-                                            'TASTYTRADE': 'Tastytrade',
-                                            'TASTYTRADE_PAPER': 'Tastytrade',
+                                            'ALPACA': 'ALPACA_PAPER',
+                                            'ALPACA_PAPER': 'ALPACA_PAPER',
+                                            'TASTYTRADE': 'TASTYTRADE',
+                                            'TASTYTRADE_PAPER': 'TASTYTRADE_PAPER',
                                             'IBKR': 'IBKR',
-                                            'IBKR_PAPER': 'IBKR',
-                                            'SCHWAB': 'Schwab',
-                                            'UPSTOX': 'upstox',
-                                            'ZERODHA': 'zerodha',
-                                            'DHANQ': 'dhanq',
-                                            'QUESTRADE': 'questrade'
+                                            'IBKR_PAPER': 'IBKR_PAPER',
+                                            'SCHWAB': 'SCHWAB',
+                                            'ROBINHOOD': 'ROBINHOOD',
+                                            'UPSTOX': 'UPSTOX',
+                                            'ZERODHA': 'ZERODHA',
+                                            'DHANQ': 'DHANQ',
+                                            'QUESTRADE': 'QUESTRADE'
                                         }
                                         first_broker = enabled[0].upper()
-                                        broker = broker_map.get(first_broker, enabled[0])
+                                        broker = broker_map.get(first_broker, enabled[0].upper())
                                         print(f"[CONDITIONAL] Using channel enabled_brokers[0]: {enabled[0]} -> {broker}")
                                 except Exception as e:
                                     print(f"[CONDITIONAL] Error parsing enabled_brokers: {e}")
