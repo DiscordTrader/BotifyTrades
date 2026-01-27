@@ -1236,7 +1236,7 @@ class RiskManager:
                         symbol=pos.get('symbol', ''),
                         quantity=abs(float(pos.get('quantity', 0))),
                         avg_cost=float(pos.get('average_buy_price') or pos.get('average_price') or 0),
-                        current_price=0,
+                        current_price=float(pos.get('current_price', 0) or 0),
                         asset=pos_type,
                         broker='ROBINHOOD',
                         strike=float(pos.get('strike_price')) if pos.get('strike_price') else None,
