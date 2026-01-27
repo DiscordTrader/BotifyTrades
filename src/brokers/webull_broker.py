@@ -111,6 +111,11 @@ class WebullBroker(BrokerInterface):
         try:
             account_response = await asyncio.to_thread(self.wb.get_account)
             
+            # DEBUG: Print raw response structure first
+            print(f"[{self.name}] Raw account response type: {type(account_response)}")
+            if isinstance(account_response, dict):
+                print(f"[{self.name}] Raw response keys: {list(account_response.keys())[:10]}")
+            
             # Unwrap API response if it has 'data' key
             if isinstance(account_response, dict) and 'data' in account_response:
                 account = account_response['data']
@@ -120,6 +125,7 @@ class WebullBroker(BrokerInterface):
             # Parse accountMembers list into a dict (Webull returns {'key': 'name', 'value': 'val'} items)
             account_data = {}
             account_members = account.get('accountMembers', []) if isinstance(account, dict) else []
+            print(f"[{self.name}] accountMembers count: {len(account_members)}")
             if account_members and isinstance(account_members, list):
                 for item in account_members:
                     if isinstance(item, dict) and 'key' in item and 'value' in item:
@@ -131,14 +137,8 @@ class WebullBroker(BrokerInterface):
                     if k != 'accountMembers' and k not in account_data:
                         account_data[k] = v
             
-            # DEBUG: Print ALL fields from Webull API so we can map them correctly
-            print(f"[{self.name}] [DEBUG] ========== WEBULL ACCOUNT DATA ==========")
-            print(f"[{self.name}] [DEBUG] All parsed fields ({len(account_data)} total):")
-            for key, val in sorted(account_data.items()):
-                # Only print scalar values, skip nested objects
-                if isinstance(val, (int, float, str)) and val:
-                    print(f"[{self.name}] [DEBUG]   {key}: {val}")
-            print(f"[{self.name}] [DEBUG] ==========================================")
+            # DEBUG: Print all fields (including zeros)
+            print(f"[{self.name}] Parsed account_data ({len(account_data)} fields): {list(account_data.keys())[:15]}")
             
             # Try multiple field name variations for buying power
             buying_power = 0.0
