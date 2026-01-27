@@ -1,7 +1,9 @@
 # BotifyTrades - Multi-Platform Trading Bot
 
 ## Overview
-BotifyTrades is a cross-platform trading automation bot for Discord and Telegram, designed for automated stock and options trading across multiple brokers. Its primary purpose is to make sophisticated trading accessible and efficient by integrating advanced trading functionalities within messaging platforms. Key capabilities include automated execution, advanced analytics, a dual-broker architecture for paper and live trading, and comprehensive risk management. The project targets markets in the USA, Canada, and India.
+BotifyTrades is a cross-platform trading automation bot for Discord and Telegram, designed for automated stock and options trading across multiple brokers. Its primary purpose is to make sophisticated trading accessible and efficient by integrating advanced trading functionalities within messaging platforms. Key capabilities include automated execution, advanced analytics, a dual-broker architecture for paper and live trading, and comprehensive risk management. The project targets markets in the USA and Canada.
+
+**Multi-Broker Dashboard** (January 2026): Shows only configured and connected brokers with real-time status from BrokerHealthMonitor. Dynamically updates when brokers connect/disconnect with status indicators showing connection state and error reasons.
 
 ## User Preferences
 - **Security**: Always use environment variables (Replit Secrets) for credentials and license keys
