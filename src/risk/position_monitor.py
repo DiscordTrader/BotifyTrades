@@ -958,13 +958,15 @@ class RiskManager:
                     if not can_proceed:
                         print(f"[RISK] Schwab rate limit - skipping (wait {wait_time:.1f}s)")
                     else:
-                        is_auth = await self.schwab_broker.is_authenticated()
+                        # is_authenticated() is a regular function, not async
+                        is_auth = self.schwab_broker.is_authenticated()
                         if is_auth:
                             rate_manager.record_request('schwab')
                             schwab_positions = await self._fetch_schwab_positions()
                             positions.extend(schwab_positions)
                 else:
-                    is_auth = await self.schwab_broker.is_authenticated()
+                    # is_authenticated() is a regular function, not async
+                    is_auth = self.schwab_broker.is_authenticated()
                     if is_auth:
                         schwab_positions = await self._fetch_schwab_positions()
                         positions.extend(schwab_positions)
