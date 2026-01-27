@@ -40,23 +40,27 @@ class DisconnectReason(Enum):
 
 BROKER_BUYING_POWER_FIELDS = {
     'WEBULL': {
-        'options': ['optionBuyingPower', 'cashBalance'],
-        'stocks': ['dayBuyingPower', 'cashBalance', 'overnightBuyingPower'],
-        'fallback': 'cashBalance'
+        # Webull broker returns snake_case keys from get_account_info()
+        'options': ['options_buying_power', 'buying_power', 'cash', 'optionBuyingPower', 'cashBalance'],
+        'stocks': ['buying_power', 'cash', 'dayBuyingPower', 'cashBalance', 'overnightBuyingPower'],
+        'fallback': 'buying_power'
     },
     'ALPACA': {
-        'options': ['options_buying_power', 'buying_power'],
+        # For options, use buying_power as primary since options_buying_power may be 0
+        'options': ['buying_power', 'options_buying_power', 'cash'],
         'stocks': ['buying_power', 'cash'],
         'fallback': 'buying_power'
     },
     'ALPACA_PAPER': {
-        'options': ['options_buying_power', 'buying_power'],
+        # For options, use buying_power as primary since options_buying_power may be 0
+        'options': ['buying_power', 'options_buying_power', 'cash'],
         'stocks': ['buying_power', 'cash'],
         'fallback': 'buying_power'
     },
     'ROBINHOOD': {
-        'options': ['options_buying_power', 'margin_buying_power'],
-        'stocks': ['buying_power', 'margin_buying_power', 'cash_available_for_withdrawal'],
+        # Robinhood: use buying_power as primary for options too
+        'options': ['buying_power', 'options_buying_power', 'margin_buying_power', 'cash'],
+        'stocks': ['buying_power', 'margin_buying_power', 'cash_available_for_withdrawal', 'cash'],
         'fallback': 'buying_power'
     },
     'SCHWAB': {

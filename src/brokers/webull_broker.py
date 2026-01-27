@@ -142,7 +142,7 @@ class WebullBroker(BrokerInterface):
             
             # Try multiple field name variations for buying power
             buying_power = 0.0
-            for field in ['buyingPower', 'dayBuyingPower', 'cashAvailableForTrade', 'settledFunds']:
+            for field in ['cashBalance', 'buyingPower', 'dayBuyingPower', 'settledFunds', 'cashAvailableForTrade', 'overnightBuyingPower']:
                 if field in account_data:
                     try:
                         buying_power = float(account_data[field])
