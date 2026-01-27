@@ -6,7 +6,7 @@ const BrokerStore = (function() {
         selectedBroker: null,
         selectedRegion: 'USA',
         brokers: [],
-        byRegion: { USA: [], Canada: [], India: [] },
+        byRegion: { USA: [], Canada: [] },
         lastRefresh: null,
         isLoading: false,
         listeners: []
@@ -47,7 +47,9 @@ const BrokerStore = (function() {
             
             if (data.success) {
                 state.brokers = data.states || [];
-                state.byRegion = data.by_region || { USA: [], Canada: [], India: [] };
+                // Filter out India region
+                const byRegion = data.by_region || { USA: [], Canada: [] };
+                state.byRegion = { USA: byRegion.USA || [], Canada: byRegion.Canada || [] };
                 state.lastRefresh = new Date();
                 
                 // Auto-refresh if no broker states found (first load)
@@ -198,14 +200,14 @@ const BrokerStore = (function() {
         if (showRegionTabs) {
             html += `
                 <div class="broker-region-tabs" style="display: flex; gap: 8px; margin-bottom: 12px;">
-                    ${['USA', 'Canada', 'India'].map(region => `
+                    ${['USA', 'Canada'].map(region => `
                         <button class="region-tab ${state.selectedRegion === region ? 'active' : ''}" 
                                 data-region="${region}"
                                 style="padding: 6px 16px; border-radius: 6px; border: 1px solid var(--border); 
                                        background: ${state.selectedRegion === region ? 'var(--primary)' : 'var(--bg-card)'};
                                        color: ${state.selectedRegion === region ? 'white' : 'var(--text-primary)'};
                                        cursor: pointer; font-size: 0.875rem;">
-                            ${region === 'USA' ? '🇺🇸' : region === 'Canada' ? '🇨🇦' : '🇮🇳'} ${region}
+                            ${region === 'USA' ? '🇺🇸' : '🇨🇦'} ${region}
                         </button>
                     `).join('')}
                 </div>

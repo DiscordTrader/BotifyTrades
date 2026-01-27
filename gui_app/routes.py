@@ -16840,39 +16840,107 @@ def register_routes(app):
     @app.route('/api/v2/broker-states', methods=['GET'])
     @login_required
     def api_get_all_broker_states():
-        """Get all broker states for multi-broker dashboard (no page reload)"""
+        """Get all broker states for multi-broker dashboard (no page reload)
+        
+        Industry-grade implementation:
+        - Only returns CONFIGURED brokers (has credentials or connected)
+        - Integrates with BrokerHealthMonitor for real-time status
+        - Removes India region (USA + Canada only)
+        """
         try:
-            db.init_broker_states_table()
-            states = db.get_all_broker_states()
+            # Get live status from BrokerHealthMonitor for real-time updates
+            # BrokerHealthMonitor uses UPPERCASE normalized keys
+            health_states = {}
+            try:
+                from src.services.broker_health_monitor import BrokerHealthMonitor
+                health_monitor = BrokerHealthMonitor()
+                # Use uppercase keys to match health monitor's normalization
+                for broker_key in ['WEBULL', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'QUESTRADE']:
+                    state = health_monitor.get_broker_state(broker_key)
+                    if state:
+                        health_states[broker_key.upper()] = state
+            except Exception as e:
+                print(f"[BROKER STATES] Health monitor error: {e}")
             
-            # Auto-populate from live brokers if database is empty
-            if len(states) == 0 and _bot_instance:
-                _populate_broker_states_from_bot()
-                states = db.get_all_broker_states()
+            # Build configured brokers list from bot instance
+            # Only include brokers that are CONNECTED (truly configured)
+            configured_brokers = []
             
-            grouped = {'USA': [], 'Canada': [], 'India': []}
-            for state in states:
+            if _bot_instance:
+                broker_mappings = [
+                    ('WEBULL', 'broker', 'USA', 'USD', False),
+                    ('ALPACA_PAPER', 'paper_broker', 'USA', 'USD', True),
+                    ('ROBINHOOD', 'robinhood_broker', 'USA', 'USD', False),
+                    ('SCHWAB', 'schwab_broker', 'USA', 'USD', False),
+                    ('IBKR', 'ibkr_broker', 'USA', 'USD', False),
+                    ('TASTYTRADE', 'tastytrade_broker', 'USA', 'USD', False),
+                    ('QUESTRADE', 'questrade_broker', 'Canada', 'CAD', False),
+                ]
+                
+                for broker_name, attr_name, region, currency, is_paper in broker_mappings:
+                    broker_instance = getattr(_bot_instance, attr_name, None)
+                    if broker_instance is None:
+                        continue
+                    
+                    # Check if broker is connected (configured and active)
+                    is_connected = getattr(broker_instance, 'connected', False)
+                    
+                    # Get real-time status from health monitor (uses uppercase keys)
+                    health_key = broker_name.upper()
+                    health = health_states.get(health_key, {})
+                    
+                    # Override with health monitor status if available
+                    if health:
+                        is_connected = health.get('is_connected', is_connected)
+                    
+                    # Only show brokers that are connected OR have a disconnect reason
+                    # This filters out unconfigured brokers
+                    if not is_connected and not health.get('reason'):
+                        continue
+                    
+                    state = {
+                        'broker_name': broker_name,
+                        'region': region,
+                        'is_connected': is_connected,
+                        'balance': 0,
+                        'buying_power': 0,
+                        'currency': currency,
+                        'is_paper': is_paper or getattr(broker_instance, 'paper_trade', False),
+                        'status': health.get('status', 'connected' if is_connected else 'disconnected'),
+                        'reason': health.get('reason'),
+                        'error_code': health.get('error_code'),
+                        'last_check': health.get('last_check')
+                    }
+                    
+                    configured_brokers.append(state)
+            
+            # Group by region (USA + Canada only, no India)
+            grouped = {'USA': [], 'Canada': []}
+            for state in configured_brokers:
                 region = state.get('region', 'USA')
                 if region in grouped:
                     grouped[region].append(state)
             
             return jsonify({
                 'success': True,
-                'states': states,
+                'states': configured_brokers,
                 'by_region': grouped,
                 'timestamp': datetime.now().isoformat()
             })
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 500
     
     def _populate_broker_states_from_bot():
-        """Populate broker states from connected bot brokers"""
+        """Populate broker states from connected bot brokers (USA + Canada only)"""
         import asyncio
         
         if not _bot_instance:
             print("[BROKER STATES] No bot instance available")
             return
         
+        # Only USA + Canada brokers (India brokers removed)
         broker_mappings = [
             ('webull', 'broker', 'US', 'USD'),
             ('alpaca_paper', 'paper_broker', 'US', 'USD'),
@@ -16880,7 +16948,7 @@ def register_routes(app):
             ('ibkr', 'ibkr_broker', 'US', 'USD'),
             ('robinhood', 'robinhood_broker', 'US', 'USD'),
             ('schwab', 'schwab_broker', 'US', 'USD'),
-            ('dhanq', 'dhanq_broker', 'IN', 'INR'),
+            ('questrade', 'questrade_broker', 'CA', 'CAD'),
         ]
         
         loop = getattr(_bot_instance, 'loop', None)
@@ -17016,10 +17084,11 @@ def register_routes(app):
     @app.route('/api/v2/broker-states/refresh-all', methods=['POST'])
     @login_required
     def api_refresh_all_broker_states():
-        """Refresh all connected broker balances"""
+        """Refresh all connected broker balances (USA + Canada only)"""
         try:
             results = {}
-            brokers_to_refresh = ['webull', 'alpaca_paper', 'tastytrade', 'ibkr', 'schwab', 'dhanq']
+            # Only USA + Canada brokers
+            brokers_to_refresh = ['webull', 'alpaca_paper', 'tastytrade', 'ibkr', 'schwab', 'robinhood', 'questrade']
             
             for broker_name in brokers_to_refresh:
                 try:
