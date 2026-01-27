@@ -2285,15 +2285,15 @@ function resetBotFilters() {
     loadBotTrades();
 }
 
-// Multi-broker selector rendering
+// Multi-broker selector rendering (USA + Canada only)
 function renderMultiBrokerSelector() {
     const container = document.getElementById('multi-broker-selector');
     if (!container || typeof BrokerStore === 'undefined') return;
     
     const states = BrokerStore.getAllStates();
-    const regions = { USA: [], Canada: [], India: [] };
+    const regions = { USA: [], Canada: [] };
     
-    // Organize brokers by region
+    // Organize brokers by region (USA + Canada only)
     Object.entries(states).forEach(([key, broker]) => {
         const region = broker.region || 'USA';
         if (regions[region]) {
@@ -2304,7 +2304,7 @@ function renderMultiBrokerSelector() {
     let html = '<div style="display: flex; gap: 24px; flex-wrap: wrap;">';
     
     Object.entries(regions).forEach(([region, brokers]) => {
-        const flag = region === 'USA' ? '🇺🇸' : region === 'Canada' ? '🇨🇦' : '🇮🇳';
+        const flag = region === 'USA' ? '🇺🇸' : '🇨🇦';
         html += `<div style="flex: 1; min-width: 280px;">`;
         html += `<div style="font-size: 0.875rem; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary);">${flag} ${region}</div>`;
         html += `<div style="display: flex; flex-wrap: wrap; gap: 8px;">`;
