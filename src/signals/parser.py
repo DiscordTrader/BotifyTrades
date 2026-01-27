@@ -485,20 +485,21 @@ BRACKET_SL_PATTERN = re.compile(
 
 # Jacob format patterns (ENTERED LONG/SHORT stock signals with bracket order data)
 # Example: ENTERED LONG: $SIDU, ENTRY: $4.00 AREA, S.L: $3.68, 1st Target: $4.32-4.37
+# Unicode characters: \u200e=LRM, \u200f=RLM, \u202a-\u202e=embedding controls, \u200b=ZWSP
 JACOB_ENTERED_PATTERN = re.compile(
-    r'ENTERED\s+(LONG|SHORT):\s*\$?([A-Z]{1,5})',
+    r'ENTERED[\s\u200b-\u200f\u202a-\u202e]+(LONG|SHORT)[\s\u200b-\u200f\u202a-\u202e]*:[\s\u200b-\u200f\u202a-\u202e]*\$?([A-Z]{1,5})',
     re.IGNORECASE
 )
 JACOB_ENTRY_PATTERN = re.compile(
-    r'ENTRY:\s*\$?([\d.]+)',
+    r'ENTRY[\s\u200b-\u200f\u202a-\u202e]*:[\s\u200b-\u200f\u202a-\u202e]*\$?([\d.]+)',
     re.IGNORECASE
 )
 JACOB_SL_PATTERN = re.compile(
-    r'S\.?L\.?:[\s\u200e\u200f\u202a-\u202e]*\$?([\d.]+)',
+    r'S\.?L\.?[\s\u200b-\u200f\u202a-\u202e]*:[\s\u200b-\u200f\u202a-\u202e]*\$?([\d.]+)',
     re.IGNORECASE
 )
 JACOB_TARGET_PATTERN = re.compile(
-    r'(?:1st\s+)?Target:\s*\$?([\d.]+)',
+    r'(?:1st[\s\u200b-\u200f\u202a-\u202e]+)?Target[\s\u200b-\u200f\u202a-\u202e]*:[\s\u200b-\u200f\u202a-\u202e]*\$?([\d.]+)',
     re.IGNORECASE
 )
 
