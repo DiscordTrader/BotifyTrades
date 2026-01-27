@@ -11719,6 +11719,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 original_message_id = signal.get('message_id')
                 is_platform_signal = bool(original_message_id and str(original_message_id).strip())
                 
+                # Risk management orders should NOT be treated as platform signals for dedup purposes
+                # They have message_id from original trade but need their own dedup logic (retry with cooldown)
+                is_risk_order = signal.get('_risk_management_order', False)
+                if is_risk_order:
+                    is_platform_signal = False  # Bypass permanent blocking for risk exits
+                
                 # Check for order_id (from conditional orders) to prevent duplicate execution of triggers
                 trigger_id = signal.get('order_id') or signal.get('signal_uuid')
                 
