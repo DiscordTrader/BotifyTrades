@@ -11568,6 +11568,42 @@ def register_routes(app):
                 else:
                     status['zerodha'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
             
+            try:
+                from src.services.broker_health_monitor import get_health_monitor
+                health_monitor = get_health_monitor()
+                health_statuses = health_monitor.get_all_broker_statuses()
+                
+                for broker_key, health_info in health_statuses.items():
+                    if not health_info.get('is_connected', False):
+                        reason = health_info.get('reason', '')
+                        error_code = health_info.get('error_code', '')
+                        
+                        broker_map = {
+                            'WEBULL': 'webull_live',
+                            'WEBULL_LIVE': 'webull_live',
+                            'WEBULL_PAPER': 'webull_paper',
+                            'ALPACA_PAPER': 'alpaca_paper',
+                            'ALPACA_LIVE': 'alpaca_live',
+                            'ROBINHOOD': 'robinhood',
+                            'SCHWAB': 'schwab',
+                            'IBKR_PAPER': 'ibkr_paper',
+                            'IBKR_LIVE': 'ibkr_live',
+                            'TASTYTRADE_PAPER': 'tastytrade_paper',
+                            'TASTYTRADE_LIVE': 'tastytrade_live',
+                            'UPSTOX': 'upstox',
+                            'ZERODHA': 'zerodha',
+                            'DHANQ': 'dhanq'
+                        }
+                        
+                        status_key = broker_map.get(broker_key.upper())
+                        if status_key and status_key in status:
+                            status[status_key]['connected'] = False
+                            status[status_key]['status'] = 'error'
+                            status[status_key]['error'] = reason
+                            status[status_key]['error_code'] = error_code
+            except Exception as hm_err:
+                print(f"[API] Health monitor status merge error: {hm_err}")
+            
             return jsonify({
                 'success': True,
                 'status': status,

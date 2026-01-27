@@ -171,25 +171,26 @@ class BrokerHealthMonitor:
             if error_code:
                 is_connected = False
                 error_str = str(error_code).lower()
+                original_reason = reason
                 
                 if '401' in str(error_code) or 'token' in error_str or 'expired' in error_str:
                     current_status = BrokerStatus.TOKEN_EXPIRED
-                    reason = DisconnectReason.TOKEN_EXPIRED.value
+                    reason = original_reason or DisconnectReason.TOKEN_EXPIRED.value
                 elif '429' in str(error_code) or 'rate' in error_str or 'limit' in error_str:
                     current_status = BrokerStatus.RATE_LIMITED
-                    reason = DisconnectReason.RATE_LIMITED.value
+                    reason = original_reason or DisconnectReason.RATE_LIMITED.value
                 elif '403' in str(error_code) or 'auth' in error_str or 'permission' in error_str:
                     current_status = BrokerStatus.ERROR
-                    reason = DisconnectReason.INSUFFICIENT_PERMISSIONS.value
+                    reason = original_reason or DisconnectReason.INSUFFICIENT_PERMISSIONS.value
                 elif '5' in str(error_code)[:1] or 'server' in error_str or 'internal' in error_str:
                     current_status = BrokerStatus.ERROR
-                    reason = DisconnectReason.API_ERROR.value
+                    reason = original_reason or DisconnectReason.API_ERROR.value
                 elif 'network' in error_str or 'connection' in error_str or 'timeout' in error_str:
                     current_status = BrokerStatus.ERROR
-                    reason = DisconnectReason.NETWORK_ERROR.value
+                    reason = original_reason or DisconnectReason.NETWORK_ERROR.value
                 else:
                     current_status = BrokerStatus.ERROR
-                    reason = reason or DisconnectReason.UNKNOWN.value
+                    reason = original_reason or DisconnectReason.UNKNOWN.value
             
             self._broker_states[broker_key] = {
                 'is_connected': is_connected,

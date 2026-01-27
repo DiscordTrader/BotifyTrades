@@ -498,6 +498,76 @@ input:checked + .slider:before {
 .account-info strong {
     color: #00d4ff;
 }
+.broker-notification-popup {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    min-width: 350px;
+    max-width: 450px;
+    padding: 16px 20px;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    z-index: 10000;
+    animation: slideInRight 0.3s ease;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+.broker-notification-popup.critical {
+    background: linear-gradient(135deg, rgba(255, 80, 80, 0.95), rgba(200, 50, 50, 0.95));
+    border: 1px solid rgba(255, 100, 100, 0.5);
+}
+.broker-notification-popup.warning {
+    background: linear-gradient(135deg, rgba(255, 180, 50, 0.95), rgba(200, 140, 30, 0.95));
+    border: 1px solid rgba(255, 200, 100, 0.5);
+}
+.broker-notification-popup.info {
+    background: linear-gradient(135deg, rgba(0, 200, 150, 0.95), rgba(0, 160, 120, 0.95));
+    border: 1px solid rgba(0, 255, 180, 0.5);
+}
+.broker-notification-popup .icon {
+    font-size: 24px;
+    flex-shrink: 0;
+}
+.broker-notification-popup .content {
+    flex: 1;
+}
+.broker-notification-popup .title {
+    font-weight: 700;
+    font-size: 14px;
+    color: white;
+    margin-bottom: 4px;
+}
+.broker-notification-popup .message {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1.4;
+}
+.broker-notification-popup .close-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+.broker-notification-popup .close-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+@keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slideOutRight {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(100%); opacity: 0; }
+}
 </style>
 
 <!-- Settings Grid -->
@@ -3144,9 +3214,51 @@ async function loadBrokerStatus() {
             updateStatusBadge('tastytrade_paper', data.status.tastytrade_paper);
             updateStatusBadge('tastytrade_live', data.status.tastytrade_live);
             updateStatusBadge('robinhood', data.status.robinhood);
+            
+            updateBrokerConnectionDisplay('webull_live', data.status.webull_live);
+            updateBrokerConnectionDisplay('webull_paper', data.status.webull_paper);
+            updateBrokerConnectionDisplay('alpaca_paper', data.status.alpaca_paper);
+            updateBrokerConnectionDisplay('alpaca_live', data.status.alpaca_live);
+            updateBrokerConnectionDisplay('robinhood', data.status.robinhood);
+            updateBrokerConnectionDisplay('tastytrade_paper', data.status.tastytrade_paper);
+            updateBrokerConnectionDisplay('tastytrade_live', data.status.tastytrade_live);
         }
     } catch (error) {
         console.error('Error loading broker status:', error);
+    }
+}
+
+function updateBrokerConnectionDisplay(brokerId, status) {
+    if (!status) return;
+    
+    const elementMap = {
+        'webull_live': 'webull-live',
+        'webull_paper': 'webull-paper',
+        'alpaca_paper': 'alpaca-paper',
+        'alpaca_live': 'alpaca-live',
+        'robinhood': 'robinhood',
+        'tastytrade_paper': 'tastytrade-paper',
+        'tastytrade_live': 'tastytrade-live'
+    };
+    
+    const prefix = elementMap[brokerId];
+    if (!prefix) return;
+    
+    const statusDiv = document.getElementById(`${prefix}-connection-status`);
+    const textSpan = document.getElementById(`${prefix}-status-text`);
+    
+    if (!statusDiv || !textSpan) return;
+    
+    if (status.status === 'error' && status.error) {
+        statusDiv.className = 'connection-status error';
+        textSpan.textContent = status.error;
+        textSpan.title = status.error_code || '';
+    } else if (status.connected) {
+        statusDiv.className = 'connection-status connected';
+        textSpan.textContent = 'Connected';
+    } else {
+        statusDiv.className = 'connection-status disconnected';
+        textSpan.textContent = 'Not connected';
     }
 }
 
@@ -3827,5 +3939,106 @@ loadConditionalOrdersSettings();
 
 // Refresh broker status every 30 seconds
 setInterval(loadBrokerStatus, 30000);
+
+// ========== BROKER NOTIFICATION POPUP SYSTEM ==========
+let shownNotificationIds = new Set();
+let notificationQueue = [];
+let isShowingNotification = false;
+
+async function fetchBrokerNotifications() {
+    try {
+        const response = await fetch('/api/brokers/notifications');
+        const data = await response.json();
+        
+        if (data.success && data.notifications && data.notifications.length > 0) {
+            for (const notif of data.notifications) {
+                if (!shownNotificationIds.has(notif.id)) {
+                    shownNotificationIds.add(notif.id);
+                    notificationQueue.push(notif);
+                }
+            }
+            processNotificationQueue();
+        }
+    } catch (error) {
+        console.error('Error fetching broker notifications:', error);
+    }
+}
+
+function processNotificationQueue() {
+    if (isShowingNotification || notificationQueue.length === 0) return;
+    
+    isShowingNotification = true;
+    const notif = notificationQueue.shift();
+    showBrokerNotificationPopup(notif);
+}
+
+function showBrokerNotificationPopup(notif) {
+    const existingPopups = document.querySelectorAll('.broker-notification-popup');
+    existingPopups.forEach(p => p.remove());
+    
+    const popup = document.createElement('div');
+    const severity = notif.severity || 'critical';
+    popup.className = `broker-notification-popup ${severity}`;
+    
+    let icon = '🔴';
+    let title = 'Broker Disconnected';
+    
+    if (notif.notification_type === 'broker_reconnect') {
+        icon = '🟢';
+        title = 'Broker Reconnected';
+    } else if (severity === 'warning') {
+        icon = '⚠️';
+        title = 'Broker Warning';
+    }
+    
+    const brokerName = notif.broker_name || 'Unknown';
+    const message = notif.message || 'Connection lost';
+    
+    popup.innerHTML = `
+        <span class="icon">${icon}</span>
+        <div class="content">
+            <div class="title">${title}: ${brokerName}</div>
+            <div class="message">${message}</div>
+        </div>
+        <button class="close-btn" onclick="closeBrokerNotification(this, ${notif.id})">×</button>
+    `;
+    
+    document.body.appendChild(popup);
+    
+    setTimeout(() => {
+        if (popup.parentNode) {
+            popup.style.animation = 'slideOutRight 0.3s ease forwards';
+            setTimeout(() => {
+                popup.remove();
+                isShowingNotification = false;
+                processNotificationQueue();
+            }, 300);
+        }
+    }, 8000);
+}
+
+async function closeBrokerNotification(btn, notifId) {
+    const popup = btn.closest('.broker-notification-popup');
+    if (popup) {
+        popup.style.animation = 'slideOutRight 0.3s ease forwards';
+        setTimeout(() => popup.remove(), 300);
+    }
+    
+    isShowingNotification = false;
+    processNotificationQueue();
+    
+    try {
+        await fetch('/api/brokers/notifications/mark-read', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notification_ids: [notifId] })
+        });
+    } catch (e) {
+        console.error('Error marking notification read:', e);
+    }
+}
+
+fetchBrokerNotifications();
+setInterval(fetchBrokerNotifications, 15000);
 </script>
 {% endblock %}

@@ -718,8 +718,29 @@ class BrokerSyncService:
             try:
                 from src.services.broker_health_monitor import get_health_monitor
                 health_monitor = get_health_monitor()
-                error_code = str(e)
-                health_monitor.update_broker_status(broker_name, False, reason=str(e), error_code=error_code)
+                
+                error_str = str(e).lower()
+                error_code = 'API_ERROR'
+                reason = str(e)
+                
+                if '401' in error_str or 'unauthorized' in error_str or 'invalid token' in error_str:
+                    error_code = 'TOKEN_EXPIRED'
+                    reason = f'{broker_name} access token expired - please re-authenticate'
+                elif 'expired' in error_str or 'session' in error_str:
+                    error_code = 'TOKEN_EXPIRED'
+                    reason = f'{broker_name} session expired - please re-login'
+                elif 'rate limit' in error_str or '429' in error_str:
+                    error_code = 'RATE_LIMITED'
+                    reason = f'{broker_name} rate limited - will retry'
+                elif 'network' in error_str or 'connection' in error_str or 'timeout' in error_str:
+                    error_code = 'NETWORK_ERROR'
+                    reason = f'{broker_name} network error - check connection'
+                elif 'auth' in error_str or 'credential' in error_str:
+                    error_code = 'AUTH_FAILED'
+                    reason = f'{broker_name} authentication failed - check credentials'
+                
+                health_monitor.update_broker_status(broker_name, False, reason=reason, error_code=error_code)
+                print(f"[SYNC] ⚠️ {broker_name} marked DISCONNECTED: {error_code} - {reason}")
             except Exception:
                 pass
             
