@@ -1838,13 +1838,37 @@ class BrokerSyncService:
         """
         try:
             def _insert_lot():
-                from gui_app.database import insert_execution_lot, get_pending_order_metadata, update_pending_order_status
+                from gui_app.database import insert_execution_lot, get_pending_order_metadata, update_pending_order_status, get_connection
                 
                 # Try to hydrate from pending order metadata first
                 meta = get_pending_order_metadata(broker=broker, broker_order_id=broker_order_id)
                 
                 # Use metadata values if available, else fall back to params
-                final_channel_id = channel_id or (meta['channel_id'] if meta else None) or 'UNKNOWN'
+                candidate_channel = channel_id or (meta['channel_id'] if meta else None)
+                
+                # FALLBACK: If still no channel_id, look up from matching trades table
+                if not candidate_channel or candidate_channel == 'UNKNOWN':
+                    try:
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            SELECT channel_id FROM trades 
+                            WHERE symbol = ? 
+                            AND (broker = ? OR broker IS NULL)
+                            AND channel_id IS NOT NULL 
+                            AND channel_id != 'UNKNOWN'
+                            AND channel_id != ''
+                            ORDER BY entry_time DESC
+                            LIMIT 1
+                        """, (symbol, broker))
+                        row = cursor.fetchone()
+                        if row and row['channel_id']:
+                            candidate_channel = row['channel_id']
+                            print(f"[SYNC] ✓ Recovered channel_id={candidate_channel} for {symbol} from trades table")
+                    except Exception as lookup_err:
+                        print(f"[SYNC] ⚠️ Channel lookup fallback failed: {lookup_err}")
+                
+                final_channel_id = candidate_channel or 'UNKNOWN'
                 final_signal_price = signal_price or (meta['signal_price'] if meta else None)
                 final_analyst_qty = analyst_entry_qty or (meta['analyst_qty'] if meta else None)
                 final_sizing_mode = sizing_mode or (meta['sizing_mode'] if meta else None)
