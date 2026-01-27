@@ -4698,7 +4698,26 @@ def try_parse_with_learned_formats(text: str) -> Optional[dict]:
         return None
 
 
+INVALID_STOCK_SYMBOLS = {
+    'NO', 'YES', 'THE', 'AND', 'FOR', 'ALL', 'NEW', 'ARE', 'NOT', 'BUT', 'CAN', 'HAD', 
+    'HAS', 'HER', 'HIM', 'HIS', 'HOW', 'ITS', 'MAY', 'NOW', 'OLD', 'OUT', 'OUR', 'OWN',
+    'SAY', 'SHE', 'TOO', 'USE', 'WAY', 'WHO', 'ANY', 'DAY', 'GET', 'GOT', 'LET', 'PUT',
+    'RUN', 'SEE', 'SET', 'TOP', 'TRY', 'TWO', 'WIN', 'WON', 'MAX', 'MIN', 'PM', 'AM',
+    'SIZE', 'RULES', 'ONLY', 'AFTER', 'BEFORE', 'ENTRY', 'ENTRIES', 'STOP', 'LOSS',
+    'PROFIT', 'TAKE', 'RISK', 'TRADE', 'TRADES', 'FOCUS', 'LOOK', 'OVER', 'UNDER'
+}
+
+INCOMPLETE_OPTION_PATTERN = re.compile(
+    r'^(BTO|STC)\s+\d*\s*\$?([A-Z]{1,5})\s+(\d+\.?\d*)\s+(\d{1,2}/\d{1,2})',
+    re.IGNORECASE
+)
+
 def parse_stock_signal(text: str) -> Optional[dict]:
+    incomplete_option = INCOMPLETE_OPTION_PATTERN.search(text.strip())
+    if incomplete_option:
+        print(f"[SIGNAL] ❌ Rejected incomplete option signal (missing C/P): {text[:80]}")
+        return None
+    
     learned_result = try_parse_with_learned_formats(text)
     if learned_result and learned_result.get('asset') == 'stock':
         print(f"[SIGNAL] Parsed using learned format: {learned_result.get('action')} {learned_result.get('symbol')}")
@@ -4709,6 +4728,10 @@ def parse_stock_signal(text: str) -> Optional[dict]:
         return None
     groups = m.groups()
     direction, qty_str, symbol, price_str = groups[:4]
+    
+    if symbol.upper() in INVALID_STOCK_SYMBOLS:
+        print(f"[SIGNAL] ❌ Rejected invalid symbol '{symbol}' (common word, not a ticker)")
+        return None
     pct_str = groups[4] if len(groups) > 4 else None
     
     # Check for market order: "@ m" or "@m" means execute at market price
