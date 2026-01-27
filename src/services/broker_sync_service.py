@@ -192,7 +192,8 @@ class BrokerSyncService:
         if hasattr(self.broker_manager, 'schwab_broker') and self.broker_manager.schwab_broker:
             schwab_broker = self.broker_manager.schwab_broker
             try:
-                is_auth = await schwab_broker.is_authenticated()
+                # is_authenticated is a regular function, not async
+                is_auth = schwab_broker.is_authenticated()
                 if is_auth:
                     brokers_to_sync.append(('SCHWAB', schwab_broker))
             except Exception:
