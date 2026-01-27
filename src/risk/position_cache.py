@@ -684,7 +684,7 @@ class PositionCache:
                 if channel_id is None:
                     entry.channel_settings = None
                     count += 1
-                elif hasattr(entry, 'channel_id') and str(entry.channel_id) == str(channel_id):
+                elif entry.channel_settings.channel_id and str(entry.channel_settings.channel_id) == str(channel_id):
                     entry.channel_settings = None
                     count += 1
         
