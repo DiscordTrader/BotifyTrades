@@ -9864,17 +9864,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         opt['qty'] = channel_qty_val
                         print(f"[POSITION SIZE] ✓ Using channel fixed QTY: {opt['qty']} contracts (no signal qty)")
                 elif channel_position_size_pct:
-                    # Channel percentage-based sizing - OVERRIDES signal qty entirely
-                    # Position sizing calculates based on buying power percentage, ignoring signal qty
+                    # Channel percentage-based sizing - uses MIN(signal_qty, position_sizing_qty)
+                    # If signal asks for less than position sizing allows, respect signal intent
+                    # If signal asks for more than position sizing allows, cap to position sizing
                     signal_qty_val = opt.get('qty')
                     opt['_position_size_pct'] = float(channel_position_size_pct)
                     opt['_pct_from_channel'] = True
-                    opt['qty'] = 1  # Placeholder - will be recalculated by worker from buying power
                     opt['_calculate_qty'] = True
-                    # NOTE: Do NOT set _signal_qty_to_cap - percentage sizing OVERRIDES signal qty
+                    
                     if signal_qty_val and signal_qty_val > 0:
-                        print(f"[POSITION SIZE] ✓ Channel {channel_position_size_pct}% OVERRIDES signal qty={signal_qty_val} (will calculate from buying power)")
+                        # Signal has qty - will use MIN(signal_qty, calculated_max) in worker
+                        opt['_signal_qty_to_cap'] = signal_qty_val
+                        opt['qty'] = signal_qty_val  # Start with signal qty, may be capped down
+                        print(f"[POSITION SIZE] ✓ Signal qty={signal_qty_val} with channel {channel_position_size_pct}% limit (will use MIN)")
                     else:
+                        # No signal qty - use full channel percentage
+                        opt['qty'] = 1  # Placeholder - will be recalculated by worker
                         print(f"[POSITION SIZE] ✓ Using channel position_size_pct: {channel_position_size_pct}% (will calculate from buying power)")
                 elif signal_qty:
                     # No channel settings - use signal's quantity as-is
