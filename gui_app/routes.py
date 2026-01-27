@@ -1622,7 +1622,78 @@ def register_routes(app):
     @app.route('/')
     def index():
         """Dashboard home page"""
-        response = make_response(render_template('index.html'))
+        # Get broker states for Multi-Broker Dashboard (server-side render)
+        broker_states = {'USA': [], 'Canada': []}
+        try:
+            from .broker_credentials_service import get_all_broker_status
+            
+            # Broker region mapping (USA + Canada only)
+            broker_config = {
+                'webull_live': {'region': 'USA', 'display_name': 'Webull', 'is_paper': False},
+                'alpaca_paper': {'region': 'USA', 'display_name': 'Alpaca (Paper)', 'is_paper': True},
+                'alpaca_live': {'region': 'USA', 'display_name': 'Alpaca (Live)', 'is_paper': False},
+                'robinhood': {'region': 'USA', 'display_name': 'Robinhood', 'is_paper': False},
+                'ibkr_live': {'region': 'USA', 'display_name': 'IBKR (Live)', 'is_paper': False},
+                'ibkr_paper': {'region': 'USA', 'display_name': 'IBKR (Paper)', 'is_paper': True},
+                'tastytrade_live': {'region': 'USA', 'display_name': 'Tastytrade (Live)', 'is_paper': False},
+                'tastytrade_paper': {'region': 'USA', 'display_name': 'Tastytrade (Paper)', 'is_paper': True},
+            }
+            
+            # Get centralized broker status
+            all_status = get_all_broker_status()
+            
+            # Build broker states from centralized status
+            for broker_id, config in broker_config.items():
+                status = all_status.get(broker_id, {})
+                is_connected = status.get('connected', False)
+                
+                # Only include brokers that have been configured (have non-default status or are connected)
+                if is_connected or status.get('status') not in ['disconnected', 'unknown']:
+                    broker_states[config['region']].append({
+                        'broker_name': config['display_name'],
+                        'is_connected': is_connected,
+                        'is_paper': config['is_paper'],
+                        'region': config['region'],
+                        'error': status.get('error')
+                    })
+            
+            # Also check for Schwab separately (it may have different status tracking)
+            try:
+                from src.services.broker_health_monitor import BrokerHealthMonitor
+                health_monitor = BrokerHealthMonitor()
+                for broker_key in ['WEBULL', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB']:
+                    state = health_monitor.get_broker_state(broker_key)
+                    if state and state.get('is_connected'):
+                        # Check if already in list
+                        display_map = {
+                            'WEBULL': 'Webull', 'ALPACA_PAPER': 'Alpaca (Paper)',
+                            'ROBINHOOD': 'Robinhood', 'SCHWAB': 'Schwab'
+                        }
+                        display_name = display_map.get(broker_key, broker_key)
+                        is_paper = 'PAPER' in broker_key
+                        
+                        # Add if not already present
+                        existing = [b['broker_name'] for b in broker_states['USA']]
+                        if display_name not in existing:
+                            broker_states['USA'].append({
+                                'broker_name': display_name,
+                                'is_connected': True,
+                                'is_paper': is_paper,
+                                'region': 'USA'
+                            })
+            except Exception as e:
+                print(f"[INDEX] Health monitor error: {e}")
+            
+        except Exception as e:
+            print(f"[INDEX] Error loading broker states: {e}")
+        
+        # Debug log broker states for dashboard
+        print(f"[INDEX] Rendering dashboard with broker_states: USA={len(broker_states.get('USA', []))} brokers, Canada={len(broker_states.get('Canada', []))} brokers")
+        for region, brokers in broker_states.items():
+            for b in brokers:
+                print(f"[INDEX]   {region}: {b['broker_name']} - connected={b['is_connected']}")
+        
+        response = make_response(render_template('index.html', broker_states=broker_states))
         response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
@@ -16848,6 +16919,8 @@ def register_routes(app):
         - Removes India region (USA + Canada only)
         """
         try:
+            from datetime import datetime
+            
             # Get live status from BrokerHealthMonitor for real-time updates
             # BrokerHealthMonitor uses UPPERCASE normalized keys
             health_states = {}
@@ -17000,6 +17073,8 @@ def register_routes(app):
     def api_refresh_broker_state(broker_name):
         """Refresh broker balance from live connection (auto-refresh endpoint)"""
         try:
+            from datetime import datetime
+            
             broker_config = {
                 'webull': {'country': 'US', 'currency': 'USD'},
                 'alpaca': {'country': 'US', 'currency': 'USD'},
@@ -17083,6 +17158,8 @@ def register_routes(app):
     def api_refresh_all_broker_states():
         """Refresh all connected broker balances (USA + Canada only)"""
         try:
+            from datetime import datetime
+            
             results = {}
             # Only USA + Canada brokers
             brokers_to_refresh = ['webull', 'alpaca_paper', 'tastytrade', 'ibkr', 'schwab', 'robinhood', 'questrade']
@@ -17611,6 +17688,8 @@ def register_routes(app):
     def api_verify_signal():
         """Verify a single signal against real-time market data"""
         try:
+            from datetime import datetime
+            
             data = request.get_json()
             
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
