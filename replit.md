@@ -5,6 +5,8 @@ BotifyTrades is a cross-platform trading automation bot for Discord and Telegram
 
 **Multi-Broker Dashboard** (January 2026): Shows only configured and connected brokers with real-time status from BrokerHealthMonitor. Dynamically updates when brokers connect/disconnect with status indicators showing connection state and error reasons.
 
+**Sync-Ready Worker Gate** (January 2026): Order processing waits for both broker connection AND first sync cycle to complete before processing signals. This prevents race conditions where conditional orders trigger before BrokerHealthMonitor is populated with buying power data. The `sync_ready` event is set by a callback in BrokerSyncService after first sync completes.
+
 ## User Preferences
 - **Security**: Always use environment variables (Replit Secrets) for credentials and license keys
 - **Testing**: Test with paper_trade = true before enabling live trading

@@ -66,8 +66,14 @@ class BrokerSyncService:
         self.running = False
         self._task = None
         self._risk_manager = None  # Set via set_risk_manager()
+        self._first_sync_callback = None  # Called after first sync completes
+        self._first_sync_done = False
         
         print(f"[SYNC] BrokerSyncService initialized (interval={sync_interval}s)")
+    
+    def set_first_sync_callback(self, callback):
+        """Set callback to run after first sync cycle completes (used for sync_ready event)"""
+        self._first_sync_callback = callback
     
     def set_risk_manager(self, risk_manager):
         """Set risk manager reference for pending order reconciliation."""
@@ -269,6 +275,15 @@ class BrokerSyncService:
                     pass
         
         print("[SYNC] ✓ Sync cycle complete", flush=True)
+        
+        # Fire first sync callback (signals sync_ready event to worker)
+        if not self._first_sync_done and self._first_sync_callback:
+            try:
+                self._first_sync_callback()
+                self._first_sync_done = True
+                print("[SYNC] ✓ First sync complete - worker ready to process orders")
+            except Exception as e:
+                print(f"[SYNC] Warning: First sync callback failed: {e}")
         
         if hasattr(self, '_risk_manager') and self._risk_manager:
             try:

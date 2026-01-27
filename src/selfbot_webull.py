@@ -4941,6 +4941,7 @@ class SelfClient(discord.Client):
         self.order_queue = None
         self.broker: Optional[WebullBroker] = None
         self.broker_ready = None
+        self.sync_ready = None  # Set after first broker sync completes (prevents race condition)
         self.processing_ready = None
         self._send_lock = None
         
@@ -5324,6 +5325,7 @@ class SelfClient(discord.Client):
         # Create async objects NOW when event loop is properly set up (fixes Windows "different loop" error)
         self.order_queue = asyncio.Queue()
         self.broker_ready = asyncio.Event()
+        self.sync_ready = asyncio.Event()  # Set after first broker sync - prevents conditional order race condition
         self.processing_ready = asyncio.Event()
         self._send_lock = asyncio.Lock()
         self._message_dedupe_lock = asyncio.Lock()  # Protect message deduplication from race conditions
@@ -5981,6 +5983,10 @@ class SelfClient(discord.Client):
                 broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker, self.upstox_broker, self.zerodha_broker, self.schwab_broker)
                 
                 self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=30)
+                
+                # Wire callback to set sync_ready after first sync (prevents conditional order race condition)
+                self.sync_service.set_first_sync_callback(lambda: self.sync_ready.set())
+                
                 await self.sync_service.start()
                 await asyncio.sleep(0)  # Yield to event loop so sync task can start
                 _original_print("[SYNC] ✓ Trade synchronization service started (30s interval)", flush=True)
@@ -6010,9 +6016,15 @@ class SelfClient(discord.Client):
                 import traceback
                 traceback.print_exc()
                 self.sync_service = None
+                # Still set sync_ready so worker doesn't hang
+                if not self.sync_ready.is_set():
+                    self.sync_ready.set()
         else:
             _original_print("[SYNC] ⏸️ Broker Sync Service DISABLED (Settings → Background Services)", flush=True)
             self.sync_service = None
+            # Set sync_ready immediately so worker doesn't wait forever
+            if not self.sync_ready.is_set():
+                self.sync_ready.set()
 
         worker_task = asyncio.create_task(self.worker())
         await asyncio.sleep(0)  # Yield to event loop so worker can start
@@ -11677,7 +11689,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         """Process orders from queue with pre-trade analysis"""
         _original_print("[WORKER] 💤 Waiting for broker_ready event...", flush=True)
         await self.broker_ready.wait()
-        _original_print("[WORKER] 🚀 Order processor started - broker is ready!", flush=True)
+        _original_print("[WORKER] ✓ Broker ready, waiting for first sync...", flush=True)
+        await self.sync_ready.wait()
+        _original_print("[WORKER] 🚀 Order processor started - broker synced and ready!", flush=True)
         
         while True:
             try:

@@ -489,51 +489,7 @@ class AlpacaBroker(BrokerInterface):
                 
         except Exception as e:
             error_msg = str(e)
-            
-            # Handle insufficient funds - auto-adjust quantity (only once to prevent infinite loop)
-            if 'insufficient' in error_msg.lower() or 'buying power' in error_msg.lower():
-                bracket_key = f"{symbol}_bracket"
-                # Check if this is already an auto-adjusted retry (prevent infinite recursion)
-                if hasattr(self, '_auto_adjust_in_progress') and self._auto_adjust_in_progress.get(bracket_key):
-                    print(f"[{self.name}] ❌ Auto-adjust already attempted for {symbol} bracket - stopping to prevent loop")
-                    del self._auto_adjust_in_progress[bracket_key]
-                else:
-                    try:
-                        # Mark that we're auto-adjusting this symbol
-                        if not hasattr(self, '_auto_adjust_in_progress'):
-                            self._auto_adjust_in_progress = {}
-                        self._auto_adjust_in_progress[bracket_key] = True
-                        
-                        account_info = await self.get_account_info()
-                        buying_power = account_info['buying_power']
-                        
-                        # Get current price
-                        current_price = await self.get_quote(symbol)
-                        
-                        if current_price and buying_power > 0:
-                            # Calculate max quantity we can afford
-                            max_qty = int(buying_power / current_price)
-                            
-                            if max_qty > 0 and max_qty != quantity:
-                                print(f"[{self.name}] Auto-adjusting bracket: {quantity} → {max_qty} shares (buying power: ${buying_power:.2f})")
-                                result = await self.place_bracket_order(
-                                    symbol, action, max_qty, 
-                                    stop_loss_price, profit_target_price, entry_price
-                                )
-                                # Clear the flag after successful adjustment
-                                if bracket_key in self._auto_adjust_in_progress:
-                                    del self._auto_adjust_in_progress[bracket_key]
-                                return result
-                            else:
-                                print(f"[{self.name}] ❌ Cannot auto-adjust bracket: max_qty={max_qty} (same or zero)")
-                        
-                        # Clear flag on completion
-                        if bracket_key in self._auto_adjust_in_progress:
-                            del self._auto_adjust_in_progress[bracket_key]
-                    except Exception as adjust_error:
-                        print(f"[{self.name}] Auto-adjust failed: {adjust_error}")
-                        if hasattr(self, '_auto_adjust_in_progress') and bracket_key in self._auto_adjust_in_progress:
-                            del self._auto_adjust_in_progress[bracket_key]
+            print(f"[{self.name}] ❌ Bracket order exception: {error_msg}")
             
             return OrderResult(
                 success=False,
