@@ -800,6 +800,20 @@ class RobinhoodBroker(BrokerInterface):
                         action=action
                     )
             
+            index_symbols = {'SPX', 'SPXW', 'NDX', 'NDXP', 'VIX', 'VIXW', 'RUT', 'DJX', 'XSP'}
+            is_index_option = symbol.upper() in index_symbols
+            
+            if is_index_option:
+                original_price = price
+                price = round(price * 20) / 20
+                if price != original_price:
+                    print(f"[{self.name}] Index option tick: ${original_price:.2f} → ${price:.2f} ($0.05 min tick)")
+            else:
+                original_price = price
+                price = round(price * 100) / 100
+                if price != original_price:
+                    print(f"[{self.name}] Standard tick: ${original_price:.4f} → ${price:.2f} ($0.01 min tick)")
+            
             def execute_option_order():
                 if is_buy:
                     return rh.orders.order_buy_option_limit(
