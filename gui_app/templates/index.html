@@ -2448,68 +2448,9 @@ function resetBotFilters() {
     loadBotTrades();
 }
 
-// Multi-broker selector rendering (USA + Canada only)
+// Multi-broker selector rendering - delegates to region-based render
 function renderMultiBrokerSelector() {
-    const container = document.getElementById('multi-broker-selector');
-    if (!container || typeof BrokerStore === 'undefined') return;
-    
-    const states = BrokerStore.getAllStates();
-    const regions = { USA: [], Canada: [] };
-    
-    // Organize brokers by region (USA + Canada only)
-    Object.entries(states).forEach(([key, broker]) => {
-        const region = broker.region || 'USA';
-        if (regions[region]) {
-            regions[region].push({ key, ...broker });
-        }
-    });
-    
-    let html = '<div style="display: flex; gap: 24px; flex-wrap: wrap;">';
-    
-    Object.entries(regions).forEach(([region, brokers]) => {
-        const flag = region === 'USA' ? '🇺🇸' : '🇨🇦';
-        html += `<div style="flex: 1; min-width: 280px;">`;
-        html += `<div style="font-size: 0.875rem; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary);">${flag} ${region}</div>`;
-        html += `<div style="display: flex; flex-wrap: wrap; gap: 8px;">`;
-        
-        if (brokers.length === 0) {
-            html += `<div style="color: var(--text-muted); font-size: 0.8rem;">No brokers configured</div>`;
-        }
-        
-        brokers.forEach(broker => {
-            const isActive = currentBroker === broker.key;
-            const statusColor = broker.is_connected ? 'var(--success)' : 'var(--error)';
-            const balance = broker.balance ? `$${parseFloat(broker.balance).toLocaleString('en-US', {minimumFractionDigits: 2})}` : '--';
-            const currency = broker.currency || 'USD';
-            const isPaper = broker.is_paper;
-            
-            html += `
-                <div onclick="selectBroker('${broker.key}')" style="
-                    padding: 12px 16px; 
-                    border-radius: 8px; 
-                    cursor: pointer;
-                    background: ${isActive ? 'var(--accent)' : 'var(--bg-secondary)'};
-                    border: 1px solid ${isActive ? 'var(--accent)' : 'var(--border-color)'};
-                    transition: all 0.2s ease;
-                    min-width: 130px;
-                ">
-                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-                        <span style="width: 8px; height: 8px; border-radius: 50%; background: ${statusColor};"></span>
-                        <span style="font-weight: 600; font-size: 0.85rem;">${broker.broker_name || broker.key}</span>
-                        ${isPaper ? '<span style="font-size: 0.65rem; background: var(--warning); color: black; padding: 1px 4px; border-radius: 3px;">PAPER</span>' : ''}
-                    </div>
-                    <div style="font-size: 0.75rem; color: var(--text-muted);">
-                        ${balance} ${currency}
-                    </div>
-                </div>
-            `;
-        });
-        
-        html += `</div></div>`;
-    });
-    
-    html += '</div>';
-    container.innerHTML = html;
+    renderRegionBrokers();
 }
 
 function selectBroker(brokerKey) {
