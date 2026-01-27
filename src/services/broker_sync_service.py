@@ -787,12 +787,14 @@ class BrokerSyncService:
                 if hasattr(broker_instance, 'get_account_info'):
                     raw = await broker_instance.get_account_info()
                     if raw:
+                        # Schwab's get_account_info returns normalized flat keys, not nested API structure
                         account_info = {
-                            'portfolio_value': raw.get('securitiesAccount', {}).get('currentBalances', {}).get('liquidationValue', 0),
-                            'buying_power': raw.get('securitiesAccount', {}).get('currentBalances', {}).get('buyingPower', 0),
-                            'availableFunds': raw.get('securitiesAccount', {}).get('currentBalances', {}).get('availableFunds', 0),
-                            'optionBuyingPower': raw.get('securitiesAccount', {}).get('currentBalances', {}).get('optionBuyingPower', 0)
+                            'portfolio_value': float(raw.get('portfolio_value', 0) or 0),
+                            'buying_power': float(raw.get('buying_power', 0) or 0),
+                            'cash': float(raw.get('cash', 0) or 0),
+                            'options_buying_power': float(raw.get('buying_power', 0) or 0)  # Use buying_power as options BP
                         }
+                        print(f"[SYNC] Schwab account info: buying_power=${account_info.get('buying_power')}, portfolio=${account_info.get('portfolio_value')}")
             
             elif broker_name == 'ROBINHOOD':
                 if hasattr(broker_instance, 'get_account_info'):
