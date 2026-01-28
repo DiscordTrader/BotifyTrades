@@ -6721,7 +6721,7 @@
   },
   "ALPACA_PAPER_TQQQ_stock": {
     "entry_price": 53.689531,
-    "highest_price": 57.92,
+    "highest_price": 57.975,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -6735,10 +6735,10 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-12T15:35:16.327462",
-    "max_pnl_seen": 7.879504479187943,
+    "max_pnl_seen": 7.981945306991038,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 57.66,
+    "last_evaluated_price": 57.95,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9570,7 +9570,7 @@
     "max_pnl_seen": 13.189565048260423,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 4.41,
+    "last_evaluated_price": 4.33,
     "early_trailing_active": true,
     "early_stop_price": 4.1131,
     "early_steps_locked": 0
@@ -9673,9 +9673,9 @@
   },
   "Webull_SLV_120.0_02/20_C": {
     "entry_price": 5.9,
-    "highest_price": 6.78,
+    "highest_price": 6.85,
     "trailing_activated": false,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -9687,13 +9687,13 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-28T14:30:12.567999",
-    "max_pnl_seen": 14.915254237288133,
+    "max_pnl_seen": 16.101694915254225,
     "dynamic_sl_price": null,
-    "giveback_guard_active": false,
-    "last_evaluated_price": 6.78,
+    "giveback_guard_active": true,
+    "last_evaluated_price": 6.55,
     "early_trailing_active": true,
-    "early_stop_price": 6.431000000000001,
-    "early_steps_locked": 3
+    "early_stop_price": 6.2540000000000004,
+    "early_steps_locked": 2
   },
   "Webull_GLXY_35.0_02/06_C": {
     "entry_price": 1.66,
@@ -9714,14 +9714,14 @@
     "max_pnl_seen": 3.012048192771087,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.57,
+    "last_evaluated_price": 1.555,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
   },
   "Webull_RKLB_100.0_02/20_C": {
     "entry_price": 3.3,
-    "highest_price": 3.6,
+    "highest_price": 3.65,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -9735,12 +9735,12 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-28T14:37:51.304526",
-    "max_pnl_seen": 9.090909090909099,
+    "max_pnl_seen": 10.606060606060609,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 3.475,
+    "last_evaluated_price": 3.65,
     "early_trailing_active": true,
-    "early_stop_price": 3.3,
-    "early_steps_locked": 0
+    "early_stop_price": 3.399,
+    "early_steps_locked": 1
   }
 }

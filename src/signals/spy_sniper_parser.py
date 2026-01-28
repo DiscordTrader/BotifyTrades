@@ -69,7 +69,7 @@ OPTION_PATTERN = re.compile(
     r'([A-Z]{1,5})\s+'                         # Symbol: SPY
     r'(\d{1,2}/\d{1,2})\s+'                    # Expiry: 1/16
     r'(\d+(?:\.\d+)?)\s*([CP])\s*'             # Strike + Type: 691P
-    r'\.?(\d+(?:\.\d+)?)?',                    # Entry Price: .44 (optional)
+    r'(\.?\d+(?:\.\d+)?)?',                    # Entry Price: .44 (optional) - dot INSIDE capture
     re.IGNORECASE
 )
 
@@ -181,7 +181,11 @@ def parse_option_signal(text: str) -> Optional[Dict[str, Any]]:
     price = None
     if match.group(5):
         price_str = match.group(5)
-        price = float(price_str) if not price_str.startswith('.') else float('0' + price_str)
+        # Handle leading dot format: ".37" should become 0.37
+        if price_str.startswith('.'):
+            price = float('0' + price_str)
+        else:
+            price = float(price_str)
     
     return {
         "symbol": symbol,
