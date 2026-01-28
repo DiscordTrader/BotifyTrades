@@ -11,6 +11,13 @@ import os
 import sys
 from pathlib import Path
 from datetime import datetime
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
+
+# EST timezone
+EST = ZoneInfo("America/New_York")
 
 def get_app_directory():
     """Get the application directory - works for both script and frozen exe."""
@@ -99,17 +106,20 @@ class CleanConsoleFormatter(logging.Formatter):
         
         # STRICT: Only show whitelisted messages in console
         if any(msg.startswith(prefix) for prefix in self.CONSOLE_WHITELIST):
-            return msg
+            # Add EST timestamp to console output
+            est_time = datetime.now(EST).strftime('%H:%M:%S')
+            return f"[{est_time} EST] {msg}"
         
         # Everything else is suppressed from console (but goes to files)
         return None
 
 
 class DetailedFileFormatter(logging.Formatter):
-    """Formatter for detailed file logs with timestamps"""
+    """Formatter for detailed file logs with EST timestamps"""
     
     def format(self, record):
-        return f"{self.formatTime(record)} - {record.levelname} - {record.getMessage()}"
+        est_time = datetime.now(EST).strftime('%Y-%m-%d %H:%M:%S')
+        return f"{est_time} EST - {record.levelname} - {record.getMessage()}"
 
 
 def setup_logging():
