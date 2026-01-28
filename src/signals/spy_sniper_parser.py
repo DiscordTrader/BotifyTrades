@@ -235,7 +235,7 @@ def parse_spy_sniper_signal(
     Returns:
         SpySniperSignal object or None if parsing fails
     """
-    if not is_spy_sniper_signal(embed_title):
+    if not is_spy_sniper_signal(embed_title, embed_description):
         return None
     
     signal_type = detect_signal_type(embed_title, embed_description)
