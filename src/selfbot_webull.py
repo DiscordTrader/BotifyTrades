@@ -11419,6 +11419,35 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         )
                     except Exception as meta_err:
                         _original_print(f"[EXEC] Warning: Could not save order metadata: {meta_err}")
+                    
+                    # Track BTO orders for unfilled order chasing (entry chase)
+                    try:
+                        order_chaser = get_order_chaser()
+                        if order_chaser:
+                            # Get entry price range if available
+                            entry_range_high = None
+                            entry_price = signal.get('price') or signal.get('limit_price')
+                            entry_high = signal.get('price_high') or signal.get('entry_high')
+                            if entry_high and float(entry_high) > 0:
+                                entry_range_high = float(entry_high)
+                            
+                            asset_type = signal.get('asset') or signal.get('asset_type', 'stock')
+                            await order_chaser.track_entry_order(
+                                order_id=str(order_id),
+                                broker_id=broker_name,
+                                symbol=signal.get('symbol', ''),
+                                asset_type=asset_type,
+                                quantity=signal.get('qty', 1),
+                                price=float(entry_price) if entry_price else 0.0,
+                                action='BTO',
+                                channel_id=str(signal.get('channel_id', '')),
+                                strike=float(signal.get('strike', 0)) if signal.get('strike') else None,
+                                expiry=signal.get('expiry'),
+                                call_put=signal.get('call_put') or signal.get('direction'),
+                                entry_range_high=entry_range_high
+                            )
+                    except Exception as track_err:
+                        _original_print(f"[EXEC] Warning: Could not track entry order: {track_err}")
                 
                 # Track STC orders from risk management for unfilled order chasing
                 if order_id and signal.get('_risk_management_order') and signal.get('action', '').upper() in ('STC', 'SELL'):

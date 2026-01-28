@@ -213,7 +213,7 @@ ORDER_EXECUTED_SELL_PATTERN = re.compile(
 
 BISHOP_ENTRY_PATTERN = re.compile(
     r'\*\*Option:\*\*\s*([A-Z]+)\s+([\d.]+)\s*([CP])\s+(\d{1,2}/\d{1,2})'  # **Option:** SYMBOL STRIKE C/P MM/DD
-    r'.*?\*\*Entry:\*\*\s*([\d.]+)',  # **Entry:** PRICE
+    r'.*?\*\*Entry:\*\*\s*([\d.]+)(?:\s*-\s*([\d.]+))?',  # **Entry:** PRICE or PRICE-PRICE
     re.IGNORECASE | re.DOTALL
 )
 
@@ -2027,23 +2027,33 @@ def parse_bishop_signal(text: str) -> Optional[Dict[str, Any]]:
     if not text:
         return None
     
-    # Try entry pattern: **Option:** SYMBOL STRIKE C/P EXPIRY ... **Entry:** PRICE
+    # Try entry pattern: **Option:** SYMBOL STRIKE C/P EXPIRY ... **Entry:** PRICE or PRICE-PRICE
     match = BISHOP_ENTRY_PATTERN.search(text)
     if match:
-        symbol, strike, opt_type, expiry, price = match.groups()
-        return {
+        groups = match.groups()
+        symbol, strike, opt_type, expiry, price_low = groups[:5]
+        price_high = groups[5] if len(groups) > 5 else None
+        
+        result = {
             'asset': 'option',
             'action': 'BTO',
             'symbol': symbol.upper(),
             'strike': float(strike),
             'opt_type': opt_type.upper(),
             'expiry': expiry,
-            'price': float(price),
+            'price': float(price_low),
             'qty': None,
             '_qty_from_signal': False,
             '_bishop': True,
             'is_exit': False,
         }
+        
+        # If entry has a range (e.g., 3.30-3.40), store both prices
+        if price_high:
+            result['price_high'] = float(price_high)
+            result['entry_high'] = float(price_high)
+        
+        return result
     
     # Try trimming pattern: "Trimming CAT 640 C 1/16 @$11.25"
     match = BISHOP_TRIMMING_PATTERN.search(text)
