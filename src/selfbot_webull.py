@@ -1451,7 +1451,7 @@ DTE_OPT_PATTERN = r'(BTO|STC)\s+[$]?([A-Za-z]+)\s+[$]?([0-9.]+)\s*([CPcp])\s+(\d
 # Option line groups: (symbol, strike, opt_type, month, day)
 BISHOP_OPTION_PATTERN = r'\*{0,2}Option:\*{0,2}\s*([A-Za-z]+)\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+(\d{1,2})/(\d{1,2})'
 # Entry price groups: (price)
-BISHOP_ENTRY_PATTERN = r'\*{0,2}Entry:\*{0,2}\s*(\d+\.?\d*)'
+BISHOP_ENTRY_PATTERN = r'\*{0,2}Entry:\*{0,2}\s*(\d+\.?\d*)(?:\s*[-–]\s*(\d+\.?\d*))?'
 # Trim/STC format: "Trimming SPX 6900 P 12/30 @$1.30"
 # Groups: (symbol, strike, opt_type, month, day, price)
 BISHOP_TRIM_PATTERN = r'[Tt]rimming\s+(?:\?\w\s+)?([A-Za-z]+)\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+(\d{1,2})/(\d{1,2})\s*@\s*\$?(\d+\.?\d*)'
@@ -4386,9 +4386,18 @@ def parse_option_signal(text: str) -> Optional[dict]:
                                                                                         # Check for Entry price
                                                                                         bishop_entry_m = BISHOP_ENTRY_REGEX.search(text.strip())
                                                                                         if bishop_entry_m:
-                                                                                            price_str = bishop_entry_m.group(1)
-                                                                                            price = float(price_str) if price_str else None
-                                                                                            print(f"[Discord] ✓ Matched Bishop Entry format: BTO {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
+                                                                                            price_low_str = bishop_entry_m.group(1)
+                                                                                            price_high_str = bishop_entry_m.group(2)  # Optional high end of range
+                                                                                            
+                                                                                            # Use HIGHER price from range for better fill (Entry: 1.58-1.60 → use 1.60)
+                                                                                            if price_high_str:
+                                                                                                price_str = price_high_str
+                                                                                                price = float(price_high_str)
+                                                                                                print(f"[Discord] ✓ Matched Bishop Entry format: BTO {symbol} {strike}{opt_type} {expiry} @ ${price_str} (range: {price_low_str}-{price_high_str}, using HIGH)")
+                                                                                            else:
+                                                                                                price_str = price_low_str
+                                                                                                price = float(price_low_str) if price_low_str else None
+                                                                                                print(f"[Discord] ✓ Matched Bishop Entry format: BTO {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
                                                                                             _current_trading_settings = get_trading_settings()
                                                                                             max_position_size = _current_trading_settings['max_position_size']
                                                                                             actual_cost_per_contract = price * 100 if price else 100

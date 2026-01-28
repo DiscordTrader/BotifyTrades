@@ -2034,6 +2034,9 @@ def parse_bishop_signal(text: str) -> Optional[Dict[str, Any]]:
         symbol, strike, opt_type, expiry, price_low = groups[:5]
         price_high = groups[5] if len(groups) > 5 else None
         
+        # Use HIGHER price from range for better fill (Entry: 1.58-1.60 → use 1.60)
+        execution_price = float(price_high) if price_high else float(price_low)
+        
         result = {
             'asset': 'option',
             'action': 'BTO',
@@ -2041,7 +2044,8 @@ def parse_bishop_signal(text: str) -> Optional[Dict[str, Any]]:
             'strike': float(strike),
             'opt_type': opt_type.upper(),
             'expiry': expiry,
-            'price': float(price_low),
+            'price': execution_price,  # Use higher price for execution
+            'price_low': float(price_low),  # Original low price
             'qty': None,
             '_qty_from_signal': False,
             '_bishop': True,

@@ -22,6 +22,12 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 
 **Unified Signal Parsing Pipeline**: A 5-tier architecture for signal detection with security gating, including embed parsers, signal format registries, trader-specific parsers, standard BTO/STC regex, and an AI Fallback (OpenAI, async, confidence-gated). Specific natural language parsers are implemented for various signal formats (e.g., Foxtrades, Bronze Swings, Phoenix). AI and learned-pattern signals require admin approval and meet confidence thresholds before execution. Signal deduplication is implemented with a 5-minute TTL.
 
+**Bishop Signal Parser** (`src/signals/parser.py`, `src/selfbot_webull.py`): Parses Market Bishop format signals with entry range handling:
+- Entry signals: "**Option:** SOFI 24.5 P 2/20 **Entry:** 1.58-1.60"
+- Trim signals: "Trimming CAT 640 C 1/16 @$11.25"
+- Exit signals: "Got stopped out at $1.65"
+- **Entry Range Handling** (January 2026): When entry has a range (e.g., 1.58-1.60), the bot uses the HIGHER price for order execution to improve fill probability
+
 **Risk Management**: Features GUI-configurable automated profit targets, stop losses, trailing stops, intelligent price slippage protection, and auto-quantity calculation, all stored in SQLite. Includes pre-trade analysis, post-execution analysis with OpenAI GPT models, real-time market data integration, and interactive Discord commands. An error monitoring system provides automatic detection, logging, and AI assistant contextual help. A dual-mode channel system for simultaneous execution and signal forwarding, FIFO-based P&L tracking, and Multi-Broker Execution across multiple accounts with per-channel broker selection are supported. Per-channel risk settings allow independent operation, including 4-tier profit targets, trailing stops, and Leave Runner functionality. Position Matching handles ambiguous exit signals, and Trade Monitor detects and posts broker-executed trades.
 
 **Enhanced Portfolio Simulation Engine v2.0**: Provides industry-grade portfolio analysis.
