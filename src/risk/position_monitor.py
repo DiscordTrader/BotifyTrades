@@ -1365,9 +1365,10 @@ class RiskManager:
                 channel_name = channel_settings.channel_name
                 return ExitDecision(
                     should_exit=True,
-                    reason=early_result.reason,
+                    reason=f"EARLY TRAIL [{channel_name}] {early_result.reason}",
                     exit_qty=int(position.quantity),
-                    channel_name=channel_name
+                    is_partial=False,
+                    risk_trigger='early_trailing'
                 )
         
         trailing_pct, activation_pct, stop_pct = get_effective_trailing_settings(

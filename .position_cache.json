@@ -6738,7 +6738,7 @@
     "max_pnl_seen": 7.981945306991038,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 57.24,
+    "last_evaluated_price": 57.23,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9570,7 +9570,7 @@
     "max_pnl_seen": 13.189565048260423,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 4.31,
+    "last_evaluated_price": 4.3191,
     "early_trailing_active": true,
     "early_stop_price": 4.1131,
     "early_steps_locked": 0
@@ -9714,7 +9714,7 @@
     "max_pnl_seen": 3.012048192771087,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.185,
+    "last_evaluated_price": 1.17,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9747,8 +9747,8 @@
     "entry_price": 2.8,
     "highest_price": 3.15,
     "trailing_activated": false,
-    "closing": false,
-    "closing_cycles": 0,
+    "closing": true,
+    "closing_cycles": 1,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "ROBINHOOD",
@@ -9762,7 +9762,7 @@
     "max_pnl_seen": 12.500000000000004,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 2.68,
+    "last_evaluated_price": 2.63,
     "early_trailing_active": true,
     "early_stop_price": 2.884,
     "early_steps_locked": 1
