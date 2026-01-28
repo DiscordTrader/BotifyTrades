@@ -148,8 +148,97 @@ class UnfilledOrderChaser:
             return
         
         self._running = True
+        
+        # Restore tracking for pending orders from database
+        await self._restore_pending_orders()
+        
         self._task = asyncio.create_task(self._monitor_loop())
         print("[ORDER_CHASER] ✓ Monitoring loop started")
+    
+    async def _restore_pending_orders(self):
+        """Restore tracking for pending entry orders from database on startup"""
+        import builtins
+        _print = getattr(builtins, '_original_print', print)
+        _print("[ORDER_CHASER] Starting pending order restore...", flush=True)
+        
+        if not DB_AVAILABLE:
+            _print("[ORDER_CHASER] ⚠️ Database not available for restore", flush=True)
+            return
+        
+        try:
+            from gui_app.database import get_connection
+            conn = get_connection()
+            cursor = conn.cursor()
+            
+            # Get pending BTO orders (status = 'PENDING' and direction in BTO/BUY)
+            cursor.execute('''
+                SELECT 
+                    id, order_id, broker, symbol, asset_type, direction,
+                    quantity, intended_price, channel_id
+                FROM trades 
+                WHERE status = 'PENDING' 
+                AND upper(direction) IN ('BTO', 'BUY')
+                AND order_id IS NOT NULL
+            ''')
+            
+            rows = cursor.fetchall()
+            restored_count = 0
+            
+            for row in rows:
+                order_id = row['order_id']
+                if not order_id or order_id in self._tracked_entry_orders:
+                    continue
+                
+                # Get channel slippage settings if available
+                slippage_max_pct = None
+                channel_id = row['channel_id']
+                if channel_id:
+                    try:
+                        cursor.execute('''
+                            SELECT slippage_protection_enabled, slippage_max_pct
+                            FROM channels WHERE discord_channel_id = ?
+                        ''', (channel_id,))
+                        ch_row = cursor.fetchone()
+                        if ch_row and ch_row['slippage_protection_enabled']:
+                            slippage_max_pct = ch_row['slippage_max_pct']
+                    except Exception:
+                        pass
+                
+                # Determine asset type
+                asset_type = row['asset_type'] or 'option'
+                intended_price = float(row['intended_price'] or 0) if row['intended_price'] else 0
+                
+                # Create tracked order
+                order = TrackedEntryOrder(
+                    order_id=order_id,
+                    broker_id=row['broker'] or 'UNKNOWN',
+                    symbol=row['symbol'] or '',
+                    asset_type=asset_type,
+                    quantity=float(row['quantity'] or 1),
+                    original_price=intended_price,
+                    action='BTO',
+                    placed_at=datetime.now(),  # Use now since we don't know exact placement time
+                    channel_id=str(channel_id) if channel_id else None,
+                    slippage_max_pct=slippage_max_pct,
+                    signal_price=intended_price
+                )
+                
+                self._tracked_entry_orders[order_id] = order
+                restored_count += 1
+                
+                max_price = order.max_chase_price
+                max_info = f"max ${max_price:.2f}" if max_price else "no limit"
+                _print(f"[ORDER_CHASER] Restored entry: {order_id} | {order.symbol} @ ${order.original_price:.2f} | {max_info}", flush=True)
+            
+            if restored_count > 0:
+                _print(f"[ORDER_CHASER] ✓ Restored {restored_count} pending entry orders from database", flush=True)
+            else:
+                _print("[ORDER_CHASER] No pending entry orders to restore", flush=True)
+                
+        except Exception as e:
+            _print(f"[ORDER_CHASER] ⚠️ Failed to restore pending orders: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
     
     async def stop(self):
         """Stop the order chaser and clear tracked orders"""
