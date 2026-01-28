@@ -340,6 +340,85 @@ class PriceMonitorService:
             print(f"[PRICE_MONITOR] Alpaca error for {symbol}: {e}")
             return None
     
+    async def _fetch_index_option_price_yfinance(
+        self,
+        symbol: str,
+        strike: float,
+        expiry: str,
+        option_type: str
+    ) -> Optional[float]:
+        """
+        Fetch index option price from yfinance (SPX, NDX, VIX, etc).
+        
+        yfinance supports index options that brokers like Alpaca/Robinhood don't.
+        Uses ^SPX for SPX, ^NDX for NDX, etc.
+        """
+        try:
+            import yfinance as yf
+            
+            SYMBOL_MAP = {
+                'SPX': '^SPX', 'SPXW': '^SPX',
+                'NDX': '^NDX', 'NDXP': '^NDX',
+                'VIX': '^VIX', 'VIXW': '^VIX',
+                'RUT': '^RUT', 'DJX': '^DJI',
+                'XSP': '^XSP'
+            }
+            
+            yf_symbol = SYMBOL_MAP.get(symbol.upper(), f'^{symbol.upper()}')
+            
+            try:
+                exp_date = datetime.strptime(expiry, "%Y-%m-%d")
+            except ValueError:
+                try:
+                    exp_date = datetime.strptime(expiry, "%m/%d/%Y")
+                except ValueError:
+                    exp_date = datetime.strptime(expiry, "%m/%d")
+                    exp_date = exp_date.replace(year=datetime.now().year)
+            
+            yf_expiry = exp_date.strftime("%Y-%m-%d")
+            
+            def fetch():
+                ticker = yf.Ticker(yf_symbol)
+                try:
+                    chain = ticker.option_chain(yf_expiry)
+                except Exception:
+                    return None
+                
+                opt_df = chain.calls if option_type.upper() == 'C' else chain.puts
+                
+                if opt_df.empty:
+                    return None
+                
+                opt_df['strike_diff'] = abs(opt_df['strike'] - strike)
+                closest = opt_df.loc[opt_df['strike_diff'].idxmin()]
+                
+                if closest['strike_diff'] > 5.0:
+                    return None
+                
+                bid = closest.get('bid', 0)
+                ask = closest.get('ask', 0)
+                last = closest.get('lastPrice', 0)
+                
+                if bid > 0 and ask > 0:
+                    return (bid + ask) / 2
+                elif last > 0:
+                    return last
+                return None
+            
+            price = await asyncio.get_event_loop().run_in_executor(None, fetch)
+            
+            if price and price > 0:
+                print(f"[PRICE_MONITOR] ✓ yfinance index option: {symbol} {strike}{option_type} = ${price:.2f}")
+            
+            return price
+            
+        except ImportError:
+            print("[PRICE_MONITOR] yfinance not installed for index option pricing")
+            return None
+        except Exception as e:
+            print(f"[PRICE_MONITOR] yfinance error for {symbol}: {e}")
+            return None
+    
     async def _fetch_price_from_broker(
         self,
         broker_id: str,
@@ -423,6 +502,15 @@ class PriceMonitorService:
             if price and price > 0:
                 pos.preferred_data_source = "alpaca_legacy"
                 return price
+            
+            INDEX_SYMBOLS = {'SPX', 'SPXW', 'NDX', 'NDXP', 'VIX', 'VIXW', 'XSP', 'RUT', 'DJX'}
+            if pos.symbol.upper() in INDEX_SYMBOLS:
+                price = await self._fetch_index_option_price_yfinance(
+                    pos.symbol, pos.strike, pos.expiry, pos.option_type
+                )
+                if price and price > 0:
+                    pos.preferred_data_source = "yfinance_index"
+                    return price
         
         return None
     
