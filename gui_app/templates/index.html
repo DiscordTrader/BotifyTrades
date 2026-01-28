@@ -74,9 +74,6 @@
                             {% if broker.is_paper %}
                                 <span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(59, 130, 246, 0.3); 
                                     border-radius: 4px; color: #93c5fd; font-weight: 600;">PAPER</span>
-                            {% else %}
-                                <span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(239, 68, 68, 0.3); 
-                                    border-radius: 4px; color: #fca5a5; font-weight: 600;">LIVE</span>
                             {% endif %}
                         </div>
                     {% endfor %}
@@ -103,9 +100,6 @@
                             {% if broker.is_paper %}
                                 <span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(59, 130, 246, 0.3); 
                                     border-radius: 4px; color: #93c5fd; font-weight: 600;">PAPER</span>
-                            {% else %}
-                                <span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(239, 68, 68, 0.3); 
-                                    border-radius: 4px; color: #fca5a5; font-weight: 600;">LIVE</span>
                             {% endif %}
                         </div>
                     {% endfor %}
@@ -938,7 +932,7 @@ function renderRegionBrokers() {
                     <span style="color: #f1f5f9; font-weight: 600; font-size: 0.9rem;">${broker.broker_name}</span>
                     ${broker.is_paper 
                         ? '<span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(59, 130, 246, 0.3); border-radius: 4px; color: #93c5fd; font-weight: 600;">PAPER</span>'
-                        : '<span style="font-size: 0.7rem; padding: 3px 10px; background: rgba(239, 68, 68, 0.3); border-radius: 4px; color: #fca5a5; font-weight: 600;">LIVE</span>'
+                        : ''
                     }
                 </div>`;
         });
