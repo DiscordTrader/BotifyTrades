@@ -220,7 +220,7 @@ class PositionLedger:
     - Exit arbitration
     """
     
-    def __init__(self, db_path: str = "botifytrades.db"):
+    def __init__(self, db_path: str = "bot_data.db"):
         self.db_path = db_path
         self.exit_arbiter = ExitArbiter()
         self._init_tables()
