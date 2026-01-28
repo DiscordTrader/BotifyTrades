@@ -73,12 +73,31 @@ class TrackedEntryOrder:
     strike: Optional[float] = None
     expiry: Optional[str] = None
     call_put: Optional[str] = None
-    entry_range_high: Optional[float] = None  # Upper limit of entry range
+    entry_range_high: Optional[float] = None  # Upper limit of entry range from signal
+    slippage_max_pct: Optional[float] = None  # Per-channel slippage limit %
+    signal_price: Optional[float] = None  # Original signal price for slippage calc
     status: OrderChaseStatus = OrderChaseStatus.PENDING
     chase_attempts: int = 0
     last_chase_at: Optional[datetime] = None
     replacement_order_id: Optional[str] = None
     final_fill_price: Optional[float] = None
+    
+    @property
+    def max_chase_price(self) -> Optional[float]:
+        """Calculate maximum allowed chase price based on slippage limit and entry range"""
+        limits = []
+        
+        # Limit 1: Entry range high from signal
+        if self.entry_range_high:
+            limits.append(self.entry_range_high)
+        
+        # Limit 2: Slippage limit from channel settings
+        if self.slippage_max_pct and self.signal_price:
+            max_with_slippage = self.signal_price * (1 + self.slippage_max_pct / 100)
+            limits.append(round(max_with_slippage, 2))
+        
+        # Return the lower of the two limits (more restrictive)
+        return min(limits) if limits else None
 
 
 class UnfilledOrderChaser:
@@ -216,11 +235,17 @@ class UnfilledOrderChaser:
         strike: Optional[float] = None,
         expiry: Optional[str] = None,
         call_put: Optional[str] = None,
-        entry_range_high: Optional[float] = None
+        entry_range_high: Optional[float] = None,
+        slippage_max_pct: Optional[float] = None,
+        signal_price: Optional[float] = None
     ) -> None:
         """
         Register an entry order (BTO) for monitoring.
         Called after placing a BTO order that might not fill immediately.
+        
+        Args:
+            slippage_max_pct: Per-channel max slippage % (e.g., 10 means max 10% above signal price)
+            signal_price: Original signal price for slippage calculation
         """
         async with self._lock:
             order = TrackedEntryOrder(
@@ -236,10 +261,17 @@ class UnfilledOrderChaser:
                 strike=strike,
                 expiry=expiry,
                 call_put=call_put,
-                entry_range_high=entry_range_high
+                entry_range_high=entry_range_high,
+                slippage_max_pct=slippage_max_pct,
+                signal_price=signal_price or price
             )
             self._tracked_entry_orders[order_id] = order
-            print(f"[ORDER_CHASER] Tracking entry order: {order_id} | {symbol} {quantity}x @ ${price:.2f} (max ${entry_range_high:.2f if entry_range_high else price:.2f})")
+            
+            max_price = order.max_chase_price
+            max_info = f"max ${max_price:.2f}" if max_price else "no limit"
+            if slippage_max_pct:
+                max_info += f" (slippage {slippage_max_pct}%)"
+            print(f"[ORDER_CHASER] Tracking entry order: {order_id} | {symbol} {quantity}x @ ${price:.2f} | {max_info}")
     
     async def mark_entry_filled(self, order_id: str, fill_price: Optional[float] = None):
         """Mark an entry order as filled and stop tracking it"""
@@ -513,8 +545,17 @@ class UnfilledOrderChaser:
                 order.status = OrderChaseStatus.PENDING
                 return
             
-            if order.entry_range_high and chase_price > order.entry_range_high:
-                print(f"[ORDER_CHASER] ⚠️ Chase price ${chase_price:.2f} exceeds max ${order.entry_range_high:.2f} - skipping")
+            # Check against combined max price (min of entry_range_high and slippage limit)
+            max_allowed = order.max_chase_price
+            if max_allowed and chase_price > max_allowed:
+                reason = []
+                if order.entry_range_high and chase_price > order.entry_range_high:
+                    reason.append(f"entry range ${order.entry_range_high:.2f}")
+                if order.slippage_max_pct and order.signal_price:
+                    slippage_limit = order.signal_price * (1 + order.slippage_max_pct / 100)
+                    if chase_price > slippage_limit:
+                        reason.append(f"slippage {order.slippage_max_pct}% (${slippage_limit:.2f})")
+                print(f"[ORDER_CHASER] ⚠️ Chase price ${chase_price:.2f} exceeds limit ${max_allowed:.2f} ({', '.join(reason)}) - skipping")
                 order.status = OrderChaseStatus.PENDING
                 return
             
