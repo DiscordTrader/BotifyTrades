@@ -500,6 +500,7 @@ class BrokerHealthMonitor:
         
         price = signal.get('price') or signal.get('intended_price') or 0
         qty = signal.get('qty', 1)
+        is_market_order = signal.get('is_market_order', False) or signal.get('_ndx_converted', False)
         
         try:
             price = float(price)
@@ -507,8 +508,11 @@ class BrokerHealthMonitor:
         except (ValueError, TypeError):
             return False, f"Invalid price ({price}) or quantity ({qty}) in signal"
         
-        if price <= 0:
+        if price <= 0 and not is_market_order:
             return False, f"Invalid or missing price in signal: {price}"
+        
+        if price <= 0 and is_market_order:
+            print(f"[HEALTH] ℹ️ Allowing market order with price={price} for {signal.get('symbol')}")
         
         if qty <= 0:
             return False, f"Invalid or missing quantity in signal: {qty}"
