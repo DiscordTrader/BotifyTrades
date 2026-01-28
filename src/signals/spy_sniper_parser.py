@@ -74,9 +74,9 @@ OPTION_PATTERN = re.compile(
 )
 
 GAIN_PATTERN = re.compile(
-    r'\.?(\d+(?:\.\d+)?)\s*'                   # Entry price: .44
+    r'(\.?\d+(?:\.\d+)?)\s*'                   # Entry price: .44 - dot INSIDE capture
     r'[\u2192➡️→]+\s*'                          # Arrow: ➡️
-    r'\.?(\d+(?:\.\d+)?)\s*'                   # Current price: 1.32
+    r'(\.?\d+(?:\.\d+)?)\s*'                   # Current price: 1.32 - dot INSIDE capture
     r'[\U0001F7E2🟢]*\s*'                       # Green emoji (optional)
     r'(\d+)\s*%',                              # Gain percent: 200%
     re.IGNORECASE

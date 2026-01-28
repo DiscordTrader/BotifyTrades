@@ -6738,7 +6738,7 @@
     "max_pnl_seen": 7.981945306991038,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 57.95,
+    "last_evaluated_price": 57.62,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9570,7 +9570,7 @@
     "max_pnl_seen": 13.189565048260423,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 4.33,
+    "last_evaluated_price": 4.35,
     "early_trailing_active": true,
     "early_stop_price": 4.1131,
     "early_steps_locked": 0
@@ -9714,16 +9714,16 @@
     "max_pnl_seen": 3.012048192771087,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.555,
+    "last_evaluated_price": 1.615,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
   },
   "Webull_RKLB_100.0_02/20_C": {
     "entry_price": 3.3,
-    "highest_price": 3.65,
+    "highest_price": 3.875,
     "trailing_activated": false,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -9735,12 +9735,12 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-28T14:37:51.304526",
-    "max_pnl_seen": 10.606060606060609,
+    "max_pnl_seen": 17.42424242424243,
     "dynamic_sl_price": null,
-    "giveback_guard_active": false,
-    "last_evaluated_price": 3.65,
+    "giveback_guard_active": true,
+    "last_evaluated_price": 3.7,
     "early_trailing_active": true,
-    "early_stop_price": 3.399,
-    "early_steps_locked": 1
+    "early_stop_price": 3.4979999999999998,
+    "early_steps_locked": 2
   }
 }
