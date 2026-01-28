@@ -12752,13 +12752,18 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             _original_print(f"[LIVE TRADE] Calling {broker_name_used}.place_option_order()...", flush=True)
                             
                             # Build order kwargs
+                            # CRITICAL: Check _use_market_order flag for urgent stop-loss exits
+                            use_market_order = signal.get('_use_market_order', False)
+                            if use_market_order:
+                                _original_print(f"[LIVE TRADE] ⚡ Using MARKET ORDER (urgent exit)", flush=True)
+                                
                             order_kwargs = {
                                 'action': signal['action'],
                                 'symbol': signal['symbol'],
                                 'strike': signal['strike'],
                                 'opt_type': signal['opt_type'],
                                 'expiry_mmdd': signal['expiry'],
-                                'limit_price': signal.get('price')  # None for market orders
+                                'limit_price': None if use_market_order else signal.get('price')  # None for market orders
                             }
                             
                             # For India brokers, determine lots to use
