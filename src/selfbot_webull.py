@@ -8181,7 +8181,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         should_convert = (is_mapped_source_channel or is_signal_routing_source or
                          (ENABLE_SIGNAL_CONVERSION and active_conversion_channel_id and message.channel.id == active_conversion_channel_id))
         
-        print(f"[DEBUG] should_convert={should_convert}, is_signal_routing_source={is_signal_routing_source}, starts_with_bang={message.content.strip().startswith('!')}")
+        # Debug logging for signal routing (can be reduced in production)
+        if execute_enabled or track_enabled:
+            print(f"[DEBUG] Channel config: execute={execute_enabled}, track={track_enabled}, mapped={is_mapped_source_channel}, should_convert={should_convert}")
         
         if should_convert:
             # Don't process commands, only natural language text
