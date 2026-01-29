@@ -153,22 +153,41 @@ class AlpacaBroker(BrokerInterface):
             return False
     
     async def get_account_info(self) -> Dict[str, Any]:
-        """Get account information"""
+        """Get account information including settled cash for good faith violation prevention"""
         try:
             account = await asyncio.to_thread(self.trading_client.get_account)
             # Get options buying power if available (may be different from stock buying power)
             options_bp = getattr(account, 'options_buying_power', None)
             if options_bp is None:
                 options_bp = account.buying_power  # Fall back to regular buying power
+            
+            # SETTLED CASH: Use cash_withdrawable as the conservative "settled cash" measure
+            # This only includes settled funds that are clear for trading without good faith violations
+            cash_withdrawable = float(getattr(account, 'cash_withdrawable', 0) or 0)
+            non_marginable_bp = float(getattr(account, 'non_marginable_buying_power', 0) or 0)
+            
+            # For settled cash, use the more conservative of cash_withdrawable or non_marginable_buying_power
+            # non_marginable_buying_power represents cash that can be used without margin (settled only)
+            settled_cash = min(cash_withdrawable, non_marginable_bp) if non_marginable_bp > 0 else cash_withdrawable
+            
+            # Unsettled cash = total cash - settled (withdrawable) cash
+            total_cash = float(account.cash)
+            unsettled_cash = max(0, total_cash - cash_withdrawable)
+            
             return {
                 'buying_power': float(account.buying_power),
                 'options_buying_power': float(options_bp),
-                'cash': float(account.cash),
-                'portfolio_value': float(account.portfolio_value)
+                'cash': total_cash,
+                'cash_balance': total_cash,
+                'portfolio_value': float(account.portfolio_value),
+                'settled_cash': settled_cash,
+                'unsettled_cash': unsettled_cash,
+                'cash_withdrawable': cash_withdrawable,
+                'non_marginable_buying_power': non_marginable_bp
             }
         except Exception as e:
             print(f"[{self.name}] Error getting account info: {e}")
-            return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+            return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0, 'settled_cash': 0, 'unsettled_cash': 0}
     
     async def get_positions(self) -> Dict[str, Any]:
         """Get current positions"""

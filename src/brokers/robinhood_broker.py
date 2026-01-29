@@ -157,9 +157,9 @@ class RobinhoodBroker(BrokerInterface):
             return False
     
     async def get_account_info(self) -> Dict[str, Any]:
-        """Get account information"""
+        """Get account information including settled cash for good faith violation prevention"""
         if not ROBIN_STOCKS_AVAILABLE or not self._logged_in:
-            return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+            return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0, 'settled_cash': 0, 'unsettled_cash': 0}
         
         try:
             def get_profile():
@@ -174,10 +174,30 @@ class RobinhoodBroker(BrokerInterface):
             buying_power = 0.0
             cash = 0.0
             portfolio_value = 0.0
+            settled_cash = 0.0
+            unsettled_cash = 0.0
             
             if account:
                 buying_power = float(account.get('buying_power', 0) or 0)
                 cash = float(account.get('cash', 0) or 0)
+                
+                # SETTLED CASH: Robinhood provides cash_available_for_withdrawal
+                # This represents settled funds that won't cause good faith violations
+                cash_available_for_withdrawal = float(account.get('cash_available_for_withdrawal', 0) or 0)
+                
+                # Also check unsettled_funds and unsettled_debit if available
+                unsettled_funds = float(account.get('unsettled_funds', 0) or 0)
+                unsettled_debit = float(account.get('unsettled_debit', 0) or 0)
+                
+                # settled_cash = what can be withdrawn (fully settled)
+                settled_cash = cash_available_for_withdrawal
+                
+                # unsettled_cash = cash minus settled (pending settlement)
+                unsettled_cash = max(0, cash - settled_cash)
+                
+                # If unsettled_funds is available, use it as more accurate measure
+                if unsettled_funds > 0:
+                    unsettled_cash = unsettled_funds
             
             if portfolio:
                 portfolio_value = float(portfolio.get('equity', 0) or 0)
@@ -186,12 +206,16 @@ class RobinhoodBroker(BrokerInterface):
                 'buying_power': buying_power,
                 'options_buying_power': buying_power,
                 'cash': cash,
-                'portfolio_value': portfolio_value
+                'cash_balance': cash,
+                'portfolio_value': portfolio_value,
+                'settled_cash': settled_cash,
+                'unsettled_cash': unsettled_cash,
+                'cash_available_for_withdrawal': settled_cash
             }
             
         except Exception as e:
             print(f"[{self.name}] Error getting account info: {e}")
-            return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+            return {'buying_power': 0, 'options_buying_power': 0, 'cash': 0, 'portfolio_value': 0, 'settled_cash': 0, 'unsettled_cash': 0}
     
     async def get_positions(self) -> Dict[str, Any]:
         """Get current stock positions"""

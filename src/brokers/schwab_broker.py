@@ -322,10 +322,10 @@ class SchwabBroker(BrokerInterface):
         print(f"[{self.name}] Disconnected")
     
     async def get_account_info(self) -> Dict[str, Any]:
-        """Get account information"""
+        """Get account information including settled cash for good faith violation prevention"""
         try:
             if not await self._ensure_valid_token():
-                return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+                return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0, 'settled_cash': 0, 'unsettled_cash': 0}
             
             import httpx
             
@@ -346,16 +346,42 @@ class SchwabBroker(BrokerInterface):
                     account = data.get('securitiesAccount', {})
                     balances = account.get('currentBalances', {})
                     
+                    buying_power = float(balances.get('buyingPower', 0))
+                    cash_balance = float(balances.get('cashBalance', 0))
+                    portfolio_value = float(balances.get('liquidationValue', 0))
+                    
+                    # SETTLED CASH: Schwab provides several relevant fields
+                    # - cashAvailableForTrading: Most conservative (settled funds)
+                    # - availableFunds: May include unsettled
+                    # - moneyMarketFund: Cash in money market
+                    cash_available_for_trading = float(balances.get('cashAvailableForTrading', 0))
+                    available_funds = float(balances.get('availableFunds', 0))
+                    
+                    # Use cashAvailableForTrading as settled cash if available, else fall back to availableFunds
+                    if cash_available_for_trading > 0:
+                        settled_cash = cash_available_for_trading
+                    else:
+                        # Fall back: use the more conservative of availableFunds or cashBalance
+                        settled_cash = min(available_funds, cash_balance) if available_funds > 0 else cash_balance
+                    
+                    # Unsettled = total cash - settled
+                    unsettled_cash = max(0, cash_balance - settled_cash)
+                    
                     return {
-                        'buying_power': float(balances.get('buyingPower', 0)),
-                        'cash': float(balances.get('cashBalance', 0)),
-                        'portfolio_value': float(balances.get('liquidationValue', 0))
+                        'buying_power': buying_power,
+                        'cash': cash_balance,
+                        'cash_balance': cash_balance,
+                        'portfolio_value': portfolio_value,
+                        'settled_cash': settled_cash,
+                        'unsettled_cash': unsettled_cash,
+                        'cashAvailableForTrading': cash_available_for_trading,
+                        'availableFunds': available_funds
                     }
                     
         except Exception as e:
             print(f"[{self.name}] Error getting account info: {e}")
         
-        return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0}
+        return {'buying_power': 0, 'cash': 0, 'portfolio_value': 0, 'settled_cash': 0, 'unsettled_cash': 0}
     
     async def get_positions(self) -> Dict[str, Any]:
         """Get current positions"""
