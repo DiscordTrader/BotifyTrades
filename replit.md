@@ -46,6 +46,15 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 
 **Broker Health Monitor**: A centralized, thread-safe system for real-time broker connection status and buying power monitoring. It includes disconnect reason classification, fail-safe pre-trade validation, integer quantity enforcement for options, cache invalidation, and normalized broker name handling. Order processing waits for both broker connection and the first sync cycle to complete before processing signals.
 
+**Settled Cash Validation** (January 2026): Industry-grade good faith violation prevention across all major brokers:
+- **Webull**: Uses `settled_cash` field to block trades when funds are unsettled
+- **Alpaca**: Uses `cash_withdrawable` and `non_marginable_buying_power` (conservative minimum)
+- **Robinhood**: Uses `cash_available_for_withdrawal` as settled cash equivalent
+- **Schwab**: Uses `cashAvailableForTrading` with fallback to `availableFunds`
+- Pre-trade validation blocks BTO orders when settled cash is negative or insufficient
+- STC orders (sell-to-close) bypass validation as they sell existing positions
+- Dashboard displays Settled Cash and Unsettled Cash with color-coded warnings (red for negative)
+
 **Unfilled Order Chaser**: Monitors pending exit orders, cancels stale ones, and replaces them with mid-price limit orders. It includes startup restoration for pending orders from the database.
 
 **Isolated Execution Flows**: Critical architecture separating Channel Execution (direct broker trading) from Signal Routing (webhook forwarding), ensuring no cross-flow contamination.
