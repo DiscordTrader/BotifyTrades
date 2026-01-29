@@ -9865,9 +9865,9 @@
   },
   "Webull_SOFI_24.5_02/20_P": {
     "entry_price": 1.48,
-    "highest_price": 1.705,
+    "highest_price": 1.725,
     "trailing_activated": false,
-    "closing": false,
+    "closing": true,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -9877,7 +9877,16 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {},
+    "pending_orders": {
+      "8NJICHG6T4RJ3M1QTIVG5C30TA": {
+        "order_id": "8NJICHG6T4RJ3M1QTIVG5C30TA",
+        "tier": 1,
+        "qty_expected": 2,
+        "qty_filled": 0,
+        "status": "pending",
+        "created_at": "2026-01-29T15:37:36.784790"
+      }
+    },
     "created_at": "2026-01-29T14:30:13.284596",
     "max_pnl_seen": 9.459459459459469,
     "dynamic_sl_price": null,
@@ -9901,16 +9910,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {
-      "eaf5c91b-07ad-423e-b71a-ea98914667a8": {
-        "order_id": "eaf5c91b-07ad-423e-b71a-ea98914667a8",
-        "tier": 1,
-        "qty_expected": 1,
-        "qty_filled": 0,
-        "status": "pending",
-        "created_at": "2026-01-29T15:35:58.593182"
-      }
-    },
+    "pending_orders": {},
     "created_at": "2026-01-29T14:30:13.285832",
     "max_pnl_seen": 9.868421052631573,
     "dynamic_sl_price": null,
@@ -10126,16 +10126,7 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {
-      "9a97536f-44fa-4f47-bd9c-1c68b826be61": {
-        "order_id": "9a97536f-44fa-4f47-bd9c-1c68b826be61",
-        "tier": 1,
-        "qty_expected": 2,
-        "qty_filled": 0,
-        "status": "pending",
-        "created_at": "2026-01-29T15:35:57.223268"
-      }
-    },
+    "pending_orders": {},
     "created_at": "2026-01-29T15:24:08.684877",
     "max_pnl_seen": 73.25581395348837,
     "dynamic_sl_price": null,
@@ -10165,6 +10156,30 @@
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
     "last_evaluated_price": null,
+    "early_trailing_active": false,
+    "early_stop_price": null,
+    "early_steps_locked": 0
+  },
+  "Webull_SPX_6860.0_01/29_P": {
+    "entry_price": 6.5,
+    "highest_price": 8.25,
+    "trailing_activated": false,
+    "closing": true,
+    "closing_cycles": 0,
+    "stop_loss_price": null,
+    "profit_target_price": null,
+    "broker": "Webull",
+    "raw_symbol": null,
+    "tier1_hit": false,
+    "tier2_hit": false,
+    "tier3_hit": false,
+    "tier4_hit": false,
+    "pending_orders": {},
+    "created_at": "2026-01-29T15:39:10.435050",
+    "max_pnl_seen": 0.0,
+    "dynamic_sl_price": null,
+    "giveback_guard_active": false,
+    "last_evaluated_price": 6.5,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
