@@ -432,6 +432,9 @@ class BrokerHealthMonitor:
         
         FAIL-SAFE: Missing cache returns False (blocks trade).
         
+        WEBULL-SPECIFIC: Uses settled_cash instead of buying_power to prevent
+        good faith violations when settled cash is negative.
+        
         Returns:
             Tuple of (is_valid, reason_if_invalid)
         """
@@ -445,6 +448,29 @@ class BrokerHealthMonitor:
             print(f"[HEALTH] ❌ {reason}")
             return False, reason
         
+        # WEBULL-SPECIFIC: Check settled cash to prevent good faith violations
+        # Negative settled cash means trading with unsettled funds
+        if broker_key == 'WEBULL':
+            settled_cash = cached_info.get('settled_cash', 0)
+            unsettled_cash = cached_info.get('unsettled_cash', 0)
+            buying_power = cached_info.get('buying_power', 0)
+            
+            print(f"[HEALTH] Webull validation: SettledCash=${settled_cash:.2f}, UnsettledCash=${unsettled_cash:.2f}, BP=${buying_power:.2f}, Required=${required_amount:.2f}")
+            
+            if settled_cash <= 0:
+                reason = f"WEBULL: Settled cash is ${settled_cash:.2f} (negative or zero) - cannot trade to avoid good faith violation"
+                print(f"[HEALTH] ❌ {reason}")
+                return False, reason
+            
+            if settled_cash < required_amount:
+                reason = f"WEBULL: Insufficient settled cash: need ${required_amount:.2f}, have ${settled_cash:.2f} (BP=${buying_power:.2f} but unsettled)"
+                print(f"[HEALTH] ❌ {reason}")
+                return False, reason
+            
+            print(f"[HEALTH] ✓ Webull settled cash validation passed: ${settled_cash:.2f} >= ${required_amount:.2f}")
+            return True, ""
+        
+        # Standard buying power check for other brokers
         buying_power = self._extract_buying_power(broker_key, cached_info, asset_type)
         
         if buying_power <= 0:

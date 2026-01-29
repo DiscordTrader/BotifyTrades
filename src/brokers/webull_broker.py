@@ -175,6 +175,28 @@ class WebullBroker(BrokerInterface):
                     except (ValueError, TypeError):
                         pass
             
+            # CRITICAL: Extract settled cash separately (can be negative!)
+            # Negative settled cash = good faith violation risk
+            settled_cash = 0.0
+            unsettled_cash = 0.0
+            for field in ['settledCash', 'settledFunds']:
+                if field in account_data:
+                    try:
+                        settled_cash = float(account_data[field])
+                        print(f"[{self.name}] [DEBUG] Settled cash from '{field}': ${settled_cash:.2f}")
+                        break
+                    except (ValueError, TypeError):
+                        pass
+            
+            for field in ['unsettledCash', 'unsettledFunds']:
+                if field in account_data:
+                    try:
+                        unsettled_cash = float(account_data[field])
+                        print(f"[{self.name}] [DEBUG] Unsettled cash from '{field}': ${unsettled_cash:.2f}")
+                        break
+                    except (ValueError, TypeError):
+                        pass
+            
             # Try multiple field name variations for portfolio value (market value)
             portfolio_value = 0.0
             for field in ['netLiquidation', 'totalMarketValue', 'accountValue', 'totalAccountValue']:
@@ -209,11 +231,13 @@ class WebullBroker(BrokerInterface):
                 'buying_power': buying_power,
                 'options_buying_power': options_buying_power,
                 'cash': cash,
+                'settled_cash': settled_cash,
+                'unsettled_cash': unsettled_cash,
                 'portfolio_value': portfolio_value,
                 'account_type': account_type,
                 'account_id': str(account_id)
             }
-            print(f"[{self.name}] [DEBUG] Final account info: Type={account_type}, BP=${buying_power:.2f}, OptBP=${options_buying_power:.2f}, Cash=${cash:.2f}, PortValue=${portfolio_value:.2f}")
+            print(f"[{self.name}] [DEBUG] Final account info: Type={account_type}, BP=${buying_power:.2f}, OptBP=${options_buying_power:.2f}, SettledCash=${settled_cash:.2f}, UnsettledCash=${unsettled_cash:.2f}, PortValue=${portfolio_value:.2f}")
             return result
         except Exception as e:
             print(f"[{self.name}] Error getting account info: {e}")
