@@ -147,7 +147,7 @@
         </div>
     </div>
     
-    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+    <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px;">
         <div class="card">
             <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 8px;">Buying Power</div>
             <div style="font-size: 1.75rem; font-weight: 700; color: var(--success);" class="sensitive-data" id="buying-power" data-value="$0.00">$0.00</div>
@@ -163,6 +163,14 @@
         <div class="card">
             <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 8px;">Cash Balance</div>
             <div style="font-size: 1.75rem; font-weight: 700; color: var(--warning);" class="sensitive-data" id="cash-balance" data-value="$0.00">$0.00</div>
+        </div>
+        <div class="card" id="settled-cash-card">
+            <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 8px;">Settled Cash</div>
+            <div style="font-size: 1.75rem; font-weight: 700;" class="sensitive-data" id="settled-cash" data-value="$0.00">$0.00</div>
+        </div>
+        <div class="card" id="unsettled-cash-card">
+            <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 8px;">Unsettled Cash</div>
+            <div style="font-size: 1.75rem; font-weight: 700; color: var(--info);" class="sensitive-data" id="unsettled-cash" data-value="$0.00">$0.00</div>
         </div>
     </div>
 </div>
@@ -1805,6 +1813,24 @@ async function loadStats() {
                 upnl.textContent = `$${unrealizedValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                 upnl.setAttribute('data-value', upnl.textContent);
                 upnl.style.color = unrealizedValue >= 0 ? 'var(--success)' : 'var(--error)';
+                
+                // Settled Cash - CRITICAL for Webull good faith violation prevention
+                const settledCashValue = parseFloat(balance.settled_cash) || 0;
+                const sc = document.getElementById('settled-cash');
+                if (sc) {
+                    sc.textContent = `$${settledCashValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    sc.setAttribute('data-value', sc.textContent);
+                    // Color code: red if negative (warning!), green if positive
+                    sc.style.color = settledCashValue >= 0 ? 'var(--success)' : 'var(--error)';
+                }
+                
+                // Unsettled Cash
+                const unsettledCashValue = parseFloat(balance.unsettled_cash) || 0;
+                const uc = document.getElementById('unsettled-cash');
+                if (uc) {
+                    uc.textContent = `$${unsettledCashValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    uc.setAttribute('data-value', uc.textContent);
+                }
                 
                 // Re-apply privacy mode if active
                 if (isPrivacyMode) {

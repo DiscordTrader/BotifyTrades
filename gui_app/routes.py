@@ -3145,6 +3145,8 @@ def register_routes(app):
                                 'net_liquidation': float(account.get('netLiquidation', 0) or account.get('totalMarketValue', 0) or 0),
                                 'total_profit_loss': float(account.get('unrealizedProfitLoss', 0) or 0),
                                 'day_profit_loss': float(account.get('dayProfitLoss', 0) or 0),
+                                'settled_cash': float(account.get('settledCash', 0) or 0),
+                                'unsettled_cash': float(account.get('unsettledCash', 0) or 0),
                                 'status': 'ok'
                             })
                             _api_cache[cache_key] = (result, time.time())
@@ -3158,6 +3160,8 @@ def register_routes(app):
                 'net_liquidation': 0,
                 'total_profit_loss': 0,
                 'day_profit_loss': 0,
+                'settled_cash': 0,
+                'unsettled_cash': 0,
                 'status': 'initializing'
             })
             _api_cache[cache_key] = (result, time.time())
@@ -3178,6 +3182,8 @@ def register_routes(app):
                     'net_liquidation': account_data.get('net_liquidation', 0),
                     'total_profit_loss': account_data.get('total_profit_loss', 0),
                     'day_profit_loss': account_data.get('day_profit_loss', 0),
+                    'settled_cash': account_data.get('settled_cash', 0),
+                    'unsettled_cash': account_data.get('unsettled_cash', 0),
                     'status': 'ok'
                 })
                 _api_cache[cache_key] = (result, time.time())
@@ -4622,6 +4628,56 @@ def register_routes(app):
                             except:
                                 pass
                     
+                    # CRITICAL: Extract settled cash and unsettled cash for good faith violation prevention
+                    settled_cash = 0.0
+                    unsettled_cash = 0.0
+                    
+                    # Parse accountMembers for settled/unsettled cash
+                    if isinstance(account_data, dict) and 'accountMembers' in account_data:
+                        account_members = account_data.get('accountMembers', [])
+                        if isinstance(account_members, list):
+                            member_dict = {}
+                            for member in account_members:
+                                if isinstance(member, dict) and 'key' in member and 'value' in member:
+                                    member_dict[member['key']] = member['value']
+                            
+                            # Try settled cash fields
+                            for field in ['settledCash', 'settledFunds']:
+                                if field in member_dict:
+                                    try:
+                                        settled_cash = float(member_dict[field])
+                                        break
+                                    except:
+                                        pass
+                            
+                            # Try unsettled cash fields
+                            for field in ['unsettledCash', 'unsettledFunds']:
+                                if field in member_dict:
+                                    try:
+                                        unsettled_cash = float(member_dict[field])
+                                        break
+                                    except:
+                                        pass
+                    
+                    # Also check direct fields
+                    if settled_cash == 0.0:
+                        for field in ['settledCash', 'settledFunds']:
+                            if field in account_data:
+                                try:
+                                    settled_cash = float(account_data[field])
+                                    break
+                                except:
+                                    pass
+                    
+                    if unsettled_cash == 0.0:
+                        for field in ['unsettledCash', 'unsettledFunds']:
+                            if field in account_data:
+                                try:
+                                    unsettled_cash = float(account_data[field])
+                                    break
+                                except:
+                                    pass
+                    
                     unrealized_pl = float(account_data.get('unrealizedProfitLoss', 0))
                     
                     # Get Day's P&L from positions data
@@ -4645,7 +4701,9 @@ def register_routes(app):
                         'cash_balance': cash_balance,
                         'net_liquidation': net_liq,
                         'total_profit_loss': unrealized_pl,
-                        'day_profit_loss': day_pl
+                        'day_profit_loss': day_pl,
+                        'settled_cash': settled_cash,
+                        'unsettled_cash': unsettled_cash
                     }
                 except Exception as inner_e:
                     print(f"[API] Error in _blocking_call: {type(inner_e).__name__}: {inner_e}")

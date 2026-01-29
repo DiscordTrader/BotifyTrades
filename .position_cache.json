@@ -10009,7 +10009,7 @@
   },
   "ALPACA_PAPER_FEED_stock": {
     "entry_price": 3.65,
-    "highest_price": 3.7918,
+    "highest_price": 3.815,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -10023,10 +10023,10 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-01-29T14:39:19.223082",
-    "max_pnl_seen": 2.739726027397263,
+    "max_pnl_seen": 4.520547945205481,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 3.4701,
+    "last_evaluated_price": 3.815,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10242,7 +10242,7 @@
     "max_pnl_seen": 6.818181818181812,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.64,
+    "last_evaluated_price": 0.6,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
