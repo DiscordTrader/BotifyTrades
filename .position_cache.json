@@ -9882,7 +9882,7 @@
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.44,
+    "last_evaluated_price": 1.385,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -9906,14 +9906,14 @@
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.42,
+    "last_evaluated_price": 1.38,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
   },
   "Webull_UNH_290.0_01/30_P": {
     "entry_price": 1.44,
-    "highest_price": 2.36,
+    "highest_price": 2.565,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -10009,7 +10009,7 @@
   },
   "ALPACA_PAPER_FEED_stock": {
     "entry_price": 2.77,
-    "highest_price": 3.38,
+    "highest_price": 3.66,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
