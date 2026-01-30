@@ -2218,15 +2218,26 @@ def register_routes(app):
             winning_trades = 0
             
             for pos in closed_positions:
-                realized_pnl = pos.realized_pnl or 0
+                # For signal routing, P&L should be based on SIGNAL price (entry_price)
+                # NOT market price at time of routing (initial_mark_price)
+                signal_price = pos.entry_price
+                
+                # Recalculate P&L using signal price as cost basis
+                if pos.partial_exits:
+                    # Sum P&L from all exits using signal price
+                    recalc_pnl = 0.0
+                    for exit in pos.partial_exits:
+                        exit_value = exit.exit_price * exit.exit_qty * 100
+                        cost_basis = signal_price * exit.exit_qty * 100
+                        recalc_pnl += (exit_value - cost_basis)
+                    realized_pnl = recalc_pnl
+                else:
+                    realized_pnl = pos.realized_pnl or 0
+                
                 total_realized += realized_pnl
                 total_trades += 1
                 if realized_pnl > 0:
                     winning_trades += 1
-                
-                # Use initial_mark_price (actual fill) for display since P&L is calculated from it
-                # Fall back to entry_price (signal price) if initial_mark not set
-                display_entry_price = pos.initial_mark_price if (pos.initial_mark_price and pos.initial_mark_price > 0) else pos.entry_price
                 
                 pnl_data.append({
                     'id': pos.id,
@@ -2235,8 +2246,7 @@ def register_routes(app):
                     'strike': pos.strike,
                     'option_type': pos.option_type,
                     'entry_qty': pos.entry_qty,
-                    'entry_price': display_entry_price,
-                    'signal_price': pos.entry_price,  # Original signal price for reference
+                    'entry_price': signal_price,  # Use signal price for display
                     'realized_pnl': realized_pnl,
                     'entry_time': pos.entry_time,
                     'exit_time': pos.partial_exits[-1].exit_time if pos.partial_exits else None,
