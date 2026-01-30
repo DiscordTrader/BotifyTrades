@@ -7547,9 +7547,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 if not isinstance(targets, list):
                                     targets = [targets]  # Convert single value to list
                                 if len(targets) > 0:
-                                    signal['profit_target_price'] = targets[0]
-                                    signal['profit_targets'] = targets
-                                    sys.stderr.write(f"[CONDITIONAL EXEC] Using signal targets: {targets}\n")
+                                    # Targets are percentages - convert to actual prices
+                                    targets_as_prices = [round(triggered_price * (1 + pct / 100), 2) for pct in targets]
+                                    signal['profit_target_pct'] = targets[0]
+                                    signal['profit_targets_pct'] = targets
+                                    signal['profit_target_price'] = targets_as_prices[0]
+                                    signal['profit_targets'] = targets_as_prices
+                                    sys.stderr.write(f"[CONDITIONAL EXEC] Using signal targets: {targets}% = ${targets_as_prices}\n")
                                     sys.stderr.flush()
                         elif channel_settings:
                             channel_targets_pct = []
