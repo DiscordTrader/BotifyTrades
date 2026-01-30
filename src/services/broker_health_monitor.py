@@ -442,11 +442,20 @@ class BrokerHealthMonitor:
         cached_info = self.get_cached_account_info(broker_key)
         
         if not cached_info:
-            # STRICT MODE: Block trades without cached account data
-            # This ensures we never trade without knowing buying power
-            reason = f"No cached account data for {broker_name} - cannot verify buying power"
-            print(f"[HEALTH] ❌ {reason}")
-            return False, reason
+            # Check if broker is marked as connected - if so, allow trade
+            # This handles the case where conditional orders trigger before first sync completes
+            # The broker itself will validate the order and reject if insufficient funds
+            with self._state_lock:
+                broker_state = self._broker_states.get(broker_key, {})
+                is_connected = broker_state.get('is_connected', False)
+            
+            if is_connected:
+                print(f"[HEALTH] ⚠️ No cached data for {broker_name} but broker connected - allowing trade (broker will validate)")
+                return True, ""
+            else:
+                reason = f"No cached account data for {broker_name} and broker not connected - cannot verify buying power"
+                print(f"[HEALTH] ❌ {reason}")
+                return False, reason
         
         # SETTLED CASH VALIDATION FOR ALL BROKERS
         # Good faith violations can occur on any broker when trading with unsettled funds
