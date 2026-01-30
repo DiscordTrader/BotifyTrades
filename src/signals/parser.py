@@ -383,11 +383,26 @@ DIRECT_SELL_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Leaving runner pattern: "leaving 10%", "leaving 20% MLTX", "leaving 10% IBRX moving my SL"
+# Leaving runner pattern: "leaving 10%", "leaving 20% MLTX", "leaving 10% here GITS"
+# Must exclude reserved words: here, now, on, more
 LEAVING_RUNNER_PATTERN = re.compile(
     r'(?:leaving|keeping)\s+(?P<percent>\d+(?:\.\d+)?)\s*%\s*'
     r'(?:of\s+)?(?:my\s+)?(?:position\s+)?(?:in\s+)?'
-    r'(?:\$?(?P<symbol>[A-Z]{1,5}))?',
+    r'(?:(?:here|now|on|more)\s*)*'  # Location/continuation words (consume but don't capture)
+    r'(?:\$?(?P<symbol>(?!here|now|on|more)[A-Z]{1,5})(?![a-z]))?',
+    re.IGNORECASE
+)
+
+# Phoenix "next target" pattern: "next target 3.95-4", "next target 2.70"
+# This indicates profit target update for active positions
+PHOENIX_NEXT_TARGET_PATTERN = re.compile(
+    r'(?:next\s+)?(?:target|tgt|pt)\s*[:\s]*\$?(?P<price1>[\d.]+)(?:\s*[-–—to]+\s*\$?(?P<price2>[\d.]+))?',
+    re.IGNORECASE
+)
+
+# Phoenix "hit SL" / "stopped out" pattern: indicates stop loss triggered
+PHOENIX_STOP_HIT_PATTERN = re.compile(
+    r'(?:hit\s+(?:my\s+)?(?:SL|stop\s*loss)|stopped?\s+out|stop(?:ped)?\s+hit)',
     re.IGNORECASE
 )
 
@@ -1112,6 +1127,105 @@ def parse_cancel_order_signal(text: str) -> Optional[Dict[str, Any]]:
         
         print(f"[CANCEL] Order cancellation requested for {symbol}")
         return result
+    
+    return None
+
+
+def parse_phoenix_next_target(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse Phoenix "next target" signals like "next target 3.95-4", "target 2.70".
+    
+    These indicate profit target updates for active positions.
+    """
+    match = PHOENIX_NEXT_TARGET_PATTERN.search(text)
+    if match:
+        price1 = float(match.group('price1'))
+        price2 = match.group('price2')
+        
+        if price2:
+            # Range target: use midpoint or keep both
+            target_min = price1
+            target_max = float(price2)
+            target_price = (target_min + target_max) / 2
+        else:
+            target_min = target_max = target_price = price1
+        
+        result = {
+            'format': 'NEXT_TARGET',
+            'action': 'UPDATE_TARGET',
+            'target_price': target_price,
+            'target_min': target_min,
+            'target_max': target_max,
+            '_original_message': text,
+        }
+        
+        if price2:
+            print(f"[PHOENIX] Next target range: ${target_min}-${target_max}")
+        else:
+            print(f"[PHOENIX] Next target: ${target_price}")
+        return result
+    
+    return None
+
+
+def parse_phoenix_stop_hit(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse Phoenix "hit SL" / "stopped out" signals.
+    
+    These indicate the stop loss was triggered.
+    """
+    match = PHOENIX_STOP_HIT_PATTERN.search(text)
+    if match:
+        result = {
+            'format': 'STOP_HIT',
+            'action': 'FULL_EXIT',
+            'exit_percent': 100.0,
+            'reason': 'stop_loss',
+            '_original_message': text,
+        }
+        
+        print(f"[PHOENIX] Stop loss hit - full exit")
+        return result
+    
+    return None
+
+
+def is_phoenix_exit_signal(text: str) -> bool:
+    """Check if text is a Phoenix-style exit signal."""
+    return (
+        is_partial_exit_signal(text) or
+        PHOENIX_NEXT_TARGET_PATTERN.search(text) is not None or
+        PHOENIX_STOP_HIT_PATTERN.search(text) is not None
+    )
+
+
+def parse_phoenix_exit_signal(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse Phoenix-style exit signals including:
+    - "selling 90% here"
+    - "selling 70%"
+    - "next target 3.95-4"
+    - "hit SL"
+    - "leaving 10% here GITS"
+    
+    Returns parsed exit signal or None.
+    """
+    # Try partial exit first (selling X%, leaving X%)
+    partial = parse_partial_exit_signal(text)
+    if partial:
+        return partial
+    
+    # Try next target pattern
+    target = parse_phoenix_next_target(text)
+    if target:
+        return target
+    
+    # Try stop hit pattern
+    stop_hit = parse_phoenix_stop_hit(text)
+    if stop_hit:
+        return stop_hit
+    
+    return None
     
     return None
 
