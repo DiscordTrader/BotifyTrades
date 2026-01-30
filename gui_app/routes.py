@@ -2224,6 +2224,10 @@ def register_routes(app):
                 if realized_pnl > 0:
                     winning_trades += 1
                 
+                # Use initial_mark_price (actual fill) for display since P&L is calculated from it
+                # Fall back to entry_price (signal price) if initial_mark not set
+                display_entry_price = pos.initial_mark_price if (pos.initial_mark_price and pos.initial_mark_price > 0) else pos.entry_price
+                
                 pnl_data.append({
                     'id': pos.id,
                     'symbol': pos.symbol,
@@ -2231,7 +2235,8 @@ def register_routes(app):
                     'strike': pos.strike,
                     'option_type': pos.option_type,
                     'entry_qty': pos.entry_qty,
-                    'entry_price': pos.entry_price,
+                    'entry_price': display_entry_price,
+                    'signal_price': pos.entry_price,  # Original signal price for reference
                     'realized_pnl': realized_pnl,
                     'entry_time': pos.entry_time,
                     'exit_time': pos.partial_exits[-1].exit_time if pos.partial_exits else None,
