@@ -8064,12 +8064,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             try:
                 from src.signals.sir_goldman_parser import is_sir_goldman_message, parse_sir_goldman_signal
                 embeds_as_dicts = [{'title': e.title, 'description': e.description} for e in message.embeds if e.title or e.description]
+                
+                # Debug: Log embed info for channels that might be Sir Goldman
+                if embeds_as_dicts and message.channel.id == 1209181195406024744:
+                    print(f"[SIR-GOLDMAN] 📋 Embed check: {len(embeds_as_dicts)} embeds from channel {message.channel.id}")
+                    for i, emb in enumerate(embeds_as_dicts):
+                        print(f"[SIR-GOLDMAN]   Embed {i}: title='{emb.get('title')}', desc='{str(emb.get('description', ''))[:50]}...'")
+                
                 if is_sir_goldman_message(embeds_as_dicts):
                     sg_signal = parse_sir_goldman_signal(embeds_as_dicts)
                     if sg_signal:
                         is_sir_goldman = True
                         sir_goldman_parsed = sg_signal
                         print(f"[SIR-GOLDMAN] ✓ Early detect: {sg_signal.signal_type.value} {sg_signal.action} {sg_signal.symbol} {sg_signal.strike}{sg_signal.option_type or ''} @ {sg_signal.price}")
+                    else:
+                        print(f"[SIR-GOLDMAN] ⚠️ Embed matched but parse returned None (likely COMMENT)")
             except Exception as sg_err:
                 print(f"[SIR-GOLDMAN] ⚠️ Early detect error: {sg_err}")
         
