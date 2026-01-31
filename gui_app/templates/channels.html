@@ -1238,21 +1238,36 @@ function renderChannels() {
                             <span class="slider"></span>
                         </label>
                     </div>
-                    <div style="background: #0F1319; padding: 8px 10px; display: flex; flex-direction: column; align-items: center;">
-                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; margin-bottom: 4px;">Auto SL</span>
-                        <label class="toggle-switch" style="transform: scale(0.7);">
-                            <input type="checkbox" ${channel.signal_update_automation ? 'checked' : ''} 
-                                   onchange="updateSignalUpdateAutomation(${channel.id}, this.checked)">
-                            <span class="slider"></span>
-                        </label>
+                    <div style="background: #0F1319; padding: 8px 10px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Auto SL</span>
+                            <label class="toggle-switch" style="transform: scale(0.6);">
+                                <input type="checkbox" ${channel.auto_sl_enabled ? 'checked' : ''} 
+                                       onchange="updateAutoSL(${channel.id}, this.checked, null)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 3px;">
+                            <input type="number" id="auto-sl-pct-${channel.id}" value="${channel.auto_sl_pct || ''}" placeholder="50" min="1" max="100" step="1"
+                                   style="width: 40px; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
+                                   ${channel.auto_sl_enabled ? '' : 'disabled'}
+                                   onchange="updateAutoSL(${channel.id}, null, this.value)">
+                            <span style="font-size: 9px; color: #6B7A90;">%</span>
+                        </div>
                     </div>
                     <div style="background: #0F1319; padding: 8px 10px;">
                         <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">Timeout</span>
                         <div style="display: flex; align-items: center; gap: 3px;">
                             <input type="number" value="${channel.order_timeout_minutes || ''}" placeholder="∞" min="1" max="1440" step="1"
                                    style="width: 40px; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
-                                   onchange="updateOrderTimeout(${channel.id}, this.value)">
+                                   onchange="updateOrderTimeout(${channel.id}, this.value)" title="Order timeout (all orders)">
                             <span style="font-size: 9px; color: #6B7A90;">m</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 3px; margin-top: 4px;">
+                            <input type="number" value="${channel.conditional_order_timeout_minutes || ''}" placeholder="∞" min="1" max="1440" step="1"
+                                   style="width: 40px; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #b388ff;"
+                                   onchange="updateConditionalOrderTimeout(${channel.id}, this.value)" title="Conditional order timeout">
+                            <span style="font-size: 9px; color: #b388ff;">c</span>
                         </div>
                     </div>
                     <div style="background: #0F1319; padding: 8px 10px;">
@@ -1285,7 +1300,7 @@ function renderChannels() {
                         <div style="font-size: 8px; color: #6B7A90; margin-top: 4px;">Unfilled Orders</div>
                     </div>
                     <div style="background: #0F1319; padding: 8px 10px;" title="Convert NDX index options to equivalent QQQ options for brokers without NDX access">
-                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
                             <span style="font-size: 9px; color: ${channel.ndx_to_qqq_enabled ? '#b388ff' : '#6B7A90'}; text-transform: uppercase;">NDX→QQQ</span>
                             <label class="toggle-switch" style="transform: scale(0.6);">
                                 <input type="checkbox" id="ndx-qqq-${channel.id}"
@@ -1294,7 +1309,13 @@ function renderChannels() {
                                 <span class="slider"></span>
                             </label>
                         </div>
-                        <div style="font-size: 8px; color: #6B7A90; margin-top: 4px;">Index Convert</div>
+                        <div style="display: flex; align-items: center; gap: 3px;">
+                            <span style="font-size: 8px; color: #6B7A90;">Δ</span>
+                            <input type="number" id="ndx-delta-${channel.id}" value="${channel.ndx_to_qqq_delta || 0.3}" placeholder="0.3" min="0.1" max="1.0" step="0.05"
+                                   style="width: 40px; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #b388ff;"
+                                   ${channel.ndx_to_qqq_enabled ? '' : 'disabled'}
+                                   onchange="updateNdxToQqqDelta(${channel.id}, this.value)" title="Target delta for QQQ option conversion">
+                        </div>
                     </div>
                 </div>
                 
@@ -1681,6 +1702,9 @@ async function updateNdxToQqq(channelId, enabled) {
         
         if (response.ok) {
             showNotification(enabled ? 'NDX→QQQ conversion enabled' : 'NDX→QQQ conversion disabled');
+            // Enable/disable the delta input
+            const deltaInput = document.getElementById(`ndx-delta-${channelId}`);
+            if (deltaInput) deltaInput.disabled = !enabled;
         } else {
             showNotification('Error updating NDX→QQQ setting', 'error');
             await loadChannels();
@@ -1688,6 +1712,79 @@ async function updateNdxToQqq(channelId, enabled) {
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
         await loadChannels();
+    }
+}
+
+async function updateNdxToQqqDelta(channelId, delta) {
+    try {
+        const deltaValue = delta ? parseFloat(delta) : null;
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ndx_to_qqq_delta: deltaValue })
+        });
+        
+        if (response.ok) {
+            showNotification(`NDX→QQQ delta set to ${deltaValue}`);
+        } else {
+            showNotification('Error updating NDX→QQQ delta', 'error');
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+    }
+}
+
+async function updateAutoSL(channelId, enabled, pct) {
+    try {
+        const updates = {};
+        if (enabled !== null) {
+            updates.auto_sl_enabled = enabled ? 1 : 0;
+        }
+        if (pct !== null) {
+            updates.auto_sl_pct = pct ? parseFloat(pct) : null;
+        }
+        
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+        
+        if (response.ok) {
+            if (enabled !== null) {
+                showNotification(enabled ? 'Auto SL enabled' : 'Auto SL disabled');
+                // Enable/disable the percentage input
+                const pctInput = document.getElementById(`auto-sl-pct-${channelId}`);
+                if (pctInput) pctInput.disabled = !enabled;
+            } else {
+                showNotification(`Auto SL set to ${pct}%`);
+            }
+        } else {
+            showNotification('Error updating Auto SL', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function updateConditionalOrderTimeout(channelId, minutes) {
+    try {
+        const timeoutValue = minutes ? parseInt(minutes) : null;
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conditional_order_timeout_minutes: timeoutValue })
+        });
+        
+        if (response.ok) {
+            showNotification(timeoutValue ? `Conditional order timeout set to ${timeoutValue} minutes` : 'Conditional order timeout disabled');
+        } else {
+            showNotification('Error updating conditional order timeout', 'error');
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
     }
 }
 

@@ -559,6 +559,15 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added order_chase_enabled column for per-channel unfilled order chasing")
     
+    # Migrate: Add auto_sl columns for dedicated auto stop-loss toggle (separate from signal_update_automation)
+    try:
+        cursor.execute('SELECT auto_sl_enabled FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN auto_sl_enabled INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN auto_sl_pct REAL DEFAULT 50.0')
+        conn.commit()
+        print("[DATABASE] ✓ Added auto_sl_enabled and auto_sl_pct columns for per-channel auto stop-loss")
+    
     # Conversion channels table (for automatic AI signal conversion)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversion_channels (
@@ -2445,7 +2454,8 @@ def update_channel(channel_id: int, **kwargs):
                    'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
                    'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
                    'use_global_risk_settings', 'circuit_breaker_enabled', 'channel_daily_loss_limit', 'channel_max_positions',
-                   'ndx_to_qqq_enabled', 'ndx_to_qqq_delta', 'order_chase_enabled']:
+                   'ndx_to_qqq_enabled', 'ndx_to_qqq_delta', 'order_chase_enabled',
+                   'auto_sl_enabled', 'auto_sl_pct']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))
