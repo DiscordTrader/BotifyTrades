@@ -7372,7 +7372,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         market = order.get('market', 'US')
                         currency = '₹' if market == 'INDIA' else '$'
                         option_info = f" {order.get('strike')}{order.get('opt_type')}" if order.get('strike') else ""
-                        sys.stderr.write(f"[CONDITIONAL EXEC] Executing order #{order['id']}: {symbol}{option_info} @ {currency}{triggered_price:.2f}\n")
+                        
+                        # Get entry price offset from global settings
+                        entry_price_offset = 0.0
+                        try:
+                            from gui_app.database import get_conditional_order_settings
+                            global_cond_settings = get_conditional_order_settings()
+                            entry_price_offset = float(global_cond_settings.get('entry_price_offset_percent', 0) or 0)
+                        except Exception as e:
+                            sys.stderr.write(f"[CONDITIONAL EXEC] Could not load entry price offset: {e}\n")
+                        
+                        # Apply entry price offset for better fills
+                        execution_price = triggered_price
+                        if entry_price_offset > 0:
+                            execution_price = triggered_price * (1 + entry_price_offset / 100)
+                            sys.stderr.write(f"[CONDITIONAL EXEC] Entry price offset +{entry_price_offset}%: ${triggered_price:.2f} → ${execution_price:.2f}\n")
+                            sys.stderr.flush()
+                        
+                        sys.stderr.write(f"[CONDITIONAL EXEC] Executing order #{order['id']}: {symbol}{option_info} @ {currency}{execution_price:.2f}\n")
                         sys.stderr.flush()
                         
                         # Build a BTO signal from the conditional order
@@ -7380,11 +7397,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             'asset': order.get('asset_type', 'stock'),
                             'action': 'BTO',
                             'symbol': symbol,
-                            'price': triggered_price,
-                            'is_market_order': True,
+                            'price': execution_price,
+                            'is_market_order': entry_price_offset == 0,  # Use limit order if offset applied
                             '_conditional_order_id': order['id'],
                             '_broker_override': broker_name,
                             'channel_id': order.get('channel_id'),  # Critical for RiskManager tracking
+                            '_trigger_price': triggered_price,  # Store original trigger price
                         }
                         
                         # Handle US Options orders with Quote-on-Trigger (QOT)

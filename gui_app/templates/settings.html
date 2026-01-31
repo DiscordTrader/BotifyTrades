@@ -1506,6 +1506,11 @@ input:checked + .slider:before {
             <p class="help-text">Adjust trigger price by +/- percentage (e.g., +0.5% to confirm breakout, -0.5% for early entry)</p>
         </div>
         <div class="form-group">
+            <label>Entry Price Offset (%)</label>
+            <input type="number" id="conditional-orders-entry-offset" value="0" min="0" max="10" step="0.1">
+            <p class="help-text">Add +X% to limit order price for better fills (e.g., +1% means $2.75 trigger places limit @ $2.78)</p>
+        </div>
+        <div class="form-group">
             <div class="toggle-row">
                 <label class="toggle-label">
                     <input type="checkbox" id="conditional-orders-auto-execute" checked>
@@ -2992,6 +2997,7 @@ async function loadConditionalOrdersSettings() {
             document.getElementById('conditional-orders-enabled').checked = settings.enabled === true;
             document.getElementById('conditional-orders-expiry').value = settings.default_expiry || 'end_of_day';
             document.getElementById('conditional-orders-offset').value = settings.trigger_offset_percent || 0;
+            document.getElementById('conditional-orders-entry-offset').value = settings.entry_price_offset_percent || 0;
             document.getElementById('conditional-orders-auto-execute').checked = settings.auto_execute !== false;
             updateConditionalOrdersToggleStatus();
             console.log('[Conditional Orders] UI updated: enabled=' + settings.enabled);
@@ -3022,6 +3028,7 @@ document.getElementById('save-conditional-orders').addEventListener('click', asy
         enabled: document.getElementById('conditional-orders-enabled').checked,
         default_expiry: document.getElementById('conditional-orders-expiry').value,
         trigger_offset_percent: parseFloat(document.getElementById('conditional-orders-offset').value) || 0,
+        entry_price_offset_percent: parseFloat(document.getElementById('conditional-orders-entry-offset').value) || 0,
         auto_execute: document.getElementById('conditional-orders-auto-execute').checked
     };
     

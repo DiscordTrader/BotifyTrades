@@ -675,7 +675,20 @@ class ConditionalOrderService:
             print(f"[CONDITIONAL] No broker configured for channel {channel_id} and none passed")
             return None
         
+        # Get trigger offset: channel-specific first, then fallback to global settings
         trigger_offset = channel_settings.get('trigger_offset_percent', 0.0) or 0.0
+        if trigger_offset == 0:
+            # Fallback to global conditional order settings
+            try:
+                from gui_app.database import get_conditional_order_settings
+                global_settings = get_conditional_order_settings()
+                trigger_offset = float(global_settings.get('trigger_offset_percent', 0) or 0)
+                if trigger_offset != 0:
+                    print(f"[CONDITIONAL] Using GLOBAL trigger offset: {trigger_offset}%")
+            except Exception as e:
+                print(f"[CONDITIONAL] Could not load global offset: {e}")
+                trigger_offset = 0.0
+        
         trigger_price = parsed_signal.get('trigger_price', 0)
         trigger_type = parsed_signal.get('trigger_type', 'over')
         
