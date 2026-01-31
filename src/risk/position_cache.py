@@ -602,6 +602,9 @@ class PositionCache:
         if not entry:
             return False
         
+        if settings is None:
+            return False
+        
         new_hash = settings.compute_settings_hash()
         
         if entry.risk_settings_hash is None:
