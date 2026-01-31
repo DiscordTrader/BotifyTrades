@@ -7384,9 +7384,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         # Apply entry price offset for better fills
                         execution_price = triggered_price
-                        if entry_price_offset > 0:
+                        if entry_price_offset != 0:
                             execution_price = triggered_price * (1 + entry_price_offset / 100)
-                            sys.stderr.write(f"[CONDITIONAL EXEC] Entry price offset +{entry_price_offset}%: ${triggered_price:.2f} → ${execution_price:.2f}\n")
+                            direction = "+" if entry_price_offset > 0 else ""
+                            sys.stderr.write(f"[CONDITIONAL EXEC] Entry price offset {direction}{entry_price_offset}%: ${triggered_price:.2f} → ${execution_price:.2f}\n")
                             sys.stderr.flush()
                         
                         sys.stderr.write(f"[CONDITIONAL EXEC] Executing order #{order['id']}: {symbol}{option_info} @ {currency}{execution_price:.2f}\n")
@@ -7398,7 +7399,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             'action': 'BTO',
                             'symbol': symbol,
                             'price': execution_price,
-                            'is_market_order': entry_price_offset == 0,  # Use limit order if offset applied
+                            'is_market_order': entry_price_offset == 0,  # Use limit order if any offset applied
                             '_conditional_order_id': order['id'],
                             '_broker_override': broker_name,
                             'channel_id': order.get('channel_id'),  # Critical for RiskManager tracking
