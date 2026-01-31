@@ -120,6 +120,9 @@ class TradeState:
         self.current_stop_price = cache.stop_loss_price
         self.dynamic_sl_price = cache.dynamic_sl_price
         self.last_evaluated_price = cache.last_evaluated_price
+        self.early_trailing_active = cache.early_trailing_active
+        self.early_stop_price = cache.early_stop_price
+        self.early_steps_locked = cache.early_steps_locked
         return self
 
 
