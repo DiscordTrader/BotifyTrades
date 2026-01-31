@@ -10473,6 +10473,10 @@ def init_conditional_orders_table():
         ('linked_message_ids', 'TEXT'),
         ('trailing_activation_pct', 'REAL DEFAULT 0'),
         ('trailing_stop_pct', 'REAL DEFAULT 0'),
+        ('exit_strategy_mode', 'TEXT DEFAULT "signal"'),
+        ('slippage_protection_enabled', 'INTEGER DEFAULT 0'),
+        ('slippage_max_pct', 'REAL DEFAULT 10.0'),
+        ('settings_source', 'TEXT DEFAULT "channel"'),
     ]
     for col_name, col_type in extended_columns:
         try:
