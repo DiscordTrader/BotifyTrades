@@ -10189,6 +10189,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
             self._save_signal_to_db(opt, message.channel.id, message.id, author_name)
             print(f"[DATABASE] ✓ Signal saved to database with option details")
+            print(f"[DEBUG FLOW 1] After database save, opt action={opt.get('action', 'N/A')}", flush=True)
             
             # Post Trade Summary for STC signals with PNL data (if enabled)
             # COMPLETELY DISABLED for USER builds - Trade Summary is admin-only feature
