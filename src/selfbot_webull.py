@@ -11999,10 +11999,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             continue  # Skip this signal - do not execute on any broker
 
                 if enabled_brokers and isinstance(enabled_brokers, list) and len(enabled_brokers) > 0:
-                    # MULTI-BROKER EXECUTION - Execute on all selected brokers
-                    _original_print(f"[MULTI-BROKER] Executing on {len(enabled_brokers)} brokers: {enabled_brokers}")
+                    # MULTI-BROKER EXECUTION - Execute on all selected brokers IN PARALLEL
+                    _original_print(f"[MULTI-BROKER] Executing on {len(enabled_brokers)} brokers IN PARALLEL: {enabled_brokers}")
                     
-                    responses = []
+                    import copy
+                    
+                    # Phase 1: Map all broker names to instances first (fast, synchronous)
+                    broker_tasks = []  # List of (broker_name, broker_instance, broker_signal) tuples
+                    immediate_failures = []  # Brokers that failed mapping
+                    
                     for broker_name in enabled_brokers:
                         broker_instance = None
                         broker_name_lower = broker_name.lower().strip()
@@ -12011,15 +12016,15 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         # Alpaca Paper: 'alpaca_paper', 'ALPACA_PAPER', 'alpaca', 'ALPACA'
                         if broker_name_lower in ('alpaca_paper', 'alpaca') and self.paper_broker and hasattr(self.paper_broker, 'name') and self.paper_broker.name == 'ALPACA':
                             broker_instance = self.paper_broker
-                            _original_print(f"[MULTI-BROKER] Using Alpaca PAPER broker")
+                            _original_print(f"[MULTI-BROKER] Queuing Alpaca PAPER broker")
                         # Webull Live: 'webull_live', 'WEBULL_LIVE', 'webull', 'WEBULL'
                         elif broker_name_lower in ('webull_live', 'webull') and self.broker and hasattr(self.broker, 'name') and self.broker.name == 'WEBULL':
                             broker_instance = self.broker
-                            _original_print(f"[MULTI-BROKER] Using Webull LIVE broker")
+                            _original_print(f"[MULTI-BROKER] Queuing Webull LIVE broker")
                         # Webull Paper: 'webull_paper', 'WEBULL_PAPER'
                         elif broker_name_lower == 'webull_paper' and self.paper_broker and hasattr(self.paper_broker, 'name') and self.paper_broker.name == 'WEBULL':
                             broker_instance = self.paper_broker
-                            _original_print(f"[MULTI-BROKER] Using Webull PAPER broker")
+                            _original_print(f"[MULTI-BROKER] Queuing Webull PAPER broker")
                         # IBKR routing - single instance supporting either paper or live mode
                         # Note: IBKR only connects to one TWS/Gateway at a time, mode is determined at startup
                         elif broker_name_lower in ('ibkr_paper', 'ibkr', 'ibkr_live') and self.ibkr_broker and self.ibkr_broker.connected:
@@ -12027,20 +12032,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             # Match the requested mode with the actual mode
                             if broker_name_lower == 'ibkr_paper' and ibkr_is_paper:
                                 broker_instance = self.ibkr_broker
-                                _original_print(f"[MULTI-BROKER] Using IBKR PAPER broker")
+                                _original_print(f"[MULTI-BROKER] Queuing IBKR PAPER broker")
                             elif broker_name_lower == 'ibkr_live' and not ibkr_is_paper:
                                 broker_instance = self.ibkr_broker
-                                _original_print(f"[MULTI-BROKER] Using IBKR LIVE broker")
+                                _original_print(f"[MULTI-BROKER] Queuing IBKR LIVE broker")
                             elif broker_name_lower == 'ibkr':
                                 # Generic 'ibkr' route uses whatever mode is configured
                                 broker_instance = self.ibkr_broker
                                 mode = "PAPER" if ibkr_is_paper else "LIVE"
-                                _original_print(f"[MULTI-BROKER] Using IBKR broker ({mode} mode)")
+                                _original_print(f"[MULTI-BROKER] Queuing IBKR broker ({mode} mode)")
                             else:
                                 # Requested mode doesn't match configured mode - append failure response
                                 configured_mode = "PAPER" if ibkr_is_paper else "LIVE"
                                 _original_print(f"[MULTI-BROKER] ⚠️ IBKR mode mismatch: requested '{broker_name}' but configured as {configured_mode}")
-                                responses.append({
+                                immediate_failures.append({
                                     'success': False,
                                     'msg': f'IBKR mode mismatch: requested {broker_name} but configured as {configured_mode}',
                                     'broker': broker_name
@@ -12049,54 +12054,85 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         # Tastytrade Paper: 'tastytrade_paper', 'TASTYTRADE_PAPER'
                         elif broker_name_lower == 'tastytrade_paper' and self.tastytrade_broker and self.tastytrade_broker.connected and not self.tastytrade_broker.is_live:
                             broker_instance = self.tastytrade_broker
-                            _original_print(f"[MULTI-BROKER] Using Tastytrade PAPER broker")
+                            _original_print(f"[MULTI-BROKER] Queuing Tastytrade PAPER broker")
                         # Tastytrade Live: 'tastytrade_live', 'TASTYTRADE_LIVE', 'tastytrade', 'TASTYTRADE'
                         elif broker_name_lower in ('tastytrade_live', 'tastytrade') and self.tastytrade_broker and self.tastytrade_broker.connected and self.tastytrade_broker.is_live:
                             broker_instance = self.tastytrade_broker
-                            _original_print(f"[MULTI-BROKER] Using Tastytrade LIVE broker")
+                            _original_print(f"[MULTI-BROKER] Queuing Tastytrade LIVE broker")
                         # DhanQ (India - Always LIVE): 'dhanq', 'DHANQ'
                         elif broker_name_lower == 'dhanq' and self.dhanq_broker and self.dhanq_broker.connected:
                             broker_instance = self.dhanq_broker
-                            _original_print(f"[MULTI-BROKER] Using DhanQ LIVE broker (India)")
+                            _original_print(f"[MULTI-BROKER] Queuing DhanQ LIVE broker (India)")
                         # Upstox (India - Always LIVE): 'upstox', 'UPSTOX'
                         elif broker_name_lower == 'upstox' and self.upstox_broker and self.upstox_broker.connected:
                             broker_instance = self.upstox_broker
-                            _original_print(f"[MULTI-BROKER] Using Upstox LIVE broker (India)")
+                            _original_print(f"[MULTI-BROKER] Queuing Upstox LIVE broker (India)")
                         # Zerodha (India - Always LIVE): 'zerodha', 'ZERODHA'
                         elif broker_name_lower == 'zerodha' and self.zerodha_broker and self.zerodha_broker.connected:
                             broker_instance = self.zerodha_broker
-                            _original_print(f"[MULTI-BROKER] Using Zerodha LIVE broker (India)")
+                            _original_print(f"[MULTI-BROKER] Queuing Zerodha LIVE broker (India)")
                         # Robinhood (LIVE ONLY - NO PAPER MODE): 'robinhood', 'ROBINHOOD', 'rh'
                         elif broker_name_lower in ('robinhood', 'rh') and self.robinhood_broker and self.robinhood_broker.connected:
                             broker_instance = self.robinhood_broker
-                            _original_print(f"[MULTI-BROKER] Using Robinhood LIVE broker (WARNING: NO PAPER MODE)")
+                            _original_print(f"[MULTI-BROKER] Queuing Robinhood LIVE broker (WARNING: NO PAPER MODE)")
                         # Charles Schwab: 'schwab', 'SCHWAB', 'schwab_live', 'SCHWAB_LIVE', 'schwab_paper', 'SCHWAB_PAPER'
                         elif broker_name_lower in ('schwab', 'schwab_live', 'schwab_paper') and self.schwab_broker and self.schwab_broker.connected:
                             is_paper = getattr(self.schwab_broker, 'dry_run', True)
                             mode = "PAPER" if is_paper else "LIVE"
                             broker_instance = self.schwab_broker
-                            _original_print(f"[MULTI-BROKER] Using Schwab {mode} broker")
+                            _original_print(f"[MULTI-BROKER] Queuing Schwab {mode} broker")
                         # Questrade (Canada - LIVE): 'questrade', 'QUESTRADE'
                         elif broker_name_lower == 'questrade' and hasattr(self, 'questrade_broker') and self.questrade_broker and self.questrade_broker.connected:
                             broker_instance = self.questrade_broker
-                            _original_print(f"[MULTI-BROKER] Using Questrade LIVE broker (Canada)")
+                            _original_print(f"[MULTI-BROKER] Queuing Questrade LIVE broker (Canada)")
                         else:
                             _original_print(f"[MULTI-BROKER] ⚠️  Broker '{broker_name}' not available or not connected")
                             _original_print(f"[DEBUG] Requested: '{broker_name_lower}', paper_broker: {getattr(self.paper_broker, 'name', None) if self.paper_broker else None}, broker: {getattr(self.broker, 'name', None) if self.broker else None}")
-                            responses.append({
+                            immediate_failures.append({
                                 'success': False,
                                 'msg': f'{broker_name} not available',
                                 'broker': broker_name
                             })
                             continue
                         
-                        # Execute on this broker - create a copy of signal to avoid cross-broker qty contamination
-                        # Each broker needs to independently calculate qty based on its own portfolio
-                        import copy
+                        # Prepare signal copy for this broker
                         broker_signal = copy.deepcopy(signal)
-                        broker_signal['broker'] = broker_name.upper() # Ensure correct broker is passed for DB saving
-                        resp = await self.execute_on_single_broker(broker_signal, broker_name.upper(), broker_instance)
-                        responses.append(resp)
+                        broker_signal['broker'] = broker_name.upper()
+                        broker_tasks.append((broker_name.upper(), broker_instance, broker_signal))
+                    
+                    # Phase 2: Execute ALL broker orders in PARALLEL using asyncio.gather
+                    responses = list(immediate_failures)  # Start with any mapping failures
+                    
+                    if broker_tasks:
+                        _original_print(f"[MULTI-BROKER] ⚡ Launching {len(broker_tasks)} orders in parallel...")
+                        
+                        async def execute_with_name(name, instance, sig):
+                            """Wrapper to include broker name in result"""
+                            try:
+                                result = await self.execute_on_single_broker(sig, name, instance)
+                                result['broker'] = name
+                                return result
+                            except Exception as e:
+                                return {'success': False, 'msg': str(e), 'broker': name}
+                        
+                        # Create coroutines for all brokers
+                        coroutines = [
+                            execute_with_name(name, instance, sig) 
+                            for name, instance, sig in broker_tasks
+                        ]
+                        
+                        # Execute all in parallel - return_exceptions=True prevents one failure from killing others
+                        parallel_results = await asyncio.gather(*coroutines, return_exceptions=True)
+                        
+                        # Process results
+                        for i, result in enumerate(parallel_results):
+                            if isinstance(result, Exception):
+                                broker_name = broker_tasks[i][0]
+                                responses.append({'success': False, 'msg': str(result), 'broker': broker_name})
+                            else:
+                                responses.append(result)
+                        
+                        _original_print(f"[MULTI-BROKER] ⚡ Parallel execution complete")
                     
                     # Handle multi-broker responses
                     # Check success flag OR if orderId has a truthy value (not just key existence)
