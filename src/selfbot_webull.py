@@ -10181,7 +10181,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     traceback.print_exc()
             
             print(f"[SIGNAL PARSED] ✓ Option Signal: {opt['action']} {opt['qty']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ ${opt['price']}")
+            import sys
+            sys.stdout.flush()
             print(f"[CHANNEL CONFIG] execute_enabled={execute_enabled}, track_enabled={track_enabled}, paper_trade_enabled={channel_info.get('paper_trade_enabled', 0) if channel_info else 0}")
+            sys.stdout.flush()
             
             # STRICT ROUTING CHECK: Validate broker assignment BEFORE creating lot
             # This prevents orphaned PNL lots when signals would be rejected at execution
