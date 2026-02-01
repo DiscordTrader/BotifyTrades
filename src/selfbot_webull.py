@@ -5072,7 +5072,6 @@ class SelfClient(discord.Client):
     
     def _save_signal_to_db(self, signal: dict, channel_id: int, message_id: int, author_name: str = None):
         """Save signal to database for tracking and process PNL"""
-        _original_print(f"[DEBUG SAVE_DB] ENTERED _save_signal_to_db, symbol={signal.get('symbol')}", flush=True)
         if not self.db:
             return
         
@@ -10187,11 +10186,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     return  # Exit early - don't create lot or queue signal
             
             # Save signal to database (for both EXECUTE and TRACK channels) with author attribution
-            _original_print(f"[DEBUG FLOW 0] ABOUT TO SAVE TO DB, opt action={opt.get('action', 'N/A')}", flush=True)
             author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
             self._save_signal_to_db(opt, message.channel.id, message.id, author_name)
-            _original_print(f"[DATABASE] ✓ Signal saved to database with option details", flush=True)
-            _original_print(f"[DEBUG FLOW 1] After database save, opt action={opt.get('action', 'N/A')}", flush=True)
+            print(f"[DATABASE] ✓ Signal saved to database with option details")
             
             # Post Trade Summary for STC signals with PNL data (if enabled)
             # COMPLETELY DISABLED for USER builds - Trade Summary is admin-only feature
@@ -10224,22 +10221,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             # Execute if execute_enabled flag is True (category is for UI organization only)
             # Apply ticker filter BEFORE execution (BTO only - exits always pass)
-            _original_print(f"[DEBUG TICKER] execute_enabled={execute_enabled}, channel_info={bool(channel_info)}, action={opt.get('action', 'N/A')}", flush=True)
             if execute_enabled and channel_info and opt.get('action', 'BTO').upper() == 'BTO':
                 try:
                     from src.signals.validator import check_ticker_filter
                     ticker_to_check = opt.get('symbol', '').upper().replace('$', '')
-                    _original_print(f"[DEBUG TICKER] Checking filter for: {ticker_to_check}", flush=True)
                     passes_filter, filter_reason = check_ticker_filter(channel_info, ticker_to_check)
-                    _original_print(f"[DEBUG TICKER] Result: passes={passes_filter}, reason={filter_reason}", flush=True)
                     if not passes_filter:
-                        _original_print(f"[TICKER FILTER] ✗ BLOCKED: {ticker_to_check} - {filter_reason}", flush=True)
-                        _original_print(f"[TICKER FILTER] Signal NOT queued for execution", flush=True)
+                        print(f"[TICKER FILTER] ✗ BLOCKED: {ticker_to_check} - {filter_reason}")
+                        print(f"[TICKER FILTER] Signal NOT queued for execution")
                         return  # Exit early - don't execute this signal
                     else:
-                        _original_print(f"[TICKER FILTER] ✓ PASSED: {ticker_to_check} - {filter_reason}", flush=True)
+                        print(f"[TICKER FILTER] ✓ PASSED: {ticker_to_check} - {filter_reason}")
                 except Exception as tf_err:
-                    _original_print(f"[TICKER FILTER] ⚠️ Error checking filter: {tf_err}", flush=True)
+                    print(f"[TICKER FILTER] ⚠️ Error checking filter: {tf_err}")
             
             if execute_enabled:
                 print(f"[ROUTE] EXECUTE enabled - adding to order queue", flush=True)
