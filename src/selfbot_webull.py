@@ -10180,8 +10180,34 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     import traceback
                     traceback.print_exc()
             
+            print(f"[DEBUG-TEST-123] About to print SIGNAL PARSED")
             print(f"[SIGNAL PARSED v2] ✓ Option Signal: {opt['action']} {opt['qty']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ ${opt['price']}")
             print(f"[CHANNEL CONFIG] execute_enabled={execute_enabled}, track_enabled={track_enabled}, paper_trade_enabled={channel_info.get('paper_trade_enabled', 0) if channel_info else 0}")
+            
+            # TICKER FILTER CHECK for options (BTO only)
+            if opt.get('action') == 'BTO' and channel_info:
+                ticker_filter_mode = channel_info.get('ticker_filter_mode', 'off')
+                ticker_filter_list = channel_info.get('ticker_filter_list', '')
+                print(f"[TICKER FILTER] Checking: mode={ticker_filter_mode}, list={ticker_filter_list}, symbol={opt.get('symbol')}")
+                
+                if ticker_filter_mode != 'off' and ticker_filter_list:
+                    filter_symbols = [s.strip().upper() for s in ticker_filter_list.split(',') if s.strip()]
+                    underlying = opt.get('symbol', '').upper()
+                    
+                    if ticker_filter_mode == 'allow':
+                        if underlying not in filter_symbols:
+                            channel_name = channel_info.get('name', 'unknown')
+                            print(f"[TICKER FILTER] ✗ BLOCKED: {underlying} - not in allow list ({', '.join(filter_symbols)}) for '{channel_name}'")
+                            return  # Block the signal
+                        else:
+                            print(f"[TICKER FILTER] ✓ ALLOWED: {underlying} is in allow list")
+                    elif ticker_filter_mode == 'block':
+                        if underlying in filter_symbols:
+                            channel_name = channel_info.get('name', 'unknown')
+                            print(f"[TICKER FILTER] ✗ BLOCKED: {underlying} - in block list ({', '.join(filter_symbols)}) for '{channel_name}'")
+                            return  # Block the signal
+                        else:
+                            print(f"[TICKER FILTER] ✓ ALLOWED: {underlying} is not in block list")
             
             # STRICT ROUTING CHECK: Validate broker assignment BEFORE creating lot
             # This prevents orphaned PNL lots when signals would be rejected at execution
