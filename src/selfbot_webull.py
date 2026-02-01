@@ -5072,7 +5072,7 @@ class SelfClient(discord.Client):
     
     def _save_signal_to_db(self, signal: dict, channel_id: int, message_id: int, author_name: str = None):
         """Save signal to database for tracking and process PNL"""
-        print(f"[DEBUG SAVE_DB] ENTERED _save_signal_to_db, symbol={signal.get('symbol')}", flush=True)
+        _original_print(f"[DEBUG SAVE_DB] ENTERED _save_signal_to_db, symbol={signal.get('symbol')}", flush=True)
         if not self.db:
             return
         
@@ -10187,11 +10187,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     return  # Exit early - don't create lot or queue signal
             
             # Save signal to database (for both EXECUTE and TRACK channels) with author attribution
-            print(f"[DEBUG FLOW 0] ABOUT TO SAVE TO DB, opt action={opt.get('action', 'N/A')}", flush=True)
+            _original_print(f"[DEBUG FLOW 0] ABOUT TO SAVE TO DB, opt action={opt.get('action', 'N/A')}", flush=True)
             author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
             self._save_signal_to_db(opt, message.channel.id, message.id, author_name)
-            print(f"[DATABASE] ✓ Signal saved to database with option details", flush=True)
-            print(f"[DEBUG FLOW 1] After database save, opt action={opt.get('action', 'N/A')}", flush=True)
+            _original_print(f"[DATABASE] ✓ Signal saved to database with option details", flush=True)
+            _original_print(f"[DEBUG FLOW 1] After database save, opt action={opt.get('action', 'N/A')}", flush=True)
             
             # Post Trade Summary for STC signals with PNL data (if enabled)
             # COMPLETELY DISABLED for USER builds - Trade Summary is admin-only feature
