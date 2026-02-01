@@ -10224,20 +10224,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             # Execute if execute_enabled flag is True (category is for UI organization only)
             # Apply ticker filter BEFORE execution (BTO only - exits always pass)
-            print(f"[DEBUG TICKER] execute_enabled={execute_enabled}, channel_info={bool(channel_info)}, action={opt.get('action', 'N/A')}", flush=True)
+            _original_print(f"[DEBUG TICKER] execute_enabled={execute_enabled}, channel_info={bool(channel_info)}, action={opt.get('action', 'N/A')}", flush=True)
             if execute_enabled and channel_info and opt.get('action', 'BTO').upper() == 'BTO':
                 try:
                     from src.signals.validator import check_ticker_filter
                     ticker_to_check = opt.get('symbol', '').upper().replace('$', '')
+                    _original_print(f"[DEBUG TICKER] Checking filter for: {ticker_to_check}", flush=True)
                     passes_filter, filter_reason = check_ticker_filter(channel_info, ticker_to_check)
+                    _original_print(f"[DEBUG TICKER] Result: passes={passes_filter}, reason={filter_reason}", flush=True)
                     if not passes_filter:
-                        print(f"[TICKER FILTER] ✗ BLOCKED: {ticker_to_check} - {filter_reason}")
-                        print(f"[TICKER FILTER] Signal NOT queued for execution")
+                        _original_print(f"[TICKER FILTER] ✗ BLOCKED: {ticker_to_check} - {filter_reason}", flush=True)
+                        _original_print(f"[TICKER FILTER] Signal NOT queued for execution", flush=True)
                         return  # Exit early - don't execute this signal
                     else:
-                        print(f"[TICKER FILTER] ✓ PASSED: {ticker_to_check} - {filter_reason}")
+                        _original_print(f"[TICKER FILTER] ✓ PASSED: {ticker_to_check} - {filter_reason}", flush=True)
                 except Exception as tf_err:
-                    print(f"[TICKER FILTER] ⚠️ Error checking filter: {tf_err}")
+                    _original_print(f"[TICKER FILTER] ⚠️ Error checking filter: {tf_err}", flush=True)
             
             if execute_enabled:
                 print(f"[ROUTE] EXECUTE enabled - adding to order queue", flush=True)
