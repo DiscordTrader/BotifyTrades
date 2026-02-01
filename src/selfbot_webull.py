@@ -10175,10 +10175,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         print(f"[Signal] ✓ Conditional trigger detected: {trigger_symbol} {trigger_condition.upper()} ${trigger_price}")
                     else:
                         print(f"[DEBUG] TRIGGER No pattern matched")
+                        print(f"[DEBUG] TRIGGER ELSE-EXIT - about to exit if block")
                 except Exception as e:
                     print(f"[SIGNAL] ⚠️ Error extracting trigger: {e}")
                     import traceback
                     traceback.print_exc()
+                print(f"[DEBUG] TRIGGER TRY-BLOCK-EXITED - try/except finished")
+            print(f"[DEBUG] TRIGGER IF-BLOCK-EXITED - if block finished at line 10141")
             
             print(f"[DEBUG-TEST-123] About to print SIGNAL PARSED")
             print(f"[SIGNAL PARSED v2] ✓ Option Signal: {opt['action']} {opt['qty']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ ${opt['price']}")
