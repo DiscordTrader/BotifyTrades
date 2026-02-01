@@ -5072,6 +5072,7 @@ class SelfClient(discord.Client):
     
     def _save_signal_to_db(self, signal: dict, channel_id: int, message_id: int, author_name: str = None):
         """Save signal to database for tracking and process PNL"""
+        print(f"[DEBUG SAVE_DB] ENTERED _save_signal_to_db, symbol={signal.get('symbol')}", flush=True)
         if not self.db:
             return
         
