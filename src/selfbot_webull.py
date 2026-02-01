@@ -11919,40 +11919,58 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     for k in expired_keys:
                         del self._executed_orders[k]
                 
-                # Pre-trade analysis for BTO orders
+                # Pre-trade analysis for BTO orders - NON-BLOCKING (runs in background)
+                # Orders execute IMMEDIATELY - analysis logs results after the fact
                 if signal['action'] == 'BTO' and ENABLE_SWING_ANALYSIS and self.swing_analyzer:
                     symbol = signal['symbol']
-                    _original_print(f"\n[PRE-TRADE] Analyzing {symbol} before execution...")
                     
-                    try:
-                        def analyze():
-                            return self.swing_analyzer.analyze_symbol(symbol, SWING_ANALYSIS_TIMEFRAME)
-                        
-                        analysis = await asyncio.to_thread(analyze)
-                        
-                        if "error" not in analysis:
-                            confidence = analysis['confidence_score']
-                            recommendation = analysis['recommendation']
+                    # Only block if auto_reject is enabled (need to check before executing)
+                    if SWING_AUTO_REJECT:
+                        _original_print(f"\n[PRE-TRADE] Analyzing {symbol} (blocking - auto_reject enabled)...")
+                        try:
+                            def analyze():
+                                return self.swing_analyzer.analyze_symbol(symbol, SWING_ANALYSIS_TIMEFRAME)
                             
-                            _original_print(f"[PRE-TRADE] {symbol} Confidence: {confidence}% - {recommendation}")
+                            analysis = await asyncio.to_thread(analyze)
                             
-                            # Check if trade meets minimum confidence
-                            if confidence < SWING_MIN_CONFIDENCE:
-                                if SWING_AUTO_REJECT:
+                            if "error" not in analysis:
+                                confidence = analysis['confidence_score']
+                                recommendation = analysis['recommendation']
+                                
+                                _original_print(f"[PRE-TRADE] {symbol} Confidence: {confidence}% - {recommendation}")
+                                
+                                if confidence < SWING_MIN_CONFIDENCE:
                                     _original_print(f"[PRE-TRADE] ❌ REJECTED - Confidence {confidence}% below minimum {SWING_MIN_CONFIDENCE}%")
                                     _original_print(f"[PRE-TRADE] Recommendation: {recommendation}")
+                                    self.order_queue.task_done()
                                     continue
                                 else:
-                                    _original_print(f"[PRE-TRADE] ⚠️  WARNING - Low confidence {confidence}% (min: {SWING_MIN_CONFIDENCE}%), but proceeding (auto_reject=false)")
+                                    _original_print(f"[PRE-TRADE] ✅ APPROVED - High confidence setup")
                             else:
-                                _original_print(f"[PRE-TRADE] ✅ APPROVED - High confidence setup")
-                        else:
-                            _original_print(f"[PRE-TRADE] ⚠️  Analysis failed: {analysis['error']}, proceeding without analysis")
-                    
-                    except Exception as e:
-                        _original_print(f"[PRE-TRADE] ⚠️  Analysis error: {e}, proceeding without analysis")
+                                _original_print(f"[PRE-TRADE] ⚠️  Analysis failed: {analysis['error']}, proceeding")
+                        except Exception as e:
+                            _original_print(f"[PRE-TRADE] ⚠️  Analysis error: {e}, proceeding")
+                    else:
+                        # NON-BLOCKING: Fire-and-forget background analysis (logs only, no delay)
+                        async def background_analysis(sym, swing_analyzer):
+                            try:
+                                def analyze():
+                                    return swing_analyzer.analyze_symbol(sym, SWING_ANALYSIS_TIMEFRAME)
+                                analysis = await asyncio.to_thread(analyze)
+                                if "error" not in analysis:
+                                    confidence = analysis['confidence_score']
+                                    recommendation = analysis['recommendation']
+                                    _original_print(f"[PRE-TRADE] {sym} Confidence: {confidence}% - {recommendation}")
+                                    if confidence < SWING_MIN_CONFIDENCE:
+                                        _original_print(f"[PRE-TRADE] ⚠️  Low confidence {confidence}% (min: {SWING_MIN_CONFIDENCE}%)")
+                            except Exception as e:
+                                _original_print(f"[PRE-TRADE] Analysis error: {e}")
+                        
+                        # Launch in background - DO NOT AWAIT (non-blocking)
+                        asyncio.create_task(background_analysis(symbol, self.swing_analyzer))
+                        _original_print(f"[PRE-TRADE] ⚡ Background analysis launched for {symbol} (non-blocking)")
                 
-                _original_print(f"[DEBUG] Pre-trade analysis complete, continuing to order execution...", flush=True)
+                _original_print(f"[DEBUG] Proceeding to order execution...", flush=True)
                 
                 # Initialize order_success to prevent scope errors
                 order_success = False
