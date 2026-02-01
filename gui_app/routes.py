@@ -5006,10 +5006,10 @@ def register_routes(app):
     
     async def _cancel_webull_order(order_id):
         """Helper to cancel Webull order"""
-        if not hasattr(_bot_instance, 'webull_broker') or _bot_instance.webull_broker is None:
+        if not hasattr(_bot_instance, 'broker') or _bot_instance.broker is None:
             return {'success': False, 'error': 'Webull broker not initialized'}
         
-        wb = _bot_instance.webull_broker._client
+        wb = _bot_instance.broker._client
         if not wb:
             return {'success': False, 'error': 'Webull client not available'}
         
@@ -5449,7 +5449,7 @@ def register_routes(app):
                     return jsonify({'success': False, 'error': result.get('error', 'Failed to cancel')}), 400
             
             elif resolved_broker == 'webull':
-                if not _bot_instance or not hasattr(_bot_instance, 'webull_broker') or not _bot_instance.webull_broker:
+                if not _bot_instance or not hasattr(_bot_instance, 'broker') or not _bot_instance.broker:
                     return jsonify({'success': False, 'error': 'Webull broker not initialized'}), 500
                 
                 future = asyncio.run_coroutine_threadsafe(
