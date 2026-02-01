@@ -10172,6 +10172,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             print(f"[SIGNAL PARSED] ✓ Option Signal: {opt['action']} {opt['qty']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ ${opt['price']}")
             
             # TICKER FILTER CHECK for options (BTO only)
+            # Debug: Check if channel_info exists and has filter settings
+            if channel_info:
+                print(f"[TICKER FILTER] Channel: {channel_info.get('name', 'N/A')} | Mode: {channel_info.get('ticker_filter_mode', 'N/A')} | List: {channel_info.get('ticker_filter_list', 'N/A')}", flush=True)
+            else:
+                print(f"[TICKER FILTER] ⚠️ No channel_info available for ticker filter check", flush=True)
+            
             if opt.get('action') == 'BTO' and channel_info:
                 ticker_filter_mode = channel_info.get('ticker_filter_mode', 'off')
                 ticker_filter_list = channel_info.get('ticker_filter_list', '')
