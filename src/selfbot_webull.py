@@ -10186,9 +10186,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     return  # Exit early - don't create lot or queue signal
             
             # Save signal to database (for both EXECUTE and TRACK channels) with author attribution
+            print(f"[DEBUG FLOW 0] ABOUT TO SAVE TO DB, opt action={opt.get('action', 'N/A')}", flush=True)
             author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
             self._save_signal_to_db(opt, message.channel.id, message.id, author_name)
-            print(f"[DATABASE] ✓ Signal saved to database with option details")
+            print(f"[DATABASE] ✓ Signal saved to database with option details", flush=True)
             print(f"[DEBUG FLOW 1] After database save, opt action={opt.get('action', 'N/A')}", flush=True)
             
             # Post Trade Summary for STC signals with PNL data (if enabled)
