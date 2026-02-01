@@ -10137,33 +10137,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             # Extract conditional triggers from the FULL message content (for multi-line signals)
             # Example: "BTO 2 QQQ 608P 1/16 @m\nBELOW QQQ 607"
-            print(f"[DEBUG] TRIGGER action={opt.get('action')}, has_trigger_price={opt.get('trigger_price') is not None}")
             if opt.get('action') == 'BTO' and not opt.get('trigger_price'):
-                print(f"[DEBUG] TRIGGER Checking combined_content: {repr(combined_content[:200] if combined_content else 'NONE')}")
                 try:
                     from src.signals.parser import (
                         CONDITIONAL_TRIGGER_PATTERN, CONDITIONAL_TRIGGER_UNDER_PATTERN,
                         CONDITIONAL_TRIGGER_ABOVE_ALT_PATTERN, CONDITIONAL_TRIGGER_UNDER_ALT_PATTERN
                     )
-                    print(f"[DEBUG] TRIGGER Patterns imported successfully")
-                    print(f"[DEBUG] TRIGGER UNDER_ALT pattern: {CONDITIONAL_TRIGGER_UNDER_ALT_PATTERN.pattern}")
                     trigger_match = CONDITIONAL_TRIGGER_PATTERN.search(combined_content)
-                    print(f"[DEBUG] TRIGGER Pattern 1 (ABOVE): {trigger_match is not None}")
                     trigger_condition = 'above'
                     
                     if not trigger_match:
                         trigger_match = CONDITIONAL_TRIGGER_ABOVE_ALT_PATTERN.search(combined_content)
-                        print(f"[DEBUG] TRIGGER Pattern 2 (ABOVE_ALT): {trigger_match is not None}")
                         trigger_condition = 'above'
                     
                     if not trigger_match:
                         trigger_match = CONDITIONAL_TRIGGER_UNDER_PATTERN.search(combined_content)
-                        print(f"[DEBUG] TRIGGER Pattern 3 (UNDER): {trigger_match is not None}")
                         trigger_condition = 'below'
                     
                     if not trigger_match:
                         trigger_match = CONDITIONAL_TRIGGER_UNDER_ALT_PATTERN.search(combined_content)
-                        print(f"[DEBUG] TRIGGER Pattern 4 (UNDER_ALT): {trigger_match is not None}")
                         trigger_condition = 'below'
                     
                     if trigger_match:
@@ -10173,26 +10165,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         opt['trigger_price'] = trigger_price
                         opt['trigger_condition'] = trigger_condition
                         print(f"[Signal] ✓ Conditional trigger detected: {trigger_symbol} {trigger_condition.upper()} ${trigger_price}")
-                    else:
-                        print(f"[DEBUG] TRIGGER No pattern matched")
-                        print(f"[DEBUG] TRIGGER ELSE-EXIT - about to exit if block")
                 except Exception as e:
                     print(f"[SIGNAL] ⚠️ Error extracting trigger: {e}")
                     import traceback
                     traceback.print_exc()
-                print(f"[DEBUG] TRIGGER TRY-BLOCK-EXITED - try/except finished")
-            print(f"[DEBUG] TRIGGER IF-BLOCK-EXITED - if block finished at line 10141")
-            import sys; sys.stdout.flush()
-            print(f"[DEBUG] LINE-10186 IMMEDIATE - no blank line before this")
-            sys.stdout.flush()
-            try:
-                print(f"[DEBUG-TEST-123] About to print SIGNAL PARSED", flush=True)
-                print(f"[SIGNAL PARSED v2] ✓ Option Signal: {opt['action']} {opt['qty']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ ${opt['price']}", flush=True)
-            except Exception as e:
-                print(f"[DEBUG-EXCEPTION] Error in SIGNAL PARSED print: {e}", flush=True)
-                import traceback
-                traceback.print_exc()
-            print(f"[CHANNEL CONFIG] execute_enabled={execute_enabled}, track_enabled={track_enabled}, paper_trade_enabled={channel_info.get('paper_trade_enabled', 0) if channel_info else 0}")
+            print(f"[SIGNAL PARSED] ✓ Option Signal: {opt['action']} {opt['qty']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ ${opt['price']}")
             
             # TICKER FILTER CHECK for options (BTO only)
             if opt.get('action') == 'BTO' and channel_info:
