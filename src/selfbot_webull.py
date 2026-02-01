@@ -10182,7 +10182,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     traceback.print_exc()
                 print(f"[DEBUG] TRIGGER TRY-BLOCK-EXITED - try/except finished")
             print(f"[DEBUG] TRIGGER IF-BLOCK-EXITED - if block finished at line 10141")
-            
+            import sys; sys.stdout.flush()
+            print(f"[DEBUG] LINE-10186 IMMEDIATE - no blank line before this")
             print(f"[DEBUG-TEST-123] About to print SIGNAL PARSED")
             print(f"[SIGNAL PARSED v2] ✓ Option Signal: {opt['action']} {opt['qty']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ ${opt['price']}")
             print(f"[CHANNEL CONFIG] execute_enabled={execute_enabled}, track_enabled={track_enabled}, paper_trade_enabled={channel_info.get('paper_trade_enabled', 0) if channel_info else 0}")
