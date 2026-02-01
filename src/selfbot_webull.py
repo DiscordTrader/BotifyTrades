@@ -10232,6 +10232,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 print(f"[PNL_TRACKER] ⏭️ Trade Summary BLOCKED - USER build (BUILD_TYPE={BUILD_TYPE})")
             
             # Execute if execute_enabled flag is True (category is for UI organization only)
+            # Apply ticker filter BEFORE execution (BTO only - exits always pass)
+            if execute_enabled and channel_info and opt.get('action', 'BTO').upper() == 'BTO':
+                try:
+                    from src.signals.validator import check_ticker_filter
+                    ticker_to_check = opt.get('symbol', '').upper().replace('$', '')
+                    passes_filter, filter_reason = check_ticker_filter(channel_info, ticker_to_check)
+                    if not passes_filter:
+                        print(f"[TICKER FILTER] ✗ BLOCKED: {ticker_to_check} - {filter_reason}")
+                        print(f"[TICKER FILTER] Signal NOT queued for execution")
+                        return  # Exit early - don't execute this signal
+                    else:
+                        print(f"[TICKER FILTER] ✓ PASSED: {ticker_to_check} - {filter_reason}")
+                except Exception as tf_err:
+                    print(f"[TICKER FILTER] ⚠️ Error checking filter: {tf_err}")
+            
             if execute_enabled:
                 print(f"[ROUTE] EXECUTE enabled - adding to order queue", flush=True)
                 print(f"[DEBUG] Queue size BEFORE put: {self.order_queue.qsize()}", flush=True)
@@ -10782,6 +10797,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
             self._save_signal_to_db(stk, message.channel.id, message.id, author_name)
             print(f"[DATABASE] ✓ Signal saved to database")
+            
+            # Apply ticker filter BEFORE execution (BTO only - exits always pass)
+            if execute_enabled and channel_info and stk.get('action', 'BTO').upper() == 'BTO':
+                try:
+                    from src.signals.validator import check_ticker_filter
+                    ticker_to_check = stk.get('symbol', '').upper().replace('$', '')
+                    passes_filter, filter_reason = check_ticker_filter(channel_info, ticker_to_check)
+                    if not passes_filter:
+                        print(f"[TICKER FILTER] ✗ BLOCKED: {ticker_to_check} - {filter_reason}")
+                        print(f"[TICKER FILTER] Signal NOT queued for execution")
+                        return  # Exit early - don't execute this signal
+                    else:
+                        print(f"[TICKER FILTER] ✓ PASSED: {ticker_to_check} - {filter_reason}")
+                except Exception as tf_err:
+                    print(f"[TICKER FILTER] ⚠️ Error checking filter: {tf_err}")
             
             # Execute if execute_enabled flag is True (category is for UI organization only)
             if execute_enabled:
