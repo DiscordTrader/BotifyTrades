@@ -6993,6 +6993,19 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                         target_channel_info = next((ch for ch in db.get_channels() if str(ch['discord_channel_id']) == target_channel_id), None)
                         
                         if target_channel_info:
+                            # === TICKER FILTER CHECK ===
+                            try:
+                                from src.signals.validator import check_ticker_filter
+                                passes_filter, filter_reason = check_ticker_filter(target_channel_info, structured['symbol'])
+                                if not passes_filter:
+                                    print(f"[TICKER FILTER] ❌ BLOCKED: {filter_reason}")
+                                    print(f"[TICKER FILTER] Signal will NOT be executed")
+                                    return
+                                else:
+                                    print(f"[TICKER FILTER] ✓ {filter_reason}")
+                            except Exception as filter_err:
+                                print(f"[TICKER FILTER] ⚠️ Error checking filter: {filter_err} - allowing trade")
+                            
                             # Generate unique signal ID for tracking
                             import uuid
                             signal_id = str(uuid.uuid4())
@@ -8883,6 +8896,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             
                             symbol = parsed_signal['symbol']
                             is_exit = parsed_signal.get('is_exit', False)
+                            
+                            # === TICKER FILTER CHECK ===
+                            # Only apply to BTO (entry) signals - exits should always go through
+                            if not is_exit and should_execute and channel_info:
+                                try:
+                                    from src.signals.validator import check_ticker_filter
+                                    passes_filter, filter_reason = check_ticker_filter(channel_info, symbol)
+                                    if not passes_filter:
+                                        print(f"[TICKER FILTER] ❌ BLOCKED: {filter_reason}")
+                                        print(f"[TICKER FILTER] Signal will NOT be executed on broker")
+                                        should_execute = False  # Block execution but allow tracking/forwarding
+                                    else:
+                                        print(f"[TICKER FILTER] ✓ {filter_reason}")
+                                except Exception as filter_err:
+                                    print(f"[TICKER FILTER] ⚠️ Error checking filter: {filter_err} - allowing trade")
                             
                             if is_exit:
                                 # STC - Process partial or full exit and calculate PNL

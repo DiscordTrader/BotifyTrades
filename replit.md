@@ -61,6 +61,13 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 
 **NDX→QQQ Conversion Service**: Enables channels with limited NDX access to trade equivalent QQQ options.
 
+**Per-Channel Ticker Filter** (February 2026): Restrict trading to specific symbols per channel, useful when a signal provider excels at certain tickers but underperforms on others:
+- **Three modes**: OFF (trade all), ALLOW LIST (only trade listed symbols), BLOCK LIST (block listed symbols)
+- **Configuration**: Trading → Execution page, click 🎯 button in Actions column
+- **Filter logic**: Applied to BTO signals only (exits always go through), uses underlying symbol for options
+- **Case-insensitive**: "spy, qqq" matches SPY, QQQ, etc.
+- **Database fields**: `ticker_filter_mode` (off/allow/block), `ticker_filter_list` (comma-separated symbols)
+
 ### System Design Choices
 The architecture is modular, structured into `src/` and `gui_app/` directories. Configuration uses database-stored encrypted credentials. It features robust error handling, logging, and a multi-broker abstraction for Webull, Alpaca, Interactive Brokers, Tastytrade, Robinhood, Charles Schwab, Questrade, Upstox, Zerodha, and DhanQ. A License Validation System provides industry-standard license activation. The Discord bot runs in a dedicated thread. Broker credentials and all bot settings are GUI-manageable and stored in SQLite. Security features include admin password management, rate limiting, and session-based authentication.
 

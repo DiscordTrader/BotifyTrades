@@ -239,3 +239,46 @@ def normalize_signal(signal: Dict[str, Any]) -> Dict[str, Any]:
         normalized['is_market_order'] = normalized.get('price') is None
     
     return normalized
+
+
+def check_ticker_filter(channel_info: Dict[str, Any], ticker: str) -> Tuple[bool, str]:
+    """
+    Check if a ticker passes the channel's ticker filter.
+    
+    Args:
+        channel_info: Channel configuration dictionary containing ticker_filter_mode and ticker_filter_list
+        ticker: The ticker symbol to check (for options, should be the underlying symbol)
+        
+    Returns:
+        Tuple of (passes_filter, reason_message)
+        - passes_filter: True if ticker should be traded, False if blocked
+        - reason_message: Human-readable explanation of the filter decision
+    """
+    if not channel_info:
+        return True, "No channel info"
+    
+    mode = channel_info.get('ticker_filter_mode', 'off')
+    filter_list = channel_info.get('ticker_filter_list', '') or ''
+    
+    if not mode or mode == 'off':
+        return True, "Ticker filter is OFF"
+    
+    if not filter_list.strip():
+        return True, f"Ticker filter mode is {mode} but list is empty"
+    
+    tickers = [t.strip().upper() for t in filter_list.split(',') if t.strip()]
+    ticker_upper = ticker.upper().strip()
+    
+    if mode == 'allow':
+        if ticker_upper in tickers:
+            return True, f"Ticker {ticker} is in ALLOW list"
+        else:
+            return False, f"Ticker {ticker} blocked - not in ALLOW list: {', '.join(tickers)}"
+    
+    elif mode == 'block':
+        if ticker_upper in tickers:
+            return False, f"Ticker {ticker} blocked by BLOCK list"
+        else:
+            return True, f"Ticker {ticker} allowed - not in BLOCK list"
+    
+    return True, f"Unknown filter mode: {mode}"

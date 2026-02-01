@@ -107,6 +107,7 @@ async function loadChannels() {
                                 <div style="display: flex; gap: 4px; justify-content: center;">
                                     <button onclick="toggleBrokerSelection(${channel.id})" title="Select Brokers" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">🔌</button>
                                     <button onclick="toggleRiskManagement(${channel.id})" title="Risk Management" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">🛡️</button>
+                                    <button onclick="toggleTickerFilter(${channel.id})" title="Ticker Filter${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? ' (Active)' : ''}" style="background: ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.15)' : 'rgba(0, 212, 255, 0.1)'}; border: 1px solid ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.3)' : 'rgba(0, 212, 255, 0.3)'}; color: ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? '#ffb300' : '#00d4ff'}; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.25)' : 'rgba(0, 212, 255, 0.25)'}'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.15)' : 'rgba(0, 212, 255, 0.1)'}'; this.style.transform='scale(1)'">🎯</button>
                                     ${channelCategory === 'TRACK' ? `<button onclick="togglePaperTradeSection(${channel.id})" title="Paper Trading Settings" style="background: ${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.15)' : 'rgba(0, 212, 255, 0.1)'}; border: 1px solid ${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.3)' : 'rgba(0, 212, 255, 0.3)'}; color: ${channel.paper_trade_enabled ? '#00ff88' : '#00d4ff'}; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.25)' : 'rgba(0, 212, 255, 0.25)'}'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='${channel.paper_trade_enabled ? 'rgba(0, 255, 136, 0.15)' : 'rgba(0, 212, 255, 0.1)'}'; this.style.transform='scale(1)'">📄</button>` : ''}
                                     <button onclick="toggleAllowedUsers(${channel.id})" title="Manage Users" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">👥</button>
                                     <button onclick="showUserPerformance('${channel.id}', '${channel.name}')" title="User Performance" style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); color: #00d4ff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0, 212, 255, 0.25)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0, 212, 255, 0.1)'; this.style.transform='scale(1)'">📈</button>
@@ -371,6 +372,40 @@ async function loadChannels() {
                                 </div>
                                 <button onclick="saveRiskManagement(${channel.id})" style="margin-top: 12px; padding: 8px 16px; background: var(--accent-gradient); border: none; border-radius: 6px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">💾 Save Risk Settings</button>
                                 </div>
+                            </td>
+                        </tr>
+                        <tr id="ticker-filter-row-${channel.id}" style="display: none; background: rgba(255, 179, 0, 0.03);">
+                            <td colspan="7" style="padding: 20px;">
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                                    <h4 style="margin: 0; font-size: 14px; color: #ffb300; display: flex; align-items: center; gap: 8px;">
+                                        🎯 Ticker Filter
+                                        <span id="ticker-filter-badge-${channel.id}" style="font-size: 11px; padding: 2px 8px; background: ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.15)' : 'rgba(142, 142, 147, 0.15)'}; border: 1px solid ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'rgba(255, 179, 0, 0.3)' : 'rgba(142, 142, 147, 0.3)'}; border-radius: 4px; color: ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? '#ffb300' : '#8E8E93'}; font-weight: 600;">${channel.ticker_filter_mode === 'allow' ? '✓ ALLOW LIST' : channel.ticker_filter_mode === 'block' ? '✗ BLOCK LIST' : 'OFF'}</span>
+                                    </h4>
+                                </div>
+                                <p style="font-size: 12px; color: #8E8E93; margin: 0 0 16px 0;">Filter which tickers this channel can trade. Useful when a trader excels at specific symbols but underperforms on others.</p>
+                                <div style="display: grid; grid-template-columns: 200px 1fr; gap: 16px; align-items: start;">
+                                    <div>
+                                        <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Filter Mode</label>
+                                        <select id="ticker-filter-mode-${channel.id}" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;" onchange="toggleTickerFilterList(${channel.id}, this.value)">
+                                            <option value="off" ${!channel.ticker_filter_mode || channel.ticker_filter_mode === 'off' ? 'selected' : ''}>Off - Trade all tickers</option>
+                                            <option value="allow" ${channel.ticker_filter_mode === 'allow' ? 'selected' : ''}>Allow List - Only trade these</option>
+                                            <option value="block" ${channel.ticker_filter_mode === 'block' ? 'selected' : ''}>Block List - Block these tickers</option>
+                                        </select>
+                                    </div>
+                                    <div id="ticker-filter-list-container-${channel.id}" style="display: ${channel.ticker_filter_mode && channel.ticker_filter_mode !== 'off' ? 'block' : 'none'};">
+                                        <label style="display: block; font-size: 11px; color: #8E8E93; margin-bottom: 4px;">Tickers (comma-separated)</label>
+                                        <input type="text" id="ticker-filter-list-${channel.id}" value="${channel.ticker_filter_list || ''}" placeholder="SPY, QQQ, AAPL, TSLA" style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #3A3A3C; border-radius: 6px; background: #1C1C1E; color: white;">
+                                        <p style="font-size: 10px; color: #666; margin: 4px 0 0 0;">For options, the underlying symbol is matched (e.g., SPY 450C matches "SPY"). Case-insensitive.</p>
+                                    </div>
+                                </div>
+                                <div style="margin-top: 12px; padding: 10px; background: rgba(100, 100, 100, 0.1); border: 1px solid rgba(100, 100, 100, 0.2); border-radius: 6px;">
+                                    <div style="font-size: 11px; color: #8E8E93;">
+                                        <strong style="color: #ccc;">Examples:</strong><br>
+                                        • <span style="color: #00ff88;">Allow List "SPY, QQQ"</span> → Only trades SPY and QQQ signals, ignores all others<br>
+                                        • <span style="color: #ff6b6b;">Block List "COIN, GME, AMC"</span> → Trades everything except COIN, GME, AMC
+                                    </div>
+                                </div>
+                                <button onclick="saveTickerFilter(${channel.id})" style="margin-top: 12px; padding: 8px 16px; background: linear-gradient(135deg, #ffb300 0%, #ff8c00 100%); border: none; border-radius: 6px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">💾 Save Ticker Filter</button>
                             </td>
                         </tr>
                         ${channelCategory === 'TRACK' ? `
@@ -1026,6 +1061,70 @@ function toggleRiskManagement(channelId) {
         } else {
             row.style.display = 'none';
         }
+    }
+}
+
+function toggleTickerFilter(channelId) {
+    const row = document.getElementById(`ticker-filter-row-${channelId}`);
+    if (row) {
+        if (row.style.display === 'none' || row.style.display === '') {
+            row.style.display = 'table-row';
+        } else {
+            row.style.display = 'none';
+        }
+    }
+}
+
+function toggleTickerFilterList(channelId, mode) {
+    const container = document.getElementById(`ticker-filter-list-container-${channelId}`);
+    if (container) {
+        container.style.display = mode === 'off' ? 'none' : 'block';
+    }
+}
+
+async function saveTickerFilter(channelId) {
+    try {
+        const mode = document.getElementById(`ticker-filter-mode-${channelId}`).value;
+        const list = document.getElementById(`ticker-filter-list-${channelId}`).value.trim();
+        
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ticker_filter_mode: mode,
+                ticker_filter_list: list
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            const badge = document.getElementById(`ticker-filter-badge-${channelId}`);
+            if (badge) {
+                if (mode === 'allow') {
+                    badge.textContent = '✓ ALLOW LIST';
+                    badge.style.background = 'rgba(255, 179, 0, 0.15)';
+                    badge.style.borderColor = 'rgba(255, 179, 0, 0.3)';
+                    badge.style.color = '#ffb300';
+                } else if (mode === 'block') {
+                    badge.textContent = '✗ BLOCK LIST';
+                    badge.style.background = 'rgba(255, 179, 0, 0.15)';
+                    badge.style.borderColor = 'rgba(255, 179, 0, 0.3)';
+                    badge.style.color = '#ffb300';
+                } else {
+                    badge.textContent = 'OFF';
+                    badge.style.background = 'rgba(142, 142, 147, 0.15)';
+                    badge.style.borderColor = 'rgba(142, 142, 147, 0.3)';
+                    badge.style.color = '#8E8E93';
+                }
+            }
+            showMessage('✅ Ticker filter saved successfully');
+        } else {
+            showMessage('❌ ' + (result.error || 'Failed to save ticker filter'), 'error');
+        }
+    } catch (error) {
+        console.error('Error saving ticker filter:', error);
+        showMessage('❌ Error: ' + error.message, 'error');
     }
 }
 

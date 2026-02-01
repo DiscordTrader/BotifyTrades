@@ -2455,7 +2455,7 @@ def update_channel(channel_id: int, **kwargs):
                    'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
                    'use_global_risk_settings', 'circuit_breaker_enabled', 'channel_daily_loss_limit', 'channel_max_positions',
                    'ndx_to_qqq_enabled', 'ndx_to_qqq_delta', 'order_chase_enabled',
-                   'auto_sl_enabled', 'auto_sl_pct']:
+                   'auto_sl_enabled', 'auto_sl_pct', 'ticker_filter_mode', 'ticker_filter_list']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
                 values.append(json.dumps(value))
@@ -10553,6 +10553,14 @@ def migrate_channels_for_conditional_orders():
         if 'ndx_to_qqq_delta' not in columns:
             cursor.execute('ALTER TABLE channels ADD COLUMN ndx_to_qqq_delta REAL DEFAULT 0.3')
             print("[DATABASE] ✓ Added ndx_to_qqq_delta column (default 0.3)")
+        
+        if 'ticker_filter_mode' not in columns:
+            cursor.execute("ALTER TABLE channels ADD COLUMN ticker_filter_mode TEXT DEFAULT 'off'")
+            print("[DATABASE] ✓ Added ticker_filter_mode column (off/allow/block)")
+        
+        if 'ticker_filter_list' not in columns:
+            cursor.execute('ALTER TABLE channels ADD COLUMN ticker_filter_list TEXT DEFAULT NULL')
+            print("[DATABASE] ✓ Added ticker_filter_list column for ticker whitelist/blacklist")
         
         conn.commit()
     except Exception as e:

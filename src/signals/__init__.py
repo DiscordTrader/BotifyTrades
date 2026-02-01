@@ -22,6 +22,7 @@ from .validator import (
     is_valid_strike,
     is_valid_expiry,
     is_valid_action,
+    check_ticker_filter,
 )
 from .spy_sniper_parser import (
     is_spy_sniper_signal,
@@ -50,6 +51,7 @@ __all__ = [
     'is_valid_strike',
     'is_valid_expiry',
     'is_valid_action',
+    'check_ticker_filter',
     'is_spy_sniper_signal',
     'parse_spy_sniper_signal',
     'process_spy_sniper_message',
