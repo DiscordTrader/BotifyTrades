@@ -1452,9 +1452,10 @@ DTE_OPT_PATTERN = r'(BTO|STC)\s+[$]?([A-Za-z]+)\s+[$]?([0-9.]+)\s*([CPcp])\s+(\d
 BISHOP_OPTION_PATTERN = r'\*{0,2}Option:\*{0,2}\s*([A-Za-z]+)\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+(\d{1,2})/(\d{1,2})'
 # Entry price groups: (price)
 BISHOP_ENTRY_PATTERN = r'\*{0,2}Entry:\*{0,2}\s*(\d+\.?\d*)(?:\s*[-–]\s*(\d+\.?\d*))?'
-# Trim/STC format: "Trimming SPX 6900 P 12/30 @$1.30"
-# Groups: (symbol, strike, opt_type, month, day, price)
-BISHOP_TRIM_PATTERN = r'[Tt]rimming\s+(?:\?\w\s+)?([A-Za-z]+)\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+(\d{1,2})/(\d{1,2})\s*@\s*\$?(\d+\.?\d*)'
+# Trim/STC format: "Trimming SPX 6900 P 12/30 @$1.30" or "Trimming TM 240 C 2/20 @$30%"
+# Groups: (symbol, strike, opt_type, month, day, price_or_pct, is_percent)
+# The optional % at the end indicates trim percentage vs actual price
+BISHOP_TRIM_PATTERN = r'[Tt]rimming\s+(?:\?\w\s+)?([A-Za-z]+)\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+(\d{1,2})/(\d{1,2})\s*@\s*\$?(\d+\.?\d*)(%)?'
 
 # Bishop stopped out pattern: "Got stopped out at $1.65" or "stopped out at $1.65 for -35%"
 # Groups: (price)
@@ -4362,27 +4363,52 @@ def parse_option_signal(text: str) -> Optional[dict]:
                                                                                 "_exit_type": "HALF"
                                                                             }
                                                                         else:
-                                                                            # Try Bishop trim format: Trimming SPX 6900 P 12/30 @$1.30
+                                                                            # Try Bishop trim format: Trimming SPX 6900 P 12/30 @$1.30 or @$30%
                                                                             bishop_trim_m = BISHOP_TRIM_REGEX.search(text.strip())
                                                                             if bishop_trim_m:
-                                                                                symbol, strike, opt_type, month, day, price_str = bishop_trim_m.groups()
+                                                                                groups = bishop_trim_m.groups()
+                                                                                symbol, strike, opt_type, month, day, price_str = groups[:6]
+                                                                                is_percent = groups[6] if len(groups) > 6 else None
                                                                                 expiry = f"{month}/{day}"
-                                                                                price = float(price_str)
-                                                                                print(f"[Discord] ✓ Matched Bishop TRIM format: STC {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
-                                                                                return {
-                                                                                    "asset": "option",
-                                                                                    "action": "STC",
-                                                                                    "qty": 1,
-                                                                                    "qty_specified": False,
-                                                                                    "symbol": symbol.upper(),
-                                                                                    "strike": float(strike),
-                                                                                    "opt_type": opt_type.upper(),
-                                                                                    "expiry": expiry,
-                                                                                    "price": price,
-                                                                                    "is_market_order": False,
-                                                                                    "_bishop_trim": True,
-                                                                                    "_exit_type": "PARTIAL"
-                                                                                }
+                                                                                
+                                                                                if is_percent:
+                                                                                    # This is a percentage trim (e.g., @$30% means trim at 30% profit)
+                                                                                    trim_pct = float(price_str)
+                                                                                    print(f"[Discord] ✓ Matched Bishop TRIM format (PERCENT): STC {symbol} {strike}{opt_type} {expiry} @ {trim_pct}%")
+                                                                                    return {
+                                                                                        "asset": "option",
+                                                                                        "action": "STC",
+                                                                                        "qty": 1,
+                                                                                        "qty_specified": False,
+                                                                                        "symbol": symbol.upper(),
+                                                                                        "strike": float(strike),
+                                                                                        "opt_type": opt_type.upper(),
+                                                                                        "expiry": expiry,
+                                                                                        "price": None,  # No specific price - use market
+                                                                                        "trim_percent": trim_pct,  # Store the trim percentage
+                                                                                        "is_market_order": True,  # Market order for percentage trims
+                                                                                        "_bishop_trim": True,
+                                                                                        "_bishop_trim_percent": True,
+                                                                                        "_exit_type": "PARTIAL"
+                                                                                    }
+                                                                                else:
+                                                                                    # This is a price-based trim (e.g., @$1.30)
+                                                                                    price = float(price_str)
+                                                                                    print(f"[Discord] ✓ Matched Bishop TRIM format: STC {symbol} {strike}{opt_type} {expiry} @ ${price_str}")
+                                                                                    return {
+                                                                                        "asset": "option",
+                                                                                        "action": "STC",
+                                                                                        "qty": 1,
+                                                                                        "qty_specified": False,
+                                                                                        "symbol": symbol.upper(),
+                                                                                        "strike": float(strike),
+                                                                                        "opt_type": opt_type.upper(),
+                                                                                        "expiry": expiry,
+                                                                                        "price": price,
+                                                                                        "is_market_order": False,
+                                                                                        "_bishop_trim": True,
+                                                                                        "_exit_type": "PARTIAL"
+                                                                                    }
                                                                             else:
                                                                                 # Try Bishop entry format: "I'm Entering" + "Option: SPX 6900 P 12/30" + "Entry: 1.00"
                                                                                 if "i'm entering" in text.lower() or "im entering" in text.lower():

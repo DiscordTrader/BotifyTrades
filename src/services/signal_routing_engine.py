@@ -853,6 +853,8 @@ class SignalRoutingEngine:
         opt_type = signal.get('opt_type', '').upper()
         exit_price = signal.get('price', 0.0)
         exit_qty = signal.get('qty', 0)
+        trim_percent = signal.get('trim_percent')  # e.g., 30 for @$30%
+        is_percent_trim = signal.get('_bishop_trim_percent', False)
         
         position = self.find_matching_position(
             symbol=symbol,
@@ -919,11 +921,15 @@ class SignalRoutingEngine:
                 exit_qty=actual_exit_qty,
                 exit_price=exit_price,
                 exit_reason=ExitReason.SIGNAL,
-                pnl_pct=pnl_pct
+                pnl_pct=pnl_pct,
+                trim_percent=trim_percent if is_percent_trim else None
             )
             
             if success:
-                print(f"[ROUTING_ENGINE] ✓ Signal STC forwarded: {symbol} @ ${exit_price:.2f}")
+                if is_percent_trim:
+                    print(f"[ROUTING_ENGINE] ✓ Signal STC forwarded: {symbol} @ {trim_percent}%")
+                else:
+                    print(f"[ROUTING_ENGINE] ✓ Signal STC forwarded: {symbol} @ ${exit_price:.2f}")
             
             return success
             
@@ -1113,7 +1119,8 @@ class SignalRoutingEngine:
         exit_qty: int,
         exit_price: float,
         exit_reason: ExitReason,
-        pnl_pct: float = 0.0
+        pnl_pct: float = 0.0,
+        trim_percent: Optional[float] = None
     ) -> bool:
         """
         Post STC signal to webhook with retry and dedupe.
@@ -1121,6 +1128,9 @@ class SignalRoutingEngine:
         Two-phase update:
         1. Post webhook
         2. If success, update ledger
+        
+        Args:
+            trim_percent: If set, format message with percentage (e.g., @ 30%) instead of price
         """
         if not config.enable_forwarding or not config.destination_url:
             return False
@@ -1149,10 +1159,16 @@ class SignalRoutingEngine:
         elif exit_reason == ExitReason.TRAILING_STOP:
             exit_label = " [TRAIL]"
         
+        # Format price display: percentage for trim signals, dollar amount for others
+        if trim_percent is not None:
+            price_display = f"{trim_percent:.0f}%"
+        else:
+            price_display = f"${exit_price:.2f}" if exit_price > 0 else "MKT"
+        
         stc_message = (
             f"@everyone\n"
             f"STC {position.symbol} {position.strike}{position.option_type} "
-            f"{position.expiry} @ {exit_price}{exit_label}\n"
+            f"{position.expiry} @ {price_display}{exit_label}\n"
             f"*Not financial advice, for educational purposes only.*"
         )
         
