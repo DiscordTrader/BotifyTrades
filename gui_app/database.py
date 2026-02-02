@@ -551,13 +551,21 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added channel_max_position_size and tracking_default_quantity columns")
     
-    # Migrate: Add per-channel order chase enabled column for unfilled order management
+    # Migrate: Add per-channel order chase enabled column for unfilled order management (exit orders)
     try:
         cursor.execute('SELECT order_chase_enabled FROM channels LIMIT 1')
     except sqlite3.OperationalError:
         cursor.execute('ALTER TABLE channels ADD COLUMN order_chase_enabled INTEGER DEFAULT NULL')
         conn.commit()
-        print("[DATABASE] ✓ Added order_chase_enabled column for per-channel unfilled order chasing")
+        print("[DATABASE] ✓ Added order_chase_enabled column for per-channel unfilled order chasing (exit)")
+    
+    # Migrate: Add per-channel entry chase enabled column for entry order chasing
+    try:
+        cursor.execute('SELECT entry_chase_enabled FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN entry_chase_enabled INTEGER DEFAULT NULL')
+        conn.commit()
+        print("[DATABASE] ✓ Added entry_chase_enabled column for per-channel entry order chasing")
     
     # Migrate: Add auto_sl columns for dedicated auto stop-loss toggle (separate from signal_update_automation)
     try:
@@ -2454,7 +2462,7 @@ def update_channel(channel_id: int, **kwargs):
                    'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
                    'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
                    'use_global_risk_settings', 'circuit_breaker_enabled', 'channel_daily_loss_limit', 'channel_max_positions',
-                   'ndx_to_qqq_enabled', 'ndx_to_qqq_delta', 'order_chase_enabled',
+                   'ndx_to_qqq_enabled', 'ndx_to_qqq_delta', 'order_chase_enabled', 'entry_chase_enabled',
                    'auto_sl_enabled', 'auto_sl_pct', 'ticker_filter_mode', 'ticker_filter_list']:
             fields.append(f"{key} = ?")
             if key == 'enabled_brokers' and isinstance(value, list):
@@ -2650,7 +2658,7 @@ def update_signal_routing_mapping(mapping_id: int, **kwargs) -> bool:
         'max_profit_giveback_enabled', 'max_profit_giveback_pct',
         'exit_strategy_mode', 'price_monitor_enabled', 'price_monitor_interval_seconds',
         'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
-        'order_chase_enabled'
+        'order_chase_enabled', 'entry_chase_enabled'
     ]
     
     updates = []
@@ -12449,6 +12457,53 @@ def set_channel_order_chase_enabled(channel_id: str, enabled: Optional[bool]) ->
         return cursor.rowcount > 0
     except Exception as e:
         print(f"[DATABASE] Error setting channel order chase: {e}")
+        return False
+
+
+def get_channel_entry_chase_enabled(channel_id: str) -> bool:
+    """
+    Get entry chase enabled status for a channel.
+    Falls back to global setting if channel setting is NULL.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT entry_chase_enabled FROM channels
+            WHERE discord_channel_id = ? OR telegram_chat_id = ?
+        ''', (str(channel_id), str(channel_id)))
+        row = cursor.fetchone()
+        
+        if row and row['entry_chase_enabled'] is not None:
+            return bool(row['entry_chase_enabled'])
+        
+        global_settings = get_order_chase_settings()
+        return global_settings.get('enabled', True)
+    except Exception as e:
+        print(f"[DATABASE] Error getting channel entry chase: {e}")
+        global_settings = get_order_chase_settings()
+        return global_settings.get('enabled', True)
+
+
+def set_channel_entry_chase_enabled(channel_id: str, enabled: Optional[bool]) -> bool:
+    """
+    Set entry chase enabled status for a channel.
+    Pass None to use global setting (fallback behavior).
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        value = None if enabled is None else (1 if enabled else 0)
+        cursor.execute('''
+            UPDATE channels SET entry_chase_enabled = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE discord_channel_id = ? OR telegram_chat_id = ?
+        ''', (value, str(channel_id), str(channel_id)))
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DATABASE] Error setting channel entry chase: {e}")
         return False
 
 

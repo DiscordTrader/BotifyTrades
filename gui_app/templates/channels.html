@@ -1296,17 +1296,18 @@ function renderChannels() {
                             <span style="font-size: 9px; color: #6B7A90;">%</span>
                         </div>
                     </div>
-                    <div style="background: #0F1319; padding: 8px 10px;" title="Chase unfilled exit orders with mid-price replacement">
-                        <div style="display: flex; align-items: center; justify-content: space-between;">
-                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Chase</span>
-                            <label class="toggle-switch" style="transform: scale(0.6);">
-                                <input type="checkbox" id="order-chase-${channel.id}"
-                                       ${channel.order_chase_enabled === 1 ? 'checked' : channel.order_chase_enabled === 0 ? '' : 'checked'}
-                                       onchange="updateOrderChase(${channel.id}, '${channel.discord_channel_id}', this.checked)">
-                                <span class="slider"></span>
-                            </label>
+                    <div style="background: #0F1319; padding: 8px 10px;" title="Chase unfilled orders with mid-price replacement">
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Order Chase</span>
+                            <select id="chase-mode-${channel.id}" 
+                                    style="width: 100%; padding: 3px 4px; font-size: 9px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
+                                    onchange="updateChaseMode(${channel.id}, this.value)">
+                                <option value="off" ${channel.entry_chase_enabled === 0 && channel.order_chase_enabled === 0 ? 'selected' : ''}>OFF</option>
+                                <option value="entry" ${channel.entry_chase_enabled === 1 && channel.order_chase_enabled === 0 ? 'selected' : ''}>Entry Only</option>
+                                <option value="exit" ${(channel.entry_chase_enabled === 0 || channel.entry_chase_enabled === null) && (channel.order_chase_enabled === 1 || channel.order_chase_enabled === null) ? 'selected' : ''}>Exit Only</option>
+                                <option value="both" ${channel.entry_chase_enabled === 1 && channel.order_chase_enabled === 1 ? 'selected' : ''}>Both</option>
+                            </select>
                         </div>
-                        <div style="font-size: 8px; color: #6B7A90; margin-top: 4px;">Unfilled Orders</div>
                     </div>
                     <div style="background: #0F1319; padding: 8px 10px;" title="Convert NDX index options to equivalent QQQ options for brokers without NDX access">
                         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
@@ -1718,6 +1719,56 @@ async function updateOrderChase(channelId, discordChannelId, enabled) {
             showNotification(enabled ? 'Order chase enabled' : 'Order chase disabled');
         } else {
             showNotification('Error updating order chase', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function updateChaseMode(channelId, mode) {
+    try {
+        let entryChase = 0;
+        let exitChase = 0;
+        let modeLabel = '';
+        
+        switch(mode) {
+            case 'off':
+                entryChase = 0;
+                exitChase = 0;
+                modeLabel = 'Order chase disabled';
+                break;
+            case 'entry':
+                entryChase = 1;
+                exitChase = 0;
+                modeLabel = 'Entry chase enabled';
+                break;
+            case 'exit':
+                entryChase = 0;
+                exitChase = 1;
+                modeLabel = 'Exit chase enabled';
+                break;
+            case 'both':
+                entryChase = 1;
+                exitChase = 1;
+                modeLabel = 'Entry & Exit chase enabled';
+                break;
+        }
+        
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                entry_chase_enabled: entryChase,
+                order_chase_enabled: exitChase 
+            })
+        });
+        
+        if (response.ok) {
+            showNotification(modeLabel);
+        } else {
+            showNotification('Error updating chase mode', 'error');
             await loadChannels();
         }
     } catch (error) {

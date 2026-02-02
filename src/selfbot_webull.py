@@ -11611,9 +11611,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             if entry_high and float(entry_high) > 0:
                                 entry_range_high = float(entry_high)
                             
-                            # Get channel slippage and timeout settings
+                            # Get channel slippage, timeout, and entry chase settings
                             slippage_max_pct = None
                             order_timeout_minutes = None
+                            entry_chase_enabled = True  # Default to enabled
                             channel_id = signal.get('channel_id')
                             if channel_id and DATABASE_MODULE_AVAILABLE:
                                 try:
@@ -11628,28 +11629,36 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         order_timeout_minutes = ch.get('order_timeout_minutes')
                                         if order_timeout_minutes:
                                             _original_print(f"[EXEC] Using channel order timeout: {order_timeout_minutes} min")
+                                        # Check entry chase enabled (NULL = use global default = enabled)
+                                        entry_chase_val = ch.get('entry_chase_enabled')
+                                        if entry_chase_val is not None:
+                                            entry_chase_enabled = bool(entry_chase_val)
                                 except Exception:
                                     pass
                             
-                            asset_type = signal.get('asset') or signal.get('asset_type', 'stock')
-                            signal_price = signal.get('signal_price') or entry_price
-                            await order_chaser.track_entry_order(
-                                order_id=str(order_id),
-                                broker_id=broker_name,
-                                symbol=signal.get('symbol', ''),
-                                asset_type=asset_type,
-                                quantity=signal.get('qty', 1),
-                                price=float(entry_price) if entry_price else 0.0,
-                                action='BTO',
-                                channel_id=str(channel_id) if channel_id else '',
-                                strike=float(signal.get('strike', 0)) if signal.get('strike') else None,
-                                expiry=signal.get('expiry'),
-                                call_put=signal.get('call_put') or signal.get('direction'),
-                                entry_range_high=entry_range_high,
-                                slippage_max_pct=slippage_max_pct,
-                                signal_price=float(signal_price) if signal_price else None,
-                                timeout_minutes=order_timeout_minutes
-                            )
+                            # Only track if entry chase is enabled for this channel
+                            if entry_chase_enabled:
+                                asset_type = signal.get('asset') or signal.get('asset_type', 'stock')
+                                signal_price = signal.get('signal_price') or entry_price
+                                await order_chaser.track_entry_order(
+                                    order_id=str(order_id),
+                                    broker_id=broker_name,
+                                    symbol=signal.get('symbol', ''),
+                                    asset_type=asset_type,
+                                    quantity=signal.get('qty', 1),
+                                    price=float(entry_price) if entry_price else 0.0,
+                                    action='BTO',
+                                    channel_id=str(channel_id) if channel_id else '',
+                                    strike=float(signal.get('strike', 0)) if signal.get('strike') else None,
+                                    expiry=signal.get('expiry'),
+                                    call_put=signal.get('call_put') or signal.get('direction'),
+                                    entry_range_high=entry_range_high,
+                                    slippage_max_pct=slippage_max_pct,
+                                    signal_price=float(signal_price) if signal_price else None,
+                                    timeout_minutes=order_timeout_minutes
+                                )
+                            else:
+                                _original_print(f"[EXEC] Entry chase disabled for channel {channel_id}")
                     except Exception as track_err:
                         _original_print(f"[EXEC] Warning: Could not track entry order: {track_err}")
                 
