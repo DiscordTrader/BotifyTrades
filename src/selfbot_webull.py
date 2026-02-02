@@ -10001,6 +10001,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         # No signal qty - use channel default
                         opt['qty'] = channel_qty_val
                         print(f"[POSITION SIZE] ✓ Using channel fixed QTY: {opt['qty']} contracts (no signal qty)")
+                    
+                    # BUGFIX: Enforce MAX POSITION$ cap for fixed QTY mode
+                    # If channel_max_position_size is set, verify the trade doesn't exceed it
+                    if channel_max_position_size:
+                        price = opt.get('price')
+                        if price and price > 0 and opt.get('asset') == 'option':
+                            cost_per_contract = float(price) * 100
+                            total_position_value = cost_per_contract * opt['qty']
+                            max_pos_val = float(channel_max_position_size)
+                            
+                            if total_position_value > max_pos_val:
+                                # Calculate max affordable qty within budget
+                                max_affordable_qty = int(max_pos_val / cost_per_contract)
+                                if max_affordable_qty <= 0:
+                                    # Cannot afford even 1 contract
+                                    print(f"[POSITION SIZE] ❌ BLOCKING TRADE: 1 contract costs ${cost_per_contract:.0f} but MAX POSITION$ is ${max_pos_val:.0f}")
+                                    opt['_blocked_by_max_position'] = True
+                                    opt['_block_reason'] = f"Position value ${cost_per_contract:.0f} exceeds MAX POSITION$ ${max_pos_val:.0f}"
+                                else:
+                                    # Reduce qty to fit within budget
+                                    old_qty = opt['qty']
+                                    opt['qty'] = max_affordable_qty
+                                    print(f"[POSITION SIZE] ⚠️ MAX POSITION$ cap: {old_qty} contracts (${total_position_value:.0f}) → {max_affordable_qty} contracts (${cost_per_contract * max_affordable_qty:.0f}) to stay within ${max_pos_val:.0f}")
                 elif channel_position_size_pct:
                     # Channel percentage-based sizing - uses MIN(signal_qty, position_sizing_qty)
                     # If signal asks for less than position sizing allows, respect signal intent
@@ -11122,6 +11145,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         }
             except Exception as e:
                 _original_print(f"[{broker_name}] Pre-trade validation error (continuing): {e}")
+            
+            # Check if trade was blocked by MAX POSITION$ cap
+            if signal.get('_blocked_by_max_position'):
+                block_reason = signal.get('_block_reason', 'Position exceeds MAX POSITION$ limit')
+                _original_print(f"[{broker_name}] ❌ Trade BLOCKED: {block_reason}")
+                return {
+                    'success': False,
+                    'message': block_reason,
+                    'rejection_reason': block_reason,
+                    'broker': broker_name
+                }
             
             # Check if we need to recalculate quantity based on position_size_pct
             position_size_pct = signal.get('_position_size_pct')
