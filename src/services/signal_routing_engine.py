@@ -410,7 +410,8 @@ class SignalRoutingEngine:
         if position.remaining_qty <= 0:
             return None, 0.0
         
-        cost_basis = position.initial_mark_price if position.initial_mark_price > 0 else position.entry_price
+        # Use entry_price (signal's entry alert price) as cost basis for PT/SL calculations
+        cost_basis = position.entry_price
         if cost_basis <= 0:
             return None, 0.0
         
@@ -912,7 +913,8 @@ class SignalRoutingEngine:
             if exit_price <= 0 and position.current_price > 0:
                 exit_price = position.current_price
             
-            cost_basis = position.initial_mark_price if position.initial_mark_price > 0 else position.entry_price
+            # Use entry_price (signal's entry alert price) as cost basis
+            cost_basis = position.entry_price
             pnl_pct = ((exit_price - cost_basis) / cost_basis * 100) if cost_basis > 0 else 0.0
             
             success = await self.post_stc_signal(
