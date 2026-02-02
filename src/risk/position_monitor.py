@@ -326,7 +326,8 @@ class RiskDBAdapter:
                                    c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
                                    c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
                                    c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
-                                   c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct
+                                   c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
+                                   t.stop_loss_price, t.profit_target_price, t.executed_price
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -345,7 +346,8 @@ class RiskDBAdapter:
                                    c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
                                    c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
                                    c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
-                                   c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct
+                                   c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
+                                   t.stop_loss_price, t.profit_target_price, t.executed_price
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -372,7 +374,8 @@ class RiskDBAdapter:
                                c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
                                c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
                                c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
-                               c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct
+                               c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
+                               t.stop_loss_price, t.profit_target_price, t.executed_price
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -391,7 +394,8 @@ class RiskDBAdapter:
                                c.profit_target_qty_3, c.profit_target_qty_4, c.trim_order_mode, c.trim_limit_offset,
                                c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
                                c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
-                               c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct
+                               c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
+                               t.stop_loss_price, t.profit_target_price, t.executed_price
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -424,6 +428,12 @@ class RiskDBAdapter:
                 if not risk_enabled:
                     return None
                 
+                # Extract trade-level SL/PT overrides (from conditional orders or parsed signals)
+                # Indices 27-29: stop_loss_price, profit_target_price, executed_price
+                trade_sl_price = row[27] if len(row) > 27 and row[27] else None
+                trade_pt_price = row[28] if len(row) > 28 and row[28] else None
+                trade_entry_price = row[29] if len(row) > 29 and row[29] else None
+                
                 pt1 = row[1] or 0
                 pt2 = row[2] or 0
                 pt3 = row[3] or 0
@@ -432,6 +442,22 @@ class RiskDBAdapter:
                 trail = row[5] or 0
                 leave_runner_enabled = bool(row[9]) if len(row) > 9 and row[9] else False
                 leave_runner_pct = row[10] if len(row) > 10 and row[10] else 25.0
+                
+                # Apply trade-level SL/PT overrides (convert absolute prices to percentages)
+                # This enables signals with explicit SL/PT to override channel defaults
+                if trade_sl_price and trade_entry_price and trade_entry_price > 0:
+                    # Calculate SL percentage from absolute price
+                    sl_pct_calc = ((trade_entry_price - trade_sl_price) / trade_entry_price) * 100
+                    if sl_pct_calc > 0:
+                        sl = round(sl_pct_calc, 1)
+                        print(f"[RISK] Using trade-level SL: ${trade_sl_price:.2f} ({sl}% from entry ${trade_entry_price:.2f})")
+                
+                if trade_pt_price and trade_entry_price and trade_entry_price > 0:
+                    # Calculate PT percentage from absolute price
+                    pt_pct_calc = ((trade_pt_price - trade_entry_price) / trade_entry_price) * 100
+                    if pt_pct_calc > 0:
+                        pt1 = round(pt_pct_calc, 1)
+                        print(f"[RISK] Using trade-level PT: ${trade_pt_price:.2f} ({pt1}% from entry ${trade_entry_price:.2f})")
                 
                 # Extract custom quantities (None means auto-calculate)
                 qty1 = row[12] if len(row) > 12 else None

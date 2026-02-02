@@ -5289,6 +5289,15 @@ class SelfClient(discord.Client):
                 'routing_mapping_id': routing_mapping_id  # Signal routing discriminator for risk engine
             }
             
+            # Add signal-level SL/PT overrides (from conditional orders or parsed signals)
+            # These override channel defaults in risk management
+            if signal.get('stop_loss_price'):
+                trade_data['stop_loss_price'] = signal['stop_loss_price']
+                print(f"[DATABASE] Trade includes signal SL: ${signal['stop_loss_price']}")
+            if signal.get('profit_target_price'):
+                trade_data['profit_target_price'] = signal['profit_target_price']
+                print(f"[DATABASE] Trade includes signal PT: ${signal['profit_target_price']}")
+            
             self.db.add_trade(trade_data)
             print(f"[DATABASE] ✓ Trade saved: {signal['symbol']} {signal['action']} qty={signal['qty']} order_id={trade_data.get('order_id')}")
             
