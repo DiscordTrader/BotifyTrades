@@ -41,7 +41,7 @@ CRITICAL_CHANNEL_FIELDS = {
     'track_enabled': {'type': int, 'required': False, 'default': 0, 'min': 0, 'max': 1},
     'risk_management_enabled': {'type': int, 'required': False, 'default': 0, 'min': 0, 'max': 1},
     'conditional_order_enabled': {'type': int, 'required': False, 'default': 1, 'min': 0, 'max': 1},
-    'exit_strategy_mode': {'type': str, 'required': False, 'default': 'signal'},
+    'exit_strategy_mode': {'type': str, 'required': False, 'default': 'hybrid'},
     'broker_override': {'type': str, 'required': False, 'default': None},
     'enabled_brokers': {'type': str, 'required': False, 'default': None},
 }

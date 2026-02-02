@@ -463,7 +463,7 @@ def init_db():
     try:
         cursor.execute('SELECT exit_strategy_mode FROM channels LIMIT 1')
     except sqlite3.OperationalError:
-        cursor.execute("ALTER TABLE channels ADD COLUMN exit_strategy_mode TEXT DEFAULT 'signal'")
+        cursor.execute("ALTER TABLE channels ADD COLUMN exit_strategy_mode TEXT DEFAULT 'hybrid'")
         conn.commit()
         print("[DATABASE] ✓ Added exit_strategy_mode column for per-channel exit strategy")
     
@@ -1160,7 +1160,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS global_risk_settings (
             id INTEGER PRIMARY KEY CHECK(id = 1),
             enable_signal_update_automation INTEGER DEFAULT 0,
-            exit_strategy_mode TEXT DEFAULT 'signal',
+            exit_strategy_mode TEXT DEFAULT 'hybrid',
             enable_circuit_breaker INTEGER DEFAULT 0,
             enable_trailing_execution INTEGER DEFAULT 0,
             global_daily_loss_limit REAL DEFAULT 0,
@@ -6354,7 +6354,7 @@ def get_telegram_channels() -> List[Dict[str, Any]]:
             'stop_loss_pct': row['stop_loss_pct'],
             'trailing_stop_pct': row['trailing_stop_pct'],
             'trailing_activation_pct': row['trailing_activation_pct'],
-            'exit_strategy_mode': row['exit_strategy_mode'] or 'signal',
+            'exit_strategy_mode': row['exit_strategy_mode'] or 'hybrid',
             'default_quantity': row['default_quantity'],
             'is_active': bool(row['is_active']),
             'created_at': row['created_at'],
@@ -6456,7 +6456,7 @@ def get_channel_by_telegram_id(telegram_chat_id: str) -> Optional[Dict[str, Any]
         'stop_loss_pct': row['stop_loss_pct'],
         'trailing_stop_pct': row['trailing_stop_pct'],
         'trailing_activation_pct': row['trailing_activation_pct'],
-        'exit_strategy_mode': row['exit_strategy_mode'] or 'signal',
+        'exit_strategy_mode': row['exit_strategy_mode'] or 'hybrid',
         'default_quantity': row['default_quantity'],
         'is_active': bool(row['is_active'])
     }
@@ -10062,7 +10062,7 @@ def get_global_risk_settings() -> Dict:
             return dict(row)
         return {
             'enable_signal_update_automation': False,
-            'exit_strategy_mode': 'signal',
+            'exit_strategy_mode': 'hybrid',
             'enable_circuit_breaker': False,
             'enable_trailing_execution': False,
             'global_daily_loss_limit': 0,
@@ -10483,7 +10483,7 @@ def init_conditional_orders_table():
         ('linked_message_ids', 'TEXT'),
         ('trailing_activation_pct', 'REAL DEFAULT 0'),
         ('trailing_stop_pct', 'REAL DEFAULT 0'),
-        ('exit_strategy_mode', 'TEXT DEFAULT "signal"'),
+        ('exit_strategy_mode', 'TEXT DEFAULT "hybrid"'),
         ('slippage_protection_enabled', 'INTEGER DEFAULT 0'),
         ('slippage_max_pct', 'REAL DEFAULT 10.0'),
         ('settings_source', 'TEXT DEFAULT "channel"'),
