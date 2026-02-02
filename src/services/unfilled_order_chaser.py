@@ -114,18 +114,21 @@ class UnfilledOrderChaser:
     DEFAULT_CHASE_TIMEOUT_SECONDS = 30
     DEFAULT_MAX_CHASE_ATTEMPTS = 3
     DEFAULT_POLL_INTERVAL_SECONDS = 5
+    DEFAULT_CANCEL_ON_MAX_ATTEMPTS = True
     
     def __init__(
         self,
         broker_manager,
         chase_timeout_seconds: int = DEFAULT_CHASE_TIMEOUT_SECONDS,
         max_chase_attempts: int = DEFAULT_MAX_CHASE_ATTEMPTS,
-        poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS
+        poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS,
+        cancel_entry_on_max_attempts: bool = DEFAULT_CANCEL_ON_MAX_ATTEMPTS
     ):
         self.broker_manager = broker_manager
         self.chase_timeout = timedelta(seconds=chase_timeout_seconds)
         self.max_chase_attempts = max_chase_attempts
         self.poll_interval = poll_interval_seconds
+        self.cancel_entry_on_max_attempts = cancel_entry_on_max_attempts
         
         self._tracked_orders: Dict[str, TrackedExitOrder] = {}
         self._tracked_entry_orders: Dict[str, TrackedEntryOrder] = {}
@@ -135,7 +138,7 @@ class UnfilledOrderChaser:
         self._enabled = True
         self._entry_chase_enabled = True
         
-        print(f"[ORDER_CHASER] Initialized (timeout={chase_timeout_seconds}s, max_attempts={max_chase_attempts})")
+        print(f"[ORDER_CHASER] Initialized (timeout={chase_timeout_seconds}s, max_attempts={max_chase_attempts}, cancel_on_fail={cancel_entry_on_max_attempts})")
     
     def set_enabled(self, enabled: bool):
         """Enable or disable the order chaser"""
@@ -610,6 +613,8 @@ class UnfilledOrderChaser:
                     else:
                         print(f"[ORDER_CHASER] ⚠️ Max entry chase attempts reached for {order_id}")
                         order.status = OrderChaseStatus.FAILED
+                        if self.cancel_entry_on_max_attempts:
+                            await self._cancel_unfilled_entry_order(order)
         
         for order in orders_to_chase:
             await self._chase_entry_order(order)
@@ -806,6 +811,63 @@ class UnfilledOrderChaser:
         except Exception as e:
             print(f"[ORDER_CHASER] Error placing entry replacement order: {e}")
             return None
+    
+    async def _cancel_unfilled_entry_order(self, order: TrackedEntryOrder):
+        """Cancel an unfilled entry order after max chase attempts"""
+        try:
+            broker = self._get_broker(order.broker_id)
+            if not broker:
+                print(f"[ORDER_CHASER] ❌ Broker {order.broker_id} not available for cancel")
+                return
+            
+            print(f"\n[ORDER_CHASER] {'='*50}")
+            print(f"[ORDER_CHASER] 🚫 CANCELLING UNFILLED ENTRY ORDER")
+            print(f"[ORDER_CHASER]   Order ID: {order.order_id}")
+            print(f"[ORDER_CHASER]   Symbol: {order.symbol}")
+            print(f"[ORDER_CHASER]   Reason: Max chase attempts ({self.max_chase_attempts}) exhausted")
+            
+            pending_orders = []
+            if hasattr(broker, 'get_pending_orders'):
+                result = broker.get_pending_orders()
+                if inspect.iscoroutine(result):
+                    pending_orders = await result
+                else:
+                    pending_orders = result
+            
+            order_still_pending = any(
+                str(po.get('order_id', '')) == str(order.order_id)
+                for po in pending_orders
+            )
+            
+            if not order_still_pending:
+                print(f"[ORDER_CHASER]   Order no longer pending (may have filled)")
+                order.status = OrderChaseStatus.FILLED
+                return
+            
+            cancel_result = None
+            if hasattr(broker, 'cancel_order'):
+                result = broker.cancel_order(order.order_id)
+                if inspect.iscoroutine(result):
+                    cancel_result = await result
+                else:
+                    cancel_result = result
+            
+            if cancel_result:
+                print(f"[ORDER_CHASER] ✅ Entry order cancelled successfully")
+                order.status = OrderChaseStatus.CANCELLED
+                
+                async with self._lock:
+                    if order.order_id in self._tracked_entry_orders:
+                        del self._tracked_entry_orders[order.order_id]
+            else:
+                print(f"[ORDER_CHASER] ⚠️ Failed to cancel entry order")
+                
+            print(f"[ORDER_CHASER] {'='*50}\n")
+            
+        except Exception as e:
+            print(f"[ORDER_CHASER] Error cancelling entry order: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _get_broker(self, broker_id: str):
         """Get broker instance by ID"""
