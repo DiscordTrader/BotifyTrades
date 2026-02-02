@@ -12324,9 +12324,9 @@ def init_order_chase_settings():
     
     default_settings = [
         ('order_chase_enabled', 'true'),
-        ('order_chase_timeout_seconds', '30'),
+        ('order_chase_timeout_seconds', '4'),
         ('order_chase_max_attempts', '3'),
-        ('order_chase_poll_interval', '5'),
+        ('order_chase_poll_interval', '2'),
     ]
     
     try:
@@ -12356,9 +12356,9 @@ def get_order_chase_settings() -> Dict[str, Any]:
         rows = cursor.fetchall()
         settings = {
             'enabled': True,
-            'timeout_seconds': 30,
+            'timeout_seconds': 4,
             'max_attempts': 3,
-            'poll_interval': 5
+            'poll_interval': 2
         }
         
         for row in rows:
@@ -12376,7 +12376,7 @@ def get_order_chase_settings() -> Dict[str, Any]:
         return settings
     except Exception as e:
         print(f"[DATABASE] Error getting order chase settings: {e}")
-        return {'enabled': True, 'timeout_seconds': 30, 'max_attempts': 3, 'poll_interval': 5}
+        return {'enabled': True, 'timeout_seconds': 4, 'max_attempts': 3, 'poll_interval': 2}
 
 
 def save_order_chase_settings(settings: Dict[str, Any]) -> bool:
