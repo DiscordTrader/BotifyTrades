@@ -12,6 +12,7 @@ Key Features:
 """
 
 import asyncio
+import inspect
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
@@ -510,12 +511,17 @@ class UnfilledOrderChaser:
         try:
             if order.asset_type == 'option' and order.strike and order.expiry and order.call_put:
                 if hasattr(broker, 'get_option_quote'):
-                    quote = await broker.get_option_quote(
+                    method = broker.get_option_quote
+                    result = method(
                         symbol=order.symbol,
                         strike=order.strike,
                         expiry=order.expiry,
                         call_put=order.call_put
                     )
+                    if inspect.iscoroutine(result):
+                        quote = await result
+                    else:
+                        quote = result
                     if quote and quote.get('mid'):
                         return quote['mid']
                     elif quote:
@@ -526,12 +532,22 @@ class UnfilledOrderChaser:
                         return quote.get('last')
             else:
                 if hasattr(broker, 'get_quote_with_bid_ask'):
-                    quote = await broker.get_quote_with_bid_ask(order.symbol)
+                    method = broker.get_quote_with_bid_ask
+                    result = method(order.symbol)
+                    if inspect.iscoroutine(result):
+                        quote = await result
+                    else:
+                        quote = result
                     if quote and quote.get('mid'):
                         return quote['mid']
                 
                 if hasattr(broker, 'get_quote'):
-                    price = await broker.get_quote(order.symbol)
+                    method = broker.get_quote
+                    result = method(order.symbol)
+                    if inspect.iscoroutine(result):
+                        price = await result
+                    else:
+                        price = result
                     return price
             
             return None
@@ -702,12 +718,17 @@ class UnfilledOrderChaser:
         try:
             if order.asset_type == 'option' and order.strike and order.expiry and order.call_put:
                 if hasattr(broker, 'get_option_quote'):
-                    quote = await broker.get_option_quote(
+                    method = broker.get_option_quote
+                    result = method(
                         symbol=order.symbol,
                         strike=order.strike,
                         expiry=order.expiry,
                         call_put=order.call_put
                     )
+                    if inspect.iscoroutine(result):
+                        quote = await result
+                    else:
+                        quote = result
                     if quote:
                         bid = quote.get('bid', 0)
                         ask = quote.get('ask', 0)
@@ -720,7 +741,12 @@ class UnfilledOrderChaser:
                         return quote.get('last')
             else:
                 if hasattr(broker, 'get_quote_with_bid_ask'):
-                    quote = await broker.get_quote_with_bid_ask(order.symbol)
+                    method = broker.get_quote_with_bid_ask
+                    result = method(order.symbol)
+                    if inspect.iscoroutine(result):
+                        quote = await result
+                    else:
+                        quote = result
                     if quote:
                         bid = quote.get('bid', 0)
                         ask = quote.get('ask', 0)
@@ -730,7 +756,12 @@ class UnfilledOrderChaser:
                             return ask
                 
                 if hasattr(broker, 'get_quote'):
-                    price = await broker.get_quote(order.symbol)
+                    method = broker.get_quote
+                    result = method(order.symbol)
+                    if inspect.iscoroutine(result):
+                        price = await result
+                    else:
+                        price = result
                     return price
             
             return None
