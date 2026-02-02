@@ -10263,13 +10263,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     ticker_to_check = opt.get('symbol', '').upper().replace('$', '')
                     passes_filter, filter_reason = check_ticker_filter(channel_info, ticker_to_check)
                     if not passes_filter:
-                        print(f"[TICKER FILTER] ✗ BLOCKED: {ticker_to_check} - {filter_reason}")
-                        print(f"[TICKER FILTER] Signal NOT queued for execution")
+                        print(f"[TICKER FILTER] ✗ BLOCKED: {ticker_to_check} - {filter_reason}", flush=True)
+                        print(f"[TICKER FILTER] Signal NOT queued for execution", flush=True)
                         return  # Exit early - don't execute this signal
                     else:
-                        print(f"[TICKER FILTER] ✓ PASSED: {ticker_to_check} - {filter_reason}")
+                        print(f"[TICKER FILTER] ✓ PASSED: {ticker_to_check} - {filter_reason}", flush=True)
                 except Exception as tf_err:
-                    print(f"[TICKER FILTER] ⚠️ Error checking filter: {tf_err}")
+                    print(f"[TICKER FILTER] ⚠️ Error checking filter: {tf_err}", flush=True)
             
             if execute_enabled:
                 print(f"[ROUTE] EXECUTE enabled - adding to order queue", flush=True)
@@ -10829,13 +10829,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     ticker_to_check = stk.get('symbol', '').upper().replace('$', '')
                     passes_filter, filter_reason = check_ticker_filter(channel_info, ticker_to_check)
                     if not passes_filter:
-                        print(f"[TICKER FILTER] ✗ BLOCKED: {ticker_to_check} - {filter_reason}")
-                        print(f"[TICKER FILTER] Signal NOT queued for execution")
+                        print(f"[TICKER FILTER] ✗ BLOCKED: {ticker_to_check} - {filter_reason}", flush=True)
+                        print(f"[TICKER FILTER] Signal NOT queued for execution", flush=True)
                         return  # Exit early - don't execute this signal
                     else:
-                        print(f"[TICKER FILTER] ✓ PASSED: {ticker_to_check} - {filter_reason}")
+                        print(f"[TICKER FILTER] ✓ PASSED: {ticker_to_check} - {filter_reason}", flush=True)
                 except Exception as tf_err:
-                    print(f"[TICKER FILTER] ⚠️ Error checking filter: {tf_err}")
+                    print(f"[TICKER FILTER] ⚠️ Error checking filter: {tf_err}", flush=True)
             
             # Execute if execute_enabled flag is True (category is for UI organization only)
             if execute_enabled:
