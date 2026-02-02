@@ -11611,17 +11611,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             if entry_high and float(entry_high) > 0:
                                 entry_range_high = float(entry_high)
                             
-                            # Get channel slippage settings
+                            # Get channel slippage and timeout settings
                             slippage_max_pct = None
+                            order_timeout_minutes = None
                             channel_id = signal.get('channel_id')
                             if channel_id and DATABASE_MODULE_AVAILABLE:
                                 try:
                                     from gui_app import database as db
                                     ch = db.get_channel_by_discord_id(str(channel_id)) or db.get_channel_by_telegram_id(str(channel_id))
-                                    if ch and ch.get('slippage_protection_enabled'):
-                                        slippage_max_pct = ch.get('slippage_max_pct')
-                                        if slippage_max_pct:
-                                            _original_print(f"[EXEC] Using channel slippage limit: {slippage_max_pct}%")
+                                    if ch:
+                                        if ch.get('slippage_protection_enabled'):
+                                            slippage_max_pct = ch.get('slippage_max_pct')
+                                            if slippage_max_pct:
+                                                _original_print(f"[EXEC] Using channel slippage limit: {slippage_max_pct}%")
+                                        # Get channel-level order timeout
+                                        order_timeout_minutes = ch.get('order_timeout_minutes')
+                                        if order_timeout_minutes:
+                                            _original_print(f"[EXEC] Using channel order timeout: {order_timeout_minutes} min")
                                 except Exception:
                                     pass
                             
@@ -11641,7 +11647,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 call_put=signal.get('call_put') or signal.get('direction'),
                                 entry_range_high=entry_range_high,
                                 slippage_max_pct=slippage_max_pct,
-                                signal_price=float(signal_price) if signal_price else None
+                                signal_price=float(signal_price) if signal_price else None,
+                                timeout_minutes=order_timeout_minutes
                             )
                     except Exception as track_err:
                         _original_print(f"[EXEC] Warning: Could not track entry order: {track_err}")

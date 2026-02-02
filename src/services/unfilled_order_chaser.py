@@ -77,6 +77,7 @@ class TrackedEntryOrder:
     entry_range_high: Optional[float] = None  # Upper limit of entry range from signal
     slippage_max_pct: Optional[float] = None  # Per-channel slippage limit %
     signal_price: Optional[float] = None  # Original signal price for slippage calc
+    timeout_minutes: Optional[int] = None  # Per-channel timeout in minutes (order_timeout_minutes)
     status: OrderChaseStatus = OrderChaseStatus.PENDING
     chase_attempts: int = 0
     last_chase_at: Optional[datetime] = None
@@ -331,7 +332,8 @@ class UnfilledOrderChaser:
         call_put: Optional[str] = None,
         entry_range_high: Optional[float] = None,
         slippage_max_pct: Optional[float] = None,
-        signal_price: Optional[float] = None
+        signal_price: Optional[float] = None,
+        timeout_minutes: Optional[int] = None
     ) -> None:
         """
         Register an entry order (BTO) for monitoring.
@@ -340,6 +342,7 @@ class UnfilledOrderChaser:
         Args:
             slippage_max_pct: Per-channel max slippage % (e.g., 10 means max 10% above signal price)
             signal_price: Original signal price for slippage calculation
+            timeout_minutes: Per-channel timeout in minutes (from order_timeout_minutes)
         """
         async with self._lock:
             order = TrackedEntryOrder(
@@ -357,7 +360,8 @@ class UnfilledOrderChaser:
                 call_put=call_put,
                 entry_range_high=entry_range_high,
                 slippage_max_pct=slippage_max_pct,
-                signal_price=signal_price or price
+                signal_price=signal_price or price,
+                timeout_minutes=timeout_minutes
             )
             self._tracked_entry_orders[order_id] = order
             
@@ -600,6 +604,7 @@ class UnfilledOrderChaser:
         """Check all tracked entry orders and chase stale ones"""
         now = datetime.now()
         orders_to_chase = []
+        orders_to_cancel = []
         
         async with self._lock:
             for order_id, order in list(self._tracked_entry_orders.items()):
@@ -607,6 +612,18 @@ class UnfilledOrderChaser:
                     continue
                 
                 age = now - order.placed_at
+                age_seconds = age.total_seconds()
+                
+                # Check channel-level timeout (order_timeout_minutes) - CANCEL if exceeded
+                if order.timeout_minutes:
+                    timeout_seconds = order.timeout_minutes * 60
+                    if age_seconds >= timeout_seconds:
+                        print(f"[ORDER_CHASER] ⏰ Channel timeout ({order.timeout_minutes}min) reached for {order_id}")
+                        order.status = OrderChaseStatus.FAILED
+                        orders_to_cancel.append(order)
+                        continue
+                
+                # Check chase timeout (30s default) - CHASE if exceeded but within channel timeout
                 if age > self.chase_timeout:
                     if order.chase_attempts < self.max_chase_attempts:
                         orders_to_chase.append(order)
@@ -614,8 +631,13 @@ class UnfilledOrderChaser:
                         print(f"[ORDER_CHASER] ⚠️ Max entry chase attempts reached for {order_id}")
                         order.status = OrderChaseStatus.FAILED
                         if self.cancel_entry_on_max_attempts:
-                            await self._cancel_unfilled_entry_order(order)
+                            orders_to_cancel.append(order)
         
+        # Cancel timed-out orders
+        for order in orders_to_cancel:
+            await self._cancel_unfilled_entry_order(order)
+        
+        # Chase stale orders
         for order in orders_to_chase:
             await self._chase_entry_order(order)
     
