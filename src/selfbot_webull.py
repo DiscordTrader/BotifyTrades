@@ -2509,6 +2509,7 @@ class WebullBroker:
         """
         Public method to get stock quote for conditional order monitoring.
         Returns dict with 'close' key for compatibility with conditional order service.
+        Supports pre-market and after-hours pricing via pPrice field.
         """
         try:
             wb = self._client
@@ -2522,9 +2523,14 @@ class WebullBroker:
             ask = float(quote.get('askPrice', 0) or 0)
             bid = float(quote.get('bidPrice', 0) or 0)
             last = float(quote.get('last', 0) or quote.get('close', 0) or 0)
+            premarket_price = float(quote.get('pPrice', 0) or 0)
+            regular_close = float(quote.get('close', 0) or 0)
             
             if ask > 0 and bid > 0:
                 mark_price = (ask + bid) / 2
+            elif premarket_price > 0:
+                mark_price = premarket_price
+                print(f"[WEBULL] Using pre-market price ${premarket_price:.2f} for {symbol} (close=${regular_close:.2f})")
             elif last > 0:
                 mark_price = last
             else:
@@ -2535,6 +2541,7 @@ class WebullBroker:
                 'bid': bid,
                 'ask': ask,
                 'last': last,
+                'premarket': premarket_price,
                 'symbol': symbol
             }
         except Exception as e:

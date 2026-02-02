@@ -32,7 +32,7 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 
 **Enhanced Portfolio Simulation Engine v2.0**: Provides industry-grade portfolio analysis.
 
-**Conditional Order Monitoring System**: Monitors price conditions and executes orders when triggered.
+**Conditional Order Monitoring System**: Monitors price conditions and executes orders when triggered. Features automatic monitor upgrade mechanism - when brokers register after order restoration (during startup), monitors using Finnhub/yfinance fallback automatically upgrade to use the broker's real-time data for accurate pre-market pricing.
 
 **Filled Orders Tracking**: Syncs filled orders from broker APIs into a local database with automatic sync and deduplication.
 

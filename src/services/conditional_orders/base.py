@@ -475,8 +475,62 @@ class BaseConditionalOrderService(ABC):
         if broker_lower in [b.lower() for b in self.get_supported_brokers()]:
             self.broker_instances[broker_lower] = instance
             self._log(f"Registered broker: {broker_name}")
+            
+            # Upgrade any monitors using fallback data sources to use this broker
+            if self._loop:
+                asyncio.run_coroutine_threadsafe(
+                    self._upgrade_fallback_monitors(broker_name, instance),
+                    self._loop
+                )
         else:
             self._log(f"Broker {broker_name} not supported for {self.MARKET} market")
+    
+    async def _upgrade_fallback_monitors(self, broker_name: str, broker_instance: Any):
+        """Upgrade monitors using fallback data sources to use the newly registered broker."""
+        broker_lower = broker_name.lower()
+        upgraded_count = 0
+        
+        fallback_monitors = [oid for oid, mon in self.monitors.items() 
+                              if isinstance(mon, (FinnhubPriceMonitor, YFinancePriceMonitor))]
+        if not fallback_monitors:
+            return
+        
+        self._log(f"Checking {len(fallback_monitors)} fallback monitor(s) for upgrade to {broker_name}")
+        
+        for order_id, monitor in list(self.monitors.items()):
+            # Check if this monitor is using a fallback (Finnhub/yfinance) and should use this broker
+            if isinstance(monitor, (FinnhubPriceMonitor, YFinancePriceMonitor)):
+                # Check if this order is configured for this broker
+                order = self.pending_orders.get(order_id)
+                if not order:
+                    continue
+                
+                order_broker = order.get('broker_primary', '').lower()
+                order_broker_key = order_broker.replace('_paper', '').replace('_live', '')
+                broker_key = broker_lower.replace('_paper', '').replace('_live', '')
+                
+                if order_broker_key == broker_key or order_broker == broker_lower:
+                    self._log(f"Upgrading #{order_id} {monitor.symbol} from fallback to {broker_name}")
+                    
+                    # Stop the old monitor
+                    await monitor.stop()
+                    if order_id in self.monitor_tasks:
+                        self.monitor_tasks[order_id].cancel()
+                        try:
+                            await self.monitor_tasks[order_id]
+                        except asyncio.CancelledError:
+                            pass
+                    
+                    # Build new monitor with the broker
+                    new_monitor = await self.build_price_monitor(order, broker_instance, broker_name)
+                    if new_monitor:
+                        self.monitors[order_id] = new_monitor
+                        task = asyncio.create_task(new_monitor.start())
+                        self.monitor_tasks[order_id] = task
+                        upgraded_count += 1
+        
+        if upgraded_count > 0:
+            self._log(f"Upgraded {upgraded_count} monitor(s) to {broker_name}")
     
     def set_execution_callback(self, callback: Callable, main_loop: Optional[asyncio.AbstractEventLoop] = None):
         self.execution_callback = callback
