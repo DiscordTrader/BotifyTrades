@@ -11533,6 +11533,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     resp = dict(result)
                     resp['broker'] = broker_name
                     resp['executed_qty'] = signal['qty']
+                    # Extract orderId from nested 'data' for Webull stock orders
+                    if not resp.get('orderId') and isinstance(result.get('data'), dict):
+                        resp['orderId'] = result['data'].get('orderId')
                 else:
                     resp = {'broker': broker_name, 'result': result, 'executed_qty': signal['qty']}
             
@@ -11656,6 +11659,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 expiry=signal.get('expiry'),
                                 call_put=signal.get('opt_type')
                             )
+                            _original_print(f"[ORDER_CHASER] ✓ Tracking risk STC: {signal.get('symbol')} order_id={order_id}")
                         elif order_chaser and not order_chase_enabled:
                             _original_print(f"[ORDER_CHASER] ℹ️ Skipped tracking - order chase disabled for channel")
                     except Exception as chase_err:
