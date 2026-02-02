@@ -591,10 +591,21 @@ class BaseConditionalOrderService(ABC):
         trigger_price = parsed_signal.get('trigger_price', 0)
         trigger_type = parsed_signal.get('trigger_type', 'over')
         
-        # ADJUST OFFSET: Manual trigger price adjustment (separate from slippage)
-        # This can be adjusted per-order via the UI slider/input
-        trigger_offset = 0.0  # Default: no offset, user can adjust via UI
-        adjusted_price = trigger_price  # Start with original trigger price
+        # ADJUST OFFSET: Apply channel-level trigger offset if configured
+        # This can also be adjusted per-order via the UI slider/input after creation
+        trigger_offset = channel_settings.get('trigger_offset_percent', 0.0) or 0.0
+        print(f"[CONDITIONAL] Channel {channel_id} trigger_offset_percent: {trigger_offset}%", flush=True)
+        
+        if trigger_offset != 0:
+            if trigger_type == 'over':
+                adjusted_price = trigger_price * (1 + trigger_offset / 100)
+                print(f"[CONDITIONAL] ✓ Applied +{trigger_offset}% offset: ${trigger_price} -> ${adjusted_price:.4f}", flush=True)
+            else:  # under
+                adjusted_price = trigger_price * (1 - trigger_offset / 100)
+                print(f"[CONDITIONAL] ✓ Applied -{trigger_offset}% offset: ${trigger_price} -> ${adjusted_price:.4f}", flush=True)
+        else:
+            adjusted_price = trigger_price
+            print(f"[CONDITIONAL] No offset configured, using signal price: ${trigger_price}", flush=True)
         
         timeout_minutes = channel_settings.get('order_timeout_minutes') or channel_settings.get('conditional_order_timeout_minutes')
         if timeout_minutes:

@@ -677,6 +677,7 @@ class ConditionalOrderService:
         
         # Get trigger offset: channel-specific first, then fallback to global settings
         trigger_offset = channel_settings.get('trigger_offset_percent', 0.0) or 0.0
+        print(f"[CONDITIONAL] Channel {channel_id} trigger_offset_percent from settings: {trigger_offset}", flush=True)
         if trigger_offset == 0:
             # Fallback to global conditional order settings
             try:
@@ -695,10 +696,13 @@ class ConditionalOrderService:
         if trigger_offset != 0:
             if trigger_type == 'over':
                 adjusted_price = trigger_price * (1 + trigger_offset / 100)
+                print(f"[CONDITIONAL] ✓ Applied +{trigger_offset}% offset: ${trigger_price} -> ${adjusted_price:.4f}", flush=True)
             else:  # under
                 adjusted_price = trigger_price * (1 - trigger_offset / 100)
+                print(f"[CONDITIONAL] ✓ Applied -{trigger_offset}% offset: ${trigger_price} -> ${adjusted_price:.4f}", flush=True)
         else:
             adjusted_price = trigger_price
+            print(f"[CONDITIONAL] No offset applied, adjusted_price = trigger_price = ${trigger_price}", flush=True)
         
         # Channel-level timeout in minutes takes priority (NULL = use legacy expiry setting)
         # order_timeout_minutes applies to ALL orders, conditional_order_timeout_minutes is legacy/specific
