@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Optional, Tuple, Dict
 
 
-APP_VERSION = "4.2.5"
-BUILD_DATE = "2026-01-31"
+APP_VERSION = "4.2.6"
+BUILD_DATE = "2026-02-02"
 
 
 def parse_version(version_str: str) -> Tuple[int, int, int]:
