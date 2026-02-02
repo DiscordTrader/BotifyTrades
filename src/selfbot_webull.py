@@ -10257,7 +10257,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             
             # Execute if execute_enabled flag is True (category is for UI organization only)
             # Apply ticker filter BEFORE execution (BTO only - exits always pass)
-            if execute_enabled and channel_info and opt.get('action', 'BTO').upper() == 'BTO':
+            action_val = opt.get('action', 'BTO').upper()
+            print(f"[DEBUG TICKER] Pre-check: execute_enabled={execute_enabled}, channel_info={bool(channel_info)}, action={action_val}", flush=True)
+            if execute_enabled and channel_info and action_val == 'BTO':
                 try:
                     from src.signals.validator import check_ticker_filter
                     ticker_to_check = opt.get('symbol', '').upper().replace('$', '')
