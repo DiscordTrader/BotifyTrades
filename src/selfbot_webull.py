@@ -7465,17 +7465,42 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         sys.stderr.flush()
                         
                         # Build a BTO signal from the conditional order
+                        # Limit Cap Protection: Use limit order with capped price to prevent chasing
+                        limit_cap_enabled = order.get('limit_cap_enabled', 0)
+                        limit_price = order.get('limit_price')
+                        
+                        # Determine order type: market vs limit
+                        # Use limit order if: limit cap is enabled OR entry offset is applied
+                        use_limit_order = limit_cap_enabled or entry_price_offset != 0
+                        
+                        # If limit cap is enabled, use the stored limit_price as max price
+                        effective_limit_price = None
+                        if limit_cap_enabled and limit_price:
+                            effective_limit_price = limit_price
+                            sys.stderr.write(f"[CONDITIONAL EXEC] 🛡️ Limit Cap active: max buy price ${limit_price:.4f}\n")
+                            sys.stderr.flush()
+                        elif entry_price_offset != 0:
+                            # Apply offset to execution price
+                            effective_limit_price = execution_price * (1 + entry_price_offset / 100)
+                        
                         signal = {
                             'asset': order.get('asset_type', 'stock'),
                             'action': 'BTO',
                             'symbol': symbol,
                             'price': execution_price,
-                            'is_market_order': entry_price_offset == 0,  # Use limit order if any offset applied
+                            'is_market_order': not use_limit_order,
                             '_conditional_order_id': order['id'],
                             '_broker_override': broker_name,
                             'channel_id': order.get('channel_id'),  # Critical for RiskManager tracking
                             '_trigger_price': triggered_price,  # Store original trigger price
                         }
+                        
+                        # Add limit price cap for broker execution
+                        if effective_limit_price:
+                            signal['_limit_price'] = effective_limit_price
+                            signal['_limit_cap_enabled'] = limit_cap_enabled
+                            sys.stderr.write(f"[CONDITIONAL EXEC] Order type: LIMIT @ max ${effective_limit_price:.4f}\n")
+                            sys.stderr.flush()
                         
                         # Handle US Options orders with Quote-on-Trigger (QOT)
                         if market == 'US' and order.get('strike'):
@@ -11570,7 +11595,14 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'WEBULL'])
                 india_brokers = ['UPSTOX', 'ZERODHA', 'DHANQ']
                 
-                _original_print(f"[{broker_name}] Placing option order: {signal['action']} {signal['qty']} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @ ${signal.get('price')}")
+                # LIMIT CAP: Use _limit_price as the order price if set (prevents chasing)
+                # The limit_price acts as a ceiling - order fills at market or better, up to limit
+                order_price = signal.get('price')
+                if signal.get('_limit_cap_enabled') and signal.get('_limit_price'):
+                    order_price = signal['_limit_price']
+                    _original_print(f"[{broker_name}] 🛡️ Using LIMIT CAP price: ${order_price:.4f} (max allowed)")
+                
+                _original_print(f"[{broker_name}] Placing option order: {signal['action']} {signal['qty']} {signal['symbol']} ${signal['strike']}{signal['opt_type']} {signal['expiry']} @ ${order_price}")
                 
                 if uses_modern_signature:
                     # Modern brokers use: symbol, strike, expiry, option_type, action, quantity, price
@@ -11581,7 +11613,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         option_type=signal['opt_type'],
                         action=signal['action'],
                         quantity=signal['qty'],
-                        price=signal.get('price')  # None for market orders
+                        price=order_price  # Uses limit_cap price if enabled
                     )
                 elif broker_upper in india_brokers:
                     # Indian brokers (Zerodha, Upstox, DhanQ) use standardized interface
@@ -11594,7 +11626,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         option_type=signal['opt_type'],
                         action=signal['action'],
                         quantity=signal['qty'],
-                        price=signal.get('price'),
+                        price=order_price,  # Uses limit_cap price if enabled
                         lots=signal.get('lots')  # Optional - broker handles lot size calculation
                     )
                 else:
@@ -11606,7 +11638,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         strike=signal['strike'],
                         opt_type=signal['opt_type'],
                         expiry_mmdd=signal['expiry'],
-                        limit_price=signal.get('price'),
+                        limit_price=order_price,  # Uses limit_cap price if enabled
                         channel_id=signal.get('channel_id')
                     )
                 
@@ -11644,6 +11676,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 broker_upper = broker_name.upper()
                 uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE'])
                 
+                # LIMIT CAP: Use _limit_price as the order price if set (prevents chasing)
+                stock_order_price = signal.get('price')
+                if signal.get('_limit_cap_enabled') and signal.get('_limit_price'):
+                    stock_order_price = signal['_limit_price']
+                    _original_print(f"[{broker_name}] 🛡️ Using LIMIT CAP price: ${stock_order_price:.4f} (max allowed)")
+                
                 if uses_modern_signature:
                     # Some brokers don't accept channel_id - only pass to those that do
                     if 'ALPACA' in broker_upper:
@@ -11651,7 +11689,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             symbol=signal['symbol'],
                             action=signal['action'],
                             quantity=signal['qty'],
-                            price=signal.get('price'),  # None for market orders
+                            price=stock_order_price,  # Uses limit_cap price if enabled
                             channel_id=signal.get('channel_id')
                         )
                     else:
@@ -11660,7 +11698,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             symbol=signal['symbol'],
                             action=signal['action'],
                             quantity=signal['qty'],
-                            price=signal.get('price')  # None for market orders
+                            price=stock_order_price  # Uses limit_cap price if enabled
                         )
                 else:
                     # Webull and other legacy brokers (uses qty, not quantity)
@@ -11668,7 +11706,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         action=signal['action'],
                         qty=signal['qty'],
                         symbol=signal['symbol'],
-                        limit_price=signal.get('price'),  # None for market orders
+                        limit_price=stock_order_price,  # Uses limit_cap price if enabled
                         channel_id=signal.get('channel_id')
                     )
                 # Convert OrderResult to dict format for consistency
