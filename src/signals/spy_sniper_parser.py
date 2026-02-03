@@ -67,8 +67,8 @@ class SpySniperSignal:
 
 OPTION_PATTERN = re.compile(
     r'([A-Z]{1,5})\s+'                         # Symbol: SPY
-    r'(\d{1,2}/\d{1,2})\s+'                    # Expiry: 1/16
-    r'(\d+(?:\.\d+)?)\s*([CP])\s*'             # Strike + Type: 691P
+    r'(\d{1,2}/\d{1,2})\s*'                    # Expiry: 1/16 (optional space after)
+    r'(\d+(?:\.\d+)?)\s*([CP])\s*'             # Strike + Type: 691P or 695C
     r'(\.?\d+(?:\.\d+)?)?',                    # Entry Price: .44 (optional) - dot INSIDE capture
     re.IGNORECASE
 )
