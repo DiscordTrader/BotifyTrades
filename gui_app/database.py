@@ -511,6 +511,15 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added per-channel slippage protection columns")
     
+    # Migrate: Add per-channel limit cap protection columns (price ceiling for limit orders)
+    try:
+        cursor.execute('SELECT limit_cap_enabled FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE channels ADD COLUMN limit_cap_enabled INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE channels ADD COLUMN limit_cap_pct REAL DEFAULT 5.0')
+        conn.commit()
+        print("[DATABASE] ✓ Added per-channel limit cap protection columns")
+    
     # ============================================
     # OMS/RMS COLUMNS - Signal Update Automation & Risk Management
     # ============================================
@@ -2466,7 +2475,8 @@ def update_channel(channel_id: int, **kwargs):
                    'trim_order_mode', 'trim_limit_offset', 'exit_strategy_mode', 'exit_strategy_mode_override', 'market', 'trade_summary_enabled',
                    'conditional_order_enabled', 'conditional_auto_execute', 'conditional_order_expiry',
                    'conditional_order_timeout_minutes', 'trigger_offset_percent', 'order_timeout_minutes',
-                   'slippage_protection_enabled', 'slippage_max_pct', 'signal_update_automation', 'signal_update_automation_override',
+                   'slippage_protection_enabled', 'slippage_max_pct', 'limit_cap_enabled', 'limit_cap_pct',
+                   'signal_update_automation', 'signal_update_automation_override',
                    'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
                    'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
                    'use_global_risk_settings', 'circuit_breaker_enabled', 'channel_daily_loss_limit', 'channel_max_positions',
@@ -10503,6 +10513,9 @@ def init_conditional_orders_table():
         ('slippage_protection_enabled', 'INTEGER DEFAULT 0'),
         ('slippage_max_pct', 'REAL DEFAULT 10.0'),
         ('settings_source', 'TEXT DEFAULT "channel"'),
+        ('limit_cap_enabled', 'INTEGER DEFAULT 0'),
+        ('limit_cap_pct', 'REAL DEFAULT 5.0'),
+        ('limit_price', 'REAL'),
     ]
     for col_name, col_type in extended_columns:
         try:
@@ -10725,7 +10738,10 @@ def create_conditional_order(
     trailing_stop_enabled: int = 0,
     trailing_stop_pct: float = None,
     trailing_activation_pct: float = None,
-    settings_source: str = None
+    settings_source: str = None,
+    limit_cap_enabled: int = 0,
+    limit_cap_pct: float = None,
+    limit_price: float = None
 ) -> Optional[int]:
     """Create a new conditional order with full channel settings linkage.
     
@@ -10750,8 +10766,9 @@ def create_conditional_order(
                 original_message, asset_type, signal_id, strike, opt_type, market, expiry, lot_size, lots,
                 stop_loss_fixed, stop_loss_pct, target_ranges, status,
                 exit_strategy_mode, slippage_protection_enabled, slippage_max_pct,
-                trailing_stop_enabled, trailing_stop_pct, trailing_activation_pct, settings_source
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?)
+                trailing_stop_enabled, trailing_stop_pct, trailing_activation_pct, settings_source,
+                limit_cap_enabled, limit_cap_pct, limit_price
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             channel_id, symbol.upper(), trigger_type, trigger_price, adjusted_trigger_price,
             broker_primary, stop_loss_type, stop_loss_value, take_profit_targets,
@@ -10759,7 +10776,8 @@ def create_conditional_order(
             original_message, asset_type, signal_id, strike, opt_type, market, expiry, lot_size, lots,
             stop_loss_fixed, stop_loss_pct, target_ranges,
             exit_strategy_mode, slippage_protection_enabled, slippage_max_pct,
-            trailing_stop_enabled, trailing_stop_pct, trailing_activation_pct, settings_source
+            trailing_stop_enabled, trailing_stop_pct, trailing_activation_pct, settings_source,
+            limit_cap_enabled, limit_cap_pct, limit_price
         ))
         
         order_id = cursor.lastrowid
@@ -11241,7 +11259,8 @@ def get_channel_conditional_settings(channel_id: str) -> Dict[str, Any]:
                    profit_target_1_pct, profit_target_2_pct, profit_target_3_pct,
                    profit_target_4_pct, trailing_stop_pct, leave_runner_enabled,
                    leave_runner_pct, trailing_activation_pct,
-                   slippage_protection_enabled, slippage_max_pct
+                   slippage_protection_enabled, slippage_max_pct,
+                   limit_cap_enabled, limit_cap_pct
             FROM channels
             WHERE discord_channel_id = ?
         ''', (channel_id,))
