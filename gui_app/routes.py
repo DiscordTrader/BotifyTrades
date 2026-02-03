@@ -10231,7 +10231,7 @@ def register_routes(app):
         """Reset all PNL tracking data (signals, lots, closures)"""
         try:
             import sqlite3
-            conn = sqlite3.connect(db.get_db_path())
+            conn = sqlite3.connect(db.get_db_path(), timeout=30.0)
             cursor = conn.cursor()
             
             # Delete in correct order (foreign key constraints)
@@ -10273,7 +10273,7 @@ def register_routes(app):
             if not end_date:
                 end_date = start_date
             
-            conn = sqlite3.connect(db.get_db_path())
+            conn = sqlite3.connect(db.get_db_path(), timeout=30.0)
             cursor = conn.cursor()
             
             # Initialize counters
@@ -10349,7 +10349,7 @@ def register_routes(app):
             if not author_name:
                 return jsonify({'error': 'author_name is required'}), 400
             
-            conn = sqlite3.connect(db.get_db_path())
+            conn = sqlite3.connect(db.get_db_path(), timeout=30.0)
             cursor = conn.cursor()
             
             # Delete lot_closures for the author
@@ -10399,7 +10399,7 @@ def register_routes(app):
         """Get list of all authors with PNL data"""
         try:
             import sqlite3
-            conn = sqlite3.connect(db.get_db_path())
+            conn = sqlite3.connect(db.get_db_path(), timeout=30.0)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             
@@ -10435,7 +10435,7 @@ def register_routes(app):
         """Get list of dates with PNL data"""
         try:
             import sqlite3
-            conn = sqlite3.connect(db.get_db_path())
+            conn = sqlite3.connect(db.get_db_path(), timeout=30.0)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             

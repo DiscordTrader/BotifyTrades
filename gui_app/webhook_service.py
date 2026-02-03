@@ -19,9 +19,14 @@ logger = logging.getLogger(__name__)
 
 
 def get_db_connection():
-    """Get database connection."""
-    conn = sqlite3.connect(get_db_path())
+    """Get database connection with timeout and WAL mode."""
+    conn = sqlite3.connect(get_db_path(), timeout=30.0)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=30000')
+    except Exception:
+        pass
     return conn
 
 

@@ -316,13 +316,21 @@ def get_db_path():
 
 
 def get_connection():
-    """Get thread-safe database connection"""
+    """Get thread-safe database connection with WAL mode and timeout"""
     if not hasattr(_local, 'connection'):
         _local.connection = sqlite3.connect(
             get_db_path(),
-            check_same_thread=False
+            check_same_thread=False,
+            timeout=30.0  # Wait up to 30 seconds for locks
         )
         _local.connection.row_factory = sqlite3.Row
+        # Enable WAL mode for better concurrent access (reduces lock contention)
+        try:
+            _local.connection.execute('PRAGMA journal_mode=WAL')
+            _local.connection.execute('PRAGMA busy_timeout=30000')  # 30 second timeout
+            _local.connection.execute('PRAGMA synchronous=NORMAL')  # Faster writes, still safe with WAL
+        except Exception:
+            pass  # Ignore if already set or not supported
     return _local.connection
 
 
