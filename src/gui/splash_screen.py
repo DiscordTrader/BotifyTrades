@@ -237,7 +237,7 @@ class SplashScreen(QWidget):
         
         self.license_input = QLineEdit()
         self.license_input.setPlaceholderText("Enter license key (BTF-XXXX-XXXX-XXXX)")
-        self.license_input.setFont(QFont("Consolas", 11))
+        self.license_input.setFont(QFont("monospace", 11))
         self.license_input.setAlignment(Qt.AlignCenter)
         self.license_input.setFixedHeight(42)
         self.license_input.setStyleSheet("""
