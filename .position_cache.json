@@ -10345,7 +10345,7 @@
   },
   "ALPACA_PAPER_HYMC_stock": {
     "entry_price": 39.652857,
-    "highest_price": 41.1565,
+    "highest_price": 41.23,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -10362,7 +10362,7 @@
     "max_pnl_seen": 4.624128132265562,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 41.1191,
+    "last_evaluated_price": 41.23,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10530,7 +10530,7 @@
     "max_pnl_seen": 16.54601861427094,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 10.552,
+    "last_evaluated_price": 10.565,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10650,7 +10650,7 @@
     "max_pnl_seen": 5.408831607859711,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.4687,
+    "last_evaluated_price": 0.4663,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10698,7 +10698,7 @@
     "max_pnl_seen": 4.75000000000001,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 4.1341,
+    "last_evaluated_price": 4.115,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -11065,7 +11065,7 @@
   },
   "ROBINHOOD_AMZN_242.5_2026-02-04_C": {
     "entry_price": 0.64,
-    "highest_price": 0.68,
+    "highest_price": 0.7,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -11079,10 +11079,10 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-02-03T17:58:47.018962",
-    "max_pnl_seen": 4.615384615384619,
+    "max_pnl_seen": 9.374999999999991,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.61,
+    "last_evaluated_price": 0.7,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -11222,20 +11222,20 @@
     "tier3_hit": false,
     "tier4_hit": false,
     "pending_orders": {
-      "5effaef2-54c1-4035-9eb4-d544aa8ee894": {
-        "order_id": "5effaef2-54c1-4035-9eb4-d544aa8ee894",
+      "e1b79d3a-f321-4971-9658-4bebf6b4551a": {
+        "order_id": "e1b79d3a-f321-4971-9658-4bebf6b4551a",
         "tier": 1,
-        "qty_expected": 2,
+        "qty_expected": 1,
         "qty_filled": 0,
         "status": "pending",
-        "created_at": "2026-02-03T20:42:42.740772"
+        "created_at": "2026-02-03T20:47:47.629056"
       }
     },
     "created_at": "2026-02-03T19:44:51.157102",
     "max_pnl_seen": 28.92857142857143,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 3.41,
+    "last_evaluated_price": 3.59,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -11259,7 +11259,7 @@
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.1,
+    "last_evaluated_price": 1.24,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0

@@ -182,3 +182,41 @@ class ThreadSafeFlag:
     def is_set(self) -> bool:
         with self._lock:
             return self._value
+
+
+def shutdown_executor(wait: bool = False) -> None:
+    """
+    Shutdown the thread pool executor gracefully.
+    
+    Args:
+        wait: Whether to wait for pending tasks to complete
+    """
+    global _executor
+    if _executor is not None:
+        try:
+            _executor.shutdown(wait=wait, cancel_futures=True)
+        except TypeError:
+            # Python < 3.9 doesn't support cancel_futures
+            _executor.shutdown(wait=wait)
+        except Exception:
+            pass
+        _executor = None
+
+
+def cleanup_all_threads() -> None:
+    """
+    Clean up all managed threads and resources.
+    Call this during application shutdown to prevent segfaults on macOS.
+    """
+    global _discord_thread, _flask_thread, _discord_loop
+    
+    # Shutdown executor first
+    shutdown_executor(wait=False)
+    
+    # Clear loop reference
+    _discord_loop = None
+    
+    # Note: daemon threads will be terminated when main thread exits
+    # We just clear the references to allow garbage collection
+    _discord_thread = None
+    _flask_thread = None

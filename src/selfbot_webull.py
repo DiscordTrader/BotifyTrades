@@ -14096,9 +14096,83 @@ if __name__ == '__main__':
     import queue
     import multiprocessing
     import argparse
+    import atexit
+    import gc
     
     # Required for multiprocessing to work in PyInstaller frozen EXE
     multiprocessing.freeze_support()
+    
+    # CRITICAL: macOS requires 'spawn' start method to avoid crashes
+    # 'fork' causes issues with frameworks like Qt, Objective-C runtime, and CoreFoundation
+    if sys.platform == 'darwin':
+        try:
+            multiprocessing.set_start_method('spawn', force=True)
+        except RuntimeError:
+            pass  # Already set
+    
+    # Industry-grade cleanup handler for graceful shutdown
+    _cleanup_done = False
+    def cleanup_resources():
+        """Clean up all resources to prevent memory leaks and segfaults on shutdown."""
+        global _cleanup_done
+        if _cleanup_done:
+            return
+        _cleanup_done = True
+        
+        try:
+            # Force garbage collection to clean up circular references
+            gc.collect()
+            
+            # Close thread pool executors and clean up threads
+            try:
+                from src.core.thread_manager import cleanup_all_threads
+                cleanup_all_threads()
+            except Exception:
+                pass
+            
+            # Close any open database connections
+            try:
+                from gui_app.database import _local
+                if hasattr(_local, 'connection'):
+                    try:
+                        _local.connection.close()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            
+            # Clean up multiprocessing resources on macOS
+            if sys.platform == 'darwin':
+                try:
+                    # Force cleanup of semaphores and shared memory
+                    from multiprocessing import resource_tracker
+                    resource_tracker._resource_tracker._stop = True
+                except Exception:
+                    pass
+            
+            gc.collect()
+        except Exception:
+            pass
+    
+    # Register cleanup handler
+    atexit.register(cleanup_resources)
+    
+    # Graceful signal handling to prevent segfaults on termination
+    import signal
+    def graceful_shutdown(signum, frame):
+        """Handle SIGTERM/SIGINT gracefully to prevent segfaults."""
+        _original_print(f"\n[SHUTDOWN] Received signal {signum}, initiating graceful shutdown...")
+        cleanup_resources()
+        sys.exit(0)
+    
+    # Register signal handlers (SIGKILL cannot be caught)
+    try:
+        signal.signal(signal.SIGTERM, graceful_shutdown)
+        signal.signal(signal.SIGINT, graceful_shutdown)
+        if sys.platform != 'win32':
+            signal.signal(signal.SIGHUP, graceful_shutdown)
+    except Exception:
+        pass  # Some signals may not be available on all platforms
     
     # CRITICAL: Single instance check IMMEDIATELY after freeze_support()
     # Must happen before ANY other initialization to prevent duplicate processes
