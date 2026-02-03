@@ -9620,6 +9620,71 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         # Initialize variables for signal tracking
         india_stock_signal = None
         bullwinkle_opt = None
+        spy_sniper_opt = None
+        
+        # Check for Spy-Sniper embed format (direct execution path - separate from signal routing)
+        if SPY_SNIPER_AVAILABLE and hasattr(message, 'embeds') and message.embeds:
+            from src.signals.spy_sniper_parser import parse_spy_sniper_signal, SpySniperSignalType
+            for embed in message.embeds:
+                embed_title = embed.title if embed.title else ""
+                embed_desc = embed.description if embed.description else ""
+                spy_signal = parse_spy_sniper_signal(embed_title, embed_desc, str(message.id))
+                if spy_signal:
+                    author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
+                    
+                    if spy_signal.signal_type == SpySniperSignalType.ENTRY:
+                        # Create BTO signal from spy-sniper Open Alert
+                        spy_sniper_opt = {
+                            'asset': 'option',
+                            'action': 'BTO',
+                            'symbol': spy_signal.symbol,
+                            'strike': spy_signal.strike,
+                            'opt_type': spy_signal.option_type,
+                            'expiry': spy_signal.expiry_date,
+                            'price': spy_signal.entry_price or 0.0,
+                            'qty': 1,  # Will be recalculated based on channel settings
+                            '_spy_sniper': True,
+                            '_spy_sniper_raw': spy_signal.raw_text,
+                        }
+                        print(f"[SPY-SNIPER] ✓ Open Alert (BTO): {spy_signal.symbol} {spy_signal.strike}{spy_signal.option_type} {spy_signal.expiry} @ ${spy_signal.entry_price}")
+                        break
+                    
+                    elif spy_signal.signal_type in [SpySniperSignalType.TRIM, SpySniperSignalType.CLOSE]:
+                        # Create STC signal from spy-sniper Trim/Close Alert
+                        # Look up open position to get correct details
+                        open_position = get_open_position_for_symbol(spy_signal.symbol, str(message.channel.id))
+                        
+                        if open_position:
+                            exit_qty = open_position.get('quantity') or 1
+                            if spy_signal.signal_type == SpySniperSignalType.TRIM and not spy_signal.is_full_exit:
+                                # Partial exit - use gain percentage to determine exit amount
+                                if spy_signal.gain_percent:
+                                    # Exit proportional amount based on signal's gain milestone
+                                    if spy_signal.gain_percent <= 25:
+                                        exit_qty = max(1, exit_qty // 4)  # 25% at 25% gain
+                                    elif spy_signal.gain_percent <= 50:
+                                        exit_qty = max(1, exit_qty // 3)  # ~33%
+                                    else:
+                                        exit_qty = max(1, exit_qty // 2)  # 50%
+                            
+                            spy_sniper_opt = {
+                                'asset': 'option',
+                                'action': 'STC',
+                                'symbol': spy_signal.symbol,
+                                'strike': open_position.get('strike') or spy_signal.strike,
+                                'opt_type': open_position.get('call_put') or open_position.get('opt_type') or spy_signal.option_type,
+                                'expiry': open_position.get('expiry') or spy_signal.expiry_date,
+                                'price': spy_signal.current_price or 0.0,
+                                'qty': exit_qty,
+                                '_spy_sniper': True,
+                                '_spy_sniper_exit_type': 'close' if spy_signal.is_full_exit else 'trim',
+                                '_spy_sniper_gain_pct': spy_signal.gain_percent,
+                            }
+                            exit_type = 'Close' if spy_signal.is_full_exit else 'Trim'
+                            print(f"[SPY-SNIPER] ✓ {exit_type} Alert (STC): {spy_signal.symbol} @ ${spy_signal.current_price} (+{spy_signal.gain_percent}%)")
+                        else:
+                            print(f"[SPY-SNIPER] ⚠️ No open position found for {spy_signal.symbol} - cannot process trim/close")
+                        break
         
         # Check for Bullwinkle format first (with deduplication)
         if is_bullwinkle_signal(combined_content):
@@ -9775,8 +9840,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # Failed to create (duplicate or error), skip
                     return
         
-        # Parse trading signals - check Bullwinkle first, then India, then US format
-        opt = bullwinkle_opt  # Use Bullwinkle signal if already parsed
+        # Parse trading signals - check Spy-Sniper, Bullwinkle first, then India, then US format
+        opt = spy_sniper_opt or bullwinkle_opt  # Use already-parsed embed signals first
         
         if opt is None and is_india_signal(normalized_content):
             print(f"[SIGNAL] Detected India format signal, using India parser")
