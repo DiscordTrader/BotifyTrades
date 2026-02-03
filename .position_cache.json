@@ -10362,7 +10362,7 @@
     "max_pnl_seen": 4.624128132265562,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 37.9,
+    "last_evaluated_price": 38.07,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10530,7 +10530,7 @@
     "max_pnl_seen": 15.82213029989658,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 10.5527,
+    "last_evaluated_price": 10.51,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10659,7 +10659,7 @@
     "max_pnl_seen": 5.408831607859711,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.4852,
+    "last_evaluated_price": 0.4833,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10707,7 +10707,7 @@
     "max_pnl_seen": 2.8750000000000053,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 3.84,
+    "last_evaluated_price": 3.87,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10882,7 +10882,7 @@
   },
   "Webull_GXAI_stock": {
     "entry_price": 1.918,
-    "highest_price": 2.1591304347826084,
+    "highest_price": 2.15,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -10894,28 +10894,19 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {
-      "3FJA7114SFKS3TH4OU456I9UG8": {
-        "order_id": "3FJA7114SFKS3TH4OU456I9UG8",
-        "tier": 1,
-        "qty_expected": 7,
-        "qty_filled": 0,
-        "status": "pending",
-        "created_at": "2026-02-03T14:52:28.094535"
-      }
-    },
+    "pending_orders": {},
     "created_at": "2026-02-03T14:44:29.770176",
     "max_pnl_seen": 12.571972616402944,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 2.0391304347826087,
+    "last_evaluated_price": 2.030869565217391,
     "early_trailing_active": true,
     "early_stop_price": 1.99472,
     "early_steps_locked": 1
   },
   "Webull_SPY_692.0_02/03_P": {
     "entry_price": 0.43,
-    "highest_price": 0.515,
+    "highest_price": 0.765,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -10939,7 +10930,7 @@
   },
   "ALPACA_PAPER_TIRX_stock": {
     "entry_price": 0.15,
-    "highest_price": 0.15,
+    "highest_price": 0.1535,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -10953,10 +10944,10 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-02-03T14:45:48.023653",
-    "max_pnl_seen": 0.0,
+    "max_pnl_seen": 2.3333333333333357,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": null,
+    "last_evaluated_price": 0.1535,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -11004,7 +10995,7 @@
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.3,
+    "last_evaluated_price": 1.25,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
