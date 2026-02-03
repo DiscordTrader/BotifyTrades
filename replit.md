@@ -34,6 +34,13 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 
 **Conditional Order Monitoring System**: Monitors price conditions and executes orders when triggered. Features automatic monitor upgrade mechanism - when brokers register after order restoration (during startup), monitors using Finnhub/yfinance fallback automatically upgrade to use the broker's real-time data for accurate pre-market pricing.
 
+**Limit Cap Protection** (February 2026): Prevents chasing runaway prices on conditional orders by setting a maximum limit price:
+- **Per-channel configuration**: Enable/disable and set cap percentage via Trading → Execution page (LimCap toggle)
+- **Calculation**: limit_price = trigger_price × (1 + limit_cap_pct/100). E.g., trigger $2.60 + 5% cap = $2.73 max buy price
+- **Execution**: Order fills at market or better up to limit_price; won't fill if price already ran beyond cap
+- **Order Chaser Integration**: limit_cap_price acts as absolute ceiling in max_chase_price calculation (min of limit_cap, slippage, entry_range)
+- **Interaction with Slippage**: Both can coexist - effective cap = min(limit_cap_pct, slippage_max_pct)
+
 **Filled Orders Tracking**: Syncs filled orders from broker APIs into a local database with automatic sync and deduplication.
 
 **Execution-Based P&L Tracking**: Provides professional-grade P&L calculation, including slippage and latency metrics, with a Two-Tier P&L Architecture separating theoretical signal performance from actual broker execution.
