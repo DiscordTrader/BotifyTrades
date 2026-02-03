@@ -78,6 +78,7 @@ class TrackedEntryOrder:
     slippage_max_pct: Optional[float] = None  # Per-channel slippage limit %
     signal_price: Optional[float] = None  # Original signal price for slippage calc
     timeout_minutes: Optional[int] = None  # Per-channel timeout in minutes (order_timeout_minutes)
+    limit_cap_price: Optional[float] = None  # Limit cap price (absolute ceiling from conditional order)
     status: OrderChaseStatus = OrderChaseStatus.PENDING
     chase_attempts: int = 0
     last_chase_at: Optional[datetime] = None
@@ -86,19 +87,34 @@ class TrackedEntryOrder:
     
     @property
     def max_chase_price(self) -> Optional[float]:
-        """Calculate maximum allowed chase price based on slippage limit.
+        """Calculate maximum allowed chase price.
         
-        Priority: Slippage limit > Entry range (slippage is the hard limit for chasing)
-        Entry range is used for initial order placement, slippage is used for chasing.
+        Priority: 
+        1. Limit cap price (absolute ceiling from conditional order, cannot be exceeded)
+        2. Slippage limit (percentage-based ceiling for normal signals)
+        3. Entry range high (from signal entry range)
+        
+        If limit_cap_price is set, it acts as an absolute ceiling.
+        The returned value is the minimum of all applicable limits.
         """
-        # Use slippage limit as the primary limit for chasing
+        limits = []
+        
+        # Limit cap price is an absolute ceiling (from conditional orders)
+        if self.limit_cap_price:
+            limits.append(self.limit_cap_price)
+        
+        # Slippage limit as a percentage-based ceiling
         if self.slippage_max_pct and self.signal_price:
             max_with_slippage = self.signal_price * (1 + self.slippage_max_pct / 100)
-            return round(max_with_slippage, 2)
+            limits.append(round(max_with_slippage, 2))
         
-        # Fall back to entry range high if no slippage configured
+        # Entry range high as a fallback
         if self.entry_range_high:
-            return self.entry_range_high
+            limits.append(self.entry_range_high)
+        
+        # Return the most restrictive (lowest) limit
+        if limits:
+            return min(limits)
         
         return None
 
@@ -333,7 +349,8 @@ class UnfilledOrderChaser:
         entry_range_high: Optional[float] = None,
         slippage_max_pct: Optional[float] = None,
         signal_price: Optional[float] = None,
-        timeout_minutes: Optional[int] = None
+        timeout_minutes: Optional[int] = None,
+        limit_cap_price: Optional[float] = None
     ) -> None:
         """
         Register an entry order (BTO) for monitoring.
@@ -343,6 +360,7 @@ class UnfilledOrderChaser:
             slippage_max_pct: Per-channel max slippage % (e.g., 10 means max 10% above signal price)
             signal_price: Original signal price for slippage calculation
             timeout_minutes: Per-channel timeout in minutes (from order_timeout_minutes)
+            limit_cap_price: Absolute ceiling price (from conditional order limit cap)
         """
         async with self._lock:
             order = TrackedEntryOrder(
@@ -361,13 +379,16 @@ class UnfilledOrderChaser:
                 entry_range_high=entry_range_high,
                 slippage_max_pct=slippage_max_pct,
                 signal_price=signal_price or price,
-                timeout_minutes=timeout_minutes
+                timeout_minutes=timeout_minutes,
+                limit_cap_price=limit_cap_price
             )
             self._tracked_entry_orders[order_id] = order
             
             max_price = order.max_chase_price
             max_info = f"max ${max_price:.2f}" if max_price else "no limit"
-            if slippage_max_pct:
+            if limit_cap_price:
+                max_info += f" (limit cap ${limit_cap_price:.2f})"
+            elif slippage_max_pct:
                 max_info += f" (slippage {slippage_max_pct}%)"
             print(f"[ORDER_CHASER] Tracking entry order: {order_id} | {symbol} {quantity}x @ ${price:.2f} | {max_info}")
     
@@ -725,6 +746,10 @@ class UnfilledOrderChaser:
                         expiry=order.expiry,
                         call_put=order.call_put,
                         entry_range_high=order.entry_range_high,
+                        slippage_max_pct=order.slippage_max_pct,
+                        signal_price=order.signal_price,
+                        timeout_minutes=order.timeout_minutes,
+                        limit_cap_price=order.limit_cap_price,  # Preserve limit cap ceiling
                         chase_attempts=order.chase_attempts
                     )
                     self._tracked_entry_orders[new_order_id] = new_tracked

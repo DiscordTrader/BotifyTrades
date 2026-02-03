@@ -11795,6 +11795,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             if entry_chase_enabled:
                                 asset_type = signal.get('asset') or signal.get('asset_type', 'stock')
                                 signal_price = signal.get('signal_price') or entry_price
+                                # Get limit cap price from conditional order if set
+                                limit_cap_price = signal.get('_limit_price') if signal.get('_limit_cap_enabled') else None
                                 await order_chaser.track_entry_order(
                                     order_id=str(order_id),
                                     broker_id=broker_name,
@@ -11810,7 +11812,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     entry_range_high=entry_range_high,
                                     slippage_max_pct=slippage_max_pct,
                                     signal_price=float(signal_price) if signal_price else None,
-                                    timeout_minutes=order_timeout_minutes
+                                    timeout_minutes=order_timeout_minutes,
+                                    limit_cap_price=limit_cap_price
                                 )
                             else:
                                 _original_print(f"[EXEC] Entry chase disabled for channel {channel_id}")
