@@ -7468,6 +7468,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         # Limit Cap Protection: Use limit order with capped price to prevent chasing
                         limit_cap_enabled = order.get('limit_cap_enabled', 0)
                         limit_price = order.get('limit_price')
+                        limit_cap_pct = order.get('limit_cap_pct')
                         
                         # Determine order type: market vs limit
                         # Use limit order if: limit cap is enabled OR entry offset is applied
@@ -7479,6 +7480,19 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             effective_limit_price = limit_price
                             sys.stderr.write(f"[CONDITIONAL EXEC] 🛡️ Limit Cap active: max buy price ${limit_price:.4f}\n")
                             sys.stderr.flush()
+                        elif limit_cap_enabled and not limit_price:
+                            # Edge case: limit_cap_enabled but limit_price missing (legacy/restored orders)
+                            # Compute limit_price on-the-fly from trigger price and cap percentage
+                            if limit_cap_pct and float(limit_cap_pct) > 0:
+                                computed_limit = triggered_price * (1 + float(limit_cap_pct) / 100)
+                                effective_limit_price = computed_limit
+                                sys.stderr.write(f"[CONDITIONAL EXEC] 🛡️ Limit Cap computed on-the-fly: ${computed_limit:.4f} (trigger ${triggered_price:.2f} + {limit_cap_pct}%)\n")
+                                sys.stderr.flush()
+                            else:
+                                # No percentage available - fallback to market order to satisfy "execute if over by a penny"
+                                use_limit_order = False
+                                sys.stderr.write(f"[CONDITIONAL EXEC] ⚠️ Limit Cap enabled but no percentage - using market order\n")
+                                sys.stderr.flush()
                         elif entry_price_offset != 0:
                             # Apply offset to execution price
                             effective_limit_price = execution_price * (1 + entry_price_offset / 100)
