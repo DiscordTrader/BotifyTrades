@@ -718,6 +718,23 @@ class BaseConditionalOrderService(ABC):
         slippage_protection_enabled = 1 if channel_settings.get('slippage_protection_enabled') else 0
         slippage_max_pct = channel_settings.get('slippage_max_pct')
         
+        # Limit Cap - price ceiling for limit orders to prevent chasing
+        limit_cap_enabled = 1 if channel_settings.get('limit_cap_enabled') else 0
+        limit_cap_pct = channel_settings.get('limit_cap_pct') or 5.0
+        
+        # Compute limit_price at order creation (will be used at trigger execution)
+        # For BUY orders: limit_price = trigger + cap% (ceiling)
+        # For SELL orders: limit_price = trigger - cap% (floor)
+        limit_price = None
+        if limit_cap_enabled and limit_cap_pct and limit_cap_pct > 0 and adjusted_price:
+            if trigger_type in ('ABOVE', 'PRICE_ABOVE', 'BTO'):
+                # Buy: max price = trigger + cap%
+                limit_price = round(adjusted_price * (1 + limit_cap_pct / 100), 4)
+            else:
+                # Sell: min price = trigger - cap%
+                limit_price = round(adjusted_price * (1 - limit_cap_pct / 100), 4)
+            self._log(f"Limit cap computed: trigger=${adjusted_price} + {limit_cap_pct}% = limit=${limit_price}")
+        
         # Trailing stop - signal overrides channel settings
         trailing_stop_pct = parsed_signal.get('trailing_stop_pct') or channel_settings.get('trailing_stop_pct')
         trailing_activation_pct = parsed_signal.get('trailing_activation_pct') or channel_settings.get('trailing_activation_pct')
@@ -735,6 +752,8 @@ class BaseConditionalOrderService(ABC):
             settings_sources.append(f"sizing:channel({qty_value}qty)")
         if slippage_protection_enabled:
             settings_sources.append(f"slippage:channel({slippage_max_pct}%)")
+        if limit_cap_enabled:
+            settings_sources.append(f"limit_cap:channel({limit_cap_pct}%)")
         if trailing_stop_pct and not parsed_signal.get('trailing_stop_pct'):
             settings_sources.append(f"trailing:channel({trailing_stop_pct}%)")
         if exit_strategy_mode != 'signal':
@@ -742,7 +761,7 @@ class BaseConditionalOrderService(ABC):
         settings_source = '; '.join(settings_sources) if settings_sources else None
         
         self._log(f"Channel settings applied: exit_mode={exit_strategy_mode}, slippage={slippage_protection_enabled}/{slippage_max_pct}, "
-                  f"trailing={trailing_stop_pct}/{trailing_activation_pct}")
+                  f"limit_cap={limit_cap_enabled}/{limit_cap_pct}%, trailing={trailing_stop_pct}/{trailing_activation_pct}")
         
         order_id = create_conditional_order(
             channel_id=channel_id,
@@ -776,6 +795,9 @@ class BaseConditionalOrderService(ABC):
             trailing_stop_pct=trailing_stop_pct,
             trailing_activation_pct=trailing_activation_pct,
             settings_source=settings_source,
+            limit_cap_enabled=limit_cap_enabled,
+            limit_cap_pct=limit_cap_pct,
+            limit_price=limit_price,
         )
         
         if order_id:
