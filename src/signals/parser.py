@@ -240,6 +240,13 @@ BISHOP_TRIMMING_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+#   Trimming MRK 115 C 2/20 @$190%!!
+#   Trimming SPY 600 P 2/14 @$250%
+BISHOP_TRIMMING_PERCENT_PATTERN = re.compile(
+    r'Trimming\s+([A-Z]+)\s+([\d.]+)\s*([CP])\s+(\d{1,2}/\d{1,2})\s*@\s*\$?([\d.]+)\s*%',
+    re.IGNORECASE
+)
+
 # ============ EVAPANDA FORMAT PATTERNS ============
 # Format: BTO SYMBOL MM/DD/YY STRIKE+C/P @ PRICE (notes)
 # Examples:
@@ -2151,6 +2158,8 @@ def is_bishop_signal(text: str) -> bool:
     
     if BISHOP_ENTRY_PATTERN.search(text):
         return True
+    if BISHOP_TRIMMING_PERCENT_PATTERN.search(text):
+        return True
     if BISHOP_TRIMMING_PATTERN.search(text):
         return True
     if BISHOP_EXIT_PATTERN.search(text):
@@ -2206,7 +2215,28 @@ def parse_bishop_signal(text: str) -> Optional[Dict[str, Any]]:
         
         return result
     
-    # Try trimming pattern: "Trimming CAT 640 C 1/16 @$11.25"
+    # Try percent-based trimming pattern FIRST: "Trimming MRK 115 C 2/20 @$190%!!"
+    match = BISHOP_TRIMMING_PERCENT_PATTERN.search(text)
+    if match:
+        symbol, strike, opt_type, expiry, pct_value = match.groups()
+        return {
+            'asset': 'option',
+            'action': 'STC',
+            'symbol': symbol.upper(),
+            'strike': float(strike),
+            'opt_type': opt_type.upper(),
+            'expiry': expiry,
+            'price': 0.0,
+            'pct_gain': float(pct_value),
+            'trim_percent': float(pct_value),
+            'qty': None,
+            '_bishop': True,
+            '_bishop_trim_percent': True,
+            'is_exit': True,
+            'is_partial': True,
+        }
+    
+    # Try price-based trimming pattern: "Trimming CAT 640 C 1/16 @$11.25"
     match = BISHOP_TRIMMING_PATTERN.search(text)
     if match:
         symbol, strike, opt_type, expiry, price = match.groups()

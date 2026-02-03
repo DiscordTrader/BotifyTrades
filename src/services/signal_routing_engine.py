@@ -1169,7 +1169,7 @@ class SignalRoutingEngine:
         
         stc_message = (
             f"@everyone\n"
-            f"STC {position.symbol} {position.strike}{position.option_type} "
+            f"STC ${position.symbol} {position.strike} {position.option_type} "
             f"{position.expiry} @ {price_display}{exit_label}\n"
             f"*Not financial advice, for educational purposes only.*"
         )
