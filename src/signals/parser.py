@@ -427,7 +427,15 @@ HYBRID_SL_PATTERN = re.compile(
 FOLLOW_UP_SL_PATTERN = re.compile(
     r'(?:SL|stop\s*loss|stop)\s*'
     r'(?:now\s+)?(?:at|moved?\s+to|raised?\s+to|lowered?\s+to|changed?\s+to|updated?\s+to|set\s+(?:at|to))?\s*'
-    r'[:\s@]*\$?(?P<price>[\d.]+)(?:\s*%)?',
+    r'[:\s@]*\$?(?P<price>[\d.]+)(?!\s*%)',  # Fixed price, NOT percentage
+    re.IGNORECASE
+)
+
+# Percentage SL pattern for Phoenix-style: "SL 10%", "stop loss 5%"
+FOLLOW_UP_SL_PERCENT_PATTERN = re.compile(
+    r'(?:SL|stop\s*loss|stop)\s*'
+    r'(?:now\s+)?(?:at|moved?\s+to|raised?\s+to|lowered?\s+to|changed?\s+to|updated?\s+to|set\s+(?:at|to))?\s*'
+    r'[:\s@]*(?P<pct>[\d.]+)\s*%',
     re.IGNORECASE
 )
 
@@ -435,6 +443,13 @@ FOLLOW_UP_PT_PATTERN = re.compile(
     r'(?:PT|target|profit\s*target|take\s*profit|TP)\s*'
     r'(?:now\s+)?(?:at|moved?\s+to|raised?\s+to|changed?\s+to|updated?\s+to|set\s+(?:at|to))?\s*'
     r'[:\s@]*\$?(?P<price>[\d.]+)',
+    re.IGNORECASE
+)
+
+# Range targets pattern for Phoenix-style: "targets 3.25-3.50", "PT 3.25-3.50"
+FOLLOW_UP_PT_RANGE_PATTERN = re.compile(
+    r'(?:targets?|PT|profit\s*target|take\s*profit|TP)\s*'
+    r'[:\s@]*\$?(?P<price1>[\d.]+)\s*[-–—to]+\s*\$?(?P<price2>[\d.]+)',
     re.IGNORECASE
 )
 
@@ -1235,7 +1250,7 @@ def parse_follow_up_update(text: str, context_symbol: str = None) -> Optional[Di
     Parse follow-up messages for SL/PT updates.
     
     These are messages that update an existing order's SL or PT.
-    Examples: "SL now at 14.60", "PT raised to 17.50"
+    Examples: "SL now at 14.60", "PT raised to 17.50", "SL 10%", "targets 3.25-3.50"
     
     Args:
         text: Message text
@@ -1246,17 +1261,30 @@ def parse_follow_up_update(text: str, context_symbol: str = None) -> Optional[Di
     """
     updates = {}
     
-    # Check for SL update
-    sl_match = FOLLOW_UP_SL_PATTERN.search(text)
-    if sl_match:
-        price_str = sl_match.group('price')
-        updates['stop_loss_update'] = float(price_str)
+    # Check for percentage SL FIRST (e.g., "SL 10%", "stop loss 5%")
+    sl_pct_match = FOLLOW_UP_SL_PERCENT_PATTERN.search(text)
+    if sl_pct_match:
+        pct_str = sl_pct_match.group('pct')
+        updates['stop_loss_pct_update'] = float(pct_str)
+    else:
+        # Check for fixed-price SL (e.g., "SL at 2.50")
+        sl_match = FOLLOW_UP_SL_PATTERN.search(text)
+        if sl_match:
+            price_str = sl_match.group('price')
+            updates['stop_loss_update'] = float(price_str)
     
-    # Check for PT update
-    pt_match = FOLLOW_UP_PT_PATTERN.search(text)
-    if pt_match:
-        price_str = pt_match.group('price')
-        updates['profit_target_update'] = float(price_str)
+    # Check for range PT FIRST (e.g., "targets 3.25-3.50")
+    pt_range_match = FOLLOW_UP_PT_RANGE_PATTERN.search(text)
+    if pt_range_match:
+        price1 = float(pt_range_match.group('price1'))
+        price2 = float(pt_range_match.group('price2'))
+        updates['profit_targets_update'] = [price1, price2]
+    else:
+        # Check for single PT (e.g., "PT raised to 3.25")
+        pt_match = FOLLOW_UP_PT_PATTERN.search(text)
+        if pt_match:
+            price_str = pt_match.group('price')
+            updates['profit_target_update'] = float(price_str)
     
     if updates:
         result = {
@@ -1270,8 +1298,13 @@ def parse_follow_up_update(text: str, context_symbol: str = None) -> Optional[Di
         update_strs = []
         if 'stop_loss_update' in updates:
             update_strs.append(f"SL=${updates['stop_loss_update']}")
+        if 'stop_loss_pct_update' in updates:
+            update_strs.append(f"SL={updates['stop_loss_pct_update']}%")
         if 'profit_target_update' in updates:
             update_strs.append(f"PT=${updates['profit_target_update']}")
+        if 'profit_targets_update' in updates:
+            pts = updates['profit_targets_update']
+            update_strs.append(f"PT=${pts[0]}-${pts[1]}")
         
         print(f"[FOLLOW-UP] Update detected: {', '.join(update_strs)}"
               f"{' for ' + context_symbol if context_symbol else ''}")

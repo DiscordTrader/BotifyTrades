@@ -10362,7 +10362,7 @@
     "max_pnl_seen": 4.624128132265562,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 40.32,
+    "last_evaluated_price": 39.5065,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10530,7 +10530,7 @@
     "max_pnl_seen": 14.064115822130294,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 10.851,
+    "last_evaluated_price": 10.81,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10650,7 +10650,7 @@
     "max_pnl_seen": 3.5072892457215303,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.4899,
+    "last_evaluated_price": 0.4858,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10698,7 +10698,7 @@
     "max_pnl_seen": 2.8750000000000053,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 3.92,
+    "last_evaluated_price": 3.86,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10805,8 +10805,8 @@
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
-    "stop_loss_price": null,
-    "profit_target_price": null,
+    "stop_loss_price": 2.142,
+    "profit_target_price": 10.0,
     "broker": "Webull",
     "raw_symbol": null,
     "tier1_hit": false,
@@ -10818,7 +10818,7 @@
     "max_pnl_seen": 1.9672131147541148,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 2.5210526315789474,
+    "last_evaluated_price": 2.57,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0

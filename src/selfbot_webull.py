@@ -9256,6 +9256,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     trigger_type = parsed_cond.get('trigger_type', 'over')
                                     print(f"[COND ORDER] ✓ Created conditional order #{order_id}: {parsed_cond['symbol']} {trigger_type} ${parsed_cond['trigger_price']}")
                                     
+                                    # Register with conversation state manager for follow-up SL/PT messages
+                                    try:
+                                        from src.services.signal_conversation_state import get_conversation_state_manager
+                                        state_mgr = get_conversation_state_manager()
+                                        state_mgr.register_signal(
+                                            message_id=int(message.id),
+                                            channel_id=int(message.channel.id),
+                                            author_id=int(message.author.id),
+                                            timestamp=message.created_at,
+                                            symbol=parsed_cond['symbol'],
+                                            order_id=order_id
+                                        )
+                                        print(f"[COND ORDER] ✓ Registered with conversation state for follow-up SL/PT")
+                                    except Exception as ctx_err:
+                                        print(f"[COND ORDER] ⚠️ Could not register conversation context: {ctx_err}")
+                                    
                                     # Save to signals table for Execution tab display
                                     try:
                                         author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
@@ -9417,22 +9433,32 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             order_id = update_result.get('order_id')
                             symbol = update_result.get('symbol')
                             sl_update = update_result.get('stop_loss_value')
+                            sl_pct_update = update_result.get('stop_loss_pct_update')
                             pt_update = update_result.get('profit_target_update')
+                            pt_range_update = update_result.get('profit_targets_update')
                             
                             if order_id:
                                 # Update the conditional order in database
                                 try:
                                     from gui_app.database import update_conditional_order_sl_pt
+                                    # Determine which PT to use (first from range if provided)
+                                    pt_value = pt_range_update[0] if pt_range_update else pt_update
                                     update_conditional_order_sl_pt(
                                         order_id=order_id,
                                         stop_loss_value=sl_update,
-                                        take_profit_target=pt_update
+                                        stop_loss_pct=sl_pct_update,
+                                        take_profit_target=pt_value,
+                                        take_profit_targets=pt_range_update
                                     )
                                     update_info = []
                                     if sl_update:
                                         update_info.append(f"SL=${sl_update}")
+                                    if sl_pct_update:
+                                        update_info.append(f"SL={sl_pct_update}%")
                                     if pt_update:
                                         update_info.append(f"PT=${pt_update}")
+                                    if pt_range_update:
+                                        update_info.append(f"PT=${pt_range_update[0]}-${pt_range_update[1]}")
                                     print(f"[FOLLOW-UP] ✓ Updated order #{order_id}: {', '.join(update_info)}")
                                 except Exception as e:
                                     print(f"[FOLLOW-UP] ⚠️ Could not update order #{order_id}: {e}")

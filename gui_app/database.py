@@ -10854,7 +10854,8 @@ def update_conditional_order_sl_pt(
     stop_loss_type: str = None,
     stop_loss_fixed: float = None,
     stop_loss_pct: float = None,
-    take_profit_target: float = None
+    take_profit_target: float = None,
+    take_profit_targets: list = None
 ) -> bool:
     """
     Update stop loss and/or profit target for a conditional order.
@@ -10946,23 +10947,30 @@ def update_conditional_order_sl_pt(
             update_fields.append('stop_loss_type = ?')
             update_values.append('fixed')
         
-        if take_profit_target is not None:
+        if take_profit_target is not None or take_profit_targets is not None:
+            import json
             cursor.execute('SELECT take_profit_targets FROM conditional_orders WHERE id = ?', (order_id,))
             row = cursor.fetchone()
+            existing_targets = []
             if row:
                 existing = row['take_profit_targets'] or ''
-                import json
                 try:
-                    targets = json.loads(existing) if existing else []
+                    existing_targets = json.loads(existing) if existing else []
                 except:
-                    targets = [float(t) for t in existing.split(',') if t.strip()] if existing else []
-                
+                    existing_targets = [float(t) for t in existing.split(',') if t.strip()] if existing else []
+            
+            # If take_profit_targets list provided (e.g., from "targets 3.25-3.50"), replace entirely
+            if take_profit_targets is not None:
+                targets = list(take_profit_targets)  # Use provided list directly
+            else:
+                # Single target - append if not exists
+                targets = existing_targets
                 if take_profit_target not in targets:
                     targets.append(take_profit_target)
-                    targets.sort()
-                
-                update_fields.append('take_profit_targets = ?')
-                update_values.append(json.dumps(targets))
+            
+            targets.sort()
+            update_fields.append('take_profit_targets = ?')
+            update_values.append(json.dumps(targets))
         
         if not update_fields:
             return False
