@@ -237,7 +237,10 @@ class SplashScreen(QWidget):
         
         self.license_input = QLineEdit()
         self.license_input.setPlaceholderText("Enter license key (BTF-XXXX-XXXX-XXXX)")
-        self.license_input.setFont(QFont("monospace", 11))
+        license_font = QFont()
+        license_font.setStyleHint(QFont.Monospace)
+        license_font.setPointSize(11)
+        self.license_input.setFont(license_font)
         self.license_input.setAlignment(Qt.AlignCenter)
         self.license_input.setFixedHeight(42)
         self.license_input.setStyleSheet("""
@@ -499,7 +502,7 @@ class SplashScreen(QWidget):
             os.environ['LICENSE_KEY'] = license_key
             self._on_license_activated({'days_remaining': 365, 'license_type': 'manual'})
     
-    def _on_license_state_changed(self, state: 'LicenseState', message: str):
+    def _on_license_state_changed(self, state, message: str):
         """Handle license state changes"""
         if state == LicenseState.VALIDATING:
             self.status_label.setText("Validating license...")

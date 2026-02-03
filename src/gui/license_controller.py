@@ -65,7 +65,7 @@ class LicenseController(QObject):
     """
     
     # Signals for UI updates
-    state_changed = Signal(LicenseState, str)  # (new_state, message)
+    state_changed = Signal(object, str)  # (new_state, message) - using object for cross-platform enum compatibility
     validation_progress = Signal(str)           # Progress message
     license_activated = Signal(dict)            # License data on success
     license_failed = Signal(str)                # Error message on failure
