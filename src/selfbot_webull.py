@@ -13423,6 +13423,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                             trade_id = db.add_trade(trade_data)
                                             _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
                                             
+                                            # For conditional orders: Create signal_lot for Signal P&L tracking
+                                            cond_order_id = signal.get('_conditional_order_id')
+                                            if cond_order_id and trade_id and channel_record_id:
+                                                try:
+                                                    from datetime import datetime
+                                                    lot_id = db.create_signal_lot(
+                                                        channel_id=channel_record_id,
+                                                        signal_id=None,
+                                                        trade_id=trade_id,
+                                                        asset_type=signal.get('asset', 'stock'),
+                                                        symbol=signal['symbol'],
+                                                        strike=signal.get('strike'),
+                                                        expiry=signal.get('expiry'),
+                                                        call_put=signal.get('opt_type'),
+                                                        quantity=executed_qty,
+                                                        open_price=signal.get('price'),
+                                                        opened_at=datetime.now().isoformat(),
+                                                        author_name='Conditional Order'
+                                                    )
+                                                    _original_print(f"[DATABASE] ✓ Signal lot #{lot_id} created for conditional order #{cond_order_id}")
+                                                except Exception as lot_err:
+                                                    _original_print(f"[DATABASE] Warning: Could not create signal_lot for conditional order: {lot_err}")
+                                            
                                             # Link lot to trade for precise fill price updates (critical for NDX→QQQ)
                                             try:
                                                 msg_id = str(signal.get('message_id', ''))
@@ -13475,6 +13498,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     }
                                     trade_id = db.add_trade(trade_data)
                                     _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
+                                    
+                                    # For conditional orders: Create signal_lot for Signal P&L tracking
+                                    cond_order_id = signal.get('_conditional_order_id')
+                                    if cond_order_id and trade_id and channel_record_id:
+                                        try:
+                                            from datetime import datetime
+                                            lot_id = db.create_signal_lot(
+                                                channel_id=channel_record_id,
+                                                signal_id=None,
+                                                trade_id=trade_id,
+                                                asset_type=signal.get('asset', 'stock'),
+                                                symbol=signal['symbol'],
+                                                strike=signal.get('strike'),
+                                                expiry=signal.get('expiry'),
+                                                call_put=signal.get('opt_type'),
+                                                quantity=executed_qty,
+                                                open_price=signal.get('price'),
+                                                opened_at=datetime.now().isoformat(),
+                                                author_name='Conditional Order'
+                                            )
+                                            _original_print(f"[DATABASE] ✓ Signal lot #{lot_id} created for conditional order #{cond_order_id}")
+                                        except Exception as lot_err:
+                                            _original_print(f"[DATABASE] Warning: Could not create signal_lot for conditional order: {lot_err}")
                                     
                                     # Link lot to trade for precise fill price updates (critical for NDX→QQQ)
                                     try:
