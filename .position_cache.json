@@ -10362,7 +10362,7 @@
     "max_pnl_seen": 11.416940272424766,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 42.16,
+    "last_evaluated_price": 41.85,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10530,7 +10530,7 @@
     "max_pnl_seen": 16.54601861427094,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 8.0703,
+    "last_evaluated_price": 8.09,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10650,7 +10650,7 @@
     "max_pnl_seen": 6.718783012888231,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.4719,
+    "last_evaluated_price": 0.4743,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10698,7 +10698,7 @@
     "max_pnl_seen": 10.250000000000004,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 3.801,
+    "last_evaluated_price": 3.789,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -11405,8 +11405,8 @@
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
-    "stop_loss_price": null,
-    "profit_target_price": null,
+    "stop_loss_price": 204.0,
+    "profit_target_price": 15.0,
     "broker": "ALPACA_PAPER",
     "raw_symbol": null,
     "tier1_hit": false,
@@ -11497,7 +11497,7 @@
   },
   "ALPACA_PAPER_SNAP_6.5_2026-02-06_C": {
     "entry_price": 0.24,
-    "highest_price": 0.23,
+    "highest_price": 0.25,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
