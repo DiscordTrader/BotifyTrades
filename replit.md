@@ -81,6 +81,13 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 
 **NDX→QQQ Conversion Service**: Enables channels with limited NDX access to trade equivalent QQQ options.
 
+**Dynamic Position Sizing with Signal Override** (February 2026): Intelligent position size calculation based on actual buying power:
+- **Signal percentage priority**: Signal provider's position size (e.g., "12.5% OF ACCOUNT") can override channel settings
+- **Force My Size %**: Per-channel toggle to ignore signal's percentage and always use channel's SIZE % setting
+- **Dynamic calculation**: Quantity is calculated at execution time based on actual broker buying power, not static max_position_size
+- **Configuration**: Trading → Channels page, under Execute panel - toggle "Force My Size %"
+- **Use case**: When signal provider suggests large allocations but you want to limit risk with smaller positions
+
 **Per-Channel Ticker Filter** (February 2026): Restrict trading to specific symbols per channel, useful when a signal provider excels at certain tickers but underperforms on others:
 - **Three modes**: OFF (trade all), ALLOW LIST (only trade listed symbols), BLOCK LIST (block listed symbols)
 - **Configuration**: Trading → Execution page, click 🎯 button in Actions column

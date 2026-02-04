@@ -10494,16 +10494,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             if execute_enabled:
                 
                 # Add EXECUTION position size percentage for dynamic qty calculation
-                # Priority: Signal percentage (from Jacob/etc with _calculate_qty) > Channel percentage
+                # Priority: Channel percentage (if ignore_signal_position_size) > Signal percentage > Channel percentage
                 exec_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
+                ignore_signal_pct = channel_info.get('ignore_signal_position_size', 0) if channel_info else 0
                 print(f"[DEBUG] Channel position_size_pct from DB: {exec_position_size_pct} (type: {type(exec_position_size_pct).__name__})")
                 
                 # Check if signal already has percentage from parsing (e.g., Jacob "12.5% OF ACCOUNT")
                 signal_has_pct = opt.get('_position_size_pct') is not None and opt.get('_calculate_qty', False)
                 
-                if signal_has_pct:
+                if signal_has_pct and not ignore_signal_pct:
                     # Signal's percentage takes precedence - don't overwrite
                     print(f"[POSITION SIZE] ✓ Using signal's {opt['_position_size_pct']}% (overrides channel's {exec_position_size_pct}%)")
+                elif signal_has_pct and ignore_signal_pct and exec_position_size_pct:
+                    # Channel has "Ignore Signal Position Size" enabled - use channel's percentage instead
+                    signal_original_pct = opt.get('_position_size_pct')
+                    opt['_position_size_pct'] = float(exec_position_size_pct)
+                    opt['_pct_from_channel'] = True
+                    print(f"[POSITION SIZE] ✓ Ignoring signal's {signal_original_pct}% - using channel's {exec_position_size_pct}% (channel priority)")
                 elif exec_position_size_pct:
                     opt['_position_size_pct'] = float(exec_position_size_pct)
                     opt['_pct_from_channel'] = True  # Mark as channel-sourced for cap mode
@@ -10921,7 +10928,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         stk = india_stock_signal if india_stock_signal else parse_stock_signal(normalized_content)
         if stk:
             # Apply tiered quantity defaults for BTO signals without qty from signal text
-            if stk.get('action') == 'BTO' and stk.get('qty') is None and not stk.get('_qty_from_signal', False):
+            # IMPORTANT: Skip if _calculate_qty is True - those signals want dynamic sizing at execution time
+            # based on actual buying power, not static max_position_size
+            if stk.get('action') == 'BTO' and stk.get('qty') is None and not stk.get('_qty_from_signal', False) and not stk.get('_calculate_qty', False):
                 # Tiered default: channel → global → max_position_size calculation (if enabled) → 1
                 channel_default_qty = channel_info.get('default_quantity') if channel_info else None
                 
@@ -10951,6 +10960,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         # Max position size disabled and no global default - fallback to 1
                         stk['qty'] = 1
                         print(f"[DEFAULT QTY] ⚠️ Max position size disabled, no global default set - using 1 share")
+            
+            # For signals with _calculate_qty=True (like Jacob format), set placeholder qty
+            # The actual qty will be calculated at execution time based on buying power
+            if stk.get('_calculate_qty') and stk.get('qty') is None:
+                stk['qty'] = 1  # Placeholder - will be recalculated at execution
+                print(f"[POSITION SIZE] ⚠️ Dynamic sizing enabled ({stk.get('_position_size_pct', 'channel')}%) - qty will be calculated at execution")
             
             # Check if this is an STC that should close an option position (Bullwinkle format)
             if stk['action'] == 'STC' and normalized_content != message.content:
@@ -11062,15 +11077,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[BRACKET ORDER] ✓ Including SL=${stk.get('stop_loss_price')} Target=${stk.get('profit_target_price')}")
                 
                 # Add EXECUTION position size percentage for dynamic qty calculation
-                # Priority: Signal percentage (from Jacob/etc with _calculate_qty) > Channel percentage
+                # Priority: Channel percentage (if ignore_signal_position_size) > Signal percentage > Channel percentage
                 exec_position_size_pct = channel_info.get('position_size_pct') if channel_info else None
+                ignore_signal_pct = channel_info.get('ignore_signal_position_size', 0) if channel_info else 0
                 
                 # Check if signal already has percentage from parsing (e.g., Jacob "12.5% OF ACCOUNT")
                 signal_has_pct = stk.get('_position_size_pct') is not None and stk.get('_calculate_qty', False)
                 
-                if signal_has_pct:
+                if signal_has_pct and not ignore_signal_pct:
                     # Signal's percentage takes precedence - don't overwrite
                     print(f"[POSITION SIZE] ✓ Using signal's {stk['_position_size_pct']}% (overrides channel's {exec_position_size_pct}%)")
+                elif signal_has_pct and ignore_signal_pct and exec_position_size_pct:
+                    # Channel has "Ignore Signal Position Size" enabled - use channel's percentage instead
+                    signal_original_pct = stk.get('_position_size_pct')
+                    stk['_position_size_pct'] = float(exec_position_size_pct)
+                    stk['_pct_from_channel'] = True
+                    print(f"[POSITION SIZE] ✓ Ignoring signal's {signal_original_pct}% - using channel's {exec_position_size_pct}% (channel priority)")
                 elif exec_position_size_pct:
                     stk['_position_size_pct'] = float(exec_position_size_pct)
                     stk['_pct_from_channel'] = True  # Mark as channel-sourced for cap mode

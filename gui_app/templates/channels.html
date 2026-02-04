@@ -1180,6 +1180,13 @@ function renderChannels() {
                                        onchange="updateDefaultQuantity(${channel.id}, this.value)">
                             </div>
                         </div>
+                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px;" title="When enabled, uses your channel's Size % instead of the signal provider's suggested %">
+                            <label class="toggle-switch" style="transform: scale(0.6);">
+                                <input type="checkbox" ${channel.ignore_signal_position_size ? 'checked' : ''} onchange="updateIgnoreSignalPositionSize(${channel.id}, this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                            <span style="font-size: 9px; color: ${channel.ignore_signal_position_size ? '#10F0B3' : '#6B7A90'};">Force My Size %</span>
+                        </div>
                     </div>
                     
                     <!-- Track Panel -->
@@ -1475,6 +1482,28 @@ async function updatePositionSize(channelId, value, sizeType = 'execution') {
             showNotification(`${sizeType === 'tracking' ? 'Track' : 'Execute'} position size set to ${displayValue}`);
         } else {
             showNotification('Error updating position size', 'error');
+            await loadChannels();
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+        await loadChannels();
+    }
+}
+
+async function updateIgnoreSignalPositionSize(channelId, enabled) {
+    try {
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ignore_signal_position_size: enabled ? 1 : 0 })
+        });
+        
+        if (response.ok) {
+            const status = enabled ? 'enabled' : 'disabled';
+            showNotification(`Force My Size % ${status} - ${enabled ? 'Your channel size % will override signal provider' : 'Signal provider size % will be used'}`);
+            await loadChannels();
+        } else {
+            showNotification('Error updating position size preference', 'error');
             await loadChannels();
         }
     } catch (error) {
