@@ -124,3 +124,22 @@ The architecture is modular, structured into `src/` and `gui_app/` directories. 
 - **pyotp**: TOTP 2FA code generation
 - **Telethon**: Telegram user client
 - **httpx**: HTTP client for Schwab API
+
+## Milestones
+
+### MILESTONE 4.2.16 (February 4, 2026)
+**Sir Goldman Parser Enhancements**
+
+Improved signal parsing robustness for Sir Goldman embed-based signals:
+
+- **0DTE Expiry Default**: ENTRY signals without explicit expiry now default to today's date (MM/DD format) for lotto/0DTE plays
+- **TRIM Pattern Strictness**: TRIM pattern now requires `$` prefix to prevent false matches on words like "off", "free", "ASFF"
+- **Non-Ticker Word Filter**: Added blocklist for common non-ticker words (OFF, FREE, ASFF, HERE, NICE, BANG, etc.) to prevent incorrect symbol assignments
+- **EXIT Price Extraction**: Enhanced EXIT parsing to capture prices from:
+  - TRIM-style formats: `$SPY 3.78! +385%` → price=3.78
+  - Simple mentions: `Out here 2.7` → price=2.7
+  - At-price formats: `Out here at 1.2` → price=1.2
+- **Position Lookup Integration**: TRIM/EXIT signals with missing strike/expiry query the database for the most recent open position to get complete contract details
+- **Verified SPX Support**: Confirmed SPX options are supported on Webull for proper 0DTE execution
+
+Files modified: `src/signals/sir_goldman_parser.py`
