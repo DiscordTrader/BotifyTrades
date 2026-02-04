@@ -121,7 +121,8 @@ class ChannelRiskSettings:
             self.enable_dynamic_sl, self.enable_giveback_guard,
             self.giveback_allowed_pct, self.dynamic_sl_profile,
             self.enable_early_trailing, self.early_trailing_activation_pct,
-            self.early_trailing_step_pct
+            self.early_trailing_step_pct,
+            self.trim_order_mode, self.sl_order_mode
         )
         hash_input = str(key_fields).encode()
         return hashlib.md5(hash_input).hexdigest()[:12]

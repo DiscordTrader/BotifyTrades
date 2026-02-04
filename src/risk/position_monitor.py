@@ -1636,9 +1636,12 @@ class RiskManager:
             use_market = self.cache.should_use_market_order(pos_key)
             
             # Check if stop loss should use market order immediately
-            if is_stop_exit and channel_settings and channel_settings.sl_order_mode == 'market':
+            # Use risk_trigger for accurate detection (stop_loss, trailing_stop, early_trailing, giveback_guard)
+            sl_triggers = ('stop_loss', 'trailing_stop', 'early_trailing', 'giveback_guard')
+            is_sl_type_exit = decision.risk_trigger in sl_triggers
+            if is_sl_type_exit and channel_settings and channel_settings.sl_order_mode == 'market':
                 use_market = True
-                print(f"[RISK] 📊 SL Market Order mode enabled - using market order for stop loss")
+                print(f"[RISK] 📊 SL Market Order mode enabled - using market order for {decision.risk_trigger}")
             
             if use_market:
                 stc_signal['_use_market_order'] = True
