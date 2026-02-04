@@ -28,6 +28,13 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 - Exit signals: "Got stopped out at $1.65"
 - **Entry Range Handling** (January 2026): When entry has a range (e.g., 1.58-1.60), the bot uses the HIGHER price for order execution to improve fill probability
 
+**Sir Goldman Signal Parser** (`src/signals/sir_goldman_parser.py`, February 2026): Parses Sir Goldman embed-based signals:
+- Entry signals: "ENTRY | **$SPX 6780p @ 2.45 lotto**" → BTO SPX 6780P @ 2.45
+- Trim signals: "TRIM | **$SPX 3.2! +31%**" → STC with position lookup
+- Exit signals: "EXIT | **Out rest here at BE**" → STC with breakeven handling
+- **0DTE Expiry Default**: Entry signals without explicit expiry default to today's date (0DTE/lotto assumption)
+- **Position Lookup for Exits**: TRIM/EXIT signals that lack strike/expiry info automatically lookup the original BTO position from the database to get complete contract details
+
 **Risk Management**: Features GUI-configurable automated profit targets, stop losses, trailing stops, intelligent price slippage protection, and auto-quantity calculation, all stored in SQLite. Includes pre-trade analysis, post-execution analysis with OpenAI GPT models, real-time market data integration, and interactive Discord commands. An error monitoring system provides automatic detection, logging, and AI assistant contextual help. A dual-mode channel system for simultaneous execution and signal forwarding, FIFO-based P&L tracking, and Multi-Broker Execution across multiple accounts with per-channel broker selection are supported. Per-channel risk settings allow independent operation, including 4-tier profit targets, trailing stops, and Leave Runner functionality. Position Matching handles ambiguous exit signals, and Trade Monitor detects and posts broker-executed trades.
 
 **Enhanced Portfolio Simulation Engine v2.0**: Provides industry-grade portfolio analysis.

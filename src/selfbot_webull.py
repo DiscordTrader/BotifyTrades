@@ -8466,12 +8466,13 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             routing_parsed = spy_sniper_parsed
                         elif is_sir_goldman and sir_goldman_parsed:
                             # Convert Sir Goldman signal to routing format
+                            # Sir Goldman signals default to 0DTE (today's date) when no expiry specified
                             routing_parsed = {
                                 'action': sir_goldman_parsed.action,
                                 'symbol': sir_goldman_parsed.symbol,
                                 'strike': sir_goldman_parsed.strike,
                                 'opt_type': sir_goldman_parsed.option_type,
-                                'expiry': '',  # Sir Goldman doesn't include expiry
+                                'expiry': sir_goldman_parsed.expiry or '',
                                 'price': sir_goldman_parsed.price,
                                 'qty': 1,
                                 'is_trim': sir_goldman_parsed.signal_type.value == 'TRIM',
@@ -8948,8 +8949,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             sg_symbol = sir_goldman_parsed.symbol
                             sg_strike = sir_goldman_parsed.strike
                             sg_opt_type = sir_goldman_parsed.option_type or 'C'
+                            sg_expiry = sir_goldman_parsed.expiry or ''
                             
-                            if is_exit and not sg_symbol:
+                            if is_exit and (not sg_symbol or not sg_strike):
                                 # Look up most recent open position for this channel
                                 try:
                                     from gui_app.database import get_connection
@@ -8966,10 +8968,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     ''', (str(channel_id),))
                                     open_pos = cursor.fetchone()
                                     if open_pos:
-                                        sg_symbol = open_pos['symbol']
-                                        sg_strike = open_pos['strike']
-                                        sg_opt_type = open_pos['call_put'] or 'C'
-                                        print(f"[SIR-GOLDMAN] ✓ Resolved EXIT to open position: {sg_symbol} ${sg_strike}{sg_opt_type}")
+                                        sg_symbol = sg_symbol or open_pos['symbol']
+                                        sg_strike = sg_strike or open_pos['strike']
+                                        sg_opt_type = open_pos['call_put'] or sg_opt_type
+                                        sg_expiry = open_pos['expiry'] or sg_expiry
+                                        print(f"[SIR-GOLDMAN] ✓ Resolved EXIT to open position: {sg_symbol} ${sg_strike}{sg_opt_type} {sg_expiry}")
                                     else:
                                         print(f"[SIR-GOLDMAN] ⚠️ No open position found for EXIT signal in channel {channel_id}")
                                 except Exception as e:
@@ -8979,7 +8982,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 'symbol': sg_symbol,
                                 'strike': sg_strike,
                                 'opt_type': sg_opt_type,
-                                'expiry': '',  # Sir Goldman doesn't include expiry
+                                'expiry': sg_expiry,
                                 'price': sir_goldman_parsed.price,
                                 'qty': 1,
                                 'is_exit': is_exit,
@@ -10010,19 +10013,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if opt is None and india_stock_signal is None:
             # Check for Sir Goldman embed signals FIRST before fallback parser
             if is_sir_goldman and sir_goldman_parsed and sir_goldman_parsed.symbol:
+                # Sir Goldman signals default to 0DTE (today's date) when no expiry specified
                 opt = {
                     'action': sir_goldman_parsed.action,
                     'symbol': sir_goldman_parsed.symbol,
                     'strike': sir_goldman_parsed.strike,
                     'opt_type': sir_goldman_parsed.option_type or 'C',
-                    'expiry': '',  # Sir Goldman doesn't include expiry - will be resolved later
+                    'expiry': sir_goldman_parsed.expiry or '',
                     'price': sir_goldman_parsed.price,
                     'qty': 1,
                     'asset': 'option',
                     'is_market_order': sir_goldman_parsed.is_market_exit,
                     '_sir_goldman': True  # Mark for special handling
                 }
-                print(f"[SIR-GOLDMAN] ✓ Created opt for broker execution: {opt['action']} {opt['symbol']} {opt['strike']}{opt['opt_type']} @ {opt['price']}")
+                print(f"[SIR-GOLDMAN] ✓ Created opt for broker execution: {opt['action']} {opt['symbol']} {opt['strike']}{opt['opt_type']} {opt['expiry']} @ {opt['price']}")
             else:
                 opt = parse_option_signal(normalized_content)
         

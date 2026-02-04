@@ -12,12 +12,16 @@ Examples:
   TRIM:  **$SPX 4.1! +58%**
   EXIT:  **Out rest here at BE**
   COMMENT: **Watching puts off 5m 9ema** (skipped)
+
+Note: Sir Goldman signals typically don't include expiry dates.
+For "lotto" plays, these are assumed to be 0DTE (same-day expiry).
 """
 
 import re
 from typing import Optional, Dict, Any, Tuple, List
 from dataclasses import dataclass
 from enum import Enum
+from datetime import datetime
 
 
 class SirGoldmanSignalType(Enum):
@@ -28,6 +32,11 @@ class SirGoldmanSignalType(Enum):
     UNKNOWN = "UNKNOWN"
 
 
+def get_today_expiry() -> str:
+    """Get today's date in MM/DD format for 0DTE options."""
+    return datetime.now().strftime('%m/%d')
+
+
 @dataclass
 class SirGoldmanSignal:
     """Parsed Sir Goldman signal."""
@@ -36,6 +45,7 @@ class SirGoldmanSignal:
     symbol: Optional[str] = None
     strike: Optional[str] = None
     option_type: Optional[str] = None
+    expiry: Optional[str] = None
     price: Optional[float] = None
     is_market_exit: bool = False
     is_breakeven: bool = False
@@ -141,7 +151,11 @@ def parse_sir_goldman_signal(embeds: List[Dict[str, Any]]) -> Optional[SirGoldma
 
 
 def _parse_entry(signal: SirGoldmanSignal, description: str) -> Optional[SirGoldmanSignal]:
-    """Parse an ENTRY signal."""
+    """Parse an ENTRY signal.
+    
+    Note: Sir Goldman signals don't include expiry dates. For "lotto" plays,
+    these are assumed to be 0DTE (same-day expiry).
+    """
     for pattern in AMBIGUOUS_PATTERNS:
         if pattern.search(description):
             signal.is_ambiguous = True
@@ -159,6 +173,7 @@ def _parse_entry(signal: SirGoldmanSignal, description: str) -> Optional[SirGold
         signal.symbol = match.group(1).upper()
         signal.strike = match.group(2)
         signal.option_type = match.group(3).upper()
+        signal.expiry = get_today_expiry()
         signal.price = float(match.group(4))
         return signal
     
@@ -305,7 +320,7 @@ def convert_to_standard_signal(signal: SirGoldmanSignal, open_position: Optional
     
     Args:
         signal: Parsed SirGoldmanSignal
-        open_position: Optional open position for STC signals
+        open_position: Optional open position for STC signals (must include expiry)
         
     Returns:
         Standard signal dict compatible with existing bot parsers
@@ -324,6 +339,7 @@ def convert_to_standard_signal(signal: SirGoldmanSignal, open_position: Optional
             'symbol': signal.symbol,
             'strike': signal.strike,
             'option_type': 'CALL' if signal.option_type == 'C' else 'PUT',
+            'expiry': signal.expiry,
             'price': signal.price,
             'order_type': 'limit',
         })
@@ -333,12 +349,14 @@ def convert_to_standard_signal(signal: SirGoldmanSignal, open_position: Optional
                 'symbol': open_position.get('symbol', signal.symbol),
                 'strike': open_position.get('strike', signal.strike),
                 'option_type': open_position.get('option_type', 'CALL' if signal.option_type == 'C' else 'PUT'),
+                'expiry': open_position.get('expiry', signal.expiry),
             })
         else:
             result.update({
                 'symbol': signal.symbol,
                 'strike': signal.strike,
                 'option_type': 'CALL' if signal.option_type == 'C' else 'PUT',
+                'expiry': signal.expiry,
             })
         
         if signal.price:
