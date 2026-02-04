@@ -1793,7 +1793,7 @@ class RiskManager:
                     sl_price = trigger_price * (1 - float(sl_pct) / 100)
                 
                 pt_price = None
-                if profit_targets_raw:
+                if profit_targets_raw and trigger_price:
                     try:
                         if isinstance(profit_targets_raw, str):
                             pts = json.loads(profit_targets_raw)
@@ -1803,7 +1803,7 @@ class RiskManager:
                         if isinstance(pts, list) and pts:
                             first_pt = pts[0]
                             if isinstance(first_pt, (int, float)):
-                                pt_price = float(first_pt)
+                                pt_price = trigger_price * (1 + float(first_pt) / 100)
                             elif isinstance(first_pt, dict) and 'price' in first_pt:
                                 pt_price = float(first_pt['price'])
                     except (json.JSONDecodeError, TypeError):
