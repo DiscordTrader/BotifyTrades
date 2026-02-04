@@ -106,6 +106,54 @@ class WebullBroker(BrokerInterface):
             print(f"[{self.name}] Error checking extended hours setting: {e}")
             return False
     
+    async def _refresh_trade_token(self) -> bool:
+        """Refresh the Webull trade token when it expires.
+        
+        Returns:
+            True if refresh successful, False otherwise
+        """
+        try:
+            def _blocking_refresh():
+                if not self.wb:
+                    return False
+                    
+                # Try refresh_login method
+                if hasattr(self.wb, 'refresh_login'):
+                    try:
+                        result = self.wb.refresh_login()
+                        if result and isinstance(result, dict):
+                            new_access = result.get('accessToken')
+                            new_refresh = result.get('refreshToken')
+                            if new_access:
+                                self.wb.access_token = new_access
+                                if new_refresh:
+                                    self.wb.refresh_token = new_refresh
+                                print(f"[{self.name}] ✓ Trade token refreshed via refresh_login")
+                                return True
+                    except Exception as e:
+                        print(f"[{self.name}] refresh_login failed: {e}")
+                
+                # Fallback: try get_trade_token if available
+                if hasattr(self.wb, 'get_trade_token'):
+                    try:
+                        # Get stored password or trading PIN
+                        trading_pin = self.config.get('trading_pin') or self.config.get('trade_pin')
+                        if trading_pin:
+                            result = self.wb.get_trade_token(trading_pin)
+                            if result:
+                                print(f"[{self.name}] ✓ Trade token refreshed via trading PIN")
+                                return True
+                    except Exception as e:
+                        print(f"[{self.name}] get_trade_token failed: {e}")
+                
+                return False
+            
+            return await asyncio.to_thread(_blocking_refresh)
+            
+        except Exception as e:
+            print(f"[{self.name}] Token refresh error: {e}")
+            return False
+    
     async def get_account_info(self) -> Dict[str, Any]:
         """Get account information"""
         try:
@@ -523,6 +571,21 @@ class WebullBroker(BrokerInterface):
             
             response = await asyncio.to_thread(execute_order)
             
+            # Check for token expiration - auto-refresh and retry
+            if response and response.get('code') == 'trade.token.expire':
+                print(f"[{self.name}] Trade token expired - attempting auto-refresh...")
+                refresh_success = await self._refresh_trade_token()
+                if refresh_success:
+                    print(f"[{self.name}] Token refreshed, retrying order...")
+                    response = await asyncio.to_thread(execute_order)
+                else:
+                    return OrderResult(
+                        success=False,
+                        message="Trade token expired and refresh failed. Please re-login to Webull in Settings.",
+                        symbol=symbol,
+                        action=action
+                    )
+            
             if response and not response.get('msg'):
                 # Send Discord notification
                 try:
@@ -558,6 +621,9 @@ class WebullBroker(BrokerInterface):
                 )
             else:
                 error_msg = response.get('msg', 'Unknown error') if response else 'No response'
+                error_code = response.get('code', '') if response else ''
+                if error_code:
+                    error_msg = f"{error_msg} (code: {error_code})"
                 return OrderResult(
                     success=False,
                     message=f"Order failed: {error_msg}",
@@ -800,6 +866,21 @@ class WebullBroker(BrokerInterface):
             
             response = await asyncio.to_thread(execute_order)
             
+            # Check for token expiration - auto-refresh and retry
+            if response and response.get('code') == 'trade.token.expire':
+                print(f"[{self.name}] Trade token expired - attempting auto-refresh...")
+                refresh_success = await self._refresh_trade_token()
+                if refresh_success:
+                    print(f"[{self.name}] Token refreshed, retrying option order...")
+                    response = await asyncio.to_thread(execute_order)
+                else:
+                    return OrderResult(
+                        success=False,
+                        message="Trade token expired and refresh failed. Please re-login to Webull in Settings.",
+                        symbol=symbol,
+                        action=action
+                    )
+            
             if response and not response.get('msg'):
                 # Send Discord notification
                 try:
@@ -840,6 +921,9 @@ class WebullBroker(BrokerInterface):
                 )
             else:
                 error_msg = response.get('msg', 'Unknown error') if response else 'No response'
+                error_code = response.get('code', '') if response else ''
+                if error_code:
+                    error_msg = f"{error_msg} (code: {error_code})"
                 return OrderResult(
                     success=False,
                     message=f"Order failed: {error_msg}",
