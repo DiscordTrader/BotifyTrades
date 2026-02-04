@@ -296,7 +296,7 @@ def evaluate_channel_stop_loss(
         if entry_price > 0:
             stop_loss_price = entry_price * (1 - stop_loss_pct / 100)
         sl_source = "OVERRIDE"
-    elif cache.dynamic_sl_price is not None:
+    elif channel_settings.enable_dynamic_sl and cache.dynamic_sl_price is not None:
         stop_loss_price = cache.dynamic_sl_price
         if entry_price > 0:
             stop_loss_pct = ((entry_price - stop_loss_price) / entry_price) * 100
