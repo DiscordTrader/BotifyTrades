@@ -326,6 +326,79 @@ class PositionCache:
             if stop_loss_price or profit_target_price:
                 print(f"[RISK] Loaded from DB: {position_key} SL=${stop_loss_price} Target=${profit_target_price}")
     
+    def update_position_sl_override(self, symbol: str, channel_id: str,
+                                    sl_price: Optional[float] = None,
+                                    sl_pct: Optional[float] = None,
+                                    pt_targets: Optional[list] = None) -> list:
+        """Update manual SL/PT overrides for filled positions matching symbol/channel.
+        
+        Called when signal provider posts follow-up like "moving SL to 1.88".
+        Returns list of position keys that were updated.
+        
+        Args:
+            symbol: Stock symbol to match (e.g., "BOXL")
+            channel_id: Channel ID where the follow-up was posted
+            sl_price: Fixed price SL override (e.g., 1.88)
+            sl_pct: Percentage SL override (e.g., 11.0 for 11%)
+            pt_targets: Profit target prices list override
+        """
+        updated_keys = []
+        symbol_upper = symbol.upper() if symbol else None
+        
+        for pos_key, entry in self._cache.items():
+            if entry.closing:
+                continue
+                
+            pos_symbol = pos_key.split('_')[1] if '_' in pos_key else None
+            if pos_symbol and symbol_upper and pos_symbol.upper() == symbol_upper:
+                update_parts = []
+                
+                if sl_price is not None:
+                    entry.manual_sl_price = sl_price
+                    entry.manual_sl_pct = None
+                    update_parts.append(f"SL=${sl_price:.2f}")
+                    
+                if sl_pct is not None:
+                    entry.manual_sl_pct = sl_pct
+                    entry.manual_sl_price = None
+                    update_parts.append(f"SL={sl_pct:.1f}%")
+                    
+                if pt_targets is not None:
+                    entry.manual_pt_targets = pt_targets
+                    update_parts.append(f"PT={pt_targets}")
+                
+                if update_parts:
+                    updated_keys.append(pos_key)
+                    print(f"[FOLLOW-UP] ✓ Updated {pos_key}: {', '.join(update_parts)} (signal provider override)")
+                    
+                    trade_id = self._trade_id_map.get(pos_key)
+                    if trade_id:
+                        try:
+                            from gui_app.database import update_trade_sl_override
+                            update_trade_sl_override(trade_id, sl_price, sl_pct)
+                        except Exception as e:
+                            print(f"[FOLLOW-UP] Warning: Could not persist SL override to DB: {e}")
+        
+        return updated_keys
+    
+    def get_positions_by_symbol(self, symbol: str) -> list:
+        """Get all active (non-closing) positions for a given symbol."""
+        results = []
+        symbol_upper = symbol.upper() if symbol else None
+        
+        for pos_key, entry in self._cache.items():
+            if entry.closing:
+                continue
+            pos_symbol = pos_key.split('_')[1] if '_' in pos_key else None
+            if pos_symbol and symbol_upper and pos_symbol.upper() == symbol_upper:
+                results.append({
+                    'position_key': pos_key,
+                    'entry_price': entry.entry_price,
+                    'broker': entry.broker,
+                    'trade_id': self._trade_id_map.get(pos_key)
+                })
+        return results
+    
     def is_closing(self, position_key: str) -> bool:
         """Check if position is in closing state, with auto-reset after 3 cycles."""
         entry = self._cache.get(position_key)
