@@ -466,6 +466,14 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added trim order mode columns (market/limit) for per-channel trim settings")
     
+    # Migrate: Add stop loss order mode column for market vs limit stop loss orders
+    try:
+        cursor.execute('SELECT sl_order_mode FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE channels ADD COLUMN sl_order_mode TEXT DEFAULT 'limit'")
+        conn.commit()
+        print("[DATABASE] ✓ Added sl_order_mode column (limit/market) for per-channel stop loss order type")
+    
     # Migrate: Add exit strategy mode column for choosing between signal-based vs risk-based exits
     # Options: 'signal' (follow trader's trims/stops), 'risk' (use risk management auto-exits), 'hybrid' (both)
     try:
@@ -2465,7 +2473,7 @@ def update_channel(channel_id: int, **kwargs):
                    'profit_target_4_pct', 'profit_target_qty_1', 'profit_target_qty_2', 'profit_target_qty_3', 'profit_target_qty_4',
                    'stop_loss_pct', 'trailing_stop_pct', 'trailing_activation_pct', 'enabled_brokers', 'position_size_pct', 'tracking_position_size_pct',
                    'default_quantity', 'tracking_default_quantity', 'channel_max_position_size', 'risk_management_enabled', 'leave_runner_enabled', 'leave_runner_pct',
-                   'trim_order_mode', 'trim_limit_offset', 'exit_strategy_mode', 'exit_strategy_mode_override', 'market', 'trade_summary_enabled',
+                   'trim_order_mode', 'trim_limit_offset', 'sl_order_mode', 'exit_strategy_mode', 'exit_strategy_mode_override', 'market', 'trade_summary_enabled',
                    'conditional_order_enabled', 'conditional_auto_execute', 'conditional_order_expiry',
                    'conditional_order_timeout_minutes', 'trigger_offset_percent', 'order_timeout_minutes',
                    'slippage_protection_enabled', 'slippage_max_pct', 'limit_cap_enabled', 'limit_cap_pct',
