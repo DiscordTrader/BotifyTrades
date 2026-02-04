@@ -13300,9 +13300,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             from src.risk.position_monitor import risk_manager_instance
                             if risk_manager_instance and hasattr(risk_manager_instance, 'cache'):
                                 cache = risk_manager_instance.cache
-                                cache.record_exit_failure(signal['_position_key'], error_msg)
+                                # Use fast emergency retry for stop loss exits
+                                is_stop_loss = signal.get('risk_trigger') == 'stop_loss'
+                                cache.record_exit_failure(signal['_position_key'], error_msg, is_stop_loss=is_stop_loss)
                                 retry_state = cache.get_retry_state(signal['_position_key'])
-                                _original_print(f"[RISK-RETRY] ⚠️ Exit failed - attempt {retry_state['retry_count']}/{retry_state['max_retries']} | Cooldown: {retry_state['cooldown_remaining']:.0f}s", flush=True)
+                                mode = "⚡ EMERGENCY" if retry_state.get('emergency_mode') else ""
+                                _original_print(f"[RISK-RETRY] {mode} Exit failed - attempt {retry_state['retry_count']}/{retry_state['max_retries']} | Cooldown: {retry_state['cooldown_remaining']:.0f}s", flush=True)
                                 
                                 if retry_state.get('exhausted'):
                                     _original_print(f"[RISK-RETRY] ❌ Max retries exhausted for {signal['_position_key']}", flush=True)

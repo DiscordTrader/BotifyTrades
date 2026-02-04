@@ -356,11 +356,17 @@ class PositionCache:
         if position_key in self._cache:
             self._cache[position_key].reset_closing()
     
-    def record_exit_failure(self, position_key: str, reason: str) -> bool:
-        """Record a failed exit attempt. Returns True if more retries allowed."""
+    def record_exit_failure(self, position_key: str, reason: str, is_stop_loss: bool = False) -> bool:
+        """Record a failed exit attempt. Returns True if more retries allowed.
+        
+        Args:
+            position_key: Position identifier
+            reason: Failure reason message
+            is_stop_loss: If True, use emergency fast retry (5s, 10s, 15s max)
+        """
         entry = self._cache.get(position_key)
         if entry:
-            entry.record_exit_failure(reason)
+            entry.record_exit_failure(reason, is_stop_loss=is_stop_loss)
             entry.reset_closing()  # Allow retry after cooldown
             return entry.can_retry_exit()
         return False
@@ -376,13 +382,14 @@ class PositionCache:
         """Get retry state for debugging/logging."""
         entry = self._cache.get(position_key)
         if not entry:
-            return {'retry_count': 0, 'cooldown_remaining': 0, 'use_market': False, 'extended_mode': False}
+            return {'retry_count': 0, 'cooldown_remaining': 0, 'use_market': False, 'extended_mode': False, 'emergency_mode': False}
         return {
             'retry_count': entry.exit_retry_count,
             'max_retries': entry.MAX_FAST_RETRIES,
             'cooldown_remaining': entry.retry_cooldown_remaining(),
             'use_market': entry.use_market_order,
             'extended_mode': entry.in_extended_retry_mode(),
+            'emergency_mode': getattr(entry, 'is_emergency_exit', False),
             'last_failure': entry.last_exit_failure_reason
         }
     

@@ -363,15 +363,32 @@ class PositionCacheEntry:
     EXTENDED_RETRY_INTERVAL = 300  # 5 minutes between extended retries
     extended_retry_mode: bool = False  # Persistent retry after fast retries exhausted
     exhausted_notified: bool = False  # Track if Discord notification was sent
+    is_emergency_exit: bool = False  # Flag for stop loss / emergency exits (faster retry)
     
-    def record_exit_failure(self, reason: str) -> None:
-        """Record a failed exit attempt with exponential backoff."""
+    def record_exit_failure(self, reason: str, is_stop_loss: bool = False) -> None:
+        """Record a failed exit attempt with backoff.
+        
+        Args:
+            reason: Failure reason message
+            is_stop_loss: If True, use FAST emergency retry timing (5s, 10s, 15s max)
+        """
         from datetime import timedelta
         self.exit_retry_count += 1
         self.last_exit_failure_reason = reason
         
-        if self.exit_retry_count <= self.MAX_FAST_RETRIES:
-            # Fast retry phase: Exponential backoff 30s, 60s, 120s, 240s, 480s
+        # Track if this is an emergency exit (stop loss)
+        if is_stop_loss:
+            self.is_emergency_exit = True
+        
+        if self.is_emergency_exit:
+            # EMERGENCY MODE: Ultra-fast retry for stop loss exits
+            # 5s, 10s, 15s, 15s, 15s... (cap at 15s)
+            backoff_seconds = min(5 * self.exit_retry_count, 15)
+            phase = "EMERGENCY"
+            # Switch to market order IMMEDIATELY on first failure for stop loss
+            self.use_market_order = True
+        elif self.exit_retry_count <= self.MAX_FAST_RETRIES:
+            # Normal retry phase: Exponential backoff 30s, 60s, 120s, 240s, 480s
             backoff_seconds = min(30 * (2 ** (self.exit_retry_count - 1)), 480)
             phase = "FAST"
         else:
@@ -382,11 +399,14 @@ class PositionCacheEntry:
         
         self.exit_retry_cooldown_until = datetime.now() + timedelta(seconds=backoff_seconds)
         
-        # Switch to market order after threshold
-        if self.exit_retry_count >= self.MARKET_ORDER_THRESHOLD:
+        # Switch to market order after threshold (for non-emergency)
+        if not self.is_emergency_exit and self.exit_retry_count >= self.MARKET_ORDER_THRESHOLD:
             self.use_market_order = True
         
-        if phase == "FAST":
+        if phase == "EMERGENCY":
+            print(f"[RISK-RETRY] ⚡ EMERGENCY EXIT failed (attempt {self.exit_retry_count}): {reason}")
+            print(f"[RISK-RETRY] ⚡ Fast retry in {backoff_seconds}s with MARKET ORDER")
+        elif phase == "FAST":
             print(f"[RISK-RETRY] Exit failed (attempt {self.exit_retry_count}/{self.MAX_FAST_RETRIES}): {reason}")
             print(f"[RISK-RETRY] Next retry in {backoff_seconds}s, market_order={self.use_market_order}")
         else:
@@ -414,6 +434,7 @@ class PositionCacheEntry:
         self.use_market_order = False
         self.extended_retry_mode = False
         self.exhausted_notified = False
+        self.is_emergency_exit = False
     
     def in_extended_retry_mode(self) -> bool:
         """Check if position is in extended retry mode (persistent retries every 5 min)."""

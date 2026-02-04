@@ -10362,7 +10362,7 @@
     "max_pnl_seen": 11.416940272424766,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 41.85,
+    "last_evaluated_price": 41.28,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10530,7 +10530,7 @@
     "max_pnl_seen": 16.54601861427094,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 8.09,
+    "last_evaluated_price": 8.165,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10650,7 +10650,7 @@
     "max_pnl_seen": 6.718783012888231,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.4743,
+    "last_evaluated_price": 0.4786,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10698,7 +10698,7 @@
     "max_pnl_seen": 10.250000000000004,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 3.789,
+    "last_evaluated_price": 3.85,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -11226,7 +11226,7 @@
     "max_pnl_seen": 30.714285714285726,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.82,
+    "last_evaluated_price": 1.86,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -11497,7 +11497,7 @@
   },
   "ALPACA_PAPER_SNAP_6.5_2026-02-06_C": {
     "entry_price": 0.24,
-    "highest_price": 0.25,
+    "highest_price": 0.32,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -11509,15 +11509,24 @@
     "tier2_hit": false,
     "tier3_hit": false,
     "tier4_hit": false,
-    "pending_orders": {},
+    "pending_orders": {
+      "8260c40a-cad5-4448-9059-a898c6f32d3d": {
+        "order_id": "8260c40a-cad5-4448-9059-a898c6f32d3d",
+        "tier": 1,
+        "qty_expected": 5,
+        "qty_filled": 0,
+        "status": "pending",
+        "created_at": "2026-02-04T15:16:32.729447"
+      }
+    },
     "created_at": "2026-02-04T14:45:52.251062",
     "max_pnl_seen": 0.0,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
     "last_evaluated_price": null,
-    "early_trailing_active": false,
-    "early_stop_price": null,
-    "early_steps_locked": 0
+    "early_trailing_active": true,
+    "early_stop_price": 0.3048,
+    "early_steps_locked": 9
   },
   "ALPACA_PAPER_CIFR_16.0_2026-02-06_C": {
     "entry_price": 0.4,
