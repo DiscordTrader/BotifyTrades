@@ -47,6 +47,13 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 
 **Order Management System (OMS) and Risk Management System (RMS)**: Provide dynamic SL/PT management via Discord message edits. The Exit Order Arbiter arbitrates between signal-driven and risk-driven exit requests. A Circuit Breaker provides emergency trading halt controls. Industry-grade Risk State Persistence ensures all risk state survives bot restarts. Enhanced Risk Management v2.0 provides Dynamic SL Escalation and Max Profit Giveback Guard.
 
+**Follow-up SL/PT Updates** (February 2026): Signal providers can update stop-loss for both pending and filled positions:
+- **Supported formats**: "SL to $X", "moving my SL to X", "SL to 15%", "moving my SL to 11%"
+- **Pending orders**: Updates conditional order trigger price in database
+- **Filled positions**: Applies manual override to active position cache with database persistence
+- **Precedence**: Manual override > Dynamic SL > Channel default
+- **Display**: Risk monitor shows [OVERRIDE] tag when manual SL is active
+
 **Early Trailing Stop**: A percentage-based trailing stop with a breakeven-first approach that moves the stop to entry after a specified gain and then locks in profit.
 
 **Broker-Aware Price Monitoring**: Routes quote requests to the position's connected broker with a fallback chain (other connected brokers, Finnhub, yfinance).
