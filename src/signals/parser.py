@@ -430,18 +430,20 @@ HYBRID_SL_PATTERN = re.compile(
 )
 
 # Follow-up message patterns for sequential monitoring
-# Detects delayed SL/PT updates: "SL now at 14.60", "PT raised to 17.50"
+# Detects delayed SL/PT updates: "SL now at 14.60", "PT raised to 17.50", "moving my SL to 1.88"
 FOLLOW_UP_SL_PATTERN = re.compile(
+    r'(?:(?:moving|mov(?:e|ed)?)\s+(?:my\s+)?)?'  # Optional "moving my" prefix
     r'(?:SL|stop\s*loss|stop)\s*'
-    r'(?:now\s+)?(?:at|moved?\s+to|raised?\s+to|lowered?\s+to|changed?\s+to|updated?\s+to|set\s+(?:at|to))?\s*'
+    r'(?:now\s+)?(?:at|to|moved?\s+to|raised?\s+to|lowered?\s+to|changed?\s+to|updated?\s+to|set\s+(?:at|to))?\s*'
     r'[:\s@]*\$?(?P<price>[\d.]+)(?!\s*%)',  # Fixed price, NOT percentage
     re.IGNORECASE
 )
 
-# Percentage SL pattern for Phoenix-style: "SL 10%", "stop loss 5%"
+# Percentage SL pattern for Phoenix-style: "SL 10%", "stop loss 5%", "moving my SL to 11%"
 FOLLOW_UP_SL_PERCENT_PATTERN = re.compile(
+    r'(?:(?:moving|mov(?:e|ed)?)\s+(?:my\s+)?)?'  # Optional "moving my" prefix
     r'(?:SL|stop\s*loss|stop)\s*'
-    r'(?:now\s+)?(?:at|moved?\s+to|raised?\s+to|lowered?\s+to|changed?\s+to|updated?\s+to|set\s+(?:at|to))?\s*'
+    r'(?:now\s+)?(?:at|to|moved?\s+to|raised?\s+to|lowered?\s+to|changed?\s+to|updated?\s+to|set\s+(?:at|to))?\s*'
     r'[:\s@]*(?P<pct>[\d.]+)\s*%',
     re.IGNORECASE
 )
