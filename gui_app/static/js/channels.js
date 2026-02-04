@@ -269,6 +269,20 @@ async function loadChannels() {
                                         </div>
                                     </div>
                                 </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(255, 82, 82, 0.05); border: 1px solid rgba(255, 82, 82, 0.2); border-radius: 8px;">
+                                    <label style="display: block; font-size: 12px; font-weight: 600; color: #ff5252; margin-bottom: 8px;">Stop Loss Order Type</label>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Market exits instantly. Limit retries 3x before switching to market.</p>
+                                    <div style="display: flex; gap: 16px; align-items: center;">
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="sl-order-mode-${channel.id}" value="limit" ${(channel.sl_order_mode || 'limit') === 'limit' ? 'checked' : ''} style="cursor: pointer;">
+                                            <span style="font-size: 12px; color: white;">Limit</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="sl-order-mode-${channel.id}" value="market" ${channel.sl_order_mode === 'market' ? 'checked' : ''} style="cursor: pointer;">
+                                            <span style="font-size: 12px; color: white;">Market</span>
+                                        </label>
+                                    </div>
+                                </div>
                                 <div style="margin-top: 16px; padding: 12px; background: rgba(0, 255, 136, 0.05); border: 1px solid rgba(0, 255, 136, 0.2); border-radius: 8px;">
                                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                                         <div style="display: flex; align-items: center; gap: 8px;">
@@ -1225,6 +1239,7 @@ async function saveRiskManagement(channelId) {
         const leaveRunnerPct = document.getElementById(`risk-leave-runner-pct-${channelId}`).value;
         const trimOrderMode = document.querySelector(`input[name="trim-order-mode-${channelId}"]:checked`)?.value || 'market';
         const trimLimitOffset = document.getElementById(`risk-trim-offset-${channelId}`).value;
+        const slOrderMode = document.querySelector(`input[name="sl-order-mode-${channelId}"]:checked`)?.value || 'limit';
         const tradeSummaryEnabled = document.getElementById(`trade-summary-enabled-${channelId}`)?.checked ? 1 : 0;
         
         // Enhanced risk settings
@@ -1264,6 +1279,7 @@ async function saveRiskManagement(channelId) {
                 leave_runner_pct: leaveRunnerPct ? parseFloat(leaveRunnerPct) : 25.0,
                 trim_order_mode: trimOrderMode,
                 trim_limit_offset: trimLimitOffset ? parseFloat(trimLimitOffset) : 0.01,
+                sl_order_mode: slOrderMode,
                 trade_summary_enabled: tradeSummaryEnabled,
                 enable_dynamic_sl: enableDynamicSl,
                 dynamic_sl_profile: dynamicSlProfile,
