@@ -9502,7 +9502,26 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 except Exception as e:
                                     print(f"[FOLLOW-UP] ⚠️ Could not update order #{order_id}: {e}")
                             else:
-                                print(f"[FOLLOW-UP] ✓ Context updated for {symbol} (no active order)")
+                                if symbol and (sl_update or sl_pct_update or pt_update):
+                                    try:
+                                        if hasattr(self, 'risk_manager') and self.risk_manager and hasattr(self.risk_manager, 'position_cache'):
+                                            updated_positions = self.risk_manager.position_cache.update_position_sl_override(
+                                                symbol=symbol,
+                                                channel_id=str(message.channel.id),
+                                                sl_price=sl_update,
+                                                sl_pct=sl_pct_update,
+                                                pt_targets=[pt_update] if pt_update else (pt_range_update if pt_range_update else None)
+                                            )
+                                            if updated_positions:
+                                                print(f"[FOLLOW-UP] ✓ Updated {len(updated_positions)} filled position(s) for {symbol}")
+                                            else:
+                                                print(f"[FOLLOW-UP] ⚠️ No active positions found for {symbol}")
+                                        else:
+                                            print(f"[FOLLOW-UP] ⚠️ Risk manager not available for SL update")
+                                    except Exception as e:
+                                        print(f"[FOLLOW-UP] ⚠️ Could not update filled positions: {e}")
+                                else:
+                                    print(f"[FOLLOW-UP] ✓ Context updated for {symbol} (no active order)")
                     except Exception as e:
                         pass  # Silently ignore follow-up parsing errors
                     
