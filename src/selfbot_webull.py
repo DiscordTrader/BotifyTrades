@@ -11056,7 +11056,6 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             author_name = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != '0' else message.author.name
             self._save_signal_to_db(stk, message.channel.id, message.id, author_name)
             print(f"[DATABASE] ✓ Signal saved to database")
-            print(f"[DEBUG-STOCK] execute_enabled={execute_enabled}, channel_info={channel_info is not None}, action={stk.get('action')}", flush=True)
             
             # Apply ticker filter BEFORE execution (BTO only - exits always pass)
             if execute_enabled and channel_info and stk.get('action', 'BTO').upper() == 'BTO':
