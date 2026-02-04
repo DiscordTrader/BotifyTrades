@@ -50,6 +50,7 @@ def create_app():
     app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', secrets.token_hex(32))
     app.config['JSON_SORT_KEYS'] = False
     app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
+    app.config['TEMPLATES_AUTO_RELOAD'] = True  # Force template reload
     
     # Security settings for cookies
     app.config['SESSION_COOKIE_SECURE'] = True  # Only send over HTTPS
