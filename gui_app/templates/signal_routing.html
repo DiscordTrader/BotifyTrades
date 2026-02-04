@@ -675,6 +675,22 @@
                     <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 5px;">Market fills immediately. Limit uses psychological pricing (.04/.09).</p>
                 </div>
                 <div class="form-group">
+                    <label>Stop Loss Order Type</label>
+                    <div style="display: flex; gap: 15px; margin-top: 8px;">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="radio" name="sl-order-type" value="market">
+                            <span>Market</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="radio" name="sl-order-type" value="limit" checked>
+                            <span>Limit</span>
+                        </label>
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 5px;">Market exits instantly. Limit retries 3x before switching to market.</p>
+                </div>
+            </div>
+            <div class="form-grid" style="grid-template-columns: repeat(2, 1fr); gap: 15px; align-items: start; margin-top: 15px;">
+                <div class="form-group">
                     <label style="display: flex; align-items: center; gap: 8px;">
                         <input type="checkbox" id="risk-leave-runner">
                         <span>⭐ Leave Runner</span>
@@ -1105,6 +1121,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('risk-trailing-stop').value = s.trailing_stop_pct || '';
                 document.getElementById('risk-trailing-activation').value = s.trailing_activation_pct || '';
                 document.querySelector(`input[name="trim-order-type"][value="${s.trim_order_type || 'market'}"]`).checked = true;
+                document.querySelector(`input[name="sl-order-type"][value="${s.sl_order_type || 'limit'}"]`).checked = true;
                 document.getElementById('risk-leave-runner').checked = !!s.leave_runner_enabled;
                 document.getElementById('risk-runner-size').value = s.leave_runner_size_pct || 25;
                 document.getElementById('risk-dynamic-sl').checked = !!s.dynamic_sl_escalation_enabled;
@@ -1146,6 +1163,7 @@ document.addEventListener('DOMContentLoaded', function() {
             trailing_stop_pct: parseFloat(document.getElementById('risk-trailing-stop').value) || 0,
             trailing_activation_pct: parseFloat(document.getElementById('risk-trailing-activation').value) || 15,
             trim_order_type: document.querySelector('input[name="trim-order-type"]:checked').value,
+            sl_order_type: document.querySelector('input[name="sl-order-type"]:checked').value,
             leave_runner_enabled: document.getElementById('risk-leave-runner').checked ? 1 : 0,
             leave_runner_size_pct: parseFloat(document.getElementById('risk-runner-size').value) || 25,
             dynamic_sl_escalation_enabled: document.getElementById('risk-dynamic-sl').checked ? 1 : 0,

@@ -56,6 +56,12 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 
 **Early Trailing Stop**: A percentage-based trailing stop with a breakeven-first approach that moves the stop to entry after a specified gain and then locks in profit.
 
+**Stop Loss Order Type** (February 2026): Per-channel option to use Market or Limit orders for stop loss exits:
+- **Configuration**: Trading → Risk Settings modal, under "Order Settings" section
+- **Limit (default)**: Uses limit orders first, retries 3x, then switches to market orders
+- **Market**: Uses market orders immediately for fastest exit when SL triggers
+- **Use case**: Market orders recommended for volatile assets where SL speed is critical
+
 **Broker-Aware Price Monitoring**: Routes quote requests to the position's connected broker with a fallback chain (other connected brokers, Finnhub, yfinance).
 
 **Broker Health Monitor**: A centralized, thread-safe system for real-time broker connection status and buying power monitoring. It includes disconnect reason classification, fail-safe pre-trade validation, integer quantity enforcement for options, cache invalidation, and normalized broker name handling. Order processing waits for both broker connection and the first sync cycle to complete before processing signals.

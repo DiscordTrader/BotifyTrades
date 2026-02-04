@@ -75,6 +75,7 @@ class ChannelRiskSettings:
     leave_runner_enabled: bool = False  # Keep portion after profit targets
     leave_runner_pct: float = 25.0  # Percentage of position to leave as runner
     trim_order_mode: str = 'market'  # 'market' or 'limit' for trim orders
+    sl_order_mode: str = 'limit'  # 'market' or 'limit' for stop loss orders
     trim_limit_offset: float = 0.01  # Offset for limit orders (e.g., 0.01 = $0.01)
     exit_strategy_mode: str = 'signal'  # 'signal' = follow trader, 'risk' = auto exits, 'hybrid' = both
     

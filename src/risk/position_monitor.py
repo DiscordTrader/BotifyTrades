@@ -191,7 +191,8 @@ class RiskDBAdapter:
                        dynamic_sl_escalation_enabled, sl_escalation_profile,
                        max_profit_giveback_enabled, max_profit_giveback_pct,
                        exit_strategy_mode, price_monitor_enabled,
-                       enable_early_trailing, early_trailing_activation_pct, early_trailing_step_pct
+                       enable_early_trailing, early_trailing_activation_pct, early_trailing_step_pct,
+                       sl_order_type
                 FROM signal_routing_mappings
                 WHERE id = ? AND enabled = 1
                 LIMIT 1
@@ -223,6 +224,7 @@ class RiskDBAdapter:
             enable_early_trailing = bool(row[23]) if len(row) > 23 and row[23] else False
             early_trailing_activation_pct = row[24] if len(row) > 24 and row[24] is not None else 5.0
             early_trailing_step_pct = row[25] if len(row) > 25 and row[25] is not None else 3.0
+            sl_order_type = row[26] if len(row) > 26 and row[26] else 'limit'
             
             has_any_risk_config = (sl > 0 or pt1 > 0 or pt2 > 0 or pt3 > 0 or pt4 > 0 or trail > 0 or enable_early_trailing)
             
@@ -246,6 +248,7 @@ class RiskDBAdapter:
                 leave_runner_enabled=leave_runner_enabled,
                 leave_runner_pct=leave_runner_pct,
                 trim_order_mode=trim_order_type,
+                sl_order_mode=sl_order_type,
                 trim_limit_offset=0.01,
                 exit_strategy_mode=exit_mode,
                 enable_dynamic_sl=dynamic_sl_enabled,
@@ -1629,7 +1632,15 @@ class RiskManager:
                 print(f"[RISK] ⚠️ No origin BTO trade found in database for {pos_key}")
             
             # Add market order flag if limit orders have failed multiple times
-            if self.cache.should_use_market_order(pos_key):
+            # OR if sl_order_mode is 'market' for stop loss exits
+            use_market = self.cache.should_use_market_order(pos_key)
+            
+            # Check if stop loss should use market order immediately
+            if is_stop_exit and channel_settings and channel_settings.sl_order_mode == 'market':
+                use_market = True
+                print(f"[RISK] 📊 SL Market Order mode enabled - using market order for stop loss")
+            
+            if use_market:
                 stc_signal['_use_market_order'] = True
                 # Keep the current position price for options (Webull doesn't support market orders for options)
                 # For stocks, we could set to None for true market order but keeping price is safer
