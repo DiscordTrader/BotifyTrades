@@ -39,9 +39,21 @@ def calculate_tier_exit_qty(
     }
     custom_qty = qty_map.get(tier)
     
-    # If custom qty is set and valid, use it
+    # Calculate runner quantity if Leave Runner is enabled
+    runner_qty = 0
+    if channel_settings.leave_runner_enabled and current_qty > 1:
+        runner_pct = channel_settings.leave_runner_pct / 100.0
+        runner_qty = max(1, int(current_qty * runner_pct))
+    
+    # Maximum we can sell (respecting runner)
+    max_sellable = current_qty - runner_qty
+    
+    # If custom qty is set and valid, use it (but respect runner)
     if custom_qty is not None and custom_qty > 0:
-        exit_qty = min(custom_qty, current_qty)
+        exit_qty = min(custom_qty, max_sellable)
+        # Don't sell if nothing left after runner
+        if exit_qty <= 0:
+            return 0, False
         is_partial = exit_qty < current_qty
         return exit_qty, is_partial
     
@@ -57,8 +69,10 @@ def calculate_tier_exit_qty(
     if channel_settings.profit_target_4_pct > 0:
         active_tiers.append(4)
     
-    # Small positions: close all at first target
+    # Small positions: close all at first target (but respect runner if enabled)
     if current_qty <= 2:
+        if runner_qty > 0 and current_qty > runner_qty:
+            return current_qty - runner_qty, True
         return current_qty, False
     
     # For larger positions, calculate based on remaining tiers
@@ -71,10 +85,8 @@ def calculate_tier_exit_qty(
     
     # Last tier or leave runner adjustment
     if tier == max(active_tiers):
-        if channel_settings.leave_runner_enabled and current_qty > 1:
-            runner_pct = channel_settings.leave_runner_pct / 100.0
-            runner_qty = max(1, int(current_qty * runner_pct))
-            exit_qty = current_qty - runner_qty
+        if runner_qty > 0:
+            exit_qty = max_sellable
             return max(0, exit_qty), exit_qty < current_qty
         return current_qty, False
     
