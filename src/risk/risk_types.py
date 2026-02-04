@@ -243,6 +243,11 @@ class PositionCacheEntry:
     early_stop_price: Optional[float] = None  # Current early trailing stop price
     early_steps_locked: int = 0  # Number of profit steps locked (0=breakeven, 1=+step%, 2=+2*step%, ...)
     
+    # Manual SL/PT overrides from signal provider follow-up messages
+    manual_sl_price: Optional[float] = None  # Fixed price SL override (e.g., "SL at 1.88")
+    manual_sl_pct: Optional[float] = None  # Percentage SL override (e.g., "SL 11%")
+    manual_pt_targets: Optional[list] = None  # PT targets override from follow-up
+    
     # Pending risk orders awaiting fill confirmation
     pending_orders: Dict[str, Any] = field(default_factory=dict)  # order_id -> PendingRiskOrder dict
     
@@ -278,7 +283,10 @@ class PositionCacheEntry:
             'last_evaluated_price': self.last_evaluated_price,
             'early_trailing_active': self.early_trailing_active,
             'early_stop_price': self.early_stop_price,
-            'early_steps_locked': self.early_steps_locked
+            'early_steps_locked': self.early_steps_locked,
+            'manual_sl_price': self.manual_sl_price,
+            'manual_sl_pct': self.manual_sl_pct,
+            'manual_pt_targets': self.manual_pt_targets
         }
     
     @classmethod
