@@ -1981,10 +1981,10 @@ class RiskManager:
                   f"Entry: ${entry:.2f} | SL: ${sl_price or 'N/A'} | Target: ${target_price or 'N/A'} | Qty: {qty}{trailing_status}{enhanced_status}")
         elif channel_settings:
             sl_display = f"{channel_settings.stop_loss_pct}%"
-            if cached_entry and cached_entry.manual_sl_price is not None:
-                sl_display = f"${cached_entry.manual_sl_price:.2f} [OVERRIDE]"
-            elif cached_entry and cached_entry.manual_sl_pct is not None:
-                sl_display = f"{cached_entry.manual_sl_pct:.1f}% [OVERRIDE]"
+            if cache and cache.manual_sl_price is not None:
+                sl_display = f"${cache.manual_sl_price:.2f} [OVERRIDE]"
+            elif cache and cache.manual_sl_pct is not None:
+                sl_display = f"{cache.manual_sl_pct:.1f}% [OVERRIDE]"
             print(f"[RISK] [{channel_name}] {pos_key}: ${current:.2f} ({pct_change:+.2f}%) | "
                   f"Entry: ${entry:.2f} | Targets: {channel_settings.profit_target_1_pct}/"
                   f"{channel_settings.profit_target_2_pct}/{channel_settings.profit_target_3_pct}% | "
