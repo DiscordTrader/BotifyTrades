@@ -3493,6 +3493,32 @@ def update_trade(trade_id: int, **kwargs):
     conn.commit()
 
 
+def update_trade_sl_override(trade_id: int, sl_price: float = None, sl_pct: float = None):
+    """Update manual SL override for a trade (from follow-up message).
+    
+    Args:
+        trade_id: Trade ID to update
+        sl_price: Fixed price SL override
+        sl_pct: Percentage SL override
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        UPDATE trades
+        SET manual_sl_price = ?,
+            manual_sl_pct = ?
+        WHERE id = ?
+    ''', (sl_price, sl_pct, trade_id))
+    
+    conn.commit()
+    
+    if sl_price:
+        print(f"[DATABASE] ✓ Saved SL override for trade #{trade_id}: ${sl_price:.2f}")
+    elif sl_pct:
+        print(f"[DATABASE] ✓ Saved SL override for trade #{trade_id}: {sl_pct:.1f}%")
+
+
 def save_trailing_state(trade_id: int, trailing_activated: bool, highest_price: float, activated_at=None):
     """Save trailing stop state to database for persistence across restarts."""
     from datetime import datetime

@@ -10362,7 +10362,7 @@
     "max_pnl_seen": 11.416940272424766,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 39.03,
+    "last_evaluated_price": 39.14,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10530,7 +10530,7 @@
     "max_pnl_seen": 16.54601861427094,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 7.6,
+    "last_evaluated_price": 7.46,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10650,7 +10650,7 @@
     "max_pnl_seen": 6.718783012888231,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.4481,
+    "last_evaluated_price": 0.4454,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -10698,7 +10698,7 @@
     "max_pnl_seen": 10.250000000000004,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 3.895,
+    "last_evaluated_price": 3.8703,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -11211,7 +11211,7 @@
     "entry_price": 2.8,
     "highest_price": 3.66,
     "trailing_activated": false,
-    "closing": true,
+    "closing": false,
     "closing_cycles": 0,
     "stop_loss_price": null,
     "profit_target_price": null,
@@ -11452,7 +11452,7 @@
     "highest_price": 0.87,
     "trailing_activated": false,
     "closing": true,
-    "closing_cycles": 11,
+    "closing_cycles": 21,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "ALPACA_PAPER",
@@ -11610,7 +11610,7 @@
     "max_pnl_seen": 3.3096926713947914,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 1.96,
+    "last_evaluated_price": 1.9729166666666667,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -11634,7 +11634,7 @@
     "max_pnl_seen": 9.999999999999995,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.84,
+    "last_evaluated_price": 0.76,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0
@@ -11658,7 +11658,7 @@
     "max_pnl_seen": 11.249999999999996,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.84,
+    "last_evaluated_price": 0.77,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0

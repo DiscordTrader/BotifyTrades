@@ -261,7 +261,9 @@ def evaluate_channel_stop_loss(
     channel_settings: ChannelRiskSettings
 ) -> ExitDecision:
     """
-    Evaluate per-channel stop loss.
+    Evaluate per-channel stop loss with manual override support.
+    
+    Precedence: manual_sl_price/manual_sl_pct > dynamic_sl_price > channel_settings.stop_loss_pct
     
     Args:
         position: Current position snapshot
@@ -274,18 +276,45 @@ def evaluate_channel_stop_loss(
     if not channel_settings:
         return ExitDecision.no_exit()
     
-    stop_loss_pct = channel_settings.stop_loss_pct
-    if not stop_loss_pct or stop_loss_pct <= 0:
-        return ExitDecision.no_exit()
-    
     pct_change = position.pct_change
     current_qty = int(position.quantity)
     channel_name = channel_settings.channel_name
+    entry_price = cache.entry_price
+    current_price = position.current_price
+    
+    sl_source = None
+    stop_loss_pct = None
+    stop_loss_price = None
+    
+    if cache.manual_sl_price is not None:
+        stop_loss_price = cache.manual_sl_price
+        if entry_price > 0:
+            stop_loss_pct = ((entry_price - stop_loss_price) / entry_price) * 100
+        sl_source = "OVERRIDE"
+    elif cache.manual_sl_pct is not None:
+        stop_loss_pct = cache.manual_sl_pct
+        if entry_price > 0:
+            stop_loss_price = entry_price * (1 - stop_loss_pct / 100)
+        sl_source = "OVERRIDE"
+    elif cache.dynamic_sl_price is not None:
+        stop_loss_price = cache.dynamic_sl_price
+        if entry_price > 0:
+            stop_loss_pct = ((entry_price - stop_loss_price) / entry_price) * 100
+        sl_source = "DYNAMIC"
+    else:
+        stop_loss_pct = channel_settings.stop_loss_pct
+        if entry_price > 0 and stop_loss_pct > 0:
+            stop_loss_price = entry_price * (1 - stop_loss_pct / 100)
+        sl_source = "CHANNEL"
+    
+    if not stop_loss_pct or stop_loss_pct <= 0:
+        return ExitDecision.no_exit()
     
     if pct_change <= -stop_loss_pct:
+        sl_label = f"STOP LOSS [{channel_name}]" if sl_source == "CHANNEL" else f"STOP LOSS [{sl_source}]"
         return ExitDecision(
             should_exit=True,
-            reason=f"STOP LOSS [{channel_name}] ({pct_change:.2f}% <= -{stop_loss_pct}%) - Closing all {current_qty}",
+            reason=f"{sl_label} ({pct_change:.2f}% <= -{stop_loss_pct:.1f}%) - Closing all {current_qty}",
             exit_qty=current_qty,
             is_partial=False,
             risk_trigger='stop_loss'
