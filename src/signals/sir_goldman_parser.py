@@ -62,12 +62,17 @@ ENTRY_PATTERN = re.compile(
 )
 
 TRIM_PATTERN = re.compile(
-    r'\$?([A-Z]{2,5})\s+(\d*\.?\d+)!?\s*(?:\+(\d+(?:\.\d+)?)%)?',
+    r'\$([A-Z]{2,5})\s+(\d*\.?\d+)!?\s*(?:\+(\d+(?:\.\d+)?)%)?',
     re.IGNORECASE
 )
 
 EXIT_PRICE_PATTERN = re.compile(
-    r'(?:at|@)\s*(\d*\.?\d+)',
+    r'(?:at|@|here)\s*(\d+\.?\d*)',
+    re.IGNORECASE
+)
+
+EXIT_TRIM_STYLE_PATTERN = re.compile(
+    r'\$([A-Z]{2,5})\s+(\d*\.?\d+)!?\s*(?:\+(\d+(?:\.\d+)?)%)?',
     re.IGNORECASE
 )
 
@@ -76,6 +81,8 @@ BE_PATTERN = re.compile(r'\bBE\b', re.IGNORECASE)
 LOSS_PATTERN = re.compile(r'-(\d+(?:\.\d+)?)%', re.IGNORECASE)
 
 FUTURES_KEYWORDS = ['NQ', 'SMS', 'ES', 'MNQ', 'MES', 'RTY', 'YM', 'GC', 'CL', 'SI', 'ZB', 'ZN']
+
+NON_TICKER_WORDS = {'OFF', 'FREE', 'ASFF', 'HERE', 'NICE', 'BANG', 'LETS', 'THAT', 'WILL', 'DONE', 'BACK', 'JUST', 'MORE'}
 
 AMBIGUOUS_PATTERNS = [
     re.compile(r'^Adding\s+here', re.IGNORECASE),
@@ -181,11 +188,23 @@ def _parse_entry(signal: SirGoldmanSignal, description: str) -> Optional[SirGold
 
 
 def _parse_trim(signal: SirGoldmanSignal, description: str) -> Optional[SirGoldmanSignal]:
-    """Parse a TRIM signal (partial exit)."""
+    """Parse a TRIM signal (partial exit).
+    
+    Valid TRIM formats:
+    - $SPX 3.2! +31%  (symbol with $ prefix)
+    - $SPY 4.1! +58%
+    
+    Invalid (rejected):
+    - Taking another off 3.5 (no $ prefix, 'off' is not a ticker)
+    - FREE ASFF 3.3! (no $ prefix, non-ticker words)
+    """
     match = TRIM_PATTERN.search(description)
     if match:
+        symbol = match.group(1).upper()
+        if symbol in NON_TICKER_WORDS:
+            return None
         signal.action = 'STC'
-        signal.symbol = match.group(1).upper()
+        signal.symbol = symbol
         signal.price = float(match.group(2))
         if match.group(3):
             signal.gain_pct = float(match.group(3))
@@ -195,7 +214,14 @@ def _parse_trim(signal: SirGoldmanSignal, description: str) -> Optional[SirGoldm
 
 
 def _parse_exit(signal: SirGoldmanSignal, description: str) -> Optional[SirGoldmanSignal]:
-    """Parse an EXIT signal (full exit)."""
+    """Parse an EXIT signal (full exit).
+    
+    Handles multiple EXIT formats:
+    - Out rest here at BE (breakeven)
+    - Out here at 1.2 -25% (price with loss)
+    - $SPY 3.78! +385% (TRIM-style in EXIT)
+    - SL Be hit! +53% (stop loss hit)
+    """
     signal.action = 'STC'
     
     if BE_PATTERN.search(description):
@@ -205,10 +231,26 @@ def _parse_exit(signal: SirGoldmanSignal, description: str) -> Optional[SirGoldm
     if loss_match:
         signal.loss_pct = float(loss_match.group(1))
     
+    trim_style_match = EXIT_TRIM_STYLE_PATTERN.search(description)
+    if trim_style_match:
+        symbol = trim_style_match.group(1).upper()
+        if symbol not in NON_TICKER_WORDS:
+            signal.symbol = symbol
+            signal.price = float(trim_style_match.group(2))
+            if trim_style_match.group(3):
+                signal.gain_pct = float(trim_style_match.group(3))
+            return signal
+    
     price_match = EXIT_PRICE_PATTERN.search(description)
     if price_match:
-        signal.price = float(price_match.group(1))
-    else:
+        price_str = price_match.group(1)
+        if price_str and price_str != '':
+            try:
+                signal.price = float(price_str)
+            except ValueError:
+                pass
+    
+    if signal.price is None and not signal.is_breakeven:
         signal.is_market_exit = True
     
     return signal
