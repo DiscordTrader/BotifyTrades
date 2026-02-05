@@ -47,8 +47,8 @@
             bell.style.cssText = `
                 position: fixed;
                 top: 15px;
-                right: 70px;
-                z-index: 9999;
+                right: 180px;
+                z-index: 999;
                 cursor: pointer;
             `;
             
@@ -83,7 +83,7 @@
                 #notification-panel {
                     position: fixed;
                     top: 60px;
-                    right: 20px;
+                    right: 130px;
                     width: 350px;
                     max-height: 500px;
                     background: var(--card-bg, #1e2030);
