@@ -235,15 +235,17 @@ BISHOP_EXIT_PATTERN = re.compile(
 #   Trimming CAT 640 C 1/16 @$11.25
 #   Trimming JNJ 220 C 2/20 @$3.37
 #   Trimming TSLA 437.50 P 1/16 @$3.60
+#   Trimming TSLA 387.5 P 2/6 | **Value:** @3.60  (new format with Value separator)
 BISHOP_TRIMMING_PATTERN = re.compile(
-    r'Trimming\s+([A-Z]+)\s+([\d.]+)\s*([CP])\s+(\d{1,2}/\d{1,2})\s*@\s*\$?([\d.]+)',
+    r'Trimming\s+([A-Z]+)\s+([\d.]+)\s*([CP])\s+(\d{1,2}/\d{1,2})(?:\s*\|\s*\*{0,2}Value:?\*{0,2})?\s*@\s*\$?([\d.]+)',
     re.IGNORECASE
 )
 
 #   Trimming MRK 115 C 2/20 @$190%!!
 #   Trimming SPY 600 P 2/14 @$250%
+#   Trimming TSLA 387.5 P 2/6 | **Value:** @250%  (new format with Value separator)
 BISHOP_TRIMMING_PERCENT_PATTERN = re.compile(
-    r'Trimming\s+([A-Z]+)\s+([\d.]+)\s*([CP])\s+(\d{1,2}/\d{1,2})\s*@\s*\$?([\d.]+)\s*%',
+    r'Trimming\s+([A-Z]+)\s+([\d.]+)\s*([CP])\s+(\d{1,2}/\d{1,2})(?:\s*\|\s*\*{0,2}Value:?\*{0,2})?\s*@\s*\$?([\d.]+)\s*%',
     re.IGNORECASE
 )
 
