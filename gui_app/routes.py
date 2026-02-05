@@ -11619,7 +11619,11 @@ def register_routes(app):
                     status['discord'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                 
                 # Webull Live broker - check if actually logged in AND tokens are valid
-                webull_broker = getattr(_bot_instance, 'broker', None)
+                # Check both 'broker' and 'webull_broker' attributes
+                webull_broker = getattr(_bot_instance, 'webull_broker', None) or getattr(_bot_instance, 'broker', None)
+                # Check if it's actually a Webull broker
+                if webull_broker and 'Webull' not in type(webull_broker).__name__:
+                    webull_broker = None
                 # Use is_authenticated() if available (checks token validity), fallback to connected flag
                 if webull_broker and hasattr(webull_broker, 'is_authenticated'):
                     webull_logged_in = webull_broker.is_authenticated()
@@ -17043,9 +17047,10 @@ def register_routes(app):
                     # For others, use connected property
                     if broker_name == 'WEBULL':
                         # Use is_authenticated() for Webull to detect token expiration
-                        instance_connected = (
-                            hasattr(broker_instance, 'is_authenticated') and broker_instance.is_authenticated()
-                        ) if hasattr(broker_instance, 'is_authenticated') else getattr(broker_instance, 'connected', False)
+                        if hasattr(broker_instance, 'is_authenticated'):
+                            instance_connected = broker_instance.is_authenticated()
+                        else:
+                            instance_connected = getattr(broker_instance, 'connected', False) or getattr(broker_instance, '_logged_in', False)
                     else:
                         instance_connected = (
                             getattr(broker_instance, 'connected', False) or 

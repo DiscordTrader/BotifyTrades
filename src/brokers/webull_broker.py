@@ -26,6 +26,7 @@ class WebullBroker(BrokerInterface):
         self.name = "WEBULL"
         self.wb = None
         self.paper_trade = config.get('paper_trade', False)
+        self._tokens_valid = False  # Start as invalid until successful authentication
     
     async def connect(self) -> bool:
         """Connect to Webull"""
@@ -590,6 +591,8 @@ class WebullBroker(BrokerInterface):
                     print(f"[{self.name}] Token refreshed, retrying order...")
                     response = await asyncio.to_thread(execute_order)
                 else:
+                    # Mark tokens as invalid for status reporting
+                    self._tokens_valid = False
                     return OrderResult(
                         success=False,
                         message="Trade token expired and refresh failed. Please re-login to Webull in Settings.",
@@ -885,6 +888,8 @@ class WebullBroker(BrokerInterface):
                     print(f"[{self.name}] Token refreshed, retrying option order...")
                     response = await asyncio.to_thread(execute_order)
                 else:
+                    # Mark tokens as invalid for status reporting
+                    self._tokens_valid = False
                     return OrderResult(
                         success=False,
                         message="Trade token expired and refresh failed. Please re-login to Webull in Settings.",

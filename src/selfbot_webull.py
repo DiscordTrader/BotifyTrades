@@ -1913,6 +1913,15 @@ class WebullBroker:
         self._client = None
         self._logged_in = False
         self._use_paper_account = False  # Flag for paper trading
+        self._tokens_valid = False  # Token validity for status reporting
+        self.connected = False  # Connection status for broker health monitor
+    
+    def is_authenticated(self) -> bool:
+        """Check if Webull is actually authenticated (tokens valid).
+        
+        This is different from '_logged_in' which may stay True after token expiration.
+        """
+        return self._tokens_valid and self._logged_in
     
     def _check_order_dedupe(self, symbol: str, strike: float, opt_type: str, expiry: str, side: str, qty: int, price: float) -> bool:
         """
@@ -2091,10 +2100,14 @@ class WebullBroker:
         self._client = await self.loop.run_in_executor(None, _blocking_login)
         if self._client is not None:
             self._logged_in = True
+            self._tokens_valid = True  # Tokens are valid after successful login
+            self.connected = True  # Mark as connected for broker health monitor
             # Apply monkey-patch to fix the startTime date bug in webull library
             self._patch_order_history_urls(self._client)
         else:
             self._logged_in = False
+            self._tokens_valid = False
+            self.connected = False
             print("[Webull] ⚠️  Broker not connected - trading functions disabled")
     
     def _patch_order_history_urls(self, wb):
