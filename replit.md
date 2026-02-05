@@ -58,6 +58,8 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 
 **Unfilled Order Chaser**: Monitors pending exit orders, cancels stale ones, and replaces them with mid-price limit orders, with startup restoration for pending orders.
 
+**Notification System**: Real-time alerting for critical trading events via Discord webhooks and desktop browser notifications. Includes notification bell UI in the dashboard with popup panel, configurable webhook URL, and polling-based desktop notifications. Supported alert types: order failures, stop loss triggers, profit target hits, and order fills (BTO/STC).
+
 **Isolated Execution Flows**: Critical architecture separating Channel Execution (direct broker trading) from Signal Routing (webhook forwarding).
 
 **NDX→QQQ Conversion Service**: Enables channels with limited NDX access to trade equivalent QQQ options.

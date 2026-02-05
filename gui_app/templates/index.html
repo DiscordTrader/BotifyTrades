@@ -881,6 +881,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
 <script>
 let currentTab = 'live';
 let currentBroker = null;  // Will be set from dropdown or BrokerStore on page load

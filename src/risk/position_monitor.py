@@ -1568,6 +1568,46 @@ class RiskManager:
         print(f"{'='*60}")
         
         is_stop_exit = 'STOP LOSS' in decision.reason or 'TRAILING STOP' in decision.reason
+        is_profit_exit = 'TARGET' in decision.reason or 'PROFIT' in decision.reason
+        
+        # Send notification for stop loss triggers
+        if is_stop_exit:
+            try:
+                from gui_app.discord_notifier import notify_stop_loss_triggered
+                notify_stop_loss_triggered(
+                    symbol=position.symbol,
+                    broker=position.broker,
+                    entry_price=position.entry_price,
+                    exit_price=current_price,
+                    loss_percent=abs(pnl_pct),
+                    quantity=int(decision.qty),
+                    channel=channel_settings.channel_name if channel_settings else None
+                )
+            except Exception as notify_err:
+                print(f"[NOTIFY] Warning: Could not send stop loss notification: {notify_err}")
+        
+        # Send notification for profit target hits
+        if is_profit_exit and pnl_pct > 0:
+            try:
+                from gui_app.discord_notifier import notify_profit_target_hit
+                tier = 1
+                if 'TARGET 2' in decision.reason or 'TARGET2' in decision.reason:
+                    tier = 2
+                elif 'TARGET 3' in decision.reason or 'TARGET3' in decision.reason:
+                    tier = 3
+                elif 'TARGET 4' in decision.reason or 'TARGET4' in decision.reason:
+                    tier = 4
+                notify_profit_target_hit(
+                    symbol=position.symbol,
+                    broker=position.broker,
+                    target_tier=tier,
+                    profit_percent=pnl_pct,
+                    exit_price=current_price,
+                    quantity=int(decision.qty),
+                    channel=channel_settings.channel_name if channel_settings else None
+                )
+            except Exception as notify_err:
+                print(f"[NOTIFY] Warning: Could not send profit target notification: {notify_err}")
         
         exit_mode = channel_settings.exit_strategy_mode if channel_settings else 'risk'
         

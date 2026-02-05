@@ -18493,3 +18493,92 @@ def register_routes(app):
             })
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # ============ NOTIFICATION SYSTEM ============
+    
+    @app.route('/api/notifications', methods=['GET'])
+    @login_required
+    def api_get_notifications():
+        """Get notification history for browser display."""
+        try:
+            from gui_app.discord_notifier import get_notification_history
+            notifications = get_notification_history()
+            return jsonify({
+                'success': True,
+                'notifications': notifications,
+                'count': len(notifications)
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/notifications/clear', methods=['POST'])
+    @login_required
+    def api_clear_notifications():
+        """Clear notification history."""
+        try:
+            from gui_app.discord_notifier import clear_notification_history
+            clear_notification_history()
+            return jsonify({'success': True, 'message': 'Notifications cleared'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/notifications/settings', methods=['GET'])
+    @login_required
+    def api_get_notification_settings():
+        """Get notification settings."""
+        try:
+            from gui_app.config_service import get_discord_notifications
+            settings = get_discord_notifications()
+            return jsonify({
+                'success': True,
+                'settings': {
+                    'webhook_url': settings.get('webhook_url', ''),
+                    'enabled': settings.get('enabled', True),
+                    'channel_id': settings.get('channel_id', '')
+                }
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/notifications/settings', methods=['POST'])
+    @login_required
+    def api_save_notification_settings():
+        """Save notification settings."""
+        try:
+            data = request.get_json()
+            webhook_url = data.get('webhook_url', '')
+            enabled = data.get('enabled', True)
+            channel_id = data.get('channel_id', '')
+            
+            from gui_app.config_service import save_discord_notifications
+            save_discord_notifications(
+                webhook_url=webhook_url,
+                channel_id=channel_id,
+                enabled=enabled
+            )
+            
+            return jsonify({'success': True, 'message': 'Notification settings saved'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/notifications/test', methods=['POST'])
+    @login_required
+    def api_test_notification():
+        """Send a test notification."""
+        try:
+            from gui_app.discord_notifier import send_critical_alert
+            success = send_critical_alert(
+                alert_type="order_filled_bto",
+                title="TEST NOTIFICATION",
+                message="This is a test notification from BotifyTrades",
+                symbol="TEST",
+                broker="System",
+                details={"Status": "Working"}
+            )
+            
+            if success:
+                return jsonify({'success': True, 'message': 'Test notification sent'})
+            else:
+                return jsonify({'success': False, 'error': 'Failed to send test notification'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500

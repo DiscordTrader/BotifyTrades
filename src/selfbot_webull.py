@@ -11854,16 +11854,36 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     )
                 
                 # Log the result for debugging (applies to all option orders)
+                order_succeeded = False
                 if hasattr(result, 'success'):
                     if result.success:
                         _original_print(f"[{broker_name}] ✅ Option order SUCCESS: {result.order_id}")
+                        order_succeeded = True
                     else:
                         _original_print(f"[{broker_name}] ❌ Option order FAILED: {result.message}")
                 elif isinstance(result, dict):
                     if result.get('success') or result.get('orderId'):
                         _original_print(f"[{broker_name}] ✅ Option order SUCCESS: {result.get('orderId', result.get('msg'))}")
+                        order_succeeded = True
                     else:
                         _original_print(f"[{broker_name}] ❌ Option order FAILED: {result.get('msg', result.get('error', 'Unknown error'))}")
+                
+                # Send notification for successful orders
+                if order_succeeded:
+                    try:
+                        from gui_app.discord_notifier import notify_order_filled
+                        notify_order_filled(
+                            symbol=signal['symbol'],
+                            action=signal['action'],
+                            broker=broker_name,
+                            quantity=signal.get('qty', 1),
+                            price=signal.get('price', 0),
+                            strike=signal.get('strike'),
+                            expiry=signal.get('expiry'),
+                            opt_type=signal.get('opt_type')
+                        )
+                    except Exception as notify_err:
+                        _original_print(f"[NOTIFY] Warning: Could not send fill notification: {notify_err}", flush=True)
                 
                 # Convert OrderResult to dict format for consistency
                 if hasattr(result, 'success'):
@@ -13490,6 +13510,23 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         error_msg = 'Unknown error'
                         error_type = 'ORDER_FAILED'
                     _original_print(f"[ORDER FAILED] ❌ {signal['action']} {signal['symbol']} - {error_msg}", flush=True)
+                    
+                    # Send critical notification for order failure
+                    try:
+                        from gui_app.discord_notifier import notify_order_failed
+                        is_risk_order = signal.get('_risk_management_order', False)
+                        broker_name = signal.get('broker', 'Unknown')
+                        notify_order_failed(
+                            symbol=signal['symbol'],
+                            action=signal['action'],
+                            broker=broker_name,
+                            error_message=error_msg,
+                            quantity=signal.get('qty'),
+                            price=signal.get('price'),
+                            is_risk_order=is_risk_order
+                        )
+                    except Exception as notify_err:
+                        _original_print(f"[NOTIFY] Warning: Could not send failure notification: {notify_err}", flush=True)
                     
                     # === CONFLICTING ORDER HANDLER ===
                     # Webull error: ORDER_NOT_SUPPORT_REVERSE_OPTION means there's already a pending order

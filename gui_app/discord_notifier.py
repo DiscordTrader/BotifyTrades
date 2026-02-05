@@ -326,3 +326,275 @@ def send_cancel_notification(symbol: str, quantity: int, price: float, is_option
             
     except Exception as e:
         logger.error(f"Failed to send Discord cancel notification: {e}")
+
+
+# ============================================================================
+# CRITICAL ALERTS - High Priority Notifications
+# ============================================================================
+
+_notification_history: list = []
+_max_history = 100
+
+def get_notification_history() -> list:
+    """Get recent notification history for browser display"""
+    return list(_notification_history)
+
+def clear_notification_history():
+    """Clear notification history"""
+    global _notification_history
+    _notification_history = []
+
+def _add_to_history(notification: dict):
+    """Add notification to history for browser retrieval"""
+    global _notification_history
+    _notification_history.insert(0, notification)
+    if len(_notification_history) > _max_history:
+        _notification_history = _notification_history[:_max_history]
+
+def send_critical_alert(
+    alert_type: str,
+    title: str,
+    message: str,
+    symbol: Optional[str] = None,
+    broker: Optional[str] = None,
+    details: Optional[Dict] = None
+) -> bool:
+    """
+    Send critical alert for order failures, stop loss triggers, etc.
+    
+    Args:
+        alert_type: Type of alert (order_failed, stop_loss_triggered, order_filled, etc.)
+        title: Short title for the notification
+        message: Detailed message
+        symbol: Trading symbol involved
+        broker: Broker name
+        details: Additional details dict
+    
+    Returns:
+        bool: True if notification was sent successfully
+    """
+    try:
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        notification = {
+            "type": alert_type,
+            "title": title,
+            "message": message,
+            "symbol": symbol,
+            "broker": broker,
+            "details": details or {},
+            "timestamp": timestamp,
+            "datetime": datetime.now().isoformat()
+        }
+        
+        _add_to_history(notification)
+        
+        settings = get_discord_notifications()
+        
+        if not settings.get('enabled', True):
+            logger.info("Discord notifications disabled - alert stored locally only")
+            return True
+        
+        webhook_url = settings.get('webhook_url', '')
+        if not webhook_url:
+            logger.info("Discord webhook not configured - alert stored locally only")
+            return True
+        
+        severity_config = {
+            "order_failed": {"emoji": "🚨", "color": 15158332, "mention": True},
+            "stop_loss_triggered": {"emoji": "🛑", "color": 15158332, "mention": True},
+            "stop_loss_failed": {"emoji": "💥", "color": 15158332, "mention": True},
+            "order_filled_bto": {"emoji": "🟢", "color": 3066993, "mention": False},
+            "order_filled_stc": {"emoji": "🔴", "color": 15844367, "mention": False},
+            "profit_target_hit": {"emoji": "🎯", "color": 3066993, "mention": False},
+            "trailing_stop_triggered": {"emoji": "📉", "color": 15844367, "mention": False},
+        }
+        
+        config = severity_config.get(alert_type, {"emoji": "📢", "color": 7506394, "mention": False})
+        
+        embed = {
+            "title": f"{config['emoji']} {title}",
+            "description": message,
+            "color": config['color'],
+            "timestamp": datetime.now().isoformat(),
+            "footer": {"text": "BotifyTrades Alert System"}
+        }
+        
+        fields = []
+        if symbol:
+            fields.append({"name": "Symbol", "value": symbol, "inline": True})
+        if broker:
+            fields.append({"name": "Broker", "value": broker, "inline": True})
+        if details:
+            for key, value in details.items():
+                if key not in ['symbol', 'broker']:
+                    fields.append({"name": key.replace('_', ' ').title(), "value": str(value), "inline": True})
+        
+        if fields:
+            embed['fields'] = fields
+        
+        content = "@everyone" if config['mention'] else None
+        
+        payload = {
+            "embeds": [embed],
+            "username": "BotifyTrades Alerts"
+        }
+        if content:
+            payload["content"] = content
+        
+        response = requests.post(webhook_url, json=payload, timeout=5)
+        
+        if response.status_code == 204:
+            logger.info(f"Critical alert sent: {title}")
+            return True
+        else:
+            logger.error(f"Discord critical alert failed: {response.status_code} - {response.text}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Failed to send critical alert: {e}")
+        return False
+
+
+def notify_order_failed(
+    symbol: str,
+    action: str,
+    broker: str,
+    error_message: str,
+    quantity: Optional[int] = None,
+    price: Optional[float] = None,
+    is_risk_order: bool = False
+):
+    """Notify when an order fails to execute"""
+    title = f"ORDER FAILED: {action} {symbol}"
+    
+    if is_risk_order:
+        title = f"⚠️ RISK ORDER FAILED: {action} {symbol}"
+        message = f"**CRITICAL**: Risk management order failed!\n\n{error_message}\n\nManual intervention may be required."
+    else:
+        message = f"Order execution failed: {error_message}"
+    
+    details = {}
+    if quantity:
+        details['Quantity'] = quantity
+    if price:
+        details['Price'] = f"${price:.2f}"
+    details['Error'] = error_message[:100]
+    
+    return send_critical_alert(
+        alert_type="order_failed",
+        title=title,
+        message=message,
+        symbol=symbol,
+        broker=broker,
+        details=details
+    )
+
+
+def notify_stop_loss_triggered(
+    symbol: str,
+    broker: str,
+    entry_price: float,
+    exit_price: float,
+    loss_percent: float,
+    quantity: int,
+    channel: Optional[str] = None
+):
+    """Notify when a stop loss is triggered"""
+    pnl = (exit_price - entry_price) * quantity * 100
+    
+    title = f"STOP LOSS: {symbol}"
+    message = f"Stop loss triggered at **{loss_percent:.1f}%** loss"
+    
+    details = {
+        'Entry': f"${entry_price:.2f}",
+        'Exit': f"${exit_price:.2f}",
+        'Loss': f"{loss_percent:.1f}%",
+        'Qty': quantity,
+        'P&L': f"${pnl:.2f}"
+    }
+    if channel:
+        details['Channel'] = channel
+    
+    return send_critical_alert(
+        alert_type="stop_loss_triggered",
+        title=title,
+        message=message,
+        symbol=symbol,
+        broker=broker,
+        details=details
+    )
+
+
+def notify_order_filled(
+    symbol: str,
+    action: str,
+    broker: str,
+    quantity: int,
+    price: float,
+    strike: Optional[float] = None,
+    expiry: Optional[str] = None,
+    opt_type: Optional[str] = None,
+    pnl: Optional[float] = None,
+    pnl_percent: Optional[float] = None
+):
+    """Notify when an order is filled"""
+    alert_type = "order_filled_bto" if action.upper() == "BTO" else "order_filled_stc"
+    
+    option_str = ""
+    if strike and expiry and opt_type:
+        option_str = f" ${strike}{opt_type} {expiry}"
+    
+    title = f"{action.upper()} FILLED: {symbol}{option_str}"
+    message = f"{quantity} contracts @ ${price:.2f}"
+    
+    details = {
+        'Qty': quantity,
+        'Price': f"${price:.2f}"
+    }
+    
+    if pnl is not None and action.upper() == "STC":
+        details['P&L'] = f"${pnl:.2f}"
+    if pnl_percent is not None and action.upper() == "STC":
+        details['Return'] = f"{pnl_percent:.1f}%"
+    
+    return send_critical_alert(
+        alert_type=alert_type,
+        title=title,
+        message=message,
+        symbol=symbol,
+        broker=broker,
+        details=details
+    )
+
+
+def notify_profit_target_hit(
+    symbol: str,
+    broker: str,
+    target_tier: int,
+    profit_percent: float,
+    exit_price: float,
+    quantity: int,
+    channel: Optional[str] = None
+):
+    """Notify when a profit target is hit"""
+    title = f"TARGET {target_tier} HIT: {symbol}"
+    message = f"Profit target {target_tier} reached at **+{profit_percent:.1f}%**"
+    
+    details = {
+        'Tier': target_tier,
+        'Profit': f"+{profit_percent:.1f}%",
+        'Exit Price': f"${exit_price:.2f}",
+        'Qty Sold': quantity
+    }
+    if channel:
+        details['Channel'] = channel
+    
+    return send_critical_alert(
+        alert_type="profit_target_hit",
+        title=title,
+        message=message,
+        symbol=symbol,
+        broker=broker,
+        details=details
+    )
