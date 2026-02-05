@@ -472,6 +472,15 @@ class PositionCache:
         if entry:
             entry.reset_exit_retry_state()
     
+    def clear_retry_state(self, position_key: str) -> None:
+        """Clear retry state and closing flag to allow immediate retry after conflicting order cancel."""
+        entry = self._cache.get(position_key)
+        if entry:
+            entry.reset_exit_retry_state()
+            entry.is_closing = False
+            entry.use_market_order = True  # Use market order on retry after cancel
+            print(f"[CACHE] ✓ Cleared retry state for {position_key} - ready for immediate retry")
+    
     def should_use_market_order(self, position_key: str) -> bool:
         """Check if should use market order (after limit failures)."""
         entry = self._cache.get(position_key)

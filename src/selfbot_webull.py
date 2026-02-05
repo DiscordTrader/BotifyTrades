@@ -13443,11 +13443,46 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         error_type = 'ORDER_FAILED'
                     elif isinstance(resp, dict):
                         error_msg = resp.get('msg') or resp.get('message') or 'Unknown error'
-                        error_type = resp.get('error', 'ORDER_FAILED')
+                        error_type = resp.get('code') or resp.get('error', 'ORDER_FAILED')
                     else:
                         error_msg = 'Unknown error'
                         error_type = 'ORDER_FAILED'
                     _original_print(f"[ORDER FAILED] ❌ {signal['action']} {signal['symbol']} - {error_msg}", flush=True)
+                    
+                    # === CONFLICTING ORDER HANDLER ===
+                    # Webull error: ORDER_NOT_SUPPORT_REVERSE_OPTION means there's already a pending order
+                    # Cancel it and schedule immediate retry
+                    if 'ORDER_NOT_SUPPORT_REVERSE' in str(error_type) or 'reverse' in error_msg.lower():
+                        _original_print(f"[EXIT-CHASER] ⚡ Conflicting pending order detected for {signal['symbol']}", flush=True)
+                        try:
+                            # Find and cancel pending orders for this symbol on Webull
+                            if webull_broker and webull_broker.connected:
+                                wb = webull_broker._client
+                                if wb:
+                                    pending_orders = wb.get_current_orders() or []
+                                    symbol = signal['symbol'].upper()
+                                    for order in pending_orders:
+                                        order_symbol = str(order.get('ticker', {}).get('symbol', '') or order.get('symbol', '')).upper()
+                                        order_action = str(order.get('action', '')).upper()
+                                        order_id = order.get('orderId') or order.get('order_id')
+                                        # Cancel matching sell orders
+                                        if order_symbol == symbol and order_action == 'SELL' and order_id:
+                                            _original_print(f"[EXIT-CHASER] Canceling conflicting order {order_id} for {symbol}", flush=True)
+                                            try:
+                                                cancel_result = wb.cancel_order(order_id)
+                                                _original_print(f"[EXIT-CHASER] Cancel result: {cancel_result}", flush=True)
+                                                # Reset retry state to allow immediate retry
+                                                if signal.get('_risk_management_order') and signal.get('_position_key'):
+                                                    from src.risk.position_monitor import risk_manager_instance
+                                                    if risk_manager_instance and hasattr(risk_manager_instance, 'cache'):
+                                                        cache = risk_manager_instance.cache
+                                                        # Reset to allow immediate retry after cancel
+                                                        cache.clear_retry_state(signal['_position_key'])
+                                                        _original_print(f"[EXIT-CHASER] ✓ Retry state reset - will retry on next monitor cycle", flush=True)
+                                            except Exception as cancel_err:
+                                                _original_print(f"[EXIT-CHASER] ⚠️ Cancel failed: {cancel_err}", flush=True)
+                        except Exception as chaser_err:
+                            _original_print(f"[EXIT-CHASER] ⚠️ Could not handle conflicting order: {chaser_err}", flush=True)
                     
                     # Record failure for risk management orders (enables retry with backoff)
                     if signal.get('_risk_management_order') and signal.get('_position_key'):
