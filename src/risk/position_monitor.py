@@ -1567,6 +1567,10 @@ class RiskManager:
                 print(f"[RISK]   📊 Using MARKET order (limit orders failed)")
         print(f"{'='*60}")
         
+        current_price = position.current_price
+        pnl_pct = ((current_price - position.entry_price) / position.entry_price * 100) if position.entry_price else 0.0
+        cache = self.cache.get(pos_key) if hasattr(self.cache, 'get') else None
+        
         is_stop_exit = 'STOP LOSS' in decision.reason and 'TRAILING' not in decision.reason
         is_trailing_exit = 'TRAILING STOP' in decision.reason or 'TRAILING' in decision.reason
         is_profit_exit = 'TARGET' in decision.reason or 'PROFIT' in decision.reason

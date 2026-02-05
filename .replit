@@ -6,6 +6,27 @@ integrations = ["python_openai_ai_integrations:1.0.0", "github:1.0.0", "google-m
 [workflows]
 runButton = "Project"
 
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "BotifyTrades"
+
+[[workflows.workflow]]
+name = "BotifyTrades"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python src/selfbot_webull.py"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [nix]
 channel = "stable-25_05"
 packages = ["cargo", "geckodriver", "gh", "glibcLocales", "libiconv", "libxcrypt", "libyaml", "openssl", "pkg-config", "rustc", "sqlite", "zip"]
