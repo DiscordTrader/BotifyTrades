@@ -7158,8 +7158,44 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                                 
                                 if recent_trade:
                                     trade_id, executed_at = recent_trade
-                                    print(f"[DEDUP] ⚠️ SKIPPING - Open trade #{trade_id} for {symbol_upper} already exists (executed at {executed_at})")
-                                    print(f"[DEDUP] This 'ENTERED LONG' message appears to be a confirmation, not a new signal")
+                                    print(f"[DEDUP] ✓ Found recent open trade #{trade_id} for {symbol_upper} (executed at {executed_at})")
+                                    print(f"[DEDUP] This 'ENTERED LONG' message is a confirmation - applying SL/PT to existing trade")
+                                    
+                                    # Apply SL/PT from confirmation to the existing trade
+                                    if structured.get('stop_loss') or structured.get('target_price'):
+                                        updates = []
+                                        params = []
+                                        if structured.get('stop_loss'):
+                                            updates.append('stop_loss_price = ?')
+                                            params.append(structured['stop_loss'])
+                                            print(f"[DEDUP] Applying SL: ${structured['stop_loss']}")
+                                        if structured.get('target_price'):
+                                            updates.append('profit_target_price = ?')
+                                            params.append(structured['target_price'])
+                                            print(f"[DEDUP] Applying PT: ${structured['target_price']}")
+                                        if updates:
+                                            params.append(trade_id)
+                                            cursor.execute(f"UPDATE trades SET {', '.join(updates)} WHERE id = ?", params)
+                                            conn.commit()
+                                            print(f"[DEDUP] ✓ Updated trade #{trade_id} with SL/PT from confirmation")
+                                        
+                                        # Also update risk monitor cache if it exists
+                                        try:
+                                            if structured.get('stop_loss'):
+                                                # Apply manual SL override to risk monitor
+                                                from src.risk.position_monitor import risk_monitor
+                                                if risk_monitor:
+                                                    # Find position key and apply override
+                                                    for pos_key, pos in list(risk_monitor.active_positions.items()):
+                                                        if pos.get('symbol', '').upper() == symbol_upper:
+                                                            pos['manual_sl_override'] = structured['stop_loss']
+                                                            print(f"[DEDUP] ✓ Applied SL override to risk monitor: {pos_key}")
+                                                            break
+                                        except Exception as risk_err:
+                                            print(f"[DEDUP] ⚠️ Could not update risk monitor: {risk_err}")
+                                    else:
+                                        print(f"[DEDUP] No SL/PT in confirmation message")
+                                    
                                     conn.close()
                                     return
                                 
