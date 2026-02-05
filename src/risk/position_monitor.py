@@ -1616,9 +1616,9 @@ class RiskManager:
                 notify_giveback_guard_triggered(
                     symbol=position.symbol,
                     broker=position.broker,
-                    max_profit=cache.max_pnl_pct if cache else pnl_pct,
+                    max_profit=cache.max_pnl_seen if cache else pnl_pct,
                     current_profit=pnl_pct,
-                    giveback_pct=channel_settings.giveback_guard_pct if channel_settings else 30.0,
+                    giveback_pct=channel_settings.giveback_allowed_pct if channel_settings else 30.0,
                     exit_price=current_price,
                     quantity=int(decision.qty),
                     channel=channel_settings.channel_name if channel_settings else None
