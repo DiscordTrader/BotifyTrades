@@ -54,6 +54,7 @@ class WebullBroker(BrokerInterface):
                 account = await asyncio.to_thread(self.wb.get_account)
                 if account:
                     self.connected = True
+                    self._tokens_valid = True
                     print(f"[{self.name}] ✓ Connected successfully (token auth)")
                     return True
             
@@ -69,6 +70,7 @@ class WebullBroker(BrokerInterface):
                 result = await asyncio.to_thread(login)
                 if result:
                     self.connected = True
+                    self._tokens_valid = True
                     print(f"[{self.name}] ✓ Connected successfully (password auth)")
                     return True
             
@@ -82,7 +84,16 @@ class WebullBroker(BrokerInterface):
     async def disconnect(self):
         """Disconnect from Webull"""
         self.connected = False
+        self._tokens_valid = False
         print(f"[{self.name}] Disconnected")
+    
+    def is_authenticated(self) -> bool:
+        """Check if Webull is actually authenticated (tokens valid)
+        
+        This is different from 'connected' which may stay True after token expiration.
+        Uses cached validation to avoid repeated API calls.
+        """
+        return getattr(self, '_tokens_valid', True) and self.connected
     
     def _get_extended_hours_enabled(self) -> bool:
         """Check if extended hours trading is enabled for Webull.

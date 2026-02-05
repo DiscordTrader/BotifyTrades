@@ -4574,6 +4574,9 @@ def register_routes(app):
                     if isinstance(account_info, dict) and account_info.get('code') == 'auth.token.expire':
                         print(f"[API] ❌ Webull auth failed - both access and refresh tokens are expired")
                         print(f"[API]    User must re-authenticate via Webull to get fresh tokens")
+                        # Mark broker as not authenticated
+                        if _bot_instance and hasattr(_bot_instance, 'broker') and _bot_instance.broker:
+                            _bot_instance.broker._tokens_valid = False
                         return None  # Return None instead of fake $0.00 data
                     
                     # Log response structure for debugging
@@ -17031,11 +17034,18 @@ def register_routes(app):
                         continue
                     
                     # Check if broker is connected (different brokers use different properties)
-                    # Webull uses _logged_in, others use connected
-                    instance_connected = (
-                        getattr(broker_instance, 'connected', False) or 
-                        getattr(broker_instance, '_logged_in', False)
-                    )
+                    # For Webull, check is_authenticated() which validates tokens
+                    # For others, use connected property
+                    if broker_name == 'WEBULL':
+                        # Use is_authenticated() for Webull to detect token expiration
+                        instance_connected = (
+                            hasattr(broker_instance, 'is_authenticated') and broker_instance.is_authenticated()
+                        ) if hasattr(broker_instance, 'is_authenticated') else getattr(broker_instance, 'connected', False)
+                    else:
+                        instance_connected = (
+                            getattr(broker_instance, 'connected', False) or 
+                            getattr(broker_instance, '_logged_in', False)
+                        )
                     
                     # Get real-time status from health monitor (uses uppercase keys)
                     health_key = broker_name.upper()

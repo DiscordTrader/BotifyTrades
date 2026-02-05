@@ -3,6 +3,32 @@
 {% block title %}Dashboard - Ψ∿ BotifyTrades{% endblock %}
 
 {% block content %}
+<!-- Broker Disconnection Alert Banner -->
+<div id="broker-alert-banner" style="display: none; margin-bottom: 16px; padding: 16px 20px; 
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.08));
+    border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);">
+    <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 1.5rem;">⚠️</span>
+        <div style="flex: 1;">
+            <div style="font-weight: 600; color: #ef4444; font-size: 1rem; margin-bottom: 4px;">
+                Broker Disconnected
+            </div>
+            <div id="broker-alert-message" style="color: #fca5a5; font-size: 0.875rem;">
+                <!-- Dynamic message -->
+            </div>
+        </div>
+        <a href="/brokers" style="padding: 8px 16px; background: rgba(239, 68, 68, 0.3); 
+            border: 1px solid rgba(239, 68, 68, 0.5); border-radius: 8px; color: #fca5a5; 
+            text-decoration: none; font-weight: 600; font-size: 0.875rem;
+            transition: all 0.2s ease;">
+            Reconnect
+        </a>
+        <button onclick="dismissBrokerAlert()" style="background: none; border: none; 
+            color: #f87171; cursor: pointer; font-size: 1.25rem; padding: 4px;">×</button>
+    </div>
+</div>
+
 <!-- Stats Grid -->
 <div class="stats-grid">
     <div class="stat-card">
@@ -913,6 +939,9 @@ function renderRegionBrokers() {
     const state = BrokerStore.getState();
     const regions = { USA: state.byRegion.USA || [], Canada: state.byRegion.Canada || [] };
     
+    // Track disconnected brokers for alert banner
+    const disconnectedBrokers = [];
+    
     Object.entries(regions).forEach(([region, brokers]) => {
         const container = document.getElementById('region-' + region);
         if (!container) return;
@@ -933,6 +962,11 @@ function renderRegionBrokers() {
             const dotColor = isConnected ? '#10b981' : '#ef4444';
             const shadowColor = isConnected ? 'rgba(16, 185, 129, 0.6)' : 'rgba(239, 68, 68, 0.6)';
             
+            // Track disconnected brokers
+            if (!isConnected) {
+                disconnectedBrokers.push(broker.broker_name);
+            }
+            
             html += `
                 <div class="broker-card" data-broker="${broker.broker_name}" style="padding: 14px 24px; border-radius: 10px; display: flex; align-items: center; gap: 12px; cursor: pointer;
                     background: ${bgColor}; border: 1px solid ${borderColor}; transition: all 0.2s ease; min-width: 140px;">
@@ -947,6 +981,78 @@ function renderRegionBrokers() {
         html += '</div>';
         container.innerHTML = html;
     });
+    
+    // Show/hide broker alert banner
+    updateBrokerAlertBanner(disconnectedBrokers);
+}
+
+function updateBrokerAlertBanner(disconnectedBrokers) {
+    const banner = document.getElementById('broker-alert-banner');
+    const messageEl = document.getElementById('broker-alert-message');
+    
+    if (!banner || !messageEl) return;
+    
+    // Check if user dismissed the alert (session storage)
+    const dismissedBrokers = JSON.parse(sessionStorage.getItem('dismissedBrokerAlerts') || '[]');
+    const newDisconnected = disconnectedBrokers.filter(b => !dismissedBrokers.includes(b));
+    
+    if (newDisconnected.length > 0) {
+        const brokerList = newDisconnected.join(', ');
+        const message = newDisconnected.length === 1 
+            ? `${brokerList} is disconnected. Trading for this broker is paused until you reconnect.`
+            : `${brokerList} are disconnected. Trading for these brokers is paused until you reconnect.`;
+        
+        messageEl.textContent = message;
+        banner.style.display = 'block';
+    } else {
+        banner.style.display = 'none';
+    }
+}
+
+function dismissBrokerAlert() {
+    const banner = document.getElementById('broker-alert-banner');
+    if (banner) {
+        banner.style.display = 'none';
+        // Store dismissed state in session storage
+        if (typeof BrokerStore !== 'undefined') {
+            const state = BrokerStore.getState();
+            const allBrokers = [...(state.byRegion.USA || []), ...(state.byRegion.Canada || [])];
+            const disconnected = allBrokers.filter(b => !b.is_connected).map(b => b.broker_name);
+            sessionStorage.setItem('dismissedBrokerAlerts', JSON.stringify(disconnected));
+        }
+    }
+}
+
+function checkInitialBrokerStatus() {
+    // Check initial server-rendered broker cards for disconnected state
+    const disconnectedBrokers = [];
+    const brokerCards = document.querySelectorAll('.broker-card');
+    
+    brokerCards.forEach(card => {
+        const brokerName = card.getAttribute('data-broker');
+        // Check if the card has red styling (not connected)
+        const dotSpan = card.querySelector('span');
+        if (dotSpan && dotSpan.style.background === 'rgb(239, 68, 68)') {
+            disconnectedBrokers.push(brokerName);
+        }
+    });
+    
+    // Also check from Jinja-rendered data via inline JSON
+    try {
+        const brokerStates = {{ broker_states | tojson if broker_states else '{"USA":[],"Canada":[]}' | safe }};
+        const allBrokers = [...(brokerStates.USA || []), ...(brokerStates.Canada || [])];
+        allBrokers.forEach(broker => {
+            if (!broker.is_connected && !disconnectedBrokers.includes(broker.broker_name)) {
+                disconnectedBrokers.push(broker.broker_name);
+            }
+        });
+    } catch (e) {
+        console.log('[Dashboard] Could not parse initial broker states');
+    }
+    
+    if (disconnectedBrokers.length > 0) {
+        updateBrokerAlertBanner(disconnectedBrokers);
+    }
 }
 
 function onBrokerChange(value) {
@@ -2490,6 +2596,9 @@ document.addEventListener('DOMContentLoaded', () => {
         regionSelector.value = currentRegion;
         switchRegion(currentRegion);
     }
+    
+    // Check for disconnected brokers from initial server-rendered data
+    checkInitialBrokerStatus();
     
     // Initialize BrokerStore and sync with selector
     const brokerFilter = document.getElementById('broker-filter');
