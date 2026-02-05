@@ -1954,7 +1954,8 @@ def register_routes(app):
                        'leave_runner_pct', 'profit_target_qty_1', 'profit_target_qty_2',
                        'profit_target_qty_3', 'profit_target_qty_4', 'exit_strategy_mode',
                        'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
-                       'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct'}
+                       'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
+                       'sl_order_mode', 'sl_limit_offset', 'entry_order_mode'}
         cache_warning = None
         if any(field in data for field in risk_fields):
             try:
