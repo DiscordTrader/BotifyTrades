@@ -1567,8 +1567,10 @@ class RiskManager:
                 print(f"[RISK]   📊 Using MARKET order (limit orders failed)")
         print(f"{'='*60}")
         
-        is_stop_exit = 'STOP LOSS' in decision.reason or 'TRAILING STOP' in decision.reason
+        is_stop_exit = 'STOP LOSS' in decision.reason and 'TRAILING' not in decision.reason
+        is_trailing_exit = 'TRAILING STOP' in decision.reason or 'TRAILING' in decision.reason
         is_profit_exit = 'TARGET' in decision.reason or 'PROFIT' in decision.reason
+        is_giveback_exit = 'GIVEBACK' in decision.reason
         
         # Send notification for stop loss triggers
         if is_stop_exit:
@@ -1585,6 +1587,40 @@ class RiskManager:
                 )
             except Exception as notify_err:
                 print(f"[NOTIFY] Warning: Could not send stop loss notification: {notify_err}")
+        
+        # Send notification for trailing stop triggers
+        if is_trailing_exit:
+            try:
+                from gui_app.discord_notifier import notify_trailing_stop_triggered
+                trail_type = "early" if "EARLY" in decision.reason else "standard"
+                notify_trailing_stop_triggered(
+                    symbol=position.symbol,
+                    broker=position.broker,
+                    trail_type=trail_type,
+                    profit_percent=pnl_pct,
+                    exit_price=current_price,
+                    quantity=int(decision.qty),
+                    channel=channel_settings.channel_name if channel_settings else None
+                )
+            except Exception as notify_err:
+                print(f"[NOTIFY] Warning: Could not send trailing stop notification: {notify_err}")
+        
+        # Send notification for giveback guard triggers
+        if is_giveback_exit:
+            try:
+                from gui_app.discord_notifier import notify_giveback_guard_triggered
+                notify_giveback_guard_triggered(
+                    symbol=position.symbol,
+                    broker=position.broker,
+                    max_profit=cache.max_pnl_pct if cache else pnl_pct,
+                    current_profit=pnl_pct,
+                    giveback_pct=channel_settings.giveback_guard_pct if channel_settings else 30.0,
+                    exit_price=current_price,
+                    quantity=int(decision.qty),
+                    channel=channel_settings.channel_name if channel_settings else None
+                )
+            except Exception as notify_err:
+                print(f"[NOTIFY] Warning: Could not send giveback guard notification: {notify_err}")
         
         # Send notification for profit target hits
         if is_profit_exit and pnl_pct > 0:

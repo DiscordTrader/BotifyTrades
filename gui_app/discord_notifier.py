@@ -598,3 +598,70 @@ def notify_profit_target_hit(
         broker=broker,
         details=details
     )
+
+
+def notify_giveback_guard_triggered(
+    symbol: str,
+    broker: str,
+    max_profit: float,
+    current_profit: float,
+    giveback_pct: float,
+    exit_price: float,
+    quantity: int,
+    channel: Optional[str] = None
+):
+    """Notify when giveback guard triggers an exit"""
+    title = f"GIVEBACK GUARD: {symbol}"
+    message = f"Max profit giveback guard triggered. Profit dropped from **+{max_profit:.1f}%** to **+{current_profit:.1f}%**"
+    
+    details = {
+        'Max Profit': f"+{max_profit:.1f}%",
+        'Current': f"+{current_profit:.1f}%",
+        'Giveback': f"{giveback_pct:.1f}%",
+        'Exit Price': f"${exit_price:.2f}",
+        'Qty Sold': quantity
+    }
+    if channel:
+        details['Channel'] = channel
+    
+    return send_critical_alert(
+        alert_type="giveback_guard",
+        title=title,
+        message=message,
+        symbol=symbol,
+        broker=broker,
+        details=details
+    )
+
+
+def notify_trailing_stop_triggered(
+    symbol: str,
+    broker: str,
+    trail_type: str,
+    profit_percent: float,
+    exit_price: float,
+    quantity: int,
+    channel: Optional[str] = None
+):
+    """Notify when trailing stop triggers"""
+    title = f"TRAILING STOP: {symbol}"
+    type_label = "Early Trailing" if trail_type == "early" else "Trailing Stop"
+    message = f"{type_label} triggered at **{'+' if profit_percent >= 0 else ''}{profit_percent:.1f}%**"
+    
+    details = {
+        'Type': type_label,
+        'P&L': f"{'+' if profit_percent >= 0 else ''}{profit_percent:.1f}%",
+        'Exit Price': f"${exit_price:.2f}",
+        'Qty Sold': quantity
+    }
+    if channel:
+        details['Channel'] = channel
+    
+    return send_critical_alert(
+        alert_type="trailing_stop",
+        title=title,
+        message=message,
+        symbol=symbol,
+        broker=broker,
+        details=details
+    )
