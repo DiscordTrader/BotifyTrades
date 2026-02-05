@@ -7093,6 +7093,80 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                                     print(f"[ALERT PARSER] Failed to parse enabled_brokers: {e}")
                                     pass
                             
+                            # === DEDUPLICATION CHECK ===
+                            # Check if there's a pending conditional order for this symbol/channel
+                            # If so, trigger it instead of creating a duplicate
+                            try:
+                                from datetime import datetime, timedelta
+                                conn = db.get_connection()
+                                cursor = conn.cursor()
+                                symbol_upper = structured['symbol'].upper()
+                                
+                                # Check for pending conditional order (within last 30 min)
+                                cursor.execute('''
+                                    SELECT id, status, trigger_price FROM conditional_orders 
+                                    WHERE channel_id = ? AND UPPER(symbol) = ? 
+                                    AND status IN ('PENDING', 'ACTIVE_MONITORING')
+                                    AND created_at > datetime('now', '-30 minutes')
+                                    ORDER BY created_at DESC LIMIT 1
+                                ''', (target_channel_id, symbol_upper))
+                                pending_cond = cursor.fetchone()
+                                
+                                if pending_cond:
+                                    cond_id, cond_status, trigger_price = pending_cond
+                                    print(f"[DEDUP] ✓ Found pending conditional order #{cond_id} for {symbol_upper}")
+                                    print(f"[DEDUP] 'ENTERED LONG' confirmation received - triggering conditional order instead of duplicate BTO")
+                                    
+                                    # Trigger the conditional order by updating its status
+                                    cursor.execute('''
+                                        UPDATE conditional_orders 
+                                        SET status = 'TRIGGERED', triggered_at = datetime('now')
+                                        WHERE id = ?
+                                    ''', (cond_id,))
+                                    conn.commit()
+                                    
+                                    # Update SL/PT from confirmation message
+                                    if structured.get('stop_loss') or structured.get('target_price'):
+                                        updates = []
+                                        params = []
+                                        if structured.get('stop_loss'):
+                                            updates.append('stop_loss_fixed = ?')
+                                            params.append(structured['stop_loss'])
+                                        if structured.get('target_price'):
+                                            updates.append('take_profit_targets = ?')
+                                            import json
+                                            params.append(json.dumps([structured['target_price']]))
+                                        if updates:
+                                            params.append(cond_id)
+                                            cursor.execute(f"UPDATE conditional_orders SET {', '.join(updates)} WHERE id = ?", params)
+                                            conn.commit()
+                                            print(f"[DEDUP] Updated conditional order with SL=${structured.get('stop_loss')}, PT=${structured.get('target_price')}")
+                                    
+                                    print(f"[DEDUP] ✓ Conditional order #{cond_id} marked as TRIGGERED - will execute on next monitor cycle")
+                                    conn.close()
+                                    return
+                                
+                                # Check for recently executed trade on same symbol (within last 5 min)
+                                cursor.execute('''
+                                    SELECT id, executed_at FROM trades 
+                                    WHERE channel_id = ? AND UPPER(symbol) = ? 
+                                    AND status = 'OPEN'
+                                    AND executed_at > datetime('now', '-5 minutes')
+                                    ORDER BY executed_at DESC LIMIT 1
+                                ''', (target_channel_id, symbol_upper))
+                                recent_trade = cursor.fetchone()
+                                
+                                if recent_trade:
+                                    trade_id, executed_at = recent_trade
+                                    print(f"[DEDUP] ⚠️ SKIPPING - Open trade #{trade_id} for {symbol_upper} already exists (executed at {executed_at})")
+                                    print(f"[DEDUP] This 'ENTERED LONG' message appears to be a confirmation, not a new signal")
+                                    conn.close()
+                                    return
+                                
+                                conn.close()
+                            except Exception as dedup_err:
+                                print(f"[DEDUP] ⚠️ Dedup check error (proceeding with execution): {dedup_err}")
+                            
                             # Add directly to queue for execution
                             await self.order_queue.put(signal)
                             print(f"[ALERT PARSER] ✅ Added signal to execution queue: BTO 1 {structured['symbol']} @${structured['entry_price']}")
