@@ -330,7 +330,7 @@ class RiskDBAdapter:
                                    c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
                                    c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
                                    c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
-                                   t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode
+                                   t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode, c.sl_limit_offset
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -350,7 +350,7 @@ class RiskDBAdapter:
                                    c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
                                    c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
                                    c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
-                                   t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode
+                                   t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode, c.sl_limit_offset
                             FROM trades t
                             LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id 
                                 OR t.channel_id = CAST(c.id AS TEXT)
@@ -378,7 +378,7 @@ class RiskDBAdapter:
                                c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
                                c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
                                c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
-                               t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode
+                               t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode, c.sl_limit_offset
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -398,7 +398,7 @@ class RiskDBAdapter:
                                c.exit_strategy_mode, c.enable_dynamic_sl, c.enable_giveback_guard,
                                c.giveback_allowed_pct, c.dynamic_sl_profile, t.routing_mapping_id,
                                c.enable_early_trailing, c.early_trailing_activation_pct, c.early_trailing_step_pct,
-                               t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode
+                               t.stop_loss_price, t.profit_target_price, t.executed_price, c.sl_order_mode, c.sl_limit_offset
                         FROM trades t
                         LEFT JOIN channels c ON (t.channel_id = c.discord_channel_id
                             OR t.channel_id = CAST(c.id AS TEXT)
@@ -489,6 +489,9 @@ class RiskDBAdapter:
                 # Extract SL order mode (index 30, after executed_price at 29)
                 sl_order_mode = row[30] if len(row) > 30 and row[30] else 'limit'
                 
+                # Extract SL limit offset (index 31, after sl_order_mode)
+                sl_limit_offset = row[31] if len(row) > 31 and row[31] is not None else 0.03
+                
                 # Risk management is enabled - return settings
                 return ChannelRiskSettings(
                     channel_id=str(row[0]),
@@ -509,6 +512,7 @@ class RiskDBAdapter:
                     trim_order_mode=trim_mode,
                     trim_limit_offset=trim_offset,
                     sl_order_mode=sl_order_mode,
+                    sl_limit_offset=sl_limit_offset,
                     exit_strategy_mode=exit_mode,
                     enable_dynamic_sl=enable_dynamic_sl,
                     enable_giveback_guard=enable_giveback_guard,
@@ -1646,6 +1650,17 @@ class RiskManager:
             if is_sl_type_exit and channel_settings and channel_settings.sl_order_mode == 'market':
                 use_market = True
                 print(f"[RISK] 📊 SL Market Order mode enabled - using market order for {decision.risk_trigger}")
+            
+            # Apply SL limit offset for limit orders on SL-type exits
+            # This sets the limit price lower than trigger price to improve fill probability
+            if is_sl_type_exit and channel_settings and channel_settings.sl_order_mode == 'limit' and not use_market:
+                sl_offset = channel_settings.sl_limit_offset or 0.03
+                if sl_offset > 0:
+                    original_price = stc_signal['price']
+                    offset_price = round(original_price * (1 - sl_offset), 2)
+                    stc_signal['price'] = offset_price
+                    stc_signal['_sl_limit_offset_applied'] = True
+                    print(f"[RISK] 📊 SL Limit Offset: trigger ${original_price:.2f} → limit ${offset_price:.2f} ({sl_offset*100:.1f}% below)")
             
             if use_market:
                 stc_signal['_use_market_order'] = True

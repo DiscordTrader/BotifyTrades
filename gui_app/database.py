@@ -474,6 +474,23 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added sl_order_mode column (limit/market) for per-channel stop loss order type")
     
+    # Migrate: Add entry order mode column for market vs limit orders on BTO/buy signals
+    try:
+        cursor.execute('SELECT entry_order_mode FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE channels ADD COLUMN entry_order_mode TEXT DEFAULT 'limit'")
+        conn.commit()
+        print("[DATABASE] ✓ Added entry_order_mode column (limit/market) for per-channel entry order type")
+    
+    # Migrate: Add stop loss limit offset column for setting limit price below SL trigger
+    # E.g., if SL triggers at -10% and offset is 3%, the limit sell is at -13%
+    try:
+        cursor.execute('SELECT sl_limit_offset FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE channels ADD COLUMN sl_limit_offset REAL DEFAULT 0.03")
+        conn.commit()
+        print("[DATABASE] ✓ Added sl_limit_offset column for SL limit price offset (default 3%)")
+    
     # Migrate: Add ignore_signal_position_size column for per-channel control over signal vs channel position sizing
     # When enabled, channel's position_size_pct takes priority over signal's percentage (e.g., Jacob's "12.5% OF ACCOUNT")
     try:

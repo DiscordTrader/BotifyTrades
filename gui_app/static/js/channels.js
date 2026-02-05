@@ -278,11 +278,30 @@ async function loadChannels() {
                                     <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Market exits instantly. Limit retries 3x before switching to market.</p>
                                     <div style="display: flex; gap: 16px; align-items: center;">
                                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                            <input type="radio" name="sl-order-mode-${channel.id}" value="limit" ${(channel.sl_order_mode || 'limit') === 'limit' ? 'checked' : ''} style="cursor: pointer;">
+                                            <input type="radio" name="sl-order-mode-${channel.id}" value="limit" ${(channel.sl_order_mode || 'limit') === 'limit' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('sl-limit-offset-container-${channel.id}').style.display='flex'">
                                             <span style="font-size: 12px; color: white;">Limit</span>
                                         </label>
                                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                            <input type="radio" name="sl-order-mode-${channel.id}" value="market" ${channel.sl_order_mode === 'market' ? 'checked' : ''} style="cursor: pointer;">
+                                            <input type="radio" name="sl-order-mode-${channel.id}" value="market" ${channel.sl_order_mode === 'market' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('sl-limit-offset-container-${channel.id}').style.display='none'">
+                                            <span style="font-size: 12px; color: white;">Market</span>
+                                        </label>
+                                    </div>
+                                    <div style="display: ${(channel.sl_order_mode || 'limit') === 'limit' ? 'flex' : 'none'}; align-items: center; gap: 8px; margin-top: 8px;" id="sl-limit-offset-container-${channel.id}">
+                                        <label style="font-size: 11px; color: #8E8E93;">Limit Offset %:</label>
+                                        <input type="number" id="risk-sl-limit-offset-${channel.id}" value="${(channel.sl_limit_offset || 0.03) * 100}" step="0.5" min="0" max="20" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
+                                        <span style="font-size: 10px; color: #8E8E93;">SL triggers at -10%, limit sells at -13% if offset=3%</span>
+                                    </div>
+                                </div>
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(100, 200, 255, 0.05); border: 1px solid rgba(100, 200, 255, 0.2); border-radius: 8px;">
+                                    <label style="display: block; font-size: 12px; font-weight: 600; color: #64c8ff; margin-bottom: 8px;">Entry Order Type</label>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Force market orders on BTO entries for faster fills.</p>
+                                    <div style="display: flex; gap: 16px; align-items: center;">
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="entry-order-mode-${channel.id}" value="limit" ${(channel.entry_order_mode || 'limit') === 'limit' ? 'checked' : ''} style="cursor: pointer;">
+                                            <span style="font-size: 12px; color: white;">Limit (default)</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="entry-order-mode-${channel.id}" value="market" ${channel.entry_order_mode === 'market' ? 'checked' : ''} style="cursor: pointer;">
                                             <span style="font-size: 12px; color: white;">Market</span>
                                         </label>
                                     </div>
@@ -1244,6 +1263,8 @@ async function saveRiskManagement(channelId) {
         const trimOrderMode = document.querySelector(`input[name="trim-order-mode-${channelId}"]:checked`)?.value || 'market';
         const trimLimitOffset = document.getElementById(`risk-trim-offset-${channelId}`).value;
         const slOrderMode = document.querySelector(`input[name="sl-order-mode-${channelId}"]:checked`)?.value || 'limit';
+        const slLimitOffset = document.getElementById(`risk-sl-limit-offset-${channelId}`).value;
+        const entryOrderMode = document.querySelector(`input[name="entry-order-mode-${channelId}"]:checked`)?.value || 'limit';
         const tradeSummaryEnabled = document.getElementById(`trade-summary-enabled-${channelId}`)?.checked ? 1 : 0;
         
         // Enhanced risk settings
@@ -1284,6 +1305,8 @@ async function saveRiskManagement(channelId) {
                 trim_order_mode: trimOrderMode,
                 trim_limit_offset: trimLimitOffset ? parseFloat(trimLimitOffset) : 0.01,
                 sl_order_mode: slOrderMode,
+                sl_limit_offset: slLimitOffset ? parseFloat(slLimitOffset) / 100 : 0.03,
+                entry_order_mode: entryOrderMode,
                 trade_summary_enabled: tradeSummaryEnabled,
                 enable_dynamic_sl: enableDynamicSl,
                 dynamic_sl_profile: dynamicSlProfile,

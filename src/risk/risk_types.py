@@ -77,6 +77,7 @@ class ChannelRiskSettings:
     trim_order_mode: str = 'market'  # 'market' or 'limit' for trim orders
     sl_order_mode: str = 'limit'  # 'market' or 'limit' for stop loss orders
     trim_limit_offset: float = 0.01  # Offset for limit orders (e.g., 0.01 = $0.01)
+    sl_limit_offset: float = 0.03  # Offset % for SL limit orders (e.g., 0.03 = SL triggers at -10%, limit at -13%)
     exit_strategy_mode: str = 'signal'  # 'signal' = follow trader, 'risk' = auto exits, 'hybrid' = both
     
     # Enhanced Risk Management Settings

@@ -10642,6 +10642,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     except:
                         pass
                 
+                # Entry Order Mode: Force market orders for BTO if configured
+                entry_order_mode = channel_info.get('entry_order_mode', 'limit') if channel_info else 'limit'
+                if entry_order_mode == 'market' and opt.get('action', 'BTO').upper() == 'BTO':
+                    opt['_use_market_order'] = True
+                    print(f"[ENTRY MODE] ✓ Market order enabled for BTO (channel setting)")
+                
                 # NDX→QQQ Conversion: Convert NDX options to QQQ with target delta
                 ndx_to_qqq_enabled = channel_info.get('ndx_to_qqq_enabled', 0) if channel_info else 0
                 print(f"[DEBUG] NDX→QQQ check: enabled={ndx_to_qqq_enabled}, symbol={opt.get('symbol')}, channel={channel_info.get('name') if channel_info else 'None'}")
@@ -11221,6 +11227,12 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         print(f"[MULTI-BROKER] Enabled brokers: {stk['_enabled_brokers']}")
                     except:
                         pass
+                
+                # Entry Order Mode: Force market orders for BTO if configured
+                entry_order_mode = channel_info.get('entry_order_mode', 'limit') if channel_info else 'limit'
+                if entry_order_mode == 'market' and stk.get('action', 'BTO').upper() == 'BTO':
+                    stk['_use_market_order'] = True
+                    print(f"[ENTRY MODE] ✓ Market order enabled for BTO (channel setting)")
                 
                 # Add channel_record_id and channel_id for database saving after execution
                 if channel_info:
