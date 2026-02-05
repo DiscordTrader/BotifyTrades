@@ -11,19 +11,13 @@
     <div style="display: flex; align-items: center; gap: 12px;">
         <span style="font-size: 1.5rem;">⚠️</span>
         <div style="flex: 1;">
-            <div style="font-weight: 600; color: #ef4444; font-size: 1rem; margin-bottom: 4px;">
+            <div id="broker-alert-title" style="font-weight: 600; color: #ef4444; font-size: 1rem; margin-bottom: 4px;">
                 Broker Disconnected
             </div>
             <div id="broker-alert-message" style="color: #fca5a5; font-size: 0.875rem;">
-                <!-- Dynamic message -->
+                <!-- Dynamic message with reason -->
             </div>
         </div>
-        <a href="/brokers" style="padding: 8px 16px; background: rgba(239, 68, 68, 0.3); 
-            border: 1px solid rgba(239, 68, 68, 0.5); border-radius: 8px; color: #fca5a5; 
-            text-decoration: none; font-weight: 600; font-size: 0.875rem;
-            transition: all 0.2s ease;">
-            Reconnect
-        </a>
         <button onclick="dismissBrokerAlert()" style="background: none; border: none; 
             color: #f87171; cursor: pointer; font-size: 1.25rem; padding: 4px;">×</button>
     </div>
@@ -962,9 +956,12 @@ function renderRegionBrokers() {
             const dotColor = isConnected ? '#10b981' : '#ef4444';
             const shadowColor = isConnected ? 'rgba(16, 185, 129, 0.6)' : 'rgba(239, 68, 68, 0.6)';
             
-            // Track disconnected brokers
+            // Track disconnected brokers with reason
             if (!isConnected) {
-                disconnectedBrokers.push(broker.broker_name);
+                disconnectedBrokers.push({
+                    name: broker.broker_name,
+                    reason: broker.reason || broker.error_code || 'Connection lost'
+                });
             }
             
             html += `
@@ -988,21 +985,39 @@ function renderRegionBrokers() {
 
 function updateBrokerAlertBanner(disconnectedBrokers) {
     const banner = document.getElementById('broker-alert-banner');
+    const titleEl = document.getElementById('broker-alert-title');
     const messageEl = document.getElementById('broker-alert-message');
     
     if (!banner || !messageEl) return;
     
     // Check if user dismissed the alert (session storage)
     const dismissedBrokers = JSON.parse(sessionStorage.getItem('dismissedBrokerAlerts') || '[]');
-    const newDisconnected = disconnectedBrokers.filter(b => !dismissedBrokers.includes(b));
+    const newDisconnected = disconnectedBrokers.filter(b => {
+        const name = typeof b === 'object' ? b.name : b;
+        return !dismissedBrokers.includes(name);
+    });
     
     if (newDisconnected.length > 0) {
-        const brokerList = newDisconnected.join(', ');
-        const message = newDisconnected.length === 1 
-            ? `${brokerList} is disconnected. Trading for this broker is paused until you reconnect.`
-            : `${brokerList} are disconnected. Trading for these brokers is paused until you reconnect.`;
+        // Build message with broker names and reasons
+        const brokerDetails = newDisconnected.map(b => {
+            if (typeof b === 'object') {
+                return `${b.name}: ${b.reason}`;
+            }
+            return b;
+        });
         
-        messageEl.textContent = message;
+        const brokerNames = newDisconnected.map(b => typeof b === 'object' ? b.name : b);
+        
+        if (titleEl) {
+            titleEl.textContent = brokerNames.length === 1 
+                ? `${brokerNames[0]} Disconnected` 
+                : 'Brokers Disconnected';
+        }
+        
+        messageEl.innerHTML = brokerDetails.map(detail => 
+            `<div style="margin-bottom: 4px;">${detail}</div>`
+        ).join('');
+        
         banner.style.display = 'block';
     } else {
         banner.style.display = 'none';
@@ -1026,24 +1041,17 @@ function dismissBrokerAlert() {
 function checkInitialBrokerStatus() {
     // Check initial server-rendered broker cards for disconnected state
     const disconnectedBrokers = [];
-    const brokerCards = document.querySelectorAll('.broker-card');
     
-    brokerCards.forEach(card => {
-        const brokerName = card.getAttribute('data-broker');
-        // Check if the card has red styling (not connected)
-        const dotSpan = card.querySelector('span');
-        if (dotSpan && dotSpan.style.background === 'rgb(239, 68, 68)') {
-            disconnectedBrokers.push(brokerName);
-        }
-    });
-    
-    // Also check from Jinja-rendered data via inline JSON
+    // Check from Jinja-rendered data via inline JSON
     try {
         const brokerStates = {{ broker_states | tojson if broker_states else '{"USA":[],"Canada":[]}' | safe }};
         const allBrokers = [...(brokerStates.USA || []), ...(brokerStates.Canada || [])];
         allBrokers.forEach(broker => {
-            if (!broker.is_connected && !disconnectedBrokers.includes(broker.broker_name)) {
-                disconnectedBrokers.push(broker.broker_name);
+            if (!broker.is_connected) {
+                disconnectedBrokers.push({
+                    name: broker.broker_name,
+                    reason: broker.reason || broker.error_code || 'Connection lost'
+                });
             }
         });
     } catch (e) {
