@@ -172,6 +172,26 @@
                 </button>
             </div>
             
+            <!-- Notification Bell -->
+            <div id="notification-bell-container" class="notification-bell-container">
+                <button id="notification-bell-btn" class="notification-bell-btn" onclick="NotificationSystem.showPanel()" title="Notifications">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                    </svg>
+                    <span id="notification-badge" class="notification-badge" style="display: none;">0</span>
+                </button>
+                <div id="notification-panel">
+                    <div class="notification-panel-header">
+                        <span class="notification-panel-title">Notifications</span>
+                        <button class="notification-panel-clear" onclick="NotificationSystem.clearAll()">Clear All</button>
+                    </div>
+                    <div class="notification-panel-body" id="notification-list">
+                        <div class="notification-empty">No notifications</div>
+                    </div>
+                </div>
+            </div>
+            
             <a href="/logout" class="logout-btn">Logout</a>
         </div>
     </nav>
@@ -640,6 +660,133 @@
     .chat-widget.maximized .chat-maximize-backdrop {
         display: block;
     }
+    
+    /* Notification Bell Styles */
+    .notification-bell-container {
+        position: relative;
+        margin-right: 10px;
+    }
+    .notification-bell-btn {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        border: none;
+        border-radius: 8px;
+        padding: 8px 12px;
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        position: relative;
+    }
+    .notification-bell-btn:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+    }
+    .notification-badge {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        background: #ef4444;
+        color: white;
+        border-radius: 50%;
+        width: 18px;
+        height: 18px;
+        font-size: 11px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    #notification-panel {
+        position: absolute;
+        top: 45px;
+        right: 0;
+        width: 360px;
+        max-height: 450px;
+        background: var(--card-bg, #1e2030);
+        border: 1px solid var(--border-color, #2a2d45);
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+        z-index: 10000;
+        display: none;
+        overflow: hidden;
+    }
+    .notification-panel-header {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border-color, #2a2d45);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: rgba(255,255,255,0.02);
+    }
+    .notification-panel-title {
+        font-weight: 600;
+        color: var(--text-primary, #fff);
+        font-size: 14px;
+    }
+    .notification-panel-clear {
+        background: none;
+        border: none;
+        color: #8b8fa3;
+        cursor: pointer;
+        font-size: 12px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: all 0.2s;
+    }
+    .notification-panel-clear:hover {
+        background: rgba(255,255,255,0.1);
+        color: #fff;
+    }
+    .notification-panel-body {
+        max-height: 380px;
+        overflow-y: auto;
+    }
+    .notification-item {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-color, #2a2d45);
+        transition: background 0.2s;
+    }
+    .notification-item:hover {
+        background: rgba(255,255,255,0.03);
+    }
+    .notification-item:last-child {
+        border-bottom: none;
+    }
+    .notification-item-title {
+        font-weight: 600;
+        color: var(--text-primary, #fff);
+        margin-bottom: 4px;
+        font-size: 13px;
+    }
+    .notification-item-message {
+        font-size: 12px;
+        color: var(--text-secondary, #8b8fa3);
+        line-height: 1.4;
+    }
+    .notification-item-time {
+        font-size: 11px;
+        color: var(--text-muted, #5a5e73);
+        margin-top: 6px;
+    }
+    .notification-empty {
+        padding: 40px 20px;
+        text-align: center;
+        color: var(--text-muted, #5a5e73);
+        font-size: 13px;
+    }
+    .notification-type-order_failed .notification-item-title,
+    .notification-type-stop_loss_triggered .notification-item-title {
+        color: #ef4444;
+    }
+    .notification-type-order_filled_bto .notification-item-title,
+    .notification-type-profit_target_hit .notification-item-title {
+        color: #22c55e;
+    }
+    .notification-type-order_filled_stc .notification-item-title {
+        color: #f59e0b;
+    }
     </style>
 
     <script>
@@ -964,6 +1111,7 @@
     }
     </script>
 
+    <script src="{{ url_for('static', filename='js/notifications.js') }}?v={{ range(1, 999999) | random }}"></script>
     <script src="{{ url_for('static', filename='js/broker-store.js') }}?v={{ range(1, 999999) | random }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}?v={{ range(1, 999999) | random }}"></script>
     {% block scripts %}{% endblock %}
