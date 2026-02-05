@@ -600,6 +600,31 @@ def notify_profit_target_hit(
     )
 
 
+def notify_token_expired(
+    broker: str,
+    error_msg: str = None
+):
+    """Notify when broker trade token expires and refresh fails"""
+    title = f"TOKEN EXPIRED: {broker}"
+    message = f"Trade token expired and auto-refresh failed. Please re-login to {broker} in Settings."
+    
+    details = {
+        'Broker': broker,
+        'Action': 'Re-login required'
+    }
+    if error_msg:
+        details['Error'] = error_msg[:100]
+    
+    return send_critical_alert(
+        alert_type="broker_disconnect",
+        title=title,
+        message=message,
+        symbol="N/A",
+        broker=broker,
+        details=details
+    )
+
+
 def notify_giveback_guard_triggered(
     symbol: str,
     broker: str,

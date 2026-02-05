@@ -1923,6 +1923,47 @@ class WebullBroker:
         """
         return self._tokens_valid and self._logged_in
     
+    def _refresh_trade_token_sync(self) -> bool:
+        """Synchronously refresh the Webull trade token when it expires.
+        
+        Uses the stored WB_PIN to get a new trade token.
+        Returns True if refresh successful, False otherwise.
+        """
+        try:
+            wb = self._client
+            if not wb:
+                print(f"[{self.name}] Cannot refresh trade token - no client")
+                return False
+            
+            # Get the global WB_PIN
+            global WB_PIN
+            if not WB_PIN:
+                print(f"[{self.name}] Cannot refresh trade token - no trade PIN configured")
+                return False
+            
+            # Try to refresh the trade token using the PIN
+            try:
+                result = wb.get_trade_token(WB_PIN)
+                if result:
+                    print(f"[{self.name}] ✓ Trade token refreshed successfully")
+                    self._tokens_valid = True
+                    return True
+                else:
+                    print(f"[{self.name}] ❌ Trade token refresh returned empty result")
+                    return False
+            except Exception as e:
+                print(f"[{self.name}] ❌ Trade token refresh failed: {e}")
+                self._tokens_valid = False
+                return False
+                
+        except Exception as e:
+            print(f"[{self.name}] Trade token refresh error: {e}")
+            return False
+    
+    async def _refresh_trade_token(self) -> bool:
+        """Async wrapper for trade token refresh."""
+        return await self.loop.run_in_executor(None, self._refresh_trade_token_sync)
+    
     def _check_order_dedupe(self, symbol: str, strike: float, opt_type: str, expiry: str, side: str, qty: int, price: float) -> bool:
         """
         Check if this order is a duplicate (same params within dedupe window).
@@ -2956,7 +2997,26 @@ class WebullBroker:
                                'WebullBroker', 'error', f'Symbol: {symbol}')
                 raise Exception(f"Webull API Error: {str(api_error)}") from api_error
 
-        return await self.loop.run_in_executor(None, _blocking_place)
+        resp = await self.loop.run_in_executor(None, _blocking_place)
+        
+        # Check for trade token expiration and auto-refresh
+        if resp and isinstance(resp, dict) and resp.get('code') == 'trade.token.expire':
+            print(f"[{self.name}] Trade token expired - attempting auto-refresh...")
+            refresh_success = await self._refresh_trade_token()
+            if refresh_success:
+                print(f"[{self.name}] Token refreshed, retrying option order...")
+                resp = await self.loop.run_in_executor(None, _blocking_place)
+            else:
+                self._tokens_valid = False
+                # Send notification about token expiration
+                try:
+                    from gui_app.discord_notifier import notify_token_expired
+                    notify_token_expired(broker='Webull')
+                except Exception:
+                    pass
+                return {'msg': 'Trade token expired and refresh failed. Please re-login to Webull in Settings.', 'code': 'token_refresh_failed', 'success': False}
+        
+        return resp
 
     async def place_option_order_simple(self, symbol: str, strike: float, expiry: str, 
                                        option_type: str, quantity: int, side: str, 
@@ -3320,7 +3380,26 @@ class WebullBroker:
             print(f"[DEBUG] Webull place_stock response: {resp}")
             return resp
 
-        return await self.loop.run_in_executor(None, _blocking_place)
+        resp = await self.loop.run_in_executor(None, _blocking_place)
+        
+        # Check for trade token expiration and auto-refresh
+        if resp and isinstance(resp, dict) and resp.get('code') == 'trade.token.expire':
+            print(f"[{self.name}] Trade token expired - attempting auto-refresh...")
+            refresh_success = await self._refresh_trade_token()
+            if refresh_success:
+                print(f"[{self.name}] Token refreshed, retrying order...")
+                resp = await self.loop.run_in_executor(None, _blocking_place)
+            else:
+                self._tokens_valid = False
+                # Send notification about token expiration
+                try:
+                    from gui_app.discord_notifier import notify_token_expired
+                    notify_token_expired(broker='Webull')
+                except Exception:
+                    pass
+                return {'msg': 'Trade token expired and refresh failed. Please re-login to Webull in Settings.', 'code': 'token_refresh_failed', 'success': False}
+        
+        return resp
 
     async def get_positions(self) -> list:
         """Get current open positions from Webull (stocks and options)"""
