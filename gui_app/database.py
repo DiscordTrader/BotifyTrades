@@ -2399,37 +2399,66 @@ def get_channels(category: Optional[str] = None, market: Optional[str] = None) -
     # Add signal statistics for each channel
     for channel in channels:
         channel_id = channel['id']
+        discord_channel_id = channel.get('discord_channel_id')
         
-        # Total signals count
+        # Total signals count from signals table
         cursor.execute('''
             SELECT COUNT(*) FROM signals WHERE channel_id = ?
         ''', (channel_id,))
-        channel['total_signals'] = cursor.fetchone()[0]
+        signals_count = cursor.fetchone()[0]
         
-        # Today's signals count
+        # Conditional orders count (uses discord_channel_id)
+        cond_order_count = 0
+        if discord_channel_id:
+            cursor.execute('''
+                SELECT COUNT(*) FROM conditional_orders WHERE channel_id = ?
+            ''', (str(discord_channel_id),))
+            cond_order_count = cursor.fetchone()[0]
+        
+        # Total signals = signals + conditional orders (to capture all activity)
+        channel['total_signals'] = signals_count + cond_order_count
+        channel['conditional_order_count'] = cond_order_count
+        
+        # Today's signals count (signals + conditional orders created today)
         cursor.execute('''
             SELECT COUNT(*) FROM signals 
             WHERE channel_id = ? AND DATE(received_at) = DATE('now')
         ''', (channel_id,))
-        channel['signals_today'] = cursor.fetchone()[0]
+        signals_today = cursor.fetchone()[0]
         
-        # Last signal received time
+        cond_orders_today = 0
+        if discord_channel_id:
+            cursor.execute('''
+                SELECT COUNT(*) FROM conditional_orders 
+                WHERE channel_id = ? AND DATE(created_at) = DATE('now')
+            ''', (str(discord_channel_id),))
+            cond_orders_today = cursor.fetchone()[0]
+        channel['signals_today'] = signals_today + cond_orders_today
+        
+        # Last signal received time (check both signals and conditional_orders)
         cursor.execute('''
             SELECT received_at FROM signals 
             WHERE channel_id = ? ORDER BY received_at DESC LIMIT 1
         ''', (channel_id,))
         last_signal = cursor.fetchone()
-        channel['last_signal_at'] = last_signal[0] if last_signal else None
+        last_signal_at = last_signal[0] if last_signal else None
         
-        # Conditional orders count (uses discord_channel_id)
-        discord_channel_id = channel.get('discord_channel_id')
+        # Also check conditional_orders for last activity
         if discord_channel_id:
             cursor.execute('''
-                SELECT COUNT(*) FROM conditional_orders WHERE channel_id = ?
+                SELECT created_at FROM conditional_orders 
+                WHERE channel_id = ? ORDER BY created_at DESC LIMIT 1
             ''', (str(discord_channel_id),))
-            channel['conditional_order_count'] = cursor.fetchone()[0]
+            last_cond = cursor.fetchone()
+            last_cond_at = last_cond[0] if last_cond else None
+            
+            # Use the most recent between signals and conditional orders
+            if last_signal_at and last_cond_at:
+                channel['last_signal_at'] = max(last_signal_at, last_cond_at)
+            else:
+                channel['last_signal_at'] = last_signal_at or last_cond_at
         else:
-            channel['conditional_order_count'] = 0
+            channel['last_signal_at'] = last_signal_at
     
     return channels
 
