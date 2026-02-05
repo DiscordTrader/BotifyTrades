@@ -846,6 +846,11 @@ def is_conditional_order_signal(text: str, require_sl_pt: bool = False) -> bool:
     """
     text_upper = text.upper()
     
+    # Exclude "Watching XXX over Y.Y" patterns - these are watchlist alerts, not trade signals
+    # Examples: "Watching TEAD over 0.70 @Daytrades", "Watching BNAI over 30.00 @Daytrades"
+    if re.search(r'\bWATCHING\s+[A-Z]+\s+OVER\b', text_upper):
+        return False
+    
     # Must have over/under trigger
     has_over_trigger = CONDITIONAL_TRIGGER_PATTERN.search(text) is not None
     has_under_trigger = CONDITIONAL_TRIGGER_UNDER_PATTERN.search(text) is not None
