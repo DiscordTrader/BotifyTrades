@@ -628,7 +628,49 @@ let currentBroker = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     loadBrokers();
+    
+    // Periodic refresh of broker status every 30 seconds
+    setInterval(refreshBrokerStatus, 30000);
 });
+
+async function refreshBrokerStatus() {
+    try {
+        const response = await fetch('/api/brokers/grouped');
+        const data = await response.json();
+        
+        if (data.success) {
+            groupedBrokers = data.grouped_brokers;
+            
+            // Update broker cards dynamically without re-rendering everything
+            for (const [code, country] of Object.entries(groupedBrokers)) {
+                for (const broker of country.brokers) {
+                    updateBrokerCardStatus(broker);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error refreshing broker status:', error);
+    }
+}
+
+function updateBrokerCardStatus(broker) {
+    const card = document.getElementById(`card-${broker.broker_name}`);
+    if (!card) return;
+    
+    const isConnected = broker.connection_status?.is_connected;
+    const statusClass = isConnected ? 'connected' : 'disconnected';
+    const statusText = isConnected ? 'Connected' : 'Not Connected';
+    
+    // Update status element
+    const statusEl = card.querySelector('.connection-status');
+    if (statusEl) {
+        statusEl.className = `connection-status ${statusClass}`;
+        statusEl.innerHTML = `
+            <span class="status-dot ${statusClass}"></span>
+            ${statusText}
+        `;
+    }
+}
 
 async function loadBrokers() {
     try {

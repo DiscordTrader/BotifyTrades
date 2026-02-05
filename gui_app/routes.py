@@ -11618,9 +11618,14 @@ def register_routes(app):
                     set_broker_status('discord', False, 'disconnected')
                     status['discord'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                 
-                # Webull Live broker - check if actually logged in, not just if object exists
+                # Webull Live broker - check if actually logged in AND tokens are valid
                 webull_broker = getattr(_bot_instance, 'broker', None)
-                webull_logged_in = webull_broker and getattr(webull_broker, '_logged_in', False)
+                # Use is_authenticated() if available (checks token validity), fallback to connected flag
+                if webull_broker and hasattr(webull_broker, 'is_authenticated'):
+                    webull_logged_in = webull_broker.is_authenticated()
+                else:
+                    webull_logged_in = webull_broker and (getattr(webull_broker, '_logged_in', False) or getattr(webull_broker, 'connected', False))
+                
                 if webull_logged_in:
                     set_broker_status('webull_live', True, 'connected')
                     status['webull_live'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': None}
