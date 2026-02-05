@@ -2290,12 +2290,29 @@ class WebullBroker:
 
     def _wb_get_option_id_strict(self, wb, base_symbol: str, strike: float, opt_type: str, expiry_mmdd: str, expiry_year: Optional[str] = None) -> Tuple[int, int]:
         def iso_from_mmdd(mmdd: str, year: Optional[str] = None) -> str:
-            m, d = mmdd.split('/')
-            if year is None:
-                yyyy = datetime.now().strftime('%Y')
-            else:
-                yyyy = year
-            return f"{yyyy}-{int(m):02d}-{int(d):02d}"
+            # Handle multiple date formats
+            if '-' in mmdd and len(mmdd) >= 10:
+                # Already ISO format: YYYY-MM-DD
+                return mmdd[:10]
+            elif '/' in mmdd:
+                # MM/DD format
+                parts = mmdd.split('/')
+                if len(parts) == 2:
+                    m, d = parts
+                    if year is None:
+                        yyyy = datetime.now().strftime('%Y')
+                    else:
+                        yyyy = year
+                    return f"{yyyy}-{int(m):02d}-{int(d):02d}"
+                elif len(parts) == 3:
+                    # MM/DD/YYYY format
+                    m, d, yyyy = parts
+                    if len(yyyy) == 2:
+                        yyyy = '20' + yyyy
+                    return f"{yyyy}-{int(m):02d}-{int(d):02d}"
+            # Fallback: try to parse as-is or return error
+            print(f"[WEBULL] ⚠️ Could not parse expiry format: {mmdd}")
+            raise ValueError(f"Invalid expiry format: {mmdd}")
 
         def iter_rows(obj):
             if isinstance(obj, dict):
