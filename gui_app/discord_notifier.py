@@ -408,6 +408,9 @@ def send_critical_alert(
             "order_filled_stc": {"emoji": "🔴", "color": 15844367, "mention": False},
             "profit_target_hit": {"emoji": "🎯", "color": 3066993, "mention": False},
             "trailing_stop_triggered": {"emoji": "📉", "color": 15844367, "mention": False},
+            "trailing_stop": {"emoji": "📉", "color": 15844367, "mention": False},
+            "giveback_guard": {"emoji": "🛡️", "color": 16761600, "mention": True},
+            "broker_disconnect": {"emoji": "🔌", "color": 15158332, "mention": True},
         }
         
         config = severity_config.get(alert_type, {"emoji": "📢", "color": 7506394, "mention": False})
@@ -602,7 +605,7 @@ def notify_profit_target_hit(
 
 def notify_token_expired(
     broker: str,
-    error_msg: str = None
+    error_msg: Optional[str] = None
 ):
     """Notify when broker trade token expires and refresh fails"""
     title = f"TOKEN EXPIRED: {broker}"
