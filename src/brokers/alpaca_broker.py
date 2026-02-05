@@ -612,13 +612,26 @@ class AlpacaBroker(BrokerInterface):
                     print(f"[{self.name}] ⚠️ Error checking position for {contract.symbol}: {pos_err}", flush=True)
 
             # Check for existing pending orders that might be locking shares/contracts
+            # If this is a risk management exit, cancel conflicting orders first
             if action.upper() in ('STC', 'BTC'):
                 try:
                     open_orders = await asyncio.to_thread(self.get_orders, status='open')
+                    target_symbol = contract.symbol if 'option' in str(type(contract)).lower() else symbol
                     for o in open_orders:
-                        if o.symbol == (contract.symbol if 'option' in str(type(contract)).lower() else symbol) and o.side == side:
-                             print(f"[{self.name}] ⚠️ Found existing pending {o.side} order for {o.symbol} (ID: {o.id}). Shares may be locked.", flush=True)
-                             # Optional: Cancel it? For now just log it as it explains the 'insufficient qty' error
+                        if o.symbol == target_symbol and o.side == side:
+                            print(f"[{self.name}] ⚠️ Found existing pending {o.side} order for {o.symbol} (ID: {o.id}). Shares may be locked.", flush=True)
+                            # Cancel the stale order to free up the shares for new exit order
+                            print(f"[{self.name}] 🔄 Cancelling stale pending order {o.id} to allow new exit order...", flush=True)
+                            try:
+                                await asyncio.to_thread(
+                                    self.trading_client.cancel_order_by_id,
+                                    str(o.id)
+                                )
+                                print(f"[{self.name}] ✓ Cancelled stale order {o.id}", flush=True)
+                                # Brief wait for cancel to process
+                                await asyncio.sleep(0.5)
+                            except Exception as cancel_err:
+                                print(f"[{self.name}] ⚠️ Could not cancel stale order {o.id}: {cancel_err}", flush=True)
                 except Exception as order_err:
                     print(f"[{self.name}] ⚠️ Error checking open orders: {order_err}", flush=True)
                 try:
