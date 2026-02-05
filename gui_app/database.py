@@ -2420,6 +2420,16 @@ def get_channels(category: Optional[str] = None, market: Optional[str] = None) -
         ''', (channel_id,))
         last_signal = cursor.fetchone()
         channel['last_signal_at'] = last_signal[0] if last_signal else None
+        
+        # Conditional orders count (uses discord_channel_id)
+        discord_channel_id = channel.get('discord_channel_id')
+        if discord_channel_id:
+            cursor.execute('''
+                SELECT COUNT(*) FROM conditional_orders WHERE channel_id = ?
+            ''', (str(discord_channel_id),))
+            channel['conditional_order_count'] = cursor.fetchone()[0]
+        else:
+            channel['conditional_order_count'] = 0
     
     return channels
 
