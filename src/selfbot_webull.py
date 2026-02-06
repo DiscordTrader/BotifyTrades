@@ -1455,7 +1455,7 @@ BISHOP_ENTRY_PATTERN = r'\*{0,2}Entry:\*{0,2}\s*(\d+\.?\d*)(?:\s*[-–]\s*(\d+\.
 # Trim/STC format: "Trimming SPX 6900 P 12/30 @$1.30" or "Trimming TM 240 C 2/20 @$30%"
 # Groups: (symbol, strike, opt_type, month, day, price_or_pct, is_percent)
 # The optional % at the end indicates trim percentage vs actual price
-BISHOP_TRIM_PATTERN = r'[Tt]rimming\s+(?:\?\w\s+)?([A-Za-z]+)\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+(\d{1,2})/(\d{1,2})\s*@\s*\$?(\d+\.?\d*)(%)?'
+BISHOP_TRIM_PATTERN = r'[Tt]rimming\s+(?:\?\w\s+)?([A-Za-z]+)\s+(\d+(?:\.\d+)?)\s*([CPcp])\s+(\d{1,2})/(\d{1,2})(?:\s*[\|\n]\s*[*]{0,2}Value:?[*]{0,2})?\s*@\s*\$?(\d+\.?\d*)(%)?'
 
 # Bishop stopped out pattern: "Got stopped out at $1.65" or "stopped out at $1.65 for -35%"
 # Groups: (price)
@@ -4058,7 +4058,7 @@ BEAR_TRIM_REGEX = re.compile(BEAR_TRIM_PATTERN, re.IGNORECASE)
 BEAR_LOTTO_REGEX = re.compile(BEAR_LOTTO_PATTERN, re.IGNORECASE)
 BISHOP_OPTION_REGEX = re.compile(BISHOP_OPTION_PATTERN, re.IGNORECASE | re.MULTILINE)
 BISHOP_ENTRY_REGEX = re.compile(BISHOP_ENTRY_PATTERN, re.IGNORECASE)
-BISHOP_TRIM_REGEX = re.compile(BISHOP_TRIM_PATTERN, re.IGNORECASE)
+BISHOP_TRIM_REGEX = re.compile(BISHOP_TRIM_PATTERN, re.IGNORECASE | re.DOTALL)
 BISHOP_STOPPED_REGEX = re.compile(BISHOP_STOPPED_PATTERN, re.IGNORECASE)
 EVAPANDA_REGEX = re.compile(EVAPANDA_PATTERN, re.IGNORECASE)
 STACK_OPT_REGEX = re.compile(STACK_OPT_PATTERN, re.IGNORECASE)
