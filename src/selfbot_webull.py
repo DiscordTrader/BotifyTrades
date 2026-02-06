@@ -7718,6 +7718,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         
                         signal = {
                             'asset': order.get('asset_type', 'stock'),
+                            'asset_type': order.get('asset_type', 'stock'),
                             'action': 'BTO',
                             'symbol': symbol,
                             'price': execution_price,
