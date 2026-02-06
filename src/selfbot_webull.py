@@ -13882,7 +13882,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 multi_broker_results = resp.get('_multi_broker_results')
                                 if multi_broker_results:
                                     # Save ONE trade entry PER successful broker
-                                    _original_print(f"[DATABASE] Multi-broker execution - saving {len([r for r in multi_broker_results if r.get('success') or 'orderId' in r])} trade entries")
+                                    successful_results = [r for r in multi_broker_results if r.get('success') or r.get('orderId')]
+                                    _original_print(f"[DATABASE] Multi-broker execution - saving {len(successful_results)} trade entries")
                                     # Lookup routing_mapping_id for signal routing risk discrimination
                                     routing_mapping_id = signal.get('routing_mapping_id')
                                     if not routing_mapping_id and channel_id_str:
@@ -13893,13 +13894,38 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         except Exception:
                                             pass
                                     
+                                    msg_id_str = str(signal.get('message_id', ''))
+                                    
                                     for broker_resp in multi_broker_results:
-                                        if broker_resp.get('success') or 'orderId' in broker_resp:
+                                        if broker_resp.get('success') or broker_resp.get('orderId'):
                                             # Use executed_qty from broker response (position-sized), fallback to signal qty
                                             executed_qty = broker_resp.get('executed_qty', signal['qty'])
+                                            broker_name_upper = broker_resp.get('broker', 'UNKNOWN').upper()
+                                            
+                                            if msg_id_str:
+                                                existing_trades = db.get_trades(status='PENDING', limit=500) + db.get_trades(status='OPEN', limit=500)
+                                                sig_strike = signal.get('strike')
+                                                sig_expiry = signal.get('expiry')
+                                                sig_opt_type = signal.get('opt_type')
+                                                is_option = signal.get('asset') == 'option'
+                                                already_exists = any(
+                                                    t.get('message_id') == msg_id_str and
+                                                    (t.get('broker') or '').upper() == broker_name_upper and
+                                                    t.get('symbol') == signal['symbol'] and
+                                                    t.get('direction') == signal['action'] and
+                                                    (not is_option or (
+                                                        t.get('strike') == sig_strike and
+                                                        t.get('call_put') == sig_opt_type
+                                                    ))
+                                                    for t in existing_trades
+                                                )
+                                                if already_exists:
+                                                    _original_print(f"[DATABASE] ⚠️ DUPLICATE PREVENTED: {signal['symbol']} {signal['action']} on {broker_name_upper} (msg={msg_id_str[:15]}...) already exists")
+                                                    continue
+                                            
                                             trade_data = {
                                                 'channel_id': channel_id_str,
-                                                'message_id': str(signal.get('message_id', '')),
+                                                'message_id': msg_id_str,
                                                 'direction': signal['action'],
                                                 'asset_type': signal['asset'],
                                                 'symbol': signal['symbol'],
@@ -13910,7 +13936,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 'intended_price': signal.get('price'),
                                                 'executed_price': signal.get('price'),
                                                 'executed': True,
-                                                'broker': broker_resp.get('broker', 'UNKNOWN').upper(),
+                                                'broker': broker_name_upper,
                                                 'order_id': broker_resp.get('orderId'),
                                                 'stop_loss_price': signal.get('stop_loss_price'),
                                                 'profit_target_price': signal.get('profit_target_price'),
@@ -13973,70 +13999,89 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                                 routing_mapping_id = mapping.get('id')
                                         except Exception:
                                             pass
-                                    trade_data = {
-                                        'channel_id': channel_id_str,
-                                        'message_id': str(signal.get('message_id', '')),
-                                        'direction': signal['action'],
-                                        'asset_type': signal['asset'],
-                                        'symbol': signal['symbol'],
-                                        'strike': signal.get('strike'),
-                                        'expiry': signal.get('expiry'),
-                                        'call_put': signal.get('opt_type'),
-                                        'quantity': executed_qty,
-                                        'intended_price': signal.get('price'),
-                                        'executed_price': signal.get('price'),
-                                        'executed': True,
-                                        'broker': resp.get('broker', 'UNKNOWN').upper(),
-                                        'order_id': resp.get('orderId'),
-                                        'stop_loss_price': signal.get('stop_loss_price'),
-                                        'profit_target_price': signal.get('profit_target_price'),
-                                        'conditional_order_id': signal.get('_conditional_order_id'),
-                                        'routing_mapping_id': routing_mapping_id
-                                    }
-                                    trade_id = db.add_trade(trade_data)
-                                    _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
+                                    single_msg_id = str(signal.get('message_id', ''))
+                                    single_broker_name = resp.get('broker', 'UNKNOWN').upper()
                                     
-                                    # For conditional orders: Create signal_lot for Signal P&L tracking
-                                    cond_order_id = signal.get('_conditional_order_id')
-                                    if cond_order_id and trade_id and channel_record_id:
-                                        try:
-                                            from datetime import datetime
-                                            lot_id = db.create_signal_lot(
-                                                channel_id=channel_record_id,
-                                                signal_id=None,
-                                                trade_id=trade_id,
-                                                asset_type=signal.get('asset', 'stock'),
-                                                symbol=signal['symbol'],
-                                                strike=signal.get('strike'),
-                                                expiry=signal.get('expiry'),
-                                                call_put=signal.get('opt_type'),
-                                                quantity=executed_qty,
-                                                open_price=signal.get('price'),
-                                                opened_at=datetime.now().isoformat(),
-                                                author_name='Conditional Order'
-                                            )
-                                            _original_print(f"[DATABASE] ✓ Signal lot #{lot_id} created for conditional order #{cond_order_id}")
-                                        except Exception as lot_err:
-                                            _original_print(f"[DATABASE] Warning: Could not create signal_lot for conditional order: {lot_err}")
-                                    
-                                    # Link lot to trade for precise fill price updates (critical for NDX→QQQ)
-                                    try:
-                                        msg_id = str(signal.get('message_id', ''))
-                                        if msg_id and trade_id:
-                                            db.link_lot_to_trade(message_id=msg_id, trade_id=trade_id)
-                                    except Exception as link_err:
-                                        _original_print(f"[DATABASE] Warning: Could not link lot to trade: {link_err}")
-                                    
-                                    # NOTE: Position ledger is exclusively for Signal Routing virtual positions.
-                                    # Broker-executed trades are tracked in the 'trades' table.
-                                    
-                                    # Update signal_lot with actual executed quantity for PNL tracking
-                                    if executed_qty and executed_qty != signal.get('qty', 1):
-                                        db.update_signal_lot_executed_qty(
-                                            message_id=str(signal.get('message_id', '')),
-                                            executed_qty=executed_qty,
-                                            channel_id=channel_id_str
+                                    skip_single_save = False
+                                    if single_msg_id:
+                                        existing_check = db.get_trades(status='PENDING', limit=500) + db.get_trades(status='OPEN', limit=500)
+                                        is_option_single = signal.get('asset') == 'option'
+                                        skip_single_save = any(
+                                            t.get('message_id') == single_msg_id and
+                                            (t.get('broker') or '').upper() == single_broker_name and
+                                            t.get('symbol') == signal['symbol'] and
+                                            t.get('direction') == signal['action'] and
+                                            (not is_option_single or (
+                                                t.get('strike') == signal.get('strike') and
+                                                t.get('call_put') == signal.get('opt_type')
+                                            ))
+                                            for t in existing_check
                                         )
+                                        if skip_single_save:
+                                            _original_print(f"[DATABASE] ⚠️ DUPLICATE PREVENTED: {signal['symbol']} {signal['action']} on {single_broker_name} already exists")
+                                    
+                                    if not skip_single_save:
+                                        trade_data = {
+                                            'channel_id': channel_id_str,
+                                            'message_id': single_msg_id,
+                                            'direction': signal['action'],
+                                            'asset_type': signal['asset'],
+                                            'symbol': signal['symbol'],
+                                            'strike': signal.get('strike'),
+                                            'expiry': signal.get('expiry'),
+                                            'call_put': signal.get('opt_type'),
+                                            'quantity': executed_qty,
+                                            'intended_price': signal.get('price'),
+                                            'executed_price': signal.get('price'),
+                                            'executed': True,
+                                            'broker': single_broker_name,
+                                            'order_id': resp.get('orderId'),
+                                            'stop_loss_price': signal.get('stop_loss_price'),
+                                            'profit_target_price': signal.get('profit_target_price'),
+                                            'conditional_order_id': signal.get('_conditional_order_id'),
+                                            'routing_mapping_id': routing_mapping_id
+                                        }
+                                        trade_id = db.add_trade(trade_data)
+                                        _original_print(f"[DATABASE] ✓ Trade #{trade_id} saved for {trade_data['broker']} qty={executed_qty} channel={channel_id_str or 'NONE'} SL=${trade_data.get('stop_loss_price')} PT=${trade_data.get('profit_target_price')}")
+                                    
+                                        # For conditional orders: Create signal_lot for Signal P&L tracking
+                                        cond_order_id = signal.get('_conditional_order_id')
+                                        if cond_order_id and trade_id and channel_record_id:
+                                            try:
+                                                from datetime import datetime
+                                                lot_id = db.create_signal_lot(
+                                                    channel_id=channel_record_id,
+                                                    signal_id=None,
+                                                    trade_id=trade_id,
+                                                    asset_type=signal.get('asset', 'stock'),
+                                                    symbol=signal['symbol'],
+                                                    strike=signal.get('strike'),
+                                                    expiry=signal.get('expiry'),
+                                                    call_put=signal.get('opt_type'),
+                                                    quantity=executed_qty,
+                                                    open_price=signal.get('price'),
+                                                    opened_at=datetime.now().isoformat(),
+                                                    author_name='Conditional Order'
+                                                )
+                                                _original_print(f"[DATABASE] ✓ Signal lot #{lot_id} created for conditional order #{cond_order_id}")
+                                            except Exception as lot_err:
+                                                _original_print(f"[DATABASE] Warning: Could not create signal_lot for conditional order: {lot_err}")
+                                        
+                                        # Link lot to trade for precise fill price updates (critical for NDX→QQQ)
+                                        try:
+                                            msg_id = str(signal.get('message_id', ''))
+                                            if msg_id and trade_id:
+                                                db.link_lot_to_trade(message_id=msg_id, trade_id=trade_id)
+                                        except Exception as link_err:
+                                            _original_print(f"[DATABASE] Warning: Could not link lot to trade: {link_err}")
+                                        
+                                        # Update signal_lot with actual executed quantity for PNL tracking
+                                        if executed_qty and executed_qty != signal.get('qty', 1):
+                                            db.update_signal_lot_executed_qty(
+                                                message_id=str(signal.get('message_id', '')),
+                                                executed_qty=executed_qty,
+                                                channel_id=channel_id_str
+                                            )
                             
                             elif signal['action'] == 'STC':
                                 # Handle STC trades - especially for risk management exits

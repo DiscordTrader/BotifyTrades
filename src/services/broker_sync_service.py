@@ -1567,25 +1567,24 @@ class BrokerSyncService:
                         'call_put': call_put
                     })
                 
-                # DUPLICATE PREVENTION: Check database for existing open position before inserting
+                # DUPLICATE PREVENTION: Check database for existing OPEN or PENDING positions before inserting
                 # This prevents duplicates across sync cycles and signal execution races
-                existing_open = self.db.get_trades(status='OPEN', limit=1000)
+                # FIX: Also check PENDING trades to prevent race condition where worker creates
+                # PENDING trade before sync detects the position
+                existing_trades = self.db.get_trades(status='OPEN', limit=1000) + self.db.get_trades(status='PENDING', limit=500)
                 has_duplicate = False
-                for existing in existing_open:
+                for existing in existing_trades:
                     existing_broker = (existing.get('broker') or '').upper()
                     trade_broker = trade_data['broker'].upper()
-                    # Match by symbol + broker (for stocks) or full position key (for options)
                     if existing['symbol'] == symbol and existing_broker == trade_broker:
                         if asset_type == 'stock':
-                            # Stock: same symbol + broker = duplicate
-                            print(f"[SYNC] ⚠️ Skipping duplicate: {symbol} already has open position (ID={existing['id']}, broker={trade_broker})")
+                            print(f"[SYNC] ⚠️ Skipping duplicate: {symbol} already has OPEN/PENDING position (ID={existing['id']}, status={existing.get('status')}, broker={trade_broker})")
                             has_duplicate = True
                             break
                         elif asset_type == 'option':
-                            # Option: check strike/expiry/call_put
                             if (existing.get('strike') == strike and 
                                 existing.get('call_put') == call_put):
-                                print(f"[SYNC] ⚠️ Skipping duplicate: {symbol} {strike}{call_put} already has open position (ID={existing['id']})")
+                                print(f"[SYNC] ⚠️ Skipping duplicate: {symbol} {strike}{call_put} already has OPEN/PENDING position (ID={existing['id']}, status={existing.get('status')})")
                                 has_duplicate = True
                                 break
                 
