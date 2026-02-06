@@ -749,7 +749,7 @@ class RiskManager:
     4. Trailing stop with activation threshold
     """
     
-    DEFAULT_MONITORING_INTERVAL = 5  # seconds - optimized for fast profit/SL locks
+    DEFAULT_MONITORING_INTERVAL = 2  # seconds - ultra-fast for real-time profit/SL locks
     DEFAULT_TRAILING_ACTIVATION = 15.0  # percent
     
     def __init__(
@@ -866,10 +866,10 @@ class RiskManager:
         
         Priority:
         1. GUI setting 'risk_check_interval_seconds' (if set)
-        2. Default 5 seconds for fast profit/SL locks
+        2. Default 2 seconds for ultra-fast profit/SL locks
         
         Configure in Settings → Risk Management → Check Interval
-        Recommended: 3-5 seconds for active trading
+        Recommended: 1-3 seconds for active trading
         """
         try:
             from gui_app.database import get_setting

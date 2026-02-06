@@ -736,7 +736,7 @@ class SignalRoutingEngine:
             except Exception as e:
                 print(f"[ROUTING_ENGINE] ⚠️ Risk monitor error: {e}")
             
-            await asyncio.sleep(3)
+            await asyncio.sleep(2)
         
         print("[ROUTING_ENGINE] ✗ Risk monitoring loop stopped")
     
