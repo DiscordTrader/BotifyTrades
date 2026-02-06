@@ -336,14 +336,23 @@ CONDITIONAL_SL_FIXED_PATTERN = re.compile(
 )
 
 # Profit target patterns for conditional orders
+# PT percentage: "target 10%", "first target 10%", "PT 5%"
+CONDITIONAL_PT_PERCENT_PATTERN = re.compile(
+    r'(?:(?:first|second|third|fourth|1st|2nd|3rd|4th)\s+)?'
+    r'(?:PT|profit\s*target|target|take\s*profit|TP)\s*[:\s@]*'
+    r'(\d+(?:\.\d+)?)\s*%'
+    r'(?:\s*\(\s*\$?([\d.]+)\s*\))?',
+    re.IGNORECASE
+)
+
 CONDITIONAL_PT_PATTERN = re.compile(
-    r'(?:PT|profit\s*target|target|take\s*profit|TP)\s*[:\s@]*\$?([\d.]+)',
+    r'(?:PT|profit\s*target|target|take\s*profit|TP)\s*[:\s@]*\$?([\d.]+)(?!\s*%)',
     re.IGNORECASE
 )
 
 # Multiple profit targets: PT 1.43, 1.50, 1.60
 CONDITIONAL_MULTI_PT_PATTERN = re.compile(
-    r'(?:PT|profit\s*target|targets?|take\s*profit|TP)\s*[:\s]*\$?([\d.]+)(?:[,\s]+\$?([\d.]+))?(?:[,\s]+\$?([\d.]+))?(?:[,\s]+\$?([\d.]+))?',
+    r'(?:PT|profit\s*target|targets?|take\s*profit|TP)\s*[:\s]*\$?([\d.]+)(?!\s*%)(?:[,\s]+\$?([\d.]+))?(?:[,\s]+\$?([\d.]+))?(?:[,\s]+\$?([\d.]+))?',
     re.IGNORECASE
 )
 
@@ -943,21 +952,32 @@ def parse_conditional_order_signal(text: str) -> Optional[Dict[str, Any]]:
         min_price = float(range_match.group('min_price'))
         max_price = float(range_match.group('max_price'))
         target_ranges.append({'tier': tier, 'min_price': min_price, 'max_price': max_price})
-        # Use midpoint for backwards compatibility
         profit_targets.append((min_price + max_price) / 2)
     
-    # If no ranges found, try regular target patterns
+    # If no ranges found, check for percentage-based targets first (e.g., "first target 10% (7.15)")
     if not target_ranges:
-        multi_pt_match = CONDITIONAL_MULTI_PT_PATTERN.search(text)
-        if multi_pt_match:
-            for i in range(1, 5):
-                pt_val = multi_pt_match.group(i)
-                if pt_val:
-                    profit_targets.append(float(pt_val))
+        pt_pct_match = CONDITIONAL_PT_PERCENT_PATTERN.search(text)
+        if pt_pct_match:
+            pt_pct = float(pt_pct_match.group(1))
+            explicit_price = pt_pct_match.group(2)
+            if explicit_price:
+                profit_targets.append(float(explicit_price))
+                print(f"[CONDITIONAL]   PT: {pt_pct}% -> explicit ${explicit_price}")
+            elif trigger_price:
+                calculated_pt = round(trigger_price * (1 + pt_pct / 100), 4)
+                profit_targets.append(calculated_pt)
+                print(f"[CONDITIONAL]   PT: {pt_pct}% of ${trigger_price} -> ${calculated_pt}")
         else:
-            pt_match = CONDITIONAL_PT_PATTERN.search(text)
-            if pt_match:
-                profit_targets.append(float(pt_match.group(1)))
+            multi_pt_match = CONDITIONAL_MULTI_PT_PATTERN.search(text)
+            if multi_pt_match:
+                for i in range(1, 5):
+                    pt_val = multi_pt_match.group(i)
+                    if pt_val:
+                        profit_targets.append(float(pt_val))
+            else:
+                pt_match = CONDITIONAL_PT_PATTERN.search(text)
+                if pt_match:
+                    profit_targets.append(float(pt_match.group(1)))
     
     # Parse position sizing
     position_size_pct = None
