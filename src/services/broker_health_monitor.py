@@ -285,6 +285,12 @@ class BrokerHealthMonitor:
         
         print(f"[HEALTH] ⚠️ BROKER DISCONNECTED: {broker_name} - {reason}")
         
+        try:
+            from gui_app.discord_notifier import notify_broker_disconnected
+            notify_broker_disconnected(broker_name, reason)
+        except Exception as e:
+            print(f"[HEALTH] Disconnect notification error: {e}")
+        
         for callback in callbacks:
             try:
                 callback(notification)
@@ -309,6 +315,12 @@ class BrokerHealthMonitor:
         }
         
         print(f"[HEALTH] ✅ BROKER RECONNECTED: {broker_name}")
+        
+        try:
+            from gui_app.discord_notifier import notify_broker_reconnected
+            notify_broker_reconnected(broker_name)
+        except Exception as e:
+            print(f"[HEALTH] Reconnect notification error: {e}")
         
         for callback in callbacks:
             try:

@@ -5514,22 +5514,35 @@ class SelfClient(discord.Client):
                         set_broker_status('webull_paper', True, 'connected', account_info={'mode': 'paper'})
                 except Exception:
                     pass
+                try:
+                    from gui_app.discord_notifier import notify_broker_reconnected
+                    notify_broker_reconnected('Webull')
+                except Exception:
+                    pass
             else:
                 print("[Webull] ⚠️  Broker not configured - configure via GUI (see startup logs for port)", flush=True)
-                # Update broker status to disconnected
                 try:
                     from gui_app.broker_credentials_service import set_broker_status
                     set_broker_status('webull_live', False, 'disconnected', error='Credentials not configured')
                     set_broker_status('webull_paper', False, 'disconnected', error='Credentials not configured')
                 except Exception:
                     pass
+                try:
+                    from gui_app.discord_notifier import notify_broker_disconnected
+                    notify_broker_disconnected('Webull', 'Credentials not configured')
+                except Exception:
+                    pass
         except Exception as e:
             print("[Webull] ✗ Login failed:", e, flush=True)
-            # Update broker status to disconnected on error
             try:
                 from gui_app.broker_credentials_service import set_broker_status
                 set_broker_status('webull_live', False, 'disconnected', error=str(e))
                 set_broker_status('webull_paper', False, 'disconnected', error=str(e))
+            except Exception:
+                pass
+            try:
+                from gui_app.discord_notifier import notify_broker_disconnected
+                notify_broker_disconnected('Webull', str(e))
             except Exception:
                 pass
         
@@ -5591,19 +5604,27 @@ class SelfClient(discord.Client):
                     
                     if connected:
                         _original_print("[ALPACA] ✓ Paper trading broker connected (PAPER account)", flush=True)
-                        # Update broker status in GUI
                         try:
                             from gui_app.broker_credentials_service import set_broker_status
                             set_broker_status('alpaca_paper', True, 'connected', account_info={'mode': 'paper'})
                         except Exception:
                             pass
+                        try:
+                            from gui_app.discord_notifier import notify_broker_reconnected
+                            notify_broker_reconnected('Alpaca Paper')
+                        except Exception:
+                            pass
                     else:
                         _original_print("[ALPACA] ⚠️ Paper broker connection failed", flush=True)
                         self.paper_broker = None
-                        # Update broker status to disconnected
                         try:
                             from gui_app.broker_credentials_service import set_broker_status
                             set_broker_status('alpaca_paper', False, 'disconnected', error='Connection failed')
+                        except Exception:
+                            pass
+                        try:
+                            from gui_app.discord_notifier import notify_broker_disconnected
+                            notify_broker_disconnected('Alpaca Paper', 'Connection failed')
                         except Exception:
                             pass
                     
@@ -5648,7 +5669,11 @@ class SelfClient(discord.Client):
                     if connected:
                         _original_print(f"[TASTYTRADE] ✓ Connected successfully ({mode_str})", flush=True)
                         _original_print(f"[TASTYTRADE]   Account #: {self.tastytrade_broker.account.account_number}", flush=True)
-                        # Update GUI broker status with account info
+                        try:
+                            from gui_app.discord_notifier import notify_broker_reconnected
+                            notify_broker_reconnected(f'Tastytrade {mode_str}')
+                        except Exception:
+                            pass
                         try:
                             from gui_app.broker_credentials_service import set_broker_status
                             
@@ -5676,6 +5701,11 @@ class SelfClient(discord.Client):
                     else:
                         _original_print("[TASTYTRADE] ⚠️ Connection failed", flush=True)
                         self.tastytrade_broker = None
+                        try:
+                            from gui_app.discord_notifier import notify_broker_disconnected
+                            notify_broker_disconnected('Tastytrade', 'Connection failed')
+                        except Exception:
+                            pass
                 else:
                     _original_print("[TASTYTRADE] No credentials configured - broker disabled", flush=True)
                     _original_print("[TASTYTRADE]   Need OAuth2 (client_secret + refresh_token) or legacy (username + password)", flush=True)
@@ -5728,9 +5758,19 @@ class SelfClient(discord.Client):
                             _original_print(f"[ROBINHOOD] ✓ Broker status updated in GUI", flush=True)
                         except Exception as status_err:
                             _original_print(f"[ROBINHOOD] ⚠️ Failed to update broker status: {status_err}", flush=True)
+                        try:
+                            from gui_app.discord_notifier import notify_broker_reconnected
+                            notify_broker_reconnected('Robinhood')
+                        except Exception:
+                            pass
                     else:
                         _original_print("[ROBINHOOD] ⚠️ Connection failed", flush=True)
                         self.robinhood_broker = None
+                        try:
+                            from gui_app.discord_notifier import notify_broker_disconnected
+                            notify_broker_disconnected('Robinhood', 'Connection failed')
+                        except Exception:
+                            pass
                 else:
                     _original_print("[ROBINHOOD] No credentials configured - broker disabled", flush=True)
             else:
@@ -5792,10 +5832,20 @@ class SelfClient(discord.Client):
                             _original_print(f"[IBKR]   Buying Power: ${account_info.get('buying_power', 0):,.2f}", flush=True)
                     except Exception as status_err:
                         _original_print(f"[IBKR] ⚠️ Failed to update broker status: {status_err}", flush=True)
+                    try:
+                        from gui_app.discord_notifier import notify_broker_reconnected
+                        notify_broker_reconnected(f'IBKR {mode}')
+                    except Exception:
+                        pass
                 else:
                     _original_print("[IBKR] ⚠️ Connection failed - TWS/Gateway may not be running", flush=True)
                     _original_print("[IBKR]   Make sure TWS or IB Gateway is running and API is enabled", flush=True)
                     self.ibkr_broker = None
+                    try:
+                        from gui_app.discord_notifier import notify_broker_disconnected
+                        notify_broker_disconnected('IBKR', 'TWS/Gateway not running')
+                    except Exception:
+                        pass
             else:
                 _original_print("[IBKR] IBKRBroker not available (ib_insync not installed)", flush=True)
         except Exception as e:
@@ -6082,9 +6132,19 @@ class SelfClient(discord.Client):
                         _original_print(f"[SCHWAB] ✓ Broker status updated in GUI", flush=True)
                     except Exception as status_err:
                         _original_print(f"[SCHWAB] ⚠️ Failed to update broker status: {status_err}", flush=True)
+                    try:
+                        from gui_app.discord_notifier import notify_broker_reconnected
+                        notify_broker_reconnected(f'Schwab {mode}')
+                    except Exception:
+                        pass
                 else:
                     _original_print("[SCHWAB] ⚠️ Not authenticated - click 'Connect with Schwab' in Settings", flush=True)
                     self.schwab_broker = None
+                    try:
+                        from gui_app.discord_notifier import notify_broker_disconnected
+                        notify_broker_disconnected('Schwab', 'Not authenticated')
+                    except Exception:
+                        pass
             else:
                 _original_print("[SCHWAB] No credentials configured - broker disabled", flush=True)
         except Exception as e:
@@ -13025,6 +13085,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         _original_print(f"[RISK] ❌ Alpaca exit order failed: {result}")
                                         resp = {'success': False, 'msg': str(result.message if result else 'Unknown error')}
                                         order_success = False
+                                        try:
+                                            from gui_app.discord_notifier import notify_stop_loss_failed
+                                            notify_stop_loss_failed(
+                                                symbol=signal['symbol'],
+                                                broker='Alpaca',
+                                                error_message=str(result.message if result else 'Unknown error'),
+                                                quantity=signal.get('qty'),
+                                                channel=str(signal.get('channel_id', ''))
+                                            )
+                                        except Exception:
+                                            pass
                                 except Exception as e:
                                     _original_print(f"[RISK] ❌ Alpaca exit order error: {e}")
                                     import traceback
@@ -13076,6 +13147,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                         _original_print(f"[RISK] ❌ Tastytrade exit order failed: {result}")
                                         resp = {'success': False, 'msg': str(result.message if result else 'Unknown error')}
                                         order_success = False
+                                        try:
+                                            from gui_app.discord_notifier import notify_stop_loss_failed
+                                            notify_stop_loss_failed(
+                                                symbol=signal['symbol'],
+                                                broker='Tastytrade',
+                                                error_message=str(result.message if result else 'Unknown error'),
+                                                quantity=signal.get('qty'),
+                                                channel=str(signal.get('channel_id', ''))
+                                            )
+                                        except Exception:
+                                            pass
                                 except Exception as e:
                                     _original_print(f"[RISK] ❌ Tastytrade exit order error: {e}")
                                     import traceback
@@ -13590,24 +13672,30 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         error_type = 'ORDER_FAILED'
                     _original_print(f"[ORDER FAILED] ❌ {signal['action']} {signal['symbol']} - {error_msg}", flush=True)
                     
-                    if not signal.get('_multi_broker_has_success'):
-                        try:
-                            from gui_app.discord_notifier import notify_order_failed
-                            is_risk_order = signal.get('_risk_management_order', False)
-                            broker_name = signal.get('broker', 'Unknown')
-                            notify_order_failed(
+                    try:
+                        from gui_app.discord_notifier import notify_order_failed
+                        is_risk_order = signal.get('_risk_management_order', False)
+                        broker_name = signal.get('broker', 'Unknown')
+                        notify_order_failed(
+                            symbol=signal['symbol'],
+                            action=signal['action'],
+                            broker=broker_name,
+                            error_message=error_msg,
+                            quantity=signal.get('qty'),
+                            price=signal.get('price'),
+                            is_risk_order=is_risk_order
+                        )
+                        if is_risk_order and signal.get('action', '').upper() in ('STC', 'SELL'):
+                            from gui_app.discord_notifier import notify_stop_loss_failed
+                            notify_stop_loss_failed(
                                 symbol=signal['symbol'],
-                                action=signal['action'],
                                 broker=broker_name,
                                 error_message=error_msg,
                                 quantity=signal.get('qty'),
-                                price=signal.get('price'),
-                                is_risk_order=is_risk_order
+                                channel=str(signal.get('channel_id', ''))
                             )
-                        except Exception as notify_err:
-                            _original_print(f"[NOTIFY] Warning: Could not send failure notification: {notify_err}", flush=True)
-                    else:
-                        _original_print(f"[NOTIFY] Suppressed failure notification - another broker succeeded", flush=True)
+                    except Exception as notify_err:
+                        _original_print(f"[NOTIFY] Warning: Could not send failure notification: {notify_err}", flush=True)
                     
                     # === CONFLICTING ORDER HANDLER ===
                     # Webull error: ORDER_NOT_SUPPORT_REVERSE_OPTION means there's already a pending order

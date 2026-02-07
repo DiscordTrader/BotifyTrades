@@ -109,16 +109,23 @@ def notify_broker_disconnected(broker_name: str, error_message: Optional[str] = 
     """
     global _alerted_brokers
     
-    # Only alert once per broker until reconnection
     if broker_name in _alerted_brokers:
         return False
     
     _alerted_brokers.add(broker_name)
+    broker_label = broker_name.upper()
     
-    message = f"Connection lost to {broker_name}"
+    message = f"Connection lost to **{broker_label}**"
     if error_message:
         message += f": {error_message}"
     message += ". Trading for this broker is paused until reconnection."
+    
+    send_critical_alert(
+        alert_type="broker_disconnect",
+        title=f"[{broker_label}] DISCONNECTED",
+        message=message,
+        broker=broker_name
+    )
     
     return send_system_alert(
         alert_type="broker_disconnect",
@@ -134,15 +141,22 @@ def notify_broker_reconnected(broker_name: str):
     """
     global _alerted_brokers
     
-    # Only send reconnection notice if we previously alerted about disconnection
     if broker_name not in _alerted_brokers:
         return False
     
     _alerted_brokers.discard(broker_name)
+    broker_label = broker_name.upper()
+    
+    send_critical_alert(
+        alert_type="broker_reconnect",
+        title=f"[{broker_label}] RECONNECTED",
+        message=f"Connection restored to **{broker_label}**. Trading resumed.",
+        broker=broker_name
+    )
     
     return send_system_alert(
         alert_type="broker_reconnect",
-        message=f"Connection restored to {broker_name}. Trading resumed.",
+        message=f"Connection restored to **{broker_label}**. Trading resumed.",
         severity="info",
         broker_name=broker_name
     )
@@ -372,8 +386,9 @@ def _add_to_history(notification: dict):
     
     symbol = notification.get('symbol', '')
     ntype = notification.get('type', '')
+    broker = notification.get('broker', '')
     if symbol and ntype in ('order_filled_bto', 'order_failed'):
-        sym_key = f"{symbol}:{ntype}"
+        sym_key = f"{symbol}:{ntype}:{broker}"
         sym_expired = [k for k, t in _symbol_dedup.items() if now - t > _symbol_dedup_ttl]
         for k in sym_expired:
             del _symbol_dedup[k]
@@ -445,6 +460,7 @@ def send_critical_alert(
             "trailing_stop": {"emoji": "📉", "color": 15844367, "mention": False},
             "giveback_guard": {"emoji": "🛡️", "color": 16761600, "mention": True},
             "broker_disconnect": {"emoji": "🔌", "color": 15158332, "mention": True},
+            "broker_reconnect": {"emoji": "✅", "color": 3066993, "mention": False},
         }
         
         config = severity_config.get(alert_type, {"emoji": "📢", "color": 7506394, "mention": False})
@@ -503,13 +519,14 @@ def notify_order_failed(
     is_risk_order: bool = False
 ):
     """Notify when an order fails to execute"""
-    title = f"ORDER FAILED: {action} {symbol}"
+    broker_label = broker.upper() if broker else 'Unknown'
+    title = f"[{broker_label}] ORDER FAILED: {action} {symbol}"
     
     if is_risk_order:
-        title = f"⚠️ RISK ORDER FAILED: {action} {symbol}"
-        message = f"**CRITICAL**: Risk management order failed!\n\n{error_message}\n\nManual intervention may be required."
+        title = f"[{broker_label}] RISK ORDER FAILED: {action} {symbol}"
+        message = f"**CRITICAL**: Risk management order failed on **{broker_label}**!\n\n{error_message}\n\nManual intervention may be required."
     else:
-        message = f"Order execution failed: {error_message}"
+        message = f"**{broker_label}** order execution failed: {error_message}"
     
     details = {}
     if quantity:
@@ -539,9 +556,10 @@ def notify_stop_loss_triggered(
 ):
     """Notify when a stop loss is triggered"""
     pnl = (exit_price - entry_price) * quantity * 100
+    broker_label = broker.upper() if broker else 'Unknown'
     
-    title = f"STOP LOSS: {symbol}"
-    message = f"Stop loss triggered at **{loss_percent:.1f}%** loss"
+    title = f"[{broker_label}] STOP LOSS: {symbol}"
+    message = f"**{broker_label}** stop loss triggered at **{loss_percent:.1f}%** loss"
     
     details = {
         'Entry': f"${entry_price:.2f}",
@@ -577,13 +595,14 @@ def notify_order_filled(
 ):
     """Notify when an order is filled"""
     alert_type = "order_filled_bto" if action.upper() == "BTO" else "order_filled_stc"
+    broker_label = broker.upper() if broker else 'Unknown'
     
     option_str = ""
     if strike and expiry and opt_type:
         option_str = f" ${strike}{opt_type} {expiry}"
     
-    title = f"{action.upper()} FILLED: {symbol}{option_str}"
-    message = f"{quantity} contracts @ ${price:.2f}"
+    title = f"[{broker_label}] {action.upper()} FILLED: {symbol}{option_str}"
+    message = f"**{broker_label}**: {quantity} contracts @ ${price:.2f}"
     
     details = {
         'Qty': quantity,
@@ -615,8 +634,9 @@ def notify_profit_target_hit(
     channel: Optional[str] = None
 ):
     """Notify when a profit target is hit"""
-    title = f"TARGET {target_tier} HIT: {symbol}"
-    message = f"Profit target {target_tier} reached at **+{profit_percent:.1f}%**"
+    broker_label = broker.upper() if broker else 'Unknown'
+    title = f"[{broker_label}] TARGET {target_tier} HIT: {symbol}"
+    message = f"**{broker_label}** profit target {target_tier} reached at **+{profit_percent:.1f}%**"
     
     details = {
         'Tier': target_tier,
@@ -637,12 +657,48 @@ def notify_profit_target_hit(
     )
 
 
+def notify_stop_loss_failed(
+    symbol: str,
+    broker: str,
+    error_message: str,
+    entry_price: Optional[float] = None,
+    current_price: Optional[float] = None,
+    quantity: Optional[int] = None,
+    channel: Optional[str] = None
+):
+    """Notify when a stop loss order fails to execute - CRITICAL alert"""
+    broker_label = broker.upper() if broker else 'Unknown'
+    title = f"[{broker_label}] SL FAILED: {symbol}"
+    message = f"**CRITICAL**: Stop loss execution failed on **{broker_label}**!\n\n{error_message}\n\n**Manual exit may be required!**"
+    
+    details = {}
+    if entry_price:
+        details['Entry'] = f"${entry_price:.2f}"
+    if current_price:
+        details['Current'] = f"${current_price:.2f}"
+    if quantity:
+        details['Qty'] = quantity
+    if channel:
+        details['Channel'] = channel
+    details['Error'] = error_message[:100]
+    
+    return send_critical_alert(
+        alert_type="stop_loss_failed",
+        title=title,
+        message=message,
+        symbol=symbol,
+        broker=broker,
+        details=details
+    )
+
+
 def notify_token_expired(
     broker: str,
     error_msg: Optional[str] = None
 ):
     """Notify when broker trade token expires and refresh fails"""
-    title = f"TOKEN EXPIRED: {broker}"
+    broker_label = broker.upper() if broker else broker
+    title = f"[{broker_label}] TOKEN EXPIRED"
     message = f"Trade token expired and auto-refresh failed. Please re-login to {broker} in Settings."
     
     details = {
@@ -673,8 +729,9 @@ def notify_giveback_guard_triggered(
     channel: Optional[str] = None
 ):
     """Notify when giveback guard triggers an exit"""
-    title = f"GIVEBACK GUARD: {symbol}"
-    message = f"Max profit giveback guard triggered. Profit dropped from **+{max_profit:.1f}%** to **+{current_profit:.1f}%**"
+    broker_label = broker.upper() if broker else 'Unknown'
+    title = f"[{broker_label}] GIVEBACK GUARD: {symbol}"
+    message = f"**{broker_label}** giveback guard triggered. Profit dropped from **+{max_profit:.1f}%** to **+{current_profit:.1f}%**"
     
     details = {
         'Max Profit': f"+{max_profit:.1f}%",
@@ -706,9 +763,10 @@ def notify_trailing_stop_triggered(
     channel: Optional[str] = None
 ):
     """Notify when trailing stop triggers"""
-    title = f"TRAILING STOP: {symbol}"
+    broker_label = broker.upper() if broker else 'Unknown'
+    title = f"[{broker_label}] TRAILING STOP: {symbol}"
     type_label = "Early Trailing" if trail_type == "early" else "Trailing Stop"
-    message = f"{type_label} triggered at **{'+' if profit_percent >= 0 else ''}{profit_percent:.1f}%**"
+    message = f"**{broker_label}** {type_label} triggered at **{'+' if profit_percent >= 0 else ''}{profit_percent:.1f}%**"
     
     details = {
         'Type': type_label,
