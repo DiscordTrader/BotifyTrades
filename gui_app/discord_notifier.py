@@ -334,6 +334,8 @@ def send_cancel_notification(symbol: str, quantity: int, price: float, is_option
 
 _notification_history: list = []
 _max_history = 100
+_recent_dedup: dict = {}
+_dedup_ttl = 10
 
 def get_notification_history() -> list:
     """Get recent notification history for browser display"""
@@ -341,12 +343,26 @@ def get_notification_history() -> list:
 
 def clear_notification_history():
     """Clear notification history"""
-    global _notification_history
+    global _notification_history, _recent_dedup
     _notification_history = []
+    _recent_dedup = {}
 
 def _add_to_history(notification: dict):
-    """Add notification to history for browser retrieval"""
-    global _notification_history
+    """Add notification to history for browser retrieval with deduplication"""
+    global _notification_history, _recent_dedup
+    import time
+    
+    dedup_key = f"{notification.get('type', '')}:{notification.get('title', '')}:{notification.get('message', '')}"
+    now = time.time()
+    
+    expired = [k for k, t in _recent_dedup.items() if now - t > _dedup_ttl]
+    for k in expired:
+        del _recent_dedup[k]
+    
+    if dedup_key in _recent_dedup:
+        return
+    _recent_dedup[dedup_key] = now
+    
     _notification_history.insert(0, notification)
     if len(_notification_history) > _max_history:
         _notification_history = _notification_history[:_max_history]

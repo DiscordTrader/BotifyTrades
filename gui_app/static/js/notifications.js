@@ -15,6 +15,7 @@
         maxToasts: 5,
         initialLoadDone: false,
         userHasInteracted: false,
+        isPolling: false,
         
         init: function() {
             this.loadSettings();
@@ -370,6 +371,8 @@
         
         poll: async function() {
             if (!this.enabled) return;
+            if (this.isPolling) return;
+            this.isPolling = true;
             
             try {
                 const response = await fetch('/api/notifications');
@@ -380,6 +383,7 @@
                 
                 const notifications = data.notifications || [];
                 let newCount = 0;
+                let newNotifs = [];
                 
                 const isFirstLoad = !this.initialLoadDone;
                 this.initialLoadDone = true;
@@ -391,17 +395,25 @@
                         newCount++;
                         
                         if (!isFirstLoad) {
-                            if (this.popupEnabled) {
-                                this.showToast(notif);
-                            }
-                            
-                            if (this.soundEnabled) {
-                                this.playSound(notif.type);
-                            }
-                            
-                            if (this.desktopEnabled) {
-                                this.showDesktopNotification(notif);
-                            }
+                            newNotifs.push(notif);
+                        }
+                    }
+                }
+                
+                if (newNotifs.length > 0) {
+                    let soundPlayed = false;
+                    for (const notif of newNotifs) {
+                        if (this.popupEnabled) {
+                            this.showToast(notif);
+                        }
+                        
+                        if (this.soundEnabled && !soundPlayed) {
+                            this.playSound(notif.type);
+                            soundPlayed = true;
+                        }
+                        
+                        if (this.desktopEnabled) {
+                            this.showDesktopNotification(notif);
                         }
                     }
                 }
@@ -417,6 +429,8 @@
                 
             } catch (err) {
                 console.error('[Notifications] Poll error:', err);
+            } finally {
+                this.isPolling = false;
             }
         },
         
