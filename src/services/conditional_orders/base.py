@@ -50,6 +50,14 @@ from gui_app.database import (
     get_channel_conditional_settings,
 )
 
+from gui_app.discord_notifier import (
+    notify_conditional_created,
+    notify_conditional_triggered,
+    notify_conditional_expired,
+    notify_conditional_failed,
+    notify_conditional_cancelled,
+)
+
 
 class OrderStatus(Enum):
     PENDING = 'PENDING'
@@ -608,6 +616,16 @@ class BaseConditionalOrderService(ABC):
             for order_id in list(self.pending_orders.keys()):
                 order = get_conditional_order_by_id(order_id)
                 if order and order.get('status') == 'EXPIRED':
+                    try:
+                        notify_conditional_expired(
+                            symbol=order.get('symbol', 'UNKNOWN'),
+                            trigger_price=order.get('trigger_price', 0),
+                            broker=order.get('broker_primary', ''),
+                            order_id=order_id,
+                            reason="Time expired"
+                        )
+                    except Exception as e:
+                        self._log(f"Notification error (expired): {e}")
                     if order_id in self.monitors:
                         await self.monitors[order_id].stop()
                         del self.monitors[order_id]
@@ -804,6 +822,20 @@ class BaseConditionalOrderService(ABC):
             self._log(f"Created order #{order_id} for {parsed_signal.get('symbol')}")
             self._schedule_monitoring(order_id)
             
+            try:
+                notify_conditional_created(
+                    symbol=parsed_signal.get('symbol', 'UNKNOWN'),
+                    trigger_type=trigger_type,
+                    trigger_price=adjusted_price,
+                    broker=effective_broker,
+                    order_id=order_id,
+                    stop_loss=stop_loss_value,
+                    expires_at=expires_at,
+                    channel_id=channel_id
+                )
+            except Exception as e:
+                self._log(f"Notification error (created): {e}")
+            
             # Register signal context for follow-up message correlation
             try:
                 from src.services.signal_conversation_state import get_conversation_state_manager
@@ -869,6 +901,16 @@ class BaseConditionalOrderService(ABC):
                 event='NO_PRICE_SOURCE',
                 error_message='No price source available for this market'
             )
+            try:
+                notify_conditional_failed(
+                    symbol=symbol,
+                    broker=broker or '',
+                    order_id=order_id,
+                    error="No price source available",
+                    stage="monitoring"
+                )
+            except Exception as e:
+                self._log(f"Notification error (no price source): {e}")
             return
         
         self.monitors[order_id] = monitor
@@ -927,6 +969,16 @@ class BaseConditionalOrderService(ABC):
         
         if triggered:
             self._log(f"TRIGGERED #{order_id} {symbol}")
+            try:
+                notify_conditional_triggered(
+                    symbol=symbol,
+                    trigger_price=adjusted_trigger,
+                    current_price=price,
+                    broker=order.get('broker_primary', ''),
+                    order_id=order_id
+                )
+            except Exception as e:
+                self._log(f"Notification error (triggered): {e}")
             await self._execute_order(order_id, order, price)
     
     async def _execute_order(self, order_id: int, order: Dict, trigger_price: float):
@@ -999,7 +1051,16 @@ class BaseConditionalOrderService(ABC):
                         event='SLIPPAGE_EXCEEDED',
                         details=f"Price ${trigger_price:.2f} exceeded {slippage_max_pct}% slippage (max ${max_allowed_price:.2f})"
                     )
-                    # Stop monitoring - order failed due to slippage
+                    try:
+                        notify_conditional_failed(
+                            symbol=symbol,
+                            broker=order.get('broker_primary', ''),
+                            order_id=order_id,
+                            error=f"Slippage {slippage_pct:.1f}% exceeded max {slippage_max_pct}% (${trigger_price:.2f} vs max ${max_allowed_price:.2f})",
+                            stage="slippage_check"
+                        )
+                    except Exception as e:
+                        self._log(f"Notification error (slippage): {e}")
                     if order_id in self.monitors:
                         await self.monitors[order_id].stop()
                         del self.monitors[order_id]
@@ -1010,7 +1071,6 @@ class BaseConditionalOrderService(ABC):
                         del self.pending_orders[order_id]
                     return
             else:
-                # For "under" trigger, block if price fell too far below trigger
                 min_allowed_price = original_trigger * (1 - slippage_max_pct / 100)
                 if trigger_price < min_allowed_price:
                     slippage_pct = ((original_trigger - trigger_price) / original_trigger) * 100
@@ -1022,6 +1082,16 @@ class BaseConditionalOrderService(ABC):
                         event='SLIPPAGE_EXCEEDED',
                         details=f"Price ${trigger_price:.2f} exceeded {slippage_max_pct}% slippage (min ${min_allowed_price:.2f})"
                     )
+                    try:
+                        notify_conditional_failed(
+                            symbol=symbol,
+                            broker=order.get('broker_primary', ''),
+                            order_id=order_id,
+                            error=f"Slippage {slippage_pct:.1f}% exceeded max {slippage_max_pct}% (${trigger_price:.2f} vs min ${min_allowed_price:.2f})",
+                            stage="slippage_check"
+                        )
+                    except Exception as e:
+                        self._log(f"Notification error (slippage): {e}")
                     if order_id in self.monitors:
                         await self.monitors[order_id].stop()
                         del self.monitors[order_id]
@@ -1076,9 +1146,21 @@ class BaseConditionalOrderService(ABC):
                     event='EXECUTION_FAILED',
                     error_message=str(e)
                 )
+                try:
+                    notify_conditional_failed(
+                        symbol=symbol,
+                        broker=order.get('broker_primary', ''),
+                        order_id=order_id,
+                        error=str(e),
+                        stage="execution"
+                    )
+                except Exception as ne:
+                    self._log(f"Notification error (execution failed): {ne}")
     
     def cancel_order(self, order_id: int) -> bool:
         """Cancel a conditional order."""
+        order = self.pending_orders.get(order_id) or get_conditional_order_by_id(order_id)
+        
         if order_id in self.monitors:
             if self._loop:
                 asyncio.run_coroutine_threadsafe(
@@ -1094,7 +1176,19 @@ class BaseConditionalOrderService(ABC):
         if order_id in self.pending_orders:
             del self.pending_orders[order_id]
         
-        return cancel_conditional_order(order_id)
+        result = cancel_conditional_order(order_id)
+        
+        if result and order:
+            try:
+                notify_conditional_cancelled(
+                    symbol=order.get('symbol', 'UNKNOWN'),
+                    broker=order.get('broker_primary', ''),
+                    order_id=order_id
+                )
+            except Exception as e:
+                self._log(f"Notification error (cancelled): {e}")
+        
+        return result
     
     def shutdown(self):
         """Shutdown the service."""

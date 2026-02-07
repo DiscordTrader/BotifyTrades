@@ -137,6 +137,35 @@
                     gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
                     osc.start(now);
                     osc.stop(now + 0.5);
+                } else if (type === 'conditional_created') {
+                    const osc = ctx.createOscillator();
+                    osc.connect(gainNode);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(392, now);
+                    osc.frequency.setValueAtTime(494, now + 0.1);
+                    osc.frequency.setValueAtTime(587, now + 0.2);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+                    osc.start(now);
+                    osc.stop(now + 0.4);
+                } else if (type === 'conditional_triggered') {
+                    const osc = ctx.createOscillator();
+                    osc.connect(gainNode);
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.setValueAtTime(660, now + 0.06);
+                    osc.frequency.setValueAtTime(880, now + 0.12);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
+                } else if (type === 'conditional_failed' || type === 'conditional_expired' || type === 'conditional_cancelled') {
+                    const osc = ctx.createOscillator();
+                    osc.connect(gainNode);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.setValueAtTime(330, now + 0.15);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
                 } else if (type === 'order_placed_bto' || type === 'order_placed_stc') {
                     const osc = ctx.createOscillator();
                     osc.connect(gainNode);
@@ -456,6 +485,11 @@
                 stop_loss_triggered: { icon: '🛑', color: '#ef4444', label: 'STOP LOSS', accent: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.4)' },
                 order_placed_bto: { icon: '📤', color: '#f59e0b', label: 'BTO PLACED', accent: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.4)' },
                 order_placed_stc: { icon: '📤', color: '#f59e0b', label: 'STC PLACED', accent: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.4)' },
+                conditional_created: { icon: '📋', color: '#6366f1', label: 'CONDITIONAL', accent: 'rgba(99, 102, 241, 0.15)', border: 'rgba(99, 102, 241, 0.4)' },
+                conditional_triggered: { icon: '⚡', color: '#eab308', label: 'TRIGGERED', accent: 'rgba(234, 179, 8, 0.15)', border: 'rgba(234, 179, 8, 0.4)' },
+                conditional_expired: { icon: '⏰', color: '#9ca3af', label: 'EXPIRED', accent: 'rgba(156, 163, 175, 0.15)', border: 'rgba(156, 163, 175, 0.4)' },
+                conditional_failed: { icon: '❌', color: '#ef4444', label: 'COND. FAILED', accent: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.4)' },
+                conditional_cancelled: { icon: '🚫', color: '#9ca3af', label: 'CANCELLED', accent: 'rgba(156, 163, 175, 0.15)', border: 'rgba(156, 163, 175, 0.4)' },
                 order_filled_bto: { icon: '🟢', color: '#22c55e', label: 'BTO FILLED', accent: 'rgba(34, 197, 94, 0.15)', border: 'rgba(34, 197, 94, 0.4)' },
                 order_filled_stc: { icon: '🔵', color: '#3b82f6', label: 'STC FILLED', accent: 'rgba(59, 130, 246, 0.15)', border: 'rgba(59, 130, 246, 0.4)' },
                 profit_target_hit: { icon: '🎯', color: '#22c55e', label: 'PROFIT TARGET', accent: 'rgba(34, 197, 94, 0.15)', border: 'rgba(34, 197, 94, 0.4)' },

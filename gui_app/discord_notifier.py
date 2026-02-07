@@ -568,6 +568,11 @@ def send_critical_alert(
             "stop_loss_failed": {"emoji": "💥", "color": 15158332, "mention": True},
             "order_placed_bto": {"emoji": "📤", "color": 16761600, "mention": False},
             "order_placed_stc": {"emoji": "📤", "color": 16761600, "mention": False},
+            "conditional_created": {"emoji": "📋", "color": 5793266, "mention": False},
+            "conditional_triggered": {"emoji": "⚡", "color": 16776960, "mention": False},
+            "conditional_expired": {"emoji": "⏰", "color": 10070709, "mention": False},
+            "conditional_failed": {"emoji": "❌", "color": 15158332, "mention": True},
+            "conditional_cancelled": {"emoji": "🚫", "color": 10070709, "mention": False},
             "order_filled_bto": {"emoji": "🟢", "color": 3066993, "mention": False},
             "order_filled_stc": {"emoji": "🔴", "color": 15844367, "mention": False},
             "profit_target_hit": {"emoji": "🎯", "color": 3066993, "mention": False},
@@ -764,6 +769,152 @@ def notify_order_filled(
     
     return send_critical_alert(
         alert_type=alert_type,
+        title=title,
+        message=message,
+        symbol=symbol,
+        broker=broker,
+        details=details
+    )
+
+
+def notify_conditional_created(
+    symbol: str,
+    trigger_type: str,
+    trigger_price: float,
+    broker: str,
+    order_id: int,
+    stop_loss: Optional[float] = None,
+    expires_at: Optional[str] = None,
+    channel_id: Optional[str] = None
+):
+    """Notify when a conditional order is created and monitoring begins."""
+    broker_label = broker.upper() if broker else 'Unknown'
+    direction = "ABOVE" if trigger_type == 'over' else "BELOW"
+    title = f"[{broker_label}] CONDITIONAL ORDER: {symbol} {direction} ${trigger_price:.2f}"
+    message = f"**{broker_label}**: Monitoring {symbol} for price {direction.lower()} ${trigger_price:.2f}"
+    
+    details = {
+        'Order #': order_id,
+        'Trigger': f"{direction} ${trigger_price:.2f}",
+        'Status': 'MONITORING'
+    }
+    if stop_loss:
+        details['Stop Loss'] = f"{stop_loss}%"
+    if expires_at:
+        details['Expires'] = expires_at
+    
+    return send_critical_alert(
+        alert_type="conditional_created",
+        title=title,
+        message=message,
+        symbol=symbol,
+        broker=broker,
+        details=details
+    )
+
+
+def notify_conditional_triggered(
+    symbol: str,
+    trigger_price: float,
+    current_price: float,
+    broker: str,
+    order_id: int
+):
+    """Notify when a conditional order's price condition is met."""
+    broker_label = broker.upper() if broker else 'Unknown'
+    title = f"[{broker_label}] CONDITIONAL TRIGGERED: {symbol} @ ${current_price:.2f}"
+    message = f"**{broker_label}**: {symbol} hit ${current_price:.2f} (trigger: ${trigger_price:.2f}) — Executing order"
+    
+    details = {
+        'Order #': order_id,
+        'Trigger Price': f"${trigger_price:.2f}",
+        'Current Price': f"${current_price:.2f}",
+        'Status': 'EXECUTING'
+    }
+    
+    return send_critical_alert(
+        alert_type="conditional_triggered",
+        title=title,
+        message=message,
+        symbol=symbol,
+        broker=broker,
+        details=details
+    )
+
+
+def notify_conditional_expired(
+    symbol: str,
+    trigger_price: float,
+    broker: str,
+    order_id: int,
+    reason: str = "Time expired"
+):
+    """Notify when a conditional order expires without triggering."""
+    broker_label = broker.upper() if broker else 'Unknown'
+    title = f"[{broker_label}] CONDITIONAL EXPIRED: {symbol}"
+    message = f"**{broker_label}**: {symbol} conditional order expired — trigger ${trigger_price:.2f} never reached"
+    
+    details = {
+        'Order #': order_id,
+        'Trigger': f"${trigger_price:.2f}",
+        'Reason': reason
+    }
+    
+    return send_critical_alert(
+        alert_type="conditional_expired",
+        title=title,
+        message=message,
+        symbol=symbol,
+        broker=broker,
+        details=details
+    )
+
+
+def notify_conditional_failed(
+    symbol: str,
+    broker: str,
+    order_id: int,
+    error: str,
+    stage: str = "execution"
+):
+    """Notify when a conditional order fails (execution error, slippage block, etc.)."""
+    broker_label = broker.upper() if broker else 'Unknown'
+    title = f"[{broker_label}] CONDITIONAL FAILED: {symbol}"
+    message = f"**{broker_label}**: {symbol} conditional order failed during {stage}"
+    
+    details = {
+        'Order #': order_id,
+        'Stage': stage.upper(),
+        'Error': error[:100]
+    }
+    
+    return send_critical_alert(
+        alert_type="conditional_failed",
+        title=title,
+        message=message,
+        symbol=symbol,
+        broker=broker,
+        details=details
+    )
+
+
+def notify_conditional_cancelled(
+    symbol: str,
+    broker: str,
+    order_id: int
+):
+    """Notify when a conditional order is manually cancelled."""
+    broker_label = broker.upper() if broker else 'Unknown'
+    title = f"[{broker_label}] CONDITIONAL CANCELLED: {symbol}"
+    message = f"**{broker_label}**: {symbol} conditional order #{order_id} cancelled"
+    
+    details = {
+        'Order #': order_id,
+        'Status': 'CANCELLED'
+    }
+    
+    return send_critical_alert(
+        alert_type="conditional_cancelled",
         title=title,
         message=message,
         symbol=symbol,
