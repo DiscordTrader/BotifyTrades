@@ -137,6 +137,15 @@
                     gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
                     osc.start(now);
                     osc.stop(now + 0.5);
+                } else if (type === 'order_placed_bto' || type === 'order_placed_stc') {
+                    const osc = ctx.createOscillator();
+                    osc.connect(gainNode);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.setValueAtTime(523, now + 0.1);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
                 } else if (type === 'order_filled_bto' || type === 'order_filled_stc' || type === 'profit_target_hit') {
                     const osc = ctx.createOscillator();
                     osc.connect(gainNode);
@@ -445,6 +454,8 @@
             const configs = {
                 order_failed: { icon: '❌', color: '#ef4444', label: 'ORDER FAILED', accent: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.4)' },
                 stop_loss_triggered: { icon: '🛑', color: '#ef4444', label: 'STOP LOSS', accent: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.4)' },
+                order_placed_bto: { icon: '📤', color: '#f59e0b', label: 'BTO PLACED', accent: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.4)' },
+                order_placed_stc: { icon: '📤', color: '#f59e0b', label: 'STC PLACED', accent: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.4)' },
                 order_filled_bto: { icon: '🟢', color: '#22c55e', label: 'BTO FILLED', accent: 'rgba(34, 197, 94, 0.15)', border: 'rgba(34, 197, 94, 0.4)' },
                 order_filled_stc: { icon: '🔵', color: '#3b82f6', label: 'STC FILLED', accent: 'rgba(59, 130, 246, 0.15)', border: 'rgba(59, 130, 246, 0.4)' },
                 profit_target_hit: { icon: '🎯', color: '#22c55e', label: 'PROFIT TARGET', accent: 'rgba(34, 197, 94, 0.15)', border: 'rgba(34, 197, 94, 0.4)' },

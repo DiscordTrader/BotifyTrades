@@ -566,6 +566,8 @@ def send_critical_alert(
             "order_failed": {"emoji": "🚨", "color": 15158332, "mention": True},
             "stop_loss_triggered": {"emoji": "🛑", "color": 15158332, "mention": True},
             "stop_loss_failed": {"emoji": "💥", "color": 15158332, "mention": True},
+            "order_placed_bto": {"emoji": "📤", "color": 16761600, "mention": False},
+            "order_placed_stc": {"emoji": "📤", "color": 16761600, "mention": False},
             "order_filled_bto": {"emoji": "🟢", "color": 3066993, "mention": False},
             "order_filled_stc": {"emoji": "🔴", "color": 15844367, "mention": False},
             "profit_target_hit": {"emoji": "🎯", "color": 3066993, "mention": False},
@@ -687,6 +689,46 @@ def notify_stop_loss_triggered(
     )
 
 
+def notify_order_placed(
+    symbol: str,
+    action: str,
+    broker: str,
+    quantity: int,
+    price: float,
+    order_id: Optional[str] = None,
+    strike: Optional[float] = None,
+    expiry: Optional[str] = None,
+    opt_type: Optional[str] = None
+):
+    """Notify when an order is submitted/placed (not yet filled)."""
+    alert_type = "order_placed_bto" if action.upper() == "BTO" else "order_placed_stc"
+    broker_label = broker.upper() if broker else 'Unknown'
+    
+    option_str = ""
+    if strike and expiry and opt_type:
+        option_str = f" ${strike}{opt_type} {expiry}"
+    
+    title = f"[{broker_label}] {action.upper()} ORDER PLACED: {symbol}{option_str}"
+    message = f"**{broker_label}**: {quantity} contracts @ ${price:.2f}"
+    
+    details = {
+        'Qty': quantity,
+        'Limit': f"${price:.2f}",
+        'Status': 'PENDING'
+    }
+    if order_id:
+        details['Order ID'] = str(order_id)[:12]
+    
+    return send_critical_alert(
+        alert_type=alert_type,
+        title=title,
+        message=message,
+        symbol=symbol,
+        broker=broker,
+        details=details
+    )
+
+
 def notify_order_filled(
     symbol: str,
     action: str,
@@ -699,7 +741,7 @@ def notify_order_filled(
     pnl: Optional[float] = None,
     pnl_percent: Optional[float] = None
 ):
-    """Notify when an order is filled"""
+    """Notify when an order is actually filled (confirmed by broker)."""
     alert_type = "order_filled_bto" if action.upper() == "BTO" else "order_filled_stc"
     broker_label = broker.upper() if broker else 'Unknown'
     
@@ -712,7 +754,7 @@ def notify_order_filled(
     
     details = {
         'Qty': quantity,
-        'Price': f"${price:.2f}"
+        'Fill Price': f"${price:.2f}"
     }
     
     if pnl is not None and action.upper() == "STC":

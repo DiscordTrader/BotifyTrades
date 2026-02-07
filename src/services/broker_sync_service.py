@@ -986,15 +986,31 @@ class BrokerSyncService:
                 # Transition PENDING → OPEN
                 if current_status == 'PENDING':
                     fill_price = position['avg_price']
-                    print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) filled: PENDING → OPEN")
+                    fill_qty = position['quantity']
+                    print(f"[SYNC] ✓ Trade #{trade_id} ({symbol}) filled: PENDING → OPEN @ ${fill_price}")
                     self.db.update_trade(
                         trade_id,
                         status='OPEN',
                         executed_price=fill_price,
                         current_price=position.get('current_price'),
-                        quantity=position['quantity'],
+                        quantity=fill_qty,
                         executed_at=datetime.now().isoformat()
                     )
+                    
+                    try:
+                        from gui_app.discord_notifier import notify_order_filled
+                        notify_order_filled(
+                            symbol=symbol,
+                            action=trade.get('action', 'BTO'),
+                            broker=broker_name,
+                            quantity=int(fill_qty),
+                            price=float(fill_price),
+                            strike=trade.get('strike'),
+                            expiry=trade.get('expiry'),
+                            opt_type=trade.get('call_put') or trade.get('opt_type')
+                        )
+                    except Exception as notify_err:
+                        print(f"[SYNC] Warning: Could not send fill notification: {notify_err}")
                     
                     # For NDX→QQQ conversions: Update the lot's open_price with actual fill price
                     # This ensures P&L is calculated using QQQ fill price, not NDX signal price

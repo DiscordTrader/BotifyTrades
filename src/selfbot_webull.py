@@ -12008,22 +12008,28 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     else:
                         _original_print(f"[{broker_name}] ❌ Option order FAILED: {result.get('msg', result.get('error', 'Unknown error'))}")
                 
-                # Send notification for successful orders
+                # Send notification for successful order submissions (ORDER PLACED, not FILLED)
                 if order_succeeded:
                     try:
-                        from gui_app.discord_notifier import notify_order_filled
-                        notify_order_filled(
+                        placed_order_id = None
+                        if hasattr(result, 'order_id'):
+                            placed_order_id = result.order_id
+                        elif isinstance(result, dict):
+                            placed_order_id = result.get('orderId') or result.get('order_id')
+                        from gui_app.discord_notifier import notify_order_placed
+                        notify_order_placed(
                             symbol=signal['symbol'],
                             action=signal['action'],
                             broker=broker_name,
                             quantity=signal.get('qty', 1),
                             price=signal.get('price', 0),
+                            order_id=placed_order_id,
                             strike=signal.get('strike'),
                             expiry=signal.get('expiry'),
                             opt_type=signal.get('opt_type')
                         )
                     except Exception as notify_err:
-                        _original_print(f"[NOTIFY] Warning: Could not send fill notification: {notify_err}", flush=True)
+                        _original_print(f"[NOTIFY] Warning: Could not send order placed notification: {notify_err}", flush=True)
                 
                 # Convert OrderResult to dict format for consistency
                 if hasattr(result, 'success'):
