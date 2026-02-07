@@ -618,7 +618,8 @@ function renderJournal(journal) {
         html += '<td class="'+pnlClass(t.pnl_pct)+'">'+(t.pnl_pct!=null?fmtPct(t.pnl_pct):'-')+'</td>';
         html += '<td>'+(t.broker||'-')+'</td>';
         html += '<td>'+(t.holding_days!=null?parseFloat(t.holding_days).toFixed(1)+'d':'-')+'</td>';
-        html += '<td>'+(t.entry_date?t.entry_date.substring(0,10):'-')+'</td>';
+        let displayDate = (t.status==='OPEN') ? (t.entry_date||'') : (t.closed_date||t.entry_date||'');
+        html += '<td>'+(displayDate?displayDate.substring(0,10):'-')+'</td>';
         html += '<td><span class="status-badge '+statusCls+'">'+statusLabel+'</span></td>';
         html += '</tr>';
         if(hasPE) {

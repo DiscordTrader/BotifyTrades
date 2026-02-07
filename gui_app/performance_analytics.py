@@ -80,6 +80,7 @@ def get_performance_v2(user_id, start_date=None, end_date=None, broker=None, per
         FROM lot_closures lc
         LEFT JOIN signal_lots sl ON sl.id = lc.lot_id
         WHERE {' AND '.join(where_closed)}
+          AND (lc.pnl IS NOT NULL AND lc.pnl != 0)
         ORDER BY lc.closed_at ASC
     """
     rows = conn.execute(closed_sql, params_closed).fetchall()
@@ -271,6 +272,7 @@ def get_broker_breakdown(user_id, start_date=None, end_date=None, period=None):
         LEFT JOIN signal_lots sl ON sl.id = lc.lot_id
         LEFT JOIN trades t ON t.id = sl.signal_id
         WHERE {' AND '.join(where)}
+          AND (lc.pnl IS NOT NULL AND lc.pnl != 0)
         ORDER BY t.broker
     """
     rows = conn.execute(sql, params).fetchall()
@@ -374,8 +376,9 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
 
         lot_groups = defaultdict(lambda: {
             'info': None, 'exits': [], 'total_pnl': 0.0,
-            'total_pnl_pct': 0.0, 'total_exit_qty': 0,
+            'total_exit_qty': 0, 'weighted_pnl_pct_sum': 0.0,
             'weighted_price_sum': 0.0, 'max_closed_at': '',
+            'min_closed_at': 'Z', 'max_holding_days': 0.0,
         })
 
         for r in closed_rows:
@@ -388,13 +391,18 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
             pnl_pct = float(r['pnl_percent'] or 0)
             qty = int(r['closed_qty'] or 0)
             price = float(r['close_price'] or 0)
+            hd = float(r['holding_days'] or 0)
             g['total_pnl'] += pnl
-            g['total_pnl_pct'] += pnl_pct
             g['total_exit_qty'] += qty
+            g['weighted_pnl_pct_sum'] += pnl_pct * qty
             g['weighted_price_sum'] += price * qty
+            if hd > g['max_holding_days']:
+                g['max_holding_days'] = hd
             closed_at_str = r['closed_at'] or ''
-            if closed_at_str > g['max_closed_at']:
+            if closed_at_str and closed_at_str > g['max_closed_at']:
                 g['max_closed_at'] = closed_at_str
+            if closed_at_str and closed_at_str < g['min_closed_at']:
+                g['min_closed_at'] = closed_at_str
 
             g['exits'].append({
                 'qty': qty,
@@ -417,22 +425,14 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
                 status = 'CLOSED'
 
             avg_exit = _safe_round(g['weighted_price_sum'] / g['total_exit_qty']) if g['total_exit_qty'] > 0 else 0.0
-            num_exits = len(g['exits'])
-            avg_pnl_pct = _safe_round(g['total_pnl_pct'] / num_exits) if num_exits > 0 else 0.0
+            total_pnl_pct = _safe_round(g['weighted_pnl_pct_sum'] / g['total_exit_qty']) if g['total_exit_qty'] > 0 else 0.0
 
-            max_hd = 0
-            for e in g['exits']:
-                try:
-                    if 'holding_days' in info and info['holding_days']:
-                        max_hd = max(max_hd, int(info.get('holding_days', 0) or 0))
-                except (ValueError, TypeError):
-                    pass
-            for ex_row in g['exits']:
-                pass
-            hd_vals = [float(r2['holding_days'] or 0) for r2 in [dict(r) for r in conn.execute(
-                "SELECT holding_days FROM lot_closures WHERE lot_id = ?", (lid,)
-            ).fetchall()]]
-            max_hd = max(hd_vals) if hd_vals else 0
+            close_date = g['max_closed_at'] if g['max_closed_at'] else ''
+            open_date = g['min_closed_at'] if g['min_closed_at'] != 'Z' else ''
+
+            direction = info['direction'] or ''
+            if not direction:
+                direction = 'BTO'
 
             trades_out.append({
                 'id': lid,
@@ -441,19 +441,20 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
                 'strike': info['strike'] or '',
                 'expiry': info['expiry'] or '',
                 'call_put': info['call_put'] or '',
-                'direction': info['direction'] or '',
+                'direction': direction,
                 'entry_price': _safe_round(info['open_price']),
                 'entry_qty': open_qty,
-                'entry_date': info['executed_at'] or '',
+                'entry_date': info['executed_at'] or open_date,
+                'closed_date': close_date,
                 'exit_price': avg_exit,
                 'total_exit_qty': g['total_exit_qty'],
                 'pnl': _safe_round(g['total_pnl']),
-                'pnl_pct': avg_pnl_pct,
+                'pnl_pct': total_pnl_pct,
                 'broker': info['broker'] or '',
                 'channel_name': info['channel_name'] or '',
                 'source': info['source'] or '',
                 'status': status,
-                'holding_days': _safe_round(max_hd),
+                'holding_days': _safe_round(g['max_holding_days']),
                 'partial_exits': g['exits'],
             })
 
@@ -491,6 +492,7 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
                 'entry_price': _safe_round(r['executed_price']),
                 'entry_qty': int(r['quantity'] or 0),
                 'entry_date': r['executed_at'] or '',
+                'closed_date': '',
                 'exit_price': 0.0,
                 'total_exit_qty': 0,
                 'pnl': _safe_round(r['pnl']),
@@ -504,7 +506,7 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
             })
 
     sort_key_map = {
-        'closed_at': lambda x: x.get('entry_date', ''),
+        'closed_at': lambda x: x.get('closed_date', '') or x.get('entry_date', ''),
         'pnl': lambda x: x.get('pnl', 0),
         'pnl_percent': lambda x: x.get('pnl_pct', 0),
         'symbol': lambda x: x.get('symbol', ''),
@@ -569,6 +571,7 @@ def get_time_breakdown(user_id, bucket='daily', start_date=None, end_date=None, 
         SELECT lc.pnl, lc.closed_at
         FROM lot_closures lc
         WHERE {' AND '.join(where)}
+          AND (lc.pnl IS NOT NULL AND lc.pnl != 0)
         ORDER BY lc.closed_at ASC
     """
     rows = conn.execute(sql, params).fetchall()
@@ -651,6 +654,7 @@ def get_performance_heatmap(user_id, start_date=None, end_date=None, broker=None
         SELECT lc.pnl, lc.closed_at
         FROM lot_closures lc
         WHERE {' AND '.join(where)}
+          AND (lc.pnl IS NOT NULL AND lc.pnl != 0)
     """
     rows = conn.execute(sql, params).fetchall()
 
@@ -745,6 +749,7 @@ def get_edge_analysis(user_id, start_date=None, end_date=None, broker=None, peri
         LEFT JOIN trades t ON t.id = sl.signal_id
         LEFT JOIN channels c ON c.discord_channel_id = t.channel_id
         WHERE {' AND '.join(where)}
+          AND (lc.pnl IS NOT NULL AND lc.pnl != 0)
     """
     rows = conn.execute(sql, params).fetchall()
 
