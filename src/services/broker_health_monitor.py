@@ -262,17 +262,12 @@ class BrokerHealthMonitor:
         return 'US'
     
     def _trigger_disconnect_notification(self, broker_name: str, reason: str):
-        """Trigger disconnect notification to dashboard with cooldown."""
-        broker_key = self._normalize_broker_name(broker_name)
-        current_time = time.time()
+        """Trigger disconnect notification to dashboard.
         
+        Cooldown is handled by the notifier's _alerted_brokers lifecycle set
+        (one alert per disconnect→reconnect cycle). No duplicate cooldown here.
+        """
         with self._state_lock:
-            last_notified = self._last_notification.get(broker_key, 0)
-            
-            if current_time - last_notified < self._notification_cooldown:
-                return
-            
-            self._last_notification[broker_key] = current_time
             callbacks = self._disconnect_callbacks.copy()
         
         notification = {

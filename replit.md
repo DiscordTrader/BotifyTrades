@@ -38,7 +38,7 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 
 **Execution-Based P&L Tracking**: Provides professional-grade P&L calculation, including slippage and latency metrics, with a Two-Tier P&L Architecture.
 
-**Order Management System (OMS) and Risk Management System (RMS)**: Provide dynamic SL/PT management via Discord message edits. The Exit Order Arbiter arbitrates between signal-driven and risk-driven exit requests. A Circuit Breaker provides emergency trading halt controls. Industry-grade Risk State Persistence ensures all risk state survives bot restarts. Enhanced Risk Management v2.0 provides Dynamic SL Escalation and Max Profit Giveback Guard.
+**Order Management System (OMS) and Risk Management System (RMS)**: Provide dynamic SL/PT management via Discord message edits. The Exit Order Arbiter uses threading.Lock for cross-thread safety (preventing double-sells between signal STC and risk-triggered exits from different threads). A Circuit Breaker provides emergency trading halt controls. Industry-grade Risk State Persistence ensures all risk state survives bot restarts. Enhanced Risk Management v2.0 provides Dynamic SL Escalation and Max Profit Giveback Guard.
 
 **Follow-up SL/PT Updates**: Signal providers can update stop-loss for both pending and filled positions using various formats (e.g., "SL to $X", "moving my SL to X"). These updates override dynamic or channel default settings and are displayed in the risk monitor.
 

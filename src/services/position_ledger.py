@@ -146,6 +146,9 @@ class ExitArbiter:
     """
     Prevents double-exits by maintaining per-position locks.
     
+    Uses threading.Lock for cross-thread safety (risk management threads +
+    asyncio signal handlers can both trigger exits concurrently).
+    
     Lock key includes:
     - option_key: The option contract identifier
     - broker_id: Broker isolation
@@ -156,7 +159,7 @@ class ExitArbiter:
     """
     
     def __init__(self):
-        self._locks: Dict[str, asyncio.Lock] = {}
+        self._locks: Dict[str, threading.Lock] = {}
         self._sync_lock = threading.Lock()
     
     def _get_lock_key(
@@ -176,12 +179,12 @@ class ExitArbiter:
         broker_id: str = "", 
         account_id: str = "",
         routing_mapping_id: Optional[int] = None
-    ) -> asyncio.Lock:
+    ) -> threading.Lock:
         """Get or create a lock for the given position key."""
         key = self._get_lock_key(option_key, broker_id, account_id, routing_mapping_id)
         with self._sync_lock:
             if key not in self._locks:
-                self._locks[key] = asyncio.Lock()
+                self._locks[key] = threading.Lock()
             return self._locks[key]
     
     def release_lock(
@@ -203,9 +206,38 @@ class ExitArbiter:
         account_id: str = "",
         routing_mapping_id: Optional[int] = None
     ) -> bool:
-        """Attempt to acquire exit lock. Returns False if already locked."""
+        """Attempt to acquire exit lock. Returns False if already locked (non-blocking)."""
         lock = self.get_lock(option_key, broker_id, account_id, routing_mapping_id)
-        return await asyncio.wait_for(lock.acquire(), timeout=0.1)
+        return lock.acquire(blocking=False)
+    
+    def acquire_exit_lock_sync(
+        self,
+        option_key: str,
+        broker_id: str = "",
+        account_id: str = "",
+        routing_mapping_id: Optional[int] = None,
+        timeout: float = 0.1
+    ) -> bool:
+        """Synchronous version for use from monitoring threads."""
+        lock = self.get_lock(option_key, broker_id, account_id, routing_mapping_id)
+        return lock.acquire(blocking=True, timeout=timeout)
+    
+    def release_exit_lock(
+        self,
+        option_key: str,
+        broker_id: str = "",
+        account_id: str = "",
+        routing_mapping_id: Optional[int] = None
+    ):
+        """Release exit lock after exit operation completes."""
+        key = self._get_lock_key(option_key, broker_id, account_id, routing_mapping_id)
+        with self._sync_lock:
+            lock = self._locks.get(key)
+            if lock and lock.locked():
+                try:
+                    lock.release()
+                except RuntimeError:
+                    pass
 
 
 class PositionLedger:
@@ -226,9 +258,11 @@ class PositionLedger:
         self._init_tables()
     
     def _get_conn(self) -> sqlite3.Connection:
-        """Get database connection with row factory."""
-        conn = sqlite3.connect(self.db_path)
+        """Get database connection with row factory, WAL mode, and busy timeout."""
+        conn = sqlite3.connect(self.db_path, timeout=10)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
         return conn
     
     def _init_tables(self):

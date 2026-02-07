@@ -7,16 +7,19 @@ Trade Monitor provides a more robust signal posting system with @everyone suppor
 """
 import requests
 import logging
+import threading
+import time as _time_mod
 from datetime import datetime
 from typing import Optional, Dict, Set
 from .config_service import get_discord_notifications
 
 logger = logging.getLogger(__name__)
 
-# Track last alert time per broker to avoid spam (cooldown in seconds)
+_notifier_lock = threading.Lock()
+
 _last_alert_time: Dict[str, datetime] = {}
-_alert_cooldown_seconds = 300  # 5 minute cooldown between same alerts
-_alerted_brokers: Set[str] = set()  # Track which brokers have been alerted as disconnected
+_alert_cooldown_seconds = 300
+_alerted_brokers: Set[str] = set()
 
 
 def send_system_alert(
@@ -37,36 +40,29 @@ def send_system_alert(
     Returns:
         bool: True if notification was sent, False otherwise
     """
-    global _last_alert_time, _alerted_brokers
-    
     try:
-        # Get notification settings
         settings = get_discord_notifications()
         
         if not settings.get('enabled', True):
             logger.info("Discord notifications disabled - skipping system alert")
             return False
         
-        # Check for system alerts webhook (prefer dedicated webhook, fall back to main)
         webhook_url = settings.get('system_webhook_url') or settings.get('webhook_url', '')
         if not webhook_url:
             logger.warning("Discord webhook URL not configured - cannot send system alert")
             return False
         
-        # Apply cooldown to prevent spam
         alert_key = f"{alert_type}:{broker_name}" if broker_name else alert_type
         now = datetime.now()
         
-        if alert_key in _last_alert_time:
-            elapsed = (now - _last_alert_time[alert_key]).total_seconds()
-            if elapsed < _alert_cooldown_seconds:
-                logger.debug(f"Alert cooldown active for {alert_key} ({elapsed:.0f}s < {_alert_cooldown_seconds}s)")
-                return False
+        with _notifier_lock:
+            if alert_key in _last_alert_time:
+                elapsed = (now - _last_alert_time[alert_key]).total_seconds()
+                if elapsed < _alert_cooldown_seconds:
+                    logger.debug(f"Alert cooldown active for {alert_key} ({elapsed:.0f}s < {_alert_cooldown_seconds}s)")
+                    return False
+            _last_alert_time[alert_key] = now
         
-        # Update last alert time
-        _last_alert_time[alert_key] = now
-        
-        # Severity emoji mapping
         severity_emoji = {
             "info": "ℹ️",
             "warning": "⚠️",
@@ -76,30 +72,59 @@ def send_system_alert(
         
         emoji = severity_emoji.get(severity, "📢")
         
-        # Format the message
         formatted_message = f"{emoji} **[SYSTEM ALERT]** {message}"
-        
         if broker_name:
             formatted_message = f"{emoji} **[{broker_name.upper()}]** {message}"
         
-        # Send notification
         payload = {
             "content": formatted_message,
             "username": "BotifyTrades System"
         }
         
-        response = requests.post(webhook_url, json=payload, timeout=5)
-        
-        if response.status_code == 204:
-            logger.info(f"System alert sent: {message}")
-            return True
-        else:
-            logger.error(f"Discord system alert failed: {response.status_code} - {response.text}")
-            return False
+        return _send_webhook_with_retry(webhook_url, payload)
             
     except Exception as e:
         logger.error(f"Failed to send system alert: {e}")
         return False
+
+
+def _send_webhook_with_retry(webhook_url: str, payload: dict, max_retries: int = 2) -> bool:
+    """Send webhook with Discord 429 rate-limit retry handling."""
+    for attempt in range(max_retries + 1):
+        try:
+            response = requests.post(webhook_url, json=payload, timeout=5)
+            
+            if response.status_code == 204:
+                logger.info(f"Webhook sent successfully (attempt {attempt + 1})")
+                return True
+            elif response.status_code == 429:
+                retry_after = 1.0
+                try:
+                    retry_after = float(response.headers.get('Retry-After', 1.0))
+                    retry_data = response.json()
+                    retry_after = max(retry_after, retry_data.get('retry_after', 1.0))
+                except Exception:
+                    pass
+                retry_after = min(retry_after, 5.0)
+                logger.warning(f"Discord rate limited (429), retry after {retry_after}s (attempt {attempt + 1}/{max_retries + 1})")
+                if attempt < max_retries:
+                    _time_mod.sleep(retry_after)
+                    continue
+                else:
+                    logger.error(f"Discord rate limit exhausted after {max_retries + 1} attempts")
+                    return False
+            else:
+                logger.error(f"Discord webhook failed: {response.status_code} - {response.text}")
+                return False
+        except requests.exceptions.Timeout:
+            logger.warning(f"Webhook timeout (attempt {attempt + 1}/{max_retries + 1})")
+            if attempt < max_retries:
+                _time_mod.sleep(0.5)
+                continue
+        except Exception as e:
+            logger.error(f"Webhook send error: {e}")
+            return False
+    return False
 
 
 def notify_broker_disconnected(broker_name: str, error_message: Optional[str] = None):
@@ -107,12 +132,11 @@ def notify_broker_disconnected(broker_name: str, error_message: Optional[str] = 
     Notify when a broker connection is lost
     Only sends one alert per broker until it reconnects
     """
-    global _alerted_brokers
+    with _notifier_lock:
+        if broker_name in _alerted_brokers:
+            return False
+        _alerted_brokers.add(broker_name)
     
-    if broker_name in _alerted_brokers:
-        return False
-    
-    _alerted_brokers.add(broker_name)
     broker_label = broker_name.upper()
     
     message = f"Connection lost to **{broker_label}**"
@@ -139,12 +163,10 @@ def notify_broker_reconnected(broker_name: str):
     """
     Notify when a broker connection is restored
     """
-    global _alerted_brokers
-    
-    if broker_name not in _alerted_brokers:
-        return False
-    
-    _alerted_brokers.discard(broker_name)
+    with _notifier_lock:
+        if broker_name not in _alerted_brokers:
+            return False
+        _alerted_brokers.discard(broker_name)
     broker_label = broker_name.upper()
     
     send_critical_alert(
@@ -164,12 +186,14 @@ def notify_broker_reconnected(broker_name: str):
 
 def is_broker_alerted(broker_name: str) -> bool:
     """Check if a broker has been alerted as disconnected"""
-    return broker_name in _alerted_brokers
+    with _notifier_lock:
+        return broker_name in _alerted_brokers
 
 
 def clear_broker_alert(broker_name: str):
     """Clear the alert status for a broker without sending notification"""
-    _alerted_brokers.discard(broker_name)
+    with _notifier_lock:
+        _alerted_brokers.discard(broker_name)
 
 
 def _is_trade_monitor_enabled() -> bool:
@@ -245,12 +269,7 @@ def send_trade_notification(
             "username": "BotifyTrades"
         }
         
-        response = requests.post(webhook_url, json=payload, timeout=5)
-        
-        if response.status_code == 204:
-            logger.info(f"Discord notification sent: {message}")
-        else:
-            logger.error(f"Discord webhook failed: {response.status_code} - {response.text}")
+        _send_webhook_with_retry(webhook_url, payload)
             
     except Exception as e:
         logger.error(f"Failed to send Discord notification: {e}")
@@ -331,12 +350,7 @@ def send_cancel_notification(symbol: str, quantity: int, price: float, is_option
             "username": "BotifyTrades"
         }
         
-        response = requests.post(webhook_url, json=payload, timeout=5)
-        
-        if response.status_code == 204:
-            logger.info(f"Discord cancel notification sent: {message}")
-        else:
-            logger.error(f"Discord webhook failed: {response.status_code} - {response.text}")
+        _send_webhook_with_retry(webhook_url, payload)
             
     except Exception as e:
         logger.error(f"Failed to send Discord cancel notification: {e}")
@@ -352,53 +366,152 @@ _recent_dedup: dict = {}
 _dedup_ttl = 300
 _symbol_dedup: dict = {}
 _symbol_dedup_ttl = 300
+_history_lock = threading.Lock()
 import uuid as _uuid_mod
 
 def get_notification_history() -> list:
     """Get recent notification history for browser display"""
-    return list(_notification_history)
+    with _history_lock:
+        return list(_notification_history)
 
 def clear_notification_history():
     """Clear notification history"""
     global _notification_history, _recent_dedup, _symbol_dedup
-    _notification_history = []
-    _recent_dedup = {}
-    _symbol_dedup = {}
+    with _history_lock:
+        _notification_history = []
+        _recent_dedup = {}
+        _symbol_dedup = {}
 
 def _add_to_history(notification: dict):
     """Add notification to history for browser retrieval with deduplication"""
-    global _notification_history, _recent_dedup, _symbol_dedup
-    import time
+    global _notification_history
     
     if 'id' not in notification:
         notification['id'] = str(_uuid_mod.uuid4())[:12]
     
     dedup_key = f"{notification.get('type', '')}:{notification.get('title', '')}:{notification.get('message', '')}"
-    now = time.time()
+    now = _time_mod.time()
     
-    expired = [k for k, t in _recent_dedup.items() if now - t > _dedup_ttl]
-    for k in expired:
-        del _recent_dedup[k]
-    
-    if dedup_key in _recent_dedup:
-        return
-    _recent_dedup[dedup_key] = now
-    
-    symbol = notification.get('symbol', '')
-    ntype = notification.get('type', '')
-    broker = notification.get('broker', '')
-    if symbol and ntype in ('order_filled_bto', 'order_failed'):
-        sym_key = f"{symbol}:{ntype}:{broker}"
-        sym_expired = [k for k, t in _symbol_dedup.items() if now - t > _symbol_dedup_ttl]
-        for k in sym_expired:
-            del _symbol_dedup[k]
-        if sym_key in _symbol_dedup:
+    with _history_lock:
+        expired = [k for k, t in _recent_dedup.items() if now - t > _dedup_ttl]
+        for k in expired:
+            del _recent_dedup[k]
+        
+        if dedup_key in _recent_dedup:
             return
-        _symbol_dedup[sym_key] = now
+        _recent_dedup[dedup_key] = now
+        
+        symbol = notification.get('symbol', '')
+        ntype = notification.get('type', '')
+        broker = notification.get('broker', '')
+        if symbol and ntype in ('order_filled_bto', 'order_failed'):
+            sym_key = f"{symbol}:{ntype}:{broker}"
+            sym_expired = [k for k, t in _symbol_dedup.items() if now - t > _symbol_dedup_ttl]
+            for k in sym_expired:
+                del _symbol_dedup[k]
+            if sym_key in _symbol_dedup:
+                return
+            _symbol_dedup[sym_key] = now
+        
+        _notification_history.insert(0, notification)
+        if len(_notification_history) > _max_history:
+            _notification_history = _notification_history[:_max_history]
     
-    _notification_history.insert(0, notification)
-    if len(_notification_history) > _max_history:
-        _notification_history = _notification_history[:_max_history]
+    _persist_notification_to_db(notification)
+
+
+_notification_table_initialized = False
+
+def _ensure_notification_table():
+    """Create notification_log table if needed (runs once)."""
+    global _notification_table_initialized
+    if _notification_table_initialized:
+        return
+    try:
+        from gui_app.database import get_connection
+        conn = get_connection()
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS notification_log (
+                id TEXT PRIMARY KEY,
+                type TEXT,
+                title TEXT,
+                message TEXT,
+                symbol TEXT,
+                broker TEXT,
+                timestamp TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                read INTEGER DEFAULT 0
+            )
+        """)
+        conn.commit()
+        _notification_table_initialized = True
+    except Exception as e:
+        logger.debug(f"Failed to create notification_log table: {e}")
+
+
+def _persist_notification_to_db(notification: dict):
+    """Persist notification to SQLite for crash recovery."""
+    try:
+        _ensure_notification_table()
+        from gui_app.database import get_connection
+        conn = get_connection()
+        conn.execute(
+            """INSERT OR IGNORE INTO notification_log (id, type, title, message, symbol, broker, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                notification.get('id', ''),
+                notification.get('type', ''),
+                notification.get('title', ''),
+                notification.get('message', ''),
+                notification.get('symbol', ''),
+                notification.get('broker', ''),
+                notification.get('timestamp', '')
+            )
+        )
+        conn.commit()
+        
+        conn.execute("DELETE FROM notification_log WHERE created_at < datetime('now', '-24 hours')")
+        conn.commit()
+    except Exception as e:
+        logger.debug(f"Failed to persist notification to DB: {e}")
+
+
+def load_notifications_from_db() -> list:
+    """Load unread notifications from DB on startup for crash recovery."""
+    try:
+        _ensure_notification_table()
+        from gui_app.database import get_connection
+        conn = get_connection()
+        cursor = conn.execute(
+            "SELECT * FROM notification_log WHERE read = 0 ORDER BY created_at DESC LIMIT 50"
+        )
+        rows = cursor.fetchall()
+        notifications = []
+        for row in rows:
+            notifications.append({
+                'id': row[0],
+                'type': row[1],
+                'title': row[2],
+                'message': row[3],
+                'symbol': row[4],
+                'broker': row[5],
+                'timestamp': row[6]
+            })
+        
+        with _history_lock:
+            global _notification_history
+            existing_ids = {n.get('id') for n in _notification_history}
+            for n in notifications:
+                if n['id'] not in existing_ids:
+                    _notification_history.append(n)
+            _notification_history.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+            _notification_history = _notification_history[:_max_history]
+        
+        return notifications
+    except Exception as e:
+        logger.debug(f"Failed to load notifications from DB: {e}")
+        return []
+
 
 def send_critical_alert(
     alert_type: str,
@@ -495,14 +608,7 @@ def send_critical_alert(
         if content:
             payload["content"] = content
         
-        response = requests.post(webhook_url, json=payload, timeout=5)
-        
-        if response.status_code == 204:
-            logger.info(f"Critical alert sent: {title}")
-            return True
-        else:
-            logger.error(f"Discord critical alert failed: {response.status_code} - {response.text}")
-            return False
+        return _send_webhook_with_retry(webhook_url, payload)
             
     except Exception as e:
         logger.error(f"Failed to send critical alert: {e}")
