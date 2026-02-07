@@ -4,7 +4,7 @@
     const NotificationSystem = {
         lastSeenTimestamp: null,
         seenNotifications: new Set(),
-        pollInterval: 5000,
+        pollInterval: 3000,
         enabled: true,
         soundEnabled: true,
         popupEnabled: true,
@@ -16,6 +16,8 @@
         initialLoadDone: false,
         userHasInteracted: false,
         isPolling: false,
+        lastSoundTime: 0,
+        soundCooldownMs: 3000,
         
         init: function() {
             this.loadSettings();
@@ -109,6 +111,11 @@
         
         playSound: function(type) {
             if (!this.soundEnabled) return;
+            
+            const timestamp = Date.now();
+            if (timestamp - this.lastSoundTime < this.soundCooldownMs) return;
+            this.lastSoundTime = timestamp;
+            
             this.ensureAudio();
             if (!this.audioContext) return;
             
