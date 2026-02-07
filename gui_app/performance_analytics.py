@@ -1,9 +1,105 @@
+import json
 import math
 import statistics
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
 from gui_app.database import get_connection
+
+EST = timezone(timedelta(hours=-5))
+EDT = timezone(timedelta(hours=-4))
+
+
+def _utc_to_est(dt_str):
+    if not dt_str:
+        return dt_str
+    try:
+        raw = str(dt_str)
+        if 'T' in raw:
+            raw = raw.replace('T', ' ')
+        if '.' in raw:
+            raw = raw[:raw.index('.')]
+        dt = datetime.strptime(raw[:19], '%Y-%m-%d %H:%M:%S')
+        dt_utc = dt.replace(tzinfo=timezone.utc)
+        mar_start = _dst_start(dt_utc.year)
+        nov_end = _dst_end(dt_utc.year)
+        if mar_start <= dt_utc < nov_end:
+            dt_local = dt_utc.astimezone(EDT)
+        else:
+            dt_local = dt_utc.astimezone(EST)
+        return dt_local.strftime('%Y-%m-%d %H:%M:%S')
+    except (ValueError, TypeError):
+        return dt_str
+
+
+def _dst_start(year):
+    mar1 = datetime(year, 3, 1, tzinfo=timezone.utc)
+    first_sun = 1 + (6 - mar1.weekday()) % 7
+    second_sun = first_sun + 7
+    return datetime(year, 3, second_sun, 7, 0, tzinfo=timezone.utc)
+
+
+def _dst_end(year):
+    nov1 = datetime(year, 11, 1, tzinfo=timezone.utc)
+    first_sun = 1 + (6 - nov1.weekday()) % 7
+    return datetime(year, 11, first_sun, 6, 0, tzinfo=timezone.utc)
+
+
+def _resolve_broker(trade_broker, channel_id, conn):
+    if trade_broker:
+        return trade_broker
+    if not channel_id:
+        return ''
+    row = conn.execute(
+        "SELECT enabled_brokers FROM channels WHERE id = ?",
+        [channel_id]
+    ).fetchone()
+    if row and row['enabled_brokers']:
+        try:
+            brokers = json.loads(row['enabled_brokers'])
+            if isinstance(brokers, list) and brokers:
+                return brokers[0]
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return ''
+
+
+def _build_broker_filter(broker):
+    return """
+        lc.lot_id IN (
+            SELECT sl_bf.id FROM signal_lots sl_bf
+            LEFT JOIN trades t_bf ON t_bf.id = sl_bf.signal_id
+            LEFT JOIN channels c_bf ON CAST(c_bf.id AS TEXT) = sl_bf.channel_id
+            WHERE (
+                UPPER(COALESCE(t_bf.broker, '')) = UPPER(?)
+                OR (
+                    (t_bf.broker IS NULL OR t_bf.broker = '')
+                    AND (
+                        UPPER(c_bf.enabled_brokers) LIKE '%"' || UPPER(?) || '"%'
+                    )
+                )
+            )
+        )
+    """
+
+
+def _broker_filter_params(broker):
+    return [broker, broker]
+
+
+def _resolve_broker_from_row(row):
+    b = row.get('broker') if isinstance(row, dict) else (row['broker'] if row else None)
+    if b:
+        return b.upper()
+    eb = row.get('ch_enabled_brokers') if isinstance(row, dict) else None
+    if eb:
+        try:
+            brokers = json.loads(eb)
+            if isinstance(brokers, list) and brokers:
+                return brokers[0].upper()
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return ''
 
 
 def _resolve_date_range(period=None, start_date=None, end_date=None):
@@ -65,14 +161,8 @@ def get_performance_v2(user_id, start_date=None, end_date=None, broker=None, per
     where_closed += _build_date_filter("lc.closed_at", sd, ed, params_closed)
 
     if broker:
-        where_closed.append("""
-            lc.lot_id IN (
-                SELECT sl.id FROM signal_lots sl
-                JOIN trades t ON t.id = sl.signal_id
-                WHERE LOWER(t.broker) = LOWER(?)
-            )
-        """)
-        params_closed.append(broker)
+        where_closed.append(_build_broker_filter(broker))
+        params_closed.extend(_broker_filter_params(broker))
 
     closed_sql = f"""
         SELECT lc.pnl, lc.pnl_percent, lc.holding_days, lc.closed_at,
@@ -106,7 +196,7 @@ def get_performance_v2(user_id, start_date=None, end_date=None, broker=None, per
         pnl_pct = float(r['pnl_percent'] or 0)
         hd = float(r['holding_days'] or 0)
         sym = r['symbol'] or ''
-        closed_at = r['closed_at'] or ''
+        closed_at = _utc_to_est(r['closed_at']) or ''
 
         pnl_list.append(pnl)
         pnl_pct_list.append(pnl_pct)
@@ -204,8 +294,18 @@ def get_performance_v2(user_id, start_date=None, end_date=None, broker=None, per
     params_open = [user_id]
     where_open = ["(t.user_id IS NULL OR t.user_id = ?)", "UPPER(t.status) = 'OPEN'"]
     if broker:
-        where_open.append("LOWER(t.broker) = LOWER(?)")
-        params_open.append(broker)
+        where_open.append("""
+            (UPPER(COALESCE(t.broker, '')) = UPPER(?)
+             OR (
+                (t.broker IS NULL OR t.broker = '')
+                AND EXISTS (
+                    SELECT 1 FROM channels c_bo
+                    WHERE c_bo.discord_channel_id = t.channel_id
+                    AND UPPER(c_bo.enabled_brokers) LIKE '%"' || UPPER(?) || '"%'
+                )
+             ))
+        """)
+        params_open.extend([broker, broker])
     open_sql = f"""
         SELECT COUNT(*) as cnt, COALESCE(SUM(t.pnl), 0) as unrealized
         FROM trades t
@@ -218,8 +318,18 @@ def get_performance_v2(user_id, start_date=None, end_date=None, broker=None, per
     params_total = [user_id]
     where_total = ["(t.user_id IS NULL OR t.user_id = ?)"]
     if broker:
-        where_total.append("LOWER(t.broker) = LOWER(?)")
-        params_total.append(broker)
+        where_total.append("""
+            (UPPER(COALESCE(t.broker, '')) = UPPER(?)
+             OR (
+                (t.broker IS NULL OR t.broker = '')
+                AND EXISTS (
+                    SELECT 1 FROM channels c_bt
+                    WHERE c_bt.discord_channel_id = t.channel_id
+                    AND UPPER(c_bt.enabled_brokers) LIKE '%"' || UPPER(?) || '"%'
+                )
+             ))
+        """)
+        params_total.extend([broker, broker])
     total_sql = f"SELECT COUNT(*) as cnt FROM trades t WHERE {' AND '.join(where_total)}"
     total_trades = int(conn.execute(total_sql, params_total).fetchone()['cnt'] or 0)
 
@@ -267,10 +377,11 @@ def get_broker_breakdown(user_id, start_date=None, end_date=None, period=None):
     where += _build_date_filter("lc.closed_at", sd, ed, params)
 
     sql = f"""
-        SELECT t.broker, lc.pnl
+        SELECT t.broker, lc.pnl, sl.channel_id, c.enabled_brokers
         FROM lot_closures lc
         LEFT JOIN signal_lots sl ON sl.id = lc.lot_id
         LEFT JOIN trades t ON t.id = sl.signal_id
+        LEFT JOIN channels c ON CAST(c.id AS TEXT) = sl.channel_id
         WHERE {' AND '.join(where)}
           AND (lc.pnl IS NOT NULL AND lc.pnl != 0)
         ORDER BY t.broker
@@ -284,7 +395,15 @@ def get_broker_breakdown(user_id, start_date=None, end_date=None, period=None):
     })
 
     for r in rows:
-        b = r['broker'] or 'Unknown'
+        b = r['broker']
+        if not b and r['enabled_brokers']:
+            try:
+                eb = json.loads(r['enabled_brokers'])
+                if isinstance(eb, list) and eb:
+                    b = eb[0]
+            except (json.JSONDecodeError, TypeError):
+                pass
+        b = (b or 'Unknown').upper() if b else 'Unknown'
         pnl = float(r['pnl'] or 0)
         d = brokers[b]
         d['trades'] += 1
@@ -345,14 +464,8 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
         where_c += _build_date_filter("lc.closed_at", sd, ed, params_c)
 
         if broker:
-            where_c.append("""
-                lc.lot_id IN (
-                    SELECT sl2.id FROM signal_lots sl2
-                    JOIN trades t2 ON t2.id = sl2.signal_id
-                    WHERE LOWER(t2.broker) = LOWER(?)
-                )
-            """)
-            params_c.append(broker)
+            where_c.append(_build_broker_filter(broker))
+            params_c.extend(_broker_filter_params(broker))
 
         if symbol_filter:
             where_c.append("UPPER(sl.symbol) = UPPER(?)")
@@ -361,14 +474,17 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
         closed_sql = f"""
             SELECT sl.id as lot_id, sl.symbol, sl.asset_type, sl.strike, sl.expiry,
                    sl.call_put, sl.open_price, sl.original_qty, sl.remaining_qty, sl.status as lot_status,
-                   t.direction, t.broker, t.source, t.channel_id, t.executed_at,
+                   t.direction, t.broker, t.source, t.channel_id as trade_channel_id, t.executed_at,
+                   sl.channel_id as sl_channel_id,
                    lc.id as lc_id, lc.closed_qty, lc.close_price, lc.pnl, lc.pnl_percent,
                    lc.exit_reason, lc.holding_days, lc.closed_at,
-                   c.name as channel_name
+                   COALESCE(c.name, c2.name) as channel_name,
+                   c2.enabled_brokers as ch_enabled_brokers
             FROM lot_closures lc
             LEFT JOIN signal_lots sl ON sl.id = lc.lot_id
             LEFT JOIN trades t ON t.id = sl.signal_id
             LEFT JOIN channels c ON c.discord_channel_id = t.channel_id
+            LEFT JOIN channels c2 ON CAST(c2.id AS TEXT) = sl.channel_id
             WHERE {' AND '.join(where_c)}
             ORDER BY lc.closed_at DESC
         """
@@ -398,7 +514,7 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
             g['weighted_price_sum'] += price * qty
             if hd > g['max_holding_days']:
                 g['max_holding_days'] = hd
-            closed_at_str = r['closed_at'] or ''
+            closed_at_str = _utc_to_est(r['closed_at']) or ''
             if closed_at_str and closed_at_str > g['max_closed_at']:
                 g['max_closed_at'] = closed_at_str
             if closed_at_str and closed_at_str < g['min_closed_at']:
@@ -444,13 +560,13 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
                 'direction': direction,
                 'entry_price': _safe_round(info['open_price']),
                 'entry_qty': open_qty,
-                'entry_date': info['executed_at'] or open_date,
+                'entry_date': _utc_to_est(info['executed_at']) or open_date,
                 'closed_date': close_date,
                 'exit_price': avg_exit,
                 'total_exit_qty': g['total_exit_qty'],
                 'pnl': _safe_round(g['total_pnl']),
                 'pnl_pct': total_pnl_pct,
-                'broker': info['broker'] or '',
+                'broker': _resolve_broker_from_row(info),
                 'channel_name': info['channel_name'] or '',
                 'source': info['source'] or '',
                 'status': status,
@@ -462,8 +578,18 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
         params_o = [user_id]
         where_o = ["(t.user_id IS NULL OR t.user_id = ?)", "UPPER(t.status) = 'OPEN'"]
         if broker:
-            where_o.append("LOWER(t.broker) = LOWER(?)")
-            params_o.append(broker)
+            where_o.append("""
+                (UPPER(COALESCE(t.broker, '')) = UPPER(?)
+                 OR (
+                    (t.broker IS NULL OR t.broker = '')
+                    AND EXISTS (
+                        SELECT 1 FROM channels c_jo
+                        WHERE c_jo.discord_channel_id = t.channel_id
+                        AND UPPER(c_jo.enabled_brokers) LIKE '%"' || UPPER(?) || '"%'
+                    )
+                 ))
+            """)
+            params_o.extend([broker, broker])
         if symbol_filter:
             where_o.append("UPPER(t.symbol) = UPPER(?)")
             params_o.append(symbol_filter)
@@ -491,7 +617,7 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
                 'direction': r['direction'] or '',
                 'entry_price': _safe_round(r['executed_price']),
                 'entry_qty': int(r['quantity'] or 0),
-                'entry_date': r['executed_at'] or '',
+                'entry_date': _utc_to_est(r['executed_at']) or '',
                 'closed_date': '',
                 'exit_price': 0.0,
                 'total_exit_qty': 0,
@@ -532,6 +658,21 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
         "SELECT DISTINCT broker FROM trades WHERE (user_id IS NULL OR user_id = ?) AND broker IS NOT NULL ORDER BY broker",
         params_filters
     ).fetchall()
+    channel_brokers_rows = conn.execute(
+        "SELECT DISTINCT enabled_brokers FROM channels WHERE enabled_brokers IS NOT NULL AND enabled_brokers != '[]'"
+    ).fetchall()
+    all_broker_names = set(r['broker'].upper() for r in brokers_rows if r['broker'])
+    for cbr in channel_brokers_rows:
+        try:
+            bl = json.loads(cbr['enabled_brokers'])
+            if isinstance(bl, list):
+                for b in bl:
+                    if b:
+                        all_broker_names.add(b.upper())
+        except (json.JSONDecodeError, TypeError):
+            pass
+    all_broker_names.discard('')
+    all_broker_names.discard(None)
 
     return {
         'trades': page_trades,
@@ -543,7 +684,7 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
         },
         'filters': {
             'symbols': [r['symbol'] for r in symbols_rows],
-            'brokers': [r['broker'] for r in brokers_rows],
+            'brokers': sorted(all_broker_names),
             'statuses': ['OPEN', 'CLOSED', 'PARTIAL'],
         },
     }
@@ -558,14 +699,8 @@ def get_time_breakdown(user_id, bucket='daily', start_date=None, end_date=None, 
     where += _build_date_filter("lc.closed_at", sd, ed, params)
 
     if broker:
-        where.append("""
-            lc.lot_id IN (
-                SELECT sl.id FROM signal_lots sl
-                JOIN trades t ON t.id = sl.signal_id
-                WHERE LOWER(t.broker) = LOWER(?)
-            )
-        """)
-        params.append(broker)
+        where.append(_build_broker_filter(broker))
+        params.extend(_broker_filter_params(broker))
 
     sql = f"""
         SELECT lc.pnl, lc.closed_at
@@ -580,7 +715,7 @@ def get_time_breakdown(user_id, bucket='daily', start_date=None, end_date=None, 
 
     for r in rows:
         pnl = float(r['pnl'] or 0)
-        closed_at = r['closed_at'] or ''
+        closed_at = _utc_to_est(r['closed_at']) or ''
         if not closed_at:
             continue
 
@@ -641,14 +776,8 @@ def get_performance_heatmap(user_id, start_date=None, end_date=None, broker=None
     where += _build_date_filter("lc.closed_at", sd, ed, params)
 
     if broker:
-        where.append("""
-            lc.lot_id IN (
-                SELECT sl.id FROM signal_lots sl
-                JOIN trades t ON t.id = sl.signal_id
-                WHERE LOWER(t.broker) = LOWER(?)
-            )
-        """)
-        params.append(broker)
+        where.append(_build_broker_filter(broker))
+        params.extend(_broker_filter_params(broker))
 
     sql = f"""
         SELECT lc.pnl, lc.closed_at
@@ -663,7 +792,7 @@ def get_performance_heatmap(user_id, start_date=None, end_date=None, broker=None
 
     for r in rows:
         pnl = float(r['pnl'] or 0)
-        closed_at = r['closed_at'] or ''
+        closed_at = _utc_to_est(r['closed_at']) or ''
         if not closed_at:
             continue
         try:
@@ -731,23 +860,18 @@ def get_edge_analysis(user_id, start_date=None, end_date=None, broker=None, peri
     where += _build_date_filter("lc.closed_at", sd, ed, params)
 
     if broker:
-        where.append("""
-            lc.lot_id IN (
-                SELECT sl2.id FROM signal_lots sl2
-                JOIN trades t2 ON t2.id = sl2.signal_id
-                WHERE LOWER(t2.broker) = LOWER(?)
-            )
-        """)
-        params.append(broker)
+        where.append(_build_broker_filter(broker))
+        params.extend(_broker_filter_params(broker))
 
     sql = f"""
         SELECT sl.symbol, sl.asset_type, t.direction, t.source, t.channel_id,
                lc.pnl, lc.pnl_percent, lc.exit_reason, lc.holding_days,
-               c.name as channel_name
+               COALESCE(c.name, c2.name) as channel_name
         FROM lot_closures lc
         LEFT JOIN signal_lots sl ON sl.id = lc.lot_id
         LEFT JOIN trades t ON t.id = sl.signal_id
         LEFT JOIN channels c ON c.discord_channel_id = t.channel_id
+        LEFT JOIN channels c2 ON CAST(c2.id AS TEXT) = sl.channel_id
         WHERE {' AND '.join(where)}
           AND (lc.pnl IS NOT NULL AND lc.pnl != 0)
     """
