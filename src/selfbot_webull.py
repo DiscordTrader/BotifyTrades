@@ -12087,7 +12087,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         channel_id=signal.get('channel_id')
                     )
                 # Convert OrderResult to dict format for consistency
+                stock_order_succeeded = False
                 if hasattr(result, 'success'):
+                    stock_order_succeeded = result.success
                     resp = {
                         'success': result.success,
                         'msg': result.message,
@@ -12102,8 +12104,30 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # Extract orderId from nested 'data' for Webull stock orders
                     if not resp.get('orderId') and isinstance(result.get('data'), dict):
                         resp['orderId'] = result['data'].get('orderId')
+                    stock_order_succeeded = resp.get('success') or bool(resp.get('orderId'))
                 else:
                     resp = {'broker': broker_name, 'result': result, 'executed_qty': signal['qty']}
+                
+                if stock_order_succeeded:
+                    try:
+                        stock_placed_id = None
+                        if hasattr(result, 'order_id'):
+                            stock_placed_id = result.order_id
+                        elif isinstance(result, dict):
+                            stock_placed_id = result.get('orderId') or result.get('order_id')
+                        elif isinstance(resp, dict):
+                            stock_placed_id = resp.get('orderId')
+                        from gui_app.discord_notifier import notify_order_placed
+                        notify_order_placed(
+                            symbol=signal['symbol'],
+                            action=signal['action'],
+                            broker=broker_name,
+                            quantity=signal.get('qty', 1),
+                            price=signal.get('price', 0),
+                            order_id=stock_placed_id
+                        )
+                    except Exception as notify_err:
+                        _original_print(f"[NOTIFY] Warning: Could not send stock order placed notification: {notify_err}", flush=True)
             
             # Save pending order metadata for execution tracking (only for BTO orders)
             if resp.get('success') or resp.get('orderId'):
@@ -13402,6 +13426,21 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                     if result.success:
                                         _original_print(f"[PAPER TRADE] ✅ Order executed in {paper_broker_label} account")
                                         _original_print(f"[PAPER TRADE] Order ID: {result.order_id}")
+                                        try:
+                                            from gui_app.discord_notifier import notify_order_placed
+                                            notify_order_placed(
+                                                symbol=signal['symbol'],
+                                                action=signal['action'],
+                                                broker=paper_broker_label,
+                                                quantity=signal.get('qty', 1),
+                                                price=signal.get('price', 0),
+                                                order_id=result.order_id,
+                                                strike=signal.get('strike'),
+                                                expiry=signal.get('expiry'),
+                                                opt_type=signal.get('opt_type')
+                                            )
+                                        except Exception as notify_err:
+                                            _original_print(f"[NOTIFY] Warning: Could not send paper order placed notification: {notify_err}", flush=True)
                                 else:
                                     # Fallback for dict response
                                     resp = result
@@ -13649,6 +13688,29 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 price=signal.get('price')  # None for market orders
                             )
                             _original_print(f"[LIVE TRADE] Broker response received: {resp}", flush=True)
+                            
+                            live_stock_success = False
+                            live_stock_order_id = None
+                            if hasattr(resp, 'success') and resp.success:
+                                live_stock_success = True
+                                live_stock_order_id = resp.order_id
+                            elif isinstance(resp, dict) and (resp.get('success') or resp.get('orderId')):
+                                live_stock_success = True
+                                live_stock_order_id = resp.get('orderId') or resp.get('order_id')
+                            
+                            if live_stock_success:
+                                try:
+                                    from gui_app.discord_notifier import notify_order_placed
+                                    notify_order_placed(
+                                        symbol=signal['symbol'],
+                                        action=signal['action'],
+                                        broker=broker_name_used or 'Unknown',
+                                        quantity=signal.get('qty', 1),
+                                        price=signal.get('price', 0),
+                                        order_id=live_stock_order_id
+                                    )
+                                except Exception as notify_err:
+                                    _original_print(f"[NOTIFY] Warning: Could not send live stock order placed notification: {notify_err}", flush=True)
                         
                         # Determine success for single-broker execution
                         # Handle both dict responses and OrderResult dataclass objects
