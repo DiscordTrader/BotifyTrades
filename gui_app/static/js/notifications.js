@@ -2,25 +2,28 @@
     'use strict';
     
     const NotificationSystem = {
-        lastCheck: null,
+        lastSeenTimestamp: null,
         seenNotifications: new Set(),
         pollInterval: 5000,
         enabled: true,
         soundEnabled: true,
         popupEnabled: true,
+        desktopEnabled: true,
         toastQueue: [],
         toastContainer: null,
         audioContext: null,
         maxToasts: 5,
+        initialLoadDone: false,
+        userHasInteracted: false,
         
         init: function() {
             this.loadSettings();
+            this.loadSeenState();
             this.createToastContainer();
             this.createSettingsPanel();
-            this.requestPermission();
             this.startPolling();
             this.setupClickOutside();
-            this.initAudio();
+            this.setupUserGestureListeners();
             console.log('[Notifications] System initialized');
         },
         
@@ -32,6 +35,7 @@
                     this.enabled = s.enabled !== undefined ? s.enabled : true;
                     this.soundEnabled = s.soundEnabled !== undefined ? s.soundEnabled : true;
                     this.popupEnabled = s.popupEnabled !== undefined ? s.popupEnabled : true;
+                    this.desktopEnabled = s.desktopEnabled !== undefined ? s.desktopEnabled : true;
                 }
             } catch(e) {}
         },
@@ -41,27 +45,73 @@
                 localStorage.setItem('botify_notification_settings', JSON.stringify({
                     enabled: this.enabled,
                     soundEnabled: this.soundEnabled,
-                    popupEnabled: this.popupEnabled
+                    popupEnabled: this.popupEnabled,
+                    desktopEnabled: this.desktopEnabled
                 }));
             } catch(e) {}
         },
         
-        initAudio: function() {
+        loadSeenState: function() {
             try {
-                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            } catch(e) {
-                console.log('[Notifications] AudioContext not available');
+                const saved = localStorage.getItem('botify_seen_notifications');
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    this.lastSeenTimestamp = data.lastSeenTimestamp || null;
+                    const ids = data.seenIds || [];
+                    ids.forEach(id => this.seenNotifications.add(id));
+                }
+            } catch(e) {}
+        },
+        
+        saveSeenState: function() {
+            try {
+                const ids = Array.from(this.seenNotifications).slice(-200);
+                localStorage.setItem('botify_seen_notifications', JSON.stringify({
+                    lastSeenTimestamp: this.lastSeenTimestamp,
+                    seenIds: ids
+                }));
+            } catch(e) {}
+        },
+        
+        setupUserGestureListeners: function() {
+            const self = this;
+            function onFirstInteraction() {
+                self.userHasInteracted = true;
+                if (!self.audioContext) {
+                    try {
+                        self.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    } catch(e) {}
+                }
+                if (self.audioContext && self.audioContext.state === 'suspended') {
+                    self.audioContext.resume();
+                }
+                if ('Notification' in window && Notification.permission === 'default' && self.desktopEnabled) {
+                    Notification.requestPermission();
+                }
+                document.removeEventListener('click', onFirstInteraction);
+                document.removeEventListener('keydown', onFirstInteraction);
+            }
+            document.addEventListener('click', onFirstInteraction);
+            document.addEventListener('keydown', onFirstInteraction);
+        },
+        
+        ensureAudio: function() {
+            if (!this.audioContext) {
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                } catch(e) { return; }
+            }
+            if (this.audioContext.state === 'suspended') {
+                this.audioContext.resume();
             }
         },
         
         playSound: function(type) {
-            if (!this.soundEnabled || !this.audioContext) return;
+            if (!this.soundEnabled) return;
+            this.ensureAudio();
+            if (!this.audioContext) return;
             
             try {
-                if (this.audioContext.state === 'suspended') {
-                    this.audioContext.resume();
-                }
-                
                 const ctx = this.audioContext;
                 const now = ctx.currentTime;
                 
@@ -181,6 +231,16 @@
                 </div>
                 <div class="notif-setting-row">
                     <div class="notif-setting-info">
+                        <span class="notif-setting-label">Desktop Notifications</span>
+                        <span class="notif-setting-desc">Browser native notifications</span>
+                    </div>
+                    <label class="notif-toggle-switch">
+                        <input type="checkbox" id="notif-desktop-toggle" ${this.desktopEnabled ? 'checked' : ''} onchange="NotificationSystem.toggleDesktop(this.checked)">
+                        <span class="notif-toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="notif-setting-row">
+                    <div class="notif-setting-info">
                         <span class="notif-setting-label">Sound Alerts</span>
                         <span class="notif-setting-desc">Play sound for new notifications</span>
                     </div>
@@ -231,6 +291,21 @@
             if (toggle) toggle.checked = this.popupEnabled;
         },
         
+        toggleDesktop: function(val) {
+            if (val !== undefined) {
+                this.desktopEnabled = val;
+            } else {
+                this.desktopEnabled = !this.desktopEnabled;
+            }
+            this.saveSettings();
+            const toggle = document.getElementById('notif-desktop-toggle');
+            if (toggle) toggle.checked = this.desktopEnabled;
+            
+            if (this.desktopEnabled && this.userHasInteracted && 'Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+        },
+        
         toggleSound: function(val) {
             if (val !== undefined) {
                 this.soundEnabled = val;
@@ -252,16 +327,6 @@
             if (onIcon) onIcon.style.display = this.soundEnabled ? 'block' : 'none';
             if (offIcon) offIcon.style.display = this.soundEnabled ? 'none' : 'block';
             if (checkbox) checkbox.checked = this.soundEnabled;
-        },
-        
-        requestPermission: async function() {
-            if (!('Notification' in window)) return false;
-            if (Notification.permission === 'granted') return true;
-            if (Notification.permission !== 'denied') {
-                const permission = await Notification.requestPermission();
-                return permission === 'granted';
-            }
-            return false;
         },
         
         setupClickOutside: function() {
@@ -316,24 +381,32 @@
                 const notifications = data.notifications || [];
                 let newCount = 0;
                 
+                const isFirstLoad = !this.initialLoadDone;
+                this.initialLoadDone = true;
+                
                 for (const notif of notifications) {
                     const notifId = notif.datetime + notif.title;
                     if (!this.seenNotifications.has(notifId)) {
                         this.seenNotifications.add(notifId);
                         newCount++;
                         
-                        if (this.popupEnabled) {
-                            this.showToast(notif);
+                        if (!isFirstLoad) {
+                            if (this.popupEnabled) {
+                                this.showToast(notif);
+                            }
+                            
+                            if (this.soundEnabled) {
+                                this.playSound(notif.type);
+                            }
+                            
+                            if (this.desktopEnabled) {
+                                this.showDesktopNotification(notif);
+                            }
                         }
-                        
-                        if (this.soundEnabled) {
-                            this.playSound(notif.type);
-                        }
-                        
-                        this.showDesktopNotification(notif);
                     }
                 }
                 
+                this.saveSeenState();
                 this.updateNotificationList(notifications);
                 
                 if (newCount > 0) {
@@ -429,19 +502,22 @@
         },
         
         sendTestToast: function() {
+            this.ensureAudio();
             const testNotif = {
                 type: 'order_filled_bto',
                 title: 'BTO Filled: SPY $500C 03/21',
                 message: '1 contract filled @ $3.45 on Webull',
                 timestamp: new Date().toLocaleTimeString(),
                 broker: 'Webull',
-                datetime: Date.now().toString()
+                datetime: 'test_' + Date.now().toString()
             };
             this.showToast(testNotif);
             this.playSound('order_filled_bto');
         },
         
         showDesktopNotification: function(notif) {
+            if (!this.desktopEnabled) return;
+            if (!('Notification' in window)) return;
             if (Notification.permission !== 'granted') return;
             
             const config = this.getTypeConfig(notif.type);
@@ -506,6 +582,7 @@
             try {
                 await fetch('/api/notifications/clear', { method: 'POST' });
                 this.seenNotifications.clear();
+                this.saveSeenState();
                 this.updateBadge(0);
                 this.updateNotificationList([]);
             } catch (err) {
@@ -521,11 +598,4 @@
     } else {
         NotificationSystem.init();
     }
-    
-    document.addEventListener('click', function initAudioOnInteraction() {
-        if (NotificationSystem.audioContext && NotificationSystem.audioContext.state === 'suspended') {
-            NotificationSystem.audioContext.resume();
-        }
-        document.removeEventListener('click', initAudioOnInteraction);
-    }, { once: true });
 })();
