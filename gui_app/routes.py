@@ -16122,8 +16122,98 @@ def register_routes(app):
     @app.route('/performance')
     @login_required
     def performance_dashboard():
-        """User Performance Dashboard - Webull-style trading analytics"""
+        """User Performance Dashboard - Industry-grade trading analytics"""
         return render_template('performance.html')
+    
+    @app.route('/api/performance-v2', methods=['GET'])
+    @login_required
+    def api_get_performance_v2():
+        """
+        Enhanced performance analytics endpoint.
+        
+        Query params:
+            - period: 'today', '7d', '30d', '90d', 'year', 'all'
+            - broker: Optional broker filter
+            - start_date: Custom start date (YYYY-MM-DD)
+            - end_date: Custom end date (YYYY-MM-DD)
+            - section: 'overview','journal','breakdown','heatmap','edge','brokers' or 'all'
+            - page: Page number for trade journal (default 1)
+            - per_page: Items per page (default 50)
+            - sort_by: Sort field for journal
+            - sort_dir: 'asc' or 'desc'
+            - symbol: Symbol filter for journal
+            - status: Status filter for journal
+            - bucket: 'daily','weekly','monthly','yearly' for breakdown
+        """
+        try:
+            from gui_app.performance_analytics import (
+                get_performance_v2, get_broker_breakdown, get_trade_journal,
+                get_time_breakdown, get_performance_heatmap, get_edge_analysis
+            )
+            
+            user_id = session.get('user_id')
+            if not user_id:
+                return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+            
+            period = request.args.get('period', '30d')
+            broker = request.args.get('broker') or None
+            start_date = request.args.get('start_date') or None
+            end_date = request.args.get('end_date') or None
+            section = request.args.get('section', 'all')
+            
+            result = {'success': True, 'period': period}
+            
+            if section in ('all', 'overview'):
+                result['performance'] = get_performance_v2(
+                    user_id, start_date=start_date, end_date=end_date,
+                    broker=broker, period=period
+                )
+            
+            if section in ('all', 'brokers'):
+                result['broker_breakdown'] = get_broker_breakdown(
+                    user_id, start_date=start_date, end_date=end_date, period=period
+                )
+            
+            if section in ('all', 'journal'):
+                page = int(request.args.get('page', 1))
+                per_page = int(request.args.get('per_page', 50))
+                sort_by = request.args.get('sort_by', 'closed_at')
+                sort_dir = request.args.get('sort_dir', 'desc')
+                symbol_filter = request.args.get('symbol') or None
+                status_filter = request.args.get('status') or None
+                
+                result['journal'] = get_trade_journal(
+                    user_id, start_date=start_date, end_date=end_date,
+                    broker=broker, period=period, page=page, per_page=per_page,
+                    sort_by=sort_by, sort_dir=sort_dir,
+                    symbol_filter=symbol_filter, status_filter=status_filter
+                )
+            
+            if section in ('all', 'breakdown'):
+                bucket = request.args.get('bucket', 'daily')
+                result['breakdown'] = get_time_breakdown(
+                    user_id, bucket=bucket, start_date=start_date,
+                    end_date=end_date, broker=broker, period=period
+                )
+            
+            if section in ('all', 'heatmap'):
+                result['heatmap'] = get_performance_heatmap(
+                    user_id, start_date=start_date, end_date=end_date,
+                    broker=broker, period=period
+                )
+            
+            if section in ('all', 'edge'):
+                result['edge'] = get_edge_analysis(
+                    user_id, start_date=start_date, end_date=end_date,
+                    broker=broker, period=period
+                )
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/performance', methods=['GET'])
     @login_required

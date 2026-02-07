@@ -30,6 +30,18 @@ Core technologies include `discord.py-self` for Discord and `webull` for brokera
 
 **Enhanced Portfolio Simulation Engine v2.0**: Provides industry-grade portfolio analysis.
 
+**Performance Analytics Dashboard v2.0**: Industry-grade performance analytics page (`gui_app/performance_analytics.py`) with:
+- Custom date range picker (1D/1W/1M/3M/1Y/ALL + custom start/end dates)
+- Per-broker isolated performance cards (no cross-broker data mixing)
+- 30+ performance metrics: P&L, win rate, profit factor, Sharpe ratio, max drawdown, expectancy, risk:reward, streaks
+- Trade journal with expandable partial exit details (entry/exit prices, quantities, exit reasons)
+- Paginated trade list with symbol/status filters and sorting
+- Time-series breakdown charts (daily/weekly/monthly/yearly)
+- Day-of-week and hour-of-day P&L heatmaps
+- Edge analysis by symbol, asset type, direction, source, channel, and exit reason
+- Equity curve, daily P&L bars, win/loss distribution charts (Chart.js)
+- API endpoint: `/api/performance-v2` with section-based loading for efficiency
+
 **Conditional Order Monitoring System**: Monitors price conditions and executes orders when triggered. Includes an automatic monitor upgrade mechanism that switches from Finnhub/yfinance fallback to broker's real-time data when brokers register.
 
 **Limit Cap Protection**: Prevents chasing runaway prices on conditional orders by setting a maximum limit price. This is configurable per channel, where `limit_price = trigger_price × (1 + limit_cap_pct/100)`.

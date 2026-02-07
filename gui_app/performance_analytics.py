@@ -1,0 +1,861 @@
+import math
+import statistics
+from datetime import datetime, timedelta
+from collections import defaultdict
+
+from gui_app.database import get_connection
+
+
+def _resolve_date_range(period=None, start_date=None, end_date=None):
+    if start_date and end_date:
+        if len(start_date) == 10:
+            start_date = start_date + ' 00:00:00'
+        if len(end_date) == 10:
+            end_date = end_date + ' 23:59:59'
+        return start_date, end_date
+
+    now = datetime.now()
+    ed = now.strftime('%Y-%m-%d 23:59:59')
+
+    if period == 'today':
+        sd = now.strftime('%Y-%m-%d 00:00:00')
+    elif period == '7d':
+        sd = (now - timedelta(days=7)).strftime('%Y-%m-%d 00:00:00')
+    elif period == '30d':
+        sd = (now - timedelta(days=30)).strftime('%Y-%m-%d 00:00:00')
+    elif period == '90d':
+        sd = (now - timedelta(days=90)).strftime('%Y-%m-%d 00:00:00')
+    elif period == 'year':
+        sd = (now - timedelta(days=365)).strftime('%Y-%m-%d 00:00:00')
+    elif period == 'all' or period is None:
+        return None, None
+    else:
+        return None, None
+
+    return sd, ed
+
+
+def _build_date_filter(col, start_date, end_date, params):
+    clauses = []
+    if start_date:
+        clauses.append(f"{col} >= ?")
+        params.append(start_date)
+    if end_date:
+        clauses.append(f"{col} <= ?")
+        params.append(end_date)
+    return clauses
+
+
+def _safe_round(val, digits=2):
+    if val is None:
+        return 0.0
+    try:
+        return round(float(val), digits)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def get_performance_v2(user_id, start_date=None, end_date=None, broker=None, period=None):
+    sd, ed = _resolve_date_range(period, start_date, end_date)
+    conn = get_connection()
+
+    params_closed = []
+    where_closed = ["(lc.user_id IS NULL OR lc.user_id = ?)"]
+    params_closed.append(user_id)
+    where_closed += _build_date_filter("lc.closed_at", sd, ed, params_closed)
+
+    if broker:
+        where_closed.append("""
+            lc.lot_id IN (
+                SELECT sl.id FROM signal_lots sl
+                JOIN trades t ON t.id = sl.signal_id
+                WHERE LOWER(t.broker) = LOWER(?)
+            )
+        """)
+        params_closed.append(broker)
+
+    closed_sql = f"""
+        SELECT lc.pnl, lc.pnl_percent, lc.holding_days, lc.closed_at,
+               sl.symbol
+        FROM lot_closures lc
+        LEFT JOIN signal_lots sl ON sl.id = lc.lot_id
+        WHERE {' AND '.join(where_closed)}
+        ORDER BY lc.closed_at ASC
+    """
+    rows = conn.execute(closed_sql, params_closed).fetchall()
+
+    total_closed = len(rows)
+    wins = 0
+    losses = 0
+    breakeven = 0
+    gross_profit = 0.0
+    gross_loss = 0.0
+    pnl_list = []
+    pnl_pct_list = []
+    hold_days_list = []
+    best_trade = 0.0
+    worst_trade = 0.0
+    best_trade_symbol = ''
+    worst_trade_symbol = ''
+
+    daily_pnl = defaultdict(float)
+
+    for r in rows:
+        pnl = float(r['pnl'] or 0)
+        pnl_pct = float(r['pnl_percent'] or 0)
+        hd = float(r['holding_days'] or 0)
+        sym = r['symbol'] or ''
+        closed_at = r['closed_at'] or ''
+
+        pnl_list.append(pnl)
+        pnl_pct_list.append(pnl_pct)
+        hold_days_list.append(hd)
+
+        if pnl > 0:
+            wins += 1
+            gross_profit += pnl
+        elif pnl < 0:
+            losses += 1
+            gross_loss += abs(pnl)
+        else:
+            breakeven += 1
+
+        if pnl > best_trade:
+            best_trade = pnl
+            best_trade_symbol = sym
+        if pnl < worst_trade:
+            worst_trade = pnl
+            worst_trade_symbol = sym
+
+        if closed_at:
+            day_key = closed_at[:10]
+            daily_pnl[day_key] += pnl
+
+    total_pnl = _safe_round(sum(pnl_list))
+    win_rate = _safe_round((wins / total_closed * 100) if total_closed > 0 else 0)
+    loss_rate = _safe_round(((losses / total_closed) * 100) if total_closed > 0 else 0)
+    avg_pnl = _safe_round(total_pnl / total_closed) if total_closed > 0 else 0.0
+    avg_pnl_pct = _safe_round(sum(pnl_pct_list) / len(pnl_pct_list)) if pnl_pct_list else 0.0
+
+    win_pnls = [p for p in pnl_list if p > 0]
+    loss_pnls = [p for p in pnl_list if p < 0]
+    avg_win = _safe_round(sum(win_pnls) / len(win_pnls)) if win_pnls else 0.0
+    avg_loss = _safe_round(sum(loss_pnls) / len(loss_pnls)) if loss_pnls else 0.0
+
+    if gross_loss > 0:
+        profit_factor = _safe_round(min(gross_profit / gross_loss, 10.0))
+    else:
+        profit_factor = _safe_round(min(gross_profit, 10.0)) if gross_profit > 0 else 0.0
+
+    wr_frac = wins / total_closed if total_closed > 0 else 0
+    lr_frac = losses / total_closed if total_closed > 0 else 0
+    expectancy = _safe_round(avg_win * wr_frac - abs(avg_loss) * lr_frac)
+
+    avg_hold_days = _safe_round(sum(hold_days_list) / len(hold_days_list)) if hold_days_list else 0.0
+    median_pnl = _safe_round(statistics.median(pnl_list)) if pnl_list else 0.0
+
+    cumulative = 0.0
+    peak = 0.0
+    max_dd = 0.0
+    for p in pnl_list:
+        cumulative += p
+        if cumulative > peak:
+            peak = cumulative
+        dd = peak - cumulative
+        if dd > max_dd:
+            max_dd = dd
+
+    max_drawdown = _safe_round(max_dd)
+    max_drawdown_pct = _safe_round((max_dd / peak * 100) if peak > 0 else 0)
+
+    current_streak = 0
+    longest_win_streak = 0
+    longest_loss_streak = 0
+    streak = 0
+    for p in pnl_list:
+        if p > 0:
+            if streak > 0:
+                streak += 1
+            else:
+                streak = 1
+            longest_win_streak = max(longest_win_streak, streak)
+        elif p < 0:
+            if streak < 0:
+                streak -= 1
+            else:
+                streak = -1
+            longest_loss_streak = max(longest_loss_streak, abs(streak))
+        else:
+            streak = 0
+    current_streak = streak
+
+    sharpe_ratio = 0.0
+    if len(daily_pnl) >= 5:
+        daily_returns = list(daily_pnl.values())
+        mean_ret = sum(daily_returns) / len(daily_returns)
+        if len(daily_returns) > 1:
+            std_ret = statistics.stdev(daily_returns)
+            if std_ret > 0:
+                sharpe_ratio = _safe_round((mean_ret / std_ret) * math.sqrt(252))
+
+    risk_reward_ratio = _safe_round(avg_win / abs(avg_loss)) if avg_loss != 0 else 0.0
+
+    params_open = [user_id]
+    where_open = ["(t.user_id IS NULL OR t.user_id = ?)", "UPPER(t.status) = 'OPEN'"]
+    if broker:
+        where_open.append("LOWER(t.broker) = LOWER(?)")
+        params_open.append(broker)
+    open_sql = f"""
+        SELECT COUNT(*) as cnt, COALESCE(SUM(t.pnl), 0) as unrealized
+        FROM trades t
+        WHERE {' AND '.join(where_open)}
+    """
+    open_row = conn.execute(open_sql, params_open).fetchone()
+    total_open = int(open_row['cnt'] or 0)
+    unrealized_pnl = _safe_round(open_row['unrealized'])
+
+    params_total = [user_id]
+    where_total = ["(t.user_id IS NULL OR t.user_id = ?)"]
+    if broker:
+        where_total.append("LOWER(t.broker) = LOWER(?)")
+        params_total.append(broker)
+    total_sql = f"SELECT COUNT(*) as cnt FROM trades t WHERE {' AND '.join(where_total)}"
+    total_trades = int(conn.execute(total_sql, params_total).fetchone()['cnt'] or 0)
+
+    return {
+        'total_trades': total_trades,
+        'total_closed': total_closed,
+        'total_open': total_open,
+        'wins': wins,
+        'losses': losses,
+        'breakeven': breakeven,
+        'win_rate': win_rate,
+        'total_pnl': total_pnl,
+        'unrealized_pnl': unrealized_pnl,
+        'gross_profit': _safe_round(gross_profit),
+        'gross_loss': _safe_round(gross_loss),
+        'avg_pnl': avg_pnl,
+        'avg_pnl_pct': avg_pnl_pct,
+        'avg_win': avg_win,
+        'avg_loss': avg_loss,
+        'best_trade': _safe_round(best_trade),
+        'worst_trade': _safe_round(worst_trade),
+        'best_trade_symbol': best_trade_symbol,
+        'worst_trade_symbol': worst_trade_symbol,
+        'profit_factor': profit_factor,
+        'expectancy': expectancy,
+        'avg_hold_days': avg_hold_days,
+        'median_pnl': median_pnl,
+        'max_drawdown': max_drawdown,
+        'max_drawdown_pct': max_drawdown_pct,
+        'current_streak': current_streak,
+        'longest_win_streak': longest_win_streak,
+        'longest_loss_streak': longest_loss_streak,
+        'sharpe_ratio': sharpe_ratio,
+        'risk_reward_ratio': risk_reward_ratio,
+        'total_fees': 0.0,
+    }
+
+
+def get_broker_breakdown(user_id, start_date=None, end_date=None, period=None):
+    sd, ed = _resolve_date_range(period, start_date, end_date)
+    conn = get_connection()
+
+    params = [user_id]
+    where = ["(lc.user_id IS NULL OR lc.user_id = ?)"]
+    where += _build_date_filter("lc.closed_at", sd, ed, params)
+
+    sql = f"""
+        SELECT t.broker, lc.pnl
+        FROM lot_closures lc
+        LEFT JOIN signal_lots sl ON sl.id = lc.lot_id
+        LEFT JOIN trades t ON t.id = sl.signal_id
+        WHERE {' AND '.join(where)}
+        ORDER BY t.broker
+    """
+    rows = conn.execute(sql, params).fetchall()
+
+    brokers = defaultdict(lambda: {
+        'trades': 0, 'wins': 0, 'losses': 0,
+        'total_pnl': 0.0, 'gross_profit': 0.0, 'gross_loss': 0.0,
+        'best': 0.0, 'worst': 0.0
+    })
+
+    for r in rows:
+        b = r['broker'] or 'Unknown'
+        pnl = float(r['pnl'] or 0)
+        d = brokers[b]
+        d['trades'] += 1
+        d['total_pnl'] += pnl
+        if pnl > 0:
+            d['wins'] += 1
+            d['gross_profit'] += pnl
+        elif pnl < 0:
+            d['losses'] += 1
+            d['gross_loss'] += abs(pnl)
+        if pnl > d['best']:
+            d['best'] = pnl
+        if pnl < d['worst']:
+            d['worst'] = pnl
+
+    result = []
+    for broker_name, d in brokers.items():
+        wr = _safe_round((d['wins'] / d['trades'] * 100) if d['trades'] > 0 else 0)
+        ap = _safe_round(d['total_pnl'] / d['trades']) if d['trades'] > 0 else 0.0
+        if d['gross_loss'] > 0:
+            pf = _safe_round(min(d['gross_profit'] / d['gross_loss'], 10.0))
+        else:
+            pf = _safe_round(min(d['gross_profit'], 10.0)) if d['gross_profit'] > 0 else 0.0
+
+        result.append({
+            'broker': broker_name,
+            'total_trades': d['trades'],
+            'wins': d['wins'],
+            'losses': d['losses'],
+            'win_rate': wr,
+            'total_pnl': _safe_round(d['total_pnl']),
+            'avg_pnl': ap,
+            'profit_factor': pf,
+            'best_trade': _safe_round(d['best']),
+            'worst_trade': _safe_round(d['worst']),
+        })
+
+    result.sort(key=lambda x: x['total_pnl'], reverse=True)
+    return result
+
+
+def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, period=None,
+                      page=1, per_page=50, sort_by='closed_at', sort_dir='desc',
+                      symbol_filter=None, status_filter=None):
+    sd, ed = _resolve_date_range(period, start_date, end_date)
+    conn = get_connection()
+
+    allowed_sort = {'closed_at', 'pnl', 'pnl_percent', 'symbol', 'executed_at', 'holding_days'}
+    if sort_by not in allowed_sort:
+        sort_by = 'closed_at'
+    sort_dir = 'ASC' if sort_dir.upper() == 'ASC' else 'DESC'
+
+    trades_out = []
+
+    if status_filter is None or status_filter.upper() in ('CLOSED', 'PARTIAL', 'ALL', ''):
+        params_c = [user_id]
+        where_c = ["(lc.user_id IS NULL OR lc.user_id = ?)"]
+        where_c += _build_date_filter("lc.closed_at", sd, ed, params_c)
+
+        if broker:
+            where_c.append("""
+                lc.lot_id IN (
+                    SELECT sl2.id FROM signal_lots sl2
+                    JOIN trades t2 ON t2.id = sl2.signal_id
+                    WHERE LOWER(t2.broker) = LOWER(?)
+                )
+            """)
+            params_c.append(broker)
+
+        if symbol_filter:
+            where_c.append("UPPER(sl.symbol) = UPPER(?)")
+            params_c.append(symbol_filter)
+
+        closed_sql = f"""
+            SELECT sl.id as lot_id, sl.symbol, sl.asset_type, sl.strike, sl.expiry,
+                   sl.call_put, sl.open_price, sl.original_qty, sl.remaining_qty, sl.status as lot_status,
+                   t.direction, t.broker, t.source, t.channel_id, t.executed_at,
+                   lc.id as lc_id, lc.closed_qty, lc.close_price, lc.pnl, lc.pnl_percent,
+                   lc.exit_reason, lc.holding_days, lc.closed_at,
+                   c.name as channel_name
+            FROM lot_closures lc
+            LEFT JOIN signal_lots sl ON sl.id = lc.lot_id
+            LEFT JOIN trades t ON t.id = sl.signal_id
+            LEFT JOIN channels c ON c.discord_channel_id = t.channel_id
+            WHERE {' AND '.join(where_c)}
+            ORDER BY lc.closed_at DESC
+        """
+        closed_rows = conn.execute(closed_sql, params_c).fetchall()
+
+        lot_groups = defaultdict(lambda: {
+            'info': None, 'exits': [], 'total_pnl': 0.0,
+            'total_pnl_pct': 0.0, 'total_exit_qty': 0,
+            'weighted_price_sum': 0.0, 'max_closed_at': '',
+        })
+
+        for r in closed_rows:
+            lid = r['lot_id'] or r['lc_id']
+            g = lot_groups[lid]
+            if g['info'] is None:
+                g['info'] = dict(r)
+
+            pnl = float(r['pnl'] or 0)
+            pnl_pct = float(r['pnl_percent'] or 0)
+            qty = int(r['closed_qty'] or 0)
+            price = float(r['close_price'] or 0)
+            g['total_pnl'] += pnl
+            g['total_pnl_pct'] += pnl_pct
+            g['total_exit_qty'] += qty
+            g['weighted_price_sum'] += price * qty
+            closed_at_str = r['closed_at'] or ''
+            if closed_at_str > g['max_closed_at']:
+                g['max_closed_at'] = closed_at_str
+
+            g['exits'].append({
+                'qty': qty,
+                'price': _safe_round(price),
+                'pnl': _safe_round(pnl),
+                'pnl_pct': _safe_round(pnl_pct),
+                'exit_reason': r['exit_reason'] or '',
+                'date': closed_at_str,
+            })
+
+        for lid, g in lot_groups.items():
+            info = g['info']
+            if not info:
+                continue
+            open_qty = int(info['original_qty'] or 0)
+            remaining = int(info['remaining_qty'] or 0)
+            if remaining > 0:
+                status = 'PARTIAL'
+            else:
+                status = 'CLOSED'
+
+            avg_exit = _safe_round(g['weighted_price_sum'] / g['total_exit_qty']) if g['total_exit_qty'] > 0 else 0.0
+            num_exits = len(g['exits'])
+            avg_pnl_pct = _safe_round(g['total_pnl_pct'] / num_exits) if num_exits > 0 else 0.0
+
+            max_hd = 0
+            for e in g['exits']:
+                try:
+                    if 'holding_days' in info and info['holding_days']:
+                        max_hd = max(max_hd, int(info.get('holding_days', 0) or 0))
+                except (ValueError, TypeError):
+                    pass
+            for ex_row in g['exits']:
+                pass
+            hd_vals = [float(r2['holding_days'] or 0) for r2 in [dict(r) for r in conn.execute(
+                "SELECT holding_days FROM lot_closures WHERE lot_id = ?", (lid,)
+            ).fetchall()]]
+            max_hd = max(hd_vals) if hd_vals else 0
+
+            trades_out.append({
+                'id': lid,
+                'symbol': info['symbol'] or '',
+                'asset_type': info['asset_type'] or '',
+                'strike': info['strike'] or '',
+                'expiry': info['expiry'] or '',
+                'call_put': info['call_put'] or '',
+                'direction': info['direction'] or '',
+                'entry_price': _safe_round(info['open_price']),
+                'entry_qty': open_qty,
+                'entry_date': info['executed_at'] or '',
+                'exit_price': avg_exit,
+                'total_exit_qty': g['total_exit_qty'],
+                'pnl': _safe_round(g['total_pnl']),
+                'pnl_pct': avg_pnl_pct,
+                'broker': info['broker'] or '',
+                'channel_name': info['channel_name'] or '',
+                'source': info['source'] or '',
+                'status': status,
+                'holding_days': _safe_round(max_hd),
+                'partial_exits': g['exits'],
+            })
+
+    if status_filter is None or status_filter.upper() in ('OPEN', 'ALL', ''):
+        params_o = [user_id]
+        where_o = ["(t.user_id IS NULL OR t.user_id = ?)", "UPPER(t.status) = 'OPEN'"]
+        if broker:
+            where_o.append("LOWER(t.broker) = LOWER(?)")
+            params_o.append(broker)
+        if symbol_filter:
+            where_o.append("UPPER(t.symbol) = UPPER(?)")
+            params_o.append(symbol_filter)
+
+        open_sql = f"""
+            SELECT t.id, t.symbol, t.asset_type, t.strike, t.expiry, t.call_put,
+                   t.direction, t.executed_price, t.quantity, t.current_price,
+                   t.pnl, t.pnl_percent, t.broker, t.source, t.channel_id,
+                   t.executed_at,
+                   c.name as channel_name
+            FROM trades t
+            LEFT JOIN channels c ON c.discord_channel_id = t.channel_id
+            WHERE {' AND '.join(where_o)}
+        """
+        open_rows = conn.execute(open_sql, params_o).fetchall()
+
+        for r in open_rows:
+            trades_out.append({
+                'id': r['id'],
+                'symbol': r['symbol'] or '',
+                'asset_type': r['asset_type'] or '',
+                'strike': r['strike'] or '',
+                'expiry': r['expiry'] or '',
+                'call_put': r['call_put'] or '',
+                'direction': r['direction'] or '',
+                'entry_price': _safe_round(r['executed_price']),
+                'entry_qty': int(r['quantity'] or 0),
+                'entry_date': r['executed_at'] or '',
+                'exit_price': 0.0,
+                'total_exit_qty': 0,
+                'pnl': _safe_round(r['pnl']),
+                'pnl_pct': _safe_round(r['pnl_percent']),
+                'broker': r['broker'] or '',
+                'channel_name': r['channel_name'] or '',
+                'source': r['source'] or '',
+                'status': 'OPEN',
+                'holding_days': 0,
+                'partial_exits': [],
+            })
+
+    sort_key_map = {
+        'closed_at': lambda x: x.get('entry_date', ''),
+        'pnl': lambda x: x.get('pnl', 0),
+        'pnl_percent': lambda x: x.get('pnl_pct', 0),
+        'symbol': lambda x: x.get('symbol', ''),
+        'executed_at': lambda x: x.get('entry_date', ''),
+        'holding_days': lambda x: x.get('holding_days', 0),
+    }
+    key_fn = sort_key_map.get(sort_by, sort_key_map['closed_at'])
+    trades_out.sort(key=key_fn, reverse=(sort_dir == 'DESC'))
+
+    total_trades = len(trades_out)
+    total_pages = max(1, math.ceil(total_trades / per_page))
+    page = max(1, min(page, total_pages))
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    page_trades = trades_out[start_idx:end_idx]
+
+    params_filters = [user_id]
+    symbols_rows = conn.execute(
+        "SELECT DISTINCT symbol FROM trades WHERE (user_id IS NULL OR user_id = ?) AND symbol IS NOT NULL ORDER BY symbol",
+        params_filters
+    ).fetchall()
+    brokers_rows = conn.execute(
+        "SELECT DISTINCT broker FROM trades WHERE (user_id IS NULL OR user_id = ?) AND broker IS NOT NULL ORDER BY broker",
+        params_filters
+    ).fetchall()
+
+    return {
+        'trades': page_trades,
+        'pagination': {
+            'page': page,
+            'per_page': per_page,
+            'total_trades': total_trades,
+            'total_pages': total_pages,
+        },
+        'filters': {
+            'symbols': [r['symbol'] for r in symbols_rows],
+            'brokers': [r['broker'] for r in brokers_rows],
+            'statuses': ['OPEN', 'CLOSED', 'PARTIAL'],
+        },
+    }
+
+
+def get_time_breakdown(user_id, bucket='daily', start_date=None, end_date=None, broker=None, period=None):
+    sd, ed = _resolve_date_range(period, start_date, end_date)
+    conn = get_connection()
+
+    params = [user_id]
+    where = ["(lc.user_id IS NULL OR lc.user_id = ?)"]
+    where += _build_date_filter("lc.closed_at", sd, ed, params)
+
+    if broker:
+        where.append("""
+            lc.lot_id IN (
+                SELECT sl.id FROM signal_lots sl
+                JOIN trades t ON t.id = sl.signal_id
+                WHERE LOWER(t.broker) = LOWER(?)
+            )
+        """)
+        params.append(broker)
+
+    sql = f"""
+        SELECT lc.pnl, lc.closed_at
+        FROM lot_closures lc
+        WHERE {' AND '.join(where)}
+        ORDER BY lc.closed_at ASC
+    """
+    rows = conn.execute(sql, params).fetchall()
+
+    buckets_data = defaultdict(lambda: {'pnl': 0.0, 'trades': 0, 'wins': 0, 'losses': 0})
+
+    for r in rows:
+        pnl = float(r['pnl'] or 0)
+        closed_at = r['closed_at'] or ''
+        if not closed_at:
+            continue
+
+        try:
+            dt = datetime.strptime(closed_at[:19], '%Y-%m-%d %H:%M:%S')
+        except (ValueError, TypeError):
+            try:
+                dt = datetime.strptime(closed_at[:10], '%Y-%m-%d')
+            except (ValueError, TypeError):
+                continue
+
+        if bucket == 'daily':
+            label = dt.strftime('%Y-%m-%d')
+        elif bucket == 'weekly':
+            iso = dt.isocalendar()
+            label = f"{iso[0]}-W{iso[1]:02d}"
+        elif bucket == 'monthly':
+            label = dt.strftime('%Y-%m')
+        elif bucket == 'yearly':
+            label = dt.strftime('%Y')
+        else:
+            label = dt.strftime('%Y-%m-%d')
+
+        b = buckets_data[label]
+        b['pnl'] += pnl
+        b['trades'] += 1
+        if pnl > 0:
+            b['wins'] += 1
+        elif pnl < 0:
+            b['losses'] += 1
+
+    sorted_labels = sorted(buckets_data.keys())
+    result = []
+    cumulative = 0.0
+    for label in sorted_labels:
+        b = buckets_data[label]
+        cumulative += b['pnl']
+        wr = _safe_round((b['wins'] / b['trades'] * 100) if b['trades'] > 0 else 0)
+        result.append({
+            'period_label': label,
+            'pnl': _safe_round(b['pnl']),
+            'cumulative_pnl': _safe_round(cumulative),
+            'trades': b['trades'],
+            'wins': b['wins'],
+            'losses': b['losses'],
+            'win_rate': wr,
+        })
+
+    return result
+
+
+def get_performance_heatmap(user_id, start_date=None, end_date=None, broker=None, period=None):
+    sd, ed = _resolve_date_range(period, start_date, end_date)
+    conn = get_connection()
+
+    params = [user_id]
+    where = ["(lc.user_id IS NULL OR lc.user_id = ?)"]
+    where += _build_date_filter("lc.closed_at", sd, ed, params)
+
+    if broker:
+        where.append("""
+            lc.lot_id IN (
+                SELECT sl.id FROM signal_lots sl
+                JOIN trades t ON t.id = sl.signal_id
+                WHERE LOWER(t.broker) = LOWER(?)
+            )
+        """)
+        params.append(broker)
+
+    sql = f"""
+        SELECT lc.pnl, lc.closed_at
+        FROM lot_closures lc
+        WHERE {' AND '.join(where)}
+    """
+    rows = conn.execute(sql, params).fetchall()
+
+    day_data = defaultdict(lambda: {'trades': 0, 'pnl': 0.0, 'wins': 0})
+    hour_data = defaultdict(lambda: {'trades': 0, 'pnl': 0.0, 'wins': 0})
+
+    for r in rows:
+        pnl = float(r['pnl'] or 0)
+        closed_at = r['closed_at'] or ''
+        if not closed_at:
+            continue
+        try:
+            dt = datetime.strptime(closed_at[:19], '%Y-%m-%d %H:%M:%S')
+        except (ValueError, TypeError):
+            try:
+                dt = datetime.strptime(closed_at[:10], '%Y-%m-%d')
+            except (ValueError, TypeError):
+                continue
+
+        dow = dt.strftime('%a')
+        hour = dt.hour
+
+        d = day_data[dow]
+        d['trades'] += 1
+        d['pnl'] += pnl
+        if pnl > 0:
+            d['wins'] += 1
+
+        h = hour_data[hour]
+        h['trades'] += 1
+        h['pnl'] += pnl
+        if pnl > 0:
+            h['wins'] += 1
+
+    day_order = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    day_of_week = []
+    for day in day_order:
+        d = day_data.get(day, {'trades': 0, 'pnl': 0.0, 'wins': 0})
+        wr = _safe_round((d['wins'] / d['trades'] * 100) if d['trades'] > 0 else 0)
+        ap = _safe_round(d['pnl'] / d['trades']) if d['trades'] > 0 else 0.0
+        day_of_week.append({
+            'day': day,
+            'trades': d['trades'],
+            'pnl': _safe_round(d['pnl']),
+            'avg_pnl': ap,
+            'win_rate': wr,
+        })
+
+    hour_of_day = []
+    for hr in range(24):
+        h = hour_data.get(hr, {'trades': 0, 'pnl': 0.0, 'wins': 0})
+        wr = _safe_round((h['wins'] / h['trades'] * 100) if h['trades'] > 0 else 0)
+        ap = _safe_round(h['pnl'] / h['trades']) if h['trades'] > 0 else 0.0
+        hour_of_day.append({
+            'hour': hr,
+            'trades': h['trades'],
+            'pnl': _safe_round(h['pnl']),
+            'avg_pnl': ap,
+            'win_rate': wr,
+        })
+
+    return {
+        'day_of_week': day_of_week,
+        'hour_of_day': hour_of_day,
+    }
+
+
+def get_edge_analysis(user_id, start_date=None, end_date=None, broker=None, period=None):
+    sd, ed = _resolve_date_range(period, start_date, end_date)
+    conn = get_connection()
+
+    params = [user_id]
+    where = ["(lc.user_id IS NULL OR lc.user_id = ?)"]
+    where += _build_date_filter("lc.closed_at", sd, ed, params)
+
+    if broker:
+        where.append("""
+            lc.lot_id IN (
+                SELECT sl2.id FROM signal_lots sl2
+                JOIN trades t2 ON t2.id = sl2.signal_id
+                WHERE LOWER(t2.broker) = LOWER(?)
+            )
+        """)
+        params.append(broker)
+
+    sql = f"""
+        SELECT sl.symbol, sl.asset_type, t.direction, t.source, t.channel_id,
+               lc.pnl, lc.pnl_percent, lc.exit_reason, lc.holding_days,
+               c.name as channel_name
+        FROM lot_closures lc
+        LEFT JOIN signal_lots sl ON sl.id = lc.lot_id
+        LEFT JOIN trades t ON t.id = sl.signal_id
+        LEFT JOIN channels c ON c.discord_channel_id = t.channel_id
+        WHERE {' AND '.join(where)}
+    """
+    rows = conn.execute(sql, params).fetchall()
+
+    sym_data = defaultdict(lambda: {'trades': 0, 'pnl': 0.0, 'wins': 0, 'hold_sum': 0.0})
+    asset_data = defaultdict(lambda: {'trades': 0, 'pnl': 0.0, 'wins': 0})
+    dir_data = defaultdict(lambda: {'trades': 0, 'pnl': 0.0, 'wins': 0})
+    src_data = defaultdict(lambda: {'trades': 0, 'pnl': 0.0, 'wins': 0})
+    chan_data = defaultdict(lambda: {'trades': 0, 'pnl': 0.0, 'wins': 0})
+    exit_data = defaultdict(lambda: {'trades': 0, 'pnl': 0.0, 'wins': 0})
+
+    for r in rows:
+        pnl = float(r['pnl'] or 0)
+        sym = r['symbol'] or 'UNKNOWN'
+        at = r['asset_type'] or 'unknown'
+        direction = r['direction'] or 'unknown'
+        source = r['source'] or 'unknown'
+        ch_name = r['channel_name'] or 'Unknown'
+        raw_exit = (r['exit_reason'] or 'UNKNOWN').upper().strip()
+        if 'PT1' in raw_exit or 'PROFIT_TARGET_1' in raw_exit or 'TIER 1' in raw_exit or 'TARGET 1' in raw_exit:
+            exit_r = 'PT1'
+        elif 'PT2' in raw_exit or 'PROFIT_TARGET_2' in raw_exit or 'TIER 2' in raw_exit or 'TARGET 2' in raw_exit:
+            exit_r = 'PT2'
+        elif 'PT3' in raw_exit or 'PROFIT_TARGET_3' in raw_exit or 'TIER 3' in raw_exit or 'TARGET 3' in raw_exit:
+            exit_r = 'PT3'
+        elif 'PT4' in raw_exit or 'PROFIT_TARGET_4' in raw_exit or 'TIER 4' in raw_exit or 'TARGET 4' in raw_exit:
+            exit_r = 'PT4'
+        elif 'PROFIT' in raw_exit or 'TARGET' in raw_exit or 'TIER' in raw_exit:
+            exit_r = 'PROFIT_TARGET'
+        elif 'STOP' in raw_exit or 'SL' == raw_exit:
+            exit_r = 'STOP_LOSS'
+        elif 'TRAIL' in raw_exit:
+            exit_r = 'TRAILING_STOP'
+        elif 'MANUAL' in raw_exit:
+            exit_r = 'MANUAL'
+        elif 'SIGNAL' in raw_exit or 'STC' in raw_exit:
+            exit_r = 'SIGNAL_EXIT'
+        elif 'CANCEL' in raw_exit:
+            exit_r = 'CANCELLED'
+        elif 'GIVEBACK' in raw_exit:
+            exit_r = 'GIVEBACK_GUARD'
+        elif 'BREAKEVEN' in raw_exit:
+            exit_r = 'BREAKEVEN'
+        elif raw_exit == 'UNKNOWN' or raw_exit == '':
+            exit_r = 'OTHER'
+        else:
+            exit_r = raw_exit[:20]
+        hd = float(r['holding_days'] or 0)
+        is_win = pnl > 0
+
+        s = sym_data[sym]
+        s['trades'] += 1
+        s['pnl'] += pnl
+        s['hold_sum'] += hd
+        if is_win:
+            s['wins'] += 1
+
+        a = asset_data[at]
+        a['trades'] += 1
+        a['pnl'] += pnl
+        if is_win:
+            a['wins'] += 1
+
+        d = dir_data[direction]
+        d['trades'] += 1
+        d['pnl'] += pnl
+        if is_win:
+            d['wins'] += 1
+
+        sc = src_data[source]
+        sc['trades'] += 1
+        sc['pnl'] += pnl
+        if is_win:
+            sc['wins'] += 1
+
+        ch = chan_data[ch_name]
+        ch['trades'] += 1
+        ch['pnl'] += pnl
+        if is_win:
+            ch['wins'] += 1
+
+        ex = exit_data[exit_r]
+        ex['trades'] += 1
+        ex['pnl'] += pnl
+        if is_win:
+            ex['wins'] += 1
+
+    def _build_breakdown(data, top_n=None, include_hold=False):
+        items = []
+        for key, d in data.items():
+            wr = _safe_round((d['wins'] / d['trades'] * 100) if d['trades'] > 0 else 0)
+            ap = _safe_round(d['pnl'] / d['trades']) if d['trades'] > 0 else 0.0
+            entry = {
+                'name': key,
+                'trades': d['trades'],
+                'pnl': _safe_round(d['pnl']),
+                'win_rate': wr,
+                'avg_pnl': ap,
+            }
+            if include_hold:
+                entry['avg_hold'] = _safe_round(d['hold_sum'] / d['trades']) if d['trades'] > 0 else 0.0
+            items.append(entry)
+        items.sort(key=lambda x: x['trades'], reverse=True)
+        if top_n:
+            items = items[:top_n]
+        return items
+
+    return {
+        'by_symbol': _build_breakdown(sym_data, top_n=15, include_hold=True),
+        'by_asset_type': _build_breakdown(asset_data),
+        'by_direction': _build_breakdown(dir_data),
+        'by_source': _build_breakdown(src_data),
+        'by_channel': _build_breakdown(chan_data),
+        'by_exit_reason': _build_breakdown(exit_data),
+    }
