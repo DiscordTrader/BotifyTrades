@@ -11,10 +11,22 @@
 #                 Then run: pyinstaller build_windows_hardened.spec
 # ============================================================
 
+import sys
+import os
+
+python_dll = os.path.join(sys.exec_prefix, 'python311.dll')
+extra_binaries = []
+if os.path.exists(python_dll):
+    extra_binaries.append((python_dll, '.'))
+for dll_name in ['vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll']:
+    dll_path = os.path.join(sys.exec_prefix, dll_name)
+    if os.path.exists(dll_path):
+        extra_binaries.append((dll_path, '.'))
+
 a = Analysis(
     ['src/selfbot_webull.py'],
     pathex=[],
-    binaries=[],
+    binaries=extra_binaries,
     datas=[
         ('gui_app/templates', 'gui_app/templates'),
         ('gui_app/static', 'gui_app/static'),
