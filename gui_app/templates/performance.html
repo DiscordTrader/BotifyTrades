@@ -395,11 +395,12 @@ document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.period-tab').forEach(x=>x.classList.remove('active'));
             this.classList.add('active');
             currentPeriod = this.dataset.period;
+            journalPage = 1;
             loadPerformanceV2();
         });
     });
 
-    document.getElementById('brokerFilter').addEventListener('change', () => loadPerformanceV2());
+    document.getElementById('brokerFilter').addEventListener('change', () => { journalPage = 1; loadPerformanceV2(); });
     document.getElementById('syncBtn').addEventListener('click', syncPositions);
 
     document.getElementById('dateToggleBtn').addEventListener('click', function() {
@@ -409,6 +410,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('applyDateBtn').addEventListener('click', function() {
         currentPeriod = 'custom';
+        journalPage = 1;
         document.querySelectorAll('.period-tab').forEach(x=>x.classList.remove('active'));
         loadPerformanceV2();
     });

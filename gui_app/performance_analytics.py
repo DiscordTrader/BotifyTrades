@@ -308,13 +308,7 @@ def get_performance_v2(user_id, start_date=None, end_date=None, broker=None, per
     total_open = int(open_row['cnt'] or 0)
     unrealized_pnl = _safe_round(open_row['unrealized'])
 
-    params_total = [user_id]
-    where_total = ["(t.user_id IS NULL OR t.user_id = ?)"]
-    if broker:
-        where_total.append("UPPER(COALESCE(t.broker, '')) = UPPER(?)")
-        params_total.append(broker)
-    total_sql = f"SELECT COUNT(*) as cnt FROM trades t WHERE {' AND '.join(where_total)}"
-    total_trades = int(conn.execute(total_sql, params_total).fetchone()['cnt'] or 0)
+    total_trades = total_closed + total_open
 
     return {
         'total_trades': total_trades,
@@ -581,6 +575,7 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
         open_rows = conn.execute(open_sql, params_o).fetchall()
 
         for r in open_rows:
+            entry_date = _utc_to_est(r['executed_at']) or ''
             trades_out.append({
                 'id': r['id'],
                 'symbol': r['symbol'] or '',
@@ -591,7 +586,7 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
                 'direction': r['direction'] or '',
                 'entry_price': _safe_round(r['executed_price']),
                 'entry_qty': int(r['quantity'] or 0),
-                'entry_date': _utc_to_est(r['executed_at']) or '',
+                'entry_date': entry_date,
                 'closed_date': '',
                 'exit_price': 0.0,
                 'total_exit_qty': 0,
@@ -605,16 +600,30 @@ def get_trade_journal(user_id, start_date=None, end_date=None, broker=None, peri
                 'partial_exits': [],
             })
 
+    is_desc = (sort_dir == 'DESC')
+
+    def _date_sort_key(x):
+        date_val = x.get('closed_date', '') or x.get('entry_date', '') or ''
+        return date_val
+
     sort_key_map = {
-        'closed_at': lambda x: x.get('closed_date', '') or x.get('entry_date', ''),
+        'closed_at': _date_sort_key,
         'pnl': lambda x: x.get('pnl', 0),
         'pnl_percent': lambda x: x.get('pnl_pct', 0),
         'symbol': lambda x: x.get('symbol', ''),
-        'executed_at': lambda x: x.get('entry_date', ''),
+        'executed_at': lambda x: x.get('entry_date', '') or '',
         'holding_days': lambda x: x.get('holding_days', 0),
     }
-    key_fn = sort_key_map.get(sort_by, sort_key_map['closed_at'])
-    trades_out.sort(key=key_fn, reverse=(sort_dir == 'DESC'))
+    key_fn = sort_key_map.get(sort_by, _date_sort_key)
+    trades_out.sort(key=key_fn, reverse=is_desc)
+
+    if sort_by in ('closed_at', 'executed_at'):
+        open_trades = [t for t in trades_out if t.get('status') == 'OPEN']
+        closed_trades = [t for t in trades_out if t.get('status') != 'OPEN']
+        if is_desc:
+            trades_out = open_trades + closed_trades
+        else:
+            trades_out = closed_trades + open_trades
 
     total_trades = len(trades_out)
     total_pages = max(1, math.ceil(total_trades / per_page))
