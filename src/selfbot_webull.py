@@ -12690,9 +12690,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             })
                             continue
                         
-                        # Prepare signal copy for this broker
                         broker_signal = copy.deepcopy(signal)
                         broker_signal['broker'] = broker_name.upper()
+                        broker_signal['_is_multi_broker'] = True
                         broker_tasks.append((broker_name.upper(), broker_instance, broker_signal))
                     
                     # Phase 2: Execute ALL broker orders in PARALLEL using asyncio.gather
@@ -12739,11 +12739,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     # For now, treat as success if at least one broker succeeded
                     if successes:
                         _original_print(f"[MULTI-BROKER] ✅ At least one broker executed successfully")
-                        # Use first successful response for database/notification
                         resp = successes[0]
                         
-                        # Add multi-broker info to response
                         resp['_multi_broker_results'] = responses
+                        signal['_multi_broker_has_success'] = True
                         
                         # Track exit orders for unfilled order chasing (multi-broker)
                         if signal.get('_risk_management_order') and signal.get('action', '').upper() in ('STC', 'SELL'):
@@ -13591,22 +13590,24 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         error_type = 'ORDER_FAILED'
                     _original_print(f"[ORDER FAILED] ❌ {signal['action']} {signal['symbol']} - {error_msg}", flush=True)
                     
-                    # Send critical notification for order failure
-                    try:
-                        from gui_app.discord_notifier import notify_order_failed
-                        is_risk_order = signal.get('_risk_management_order', False)
-                        broker_name = signal.get('broker', 'Unknown')
-                        notify_order_failed(
-                            symbol=signal['symbol'],
-                            action=signal['action'],
-                            broker=broker_name,
-                            error_message=error_msg,
-                            quantity=signal.get('qty'),
-                            price=signal.get('price'),
-                            is_risk_order=is_risk_order
-                        )
-                    except Exception as notify_err:
-                        _original_print(f"[NOTIFY] Warning: Could not send failure notification: {notify_err}", flush=True)
+                    if not signal.get('_multi_broker_has_success'):
+                        try:
+                            from gui_app.discord_notifier import notify_order_failed
+                            is_risk_order = signal.get('_risk_management_order', False)
+                            broker_name = signal.get('broker', 'Unknown')
+                            notify_order_failed(
+                                symbol=signal['symbol'],
+                                action=signal['action'],
+                                broker=broker_name,
+                                error_message=error_msg,
+                                quantity=signal.get('qty'),
+                                price=signal.get('price'),
+                                is_risk_order=is_risk_order
+                            )
+                        except Exception as notify_err:
+                            _original_print(f"[NOTIFY] Warning: Could not send failure notification: {notify_err}", flush=True)
+                    else:
+                        _original_print(f"[NOTIFY] Suppressed failure notification - another broker succeeded", flush=True)
                     
                     # === CONFLICTING ORDER HANDLER ===
                     # Webull error: ORDER_NOT_SUPPORT_REVERSE_OPTION means there's already a pending order

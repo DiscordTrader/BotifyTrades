@@ -396,7 +396,7 @@
                 this.initialLoadDone = true;
                 
                 for (const notif of notifications) {
-                    const notifId = notif.datetime + notif.title;
+                    const notifId = notif.id || (notif.datetime + notif.title);
                     if (!this.seenNotifications.has(notifId)) {
                         this.seenNotifications.add(notifId);
                         newCount++;

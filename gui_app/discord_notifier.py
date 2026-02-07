@@ -335,7 +335,10 @@ def send_cancel_notification(symbol: str, quantity: int, price: float, is_option
 _notification_history: list = []
 _max_history = 100
 _recent_dedup: dict = {}
-_dedup_ttl = 10
+_dedup_ttl = 300
+_symbol_dedup: dict = {}
+_symbol_dedup_ttl = 300
+import uuid as _uuid_mod
 
 def get_notification_history() -> list:
     """Get recent notification history for browser display"""
@@ -343,14 +346,18 @@ def get_notification_history() -> list:
 
 def clear_notification_history():
     """Clear notification history"""
-    global _notification_history, _recent_dedup
+    global _notification_history, _recent_dedup, _symbol_dedup
     _notification_history = []
     _recent_dedup = {}
+    _symbol_dedup = {}
 
 def _add_to_history(notification: dict):
     """Add notification to history for browser retrieval with deduplication"""
-    global _notification_history, _recent_dedup
+    global _notification_history, _recent_dedup, _symbol_dedup
     import time
+    
+    if 'id' not in notification:
+        notification['id'] = str(_uuid_mod.uuid4())[:12]
     
     dedup_key = f"{notification.get('type', '')}:{notification.get('title', '')}:{notification.get('message', '')}"
     now = time.time()
@@ -362,6 +369,17 @@ def _add_to_history(notification: dict):
     if dedup_key in _recent_dedup:
         return
     _recent_dedup[dedup_key] = now
+    
+    symbol = notification.get('symbol', '')
+    ntype = notification.get('type', '')
+    if symbol and ntype in ('order_filled_bto', 'order_failed'):
+        sym_key = f"{symbol}:{ntype}"
+        sym_expired = [k for k, t in _symbol_dedup.items() if now - t > _symbol_dedup_ttl]
+        for k in sym_expired:
+            del _symbol_dedup[k]
+        if sym_key in _symbol_dedup:
+            return
+        _symbol_dedup[sym_key] = now
     
     _notification_history.insert(0, notification)
     if len(_notification_history) > _max_history:
