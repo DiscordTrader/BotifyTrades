@@ -6473,7 +6473,6 @@ class SelfClient(discord.Client):
                     LIMIT 1
                 ''')
                 row = cursor.fetchone()
-                conn.close()
                 
                 if row and row[0]:
                     channel_id = int(row[0])
@@ -7312,7 +7311,6 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                                             print(f"[DEDUP] Updated conditional order with SL=${structured.get('stop_loss')}, PT=${structured.get('target_price')}")
                                     
                                     print(f"[DEDUP] ✓ Conditional order #{cond_id} marked as TRIGGERED - will execute on next monitor cycle")
-                                    conn.close()
                                     return
                                 
                                 # Check for recently executed trade on same symbol (within last 5 min)
@@ -7365,10 +7363,7 @@ Provide actionable insights for BOTH day traders AND long-term investors. Keep u
                                     else:
                                         print(f"[DEDUP] No SL/PT in confirmation message")
                                     
-                                    conn.close()
                                     return
-                                
-                                conn.close()
                             except Exception as dedup_err:
                                 print(f"[DEDUP] ⚠️ Dedup check error (proceeding with execution): {dedup_err}")
                             

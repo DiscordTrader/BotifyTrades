@@ -96,11 +96,18 @@ class SignalVerificationService:
         """Get database connection from the main gui_app database"""
         if USE_GUI_DB:
             conn = db.get_connection()
+            conn._is_shared = True
             return conn
         else:
             conn = sqlite3.connect(DATABASE_PATH)
             conn.row_factory = sqlite3.Row
+            conn._is_shared = False
             return conn
+    
+    def _close_db(self, conn):
+        """Close database connection only if it's not the shared thread-local one"""
+        if conn and not getattr(conn, '_is_shared', False):
+            conn.close()
     
     def _get_webull_option_quote(self, ticker: str, strike: float, expiry: str, 
                                   direction: str) -> Optional[Dict]:
@@ -1117,7 +1124,7 @@ class SignalVerificationService:
         
         verification_id = cursor.lastrowid
         conn.commit()
-        conn.close()
+        self._close_db(conn)
         
         return verification_id
     
@@ -1146,7 +1153,7 @@ class SignalVerificationService:
         
         cursor.execute(query, params)
         rows = cursor.fetchall()
-        conn.close()
+        self._close_db(conn)
         
         return [dict(row) for row in rows]
     
@@ -1180,7 +1187,7 @@ class SignalVerificationService:
         ''', (entity_id, date_filter))
         
         row = cursor.fetchone()
-        conn.close()
+        self._close_db(conn)
         
         if not row or row['total'] == 0:
             return {
@@ -1270,7 +1277,7 @@ class SignalVerificationService:
         ''', (entity_id, date_filter))
         
         trades = [dict(row) for row in cursor.fetchall()]
-        conn.close()
+        self._close_db(conn)
         
         reported_wins = 0
         reported_losses = 0
