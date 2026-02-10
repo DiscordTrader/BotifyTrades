@@ -10333,6 +10333,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
         if is_conditional_order_signal(normalized_content, require_sl_pt=False):
             conditional_signal = parse_conditional_order_signal(normalized_content)
             if conditional_signal:
+                conditional_signal['author_name'] = str(message.author)
+                conditional_signal['author_id'] = str(message.author.id)
+                conditional_signal['message_id'] = str(message.id)
                 print(f"[CONDITIONAL] ✓ Detected conditional order: {conditional_signal['symbol']} {conditional_signal['trigger_type']} ${conditional_signal['trigger_price']}")
                 
                 # Route to conditional order router if enabled (market-isolated)
@@ -11113,6 +11116,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 'trigger_symbol': opt.get('trigger_symbol') or opt.get('symbol'),
                                 'channel_record_id': opt.get('channel_record_id'),
                                 'message_id': str(message.id),
+                                'author_name': str(message.author),
+                                'author_id': str(message.author.id),
                                 'market': 'US',
                             }
                             
@@ -12473,6 +12478,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 'asset_type': 'option',
                 'original_message': signal.get('raw_message', ''),
                 'message_id': signal.get('message_id'),
+                'author_name': signal.get('author_name'),
             }
             
             order_id = conditional_order_router.create_order(

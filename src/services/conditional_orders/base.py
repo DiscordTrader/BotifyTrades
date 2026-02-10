@@ -813,6 +813,7 @@ class BaseConditionalOrderService(ABC):
             trailing_stop_pct=trailing_stop_pct,
             trailing_activation_pct=trailing_activation_pct,
             settings_source=settings_source,
+            author_name=parsed_signal.get('author_name'),
             limit_cap_enabled=limit_cap_enabled,
             limit_cap_pct=limit_cap_pct,
             limit_price=limit_price,

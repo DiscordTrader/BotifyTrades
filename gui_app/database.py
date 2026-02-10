@@ -4698,6 +4698,12 @@ def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = No
             COALESCE(
                 sl.author_name, 
                 sig.author_name,
+                (SELECT co.author_name FROM conditional_orders co
+                 JOIN trades t ON t.conditional_order_id = co.id
+                 WHERE t.channel_id = ec.channel_id 
+                 AND t.symbol = el.symbol
+                 AND co.author_name IS NOT NULL
+                 ORDER BY t.executed_at DESC LIMIT 1),
                 (SELECT s2.author_name FROM signals s2 
                  JOIN channels ch ON s2.channel_id = ch.id
                  WHERE ch.discord_channel_id = ec.channel_id 
@@ -4727,6 +4733,11 @@ def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = No
     if user:
         query += ''' AND (
             sl.author_name LIKE ? OR sig.author_name LIKE ? OR 
+            EXISTS (SELECT 1 FROM conditional_orders co
+                    JOIN trades t ON t.conditional_order_id = co.id
+                    WHERE t.channel_id = ec.channel_id 
+                    AND t.symbol = el.symbol
+                    AND co.author_name LIKE ?) OR
             EXISTS (SELECT 1 FROM signals s2 
                     JOIN channels ch ON s2.channel_id = ch.id
                     WHERE ch.discord_channel_id = ec.channel_id 
@@ -4734,7 +4745,7 @@ def get_execution_pnl(channel_id: str = None, broker: str = None, days: int = No
                     AND s2.direction = 'BTO'
                     AND s2.author_name LIKE ?)
         )'''
-        params.extend([f'%{user}%', f'%{user}%', f'%{user}%'])
+        params.extend([f'%{user}%', f'%{user}%', f'%{user}%', f'%{user}%'])
     if exit_source:
         query += ' AND ec.exit_source = ?'
         params.append(exit_source)
@@ -4752,13 +4763,38 @@ def get_execution_pnl_users():
     cursor = conn.cursor()
     
     cursor.execute('''
-        SELECT DISTINCT COALESCE(sl.author_name, sig.author_name) as author_name
+        SELECT DISTINCT COALESCE(
+            sl.author_name, 
+            sig.author_name,
+            (SELECT co.author_name FROM conditional_orders co
+             JOIN trades t ON t.conditional_order_id = co.id
+             WHERE t.channel_id = ec.channel_id 
+             AND t.symbol = el.symbol
+             AND co.author_name IS NOT NULL
+             ORDER BY t.executed_at DESC LIMIT 1)
+        ) as author_name
         FROM execution_closures ec
         JOIN execution_lots el ON ec.execution_lot_id = el.id
         LEFT JOIN signal_lots sl ON el.signal_lot_id = sl.id
         LEFT JOIN signals sig ON sl.signal_id = sig.id
-        WHERE COALESCE(sl.author_name, sig.author_name) IS NOT NULL 
-              AND COALESCE(sl.author_name, sig.author_name) != ''
+        WHERE COALESCE(
+            sl.author_name, sig.author_name,
+            (SELECT co.author_name FROM conditional_orders co
+             JOIN trades t ON t.conditional_order_id = co.id
+             WHERE t.channel_id = ec.channel_id 
+             AND t.symbol = el.symbol
+             AND co.author_name IS NOT NULL
+             ORDER BY t.executed_at DESC LIMIT 1)
+        ) IS NOT NULL 
+        AND COALESCE(
+            sl.author_name, sig.author_name,
+            (SELECT co.author_name FROM conditional_orders co
+             JOIN trades t ON t.conditional_order_id = co.id
+             WHERE t.channel_id = ec.channel_id 
+             AND t.symbol = el.symbol
+             AND co.author_name IS NOT NULL
+             ORDER BY t.executed_at DESC LIMIT 1)
+        ) != ''
         ORDER BY author_name
     ''')
     
@@ -10616,6 +10652,7 @@ def init_conditional_orders_table():
         ('limit_cap_enabled', 'INTEGER DEFAULT 0'),
         ('limit_cap_pct', 'REAL DEFAULT 5.0'),
         ('limit_price', 'REAL'),
+        ('author_name', 'TEXT'),
     ]
     for col_name, col_type in extended_columns:
         try:
@@ -10841,7 +10878,8 @@ def create_conditional_order(
     settings_source: str = None,
     limit_cap_enabled: int = 0,
     limit_cap_pct: float = None,
-    limit_price: float = None
+    limit_price: float = None,
+    author_name: str = None
 ) -> Optional[int]:
     """Create a new conditional order with full channel settings linkage.
     
@@ -10867,8 +10905,8 @@ def create_conditional_order(
                 stop_loss_fixed, stop_loss_pct, target_ranges, status,
                 exit_strategy_mode, slippage_protection_enabled, slippage_max_pct,
                 trailing_stop_enabled, trailing_stop_pct, trailing_activation_pct, settings_source,
-                limit_cap_enabled, limit_cap_pct, limit_price
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                limit_cap_enabled, limit_cap_pct, limit_price, author_name
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             channel_id, symbol.upper(), trigger_type, trigger_price, adjusted_trigger_price,
             broker_primary, stop_loss_type, stop_loss_value, take_profit_targets,
@@ -10877,7 +10915,7 @@ def create_conditional_order(
             stop_loss_fixed, stop_loss_pct, target_ranges,
             exit_strategy_mode, slippage_protection_enabled, slippage_max_pct,
             trailing_stop_enabled, trailing_stop_pct, trailing_activation_pct, settings_source,
-            limit_cap_enabled, limit_cap_pct, limit_price
+            limit_cap_enabled, limit_cap_pct, limit_price, author_name
         ))
         
         order_id = cursor.lastrowid

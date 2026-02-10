@@ -799,6 +799,7 @@ class ConditionalOrderService:
             expiry=option_expiry,
             lot_size=lot_size,
             lots=lots,
+            author_name=parsed_signal.get('author_name'),
         )
         
         if order_id:
