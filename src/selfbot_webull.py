@@ -11893,21 +11893,31 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         qty = signal['qty']
                         
                         if price > 0 and buying_power > 0:
-                            # Calculate order cost (options x100, stocks x1)
-                            multiplier = 100 if signal['asset'] == 'option' else 1
-                            order_cost = price * qty * multiplier
+                            is_conditional_option = (
+                                signal.get('_conditional_order_id') is not None
+                                and signal.get('asset') == 'option'
+                                and signal.get('is_market_order', False)
+                                and signal.get('_trigger_price') is not None
+                                and signal.get('_qot_price') is None
+                            )
                             
-                            if order_cost > buying_power:
-                                max_affordable_qty = int(buying_power / (price * multiplier))
-                                if max_affordable_qty >= 1:
-                                    _original_print(f"[{broker_name}] [FUNDS] ⚠️ Reducing qty from {qty} to {max_affordable_qty} (have ${buying_power:.2f}, need ${order_cost:.2f})")
-                                    signal['qty'] = max_affordable_qty
-                                else:
-                                    min_cost = price * multiplier
-                                    _original_print(f"[{broker_name}] [FUNDS] ❌ Cannot afford 1 unit (have ${buying_power:.2f}, need ${min_cost:.2f})")
-                                    return {'success': False, 'error': f'Insufficient funds: have ${buying_power:.2f}, need ${min_cost:.2f} for 1 unit'}
+                            if is_conditional_option:
+                                _original_print(f"[{broker_name}] [FUNDS] ℹ️ Skipping BP check - conditional option market order (price is stock trigger, not premium)")
                             else:
-                                _original_print(f"[{broker_name}] [FUNDS] ✓ Buying power: ${buying_power:.2f}, Order cost: ${order_cost:.2f}")
+                                multiplier = 100 if signal['asset'] == 'option' else 1
+                                order_cost = price * qty * multiplier
+                                
+                                if order_cost > buying_power:
+                                    max_affordable_qty = int(buying_power / (price * multiplier))
+                                    if max_affordable_qty >= 1:
+                                        _original_print(f"[{broker_name}] [FUNDS] ⚠️ Reducing qty from {qty} to {max_affordable_qty} (have ${buying_power:.2f}, need ${order_cost:.2f})")
+                                        signal['qty'] = max_affordable_qty
+                                    else:
+                                        min_cost = price * multiplier
+                                        _original_print(f"[{broker_name}] [FUNDS] ❌ Cannot afford 1 unit (have ${buying_power:.2f}, need ${min_cost:.2f})")
+                                        return {'success': False, 'error': f'Insufficient funds: have ${buying_power:.2f}, need ${min_cost:.2f} for 1 unit'}
+                                else:
+                                    _original_print(f"[{broker_name}] [FUNDS] ✓ Buying power: ${buying_power:.2f}, Order cost: ${order_cost:.2f}")
                 except Exception as e:
                     _original_print(f"[{broker_name}] [FUNDS] ⚠️ Could not check buying power: {e} - proceeding with order")
             

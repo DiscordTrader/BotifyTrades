@@ -575,6 +575,16 @@ class BrokerHealthMonitor:
             if qty != int(qty):
                 return False, f"Option contracts must be whole numbers, got: {qty}"
             qty = int(qty)
+            
+            is_conditional = signal.get('_conditional_order_id') is not None
+            has_trigger_price = signal.get('_trigger_price') is not None
+            has_qot_price = signal.get('_qot_price') is not None
+            
+            if is_conditional and is_market_order and not has_qot_price and has_trigger_price:
+                print(f"[HEALTH] ℹ️ Skipping BP check for conditional market option order #{signal.get('_conditional_order_id')} "
+                      f"(price ${price:.2f} is stock trigger, not option premium) - broker will validate", flush=True)
+                return True, ""
+            
             required_amount = price * 100 * qty
             bp_type = 'options'
         else:
