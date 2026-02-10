@@ -11630,17 +11630,22 @@ def register_routes(app):
                 # Check if it's actually a Webull broker
                 if webull_broker and 'Webull' not in type(webull_broker).__name__:
                     webull_broker = None
-                # Use is_authenticated() if available (checks token validity), fallback to connected flag
-                if webull_broker and hasattr(webull_broker, 'is_authenticated'):
-                    webull_logged_in = webull_broker.is_authenticated()
-                else:
-                    webull_logged_in = webull_broker and (getattr(webull_broker, '_logged_in', False) or getattr(webull_broker, 'connected', False))
+                # Use multiple checks - is_authenticated() is strict (requires valid tokens),
+                # fall back to _logged_in or connected flags which persist through token refresh cycles
+                webull_logged_in = False
+                if webull_broker:
+                    try:
+                        if hasattr(webull_broker, 'is_authenticated'):
+                            webull_logged_in = webull_broker.is_authenticated()
+                        if not webull_logged_in:
+                            webull_logged_in = getattr(webull_broker, '_logged_in', False) or getattr(webull_broker, 'connected', False)
+                    except Exception:
+                        webull_logged_in = getattr(webull_broker, '_logged_in', False) or getattr(webull_broker, 'connected', False)
                 
                 if webull_logged_in:
                     set_broker_status('webull_live', True, 'connected')
                     status['webull_live'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': None}
                 else:
-                    set_broker_status('webull_live', False, 'disconnected')
                     status['webull_live'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                 
                 # Paper broker - detect type
@@ -11652,7 +11657,6 @@ def register_routes(app):
                     set_broker_status('webull_paper', True, 'connected')
                     status['webull_paper'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': None}
                 else:
-                    set_broker_status('webull_paper', False, 'disconnected')
                     status['webull_paper'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                 
                 # Alpaca Paper
@@ -11660,7 +11664,6 @@ def register_routes(app):
                     set_broker_status('alpaca_paper', True, 'connected')
                     status['alpaca_paper'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': None}
                 else:
-                    set_broker_status('alpaca_paper', False, 'disconnected')
                     status['alpaca_paper'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                 
                 # Alpaca Live broker
@@ -11670,7 +11673,6 @@ def register_routes(app):
                     set_broker_status('alpaca_live', True, 'connected')
                     status['alpaca_live'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': None}
                 else:
-                    set_broker_status('alpaca_live', False, 'disconnected')
                     status['alpaca_live'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                 
                 # IBKR broker
@@ -11678,7 +11680,6 @@ def register_routes(app):
                     set_broker_status('ibkr_live', True, 'connected')
                     status['ibkr_live'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': None}
                 else:
-                    set_broker_status('ibkr_live', False, 'disconnected')
                     status['ibkr_live'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                 
                 # Robinhood broker (LIVE only - no paper mode)
@@ -11688,7 +11689,6 @@ def register_routes(app):
                     set_broker_status('robinhood', True, 'connected')
                     status['robinhood'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': {'mode': 'LIVE'}}
                 else:
-                    set_broker_status('robinhood', False, 'disconnected')
                     status['robinhood'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                 
                 # Tastytrade broker - check if connected property is True
@@ -11701,12 +11701,8 @@ def register_routes(app):
                         set_broker_status(broker_id, True, 'connected')
                         status[broker_id] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': {'mode': 'PAPER' if is_paper else 'LIVE'}}
                     else:
-                        set_broker_status(broker_id, False, 'disconnected')
                         status[broker_id] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                 else:
-                    # No Tastytrade broker, mark both as disconnected
-                    set_broker_status('tastytrade_live', False, 'disconnected')
-                    set_broker_status('tastytrade_paper', False, 'disconnected')
                     status['tastytrade_live'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                     status['tastytrade_paper'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                 
@@ -11737,7 +11733,6 @@ def register_routes(app):
                     set_broker_status('schwab', True, 'connected')
                     status['schwab'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': {'mode': 'LIVE'}}
                 else:
-                    set_broker_status('schwab', False, 'disconnected')
                     status['schwab'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
             
             try:
@@ -17322,9 +17317,12 @@ def register_routes(app):
                 'sync_error': None
             }
             
+            brokers_initialized = False
             if _bot_instance:
                 import asyncio
                 loop = getattr(_bot_instance, 'loop', None)
+                broker_ready = getattr(_bot_instance, 'broker_ready', None)
+                brokers_initialized = broker_ready and broker_ready.is_set() if broker_ready else False
                 
                 broker_attr_map = {
                     'webull': 'broker',
@@ -17340,7 +17338,13 @@ def register_routes(app):
                 broker_attr = broker_attr_map.get(broker_name.lower())
                 broker_instance = getattr(_bot_instance, broker_attr, None) if broker_attr else None
                 
-                if broker_instance and getattr(broker_instance, 'connected', False):
+                is_connected = False
+                if broker_instance:
+                    is_connected = getattr(broker_instance, 'connected', False)
+                    if not is_connected and broker_name.lower() == 'webull':
+                        is_connected = getattr(broker_instance, '_logged_in', False)
+                
+                if is_connected:
                     state['is_connected'] = True
                     state['is_paper'] = getattr(broker_instance, 'paper_trade', False) or 'paper' in broker_name.lower()
                     
@@ -17359,7 +17363,8 @@ def register_routes(app):
                             state['sync_error'] = str(e)
             
             db.init_broker_states_table()
-            db.update_broker_state(broker_name, config['country'], state)
+            if state['is_connected'] or brokers_initialized:
+                db.update_broker_state(broker_name, config['country'], state)
             
             return jsonify({
                 'success': True,

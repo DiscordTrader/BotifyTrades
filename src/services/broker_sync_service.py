@@ -264,15 +264,24 @@ class BrokerSyncService:
             try:
                 await self._sync_broker(broker_name, broker_instance)
             except Exception as e:
-                print(f"[SYNC] Error syncing {broker_name}: {e}")
-                import traceback
-                traceback.print_exc()
-                
-                try:
-                    from gui_app.broker_health_monitor import check_broker_health
-                    check_broker_health(broker_name, False, str(e))
-                except Exception:
-                    pass
+                error_str = str(e)
+                is_transient = any(msg in error_str for msg in [
+                    "cannot schedule new futures after shutdown",
+                    "Event loop is closed",
+                    "Session is closed",
+                ])
+                if is_transient:
+                    print(f"[SYNC] ⏳ Transient error syncing {broker_name} (skipping health report): {e}")
+                else:
+                    print(f"[SYNC] Error syncing {broker_name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    
+                    try:
+                        from gui_app.broker_health_monitor import check_broker_health
+                        check_broker_health(broker_name, False, error_str)
+                    except Exception:
+                        pass
         
         print("[SYNC] ✓ Sync cycle complete", flush=True)
         
