@@ -446,21 +446,27 @@ class RiskDBAdapter:
                 leave_runner_enabled = bool(row[9]) if len(row) > 9 and row[9] else False
                 leave_runner_pct = row[10] if len(row) > 10 and row[10] else 25.0
                 
-                # Apply trade-level SL/PT overrides (convert absolute prices to percentages)
-                # This enables signals with explicit SL/PT to override channel defaults
-                if trade_sl_price and trade_entry_price and trade_entry_price > 0:
-                    # Calculate SL percentage from absolute price
-                    sl_pct_calc = ((trade_entry_price - trade_sl_price) / trade_entry_price) * 100
-                    if sl_pct_calc > 0:
-                        sl = round(sl_pct_calc, 1)
-                        print(f"[RISK] Using trade-level SL: ${trade_sl_price:.2f} ({sl}% from entry ${trade_entry_price:.2f})")
+                # Extract exit strategy mode BEFORE applying overrides
+                exit_mode = row[18] if len(row) > 18 and row[18] else 'signal'
                 
-                if trade_pt_price and trade_entry_price and trade_entry_price > 0:
-                    # Calculate PT percentage from absolute price
-                    pt_pct_calc = ((trade_pt_price - trade_entry_price) / trade_entry_price) * 100
-                    if pt_pct_calc > 0:
-                        pt1 = round(pt_pct_calc, 1)
-                        print(f"[RISK] Using trade-level PT: ${trade_pt_price:.2f} ({pt1}% from entry ${trade_entry_price:.2f})")
+                # Apply trade-level SL/PT overrides ONLY when exit mode allows it
+                # exit_mode='risk' → channel settings are authoritative, signal values ignored
+                # exit_mode='hybrid' or 'signal' → signal-embedded SL/PT can override channel defaults
+                if exit_mode != 'risk':
+                    if trade_sl_price and trade_entry_price and trade_entry_price > 0:
+                        sl_pct_calc = ((trade_entry_price - trade_sl_price) / trade_entry_price) * 100
+                        if sl_pct_calc > 0:
+                            sl = round(sl_pct_calc, 1)
+                            print(f"[RISK] Using trade-level SL: ${trade_sl_price:.2f} ({sl}% from entry ${trade_entry_price:.2f})")
+                    
+                    if trade_pt_price and trade_entry_price and trade_entry_price > 0:
+                        pt_pct_calc = ((trade_pt_price - trade_entry_price) / trade_entry_price) * 100
+                        if pt_pct_calc > 0:
+                            pt1 = round(pt_pct_calc, 1)
+                            print(f"[RISK] Using trade-level PT: ${trade_pt_price:.2f} ({pt1}% from entry ${trade_entry_price:.2f})")
+                else:
+                    if trade_sl_price or trade_pt_price:
+                        print(f"[RISK] Exit mode is 'risk' - using channel settings (ignoring signal SL/PT override)")
                 
                 # Extract custom quantities (None means auto-calculate)
                 qty1 = row[12] if len(row) > 12 else None
@@ -472,8 +478,7 @@ class RiskDBAdapter:
                 trim_mode = row[16] if len(row) > 16 and row[16] else 'market'
                 trim_offset = row[17] if len(row) > 17 and row[17] is not None else 0.01
                 
-                # Extract exit strategy mode (signal, risk, hybrid)
-                exit_mode = row[18] if len(row) > 18 and row[18] else 'signal'
+                # exit_mode already extracted above (before SL/PT override logic)
                 
                 # Extract enhanced risk settings
                 enable_dynamic_sl = bool(row[19]) if len(row) > 19 and row[19] else False
