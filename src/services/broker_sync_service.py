@@ -1928,7 +1928,7 @@ class BrokerSyncService:
                         cursor.execute("""
                             SELECT channel_id FROM trades 
                             WHERE symbol = ? 
-                            AND (broker = ? OR broker IS NULL)
+                            AND (UPPER(broker) = UPPER(?) OR broker IS NULL)
                             AND channel_id IS NOT NULL 
                             AND channel_id != 'UNKNOWN'
                             AND channel_id != ''
