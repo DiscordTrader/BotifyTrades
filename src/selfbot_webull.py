@@ -5088,6 +5088,8 @@ class SelfClient(discord.Client):
             kwargs['intents'] = intents
         
         super().__init__(**kwargs)
+        self._gateway_event_count = 0
+        self._gateway_diag_printed = False
         # Initialize async objects to None - will be created in setup() when event loop is ready
         self.order_queue = None
         self.broker: Optional[WebullBroker] = None
@@ -7539,6 +7541,22 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             await message.channel.send(f"❌ Scan failed: {str(e)}")
     
 
+    def dispatch(self, event, /, *args, **kwargs):
+        """Override dispatch to track ALL gateway events for diagnostics."""
+        self._gateway_event_count += 1
+        if self._gateway_event_count <= 5:
+            _original_print(f"[Discord GATEWAY] Event #{self._gateway_event_count}: {event}", flush=True)
+        if self._gateway_event_count % 200 == 0:
+            _original_print(f"[Discord GATEWAY] Total events dispatched: {self._gateway_event_count}", flush=True)
+        super().dispatch(event, *args, **kwargs)
+
+    async def on_message(self, message: discord.Message):
+        """Overridden to add gateway-level message event diagnostics."""
+        if not self._gateway_diag_printed:
+            self._gateway_diag_printed = True
+            _original_print(f"[Discord GATEWAY] ✓ First on_message event! Channel: {message.channel.id} Author: {message.author.name}", flush=True)
+        await self._process_message(message)
+
     async def on_ready(self):
         global _discord_ready_event  # Declare at function start for early signaling
         
@@ -8303,7 +8321,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
             import traceback
             traceback.print_exc()
 
-    async def on_message(self, message: discord.Message):
+    async def _process_message(self, message: discord.Message):
         # Generate trace ID for complete signal lifecycle tracking
         trace_id = f"T{message.id % 100000:05d}"  # Short trace ID based on message ID
         
