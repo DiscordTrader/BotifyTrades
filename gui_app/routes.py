@@ -3219,7 +3219,11 @@ def register_routes(app):
                 return result
                 
         except Exception as e:
-            print(f"[API] Exception in balance endpoint: {e}")
+            err_type = type(e).__name__
+            err_msg = str(e) or 'no details'
+            print(f"[API] Exception in balance endpoint: {err_type}: {err_msg}")
+            import traceback
+            traceback.print_exc()
             result = jsonify({
                 'buying_power': 0,
                 'cash_balance': 0,
@@ -3227,7 +3231,7 @@ def register_routes(app):
                 'total_profit_loss': 0,
                 'day_profit_loss': 0,
                 'status': 'error',
-                'error': str(e)
+                'error': f"{err_type}: {err_msg}"
             })
             _api_cache[cache_key] = (result, time.time())
             return result
@@ -4245,7 +4249,7 @@ def register_routes(app):
                         'day_profit_loss': webull_data.get('day_profit_loss', 0)
                     }
             except Exception as e:
-                print(f"[API] Error fetching Webull LIVE account: {e}")
+                print(f"[API] Error fetching Webull LIVE account: {type(e).__name__}: {e}")
                 accounts['webull_live']['status'] = 'error'
         
         # Fetch Alpaca PAPER account
@@ -6617,7 +6621,7 @@ def register_routes(app):
             return jsonify({'trades': merged})
             
         except Exception as e:
-            print(f"[API] Error fetching merged trades: {e}")
+            print(f"[API] Error fetching merged trades: {type(e).__name__}: {e}")
             import traceback
             traceback.print_exc()
             return jsonify({'error': str(e), 'trades': []}), 500
