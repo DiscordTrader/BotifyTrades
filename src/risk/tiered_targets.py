@@ -286,12 +286,14 @@ def evaluate_channel_stop_loss(
     stop_loss_pct = None
     stop_loss_price = None
     
-    if cache.manual_sl_price is not None:
+    exit_mode = getattr(channel_settings, 'exit_strategy_mode', 'hybrid')
+    
+    if exit_mode != 'risk' and cache.manual_sl_price is not None:
         stop_loss_price = cache.manual_sl_price
         if entry_price > 0:
             stop_loss_pct = ((entry_price - stop_loss_price) / entry_price) * 100
         sl_source = "OVERRIDE"
-    elif cache.manual_sl_pct is not None:
+    elif exit_mode != 'risk' and cache.manual_sl_pct is not None:
         stop_loss_pct = cache.manual_sl_pct
         if entry_price > 0:
             stop_loss_price = entry_price * (1 - stop_loss_pct / 100)
