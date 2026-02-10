@@ -1583,6 +1583,12 @@ input:checked + .slider:before {
                 <input type="number" id="global-max-positions" value="10" min="1" max="100" step="1">
                 <p class="help-text">Maximum number of simultaneous open positions allowed</p>
             </div>
+            
+            <div class="form-group">
+                <label>Risk Check Interval (seconds)</label>
+                <input type="number" id="global-risk-check-interval" value="2" min="1" max="60" step="0.5">
+                <p class="help-text">How often the risk engine checks positions for SL/PT triggers. Default: 2s. Minimum: 1s. Lower = faster reaction but more API calls.</p>
+            </div>
         </div>
         
         <div class="btn-group" style="margin-top: 20px;">
@@ -3031,6 +3037,7 @@ async function loadConditionalOrdersSettings() {
             document.getElementById('global-circuit-breaker').checked = riskSettings.enable_circuit_breaker === true || riskSettings.enable_circuit_breaker === 1;
             document.getElementById('global-daily-loss-limit').value = riskSettings.global_daily_loss_limit || 0;
             document.getElementById('global-max-positions').value = riskSettings.global_max_positions || 10;
+            document.getElementById('global-risk-check-interval').value = riskSettings.risk_check_interval_seconds || 2;
             console.log('[Global Risk] UI updated');
         }
     } catch (error) {
@@ -3056,7 +3063,8 @@ document.getElementById('save-conditional-orders').addEventListener('click', asy
         exit_strategy_mode: document.getElementById('global-exit-strategy-mode').value,
         enable_circuit_breaker: document.getElementById('global-circuit-breaker').checked,
         global_daily_loss_limit: parseFloat(document.getElementById('global-daily-loss-limit').value) || 0,
-        global_max_positions: parseInt(document.getElementById('global-max-positions').value) || 10
+        global_max_positions: parseInt(document.getElementById('global-max-positions').value) || 10,
+        risk_check_interval_seconds: parseFloat(document.getElementById('global-risk-check-interval').value) || 2
     };
     
     const inlineStatus = document.getElementById('conditional-orders-save-status');

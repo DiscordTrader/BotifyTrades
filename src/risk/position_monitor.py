@@ -870,16 +870,17 @@ class RiskManager:
         """Get monitoring interval - configurable via GUI settings.
         
         Priority:
-        1. GUI setting 'risk_check_interval_seconds' (if set)
+        1. Global risk setting 'risk_check_interval_seconds' (if set)
         2. Default 2 seconds for ultra-fast profit/SL locks
         
         Configure in Settings → Risk Management → Check Interval
         Recommended: 1-3 seconds for active trading
         """
         try:
-            from gui_app.database import get_setting
-            custom_interval = get_setting('risk_check_interval_seconds', None)
-            if custom_interval:
+            from gui_app.database import get_global_risk_settings
+            settings = get_global_risk_settings()
+            custom_interval = settings.get('risk_check_interval_seconds')
+            if custom_interval is not None:
                 interval = float(custom_interval)
                 if 1 <= interval <= 60:
                     return interval

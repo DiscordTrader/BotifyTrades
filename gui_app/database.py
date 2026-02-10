@@ -1221,6 +1221,7 @@ def init_db():
             global_daily_loss_limit REAL DEFAULT 0,
             global_max_positions INTEGER DEFAULT 10,
             order_timeout_minutes INTEGER DEFAULT 5,
+            risk_check_interval_seconds REAL DEFAULT 2,
             acknowledged_v2_features INTEGER DEFAULT 0,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -1229,6 +1230,12 @@ def init_db():
     cursor.execute('''
         INSERT OR IGNORE INTO global_risk_settings (id) VALUES (1)
     ''')
+    
+    try:
+        cursor.execute('SELECT risk_check_interval_seconds FROM global_risk_settings LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute('ALTER TABLE global_risk_settings ADD COLUMN risk_check_interval_seconds REAL DEFAULT 2')
+        conn.commit()
     
     # Risk events audit log - Immutable record of all risk decisions
     cursor.execute('''
@@ -10245,7 +10252,8 @@ def update_global_risk_settings(updates: Dict) -> bool:
         'enable_signal_update_automation', 'exit_strategy_mode',
         'enable_circuit_breaker', 'enable_trailing_execution',
         'global_daily_loss_limit', 'global_max_positions',
-        'order_timeout_minutes', 'acknowledged_v2_features'
+        'order_timeout_minutes', 'risk_check_interval_seconds',
+        'acknowledged_v2_features'
     ]
     
     try:
