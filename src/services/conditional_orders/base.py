@@ -664,17 +664,24 @@ class BaseConditionalOrderService(ABC):
         trigger_type = parsed_signal.get('trigger_type', 'over')
         
         # ADJUST OFFSET: Apply channel-level trigger offset if configured
-        # This can also be adjusted per-order via the UI slider/input after creation
-        trigger_offset = channel_settings.get('trigger_offset_percent', 0.0) or 0.0
-        print(f"[CONDITIONAL] Channel {channel_id} trigger_offset_percent: {trigger_offset}%", flush=True)
+        # Supports both percentage and dollar-value modes
+        from gui_app.database import compute_adjusted_trigger
         
-        if trigger_offset != 0:
-            if trigger_type == 'over':
-                adjusted_price = trigger_price * (1 + trigger_offset / 100)
-                print(f"[CONDITIONAL] ✓ Applied +{trigger_offset}% offset: ${trigger_price} -> ${adjusted_price:.4f}", flush=True)
-            else:  # under
-                adjusted_price = trigger_price * (1 - trigger_offset / 100)
-                print(f"[CONDITIONAL] ✓ Applied -{trigger_offset}% offset: ${trigger_price} -> ${adjusted_price:.4f}", flush=True)
+        offset_mode = channel_settings.get('trigger_offset_mode', 'percent') or 'percent'
+        if offset_mode == 'dollar':
+            offset_value = channel_settings.get('trigger_offset_value', 0.0) or 0.0
+        else:
+            offset_value = channel_settings.get('trigger_offset_percent', 0.0) or 0.0
+        
+        print(f"[CONDITIONAL] Channel {channel_id} trigger offset: {offset_value} ({offset_mode})", flush=True)
+        
+        if offset_value != 0:
+            adjusted_price = compute_adjusted_trigger(trigger_price, trigger_type, offset_mode, offset_value)
+            if offset_mode == 'dollar':
+                print(f"[CONDITIONAL] ✓ Applied {'+'if trigger_type=='over' else '-'}${abs(offset_value):.2f} offset: ${trigger_price} -> ${adjusted_price:.4f}", flush=True)
+            else:
+                sign = '+' if trigger_type == 'over' else '-'
+                print(f"[CONDITIONAL] ✓ Applied {sign}{offset_value}% offset: ${trigger_price} -> ${adjusted_price:.4f}", flush=True)
         else:
             adjusted_price = trigger_price
             print(f"[CONDITIONAL] No offset configured, using signal price: ${trigger_price}", flush=True)

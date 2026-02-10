@@ -1294,13 +1294,23 @@ function renderChannels() {
                             <span style="font-size: 9px; color: #b388ff;">%</span>
                         </div>
                     </div>
-                    <div style="background: #0F1319; padding: 8px 10px;" title="Entry price offset for limit orders (overrides global)">
-                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">Entry Offset</span>
+                    <div style="background: #0F1319; padding: 8px 10px;" title="Trigger price offset for conditional orders (% or $ value)">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase;">Trigger Offset</span>
+                            <select id="trigger-offset-mode-${channel.id}" 
+                                    style="width: 32px; padding: 1px 2px; font-size: 9px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #b388ff; cursor: pointer;"
+                                    onchange="updateTriggerOffsetMode(${channel.id}, this.value)">
+                                <option value="percent" ${(channel.trigger_offset_mode || 'percent') === 'percent' ? 'selected' : ''}>%</option>
+                                <option value="dollar" ${channel.trigger_offset_mode === 'dollar' ? 'selected' : ''}>$</option>
+                            </select>
+                        </div>
                         <div style="display: flex; align-items: center; gap: 3px;">
-                            <input type="number" value="${channel.trigger_offset_percent || ''}" placeholder="0" min="-10" max="10" step="0.1"
+                            <input type="number" id="trigger-offset-val-${channel.id}"
+                                   value="${(channel.trigger_offset_mode === 'dollar' ? channel.trigger_offset_value : channel.trigger_offset_percent) || ''}" 
+                                   placeholder="0" min="-100" max="100" step="${(channel.trigger_offset_mode || 'percent') === 'dollar' ? '0.01' : '0.1'}"
                                    style="width: 45px; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
-                                   onchange="updateTriggerOffset(${channel.id}, this.value)" title="Entry price offset % (+/- for limit orders)">
-                            <span style="font-size: 9px; color: #6B7A90;">%</span>
+                                   onchange="updateTriggerOffset(${channel.id}, this.value)" title="Trigger offset (+/- for conditional order triggers)">
+                            <span id="trigger-offset-unit-${channel.id}" style="font-size: 9px; color: #6B7A90;">${(channel.trigger_offset_mode || 'percent') === 'dollar' ? '$' : '%'}</span>
                         </div>
                     </div>
                     <div style="background: #0F1319; padding: 8px 10px;" title="Chase unfilled orders with mid-price replacement">
@@ -1801,28 +1811,57 @@ async function updateOrderType(channelId, orderType, value) {
     }
 }
 
-async function updateTriggerOffset(channelId, offsetPct) {
+async function updateTriggerOffset(channelId, rawValue) {
     try {
-        const offsetValue = offsetPct ? parseFloat(offsetPct) : 0;
+        const mode = document.getElementById(`trigger-offset-mode-${channelId}`).value;
+        const val = rawValue ? parseFloat(rawValue) : 0;
+        const payload = { trigger_offset_mode: mode };
+        if (mode === 'dollar') {
+            payload.trigger_offset_value = val;
+        } else {
+            payload.trigger_offset_percent = val;
+        }
         const response = await fetch(`/api/channels/${channelId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ trigger_offset_percent: offsetValue })
+            body: JSON.stringify(payload)
         });
         
         if (response.ok) {
-            if (offsetValue === 0) {
-                showNotification('Entry offset cleared (using global)');
+            if (val === 0) {
+                showNotification('Trigger offset cleared (using global)');
             } else {
-                showNotification(`Entry offset set to ${offsetValue > 0 ? '+' : ''}${offsetValue}%`);
+                const unit = mode === 'dollar' ? '$' : '%';
+                const sign = val > 0 ? '+' : '';
+                showNotification(`Trigger offset set to ${sign}${mode === 'dollar' ? '$' + val : val + '%'}`);
             }
         } else {
-            showNotification('Error updating entry offset', 'error');
+            showNotification('Error updating trigger offset', 'error');
             await loadChannels();
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
         await loadChannels();
+    }
+}
+
+async function updateTriggerOffsetMode(channelId, mode) {
+    try {
+        const input = document.getElementById(`trigger-offset-val-${channelId}`);
+        const unitSpan = document.getElementById(`trigger-offset-unit-${channelId}`);
+        input.value = '';
+        input.step = mode === 'dollar' ? '0.01' : '0.1';
+        unitSpan.textContent = mode === 'dollar' ? '$' : '%';
+        const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trigger_offset_mode: mode, trigger_offset_percent: 0, trigger_offset_value: 0 })
+        });
+        if (response.ok) {
+            showNotification(`Trigger offset mode changed to ${mode === 'dollar' ? 'Dollar ($)' : 'Percent (%)'}`);
+        }
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
     }
 }
 

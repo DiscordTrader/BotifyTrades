@@ -2546,7 +2546,7 @@ def update_channel(channel_id: int, **kwargs):
                    'trim_order_mode', 'trim_limit_offset', 'sl_order_mode', 'sl_limit_offset', 'entry_order_mode',
                    'ignore_signal_position_size', 'exit_strategy_mode', 'exit_strategy_mode_override', 'market', 'trade_summary_enabled',
                    'conditional_order_enabled', 'conditional_auto_execute', 'conditional_order_expiry',
-                   'conditional_order_timeout_minutes', 'trigger_offset_percent', 'order_timeout_minutes',
+                   'conditional_order_timeout_minutes', 'trigger_offset_percent', 'trigger_offset_mode', 'trigger_offset_value', 'order_timeout_minutes',
                    'slippage_protection_enabled', 'slippage_max_pct', 'limit_cap_enabled', 'limit_cap_pct',
                    'signal_update_automation', 'signal_update_automation_override',
                    'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
@@ -10696,6 +10696,14 @@ def migrate_channels_for_conditional_orders():
             cursor.execute('ALTER TABLE channels ADD COLUMN trigger_offset_percent REAL DEFAULT 0.0')
             print("[DATABASE] ✓ Added trigger_offset_percent column to channels")
         
+        if 'trigger_offset_mode' not in columns:
+            cursor.execute("ALTER TABLE channels ADD COLUMN trigger_offset_mode TEXT DEFAULT 'percent'")
+            print("[DATABASE] ✓ Added trigger_offset_mode column to channels")
+        
+        if 'trigger_offset_value' not in columns:
+            cursor.execute('ALTER TABLE channels ADD COLUMN trigger_offset_value REAL DEFAULT 0.0')
+            print("[DATABASE] ✓ Added trigger_offset_value column to channels")
+        
         if 'conditional_order_expiry' not in columns:
             cursor.execute("ALTER TABLE channels ADD COLUMN conditional_order_expiry TEXT DEFAULT 'end_of_day'")
             print("[DATABASE] ✓ Added conditional_order_expiry column to channels")
@@ -11301,8 +11309,36 @@ def purge_conditional_orders(market: str = None, keep_active: bool = True) -> in
         return 0
 
 
-def update_conditional_order_trigger_offset(order_id: int, offset_percent: float) -> bool:
-    """Update the trigger offset for a conditional order and recalculate adjusted price"""
+def compute_adjusted_trigger(trigger_price: float, trigger_type: str, mode: str, value: float) -> float:
+    """Compute adjusted trigger price given mode ('percent' or 'dollar') and value.
+    
+    For 'over' triggers: adds offset (higher trigger = confirm breakout)
+    For 'under' triggers: subtracts offset (lower trigger = confirm breakdown)
+    """
+    if not value or value == 0:
+        return trigger_price
+    
+    if mode == 'dollar':
+        if trigger_type == 'over':
+            return trigger_price + value
+        else:
+            return trigger_price - value
+    else:
+        if trigger_type == 'over':
+            return trigger_price * (1 + value / 100)
+        else:
+            return trigger_price * (1 - value / 100)
+
+
+def update_conditional_order_trigger_offset(order_id: int, offset_percent: float = None, offset_mode: str = 'percent', offset_value: float = None) -> bool:
+    """Update the trigger offset for a conditional order and recalculate adjusted price.
+    
+    Args:
+        order_id: The conditional order ID
+        offset_percent: Legacy percent offset (backward compatible)
+        offset_mode: 'percent' or 'dollar'
+        offset_value: The offset value (% or $ depending on mode)
+    """
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -11315,10 +11351,10 @@ def update_conditional_order_trigger_offset(order_id: int, offset_percent: float
         trigger_price = row['trigger_price']
         trigger_type = row['trigger_type']
         
-        if trigger_type == 'over':
-            adjusted_price = trigger_price * (1 + offset_percent / 100)
-        else:
-            adjusted_price = trigger_price * (1 - offset_percent / 100)
+        effective_value = offset_value if offset_value is not None else (offset_percent or 0)
+        effective_mode = offset_mode or 'percent'
+        
+        adjusted_price = compute_adjusted_trigger(trigger_price, trigger_type, effective_mode, effective_value)
         
         cursor.execute('''
             UPDATE conditional_orders 
@@ -11326,14 +11362,19 @@ def update_conditional_order_trigger_offset(order_id: int, offset_percent: float
             WHERE id = ?
         ''', (adjusted_price, order_id))
         
+        if effective_mode == 'dollar':
+            detail_str = f'Trigger offset adjusted to {"+$" if effective_value >= 0 else "-$"}{abs(effective_value):.2f} -> ${adjusted_price:.2f}'
+        else:
+            detail_str = f'Trigger offset adjusted to {effective_value:+.1f}% -> ${adjusted_price:.2f}'
+        
         cursor.execute('''
             INSERT INTO conditional_order_audit (order_id, previous_status, new_status, event, details)
             SELECT id, status, status, 'OFFSET_ADJUSTED', ?
             FROM conditional_orders WHERE id = ?
-        ''', (f'Trigger offset adjusted to {offset_percent:+.1f}% -> ${adjusted_price:.2f}', order_id))
+        ''', (detail_str, order_id))
         
         conn.commit()
-        print(f"[DATABASE] Updated conditional order #{order_id} offset to {offset_percent:+.1f}%")
+        print(f"[DATABASE] Updated conditional order #{order_id} offset: {detail_str}")
         return True
     except Exception as e:
         print(f"[DATABASE] Error updating conditional order trigger offset: {e}")
@@ -11390,6 +11431,7 @@ def get_channel_conditional_settings(channel_id: str) -> Dict[str, Any]:
     try:
         cursor.execute('''
             SELECT conditional_order_enabled, trigger_offset_percent,
+                   trigger_offset_mode, trigger_offset_value,
                    conditional_order_expiry, conditional_auto_execute,
                    conditional_order_timeout_minutes, order_timeout_minutes,
                    broker_override, exit_strategy_mode, default_quantity,
