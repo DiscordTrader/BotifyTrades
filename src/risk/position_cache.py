@@ -305,14 +305,46 @@ class PositionCache:
             else:
                 print(f"[RISK] New position tracked: {pos_key} @ ${position.avg_cost:.2f}")
         else:
-            # Position already cached - update entry_price if broker reports a different value
-            # This handles cases where a new position opens at the same strike as a closed one
             cached_entry = self._cache[pos_key]
             broker_entry_price = position.avg_cost
             if broker_entry_price > 0 and abs(cached_entry.entry_price - broker_entry_price) > 0.001:
                 old_price = cached_entry.entry_price
-                cached_entry.entry_price = broker_entry_price
-                print(f"[RISK] ✓ Updated {pos_key} entry price: ${old_price:.2f} → ${broker_entry_price:.2f} (broker sync)")
+                if cached_entry.closing or cached_entry.giveback_guard_active or cached_entry.early_trailing_active:
+                    print(f"[RISK] ♻️  New position detected at same key {pos_key}: ${old_price:.2f} → ${broker_entry_price:.2f}")
+                    print(f"[RISK]   Resetting stale risk state (giveback={cached_entry.giveback_guard_active}, "
+                          f"max_pnl={cached_entry.max_pnl_seen:.1f}%, early_trail={cached_entry.early_trailing_active}, "
+                          f"closing={cached_entry.closing})")
+                    cached_entry.entry_price = broker_entry_price
+                    cached_entry.highest_price = broker_entry_price
+                    cached_entry.trailing_activated = False
+                    cached_entry.trailing_stop_price = None
+                    cached_entry.closing = False
+                    cached_entry.closing_cycles = 0
+                    cached_entry.tier1_hit = False
+                    cached_entry.tier2_hit = False
+                    cached_entry.tier3_hit = False
+                    cached_entry.tier4_hit = False
+                    cached_entry.max_pnl_seen = 0.0
+                    cached_entry.dynamic_sl_price = None
+                    cached_entry.giveback_guard_active = False
+                    cached_entry.last_evaluated_price = None
+                    cached_entry.early_trailing_active = False
+                    cached_entry.early_stop_price = None
+                    cached_entry.early_steps_locked = 0
+                    cached_entry.exit_retry_count = 0
+                    cached_entry.exit_retry_cooldown_until = None
+                    cached_entry.last_exit_failure_reason = None
+                    cached_entry.use_market_order = False
+                    cached_entry.pending_orders = {}
+                    cached_entry.manual_sl_price = None
+                    cached_entry.manual_sl_pct = None
+                    cached_entry.manual_pt_targets = None
+                    cached_entry.source_order_id = None
+                    cached_entry.source_trade_id = None
+                    cached_entry.seed_time = None
+                else:
+                    cached_entry.entry_price = broker_entry_price
+                    print(f"[RISK] ✓ Updated {pos_key} entry price: ${old_price:.2f} → ${broker_entry_price:.2f} (broker sync)")
         
         return self._cache[pos_key]
     
