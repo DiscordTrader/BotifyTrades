@@ -10236,7 +10236,8 @@ def get_global_risk_settings() -> Dict:
             'enable_trailing_execution': False,
             'global_daily_loss_limit': 0,
             'global_max_positions': 10,
-            'order_timeout_minutes': 5
+            'order_timeout_minutes': 5,
+            'risk_check_interval_seconds': 2
         }
     except Exception as e:
         print(f"[OMS] Error getting global risk settings: {e}")
@@ -10257,6 +10258,13 @@ def update_global_risk_settings(updates: Dict) -> bool:
     ]
     
     try:
+        if 'risk_check_interval_seconds' in updates:
+            try:
+                val = float(updates['risk_check_interval_seconds'])
+                updates['risk_check_interval_seconds'] = max(1.0, min(60.0, val))
+            except (TypeError, ValueError):
+                updates['risk_check_interval_seconds'] = 2.0
+        
         set_clauses = []
         params = []
         
