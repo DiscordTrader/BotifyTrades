@@ -3038,7 +3038,7 @@ def find_open_bto_trade(symbol: str, asset_type: str, broker: str = None,
                     FROM trades
                     WHERE symbol = ? AND asset_type = 'option' 
                     AND strike = ? AND expiry = ? AND call_put = ?
-                    AND status = 'OPEN' AND direction = 'BTO'
+                    AND status IN ('OPEN', 'PARTIAL') AND direction = 'BTO'
                 '''
                 params = [symbol, strike, exp_try, call_put]
                 if broker:
@@ -3060,7 +3060,7 @@ def find_open_bto_trade(symbol: str, asset_type: str, broker: str = None,
                 SELECT id, channel_id, message_id, broker
                 FROM trades
                 WHERE symbol = ? AND asset_type = 'stock'
-                AND status = 'OPEN' AND direction = 'BTO'
+                AND status IN ('OPEN', 'PARTIAL') AND direction = 'BTO'
             '''
             params = [symbol]
         
@@ -5040,6 +5040,8 @@ def map_risk_trigger_to_exit_source(risk_trigger: str, tier: int = None) -> str:
         return 'MANUAL'
     elif trigger_lower in ('risk', 'risk_management'):
         return 'RISK'
+    elif 'giveback' in trigger_lower or 'guard' in trigger_lower:
+        return 'TRAILING'
     
     return 'SIGNAL'
 

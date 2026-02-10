@@ -1735,7 +1735,36 @@ class BrokerSyncService:
                             filled_at=filled_time
                         )
                     elif side == 'STC':
-                        # Record exit in execution_closures
+                        exit_source = 'SIGNAL'
+                        stc_channel_id = None
+                        try:
+                            from gui_app.database import find_open_bto_trade, map_risk_trigger_to_exit_source
+                            conn = get_connection()
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                SELECT risk_trigger, channel_id FROM trades
+                                WHERE symbol = ? AND broker = ? AND direction = 'STC'
+                                AND risk_trigger IS NOT NULL AND risk_trigger != ''
+                                ORDER BY id DESC LIMIT 1
+                            """, (order.get('symbol', ''), broker_name))
+                            stc_row = cursor.fetchone()
+                            if stc_row and stc_row['risk_trigger']:
+                                exit_source = map_risk_trigger_to_exit_source(stc_row['risk_trigger'])
+                                stc_channel_id = stc_row['channel_id']
+                            elif not stc_channel_id:
+                                bto_trade = find_open_bto_trade(
+                                    symbol=order.get('symbol', ''),
+                                    asset_type=order.get('asset_type', 'stock'),
+                                    broker=broker_name,
+                                    strike=order.get('strike'),
+                                    expiry=order.get('expiry'),
+                                    call_put=order.get('direction')
+                                )
+                                if bto_trade:
+                                    stc_channel_id = bto_trade.get('channel_id')
+                        except Exception as lookup_err:
+                            print(f"[SYNC] ⚠️ Exit source lookup: {lookup_err}")
+                        
                         await self._record_execution_closure(
                             broker=broker_name,
                             broker_order_id=str(order.get('order_id', '')),
@@ -1746,7 +1775,9 @@ class BrokerSyncService:
                             call_put=order.get('direction'),
                             quantity=qty,
                             fill_price=price,
-                            filled_at=filled_time
+                            filled_at=filled_time,
+                            exit_source=exit_source,
+                            channel_id=stc_channel_id
                         )
             
             if new_count > 0:
@@ -1901,7 +1932,7 @@ class BrokerSyncService:
                             AND channel_id IS NOT NULL 
                             AND channel_id != 'UNKNOWN'
                             AND channel_id != ''
-                            ORDER BY entry_time DESC
+                            ORDER BY executed_at DESC
                             LIMIT 1
                         """, (symbol, broker))
                         row = cursor.fetchone()

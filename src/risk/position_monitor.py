@@ -1732,6 +1732,14 @@ class RiskManager:
                       f"(trade #{origin_trade.get('id')})")
             else:
                 print(f"[RISK] ⚠️ No origin BTO trade found in database for {pos_key}")
+                if channel_settings and channel_settings.channel_id:
+                    stc_signal['channel_id'] = channel_settings.channel_id
+                    channel_record_id = self.db_adapter.get_channel_record_id(
+                        channel_settings.channel_id
+                    )
+                    if channel_record_id:
+                        stc_signal['channel_record_id'] = channel_record_id
+                    print(f"[RISK] ✓ Fallback channel_id={channel_settings.channel_id} from channel settings")
             
             # Add market order flag if limit orders have failed multiple times
             # OR if sl_order_mode is 'market' for stop loss exits
