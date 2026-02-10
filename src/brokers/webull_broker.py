@@ -515,7 +515,9 @@ class WebullBroker(BrokerInterface):
                 symbol = ticker.get('symbol', '') if ticker else ''
                 
                 option_data = order.get('optionExercisePrice')
-                is_option = option_data is not None or order.get('assetType') == 'option'
+                asset_type_raw = str(order.get('assetType', '')).lower()
+                has_option_strike = option_data is not None and float(option_data or 0) > 0
+                is_option = has_option_strike or asset_type_raw == 'option'
                 
                 order_dict = {
                     'order_id': str(order.get('orderId', '')),
