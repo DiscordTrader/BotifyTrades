@@ -657,6 +657,7 @@ class SignalRoutingEngine:
         sys.stderr.flush()
         
         loop_count = 0
+        _quote_fail_counts = {}
         while self._running:
             try:
                 loop_count += 1
@@ -678,7 +679,6 @@ class SignalRoutingEngine:
                         continue
                     
                     try:
-                        quote_agg = get_quote_aggregator()
                         expiry_fmt = position.expiry
                         if '/' in expiry_fmt:
                             parts = expiry_fmt.split('/')
@@ -686,16 +686,44 @@ class SignalRoutingEngine:
                                 year = datetime.now().year
                                 expiry_fmt = f"{year}-{int(parts[0]):02d}-{int(parts[1]):02d}"
                         
+                        try:
+                            from datetime import date
+                            expiry_date = datetime.strptime(expiry_fmt, "%Y-%m-%d").date()
+                            today = date.today()
+                            if expiry_date < today:
+                                if loop_count <= 3 or loop_count % 100 == 0:
+                                    sys.stderr.write(f"[ROUTING_ENGINE] ⏭️  Skipping expired position {position.symbol} {position.strike}{position.option_type} {expiry_fmt} (expired {(today - expiry_date).days} day(s) ago)\n")
+                                    sys.stderr.flush()
+                                position.current_price = 0.01
+                                continue
+                        except (ValueError, TypeError):
+                            pass
+                        
+                        pos_key = getattr(position, 'option_key', None) or f"{position.symbol}_{expiry_fmt}_{position.strike}_{position.option_type}"
+                        fail_count = _quote_fail_counts.get(pos_key, 0)
+                        if fail_count >= 5:
+                            skip_interval = min(fail_count * 5, 60)
+                            if loop_count % (skip_interval // 2 + 1) != 0:
+                                continue
+                        
+                        quote_agg = get_quote_aggregator()
                         from src.services.quote_aggregator import BrokerCapability
                         connected_brokers = quote_agg.get_connected_brokers(BrokerCapability.OPTION_QUOTE)
                         
-                        quote_result = quote_agg.get_option_quote(
-                            symbol=position.symbol,
-                            strike=position.strike,
-                            opt_type=position.option_type,
-                            expiry=expiry_fmt
+                        quote_result = await asyncio.get_event_loop().run_in_executor(
+                            None,
+                            lambda: quote_agg.get_option_quote(
+                                symbol=position.symbol,
+                                strike=position.strike,
+                                opt_type=position.option_type,
+                                expiry=expiry_fmt
+                            )
                         )
                         price = quote_result.mid if quote_result.success else None
+                        if quote_result.success:
+                            _quote_fail_counts.pop(pos_key, None)
+                        else:
+                            _quote_fail_counts[pos_key] = fail_count + 1
                         if loop_count <= 3:
                             error_info = quote_result.error if not quote_result.success else ""
                             sys.stderr.write(f"[ROUTING_ENGINE] {position.symbol} {position.strike}{position.option_type} {expiry_fmt}: price={price} (entry={position.entry_price}) brokers={connected_brokers} {error_info}\n")
