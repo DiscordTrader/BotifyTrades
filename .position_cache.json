@@ -75,7 +75,7 @@
     "tier4_hit": false,
     "pending_orders": {},
     "created_at": "2026-02-04T19:33:10.428996",
-    "max_pnl_seen": 0.0,
+    "max_pnl_seen": 4.4354838709677455,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
     "last_evaluated_price": 0.215,

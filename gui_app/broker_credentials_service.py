@@ -19,6 +19,7 @@ BROKER_STATUS = {
     'tastytrade_live': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
     'tastytrade_paper': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
     'robinhood': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
+    'schwab': {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None},
 }
 
 

@@ -11724,6 +11724,15 @@ def register_routes(app):
                     status['zerodha'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': {'mode': 'LIVE'}}
                 else:
                     status['zerodha'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+                
+                # Schwab broker
+                schwab_broker = getattr(_bot_instance, 'schwab_broker', None)
+                if schwab_broker and getattr(schwab_broker, 'connected', False):
+                    set_broker_status('schwab', True, 'connected')
+                    status['schwab'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': {'mode': 'LIVE'}}
+                else:
+                    set_broker_status('schwab', False, 'disconnected')
+                    status['schwab'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
             
             try:
                 from src.services.broker_health_monitor import get_health_monitor

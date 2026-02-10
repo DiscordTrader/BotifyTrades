@@ -352,6 +352,7 @@ input:checked + .slider:before {
         <span id="tastytrade-paper-status-badge" class="status-badge disconnected">Tasty Paper</span>
         <span id="tastytrade-live-status-badge" class="status-badge disconnected">Tasty Live</span>
         <span id="ibkr-status-badge" class="status-badge disconnected">IBKR</span>
+        <span id="schwab-status-badge" class="status-badge disconnected">Schwab</span>
         <span id="robinhood-status-badge" class="status-badge disconnected" style="background: rgba(0, 200, 83, 0.15); border-color: rgba(0, 200, 83, 0.3);">Robinhood</span>
     </div>
     <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid rgba(0, 212, 255, 0.2);">
@@ -3221,6 +3222,7 @@ async function loadBrokerStatus() {
             updateStatusBadge('tastytrade_paper', data.status.tastytrade_paper);
             updateStatusBadge('tastytrade_live', data.status.tastytrade_live);
             updateStatusBadge('robinhood', data.status.robinhood);
+            updateStatusBadge('schwab', data.status.schwab);
             
             updateBrokerConnectionDisplay('webull_live', data.status.webull_live);
             updateBrokerConnectionDisplay('webull_paper', data.status.webull_paper);
@@ -3229,6 +3231,7 @@ async function loadBrokerStatus() {
             updateBrokerConnectionDisplay('robinhood', data.status.robinhood);
             updateBrokerConnectionDisplay('tastytrade_paper', data.status.tastytrade_paper);
             updateBrokerConnectionDisplay('tastytrade_live', data.status.tastytrade_live);
+            updateBrokerConnectionDisplay('schwab', data.status.schwab);
         }
     } catch (error) {
         console.error('Error loading broker status:', error);
@@ -3239,13 +3242,14 @@ function updateBrokerConnectionDisplay(brokerId, status) {
     if (!status) return;
     
     const elementMap = {
-        'webull_live': 'webull-live',
+        'webull_live': 'webull',
         'webull_paper': 'webull-paper',
         'alpaca_paper': 'alpaca-paper',
         'alpaca_live': 'alpaca-live',
         'robinhood': 'robinhood',
         'tastytrade_paper': 'tastytrade-paper',
-        'tastytrade_live': 'tastytrade-live'
+        'tastytrade_live': 'tastytrade-live',
+        'schwab': 'schwab'
     };
     
     const prefix = elementMap[brokerId];
@@ -3279,7 +3283,8 @@ function updateStatusBadge(brokerId, status) {
         'ibkr_paper': 'ibkr-status-badge',
         'tastytrade_paper': 'tastytrade-paper-status-badge',
         'tastytrade_live': 'tastytrade-live-status-badge',
-        'robinhood': 'robinhood-status-badge'
+        'robinhood': 'robinhood-status-badge',
+        'schwab': 'schwab-status-badge'
     };
     
     const badge = document.getElementById(badgeMap[brokerId]);
