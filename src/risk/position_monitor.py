@@ -949,6 +949,15 @@ class RiskManager:
             except Exception as e:
                 print(f"[RISK] ⚠️ Error processing position {position.symbol}: {e}")
         
+        if not hasattr(self, '_stale_cleanup_counter'):
+            self._stale_cleanup_counter = 0
+        self._stale_cleanup_counter += 1
+        if self._stale_cleanup_counter >= 20 and broker_position_keys:
+            self._stale_cleanup_counter = 0
+            stale_count = self.cache.cleanup_stale(broker_position_keys)
+            if stale_count > 0:
+                print(f"[RISK] 🧹 Periodic cleanup: removed {stale_count} stale cache entries")
+        
         self.cache.save()
     
     async def _fetch_all_positions(self) -> List[PositionSnapshot]:
@@ -1864,39 +1873,81 @@ class RiskManager:
         Reconcile executed conditional orders with open positions.
         Links positions to their source channels and seeds SL/PT into cache.
         
-        This handles cases where:
-        - Conditional orders triggered but bot restarted before seeding
-        - BrokerSync created trade records without channel context
-        - Positions are showing as "Pre-tracking" despite having conditional orders
+        Industry-grade approach:
+        1. Group executed/tracking orders by broker+symbol
+        2. For each group, pick the MOST RECENT order that maps to an OPEN trade
+        3. Always seed SL/PT from that order (overwriting stale values)
+        4. Clean up cache entries from terminal orders (expired/cancelled/closed)
+        
+        This prevents stale SL/PT from old orders causing premature exits on re-entries.
         """
         try:
             from gui_app.database import get_connection
             import json
+            from datetime import datetime as dt
             
             conn = get_connection()
             cursor = conn.cursor()
             
             cursor.execute('''
-                SELECT id, symbol, channel_id, broker_primary,
-                       stop_loss_pct, stop_loss_fixed, stop_loss_type, stop_loss_value,
-                       take_profit_targets, target_ranges, trigger_price,
-                       trailing_stop_enabled, leave_runner
-                FROM conditional_orders
-                WHERE status IN ('EXECUTED', 'TRACKING')
-                AND created_at >= datetime('now', '-7 days')
+                SELECT co.id, co.symbol, co.channel_id, co.broker_primary,
+                       co.stop_loss_pct, co.stop_loss_fixed, co.stop_loss_type, co.stop_loss_value,
+                       co.take_profit_targets, co.target_ranges, co.trigger_price,
+                       co.trailing_stop_enabled, co.leave_runner, co.status as order_status,
+                       co.created_at as order_created_at
+                FROM conditional_orders co
+                WHERE co.status IN ('EXECUTED', 'TRACKING')
+                AND co.created_at >= datetime('now', '-7 days')
+                ORDER BY co.created_at DESC
             ''')
             
             executed_orders = cursor.fetchall()
             if not executed_orders:
                 return 0
             
-            reconciled_count = 0
+            open_trade_symbols = set()
+            try:
+                cursor.execute('''
+                    SELECT UPPER(symbol) as symbol, broker, id as trade_id
+                    FROM trades WHERE status = 'OPEN'
+                ''')
+                for row in cursor.fetchall():
+                    open_trade_symbols.add((row['symbol'], row['broker']))
+            except Exception:
+                pass
+            
+            best_orders = {}
             for order in executed_orders:
                 order_id = order['id']
                 symbol = order['symbol'].upper()
-                channel_id = order['channel_id']
+                broker = order['broker_primary']
+                group_key = f"{broker}_{symbol}"
+                
+                has_open_trade = (symbol, broker) in open_trade_symbols
+                
+                if group_key not in best_orders:
+                    best_orders[group_key] = (order, has_open_trade)
+                else:
+                    existing_order, existing_has_open = best_orders[group_key]
+                    if has_open_trade and not existing_has_open:
+                        best_orders[group_key] = (order, has_open_trade)
+                    elif has_open_trade == existing_has_open:
+                        if order_id > existing_order['id']:
+                            best_orders[group_key] = (order, has_open_trade)
+            
+            reconciled_count = 0
+            for group_key, (order, has_open_trade) in best_orders.items():
+                order_id = order['id']
+                symbol = order['symbol'].upper()
                 broker = order['broker_primary']
                 trigger_price = order['trigger_price']
+                
+                if not has_open_trade:
+                    pos_key_stock = f"{broker}_{symbol}_stock"
+                    if self.cache.get(pos_key_stock):
+                        self.cache.remove(pos_key_stock)
+                        print(f"[RISK] 🧹 Cleaned stale cache for {symbol} (no open trade, order #{order_id})")
+                    continue
                 
                 sl_pct = order['stop_loss_pct'] or order['stop_loss_value']
                 sl_fixed = order['stop_loss_fixed']
@@ -1935,17 +1986,41 @@ class RiskManager:
                 
                 cache_entry = self.cache.get(pos_key_stock) or self.cache.get(pos_key_simple)
                 if cache_entry:
-                    updated = False
+                    is_new_instance = (
+                        cache_entry.source_order_id is None or
+                        cache_entry.source_order_id != order_id
+                    )
                     
-                    if sl_price and not cache_entry.stop_loss_price:
-                        cache_entry.stop_loss_price = sl_price
-                        updated = True
-                    
-                    if pt_price and not cache_entry.profit_target_price:
-                        cache_entry.profit_target_price = pt_price
-                        updated = True
-                    
-                    if updated:
+                    if is_new_instance:
+                        if sl_price:
+                            cache_entry.stop_loss_price = sl_price
+                        if pt_price:
+                            cache_entry.profit_target_price = pt_price
+                        cache_entry.source_order_id = order_id
+                        cache_entry.seed_time = dt.now().isoformat()
+                        cache_entry.manual_sl_price = None
+                        cache_entry.manual_sl_pct = None
+                        cache_entry.manual_pt_targets = None
+                        cache_entry.dynamic_sl_price = None
+                        cache_entry.tier1_hit = False
+                        cache_entry.tier2_hit = False
+                        cache_entry.tier3_hit = False
+                        cache_entry.tier4_hit = False
+                        cache_entry.max_pnl_seen = 0.0
+                        cache_entry.giveback_guard_active = False
+                        cache_entry.early_trailing_active = False
+                        cache_entry.early_stop_price = None
+                        cache_entry.early_steps_locked = 0
+                        reconciled_count += 1
+                        sl_display = f"${sl_price:.2f}" if sl_price else "N/A"
+                        pt_display = f"${pt_price:.2f}" if pt_price else "N/A"
+                        print(f"[RISK] 🔗 Linked {symbol} to conditional order #{order_id} "
+                              f"(SL: {sl_display}, PT: {pt_display}) [new instance]")
+                    else:
+                        if sl_price and not cache_entry.stop_loss_price:
+                            cache_entry.stop_loss_price = sl_price
+                        if pt_price and not cache_entry.profit_target_price:
+                            cache_entry.profit_target_price = pt_price
                         reconciled_count += 1
                         sl_display = f"${sl_price:.2f}" if sl_price else "N/A"
                         pt_display = f"${pt_price:.2f}" if pt_price else "N/A"
@@ -1957,12 +2032,18 @@ class RiskManager:
                         highest_price=trigger_price or 0,
                         stop_loss_price=sl_price,
                         profit_target_price=pt_price,
-                        broker=broker
+                        broker=broker,
+                        source_order_id=order_id,
+                        seed_time=dt.now().isoformat()
                     )
                     reconciled_count += 1
                     print(f"[RISK] ✨ Created cache entry for {symbol} from conditional order #{order_id}")
             
-            if reconciled_count > 0:
+            terminal_cleaned = self._cleanup_terminal_order_cache(conn)
+            if terminal_cleaned > 0:
+                print(f"[RISK] 🧹 Cleaned {terminal_cleaned} stale cache entries from terminal orders")
+            
+            if reconciled_count > 0 or terminal_cleaned > 0:
                 self.cache.save()
             
             return reconciled_count
@@ -1971,6 +2052,54 @@ class RiskManager:
             print(f"[RISK] Error reconciling conditional orders: {e}")
             import traceback
             traceback.print_exc()
+            return 0
+    
+    def _cleanup_terminal_order_cache(self, conn=None) -> int:
+        """
+        Clean up cache entries from conditional orders in terminal states
+        (EXPIRED, CANCELED, CANCELLED, ERROR, FAILED) that have no matching open trade.
+        """
+        try:
+            from gui_app.database import get_connection as _get_conn
+            if conn is None:
+                conn = _get_conn()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT DISTINCT co.symbol, co.broker_primary
+                FROM conditional_orders co
+                WHERE co.status IN ('EXPIRED', 'CANCELED', 'CANCELLED', 'ERROR', 'FAILED')
+                AND co.created_at >= datetime('now', '-7 days')
+            ''')
+            terminal_orders = cursor.fetchall()
+            
+            if not terminal_orders:
+                return 0
+            
+            cleaned = 0
+            for order in terminal_orders:
+                symbol = order['symbol'].upper()
+                broker = order['broker_primary']
+                pos_key = f"{broker}_{symbol}_stock"
+                
+                cache_entry = self.cache.get(pos_key)
+                if not cache_entry:
+                    continue
+                
+                cursor.execute('''
+                    SELECT COUNT(*) as cnt FROM trades
+                    WHERE UPPER(symbol) = ? AND broker = ? AND status = 'OPEN'
+                ''', (symbol, broker))
+                row = cursor.fetchone()
+                has_open = row['cnt'] > 0 if row else False
+                
+                if not has_open:
+                    self.cache.remove(pos_key)
+                    cleaned += 1
+            
+            return cleaned
+        except Exception as e:
+            print(f"[RISK] Error cleaning terminal order cache: {e}")
             return 0
     
     def _to_snapshot(self, pos: Dict) -> PositionSnapshot:

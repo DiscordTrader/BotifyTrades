@@ -246,6 +246,11 @@ class PositionCacheEntry:
     early_stop_price: Optional[float] = None  # Current early trailing stop price
     early_steps_locked: int = 0  # Number of profit steps locked (0=breakeven, 1=+step%, 2=+2*step%, ...)
     
+    # Position instance identity - prevents stale SL/PT from old orders
+    source_order_id: Optional[int] = None  # Conditional order ID that seeded this entry
+    source_trade_id: Optional[int] = None  # Trade record ID for this position instance
+    seed_time: Optional[str] = None  # ISO timestamp when SL/PT were last seeded
+    
     # Manual SL/PT overrides from signal provider follow-up messages
     manual_sl_price: Optional[float] = None  # Fixed price SL override (e.g., "SL at 1.88")
     manual_sl_pct: Optional[float] = None  # Percentage SL override (e.g., "SL 11%")
@@ -289,7 +294,10 @@ class PositionCacheEntry:
             'early_steps_locked': self.early_steps_locked,
             'manual_sl_price': self.manual_sl_price,
             'manual_sl_pct': self.manual_sl_pct,
-            'manual_pt_targets': self.manual_pt_targets
+            'manual_pt_targets': self.manual_pt_targets,
+            'source_order_id': self.source_order_id,
+            'source_trade_id': self.source_trade_id,
+            'seed_time': self.seed_time
         }
     
     @classmethod

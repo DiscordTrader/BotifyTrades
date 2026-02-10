@@ -1215,7 +1215,9 @@ class ConditionalOrderService:
                 sys.stderr.flush()
                 
                 try:
-                    from src.risk.position_cache import PositionCache
+                    from src.risk.position_monitor import risk_manager_instance
+                    from src.risk.risk_types import PositionCacheEntry
+                    from datetime import datetime as dt
                     
                     qty = order.get('calculated_qty') or order.get('qty_value') or 1
                     asset_type = order.get('asset_type', 'stock')
@@ -1230,27 +1232,66 @@ class ConditionalOrderService:
                     else:
                         position_key = f"{broker_upper}_{symbol}_stock"
                     
-                    cache = PositionCache()
-                    
-                    cache_data = {
-                        'symbol': symbol,
-                        'entry_price': entry_price,
-                        'quantity': int(qty),
-                        'broker': broker_upper,
-                        'channel_id': str(channel_id) if channel_id else None,
-                        'conditional_order_id': order_id,
-                        'stop_loss_price': sl_price,
-                        'stop_loss_pct': float(sl_pct) if sl_pct else None,
-                        'profit_targets': pt_prices if pt_prices else None,
-                        'trailing_enabled': trailing_enabled,
-                        'leave_runner': leave_runner,
-                        'asset_type': asset_type,
-                    }
-                    
-                    cache.set(position_key, cache_data)
-                    sl_display = f"${sl_price:.2f}" if sl_price else "None"
-                    sys.stderr.write(f"[CONDITIONAL] ✓ Seeded position cache: {position_key} with SL={sl_display} PT={pt_prices}\n")
-                    sys.stderr.flush()
+                    if risk_manager_instance and hasattr(risk_manager_instance, 'cache'):
+                        cache = risk_manager_instance.cache
+                        first_pt = pt_prices[0] if pt_prices else None
+                        
+                        with cache._persist_lock:
+                            existing = cache.get(position_key)
+                            
+                            if existing:
+                                is_new_instance = (
+                                    existing.source_order_id is None or
+                                    existing.source_order_id != order_id
+                                )
+                                if is_new_instance:
+                                    existing.entry_price = entry_price
+                                    existing.highest_price = entry_price
+                                    existing.stop_loss_price = sl_price
+                                    existing.profit_target_price = first_pt
+                                    existing.source_order_id = order_id
+                                    existing.seed_time = dt.now().isoformat()
+                                    existing.closing = False
+                                    existing.closing_cycles = 0
+                                    existing.tier1_hit = False
+                                    existing.tier2_hit = False
+                                    existing.tier3_hit = False
+                                    existing.tier4_hit = False
+                                    existing.max_pnl_seen = 0.0
+                                    existing.dynamic_sl_price = None
+                                    existing.giveback_guard_active = False
+                                    existing.early_trailing_active = False
+                                    existing.early_stop_price = None
+                                    existing.early_steps_locked = 0
+                                    existing.manual_sl_price = None
+                                    existing.manual_sl_pct = None
+                                    existing.manual_pt_targets = None
+                                    existing.trailing_activated = False
+                                    existing.trailing_stop_price = None
+                                    sys.stderr.write(f"[CONDITIONAL] ✓ Reset cache {position_key} for new order #{order_id}\n")
+                                else:
+                                    if sl_price and not existing.stop_loss_price:
+                                        existing.stop_loss_price = sl_price
+                                    if first_pt and not existing.profit_target_price:
+                                        existing.profit_target_price = first_pt
+                            else:
+                                cache._cache[position_key] = PositionCacheEntry(
+                                    entry_price=entry_price,
+                                    highest_price=entry_price,
+                                    stop_loss_price=sl_price,
+                                    profit_target_price=first_pt,
+                                    broker=broker_upper,
+                                    source_order_id=order_id,
+                                    seed_time=dt.now().isoformat()
+                                )
+                        
+                        cache.save()
+                        sl_display = f"${sl_price:.2f}" if sl_price else "None"
+                        sys.stderr.write(f"[CONDITIONAL] ✓ Seeded position cache: {position_key} with SL={sl_display} PT={pt_prices}\n")
+                        sys.stderr.flush()
+                    else:
+                        sys.stderr.write(f"[CONDITIONAL] ⚠️ RiskManager not available for cache seeding\n")
+                        sys.stderr.flush()
                     
                 except Exception as e:
                     sys.stderr.write(f"[CONDITIONAL] ⚠️ Failed to seed position cache: {e}\n")

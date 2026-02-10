@@ -1154,9 +1154,9 @@ class BrokerSyncService:
                         # Remove from risk position cache if exists
                         if hasattr(self, '_risk_manager') and self._risk_manager:
                             pos_key = f"{broker}_{symbol}_{asset_type}"
-                            if hasattr(self._risk_manager, 'position_cache') and self._risk_manager.position_cache:
-                                if pos_key in self._risk_manager.position_cache._cache:
-                                    del self._risk_manager.position_cache._cache[pos_key]
+                            if hasattr(self._risk_manager, 'cache') and self._risk_manager.cache:
+                                if pos_key in self._risk_manager.cache._cache:
+                                    self._risk_manager.cache.remove(pos_key)
                                     print(f"[SYNC] ✓ Removed {pos_key} from position cache (order cancelled)")
                         
                         # Remove from position ledger if exists
@@ -1202,6 +1202,16 @@ class BrokerSyncService:
                         pnl_percent=pnl_percent,
                         close_reason='broker_closed_position'
                     )
+                    
+                    try:
+                        if hasattr(self, '_risk_manager') and self._risk_manager:
+                            pos_key = f"{broker}_{symbol}_{asset_type}"
+                            if hasattr(self._risk_manager, 'cache') and self._risk_manager.cache:
+                                if pos_key in self._risk_manager.cache._cache:
+                                    self._risk_manager.cache.remove(pos_key)
+                                    print(f"[SYNC] ✓ Cleaned position cache: {pos_key} (trade closed)")
+                    except Exception as cache_err:
+                        print(f"[SYNC] Warning: Could not clean cache on close: {cache_err}")
                     
                     # Create lot_closure for PNL/leaderboard tracking
                     # Note: exit_price can be 0 for expired worthless options - still valid closure
