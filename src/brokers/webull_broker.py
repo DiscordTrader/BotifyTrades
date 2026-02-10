@@ -545,6 +545,19 @@ class WebullBroker(BrokerInterface):
             traceback.print_exc()
             return []
     
+    @staticmethod
+    def _get_min_lot_size(price: float) -> int:
+        """Webull minimum order sizes for low-priced stocks."""
+        if price is None or price <= 0:
+            return 1
+        if price < 0.01:
+            return 10000
+        elif price < 0.1:
+            return 1000
+        elif price < 1.0:
+            return 100
+        return 1
+
     async def place_stock_order(
         self,
         symbol: str,
@@ -556,6 +569,12 @@ class WebullBroker(BrokerInterface):
         try:
             side = 'BUY' if action == 'BTO' else 'SELL'
             extended_hours_enabled = self._get_extended_hours_enabled()
+            
+            if price is not None and action == 'BTO':
+                min_qty = self._get_min_lot_size(price)
+                if quantity < min_qty:
+                    print(f"[{self.name}] ⚠️ Webull requires minimum {min_qty} shares for ${price:.4f} stocks, adjusting {quantity} → {min_qty}")
+                    quantity = min_qty
             
             def execute_order():
                 if price is None:

@@ -1887,6 +1887,20 @@ def _latin1(s: str) -> str:
 print("[CONFIG] ✓ All settings loaded successfully\n")
 
 # ------------------------------ HELPERS ---------------------------------------
+def _get_webull_min_lot_size(price: float) -> int:
+    """Webull enforces minimum order sizes for low-priced stocks.
+    Returns the minimum quantity required for the given price."""
+    if price < 0.0001:
+        return 1
+    elif price < 0.01:
+        return 10000
+    elif price < 0.1:
+        return 1000
+    elif price < 1.0:
+        return 100
+    else:
+        return 1
+
 def fix_symbol(symbol: str, direction: str) -> str:
     if direction == 'in':
         return symbol.replace("SPXW", "SPX").replace("NDXP", "NDX")
@@ -3338,6 +3352,23 @@ class WebullBroker:
                             print(f"[POSITION] Proceeding with signal quantity: {qty}")
                 except Exception as e:
                     print(f"[POSITION] Warning: Could not check positions: {e}")
+
+            if side == 'BUY' and limit_price is not None and limit_price > 0:
+                webull_min_qty = _get_webull_min_lot_size(limit_price)
+                if adjusted_qty < webull_min_qty:
+                    order_cost = webull_min_qty * limit_price
+                    bp = locals().get('buying_power', 0)
+                    if bp >= order_cost or bp == 0:
+                        print(f"[WEBULL LOT SIZE] ⚠️ Webull requires minimum {webull_min_qty} shares for ${limit_price:.4f} stocks")
+                        print(f"[WEBULL LOT SIZE] ✓ Adjusting quantity: {adjusted_qty} → {webull_min_qty} shares (cost: ${order_cost:.2f})")
+                        adjusted_qty = webull_min_qty
+                    else:
+                        return {
+                            'success': False,
+                            'msg': f'Webull requires minimum {webull_min_qty} shares for stocks priced ${limit_price:.4f}. '
+                                   f'Need ${order_cost:.2f} but only ${bp:.2f} available.',
+                            'error': 'WEBULL_MIN_LOT_SIZE'
+                        }
 
             base_payload = {
                 'stock': base_sym,
