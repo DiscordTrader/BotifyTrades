@@ -702,8 +702,8 @@ class SignalRoutingEngine:
                         pos_key = getattr(position, 'option_key', None) or f"{position.symbol}_{expiry_fmt}_{position.strike}_{position.option_type}"
                         fail_count = _quote_fail_counts.get(pos_key, 0)
                         if fail_count >= 5:
-                            skip_interval = min(fail_count * 5, 60)
-                            if loop_count % (skip_interval // 2 + 1) != 0:
+                            skip_interval = min(2 ** (fail_count - 4), 120)
+                            if loop_count % skip_interval != 0:
                                 continue
                         
                         quote_agg = get_quote_aggregator()
