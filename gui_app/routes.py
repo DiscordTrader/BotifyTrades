@@ -17122,11 +17122,12 @@ def register_routes(app):
             except Exception as e:
                 print(f"[BROKER STATES] Health monitor error: {e}")
             
-            # Build configured brokers list from bot instance
-            # Only include brokers that are CONNECTED (truly configured)
             configured_brokers = []
             
             if _bot_instance:
+                broker_ready = getattr(_bot_instance, 'broker_ready', None)
+                brokers_initialized = broker_ready and broker_ready.is_set() if broker_ready else False
+                
                 broker_mappings = [
                     ('WEBULL', 'broker', 'USA', 'USD', False),
                     ('ALPACA_PAPER', 'paper_broker', 'USA', 'USD', True),
@@ -17142,20 +17143,21 @@ def register_routes(app):
                     if broker_instance is None:
                         continue
                     
-                    # Check if broker is connected (different brokers use different properties)
-                    # For Webull, check is_authenticated() which validates tokens
-                    # For others, use connected property
                     if broker_name == 'WEBULL':
-                        # Use is_authenticated() for Webull to detect token expiration
                         if hasattr(broker_instance, 'is_authenticated'):
                             instance_connected = broker_instance.is_authenticated()
                         else:
                             instance_connected = getattr(broker_instance, 'connected', False) or getattr(broker_instance, '_logged_in', False)
+                        if not instance_connected:
+                            instance_connected = getattr(broker_instance, '_logged_in', False)
                     else:
                         instance_connected = (
                             getattr(broker_instance, 'connected', False) or 
                             getattr(broker_instance, '_logged_in', False)
                         )
+                    
+                    if not instance_connected and not brokers_initialized:
+                        continue
                     
                     # Get real-time status from health monitor (uses uppercase keys)
                     health_key = broker_name.upper()
@@ -17225,7 +17227,9 @@ def register_routes(app):
             print("[BROKER STATES] No bot instance available")
             return
         
-        # Only USA + Canada brokers (India brokers removed)
+        broker_ready = getattr(_bot_instance, 'broker_ready', None)
+        brokers_initialized = broker_ready and broker_ready.is_set() if broker_ready else False
+        
         broker_mappings = [
             ('webull', 'broker', 'US', 'USD'),
             ('alpaca_paper', 'paper_broker', 'US', 'USD'),
@@ -17237,12 +17241,14 @@ def register_routes(app):
         ]
         
         loop = getattr(_bot_instance, 'loop', None)
-        print(f"[BROKER STATES] Populating states, loop running: {loop and loop.is_running()}")
+        print(f"[BROKER STATES] Populating states, loop running: {loop and loop.is_running()}, brokers_initialized: {brokers_initialized}")
         
         for broker_name, attr_name, country, currency in broker_mappings:
             try:
                 broker_instance = getattr(_bot_instance, attr_name, None)
                 is_connected = broker_instance and getattr(broker_instance, 'connected', False)
+                if not is_connected and broker_instance and broker_name == 'webull':
+                    is_connected = getattr(broker_instance, '_logged_in', False)
                 is_paper = getattr(broker_instance, 'paper_trade', False) if broker_instance else False
                 is_paper = is_paper or 'paper' in broker_name.lower()
                 
@@ -17269,7 +17275,8 @@ def register_routes(app):
                         state['sync_error'] = str(e)
                         print(f"[BROKER STATES] {broker_name} error: {e}")
                 
-                db.update_broker_state(broker_name, country, state)
+                if state['is_connected'] or brokers_initialized:
+                    db.update_broker_state(broker_name, country, state)
             except Exception as e:
                 print(f"[BROKER STATES] Error populating {broker_name}: {e}")
     

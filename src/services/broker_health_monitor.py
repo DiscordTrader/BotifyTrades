@@ -136,8 +136,53 @@ class BrokerHealthMonitor:
         self._last_notification: Dict[str, float] = {}
         self._notification_cooldown = 300
         
+        self._clear_stale_disconnect_notifications()
         print("[HEALTH] BrokerHealthMonitor initialized (thread-safe)")
     
+    def _clear_stale_disconnect_notifications(self):
+        """Clear old broker_disconnect notifications and stale broker_states on startup."""
+        try:
+            from gui_app.database import get_connection
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS broker_notifications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    broker_name TEXT NOT NULL,
+                    notification_type TEXT NOT NULL,
+                    message TEXT,
+                    severity TEXT DEFAULT 'info',
+                    is_read INTEGER DEFAULT 0,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cursor.execute('''
+                UPDATE broker_notifications SET is_read = 1
+                WHERE notification_type = 'broker_disconnect' AND is_read = 0
+            ''')
+            try:
+                cursor.execute('DELETE FROM broker_states')
+            except Exception:
+                pass
+            conn.commit()
+            print("[HEALTH] Cleared stale broker disconnect notifications and broker states from previous session")
+        except Exception as e:
+            print(f"[HEALTH] Error clearing stale notifications: {e}")
+
+    def _mark_broker_disconnect_notifications_read(self, broker_name: str):
+        """Mark all unread disconnect notifications for a specific broker as read."""
+        try:
+            from gui_app.database import get_connection
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE broker_notifications SET is_read = 1
+                WHERE broker_name = ? AND notification_type = 'broker_disconnect' AND is_read = 0
+            ''', (broker_name,))
+            conn.commit()
+        except Exception as e:
+            print(f"[HEALTH] Error marking disconnect notifications read for {broker_name}: {e}")
+
     def _normalize_broker_name(self, broker_name: str) -> str:
         """Normalize broker name to uppercase for consistent lookups."""
         return broker_name.upper().strip() if broker_name else ""
@@ -310,6 +355,8 @@ class BrokerHealthMonitor:
         }
         
         print(f"[HEALTH] ✅ BROKER RECONNECTED: {broker_name}")
+        
+        self._mark_broker_disconnect_notifications_read(broker_name)
         
         try:
             from gui_app.discord_notifier import notify_broker_reconnected
