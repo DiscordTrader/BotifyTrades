@@ -3273,13 +3273,14 @@ class WebullBroker:
 
             side = 'BUY' if action.upper() in ('BTO', 'BTC') else 'SELL'
             
-            is_market_order = limit_price is None
+            effective_price = limit_price
+            is_market_order = effective_price is None
             
             if is_market_order and side == 'BUY':
                 try:
                     quote_price = self._get_current_stock_quote(wb, base_sym)
                     if quote_price and quote_price > 0:
-                        limit_price = quote_price
+                        effective_price = quote_price
                         print(f"[MARKET ORDER] Got live quote for {base_sym}: ${quote_price:.4f} (for buying power check)")
                     else:
                         print(f"[MARKET ORDER] No quote available for {base_sym}, proceeding without fund check")
@@ -3312,8 +3313,8 @@ class WebullBroker:
                     
                     net_liq = float(account_data.get('netLiquidation', 0))
                     
-                    if limit_price is not None and limit_price > 0:
-                        order_cost = qty * limit_price
+                    if effective_price is not None and effective_price > 0:
+                        order_cost = qty * effective_price
                         print(f"[FUNDS] Buying power: ${buying_power:.2f}, Order cost: ${order_cost:.2f} (Net liquidation: ${net_liq:.2f})")
                         
                         if buying_power <= 0:
@@ -3324,11 +3325,11 @@ class WebullBroker:
                             }
                         
                         if order_cost > buying_power:
-                            max_affordable_qty = int(buying_power / limit_price)
+                            max_affordable_qty = int(buying_power / effective_price)
                             if max_affordable_qty > 0:
                                 print(f"[FUNDS] ⚠️ Insufficient funds for {qty} shares")
                                 print(f"[FUNDS] ✓ Adjusting quantity: {qty} → {max_affordable_qty} shares")
-                                print(f"[FUNDS] Adjusted cost: ${max_affordable_qty * limit_price:.2f}")
+                                print(f"[FUNDS] Adjusted cost: ${max_affordable_qty * effective_price:.2f}")
                                 adjusted_qty = max_affordable_qty
                             else:
                                 return {
@@ -3368,18 +3369,18 @@ class WebullBroker:
                 except Exception as e:
                     print(f"[POSITION] Warning: Could not check positions: {e}")
 
-            if side == 'BUY' and limit_price is not None and limit_price > 0:
-                webull_min_qty = _get_webull_min_lot_size(limit_price)
+            if side == 'BUY' and effective_price is not None and effective_price > 0:
+                webull_min_qty = _get_webull_min_lot_size(effective_price)
                 if adjusted_qty < webull_min_qty:
-                    order_cost = webull_min_qty * limit_price
+                    order_cost = webull_min_qty * effective_price
                     if buying_power >= order_cost or buying_power == 0:
-                        print(f"[WEBULL LOT SIZE] ⚠️ Webull requires minimum {webull_min_qty} shares for ${limit_price:.4f} stocks")
+                        print(f"[WEBULL LOT SIZE] ⚠️ Webull requires minimum {webull_min_qty} shares for ${effective_price:.4f} stocks")
                         print(f"[WEBULL LOT SIZE] ✓ Adjusting quantity: {adjusted_qty} → {webull_min_qty} shares (cost: ${order_cost:.2f})")
                         adjusted_qty = webull_min_qty
                     else:
                         return {
                             'success': False,
-                            'msg': f'Webull requires minimum {webull_min_qty} shares for stocks priced ${limit_price:.4f}. '
+                            'msg': f'Webull requires minimum {webull_min_qty} shares for stocks priced ${effective_price:.4f}. '
                                    f'Need ${order_cost:.2f} but only ${buying_power:.2f} available.',
                             'error': 'WEBULL_MIN_LOT_SIZE'
                         }
@@ -3399,8 +3400,8 @@ class WebullBroker:
                 base_payload = {
                     'stock': base_sym,
                     'tId': int(tId),
-                    'price': round(float(limit_price), 2),
-                    'lmtPrice': round(float(limit_price), 2),
+                    'price': round(float(effective_price), 2),
+                    'lmtPrice': round(float(effective_price), 2),
                     'action': side,
                     'orderType': 'LMT',
                     'enforce': WB_ENFORCE,
