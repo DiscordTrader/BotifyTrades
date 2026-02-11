@@ -5566,7 +5566,6 @@ class SelfClient(discord.Client):
             if self.broker._logged_in:
                 print("[Webull] ✓ Login successful (LIVE account)", flush=True)
                 self.broker_ready.set()
-                # Update broker status in GUI
                 try:
                     from gui_app.broker_credentials_service import set_broker_status
                     set_broker_status('webull_live', True, 'connected', account_info={'mode': 'live'})
@@ -5579,6 +5578,18 @@ class SelfClient(discord.Client):
                     notify_broker_reconnected('Webull')
                 except Exception:
                     pass
+                try:
+                    from src.services.broker_health_monitor import get_health_monitor
+                    hm = get_health_monitor()
+                    acct = await self.broker.get_account_info()
+                    hm.update_broker_status('WEBULL', True, account_info=acct)
+                    _original_print(f"[HEALTH] ✓ Webull cached (buying_power=${acct.get('buying_power', 0):,.2f})", flush=True)
+                except Exception as he:
+                    try:
+                        hm.update_broker_status('WEBULL', True)
+                    except Exception:
+                        pass
+                    _original_print(f"[HEALTH] Webull connected (no account data: {he})", flush=True)
             else:
                 print("[Webull] ⚠️  Broker not configured - configure via GUI (see startup logs for port)", flush=True)
                 try:
@@ -5674,6 +5685,19 @@ class SelfClient(discord.Client):
                             notify_broker_reconnected('Alpaca Paper')
                         except Exception:
                             pass
+                        try:
+                            from src.services.broker_health_monitor import get_health_monitor
+                            hm = get_health_monitor()
+                            acct = await self.paper_broker.get_account_info()
+                            hm.update_broker_status('ALPACA_PAPER', True, account_info=acct)
+                            _original_print(f"[HEALTH] ✓ Alpaca Paper cached (buying_power=${acct.get('buying_power', 0):,.2f})", flush=True)
+                        except Exception as he:
+                            try:
+                                from src.services.broker_health_monitor import get_health_monitor
+                                get_health_monitor().update_broker_status('ALPACA_PAPER', True)
+                            except Exception:
+                                pass
+                            _original_print(f"[HEALTH] Alpaca connected (no account data: {he})", flush=True)
                     else:
                         _original_print("[ALPACA] ⚠️ Paper broker connection failed", flush=True)
                         self.paper_broker = None
@@ -5813,9 +5837,23 @@ class SelfClient(discord.Client):
                         _original_print(f"[ROBINHOOD] ✓ Connected successfully (LIVE)", flush=True)
                         try:
                             from gui_app.broker_credentials_service import set_broker_status
-                            account_info = await self.robinhood_broker.get_account_info()
+                            _rh_acct_task = asyncio.create_task(self.robinhood_broker.get_account_info())
+                            _rh_done, _rh_pending = await asyncio.wait({_rh_acct_task}, timeout=10.0)
+                            if _rh_pending:
+                                for t in _rh_pending:
+                                    t.cancel()
+                                account_info = {'buying_power': 0}
+                                _original_print(f"[ROBINHOOD] ⚠️ Account info timeout (10s) - using defaults", flush=True)
+                            else:
+                                account_info = _rh_acct_task.result()
                             set_broker_status('robinhood', True, 'connected', account_info=account_info)
                             _original_print(f"[ROBINHOOD] ✓ Broker status updated in GUI", flush=True)
+                            try:
+                                from src.services.broker_health_monitor import get_health_monitor
+                                get_health_monitor().update_broker_status('ROBINHOOD', True, account_info=account_info)
+                                _original_print(f"[HEALTH] ✓ Robinhood cached (buying_power=${account_info.get('buying_power', 0):,.2f})", flush=True)
+                            except Exception:
+                                pass
                         except Exception as status_err:
                             _original_print(f"[ROBINHOOD] ⚠️ Failed to update broker status: {status_err}", flush=True)
                         try:
@@ -5856,56 +5894,72 @@ class SelfClient(discord.Client):
                 ibkr_client_id = ibkr_creds.get('client_id', 1)
                 ibkr_paper_mode = ibkr_creds.get('paper_mode', True)
                 
-                # Select port based on paper/live mode
                 ibkr_port = ibkr_port_paper if ibkr_paper_mode else ibkr_port_live
                 
-                _original_print(f"[IBKR] ✓ Loaded credentials from DATABASE", flush=True)
-                _original_print(f"[IBKR]   Host: {ibkr_host}:{ibkr_port} (Client ID: {ibkr_client_id})", flush=True)
-                _original_print(f"[IBKR]   Mode: {'PAPER' if ibkr_paper_mode else 'LIVE'}", flush=True)
-                _original_print(f"[IBKR] Creating IBKRBroker instance...", flush=True)
-                
-                self.ibkr_broker = IBKRBroker({
-                    'host': ibkr_host,
-                    'port': ibkr_port,
-                    'client_id': ibkr_client_id,
-                    'paper_trade': ibkr_paper_mode
-                })
-                
-                # Add timeout - IBKR requires TWS/Gateway running
+                import socket
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(2)
+                port_open = False
                 try:
-                    connected = await asyncio.wait_for(self.ibkr_broker.connect(), timeout=15.0)
-                except asyncio.TimeoutError:
-                    _original_print("[IBKR] ⚠️ Connection timeout (15s) - TWS/Gateway may not be running", flush=True)
+                    result = sock.connect_ex((ibkr_host, ibkr_port))
+                    port_open = (result == 0)
+                except Exception:
+                    pass
+                finally:
+                    sock.close()
+                
+                if not port_open:
+                    _original_print(f"[IBKR] ⏭️ TWS/Gateway not reachable at {ibkr_host}:{ibkr_port} - skipping", flush=True)
+                    _original_print(f"[IBKR]   Start TWS or IB Gateway and restart bot to connect", flush=True)
                     self.ibkr_broker = None
                     connected = False
-                if connected:
-                    mode = "PAPER" if ibkr_paper_mode else "LIVE"
-                    _original_print(f"[IBKR] ✓ Connected successfully ({mode})", flush=True)
-                    try:
-                        account_info = await self.ibkr_broker.get_account_info()
-                        broker_id = 'ibkr_paper' if ibkr_paper_mode else 'ibkr_live'
-                        set_broker_status(broker_id, True, 'connected', account_info=account_info)
-                        _original_print(f"[IBKR] ✓ Broker status updated in GUI", flush=True)
-                        nlv = account_info.get('portfolio_value', 0)
-                        if nlv > 0:
-                            _original_print(f"[IBKR]   Net Liq: ${nlv:,.2f}", flush=True)
-                            _original_print(f"[IBKR]   Buying Power: ${account_info.get('buying_power', 0):,.2f}", flush=True)
-                    except Exception as status_err:
-                        _original_print(f"[IBKR] ⚠️ Failed to update broker status: {status_err}", flush=True)
-                    try:
-                        from gui_app.discord_notifier import notify_broker_reconnected
-                        notify_broker_reconnected(f'IBKR {mode}')
-                    except Exception:
-                        pass
                 else:
-                    _original_print("[IBKR] ⚠️ Connection failed - TWS/Gateway may not be running", flush=True)
-                    _original_print("[IBKR]   Make sure TWS or IB Gateway is running and API is enabled", flush=True)
-                    self.ibkr_broker = None
+                    _original_print(f"[IBKR] ✓ Loaded credentials from DATABASE", flush=True)
+                    _original_print(f"[IBKR]   Host: {ibkr_host}:{ibkr_port} (Client ID: {ibkr_client_id})", flush=True)
+                    _original_print(f"[IBKR]   Mode: {'PAPER' if ibkr_paper_mode else 'LIVE'}", flush=True)
+                    _original_print(f"[IBKR] Creating IBKRBroker instance...", flush=True)
+                    
+                    self.ibkr_broker = IBKRBroker({
+                        'host': ibkr_host,
+                        'port': ibkr_port,
+                        'client_id': ibkr_client_id,
+                        'paper_trade': ibkr_paper_mode
+                    })
+                    
                     try:
-                        from gui_app.discord_notifier import notify_broker_disconnected
-                        notify_broker_disconnected('IBKR', 'TWS/Gateway not running')
-                    except Exception:
-                        pass
+                        connected = await asyncio.wait_for(self.ibkr_broker.connect(), timeout=15.0)
+                    except asyncio.TimeoutError:
+                        _original_print("[IBKR] ⚠️ Connection timeout (15s) - TWS/Gateway may not be running", flush=True)
+                        self.ibkr_broker = None
+                        connected = False
+                    if connected:
+                        mode = "PAPER" if ibkr_paper_mode else "LIVE"
+                        _original_print(f"[IBKR] ✓ Connected successfully ({mode})", flush=True)
+                        try:
+                            account_info = await self.ibkr_broker.get_account_info()
+                            broker_id = 'ibkr_paper' if ibkr_paper_mode else 'ibkr_live'
+                            set_broker_status(broker_id, True, 'connected', account_info=account_info)
+                            _original_print(f"[IBKR] ✓ Broker status updated in GUI", flush=True)
+                            nlv = account_info.get('portfolio_value', 0)
+                            if nlv > 0:
+                                _original_print(f"[IBKR]   Net Liq: ${nlv:,.2f}", flush=True)
+                                _original_print(f"[IBKR]   Buying Power: ${account_info.get('buying_power', 0):,.2f}", flush=True)
+                        except Exception as status_err:
+                            _original_print(f"[IBKR] ⚠️ Failed to update broker status: {status_err}", flush=True)
+                        try:
+                            from gui_app.discord_notifier import notify_broker_reconnected
+                            notify_broker_reconnected(f'IBKR {mode}')
+                        except Exception:
+                            pass
+                    else:
+                        _original_print("[IBKR] ⚠️ Connection failed - TWS/Gateway may not be running", flush=True)
+                        _original_print("[IBKR]   Make sure TWS or IB Gateway is running and API is enabled", flush=True)
+                        self.ibkr_broker = None
+                        try:
+                            from gui_app.discord_notifier import notify_broker_disconnected
+                            notify_broker_disconnected('IBKR', 'TWS/Gateway not running')
+                        except Exception:
+                            pass
             else:
                 _original_print("[IBKR] IBKRBroker not available (ib_insync not installed)", flush=True)
         except Exception as e:
@@ -5939,11 +5993,22 @@ class SelfClient(discord.Client):
                             'access_token': dhanq_access_token
                         })
                         
-                        # Add timeout to prevent blocking
                         try:
-                            connected = await asyncio.wait_for(self.dhanq_broker.connect(), timeout=15.0)
-                        except asyncio.TimeoutError:
-                            _original_print("[DHANQ] ⚠️ Connection timeout (15s) - broker skipped", flush=True)
+                            _dhanq_task = asyncio.create_task(self.dhanq_broker.connect())
+                            done, pending = await asyncio.wait({_dhanq_task}, timeout=10.0)
+                            if pending:
+                                _original_print("[DHANQ] ⚠️ Connection timeout (10s) - broker skipped", flush=True)
+                                for t in pending:
+                                    t.cancel()
+                                self.dhanq_broker = None
+                                connected = False
+                            else:
+                                try:
+                                    connected = _dhanq_task.result()
+                                except Exception:
+                                    connected = False
+                        except Exception as de:
+                            _original_print(f"[DHANQ] ⚠️ Connection error: {de}", flush=True)
                             self.dhanq_broker = None
                             connected = False
                         if connected:
@@ -6006,11 +6071,22 @@ class SelfClient(discord.Client):
                             'token_issued_at': token_issued_at
                         })
                         
-                        # Add timeout to prevent blocking
                         try:
-                            connected = await asyncio.wait_for(self.upstox_broker.connect(), timeout=15.0)
-                        except asyncio.TimeoutError:
-                            _original_print("[UPSTOX] ⚠️ Connection timeout (15s) - broker skipped", flush=True)
+                            _upstox_task = asyncio.create_task(self.upstox_broker.connect())
+                            done, pending = await asyncio.wait({_upstox_task}, timeout=10.0)
+                            if pending:
+                                _original_print("[UPSTOX] ⚠️ Connection timeout (10s) - broker skipped", flush=True)
+                                for t in pending:
+                                    t.cancel()
+                                self.upstox_broker = None
+                                connected = False
+                            else:
+                                try:
+                                    connected = _upstox_task.result()
+                                except Exception:
+                                    connected = False
+                        except Exception as ue:
+                            _original_print(f"[UPSTOX] ⚠️ Connection error: {ue}", flush=True)
                             self.upstox_broker = None
                             connected = False
                         if connected:
@@ -6104,11 +6180,22 @@ class SelfClient(discord.Client):
                             'request_token': zerodha_request_token
                         })
                         
-                        # Add timeout to prevent blocking
                         try:
-                            connected = await asyncio.wait_for(self.zerodha_broker.connect(), timeout=15.0)
-                        except asyncio.TimeoutError:
-                            _original_print("[ZERODHA] ⚠️ Connection timeout (15s) - broker skipped", flush=True)
+                            _zerodha_task = asyncio.create_task(self.zerodha_broker.connect())
+                            done, pending = await asyncio.wait({_zerodha_task}, timeout=10.0)
+                            if pending:
+                                _original_print("[ZERODHA] ⚠️ Connection timeout (10s) - broker skipped", flush=True)
+                                for t in pending:
+                                    t.cancel()
+                                self.zerodha_broker = None
+                                connected = False
+                            else:
+                                try:
+                                    connected = _zerodha_task.result()
+                                except Exception:
+                                    connected = False
+                        except Exception as ze:
+                            _original_print(f"[ZERODHA] ⚠️ Connection error: {ze}", flush=True)
                             self.zerodha_broker = None
                             connected = False
                         if connected:
@@ -6172,11 +6259,22 @@ class SelfClient(discord.Client):
                     'dry_run': schwab_creds.get('dry_run', True)
                 })
                 
-                # Add timeout to prevent blocking
                 try:
-                    connected = await asyncio.wait_for(self.schwab_broker.connect(), timeout=15.0)
-                except asyncio.TimeoutError:
-                    _original_print("[SCHWAB] ⚠️ Connection timeout (15s) - broker skipped", flush=True)
+                    _schwab_task = asyncio.create_task(self.schwab_broker.connect())
+                    done, pending = await asyncio.wait({_schwab_task}, timeout=15.0)
+                    if pending:
+                        _original_print("[SCHWAB] ⚠️ Connection timeout (15s) - broker skipped", flush=True)
+                        for t in pending:
+                            t.cancel()
+                        self.schwab_broker = None
+                        connected = False
+                    else:
+                        try:
+                            connected = _schwab_task.result()
+                        except Exception:
+                            connected = False
+                except Exception as se:
+                    _original_print(f"[SCHWAB] ⚠️ Connection error: {se}", flush=True)
                     self.schwab_broker = None
                     connected = False
                 if connected:
@@ -6463,6 +6561,58 @@ class SelfClient(discord.Client):
             _original_print("[QUOTE_AGG] ✓ Registered connected brokers with QuoteAggregator", flush=True)
         except Exception as e:
             _original_print(f"[QUOTE_AGG] ⚠️ Could not register brokers: {e}", flush=True)
+        
+        try:
+            from src.services.broker_health_monitor import get_health_monitor
+            hm = get_health_monitor()
+            if self.broker and getattr(self.broker, '_logged_in', False):
+                try:
+                    acct = await self.broker.get_account_info()
+                    hm.update_broker_status('WEBULL', True, account_info=acct)
+                    _original_print(f"[HEALTH] ✓ Webull cached (buying_power=${acct.get('buying_power', 0):,.2f})", flush=True)
+                except Exception as he:
+                    hm.update_broker_status('WEBULL', True)
+                    _original_print(f"[HEALTH] Webull connected (no account data: {he})", flush=True)
+            if self.paper_broker and getattr(self.paper_broker, 'connected', False):
+                try:
+                    acct = await self.paper_broker.get_account_info()
+                    hm.update_broker_status('ALPACA_PAPER', True, account_info=acct)
+                    _original_print(f"[HEALTH] ✓ Alpaca Paper cached (buying_power=${acct.get('buying_power', 0):,.2f})", flush=True)
+                except Exception as he:
+                    hm.update_broker_status('ALPACA_PAPER', True)
+                    _original_print(f"[HEALTH] Alpaca connected (no account data: {he})", flush=True)
+            if self.robinhood_broker and getattr(self.robinhood_broker, 'connected', False):
+                try:
+                    acct = await self.robinhood_broker.get_account_info()
+                    hm.update_broker_status('ROBINHOOD', True, account_info=acct)
+                    _original_print(f"[HEALTH] ✓ Robinhood cached (buying_power=${acct.get('buying_power', 0):,.2f})", flush=True)
+                except Exception as he:
+                    hm.update_broker_status('ROBINHOOD', True)
+                    _original_print(f"[HEALTH] Robinhood connected (no account data: {he})", flush=True)
+            if self.schwab_broker and getattr(self.schwab_broker, 'connected', False):
+                try:
+                    acct = await self.schwab_broker.get_account_info()
+                    hm.update_broker_status('SCHWAB', True, account_info=acct)
+                    _original_print(f"[HEALTH] ✓ Schwab cached", flush=True)
+                except Exception as he:
+                    hm.update_broker_status('SCHWAB', True)
+            if self.ibkr_broker and getattr(self.ibkr_broker, 'connected', False):
+                try:
+                    acct = await self.ibkr_broker.get_account_info()
+                    hm.update_broker_status('IBKR', True, account_info=acct)
+                    _original_print(f"[HEALTH] ✓ IBKR cached", flush=True)
+                except Exception as he:
+                    hm.update_broker_status('IBKR', True)
+            if self.tastytrade_broker and getattr(self.tastytrade_broker, 'connected', False):
+                try:
+                    acct = await self.tastytrade_broker.get_account_info()
+                    hm.update_broker_status('TASTYTRADE', True, account_info=acct)
+                    _original_print(f"[HEALTH] ✓ Tastytrade cached", flush=True)
+                except Exception as he:
+                    hm.update_broker_status('TASTYTRADE', True)
+            _original_print("[HEALTH] ✓ Broker health monitor pre-populated with account data", flush=True)
+        except Exception as hm_err:
+            _original_print(f"[HEALTH] ⚠️ Could not pre-populate health monitor: {hm_err}", flush=True)
         
         _original_print("[BROKERS] ✓ Background broker initialization complete - Discord was never blocked", flush=True)
     

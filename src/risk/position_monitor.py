@@ -1327,6 +1327,10 @@ class RiskManager:
         if self.cache.is_closing(pos_key):
             return
         
+        cache_entry = self.cache._cache.get(pos_key)
+        if cache_entry and getattr(cache_entry, 'retry_permanently_exhausted', False):
+            return
+        
         # Get trade_id for database persistence of trailing state
         # If not mapped yet (new position), look it up from DB and cache it
         trade_id = self.cache.get_trade_id(pos_key)

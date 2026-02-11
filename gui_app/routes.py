@@ -3131,12 +3131,31 @@ def register_routes(app):
         """Get Webull account balance"""
         import asyncio
         
-        # Check cache first (5 second TTL)
         cache_key = 'webull_balance'
         if cache_key in _api_cache:
             cached_value, timestamp = _api_cache[cache_key]
             if time.time() - timestamp < 5:
                 return cached_value
+        
+        try:
+            from src.services.broker_health_monitor import get_health_monitor
+            hm = get_health_monitor()
+            cached = hm.get_cached_account_info('WEBULL')
+            if cached and cached.get('buying_power', 0) > 0:
+                result = jsonify({
+                    'buying_power': cached.get('buying_power', 0),
+                    'cash_balance': cached.get('cash', cached.get('cash_balance', 0)),
+                    'net_liquidation': cached.get('portfolio_value', cached.get('net_liquidation', 0)),
+                    'total_profit_loss': cached.get('total_profit_loss', 0),
+                    'day_profit_loss': cached.get('day_profit_loss', 0),
+                    'settled_cash': cached.get('settled_cash', 0),
+                    'unsettled_cash': cached.get('unsettled_cash', 0),
+                    'status': 'cached'
+                })
+                _api_cache[cache_key] = (result, time.time())
+                return result
+        except Exception:
+            pass
         
         if not _bot_instance or not hasattr(_bot_instance, 'broker'):
             # Fallback: Use WebullAuth directly when bot is not running
@@ -3222,8 +3241,25 @@ def register_routes(app):
             err_type = type(e).__name__
             err_msg = str(e) or 'no details'
             print(f"[API] Exception in balance endpoint: {err_type}: {err_msg}")
-            import traceback
-            traceback.print_exc()
+            try:
+                from src.services.broker_health_monitor import get_health_monitor
+                hm = get_health_monitor()
+                cached = hm.get_cached_account_info('WEBULL')
+                if cached:
+                    result = jsonify({
+                        'buying_power': cached.get('buying_power', 0),
+                        'cash_balance': cached.get('cash', cached.get('cash_balance', 0)),
+                        'net_liquidation': cached.get('portfolio_value', cached.get('net_liquidation', 0)),
+                        'total_profit_loss': cached.get('total_profit_loss', 0),
+                        'day_profit_loss': cached.get('day_profit_loss', 0),
+                        'settled_cash': cached.get('settled_cash', 0),
+                        'unsettled_cash': cached.get('unsettled_cash', 0),
+                        'status': 'cached'
+                    })
+                    _api_cache[cache_key] = (result, time.time())
+                    return result
+            except Exception:
+                pass
             result = jsonify({
                 'buying_power': 0,
                 'cash_balance': 0,
@@ -3241,12 +3277,29 @@ def register_routes(app):
         """Get Alpaca paper account balance for Dashboard"""
         import asyncio
         
-        # Check cache first (5 second TTL)
         cache_key = 'alpaca_balance'
         if cache_key in _api_cache:
             cached_value, timestamp = _api_cache[cache_key]
             if time.time() - timestamp < 5:
                 return cached_value
+        
+        try:
+            from src.services.broker_health_monitor import get_health_monitor
+            hm = get_health_monitor()
+            cached = hm.get_cached_account_info('ALPACA_PAPER')
+            if cached and cached.get('buying_power', 0) > 0:
+                result = jsonify({
+                    'buying_power': cached.get('buying_power', 0),
+                    'cash_balance': cached.get('cash', cached.get('cash_balance', 0)),
+                    'net_liquidation': cached.get('portfolio_value', cached.get('net_liquidation', 0)),
+                    'equity': cached.get('portfolio_value', cached.get('net_liquidation', 0)),
+                    'unrealized_pnl': cached.get('unrealized_pnl', 0),
+                    'status': 'cached'
+                })
+                _api_cache[cache_key] = (result, time.time())
+                return result
+        except Exception:
+            pass
         
         if not _bot_instance or not hasattr(_bot_instance, 'paper_broker') or not _bot_instance.paper_broker:
             result = jsonify({
@@ -3296,6 +3349,23 @@ def register_routes(app):
                 
         except Exception as e:
             print(f"[API] Exception in Alpaca balance endpoint: {e}")
+            try:
+                from src.services.broker_health_monitor import get_health_monitor
+                hm = get_health_monitor()
+                cached = hm.get_cached_account_info('ALPACA_PAPER')
+                if cached:
+                    result = jsonify({
+                        'buying_power': cached.get('buying_power', 0),
+                        'cash_balance': cached.get('cash', 0),
+                        'net_liquidation': cached.get('portfolio_value', 0),
+                        'equity': cached.get('portfolio_value', 0),
+                        'unrealized_pnl': cached.get('unrealized_pnl', 0),
+                        'status': 'cached'
+                    })
+                    _api_cache[cache_key] = (result, time.time())
+                    return result
+            except Exception:
+                pass
             result = jsonify({
                 'buying_power': 0,
                 'cash_balance': 0,
@@ -3573,6 +3643,23 @@ def register_routes(app):
             cached_data, timestamp = _api_cache[cache_key]
             if time.time() - timestamp < 5:
                 return jsonify(cached_data)
+        
+        try:
+            from src.services.broker_health_monitor import get_health_monitor
+            hm = get_health_monitor()
+            cached = hm.get_cached_account_info('ROBINHOOD')
+            if cached and cached.get('buying_power', 0) > 0:
+                result = {
+                    'buying_power': cached.get('buying_power', 0),
+                    'cash': cached.get('cash', 0),
+                    'portfolio_value': cached.get('portfolio_value', 0),
+                    'positions': [],
+                    'status': 'cached'
+                }
+                _api_cache[cache_key] = (result, time.time())
+                return jsonify(result)
+        except Exception:
+            pass
         
         try:
             if _bot_instance and hasattr(_bot_instance, 'robinhood_broker') and _bot_instance.robinhood_broker:

@@ -472,6 +472,8 @@ class PositionCache:
         entry = self._cache.get(position_key)
         if entry:
             entry.record_exit_failure(reason, is_stop_loss=is_stop_loss)
+            if entry.retry_permanently_exhausted:
+                return False
             entry.reset_closing()  # Allow retry after cooldown
             return entry.can_retry_exit()
         return False
