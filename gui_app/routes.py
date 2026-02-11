@@ -3287,7 +3287,7 @@ def register_routes(app):
             from src.services.broker_health_monitor import get_health_monitor
             hm = get_health_monitor()
             cached = hm.get_cached_account_info('ALPACA_PAPER')
-            if cached and cached.get('buying_power', 0) > 0:
+            if cached is not None:
                 result = jsonify({
                     'buying_power': cached.get('buying_power', 0),
                     'cash_balance': cached.get('cash', cached.get('cash_balance', 0)),
@@ -3348,7 +3348,8 @@ def register_routes(app):
                 return result
                 
         except Exception as e:
-            print(f"[API] Exception in Alpaca balance endpoint: {e}")
+            if str(e):
+                print(f"[API] Exception in Alpaca balance endpoint: {e}")
             try:
                 from src.services.broker_health_monitor import get_health_monitor
                 hm = get_health_monitor()
@@ -6332,7 +6333,8 @@ def register_routes(app):
                         alpaca_positions = alpaca_data.get('positions', [])
                         alpaca_orders = alpaca_data.get('orders', [])
                 except Exception as e:
-                    print(f"[API] Error fetching Alpaca positions: {e}")
+                    if str(e):
+                        print(f"[API] Error fetching Alpaca positions: {e}")
             
             # Fetch Robinhood positions if broker filter is ROBINHOOD or no filter
             robinhood_positions = []
@@ -17203,8 +17205,8 @@ def register_routes(app):
                 health_monitor = get_health_monitor()  # Use singleton instance
                 # Use uppercase keys to match health monitor's normalization
                 for broker_key in ['WEBULL', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'QUESTRADE']:
-                    state = health_monitor.get_broker_state(broker_key)
-                    if state:
+                    state = health_monitor.get_broker_status(broker_key)
+                    if state and state.get('is_connected', False):
                         health_states[broker_key.upper()] = state
             except Exception as e:
                 print(f"[BROKER STATES] Health monitor error: {e}")
@@ -17262,15 +17264,36 @@ def register_routes(app):
                     # Show any broker that has an instance (means it's configured)
                     # Connected brokers show, disconnected brokers show with their error reason
                     
-                    # Get buying power from health monitor cache
                     buying_power = 0
                     balance = 0
                     if health_monitor and is_connected:
                         cached_info = health_monitor.get_cached_account_info(health_key)
                         if cached_info:
-                            # Extract buying power using health monitor's method
-                            buying_power = health_monitor._extract_buying_power(health_key, cached_info, 'options')
-                            balance = cached_info.get('portfolio_value', cached_info.get('balance', 0))
+                            buying_power = float(cached_info.get('buying_power', 0) or 0)
+                            balance = float(cached_info.get('portfolio_value', cached_info.get('balance', 0)) or 0)
+                        elif instance_connected and broker_instance:
+                            try:
+                                import asyncio as _aio
+                                def _get_account_sync():
+                                    loop = _aio.new_event_loop()
+                                    try:
+                                        return loop.run_until_complete(
+                                            _aio.wait_for(broker_instance.get_account_info(), timeout=5.0)
+                                        )
+                                    except:
+                                        return None
+                                    finally:
+                                        loop.close()
+                                import concurrent.futures
+                                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                                    future = pool.submit(_get_account_sync)
+                                    acct = future.result(timeout=7)
+                                if acct:
+                                    buying_power = float(acct.get('buying_power', 0) or 0)
+                                    balance = float(acct.get('portfolio_value', acct.get('balance', 0)) or 0)
+                                    health_monitor.update_broker_status(health_key, True, account_info=acct)
+                            except Exception:
+                                pass
                     
                     state = {
                         'broker_name': broker_name,

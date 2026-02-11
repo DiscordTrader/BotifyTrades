@@ -76,14 +76,15 @@ class SchwabBroker(BrokerInterface):
             try:
                 from gui_app.schwab_auth import get_token_manager
                 token_manager = get_token_manager()
-                access_token = token_manager.get_access_token()
-                if access_token:
-                    self.access_token = access_token
-                    self.refresh_token = token_manager.get_refresh_token()
-                    if token_manager._token_data:
-                        self.token_expiry = token_manager._token_data.get('token_expiry')
-                    print(f"[{self.name}] Tokens loaded via token manager (auto-refresh enabled)")
-                    return True
+                if not token_manager._token_data:
+                    token_manager.load_tokens()
+                if token_manager._token_data:
+                    self.access_token = token_manager._token_data.get('access_token')
+                    self.refresh_token = token_manager._token_data.get('refresh_token')
+                    self.token_expiry = token_manager._token_data.get('token_expiry')
+                    if self.access_token:
+                        print(f"[{self.name}] Tokens loaded via token manager (auto-refresh enabled)")
+                        return True
             except (ImportError, Exception) as e:
                 # Token manager not available or error - fallback to file
                 if not isinstance(e, ImportError):
@@ -147,7 +148,7 @@ class SchwabBroker(BrokerInterface):
                 'redirect_uri': self.redirect_uri
             }
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.post(self.TOKEN_URL, headers=headers, data=data)
                 
                 if response.status_code == 200:
@@ -193,7 +194,7 @@ class SchwabBroker(BrokerInterface):
                 'client_id': self.client_id
             }
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(self.TOKEN_URL, headers=headers, data=data)
                 
                 if response.status_code == 200:
@@ -224,7 +225,7 @@ class SchwabBroker(BrokerInterface):
                 'Accept': 'application/json'
             }
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(
                     f"{self.BASE_URL}/accounts/accountNumbers",
                     headers=headers
@@ -334,7 +335,7 @@ class SchwabBroker(BrokerInterface):
                 'Accept': 'application/json'
             }
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(
                     f"{self.BASE_URL}/accounts/{self.account_hash}",
                     headers=headers,
@@ -396,7 +397,7 @@ class SchwabBroker(BrokerInterface):
                 'Accept': 'application/json'
             }
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(
                     f"{self.BASE_URL}/accounts/{self.account_hash}",
                     headers=headers,
@@ -481,7 +482,7 @@ class SchwabBroker(BrokerInterface):
                 'Accept': 'application/json'
             }
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.post(
                     f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
                     headers=headers,
@@ -599,7 +600,7 @@ class SchwabBroker(BrokerInterface):
                 'Accept': 'application/json'
             }
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.post(
                     f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
                     headers=headers,
@@ -669,7 +670,7 @@ class SchwabBroker(BrokerInterface):
                 'Accept': 'application/json'
             }
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(
                     f"https://api.schwabapi.com/marketdata/v1/quotes",
                     headers=headers,
@@ -700,7 +701,7 @@ class SchwabBroker(BrokerInterface):
                 'Accept': 'application/json'
             }
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(
                     f"https://api.schwabapi.com/marketdata/v1/quotes",
                     headers=headers,
@@ -739,7 +740,7 @@ class SchwabBroker(BrokerInterface):
                 'Accept': 'application/json'
             }
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(
                     f"https://api.schwabapi.com/marketdata/v1/quotes",
                     headers=headers,
@@ -915,7 +916,7 @@ class SchwabBroker(BrokerInterface):
                 'Accept': 'application/json'
             }
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(
                     f"{self.BASE_URL}/accounts/{self.account_hash}",
                     headers=headers,
@@ -1016,7 +1017,7 @@ class SchwabBroker(BrokerInterface):
             to_date = datetime.now()
             from_date = to_date - timedelta(days=7)
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(
                     f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
                     headers=headers,
@@ -1079,7 +1080,7 @@ class SchwabBroker(BrokerInterface):
             to_date = datetime.now()
             from_date = to_date - timedelta(days=30)
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(
                     f"{self.BASE_URL}/accounts/{self.account_hash}/orders",
                     headers=headers,

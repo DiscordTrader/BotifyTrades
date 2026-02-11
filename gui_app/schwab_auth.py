@@ -202,7 +202,7 @@ class SchwabTokenManager:
             
             print("[SCHWAB TOKEN] Sending refresh token request...")
             
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(timeout=10.0) as client:
                 response = client.post(
                     'https://api.schwabapi.com/v1/oauth/token',
                     headers=headers,

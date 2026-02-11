@@ -6072,19 +6072,22 @@ class SelfClient(discord.Client):
                         })
                         
                         try:
-                            _upstox_task = asyncio.create_task(self.upstox_broker.connect())
-                            done, pending = await asyncio.wait({_upstox_task}, timeout=10.0)
-                            if pending:
-                                _original_print("[UPSTOX] ⚠️ Connection timeout (10s) - broker skipped", flush=True)
-                                for t in pending:
-                                    t.cancel()
-                                self.upstox_broker = None
-                                connected = False
-                            else:
+                            def _upstox_connect_sync():
+                                import asyncio as _aio
+                                _loop = _aio.new_event_loop()
                                 try:
-                                    connected = _upstox_task.result()
-                                except Exception:
-                                    connected = False
+                                    return _loop.run_until_complete(
+                                        _aio.wait_for(self.upstox_broker.connect(), timeout=10.0)
+                                    )
+                                except _aio.TimeoutError:
+                                    _original_print("[UPSTOX] ⚠️ Connection timeout (10s) - broker skipped", flush=True)
+                                    return False
+                                except Exception as _e:
+                                    _original_print(f"[UPSTOX] ⚠️ Connect failed: {_e}", flush=True)
+                                    return False
+                                finally:
+                                    _loop.close()
+                            connected = await asyncio.to_thread(_upstox_connect_sync)
                         except Exception as ue:
                             _original_print(f"[UPSTOX] ⚠️ Connection error: {ue}", flush=True)
                             self.upstox_broker = None
@@ -6181,19 +6184,22 @@ class SelfClient(discord.Client):
                         })
                         
                         try:
-                            _zerodha_task = asyncio.create_task(self.zerodha_broker.connect())
-                            done, pending = await asyncio.wait({_zerodha_task}, timeout=10.0)
-                            if pending:
-                                _original_print("[ZERODHA] ⚠️ Connection timeout (10s) - broker skipped", flush=True)
-                                for t in pending:
-                                    t.cancel()
-                                self.zerodha_broker = None
-                                connected = False
-                            else:
+                            def _zerodha_connect_sync():
+                                import asyncio as _aio
+                                _loop = _aio.new_event_loop()
                                 try:
-                                    connected = _zerodha_task.result()
-                                except Exception:
-                                    connected = False
+                                    return _loop.run_until_complete(
+                                        _aio.wait_for(self.zerodha_broker.connect(), timeout=10.0)
+                                    )
+                                except _aio.TimeoutError:
+                                    _original_print("[ZERODHA] ⚠️ Connection timeout (10s) - broker skipped", flush=True)
+                                    return False
+                                except Exception as _e:
+                                    _original_print(f"[ZERODHA] ⚠️ Connect failed: {_e}", flush=True)
+                                    return False
+                                finally:
+                                    _loop.close()
+                            connected = await asyncio.to_thread(_zerodha_connect_sync)
                         except Exception as ze:
                             _original_print(f"[ZERODHA] ⚠️ Connection error: {ze}", flush=True)
                             self.zerodha_broker = None
@@ -6260,19 +6266,22 @@ class SelfClient(discord.Client):
                 })
                 
                 try:
-                    _schwab_task = asyncio.create_task(self.schwab_broker.connect())
-                    done, pending = await asyncio.wait({_schwab_task}, timeout=15.0)
-                    if pending:
-                        _original_print("[SCHWAB] ⚠️ Connection timeout (15s) - broker skipped", flush=True)
-                        for t in pending:
-                            t.cancel()
-                        self.schwab_broker = None
-                        connected = False
-                    else:
+                    def _schwab_connect_sync():
+                        import asyncio as _aio
+                        _loop = _aio.new_event_loop()
                         try:
-                            connected = _schwab_task.result()
-                        except Exception:
-                            connected = False
+                            return _loop.run_until_complete(
+                                _aio.wait_for(self.schwab_broker.connect(), timeout=15.0)
+                            )
+                        except _aio.TimeoutError:
+                            _original_print("[SCHWAB] ⚠️ Connection timeout (15s) - broker skipped", flush=True)
+                            return False
+                        except Exception as _e:
+                            _original_print(f"[SCHWAB] ⚠️ Connect failed: {_e}", flush=True)
+                            return False
+                        finally:
+                            _loop.close()
+                    connected = await asyncio.to_thread(_schwab_connect_sync)
                 except Exception as se:
                     _original_print(f"[SCHWAB] ⚠️ Connection error: {se}", flush=True)
                     self.schwab_broker = None
@@ -6282,12 +6291,26 @@ class SelfClient(discord.Client):
                     _original_print(f"[SCHWAB] ✓ Connected successfully ({mode})", flush=True)
                     try:
                         from gui_app.database import update_broker_connection_status
-                        account_info = await self.schwab_broker.get_account_info()
-                        update_broker_connection_status('schwab', True, f"Connected - Account: {self.schwab_broker.account_number}")
+                        _schwab_acct_task = asyncio.create_task(self.schwab_broker.get_account_info())
+                        _schwab_done, _schwab_pending = await asyncio.wait({_schwab_acct_task}, timeout=10.0)
+                        if _schwab_pending:
+                            for t in _schwab_pending:
+                                t.cancel()
+                            account_info = {'buying_power': 0}
+                            _original_print(f"[SCHWAB] ⚠️ Account info timeout (10s) - using defaults", flush=True)
+                        else:
+                            account_info = _schwab_acct_task.result()
+                        update_broker_connection_status('schwab', True, f"Connected - Account: {getattr(self.schwab_broker, 'account_number', 'unknown')}")
                         buying_power = account_info.get('buying_power', 0)
                         if buying_power > 0:
                             _original_print(f"[SCHWAB]   Buying Power: ${buying_power:,.2f}", flush=True)
                         _original_print(f"[SCHWAB] ✓ Broker status updated in GUI", flush=True)
+                        try:
+                            from src.services.broker_health_monitor import get_health_monitor
+                            get_health_monitor().update_broker_status('SCHWAB', True, account_info=account_info)
+                            _original_print(f"[HEALTH] ✓ Schwab cached (buying_power=${buying_power:,.2f})", flush=True)
+                        except Exception:
+                            pass
                     except Exception as status_err:
                         _original_print(f"[SCHWAB] ⚠️ Failed to update broker status: {status_err}", flush=True)
                     try:
@@ -6311,8 +6334,6 @@ class SelfClient(discord.Client):
             traceback.print_exc()
             self.schwab_broker = None
 
-        # CRITICAL: Set broker_ready if ANY broker is available (not just Webull)
-        # This fixes user builds where only Alpaca/Tastytrade are configured
         if not self.broker_ready.is_set():
             any_broker_available = (
                 (self.broker and getattr(self.broker, 'is_logged_in', False)) or
