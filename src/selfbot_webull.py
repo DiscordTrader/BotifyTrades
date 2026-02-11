@@ -3273,6 +3273,19 @@ class WebullBroker:
 
             side = 'BUY' if action.upper() in ('BTO', 'BTC') else 'SELL'
             
+            is_market_order = limit_price is None
+            
+            if is_market_order and side == 'BUY':
+                try:
+                    quote_price = self._get_current_stock_quote(wb, base_sym)
+                    if quote_price and quote_price > 0:
+                        limit_price = quote_price
+                        print(f"[MARKET ORDER] Got live quote for {base_sym}: ${quote_price:.4f} (for buying power check)")
+                    else:
+                        print(f"[MARKET ORDER] No quote available for {base_sym}, proceeding without fund check")
+                except Exception as e:
+                    print(f"[MARKET ORDER] Quote fetch error: {e}, proceeding without fund check")
+            
             adjusted_qty = qty
             buying_power = 0.0
             
@@ -3281,14 +3294,12 @@ class WebullBroker:
                     account_info = wb.get_account()
                     account_members = account_info.get('accountMembers', [])
                     
-                    # Convert list of {'key': 'name', 'value': 'value'} into a proper dict
                     account_data = {}
                     if account_members:
                         for item in account_members:
                             if isinstance(item, dict) and 'key' in item and 'value' in item:
                                 account_data[item['key']] = item['value']
                     
-                    # Try multiple possible field names for buying power
                     buying_power = 0.0
                     for field in ['buyingPower', 'cashAvailableForTrade', 'cashBalance', 'dayBuyingPower']:
                         if field in account_data:
@@ -3299,31 +3310,34 @@ class WebullBroker:
                             except (ValueError, TypeError):
                                 continue
                     
-                    order_cost = qty * limit_price
-                    
                     net_liq = float(account_data.get('netLiquidation', 0))
-                    print(f"[FUNDS] Buying power: ${buying_power:.2f}, Order cost: ${order_cost:.2f} (Net liquidation: ${net_liq:.2f})")
                     
-                    if buying_power <= 0:
-                        return {
-                            'success': False,
-                            'msg': f'No buying power available: ${buying_power:.2f} (Account value: ${net_liq:.2f})',
-                            'error': 'INSUFFICIENT_FUNDS'
-                        }
-                    
-                    if order_cost > buying_power:
-                        max_affordable_qty = int(buying_power / limit_price)
-                        if max_affordable_qty > 0:
-                            print(f"[FUNDS] ⚠️ Insufficient funds for {qty} shares")
-                            print(f"[FUNDS] ✓ Adjusting quantity: {qty} → {max_affordable_qty} shares")
-                            print(f"[FUNDS] Adjusted cost: ${max_affordable_qty * limit_price:.2f}")
-                            adjusted_qty = max_affordable_qty
-                        else:
+                    if limit_price is not None and limit_price > 0:
+                        order_cost = qty * limit_price
+                        print(f"[FUNDS] Buying power: ${buying_power:.2f}, Order cost: ${order_cost:.2f} (Net liquidation: ${net_liq:.2f})")
+                        
+                        if buying_power <= 0:
                             return {
                                 'success': False,
-                                'msg': f'Insufficient buying power: have ${buying_power:.2f}, need ${order_cost:.2f}',
+                                'msg': f'No buying power available: ${buying_power:.2f} (Account value: ${net_liq:.2f})',
                                 'error': 'INSUFFICIENT_FUNDS'
                             }
+                        
+                        if order_cost > buying_power:
+                            max_affordable_qty = int(buying_power / limit_price)
+                            if max_affordable_qty > 0:
+                                print(f"[FUNDS] ⚠️ Insufficient funds for {qty} shares")
+                                print(f"[FUNDS] ✓ Adjusting quantity: {qty} → {max_affordable_qty} shares")
+                                print(f"[FUNDS] Adjusted cost: ${max_affordable_qty * limit_price:.2f}")
+                                adjusted_qty = max_affordable_qty
+                            else:
+                                return {
+                                    'success': False,
+                                    'msg': f'Insufficient buying power: have ${buying_power:.2f}, need ${order_cost:.2f}',
+                                    'error': 'INSUFFICIENT_FUNDS'
+                                }
+                    else:
+                        print(f"[FUNDS] Buying power: ${buying_power:.2f} (Net liquidation: ${net_liq:.2f}) - market order, skipping cost check")
                 except Exception as e:
                     print(f"[FUNDS] Warning: Could not check buying power: {e}")
             
@@ -3370,20 +3384,32 @@ class WebullBroker:
                             'error': 'WEBULL_MIN_LOT_SIZE'
                         }
 
-            base_payload = {
-                'stock': base_sym,
-                'tId': int(tId),
-                'price': round(float(limit_price), 2),
-                'lmtPrice': round(float(limit_price), 2),
-                'action': side,
-                'orderType': 'LMT',
-                'enforce': WB_ENFORCE,
-                'quant': int(adjusted_qty),
-                'outsideRegularTradingHour': True,
-                'stpPrice': None,
-                'trial_value': None,
-                'trial_type': None,
-            }
+            if is_market_order:
+                base_payload = {
+                    'stock': base_sym,
+                    'tId': int(tId),
+                    'price': 0.0,
+                    'action': side,
+                    'orderType': 'MKT',
+                    'enforce': WB_ENFORCE,
+                    'quant': int(adjusted_qty),
+                }
+                print(f"[WEBULL] ⚡ Placing MARKET ORDER for {side} {adjusted_qty} {base_sym}")
+            else:
+                base_payload = {
+                    'stock': base_sym,
+                    'tId': int(tId),
+                    'price': round(float(limit_price), 2),
+                    'lmtPrice': round(float(limit_price), 2),
+                    'action': side,
+                    'orderType': 'LMT',
+                    'enforce': WB_ENFORCE,
+                    'quant': int(adjusted_qty),
+                    'outsideRegularTradingHour': True,
+                    'stpPrice': None,
+                    'trial_value': None,
+                    'trial_type': None,
+                }
 
             func = None
             if hasattr(wb, 'place_order'):
@@ -12120,7 +12146,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 use_market_order = signal.get('_use_market_order', False)
                 if use_market_order:
                     stock_order_price = None
-                    _original_print(f"[{broker_name}] ⚡ Using MARKET ORDER for stock exit (urgent)", flush=True)
+                    _original_print(f"[{broker_name}] ⚡ Using MARKET ORDER for stock {signal.get('action', 'BTO')}", flush=True)
                 else:
                     # LIMIT CAP: Use _limit_price as the order price if set (prevents chasing)
                     stock_order_price = signal.get('price')
@@ -13753,7 +13779,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             use_market_order = signal.get('_use_market_order', False)
                             stock_price = None if use_market_order else signal.get('price')
                             if use_market_order:
-                                _original_print(f"[LIVE TRADE] ⚡ Using MARKET ORDER for stock exit (urgent)", flush=True)
+                                _original_print(f"[LIVE TRADE] ⚡ Using MARKET ORDER for stock {signal.get('action', 'BTO')}", flush=True)
                             _original_print(f"[LIVE TRADE] Calling {broker_name_used}.place_stock_order()...", flush=True)
                             resp = await live_broker.place_stock_order(
                                 symbol=signal['symbol'],
