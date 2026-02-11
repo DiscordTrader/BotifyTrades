@@ -12112,11 +12112,17 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 broker_upper = broker_name.upper()
                 uses_modern_signature = any(x in broker_upper for x in ['ALPACA', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE'])
                 
-                # LIMIT CAP: Use _limit_price as the order price if set (prevents chasing)
-                stock_order_price = signal.get('price')
-                if signal.get('_limit_cap_enabled') and signal.get('_limit_price'):
-                    stock_order_price = signal['_limit_price']
-                    _original_print(f"[{broker_name}] 🛡️ Using LIMIT CAP price: ${stock_order_price:.4f} (max allowed)")
+                # MARKET ORDER: Check _use_market_order flag for urgent stop-loss exits
+                use_market_order = signal.get('_use_market_order', False)
+                if use_market_order:
+                    stock_order_price = None
+                    _original_print(f"[{broker_name}] ⚡ Using MARKET ORDER for stock exit (urgent)", flush=True)
+                else:
+                    # LIMIT CAP: Use _limit_price as the order price if set (prevents chasing)
+                    stock_order_price = signal.get('price')
+                    if signal.get('_limit_cap_enabled') and signal.get('_limit_price'):
+                        stock_order_price = signal['_limit_price']
+                        _original_print(f"[{broker_name}] 🛡️ Using LIMIT CAP price: ${stock_order_price:.4f} (max allowed)")
                 
                 if uses_modern_signature:
                     # Some brokers don't accept channel_id - only pass to those that do
@@ -13740,12 +13746,16 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 # Success or non-transient error, break out
                                 break
                         else:
+                            use_market_order = signal.get('_use_market_order', False)
+                            stock_price = None if use_market_order else signal.get('price')
+                            if use_market_order:
+                                _original_print(f"[LIVE TRADE] ⚡ Using MARKET ORDER for stock exit (urgent)", flush=True)
                             _original_print(f"[LIVE TRADE] Calling {broker_name_used}.place_stock_order()...", flush=True)
                             resp = await live_broker.place_stock_order(
                                 symbol=signal['symbol'],
                                 action=signal['action'],
                                 quantity=signal['qty'],
-                                price=signal.get('price')  # None for market orders
+                                price=stock_price
                             )
                             _original_print(f"[LIVE TRADE] Broker response received: {resp}", flush=True)
                             
