@@ -6271,17 +6271,18 @@ def register_routes(app):
     @app.route('/api/trades/merged', methods=['GET'])
     def get_merged_trades():
         """Get trades merged with live Webull positions"""
+        import time as _time
+        _t0 = _time.time()
         if _bot_instance is None:
             return jsonify({'trades': []})
         
-        # Get filter parameters
         status_filter = request.args.get('status')
         broker_filter = request.args.get('broker')
         limit = int(request.args.get('limit', 1000))
         
         try:
-            # Get database trades with filters, enriched with remaining_qty from execution_lots
             db_trades = db.get_trades(status=status_filter, broker=broker_filter, limit=limit)
+            print(f"[API] merged trades: db={len(db_trades)} filter={status_filter}/{broker_filter} ({_time.time()-_t0:.2f}s)", flush=True)
             
             # Enrich each trade with remaining_qty from canonical execution_lots
             for trade in db_trades:
@@ -6307,19 +6308,112 @@ def register_routes(app):
             broker_filter_upper = broker_filter.upper() if broker_filter else None
             
             if not broker_filter_upper or broker_filter_upper in ['WEBULL', 'WEBULL_PAPER']:
-                # Get live Webull positions AND open orders
-                positions_future = asyncio.run_coroutine_threadsafe(
-                    _get_webull_positions(),
-                    _bot_instance.loop
-                )
-                live_positions = positions_future.result(timeout=15)
+                import concurrent.futures as _cf
+                wb_client = getattr(_bot_instance.broker, '_client', None) if hasattr(_bot_instance, 'broker') and _bot_instance.broker else None
+                if not wb_client and hasattr(_bot_instance, 'broker') and _bot_instance.broker and hasattr(_bot_instance.broker, 'brokers'):
+                    wb_inst = _bot_instance.broker.brokers.get('Webull')
+                    if wb_inst:
+                        wb_client = getattr(wb_inst, 'wb', None) or getattr(wb_inst, '_client', None)
+                if not wb_client and hasattr(_bot_instance, 'broker') and _bot_instance.broker:
+                    wb_client = getattr(_bot_instance.broker, 'wb', None)
                 
-                # Get Webull open orders to determine fill status
-                orders_future = asyncio.run_coroutine_threadsafe(
-                    _get_webull_open_orders(),
-                    _bot_instance.loop
-                )
-                webull_orders = orders_future.result(timeout=10) or []
+                if wb_client:
+                    def _fetch_webull_positions_sync():
+                        try:
+                            positions_raw = wb_client.get_positions()
+                            positions = []
+                            for pos in (positions_raw or []):
+                                position_qty = float(pos.get('position', 0))
+                                if position_qty <= 0:
+                                    continue
+                                symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
+                                asset_type = pos.get('assetType', 'unknown')
+                                is_option = ('optionId' in pos or 'strikePrice' in pos or asset_type.lower() in ('option', 'opt'))
+                                if is_option:
+                                    strike = float(pos.get('strikePrice', 0))
+                                    direction = pos.get('direction', '').upper()
+                                    expiry = pos.get('expireDate', '')
+                                    expiry_mmdd = ''
+                                    if expiry and '-' in expiry:
+                                        from datetime import datetime
+                                        try:
+                                            exp_date = datetime.strptime(expiry, '%Y-%m-%d')
+                                            expiry_mmdd = exp_date.strftime('%m/%d')
+                                        except:
+                                            expiry_mmdd = expiry
+                                    positions.append({
+                                        'asset': 'option', 'symbol': symbol, 'quantity': position_qty,
+                                        'avg_cost': float(pos.get('costPrice', 0)),
+                                        'current_price': float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0)),
+                                        'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
+                                        'option_id': pos.get('optionId', 0), 'strike': strike,
+                                        'expiry': expiry_mmdd, 'expiry_full': expiry,
+                                        'direction': 'C' if direction == 'CALL' else ('P' if direction == 'PUT' else ''),
+                                        'ticker_id': pos.get('ticker', {}).get('tickerId', 0)
+                                    })
+                                else:
+                                    market_value = float(pos.get('marketValue', 0))
+                                    current_price = market_value / position_qty if position_qty > 0 else 0
+                                    positions.append({
+                                        'asset': 'stock', 'symbol': symbol, 'quantity': position_qty,
+                                        'avg_cost': float(pos.get('costPrice', 0)),
+                                        'current_price': current_price,
+                                        'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
+                                        'ticker_id': pos.get('ticker', {}).get('tickerId', 0)
+                                    })
+                            return positions
+                        except Exception as e:
+                            print(f"[API] Error in Webull positions sync: {e}")
+                            return []
+                    
+                    def _fetch_webull_orders_sync():
+                        try:
+                            account_info = wb_client.get_account()
+                            open_orders = account_info.get('openOrders', []) if account_info else []
+                            formatted = []
+                            for order in open_orders:
+                                try:
+                                    quantity = int(order.get('totalQuantity', 0) or 0)
+                                except (ValueError, TypeError):
+                                    quantity = 0
+                                try:
+                                    filled_quantity = int(order.get('filledQuantity', 0) or 0)
+                                except (ValueError, TypeError):
+                                    filled_quantity = 0
+                                try:
+                                    limit_price = float(order.get('lmtPrice', 0) or 0)
+                                except (ValueError, TypeError):
+                                    limit_price = 0.0
+                                asset_type = 'option' if order.get('optionId') or order.get('optionType') else 'stock'
+                                formatted.append({
+                                    'order_id': order.get('orderId', 'N/A'),
+                                    'symbol': order.get('ticker', {}).get('symbol', 'N/A'),
+                                    'action': order.get('action', 'N/A'),
+                                    'quantity': quantity, 'filled_quantity': filled_quantity,
+                                    'limit_price': limit_price,
+                                    'order_type': order.get('orderType', 'N/A'),
+                                    'status': order.get('status', 'N/A'),
+                                    'created_time': order.get('createTime0', 'N/A'),
+                                    'asset_type': asset_type
+                                })
+                            return formatted
+                        except Exception as e:
+                            print(f"[API] Error in Webull orders sync: {e}")
+                            return []
+                    
+                    with _cf.ThreadPoolExecutor(max_workers=2) as pool:
+                        pos_future = pool.submit(_fetch_webull_positions_sync)
+                        ord_future = pool.submit(_fetch_webull_orders_sync)
+                        try:
+                            live_positions = pos_future.result(timeout=10)
+                        except Exception as e:
+                            print(f"[API] Webull positions timeout: {e}")
+                            live_positions = []
+                        try:
+                            webull_orders = ord_future.result(timeout=10) or []
+                        except Exception as e:
+                            print(f"[API] Webull orders timeout: {e}")
+                            webull_orders = []
             
             # Fetch Alpaca positions if broker filter is ALPACA or ALPACA_PAPER
             if broker_filter_upper in ['ALPACA', 'ALPACA_PAPER']:
