@@ -17273,21 +17273,63 @@ def register_routes(app):
                             balance = float(cached_info.get('portfolio_value', cached_info.get('balance', 0)) or 0)
                         elif instance_connected and broker_instance:
                             try:
-                                import asyncio as _aio
-                                def _get_account_sync():
-                                    loop = _aio.new_event_loop()
-                                    try:
-                                        return loop.run_until_complete(
-                                            _aio.wait_for(broker_instance.get_account_info(), timeout=5.0)
-                                        )
-                                    except:
-                                        return None
-                                    finally:
-                                        loop.close()
-                                import concurrent.futures
-                                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                                    future = pool.submit(_get_account_sync)
-                                    acct = future.result(timeout=7)
+                                acct = None
+                                if broker_name == 'WEBULL' and hasattr(broker_instance, '_client') and broker_instance._client:
+                                    import concurrent.futures
+                                    def _webull_get_account_blocking():
+                                        try:
+                                            account = broker_instance._client.get_account()
+                                            if not account:
+                                                return None
+                                            account_data = {}
+                                            account_members = account.get('accountMembers', [])
+                                            if account_members and isinstance(account_members, list):
+                                                for item in account_members:
+                                                    if isinstance(item, dict) and 'key' in item and 'value' in item:
+                                                        account_data[item['key']] = item['value']
+                                            for k, v in account.items():
+                                                if k != 'accountMembers' and k not in account_data:
+                                                    account_data[k] = v
+                                            buying_power_val = 0.0
+                                            for field in ['buyingPower', 'dayBuyingPower', 'cashAvailableForTrade', 'settledFunds']:
+                                                if field in account_data:
+                                                    try:
+                                                        buying_power_val = float(account_data[field])
+                                                        if buying_power_val > 0:
+                                                            break
+                                                    except (ValueError, TypeError):
+                                                        pass
+                                            portfolio_val = 0.0
+                                            for field in ['netLiquidation', 'totalMarketValue', 'accountValue']:
+                                                if field in account_data:
+                                                    try:
+                                                        portfolio_val = float(account_data[field])
+                                                        if portfolio_val > 0:
+                                                            break
+                                                    except (ValueError, TypeError):
+                                                        pass
+                                            return {'buying_power': buying_power_val, 'portfolio_value': portfolio_val}
+                                        except Exception:
+                                            return None
+                                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                                        future = pool.submit(_webull_get_account_blocking)
+                                        acct = future.result(timeout=8)
+                                else:
+                                    import asyncio as _aio
+                                    import concurrent.futures
+                                    def _get_account_sync():
+                                        loop = _aio.new_event_loop()
+                                        try:
+                                            return loop.run_until_complete(
+                                                _aio.wait_for(broker_instance.get_account_info(), timeout=5.0)
+                                            )
+                                        except:
+                                            return None
+                                        finally:
+                                            loop.close()
+                                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                                        future = pool.submit(_get_account_sync)
+                                        acct = future.result(timeout=7)
                                 if acct:
                                     buying_power = float(acct.get('buying_power', 0) or 0)
                                     balance = float(acct.get('portfolio_value', acct.get('balance', 0)) or 0)

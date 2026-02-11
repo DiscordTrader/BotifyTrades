@@ -6072,22 +6072,37 @@ class SelfClient(discord.Client):
                         })
                         
                         try:
-                            def _upstox_connect_sync():
+                            import threading as _upstox_threading
+                            _upstox_result = [False]
+                            _upstox_done_event = _upstox_threading.Event()
+                            def _upstox_connect_thread():
                                 import asyncio as _aio
                                 _loop = _aio.new_event_loop()
                                 try:
-                                    return _loop.run_until_complete(
+                                    _upstox_result[0] = _loop.run_until_complete(
                                         _aio.wait_for(self.upstox_broker.connect(), timeout=10.0)
                                     )
                                 except _aio.TimeoutError:
                                     _original_print("[UPSTOX] ⚠️ Connection timeout (10s) - broker skipped", flush=True)
-                                    return False
+                                    _upstox_result[0] = False
                                 except Exception as _e:
                                     _original_print(f"[UPSTOX] ⚠️ Connect failed: {_e}", flush=True)
-                                    return False
+                                    _upstox_result[0] = False
                                 finally:
-                                    _loop.close()
-                            connected = await asyncio.to_thread(_upstox_connect_sync)
+                                    _upstox_done_event.set()
+                                    try:
+                                        if hasattr(_loop, '_default_executor') and _loop._default_executor:
+                                            _loop._default_executor.shutdown(wait=False)
+                                        _loop.close()
+                                    except Exception:
+                                        pass
+                            _upstox_thread = _upstox_threading.Thread(target=_upstox_connect_thread, daemon=True)
+                            _upstox_thread.start()
+                            _upstox_waited = await asyncio.get_event_loop().run_in_executor(None, _upstox_done_event.wait, 15)
+                            connected = _upstox_result[0]
+                            if not _upstox_waited:
+                                _original_print("[UPSTOX] ⚠️ Connection timeout (15s) - broker skipped", flush=True)
+                                connected = False
                         except Exception as ue:
                             _original_print(f"[UPSTOX] ⚠️ Connection error: {ue}", flush=True)
                             self.upstox_broker = None
@@ -6109,33 +6124,13 @@ class SelfClient(discord.Client):
                                 _original_print(f"[UPSTOX] ⚠️ Failed to update broker status: {status_err}", flush=True)
                         else:
                             _original_print("[UPSTOX] ⚠️ Connection failed - token may be expired", flush=True)
-                            if upstox_refresh_token:
-                                _original_print("[UPSTOX]   Attempting token refresh...", flush=True)
-                                refresh_success = await self.upstox_broker.refresh_access_token()
-                                if refresh_success:
-                                    _original_print("[UPSTOX] ✓ Token refreshed, retrying connection...", flush=True)
-                                    self.upstox_broker.config['token_issued_at'] = datetime.now().isoformat()
-                                    retry_connected = await self.upstox_broker.connect()
-                                    if retry_connected:
-                                        _original_print(f"[UPSTOX] ✓ Reconnected after token refresh (LIVE trading)", flush=True)
-                                        from gui_app.database import update_broker_connection_status
-                                        update_broker_connection_status('upstox', True, f"Connected - User: {self.upstox_broker.user_id}")
-                                        await self.upstox_broker.start_token_refresh_scheduler()
-                                    else:
-                                        _original_print("[UPSTOX] ⚠️ Reconnection failed after refresh", flush=True)
-                                        from gui_app.database import update_broker_connection_status
-                                        update_broker_connection_status('upstox', False, 'Reconnection failed after token refresh')
-                                        self.upstox_broker = None
-                                else:
-                                    _original_print("[UPSTOX] ⚠️ Token refresh failed - manual re-auth required", flush=True)
-                                    from gui_app.database import update_broker_connection_status
-                                    update_broker_connection_status('upstox', False, 'Token refresh failed - manual re-auth required')
-                                    self.upstox_broker = None
-                            else:
-                                _original_print("[UPSTOX]   Go to Settings → Brokers → Upstox to update access token", flush=True)
+                            _original_print("[UPSTOX]   Go to Settings → Brokers → Upstox to update access token", flush=True)
+                            try:
                                 from gui_app.database import update_broker_connection_status
                                 update_broker_connection_status('upstox', False, 'Connection failed - token may be expired')
-                                self.upstox_broker = None
+                            except Exception:
+                                pass
+                            self.upstox_broker = None
                     else:
                         _original_print("[UPSTOX] ⚠️ Incomplete credentials - missing access_token", flush=True)
                 else:
@@ -6184,22 +6179,37 @@ class SelfClient(discord.Client):
                         })
                         
                         try:
-                            def _zerodha_connect_sync():
+                            import threading as _zerodha_threading
+                            _zerodha_result = [False]
+                            _zerodha_done_event = _zerodha_threading.Event()
+                            def _zerodha_connect_thread():
                                 import asyncio as _aio
                                 _loop = _aio.new_event_loop()
                                 try:
-                                    return _loop.run_until_complete(
+                                    _zerodha_result[0] = _loop.run_until_complete(
                                         _aio.wait_for(self.zerodha_broker.connect(), timeout=10.0)
                                     )
                                 except _aio.TimeoutError:
                                     _original_print("[ZERODHA] ⚠️ Connection timeout (10s) - broker skipped", flush=True)
-                                    return False
+                                    _zerodha_result[0] = False
                                 except Exception as _e:
                                     _original_print(f"[ZERODHA] ⚠️ Connect failed: {_e}", flush=True)
-                                    return False
+                                    _zerodha_result[0] = False
                                 finally:
-                                    _loop.close()
-                            connected = await asyncio.to_thread(_zerodha_connect_sync)
+                                    _zerodha_done_event.set()
+                                    try:
+                                        if hasattr(_loop, '_default_executor') and _loop._default_executor:
+                                            _loop._default_executor.shutdown(wait=False)
+                                        _loop.close()
+                                    except Exception:
+                                        pass
+                            _zerodha_thread = _zerodha_threading.Thread(target=_zerodha_connect_thread, daemon=True)
+                            _zerodha_thread.start()
+                            _zerodha_waited = await asyncio.get_event_loop().run_in_executor(None, _zerodha_done_event.wait, 15)
+                            connected = _zerodha_result[0]
+                            if not _zerodha_waited:
+                                _original_print("[ZERODHA] ⚠️ Connection timeout (15s) - broker skipped", flush=True)
+                                connected = False
                         except Exception as ze:
                             _original_print(f"[ZERODHA] ⚠️ Connection error: {ze}", flush=True)
                             self.zerodha_broker = None
@@ -6266,7 +6276,7 @@ class SelfClient(discord.Client):
                 })
                 
                 try:
-                    def _schwab_connect_sync():
+                    def _schwab_sync_connect():
                         import asyncio as _aio
                         _loop = _aio.new_event_loop()
                         try:
@@ -6280,8 +6290,23 @@ class SelfClient(discord.Client):
                             _original_print(f"[SCHWAB] ⚠️ Connect failed: {_e}", flush=True)
                             return False
                         finally:
-                            _loop.close()
-                    connected = await asyncio.to_thread(_schwab_connect_sync)
+                            try:
+                                if hasattr(_loop, '_default_executor') and _loop._default_executor:
+                                    _loop._default_executor.shutdown(wait=False)
+                                _loop.close()
+                            except Exception:
+                                pass
+                    import concurrent.futures as _schwab_cf
+                    _schwab_executor = _schwab_cf.ThreadPoolExecutor(max_workers=1)
+                    _schwab_future = _schwab_executor.submit(_schwab_sync_connect)
+                    try:
+                        connected = _schwab_future.result(timeout=20)
+                    except (_schwab_cf.TimeoutError, Exception) as _e:
+                        _schwab_future.cancel()
+                        _original_print(f"[SCHWAB] ⚠️ Connection timeout/error: {_e}", flush=True)
+                        connected = False
+                    finally:
+                        _schwab_executor.shutdown(wait=False)
                 except Exception as se:
                     _original_print(f"[SCHWAB] ⚠️ Connection error: {se}", flush=True)
                     self.schwab_broker = None

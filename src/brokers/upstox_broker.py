@@ -208,7 +208,8 @@ class UpstoxBroker(BrokerInterface):
                     requests.post,
                     self.TOKEN_REFRESH_URL,
                     data=data,
-                    headers=headers
+                    headers=headers,
+                    timeout=10
                 )
                 
                 if response.status_code == 200:

@@ -130,7 +130,7 @@ class BrokerHealthMonitor:
         self._state_lock = threading.RLock()
         self._broker_states: Dict[str, Dict] = {}
         self._account_cache: Dict[str, Dict] = {}
-        self._cache_ttl = 120
+        self._cache_ttl = 600
         self._disconnect_callbacks: List[callable] = []
         self._reconnect_callbacks: List[callable] = []
         self._last_notification: Dict[str, float] = {}
