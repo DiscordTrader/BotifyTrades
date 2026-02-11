@@ -3274,6 +3274,7 @@ class WebullBroker:
             side = 'BUY' if action.upper() in ('BTO', 'BTC') else 'SELL'
             
             adjusted_qty = qty
+            buying_power = 0.0
             
             if side == 'BUY':
                 try:
@@ -3357,8 +3358,7 @@ class WebullBroker:
                 webull_min_qty = _get_webull_min_lot_size(limit_price)
                 if adjusted_qty < webull_min_qty:
                     order_cost = webull_min_qty * limit_price
-                    bp = locals().get('buying_power', 0)
-                    if bp >= order_cost or bp == 0:
+                    if buying_power >= order_cost or buying_power == 0:
                         print(f"[WEBULL LOT SIZE] ⚠️ Webull requires minimum {webull_min_qty} shares for ${limit_price:.4f} stocks")
                         print(f"[WEBULL LOT SIZE] ✓ Adjusting quantity: {adjusted_qty} → {webull_min_qty} shares (cost: ${order_cost:.2f})")
                         adjusted_qty = webull_min_qty
@@ -3366,7 +3366,7 @@ class WebullBroker:
                         return {
                             'success': False,
                             'msg': f'Webull requires minimum {webull_min_qty} shares for stocks priced ${limit_price:.4f}. '
-                                   f'Need ${order_cost:.2f} but only ${bp:.2f} available.',
+                                   f'Need ${order_cost:.2f} but only ${buying_power:.2f} available.',
                             'error': 'WEBULL_MIN_LOT_SIZE'
                         }
 
