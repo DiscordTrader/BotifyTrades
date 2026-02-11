@@ -3392,10 +3392,10 @@ class WebullBroker:
                     'price': 0.0,
                     'action': side,
                     'orderType': 'MKT',
-                    'enforce': 'DAY',
+                    'enforce': WB_ENFORCE,
                     'quant': int(adjusted_qty),
                 }
-                print(f"[WEBULL] ⚡ Placing MARKET ORDER for {side} {adjusted_qty} {base_sym} (DAY enforce)")
+                print(f"[WEBULL] ⚡ Placing MARKET ORDER for {side} {adjusted_qty} {base_sym}")
             else:
                 base_payload = {
                     'stock': base_sym,
