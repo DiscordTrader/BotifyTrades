@@ -100,9 +100,9 @@ class UpstoxBroker(BrokerInterface):
             self.quote_api = MarketQuoteApi(self.api_client)
             self.options_api = OptionsApi(self.api_client)
             
-            profile = await asyncio.wait_for(
-                asyncio.to_thread(self.user_api.get_profile, api_version='2.0'),
-                timeout=10.0
+            profile = await asyncio.to_thread(
+                self.user_api.get_profile,
+                api_version='2.0'
             )
             
             if profile and profile.data:
@@ -208,8 +208,7 @@ class UpstoxBroker(BrokerInterface):
                     requests.post,
                     self.TOKEN_REFRESH_URL,
                     data=data,
-                    headers=headers,
-                    timeout=10
+                    headers=headers
                 )
                 
                 if response.status_code == 200:

@@ -380,13 +380,11 @@ class PositionCacheEntry:
     
     # Industry-grade retry management
     MAX_FAST_RETRIES = 5  # Fast retries with exponential backoff
-    MAX_EMERGENCY_RETRIES = 10  # Emergency (stop loss) max retries before giving up
     MARKET_ORDER_THRESHOLD = 3  # Switch to market after N limit order failures
     EXTENDED_RETRY_INTERVAL = 300  # 5 minutes between extended retries
     extended_retry_mode: bool = False  # Persistent retry after fast retries exhausted
     exhausted_notified: bool = False  # Track if Discord notification was sent
     is_emergency_exit: bool = False  # Flag for stop loss / emergency exits (faster retry)
-    retry_permanently_exhausted: bool = False  # True when all retries exhausted - stops re-triggering
     
     def record_exit_failure(self, reason: str, is_stop_loss: bool = False) -> None:
         """Record a failed exit attempt with backoff.
@@ -404,13 +402,11 @@ class PositionCacheEntry:
             self.is_emergency_exit = True
         
         if self.is_emergency_exit:
-            if self.exit_retry_count > self.MAX_EMERGENCY_RETRIES:
-                self.retry_permanently_exhausted = True
-                print(f"[RISK-RETRY] ❌ EMERGENCY retries EXHAUSTED ({self.exit_retry_count} attempts) - giving up")
-                print(f"[RISK-RETRY] ❌ Position must be closed manually")
-                return
+            # EMERGENCY MODE: Ultra-fast retry for stop loss exits
+            # 5s, 10s, 15s, 15s, 15s... (cap at 15s)
             backoff_seconds = min(5 * self.exit_retry_count, 15)
             phase = "EMERGENCY"
+            # Switch to market order IMMEDIATELY on first failure for stop loss
             self.use_market_order = True
         elif self.exit_retry_count <= self.MAX_FAST_RETRIES:
             # Normal retry phase: Exponential backoff 30s, 60s, 120s, 240s, 480s
@@ -439,12 +435,10 @@ class PositionCacheEntry:
             print(f"[RISK-RETRY] Will retry in {backoff_seconds // 60} minutes (persistent until success)")
     
     def can_retry_exit(self) -> bool:
-        """Check if retry is allowed (cooldown expired)."""
-        if self.retry_permanently_exhausted:
-            return False
+        """Check if retry is allowed (cooldown expired). Never stops in extended mode."""
         if self.exit_retry_cooldown_until and datetime.now() < self.exit_retry_cooldown_until:
             return False
-        return True
+        return True  # Always allow retry - extended mode never gives up
     
     def retry_cooldown_remaining(self) -> float:
         """Get seconds remaining in cooldown, or 0 if ready."""
@@ -462,7 +456,6 @@ class PositionCacheEntry:
         self.extended_retry_mode = False
         self.exhausted_notified = False
         self.is_emergency_exit = False
-        self.retry_permanently_exhausted = False
     
     def in_extended_retry_mode(self) -> bool:
         """Check if position is in extended retry mode (persistent retries every 5 min)."""

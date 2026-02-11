@@ -3131,31 +3131,12 @@ def register_routes(app):
         """Get Webull account balance"""
         import asyncio
         
+        # Check cache first (5 second TTL)
         cache_key = 'webull_balance'
         if cache_key in _api_cache:
             cached_value, timestamp = _api_cache[cache_key]
             if time.time() - timestamp < 5:
                 return cached_value
-        
-        try:
-            from src.services.broker_health_monitor import get_health_monitor
-            hm = get_health_monitor()
-            cached = hm.get_cached_account_info('WEBULL')
-            if cached and cached.get('buying_power', 0) > 0:
-                result = jsonify({
-                    'buying_power': cached.get('buying_power', 0),
-                    'cash_balance': cached.get('cash', cached.get('cash_balance', 0)),
-                    'net_liquidation': cached.get('portfolio_value', cached.get('net_liquidation', 0)),
-                    'total_profit_loss': cached.get('total_profit_loss', 0),
-                    'day_profit_loss': cached.get('day_profit_loss', 0),
-                    'settled_cash': cached.get('settled_cash', 0),
-                    'unsettled_cash': cached.get('unsettled_cash', 0),
-                    'status': 'cached'
-                })
-                _api_cache[cache_key] = (result, time.time())
-                return result
-        except Exception:
-            pass
         
         if not _bot_instance or not hasattr(_bot_instance, 'broker'):
             # Fallback: Use WebullAuth directly when bot is not running
@@ -3241,25 +3222,8 @@ def register_routes(app):
             err_type = type(e).__name__
             err_msg = str(e) or 'no details'
             print(f"[API] Exception in balance endpoint: {err_type}: {err_msg}")
-            try:
-                from src.services.broker_health_monitor import get_health_monitor
-                hm = get_health_monitor()
-                cached = hm.get_cached_account_info('WEBULL')
-                if cached:
-                    result = jsonify({
-                        'buying_power': cached.get('buying_power', 0),
-                        'cash_balance': cached.get('cash', cached.get('cash_balance', 0)),
-                        'net_liquidation': cached.get('portfolio_value', cached.get('net_liquidation', 0)),
-                        'total_profit_loss': cached.get('total_profit_loss', 0),
-                        'day_profit_loss': cached.get('day_profit_loss', 0),
-                        'settled_cash': cached.get('settled_cash', 0),
-                        'unsettled_cash': cached.get('unsettled_cash', 0),
-                        'status': 'cached'
-                    })
-                    _api_cache[cache_key] = (result, time.time())
-                    return result
-            except Exception:
-                pass
+            import traceback
+            traceback.print_exc()
             result = jsonify({
                 'buying_power': 0,
                 'cash_balance': 0,
@@ -3277,29 +3241,12 @@ def register_routes(app):
         """Get Alpaca paper account balance for Dashboard"""
         import asyncio
         
+        # Check cache first (5 second TTL)
         cache_key = 'alpaca_balance'
         if cache_key in _api_cache:
             cached_value, timestamp = _api_cache[cache_key]
             if time.time() - timestamp < 5:
                 return cached_value
-        
-        try:
-            from src.services.broker_health_monitor import get_health_monitor
-            hm = get_health_monitor()
-            cached = hm.get_cached_account_info('ALPACA_PAPER')
-            if cached is not None:
-                result = jsonify({
-                    'buying_power': cached.get('buying_power', 0),
-                    'cash_balance': cached.get('cash', cached.get('cash_balance', 0)),
-                    'net_liquidation': cached.get('portfolio_value', cached.get('net_liquidation', 0)),
-                    'equity': cached.get('portfolio_value', cached.get('net_liquidation', 0)),
-                    'unrealized_pnl': cached.get('unrealized_pnl', 0),
-                    'status': 'cached'
-                })
-                _api_cache[cache_key] = (result, time.time())
-                return result
-        except Exception:
-            pass
         
         if not _bot_instance or not hasattr(_bot_instance, 'paper_broker') or not _bot_instance.paper_broker:
             result = jsonify({
@@ -3348,25 +3295,7 @@ def register_routes(app):
                 return result
                 
         except Exception as e:
-            if str(e):
-                print(f"[API] Exception in Alpaca balance endpoint: {e}")
-            try:
-                from src.services.broker_health_monitor import get_health_monitor
-                hm = get_health_monitor()
-                cached = hm.get_cached_account_info('ALPACA_PAPER')
-                if cached:
-                    result = jsonify({
-                        'buying_power': cached.get('buying_power', 0),
-                        'cash_balance': cached.get('cash', 0),
-                        'net_liquidation': cached.get('portfolio_value', 0),
-                        'equity': cached.get('portfolio_value', 0),
-                        'unrealized_pnl': cached.get('unrealized_pnl', 0),
-                        'status': 'cached'
-                    })
-                    _api_cache[cache_key] = (result, time.time())
-                    return result
-            except Exception:
-                pass
+            print(f"[API] Exception in Alpaca balance endpoint: {e}")
             result = jsonify({
                 'buying_power': 0,
                 'cash_balance': 0,
@@ -3644,23 +3573,6 @@ def register_routes(app):
             cached_data, timestamp = _api_cache[cache_key]
             if time.time() - timestamp < 5:
                 return jsonify(cached_data)
-        
-        try:
-            from src.services.broker_health_monitor import get_health_monitor
-            hm = get_health_monitor()
-            cached = hm.get_cached_account_info('ROBINHOOD')
-            if cached and cached.get('buying_power', 0) > 0:
-                result = {
-                    'buying_power': cached.get('buying_power', 0),
-                    'cash': cached.get('cash', 0),
-                    'portfolio_value': cached.get('portfolio_value', 0),
-                    'positions': [],
-                    'status': 'cached'
-                }
-                _api_cache[cache_key] = (result, time.time())
-                return jsonify(result)
-        except Exception:
-            pass
         
         try:
             if _bot_instance and hasattr(_bot_instance, 'robinhood_broker') and _bot_instance.robinhood_broker:
@@ -6271,18 +6183,17 @@ def register_routes(app):
     @app.route('/api/trades/merged', methods=['GET'])
     def get_merged_trades():
         """Get trades merged with live Webull positions"""
-        import time as _time
-        _t0 = _time.time()
         if _bot_instance is None:
             return jsonify({'trades': []})
         
+        # Get filter parameters
         status_filter = request.args.get('status')
         broker_filter = request.args.get('broker')
         limit = int(request.args.get('limit', 1000))
         
         try:
+            # Get database trades with filters, enriched with remaining_qty from execution_lots
             db_trades = db.get_trades(status=status_filter, broker=broker_filter, limit=limit)
-            print(f"[API] merged trades: db={len(db_trades)} filter={status_filter}/{broker_filter} ({_time.time()-_t0:.2f}s)", flush=True)
             
             # Enrich each trade with remaining_qty from canonical execution_lots
             for trade in db_trades:
@@ -6308,112 +6219,19 @@ def register_routes(app):
             broker_filter_upper = broker_filter.upper() if broker_filter else None
             
             if not broker_filter_upper or broker_filter_upper in ['WEBULL', 'WEBULL_PAPER']:
-                import concurrent.futures as _cf
-                wb_client = getattr(_bot_instance.broker, '_client', None) if hasattr(_bot_instance, 'broker') and _bot_instance.broker else None
-                if not wb_client and hasattr(_bot_instance, 'broker') and _bot_instance.broker and hasattr(_bot_instance.broker, 'brokers'):
-                    wb_inst = _bot_instance.broker.brokers.get('Webull')
-                    if wb_inst:
-                        wb_client = getattr(wb_inst, 'wb', None) or getattr(wb_inst, '_client', None)
-                if not wb_client and hasattr(_bot_instance, 'broker') and _bot_instance.broker:
-                    wb_client = getattr(_bot_instance.broker, 'wb', None)
+                # Get live Webull positions AND open orders
+                positions_future = asyncio.run_coroutine_threadsafe(
+                    _get_webull_positions(),
+                    _bot_instance.loop
+                )
+                live_positions = positions_future.result(timeout=15)
                 
-                if wb_client:
-                    def _fetch_webull_positions_sync():
-                        try:
-                            positions_raw = wb_client.get_positions()
-                            positions = []
-                            for pos in (positions_raw or []):
-                                position_qty = float(pos.get('position', 0))
-                                if position_qty <= 0:
-                                    continue
-                                symbol = pos.get('ticker', {}).get('symbol', '') or pos.get('symbol', '')
-                                asset_type = pos.get('assetType', 'unknown')
-                                is_option = ('optionId' in pos or 'strikePrice' in pos or asset_type.lower() in ('option', 'opt'))
-                                if is_option:
-                                    strike = float(pos.get('strikePrice', 0))
-                                    direction = pos.get('direction', '').upper()
-                                    expiry = pos.get('expireDate', '')
-                                    expiry_mmdd = ''
-                                    if expiry and '-' in expiry:
-                                        from datetime import datetime
-                                        try:
-                                            exp_date = datetime.strptime(expiry, '%Y-%m-%d')
-                                            expiry_mmdd = exp_date.strftime('%m/%d')
-                                        except:
-                                            expiry_mmdd = expiry
-                                    positions.append({
-                                        'asset': 'option', 'symbol': symbol, 'quantity': position_qty,
-                                        'avg_cost': float(pos.get('costPrice', 0)),
-                                        'current_price': float(pos.get('latestPrice', 0) or pos.get('lastPrice', 0)),
-                                        'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
-                                        'option_id': pos.get('optionId', 0), 'strike': strike,
-                                        'expiry': expiry_mmdd, 'expiry_full': expiry,
-                                        'direction': 'C' if direction == 'CALL' else ('P' if direction == 'PUT' else ''),
-                                        'ticker_id': pos.get('ticker', {}).get('tickerId', 0)
-                                    })
-                                else:
-                                    market_value = float(pos.get('marketValue', 0))
-                                    current_price = market_value / position_qty if position_qty > 0 else 0
-                                    positions.append({
-                                        'asset': 'stock', 'symbol': symbol, 'quantity': position_qty,
-                                        'avg_cost': float(pos.get('costPrice', 0)),
-                                        'current_price': current_price,
-                                        'unrealized_pl': float(pos.get('unrealizedProfitLoss', 0)),
-                                        'ticker_id': pos.get('ticker', {}).get('tickerId', 0)
-                                    })
-                            return positions
-                        except Exception as e:
-                            print(f"[API] Error in Webull positions sync: {e}")
-                            return []
-                    
-                    def _fetch_webull_orders_sync():
-                        try:
-                            account_info = wb_client.get_account()
-                            open_orders = account_info.get('openOrders', []) if account_info else []
-                            formatted = []
-                            for order in open_orders:
-                                try:
-                                    quantity = int(order.get('totalQuantity', 0) or 0)
-                                except (ValueError, TypeError):
-                                    quantity = 0
-                                try:
-                                    filled_quantity = int(order.get('filledQuantity', 0) or 0)
-                                except (ValueError, TypeError):
-                                    filled_quantity = 0
-                                try:
-                                    limit_price = float(order.get('lmtPrice', 0) or 0)
-                                except (ValueError, TypeError):
-                                    limit_price = 0.0
-                                asset_type = 'option' if order.get('optionId') or order.get('optionType') else 'stock'
-                                formatted.append({
-                                    'order_id': order.get('orderId', 'N/A'),
-                                    'symbol': order.get('ticker', {}).get('symbol', 'N/A'),
-                                    'action': order.get('action', 'N/A'),
-                                    'quantity': quantity, 'filled_quantity': filled_quantity,
-                                    'limit_price': limit_price,
-                                    'order_type': order.get('orderType', 'N/A'),
-                                    'status': order.get('status', 'N/A'),
-                                    'created_time': order.get('createTime0', 'N/A'),
-                                    'asset_type': asset_type
-                                })
-                            return formatted
-                        except Exception as e:
-                            print(f"[API] Error in Webull orders sync: {e}")
-                            return []
-                    
-                    with _cf.ThreadPoolExecutor(max_workers=2) as pool:
-                        pos_future = pool.submit(_fetch_webull_positions_sync)
-                        ord_future = pool.submit(_fetch_webull_orders_sync)
-                        try:
-                            live_positions = pos_future.result(timeout=10)
-                        except Exception as e:
-                            print(f"[API] Webull positions timeout: {e}")
-                            live_positions = []
-                        try:
-                            webull_orders = ord_future.result(timeout=10) or []
-                        except Exception as e:
-                            print(f"[API] Webull orders timeout: {e}")
-                            webull_orders = []
+                # Get Webull open orders to determine fill status
+                orders_future = asyncio.run_coroutine_threadsafe(
+                    _get_webull_open_orders(),
+                    _bot_instance.loop
+                )
+                webull_orders = orders_future.result(timeout=10) or []
             
             # Fetch Alpaca positions if broker filter is ALPACA or ALPACA_PAPER
             if broker_filter_upper in ['ALPACA', 'ALPACA_PAPER']:
@@ -6427,8 +6245,7 @@ def register_routes(app):
                         alpaca_positions = alpaca_data.get('positions', [])
                         alpaca_orders = alpaca_data.get('orders', [])
                 except Exception as e:
-                    if str(e):
-                        print(f"[API] Error fetching Alpaca positions: {e}")
+                    print(f"[API] Error fetching Alpaca positions: {e}")
             
             # Fetch Robinhood positions if broker filter is ROBINHOOD or no filter
             robinhood_positions = []
@@ -17299,8 +17116,8 @@ def register_routes(app):
                 health_monitor = get_health_monitor()  # Use singleton instance
                 # Use uppercase keys to match health monitor's normalization
                 for broker_key in ['WEBULL', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'QUESTRADE']:
-                    state = health_monitor.get_broker_status(broker_key)
-                    if state and state.get('is_connected', False):
+                    state = health_monitor.get_broker_state(broker_key)
+                    if state:
                         health_states[broker_key.upper()] = state
             except Exception as e:
                 print(f"[BROKER STATES] Health monitor error: {e}")
@@ -17358,78 +17175,15 @@ def register_routes(app):
                     # Show any broker that has an instance (means it's configured)
                     # Connected brokers show, disconnected brokers show with their error reason
                     
+                    # Get buying power from health monitor cache
                     buying_power = 0
                     balance = 0
                     if health_monitor and is_connected:
                         cached_info = health_monitor.get_cached_account_info(health_key)
                         if cached_info:
-                            buying_power = float(cached_info.get('buying_power', 0) or 0)
-                            balance = float(cached_info.get('portfolio_value', cached_info.get('balance', 0)) or 0)
-                        elif instance_connected and broker_instance:
-                            try:
-                                acct = None
-                                if broker_name == 'WEBULL' and hasattr(broker_instance, '_client') and broker_instance._client:
-                                    import concurrent.futures
-                                    def _webull_get_account_blocking():
-                                        try:
-                                            account = broker_instance._client.get_account()
-                                            if not account:
-                                                return None
-                                            account_data = {}
-                                            account_members = account.get('accountMembers', [])
-                                            if account_members and isinstance(account_members, list):
-                                                for item in account_members:
-                                                    if isinstance(item, dict) and 'key' in item and 'value' in item:
-                                                        account_data[item['key']] = item['value']
-                                            for k, v in account.items():
-                                                if k != 'accountMembers' and k not in account_data:
-                                                    account_data[k] = v
-                                            buying_power_val = 0.0
-                                            for field in ['buyingPower', 'dayBuyingPower', 'cashAvailableForTrade', 'settledFunds']:
-                                                if field in account_data:
-                                                    try:
-                                                        buying_power_val = float(account_data[field])
-                                                        if buying_power_val > 0:
-                                                            break
-                                                    except (ValueError, TypeError):
-                                                        pass
-                                            portfolio_val = 0.0
-                                            for field in ['netLiquidation', 'totalMarketValue', 'accountValue']:
-                                                if field in account_data:
-                                                    try:
-                                                        portfolio_val = float(account_data[field])
-                                                        if portfolio_val > 0:
-                                                            break
-                                                    except (ValueError, TypeError):
-                                                        pass
-                                            return {'buying_power': buying_power_val, 'portfolio_value': portfolio_val}
-                                        except Exception:
-                                            return None
-                                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                                        future = pool.submit(_webull_get_account_blocking)
-                                        acct = future.result(timeout=8)
-                                else:
-                                    import asyncio as _aio
-                                    import concurrent.futures
-                                    def _get_account_sync():
-                                        loop = _aio.new_event_loop()
-                                        try:
-                                            return loop.run_until_complete(
-                                                _aio.wait_for(broker_instance.get_account_info(), timeout=5.0)
-                                            )
-                                        except:
-                                            return None
-                                        finally:
-                                            loop.close()
-                                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                                        future = pool.submit(_get_account_sync)
-                                        acct = future.result(timeout=7)
-                                if acct:
-                                    buying_power = float(acct.get('buying_power', 0) or 0)
-                                    balance = float(acct.get('portfolio_value', acct.get('balance', 0)) or 0)
-                                    health_monitor.update_broker_status(health_key, True, account_info=acct)
-                            except Exception:
-                                pass
+                            # Extract buying power using health monitor's method
+                            buying_power = health_monitor._extract_buying_power(health_key, cached_info, 'options')
+                            balance = cached_info.get('portfolio_value', cached_info.get('balance', 0))
                     
                     state = {
                         'broker_name': broker_name,

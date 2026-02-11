@@ -153,14 +153,14 @@ class ZerodhaBroker(BrokerInterface):
             
             print(f"[{self.name}] Connecting...")
             
-            self.kite = KiteConnect(api_key=api_key, timeout=8)
+            self.kite = KiteConnect(api_key=api_key)
             
             access_token_worked = False
             if access_token:
                 try:
                     print(f"[{self.name}] Trying stored access_token...")
                     self.kite.set_access_token(access_token)
-                    profile = await asyncio.wait_for(asyncio.to_thread(self.kite.profile), timeout=10.0)
+                    profile = await asyncio.to_thread(self.kite.profile)
                     if profile:
                         access_token_worked = True
                         self.user_id = profile.get('user_id')
@@ -175,11 +175,11 @@ class ZerodhaBroker(BrokerInterface):
             if not access_token_worked and request_token and api_secret:
                 try:
                     print(f"[{self.name}] Trying request_token + api_secret flow...")
-                    data = await asyncio.wait_for(asyncio.to_thread(self.kite.generate_session, request_token, api_secret=api_secret), timeout=10.0)
+                    data = self.kite.generate_session(request_token, api_secret=api_secret)
                     new_access_token = data["access_token"]
                     self.kite.set_access_token(new_access_token)
                     
-                    profile = await asyncio.wait_for(asyncio.to_thread(self.kite.profile), timeout=10.0)
+                    profile = await asyncio.to_thread(self.kite.profile)
                     if profile:
                         self.user_id = profile.get('user_id')
                         print(f"[{self.name}] Connected via request_token! User: {self.user_id}")
