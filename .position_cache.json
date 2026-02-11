@@ -1,7 +1,7 @@
 {
   "Webull_COPX_100.0_03/20_C": {
     "entry_price": 3.1,
-    "highest_price": 2.825,
+    "highest_price": 3.2,
     "trailing_activated": false,
     "closing": false,
     "closing_cycles": 0,
@@ -48,7 +48,7 @@
     "max_pnl_seen": 4.4354838709677455,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 0.2196,
+    "last_evaluated_price": 0.2073,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0,
@@ -168,7 +168,7 @@
     "max_pnl_seen": 1.1312217194570096,
     "dynamic_sl_price": null,
     "giveback_guard_active": false,
-    "last_evaluated_price": 2.005,
+    "last_evaluated_price": 2.035,
     "early_trailing_active": false,
     "early_stop_price": null,
     "early_steps_locked": 0,
