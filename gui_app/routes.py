@@ -1956,7 +1956,7 @@ def register_routes(app):
                        'enable_dynamic_sl', 'enable_giveback_guard', 'giveback_allowed_pct', 'dynamic_sl_profile',
                        'enable_early_trailing', 'early_trailing_activation_pct', 'early_trailing_step_pct',
                        'sl_order_mode', 'sl_limit_offset', 'entry_order_mode',
-                       'trim_order_mode', 'trim_limit_offset',
+                       'trim_order_mode', 'trim_limit_offset', 'trim_limit_offset_mode', 'trim_limit_offset_pct',
                        'order_chase_enabled', 'entry_chase_enabled'}
         cache_warning = None
         if any(field in data for field in risk_fields):

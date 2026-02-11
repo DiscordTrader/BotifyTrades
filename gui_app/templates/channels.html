@@ -1356,7 +1356,13 @@ function renderChannels() {
                             <option value="market" ${(channel.trim_order_mode || 'market') === 'market' ? 'selected' : ''}>Market</option>
                             <option value="limit" ${channel.trim_order_mode === 'limit' ? 'selected' : ''}>Limit</option>
                         </select>
-                        <span style="font-size: 8px; color: #6B7A90; display: block; margin-top: 2px;">Profit target exits</span>
+                        <span style="font-size: 8px; color: #6B7A90; display: block; margin-top: 2px;">
+                            ${channel.trim_order_mode === 'limit' ? 
+                                (channel.trim_limit_offset_mode === 'percent' ? 
+                                    'Offset: ' + (channel.trim_limit_offset_pct || 2) + '%' : 
+                                    'Offset: $' + (channel.trim_limit_offset || 0.01)) 
+                                : 'Profit target exits'}
+                        </span>
                     </div>
                     <div style="background: #0F1319; padding: 8px 10px;">
                         <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">SL Order Type</span>

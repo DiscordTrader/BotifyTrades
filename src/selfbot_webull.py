@@ -11231,7 +11231,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'leave_runner_enabled': channel_info.get('leave_runner_enabled'),
                         'leave_runner_pct': channel_info.get('leave_runner_pct'),
                         'trim_order_mode': channel_info.get('trim_order_mode', 'market'),
-                        'trim_limit_offset': channel_info.get('trim_limit_offset', 0.01)
+                        'trim_limit_offset': channel_info.get('trim_limit_offset', 0.01),
+                        'trim_limit_offset_mode': channel_info.get('trim_limit_offset_mode', 'dollar'),
+                        'trim_limit_offset_pct': channel_info.get('trim_limit_offset_pct', 2.0)
                     }
                     
                     # Add channel_record_id and channel_id for database saving after execution
@@ -11504,7 +11506,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         'leave_runner_enabled': channel_info.get('leave_runner_enabled'),
                         'leave_runner_pct': channel_info.get('leave_runner_pct'),
                         'trim_order_mode': channel_info.get('trim_order_mode', 'market'),
-                        'trim_limit_offset': channel_info.get('trim_limit_offset', 0.01)
+                        'trim_limit_offset': channel_info.get('trim_limit_offset', 0.01),
+                        'trim_limit_offset_mode': channel_info.get('trim_limit_offset_mode', 'dollar'),
+                        'trim_limit_offset_pct': channel_info.get('trim_limit_offset_pct', 2.0)
                     }
                     
                     # Add channel_record_id and channel_id for database saving after execution

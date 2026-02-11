@@ -237,22 +237,27 @@ def get_trim_order_price(
     if channel_settings.trim_order_mode != 'limit':
         return None
     
-    offset = channel_settings.trim_limit_offset
-    if is_sell:
-        # For sells, set limit slightly below current to ensure fill
-        # Adjust to psychological levels (.04 or .09)
-        base_price = current_price - offset
-        cents = int((base_price * 100) % 10)
-        if cents >= 5:
-            # Round to .09
-            limit_price = (int(base_price * 10) / 10) + 0.09
+    offset_mode = getattr(channel_settings, 'trim_limit_offset_mode', 'dollar')
+    
+    if offset_mode == 'percent':
+        pct = getattr(channel_settings, 'trim_limit_offset_pct', 2.0)
+        if is_sell:
+            limit_price = current_price * (1 - pct / 100)
         else:
-            # Round to .04
-            limit_price = (int(base_price * 10) / 10) + 0.04
+            limit_price = current_price * (1 + pct / 100)
         return round(limit_price, 2)
     else:
-        # For buys, set limit slightly above current
-        return round(current_price + offset, 2)
+        offset = channel_settings.trim_limit_offset
+        if is_sell:
+            base_price = current_price - offset
+            cents = int((base_price * 100) % 10)
+            if cents >= 5:
+                limit_price = (int(base_price * 10) / 10) + 0.09
+            else:
+                limit_price = (int(base_price * 10) / 10) + 0.04
+            return round(limit_price, 2)
+        else:
+            return round(current_price + offset, 2)
 
 
 def evaluate_channel_stop_loss(

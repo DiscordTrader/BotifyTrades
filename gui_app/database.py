@@ -471,6 +471,15 @@ def init_db():
         conn.commit()
         print("[DATABASE] ✓ Added trim order mode columns (market/limit) for per-channel trim settings")
     
+    # Migrate: Add trim offset mode (dollar vs percent) and pct value
+    try:
+        cursor.execute('SELECT trim_limit_offset_mode FROM channels LIMIT 1')
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE channels ADD COLUMN trim_limit_offset_mode TEXT DEFAULT 'dollar'")
+        cursor.execute('ALTER TABLE channels ADD COLUMN trim_limit_offset_pct REAL DEFAULT 2.0')
+        conn.commit()
+        print("[DATABASE] ✓ Added trim offset mode (dollar/percent) and pct columns")
+
     # Migrate: Add stop loss order mode column for market vs limit stop loss orders
     try:
         cursor.execute('SELECT sl_order_mode FROM channels LIMIT 1')
@@ -2550,7 +2559,7 @@ def update_channel(channel_id: int, **kwargs):
                    'profit_target_4_pct', 'profit_target_qty_1', 'profit_target_qty_2', 'profit_target_qty_3', 'profit_target_qty_4',
                    'stop_loss_pct', 'trailing_stop_pct', 'trailing_activation_pct', 'enabled_brokers', 'position_size_pct', 'tracking_position_size_pct',
                    'default_quantity', 'tracking_default_quantity', 'channel_max_position_size', 'risk_management_enabled', 'leave_runner_enabled', 'leave_runner_pct',
-                   'trim_order_mode', 'trim_limit_offset', 'sl_order_mode', 'sl_limit_offset', 'entry_order_mode',
+                   'trim_order_mode', 'trim_limit_offset', 'trim_limit_offset_mode', 'trim_limit_offset_pct', 'sl_order_mode', 'sl_limit_offset', 'entry_order_mode',
                    'ignore_signal_position_size', 'exit_strategy_mode', 'exit_strategy_mode_override', 'market', 'trade_summary_enabled',
                    'conditional_order_enabled', 'conditional_auto_execute', 'conditional_order_expiry',
                    'conditional_order_timeout_minutes', 'trigger_offset_percent', 'trigger_offset_mode', 'trigger_offset_value', 'order_timeout_minutes',

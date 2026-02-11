@@ -257,7 +257,7 @@ async function loadChannels() {
                                 </div>
                                 <div style="margin-top: 12px; padding: 12px; background: rgba(255, 165, 0, 0.05); border: 1px solid rgba(255, 165, 0, 0.2); border-radius: 8px;">
                                     <label style="display: block; font-size: 12px; font-weight: 600; color: #ffb700; margin-bottom: 8px;">Trim Order Type</label>
-                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Market orders fill immediately. Limit orders use psychological pricing (.04/.09).</p>
+                                    <p style="font-size: 11px; color: #8E8E93; margin: 0 0 8px 0;">Market orders fill immediately. Limit orders place below target for higher fill chance.</p>
                                     <div style="display: flex; gap: 16px; align-items: center;">
                                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
                                             <input type="radio" name="trim-order-mode-${channel.id}" value="market" ${(channel.trim_order_mode || 'market') === 'market' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('limit-offset-container-${channel.id}').style.display='none'">
@@ -267,9 +267,17 @@ async function loadChannels() {
                                             <input type="radio" name="trim-order-mode-${channel.id}" value="limit" ${channel.trim_order_mode === 'limit' ? 'checked' : ''} style="cursor: pointer;" onchange="document.getElementById('limit-offset-container-${channel.id}').style.display='flex'">
                                             <span style="font-size: 12px; color: white;">Limit</span>
                                         </label>
-                                        <div style="display: ${channel.trim_order_mode === 'limit' ? 'flex' : 'none'}; align-items: center; gap: 8px;" id="limit-offset-container-${channel.id}">
-                                            <label style="font-size: 11px; color: #8E8E93;">Offset $:</label>
-                                            <input type="number" id="risk-trim-offset-${channel.id}" value="${channel.trim_limit_offset || 0.01}" step="0.01" min="0" max="1" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
+                                        <div style="display: ${channel.trim_order_mode === 'limit' ? 'flex' : 'none'}; align-items: center; gap: 8px; flex-wrap: wrap;" id="limit-offset-container-${channel.id}">
+                                            <select id="risk-trim-offset-mode-${channel.id}" style="padding: 4px 6px; font-size: 11px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;" onchange="toggleTrimOffsetMode(${channel.id}, this.value)">
+                                                <option value="dollar" ${(channel.trim_limit_offset_mode || 'dollar') === 'dollar' ? 'selected' : ''}>$</option>
+                                                <option value="percent" ${channel.trim_limit_offset_mode === 'percent' ? 'selected' : ''}>%</option>
+                                            </select>
+                                            <div id="trim-offset-dollar-${channel.id}" style="display: ${(channel.trim_limit_offset_mode || 'dollar') === 'dollar' ? 'flex' : 'none'}; align-items: center; gap: 4px;">
+                                                <input type="number" id="risk-trim-offset-${channel.id}" value="${channel.trim_limit_offset || 0.01}" step="0.01" min="0" max="5" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
+                                            </div>
+                                            <div id="trim-offset-pct-${channel.id}" style="display: ${channel.trim_limit_offset_mode === 'percent' ? 'flex' : 'none'}; align-items: center; gap: 4px;">
+                                                <input type="number" id="risk-trim-offset-pct-${channel.id}" value="${channel.trim_limit_offset_pct || 2.0}" step="0.5" min="0" max="20" style="width: 60px; padding: 4px 8px; font-size: 12px; border: 1px solid #3A3A3C; border-radius: 4px; background: #1C1C1E; color: white;">
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1244,6 +1252,13 @@ function toggleEarlyTrailingExclusion(channelId, enabled) {
     }
 }
 
+function toggleTrimOffsetMode(channelId, mode) {
+    const dollarDiv = document.getElementById(`trim-offset-dollar-${channelId}`);
+    const pctDiv = document.getElementById(`trim-offset-pct-${channelId}`);
+    if (dollarDiv) dollarDiv.style.display = mode === 'dollar' ? 'flex' : 'none';
+    if (pctDiv) pctDiv.style.display = mode === 'percent' ? 'flex' : 'none';
+}
+
 async function saveRiskManagement(channelId) {
     try {
         const riskEnabled = document.getElementById(`risk-enabled-${channelId}`)?.checked ? 1 : 0;
@@ -1262,6 +1277,8 @@ async function saveRiskManagement(channelId) {
         const leaveRunnerPct = document.getElementById(`risk-leave-runner-pct-${channelId}`).value;
         const trimOrderMode = document.querySelector(`input[name="trim-order-mode-${channelId}"]:checked`)?.value || 'market';
         const trimLimitOffset = document.getElementById(`risk-trim-offset-${channelId}`).value;
+        const trimOffsetMode = document.getElementById(`risk-trim-offset-mode-${channelId}`)?.value || 'dollar';
+        const trimOffsetPct = document.getElementById(`risk-trim-offset-pct-${channelId}`)?.value;
         const slOrderMode = document.querySelector(`input[name="sl-order-mode-${channelId}"]:checked`)?.value || 'limit';
         const slLimitOffset = document.getElementById(`risk-sl-limit-offset-${channelId}`).value;
         const entryOrderMode = document.querySelector(`input[name="entry-order-mode-${channelId}"]:checked`)?.value || 'limit';
@@ -1304,6 +1321,8 @@ async function saveRiskManagement(channelId) {
                 leave_runner_pct: leaveRunnerPct ? parseFloat(leaveRunnerPct) : 25.0,
                 trim_order_mode: trimOrderMode,
                 trim_limit_offset: trimLimitOffset ? parseFloat(trimLimitOffset) : 0.01,
+                trim_limit_offset_mode: trimOffsetMode,
+                trim_limit_offset_pct: trimOffsetPct ? parseFloat(trimOffsetPct) : 2.0,
                 sl_order_mode: slOrderMode,
                 sl_limit_offset: slLimitOffset ? parseFloat(slLimitOffset) / 100 : 0.03,
                 entry_order_mode: entryOrderMode,
