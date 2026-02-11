@@ -691,10 +691,42 @@ class SignalRoutingEngine:
                             expiry_date = datetime.strptime(expiry_fmt, "%Y-%m-%d").date()
                             today = date.today()
                             if expiry_date < today:
-                                if loop_count <= 3 or loop_count % 100 == 0:
-                                    sys.stderr.write(f"[ROUTING_ENGINE] ⏭️  Skipping expired position {position.symbol} {position.strike}{position.option_type} {expiry_fmt} (expired {(today - expiry_date).days} day(s) ago)\n")
-                                    sys.stderr.flush()
+                                days_expired = (today - expiry_date).days
+                                sys.stderr.write(f"[ROUTING_ENGINE] 📅 Expired position detected: {position.symbol} {position.strike}{position.option_type} {expiry_fmt} (expired {days_expired} day(s) ago)\n")
+                                sys.stderr.flush()
                                 position.current_price = 0.01
+                                try:
+                                    dedupe = f"expired_{position.id}_{expiry_fmt}"
+                                    result = self.ledger.record_partial_exit(
+                                        position_id=position.id,
+                                        exit_qty=position.remaining_qty,
+                                        exit_price=0.01,
+                                        exit_reason=ExitReason.EXPIRED.value,
+                                        dedupe_key=dedupe
+                                    )
+                                    if result:
+                                        sys.stderr.write(f"[ROUTING_ENGINE] ✅ Auto-closed expired position {position.symbol} {position.strike}{position.option_type} in ledger (P&L: ${result.exit_pnl_dollar:.2f})\n")
+                                        sys.stderr.flush()
+                                        config = self.get_routing_config(position.routing_mapping_id)
+                                        if config:
+                                            try:
+                                                pnl_pct = -100.0 if position.entry_price > 0 else 0.0
+                                                await self.post_stc_signal(
+                                                    config=config,
+                                                    position=position,
+                                                    exit_qty=position.remaining_qty,
+                                                    exit_price=0.01,
+                                                    exit_reason=ExitReason.EXPIRED,
+                                                    pnl_pct=pnl_pct
+                                                )
+                                            except Exception:
+                                                pass
+                                    else:
+                                        sys.stderr.write(f"[ROUTING_ENGINE] ⏭️ Expired position already closed: {position.symbol}\n")
+                                        sys.stderr.flush()
+                                except Exception as exp_err:
+                                    sys.stderr.write(f"[ROUTING_ENGINE] ❌ Error auto-closing expired position: {exp_err}\n")
+                                    sys.stderr.flush()
                                 continue
                         except (ValueError, TypeError):
                             pass
