@@ -552,7 +552,7 @@ JACOB_SL_PATTERN = re.compile(
     re.IGNORECASE
 )
 JACOB_TARGET_PATTERN = re.compile(
-    r'(?:1st[\s\u200b-\u200f\u202a-\u202e]+)?Target[\s\u200b-\u200f\u202a-\u202e]*:[\s\u200b-\u200f\u202a-\u202e]*\$?([\d.]+)',
+    r'(?:1st[\s\u200b-\u200f\u202a-\u202e]+)?Target[\s\u200b-\u200f\u202a-\u202e]*:[\s\u200b-\u200f\u202a-\u202e]*\$?([\d]+\.{1,2}\d+)',
     re.IGNORECASE
 )
 
@@ -775,7 +775,11 @@ def parse_jacob_signal(text: str) -> Optional[Dict[str, Any]]:
     targets = []
     target_match = JACOB_TARGET_PATTERN.search(text)
     if target_match:
-        targets.append(float(target_match.group(1)))
+        try:
+            target_val = target_match.group(1).replace('..', '.')
+            targets.append(float(target_val))
+        except (ValueError, TypeError):
+            pass
     
     # Determine action based on direction
     action = 'BTO' if direction == 'LONG' else 'STO'  # STO for short selling
