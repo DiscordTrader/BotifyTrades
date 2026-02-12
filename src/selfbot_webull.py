@@ -1921,14 +1921,15 @@ class WebullBroker:
     _order_dedupe_window = 60.0  # 60 seconds - block duplicate orders
     _order_dedupe_lock = threading.Lock()  # Thread-safe access
     
-    def __init__(self, loop: asyncio.AbstractEventLoop):
+    def __init__(self, loop: asyncio.AbstractEventLoop, name: str = "WEBULL", paper_trade: bool = False, credentials: dict = None):
         self.loop = loop
-        self.name = "WEBULL"  # Add name attribute for multi-broker detection
+        self.name = name
         self._client = None
         self._logged_in = False
-        self._use_paper_account = False  # Flag for paper trading
-        self._tokens_valid = False  # Token validity for status reporting
-        self.connected = False  # Connection status for broker health monitor
+        self._use_paper_account = paper_trade
+        self._tokens_valid = False
+        self.connected = False
+        self._custom_credentials = credentials
     
     def is_authenticated(self) -> bool:
         """Check if Webull is actually authenticated (tokens valid).
@@ -2076,17 +2077,29 @@ class WebullBroker:
 
     async def login(self):
         def _blocking_login():
-            # Check if credentials are available
-            if WEBULL_CREDENTIALS_MISSING:
-                print("[Webull] ⚠️  Credentials not configured - skipping login")
-                print("[Webull] Configure credentials via GUI at http://localhost:<port>/settings")
+            creds = self._custom_credentials or {}
+            use_custom = bool(creds)
+            
+            c_access = creds.get('access_token', '') if use_custom else WB_ACCESS_TOKEN
+            c_refresh = creds.get('refresh_token', '') if use_custom else WB_REFRESH_TOKEN
+            c_did = creds.get('device_id', '') if use_custom else WB_DID
+            c_user = creds.get('email', '') if use_custom else WB_USER
+            c_pass = creds.get('password', '') if use_custom else WB_PASS
+            c_pin = creds.get('trade_pin', '') if use_custom else WB_PIN
+            
+            if not use_custom and WEBULL_CREDENTIALS_MISSING:
+                print(f"[{self.name}] ⚠️  Credentials not configured - skipping login")
+                print(f"[{self.name}] Configure credentials via GUI at http://localhost:<port>/settings")
                 return None
             
-            # Use paper trading account if flag is set
+            if use_custom and not c_access and not c_user:
+                print(f"[{self.name}] ⚠️  No credentials provided - skipping login")
+                return None
+            
             if self._use_paper_account:
                 from webull import paper_webull
                 wb = paper_webull()
-                print("[Webull] Using PAPER TRADING account")
+                print(f"[{self.name}] Using PAPER TRADING account")
             else:
                 from webull import webull
                 wb = webull()
@@ -2094,28 +2107,30 @@ class WebullBroker:
             try:
                 self._set_did(wb)
             except Exception as e:
-                print(f"[Webull] DID set warning: {e}")
+                print(f"[{self.name}] DID set warning: {e}")
             try:
                 self._patch_headers(wb)
             except Exception as e:
-                print(f"[Webull] header patch warning: {e}")
+                print(f"[{self.name}] header patch warning: {e}")
 
-            if WB_ACCESS_TOKEN and WB_REFRESH_TOKEN:
-                print("[Webull] Using saved access/refresh tokens")
-                self._apply_tokens(wb, WB_ACCESS_TOKEN, WB_REFRESH_TOKEN, did_from_web=WB_DID or None)
-                print("[Webull] ✓ Tokens applied successfully")
+            if c_access and c_refresh:
+                print(f"[{self.name}] Using saved access/refresh tokens")
+                self._apply_tokens(wb, c_access, c_refresh, did_from_web=c_did or None)
+                print(f"[{self.name}] ✓ Tokens applied successfully")
             else:
                 try:
-                    print(f"[Webull] Attempting login with username: {WB_USER}")
-                    data = wb.login(WB_USER, WB_PASS, _latin1(WB_DEVICE))
+                    print(f"[{self.name}] Attempting login with username: {c_user}")
+                    data = wb.login(c_user, c_pass, _latin1(WB_DEVICE))
                     if not (data and data.get('accessToken')):
                         raise RuntimeError(f"login returned no accessToken: {data}")
-                    print("[Webull] ✓ Login successful")
+                    print(f"[{self.name}] ✓ Login successful")
                 except Exception as e_login:
-                    print(f"[Webull] primary login failed: {e_login}")
-                    log_error_to_db('broker_connection', f"Webull login failed: {str(e_login)}", 
+                    print(f"[{self.name}] primary login failed: {e_login}")
+                    log_error_to_db('broker_connection', f"{self.name} login failed: {str(e_login)}", 
                                    'WebullBroker', 'error', 'Login with username/password failed')
-                    print("[Webull] Using manual token bootstrap from your logged-in browser session.")
+                    if use_custom:
+                        raise RuntimeError(f"{self.name} login failed: {e_login}")
+                    print(f"[{self.name}] Using manual token bootstrap from your logged-in browser session.")
                     print("\n>>> In Chrome/Edge: open https://app.webull.com, log in, press F12 → Console and paste:")
                     print("""console.log(JSON.stringify({
   accessToken: sessionStorage.accessToken || localStorage.accessToken || localStorage.ACCESS_TOKEN || '',
@@ -2137,15 +2152,15 @@ class WebullBroker:
                     if not acc:
                         raise RuntimeError("Missing accessToken in pasted JSON.")
                     if not ref:
-                        print("[Webull] No refreshToken provided — continuing with accessToken only.")
+                        print(f"[{self.name}] No refreshToken provided — continuing with accessToken only.")
                     self._apply_tokens(wb, acc, ref, did_from_web=did_web or None)
 
             try:
                 wb.get_account_id()
             except Exception as e_acc:
-                print(f"[Webull] get_account_id warning: {e_acc}")
+                print(f"[{self.name}] get_account_id warning: {e_acc}")
             try:
-                wb.get_trade_token(WB_PIN)
+                wb.get_trade_token(c_pin)
             except Exception as e_pin:
                 log_error_to_db('broker_connection', f"Trade PIN verification failed: {str(e_pin)}", 
                                'WebullBroker', 'critical', 'Check your 6-digit trading PIN in Settings')
@@ -5520,7 +5535,9 @@ class SelfClient(discord.Client):
         
         broker_lower = broker_name.lower()
         
-        if 'webull' in broker_lower:
+        if broker_lower in ('webull_paper', 'webull paper'):
+            return getattr(self, 'webull_paper_broker', None)
+        elif 'webull' in broker_lower:
             return getattr(self, 'broker', None)
         elif 'alpaca' in broker_lower:
             return getattr(self, 'paper_broker', None)
@@ -5560,18 +5577,16 @@ class SelfClient(discord.Client):
         """Initialize all brokers in background - Discord connection is NOT blocked."""
         print("[BROKERS] Starting background broker initialization...")
         
-        self.broker = WebullBroker(loop=self.loop)
+        self.broker = WebullBroker(loop=self.loop, name="WEBULL", paper_trade=PAPER_TRADE)
         try:
             await self.broker.login()
             if self.broker._logged_in:
-                print("[Webull] ✓ Login successful (LIVE account)", flush=True)
+                mode_str = "PAPER" if PAPER_TRADE else "LIVE"
+                print(f"[Webull] ✓ Login successful ({mode_str} account)", flush=True)
                 self.broker_ready.set()
-                # Update broker status in GUI
                 try:
                     from gui_app.broker_credentials_service import set_broker_status
                     set_broker_status('webull_live', True, 'connected', account_info={'mode': 'live'})
-                    if PAPER_TRADE:
-                        set_broker_status('webull_paper', True, 'connected', account_info={'mode': 'paper'})
                 except Exception:
                     pass
                 try:
@@ -5584,7 +5599,6 @@ class SelfClient(discord.Client):
                 try:
                     from gui_app.broker_credentials_service import set_broker_status
                     set_broker_status('webull_live', False, 'disconnected', error='Credentials not configured')
-                    set_broker_status('webull_paper', False, 'disconnected', error='Credentials not configured')
                 except Exception:
                     pass
                 try:
@@ -5597,7 +5611,6 @@ class SelfClient(discord.Client):
             try:
                 from gui_app.broker_credentials_service import set_broker_status
                 set_broker_status('webull_live', False, 'disconnected', error=str(e))
-                set_broker_status('webull_paper', False, 'disconnected', error=str(e))
             except Exception:
                 pass
             try:
@@ -5605,6 +5618,45 @@ class SelfClient(discord.Client):
                 notify_broker_disconnected('Webull', str(e))
             except Exception:
                 pass
+        
+        self.webull_paper_broker = None
+        try:
+            from gui_app.broker_credentials_service import get_webull_credentials, set_broker_status
+            wb_creds = get_webull_credentials() or {}
+            wb_paper_enabled = wb_creds.get('paper_mode', False)
+            
+            if wb_paper_enabled and (wb_creds.get('access_token') or wb_creds.get('email')):
+                _original_print("[WEBULL_PAPER] Starting paper broker initialization...", flush=True)
+                self.webull_paper_broker = WebullBroker(
+                    loop=self.loop,
+                    name="WEBULL_PAPER",
+                    paper_trade=True,
+                    credentials=wb_creds
+                )
+                try:
+                    await self.webull_paper_broker.login()
+                    if self.webull_paper_broker._logged_in:
+                        _original_print("[WEBULL_PAPER] ✓ Paper trading broker connected", flush=True)
+                        set_broker_status('webull_paper', True, 'connected', account_info={'mode': 'paper'})
+                        try:
+                            from gui_app.discord_notifier import notify_broker_reconnected
+                            notify_broker_reconnected('Webull Paper')
+                        except Exception:
+                            pass
+                    else:
+                        _original_print("[WEBULL_PAPER] ⚠️  Paper broker login returned no client", flush=True)
+                        self.webull_paper_broker = None
+                        set_broker_status('webull_paper', False, 'disconnected', error='Login failed')
+                except Exception as wp_err:
+                    _original_print(f"[WEBULL_PAPER] ⚠️  Paper broker login failed: {wp_err}", flush=True)
+                    self.webull_paper_broker = None
+                    set_broker_status('webull_paper', False, 'disconnected', error=str(wp_err))
+            else:
+                _original_print("[WEBULL_PAPER] Paper trading not enabled or no credentials - skipping", flush=True)
+                set_broker_status('webull_paper', False, 'disconnected', error='Not enabled')
+        except Exception as e:
+            _original_print(f"[WEBULL_PAPER] ⚠️  Initialization error: {e}", flush=True)
+            self.webull_paper_broker = None
         
         # Initialize Alpaca paper trading broker for tracking channels
         try:
@@ -6249,7 +6301,7 @@ class SelfClient(discord.Client):
                 
                 # Create simple broker manager for sync service
                 class BrokerManager:
-                    def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None, dhanq_broker=None, upstox_broker=None, zerodha_broker=None, schwab_broker=None):
+                    def __init__(self, webull_broker, alpaca_paper_broker, tastytrade_broker=None, robinhood_broker=None, ibkr_broker=None, dhanq_broker=None, upstox_broker=None, zerodha_broker=None, schwab_broker=None, webull_paper_broker=None):
                         self.webull_broker = webull_broker
                         self.alpaca_paper_broker = alpaca_paper_broker
                         self.tastytrade_broker = tastytrade_broker
@@ -6259,8 +6311,9 @@ class SelfClient(discord.Client):
                         self.upstox_broker = upstox_broker
                         self.zerodha_broker = zerodha_broker
                         self.schwab_broker = schwab_broker
+                        self.webull_paper_broker = webull_paper_broker
                 
-                broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker, self.upstox_broker, self.zerodha_broker, self.schwab_broker)
+                broker_manager = BrokerManager(self.broker, self.paper_broker, self.tastytrade_broker, self.robinhood_broker, self.ibkr_broker, self.dhanq_broker, self.upstox_broker, self.zerodha_broker, self.schwab_broker, webull_paper_broker=self.webull_paper_broker)
                 
                 self.sync_service = BrokerSyncService(broker_manager, db_instance, sync_interval=30)
                 
@@ -6435,6 +6488,9 @@ class SelfClient(discord.Client):
             if self.broker:
                 conditional_order_router.set_broker_instance('Webull', self.broker)
                 _original_print("[CONDITIONAL] ✓ Webull registered for price monitoring", flush=True)
+            if self.webull_paper_broker and getattr(self.webull_paper_broker, '_logged_in', False):
+                conditional_order_router.set_broker_instance('Webull_Paper', self.webull_paper_broker)
+                _original_print("[CONDITIONAL] ✓ Webull Paper registered for price monitoring", flush=True)
             if self.paper_broker:
                 conditional_order_router.set_broker_instance('Alpaca', self.paper_broker)
                 _original_print("[CONDITIONAL] ✓ Alpaca registered for price monitoring", flush=True)
@@ -6450,6 +6506,8 @@ class SelfClient(discord.Client):
             # Webull: check for _client attribute or _logged_in status
             if self.broker and (getattr(self.broker, '_logged_in', False) or getattr(self.broker, 'wb', None)):
                 register_broker_with_aggregator('webull', self.broker)
+            if self.webull_paper_broker and getattr(self.webull_paper_broker, '_logged_in', False):
+                register_broker_with_aggregator('webull_paper', self.webull_paper_broker)
             if self.paper_broker and getattr(self.paper_broker, 'connected', False):
                 register_broker_with_aggregator('alpaca', self.paper_broker)
             if self.robinhood_broker and getattr(self.robinhood_broker, 'connected', False):
@@ -12753,6 +12811,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             enabled_brokers = ['ALPACA_PAPER']
                         elif str(risk_broker).upper() == 'WEBULL' and self.broker:
                             enabled_brokers = ['WEBULL']
+                        elif str(risk_broker).upper() == 'WEBULL_PAPER' and self.webull_paper_broker:
+                            enabled_brokers = ['WEBULL_PAPER']
                         else:
                             enabled_brokers = [str(risk_broker).upper()]
                     else:
@@ -12804,8 +12864,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             broker_instance = self.broker
                             _original_print(f"[MULTI-BROKER] Queuing Webull LIVE broker")
                         # Webull Paper: 'webull_paper', 'WEBULL_PAPER'
-                        elif broker_name_lower == 'webull_paper' and self.paper_broker and hasattr(self.paper_broker, 'name') and self.paper_broker.name == 'WEBULL':
-                            broker_instance = self.paper_broker
+                        elif broker_name_lower == 'webull_paper' and self.webull_paper_broker and getattr(self.webull_paper_broker, '_logged_in', False):
+                            broker_instance = self.webull_paper_broker
                             _original_print(f"[MULTI-BROKER] Queuing Webull PAPER broker")
                         # IBKR routing - single instance supporting either paper or live mode
                         # Note: IBKR only connects to one TWS/Gateway at a time, mode is determined at startup

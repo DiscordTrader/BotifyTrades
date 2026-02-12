@@ -57,6 +57,11 @@ BROKER_BUYING_POWER_FIELDS = {
         'stocks': ['buying_power', 'cash'],
         'fallback': 'buying_power'
     },
+    'WEBULL_PAPER': {
+        'options': ['options_buying_power', 'buying_power', 'cash', 'optionBuyingPower', 'cashBalance'],
+        'stocks': ['buying_power', 'cash', 'dayBuyingPower', 'cashBalance', 'overnightBuyingPower'],
+        'fallback': 'buying_power'
+    },
     'ROBINHOOD': {
         # Robinhood: use buying_power as primary for options too
         'options': ['buying_power', 'options_buying_power', 'margin_buying_power', 'cash'],
@@ -514,7 +519,7 @@ class BrokerHealthMonitor:
         # SETTLED CASH VALIDATION FOR ALL BROKERS
         # Good faith violations can occur on any broker when trading with unsettled funds
         # Brokers with settled cash tracking: WEBULL, ALPACA, ALPACA_PAPER, ROBINHOOD, SCHWAB
-        brokers_with_settled_cash = ['WEBULL', 'ALPACA', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB']
+        brokers_with_settled_cash = ['WEBULL', 'WEBULL_PAPER', 'ALPACA', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB']
         
         if broker_key in brokers_with_settled_cash:
             settled_cash = cached_info.get('settled_cash', 0)

@@ -183,6 +183,12 @@ class BrokerSyncService:
         if hasattr(self.broker_manager, 'webull_broker') and self.broker_manager.webull_broker:
             brokers_to_sync.append(('Webull', self.broker_manager.webull_broker))
         
+        # Add Webull Paper if available
+        if hasattr(self.broker_manager, 'webull_paper_broker') and self.broker_manager.webull_paper_broker:
+            wb_paper = self.broker_manager.webull_paper_broker
+            if getattr(wb_paper, '_logged_in', False) or getattr(wb_paper, 'connected', False):
+                brokers_to_sync.append(('WEBULL_PAPER', wb_paper))
+        
         # Add Alpaca if available
         if hasattr(self.broker_manager, 'alpaca_paper_broker') and self.broker_manager.alpaca_paper_broker:
             brokers_to_sync.append(('ALPACA_PAPER', self.broker_manager.alpaca_paper_broker))
@@ -356,8 +362,8 @@ class BrokerSyncService:
             }
             
             # Fetch based on broker type
-            if broker_name == 'Webull':
-                # Get live positions using detailed method (supports options)
+            if broker_name in ('Webull', 'WEBULL_PAPER'):
+                # Get positions using detailed method (supports options)
                 if hasattr(broker_instance, 'get_positions_detailed'):
                     positions = await broker_instance.get_positions_detailed() or []
                     
@@ -776,12 +782,11 @@ class BrokerSyncService:
         try:
             account_info = {}
             
-            if broker_name == 'Webull':
+            if broker_name in ('Webull', 'WEBULL_PAPER'):
                 if hasattr(broker_instance, 'get_account_info'):
                     raw = await broker_instance.get_account_info()
                     if raw:
-                        # Log account data for debugging - NOTE: get_account_info returns normalized snake_case keys
-                        print(f"[SYNC] Webull account info keys: {list(raw.keys())[:10]}")
+                        print(f"[SYNC] {broker_name} account info keys: {list(raw.keys())[:10]}")
                         # Use the normalized keys returned by get_account_info (snake_case)
                         account_info = {
                             'portfolio_value': raw.get('portfolio_value', 0),
@@ -1654,7 +1659,7 @@ class BrokerSyncService:
             filled_orders = []
             
             # Fetch filled orders based on broker type
-            if broker_name == 'Webull':
+            if broker_name in ('Webull', 'WEBULL_PAPER'):
                 if hasattr(broker_instance, 'get_order_history'):
                     filled_orders = await broker_instance.get_order_history(count=50)
             elif 'ALPACA' in broker_name.upper():
