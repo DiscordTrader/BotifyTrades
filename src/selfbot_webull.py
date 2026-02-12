@@ -11908,6 +11908,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     
                     if account_info:
                         buying_power = account_info.get('buying_power') or account_info.get('net_liquidation') or 0
+                        _original_print(f"[{broker_name}] [POSITION SIZE] Buying power: ${buying_power:,.2f}, Position size: {position_size_pct}%, Original qty: {original_qty}")
+                        if buying_power <= 0:
+                            _original_print(f"[{broker_name}] [POSITION SIZE] ⚠️ Buying power is $0 - cannot calculate position size! Rejecting order.")
+                            return {'success': False, 'error': f'{broker_name} has $0 buying power - cannot calculate position size'}
                         if buying_power > 0:
                             # Calculate position size in dollars based on percentage
                             position_dollars = (buying_power * position_size_pct) / 100
