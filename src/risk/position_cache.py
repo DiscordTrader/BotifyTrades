@@ -15,9 +15,7 @@ from .risk_types import PositionCacheEntry, PositionSnapshot
 class PositionCache:
     """Manages position state cache with file persistence."""
     
-    CLOSING_CYCLE_RESET = 30  # Reset closing flag after this many cycles (~30s at 1s/cycle)
-    # Increased from 3 to 30 to give Order Chaser time to chase stale orders
-    # before Risk Management fires duplicate STC orders
+    CLOSING_CYCLE_RESET = 5  # Reset closing flag after this many cycles (~5s at 1s/cycle)
     
     def __init__(self, cache_file: Optional[Path] = None):
         self.cache_file = cache_file or Path.cwd() / '.position_cache.json'
