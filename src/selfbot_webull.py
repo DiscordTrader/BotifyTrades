@@ -2993,32 +2993,59 @@ class WebullBroker:
                 }
             
             if self._use_paper_account:
-                print(f"[{self.name}] Using SDK place_order_option for paper account")
+                print(f"[{self.name}] Using paper trading center API for option order")
                 try:
-                    resp = wb.place_order_option(
-                        optionId=int(option_id),
-                        lmtPrice=float(effective_price),
-                        action=side,
-                        orderType='LMT',
-                        enforce=WB_ENFORCE,
-                        quant=int(adjusted_qty)
-                    )
-                    print(f"[{self.name}] SDK response: {resp}")
-                    if resp and isinstance(resp, dict):
-                        if resp.get('success') == False:
-                            error_msg = resp.get('msg', 'Unknown paper order error')
-                            print(f"[{self.name}] ❌ Paper option order failed: {error_msg}")
+                    paper_headers = wb.build_req_headers(include_trade_token=True, include_time=True)
+                    paper_url = f"{wb._urls.base_paper_url}/paper/1/acc/{wb._account_id}/orderop/place/{int(option_id)}"
+                    paper_payload = {
+                        'action': side,
+                        'comboType': 'NORMAL',
+                        'orderType': 'LMT',
+                        'outsideRegularTradingHour': False,
+                        'quantity': int(adjusted_qty),
+                        'serialId': str(uuid.uuid4()),
+                        'tickerId': int(option_id),
+                        'tickerType': 'OPTION',
+                        'timeInForce': WB_ENFORCE,
+                        'lmtPrice': float(effective_price)
+                    }
+                    print(f"[{self.name}] Paper API URL: {paper_url}")
+                    print(f"[{self.name}] Paper payload: {paper_payload}")
+                    paper_resp = requests.post(paper_url, json=paper_payload, headers=paper_headers, timeout=wb.timeout)
+                    print(f"[{self.name}] Paper API status: {paper_resp.status_code}")
+                    
+                    if paper_resp.status_code == 200:
+                        resp_json = paper_resp.json()
+                        print(f"[{self.name}] ✓ Paper option order response: {resp_json}")
+                        if isinstance(resp_json, dict) and resp_json.get('success') == False:
+                            error_msg = resp_json.get('msg', 'Unknown paper order error')
+                            print(f"[{self.name}] ❌ Paper option order rejected: {error_msg}")
                             return {'success': False, 'msg': error_msg, 'error': 'PAPER_ORDER_FAILED'}
-                        order_id = resp.get('orderId') or resp.get('data', {}).get('orderId')
-                        if order_id:
-                            print(f"[{self.name}] ✓ Paper order placed: orderId={order_id}")
-                        else:
-                            print(f"[{self.name}] ✓ Paper order placed (response: {resp})")
-                    return resp
-                except Exception as sdk_err:
-                    error_msg = str(sdk_err)
-                    print(f"[{self.name}] ❌ SDK place_order_option failed: {error_msg}")
-                    print(f"[{self.name}] Falling back to direct API...")
+                        return resp_json
+                    else:
+                        try:
+                            err_detail = paper_resp.json()
+                        except:
+                            err_detail = paper_resp.text
+                        print(f"[{self.name}] ⚠️ Paper center returned {paper_resp.status_code}: {err_detail}")
+                        print(f"[{self.name}] Falling back to SDK method...")
+                        try:
+                            sdk_resp = wb.place_order_option(
+                                optionId=int(option_id),
+                                lmtPrice=float(effective_price),
+                                action=side,
+                                orderType='LMT',
+                                enforce=WB_ENFORCE,
+                                quant=int(adjusted_qty)
+                            )
+                            print(f"[{self.name}] SDK fallback response: {sdk_resp}")
+                            return sdk_resp
+                        except Exception as sdk_err:
+                            print(f"[{self.name}] SDK fallback also failed: {sdk_err}")
+                            return {'success': False, 'msg': f'Paper order failed: {err_detail}', 'error': 'PAPER_ORDER_FAILED'}
+                except Exception as paper_err:
+                    print(f"[{self.name}] ❌ Paper option order error: {paper_err}")
+                    return {'success': False, 'msg': str(paper_err), 'error': 'PAPER_ORDER_ERROR'}
             
             headers = wb.build_req_headers(include_trade_token=True, include_time=True)
             
