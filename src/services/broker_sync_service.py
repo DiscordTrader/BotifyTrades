@@ -906,38 +906,52 @@ class BrokerSyncService:
         # Stage 2: Import manual trades (positions not tracked by bot)
         await self._import_manual_trades(broker_name, normalized_data)
     
+    def _is_broker_match(self, broker_name: str, trade_broker_raw: str) -> bool:
+        """Check if a trade's broker matches the sync broker name.
+        
+        Uses exact matching to prevent cross-contamination between
+        similar broker names (e.g., 'webull' vs 'webull_paper').
+        """
+        broker_lower = broker_name.lower()
+        trade_broker = (trade_broker_raw or '').lower()
+        
+        if not trade_broker:
+            return False
+        
+        if broker_lower == 'webull':
+            return trade_broker == 'webull'
+        elif broker_lower == 'webull_paper':
+            return trade_broker == 'webull_paper'
+        elif broker_lower == 'alpaca_paper':
+            return trade_broker in ('alpaca_paper', 'alpaca')
+        elif broker_lower == 'schwab':
+            return 'schwab' in trade_broker
+        elif broker_lower.startswith('ibkr'):
+            return 'ibkr' in trade_broker
+        elif broker_lower.startswith('tastytrade'):
+            return 'tastytrade' in trade_broker
+        elif broker_lower == 'robinhood':
+            return trade_broker == 'robinhood'
+        elif broker_lower == 'zerodha':
+            return trade_broker == 'zerodha'
+        elif broker_lower == 'upstox':
+            return trade_broker == 'upstox'
+        elif broker_lower == 'dhanq':
+            return trade_broker == 'dhanq'
+        else:
+            return trade_broker == broker_lower
+
     async def _update_existing_trades(self, broker_name: str, normalized_data: Dict[str, Any]):
         """Update status of existing database trades based on broker state"""
         
-        # Get all non-closed trades for this broker (handle multiple name formats)
-        db_trades = self.db.get_trades(limit=1000)
+        open_trades = self.db.get_trades(status='OPEN', limit=5000)
+        pending_trades = self.db.get_trades(status='PENDING', limit=5000)
+        db_trades = open_trades + pending_trades
         
-        # Filter for this broker (case-insensitive match)
-        broker_lower = broker_name.lower()
         active_trades = []
         for t in db_trades:
-            if t['status'] in ('CLOSED', 'FAILED'):
-                continue
-            trade_broker = (t.get('broker') or '').lower()
-            if broker_lower == 'webull' and 'webull' in trade_broker:
-                active_trades.append(t)
-            elif broker_lower == 'alpaca_paper' and 'alpaca' in trade_broker:
-                active_trades.append(t)
-            elif broker_lower == 'schwab' and 'schwab' in trade_broker:
-                active_trades.append(t)
-            elif broker_lower.startswith('ibkr') and 'ibkr' in trade_broker:
-                active_trades.append(t)
-            elif broker_lower.startswith('tastytrade') and 'tastytrade' in trade_broker:
-                active_trades.append(t)
-            elif broker_lower == 'robinhood' and 'robinhood' in trade_broker:
-                active_trades.append(t)
-            elif broker_lower == 'zerodha' and 'zerodha' in trade_broker:
-                active_trades.append(t)
-            elif broker_lower == 'upstox' and 'upstox' in trade_broker:
-                active_trades.append(t)
-            elif broker_lower == 'dhanq' and 'dhanq' in trade_broker:
-                active_trades.append(t)
-            elif trade_broker == broker_lower:
+            trade_broker = t.get('broker') or ''
+            if self._is_broker_match(broker_name, trade_broker):
                 active_trades.append(t)
         
         if not active_trades:
@@ -1163,11 +1177,9 @@ class BrokerSyncService:
                     except Exception as lot_err:
                         print(f"[SYNC] Warning: Could not cancel lot: {lot_err}")
                     
-                    # Clean up position cache/ledger to remove stale entries
                     try:
-                        # Remove from risk position cache if exists
                         if hasattr(self, '_risk_manager') and self._risk_manager:
-                            pos_key = f"{broker}_{symbol}_{asset_type}"
+                            pos_key = f"{broker_name}_{symbol}_{asset_type}"
                             if hasattr(self._risk_manager, 'cache') and self._risk_manager.cache:
                                 if pos_key in self._risk_manager.cache._cache:
                                     self._risk_manager.cache.remove(pos_key)
@@ -1219,7 +1231,7 @@ class BrokerSyncService:
                     
                     try:
                         if hasattr(self, '_risk_manager') and self._risk_manager:
-                            pos_key = f"{broker}_{symbol}_{asset_type}"
+                            pos_key = f"{broker_name}_{symbol}_{asset_type}"
                             if hasattr(self._risk_manager, 'cache') and self._risk_manager.cache:
                                 if pos_key in self._risk_manager.cache._cache:
                                     self._risk_manager.cache.remove(pos_key)
@@ -1352,24 +1364,12 @@ class BrokerSyncService:
         all_db_trades_pending = self.db.get_trades(status='PENDING', limit=1000)
         all_db_trades = all_db_trades_open + all_db_trades_pending
         
-        # RECOVERY: Find orphaned trades (OPEN, no channel_id) for this broker and try to link them
-        broker_lower = broker_name.lower()
         orphaned_trades_by_key = {}
         for t in all_db_trades_open:
             if t.get('channel_id'):
-                continue  # Already has channel, not orphaned
-            trade_broker = (t.get('broker') or '').lower()
-            is_broker_match = False
-            if broker_lower == 'webull' and 'webull' in trade_broker:
-                is_broker_match = True
-            elif broker_lower == 'alpaca_paper' and 'alpaca' in trade_broker:
-                is_broker_match = True
-            elif broker_lower == 'robinhood' and 'robinhood' in trade_broker:
-                is_broker_match = True
-            elif trade_broker == broker_lower:
-                is_broker_match = True
-            
-            if is_broker_match:
+                continue
+            trade_broker = t.get('broker') or ''
+            if self._is_broker_match(broker_name, trade_broker):
                 key = self._build_position_key(
                     t['symbol'],
                     t.get('asset_type', 'stock'),
@@ -1382,23 +1382,11 @@ class BrokerSyncService:
         # Also get recently closed Discord trades to find origin channel_id for positions
         all_discord_trades = self.db.get_trades(limit=1000)  # Get all trades to find origins
         
-        # Filter for this broker (case-insensitive)
-        broker_lower = broker_name.lower()
         db_trades = []
-        pending_trades_by_key = {}  # Track pending trades for promotion to OPEN
+        pending_trades_by_key = {}
         for t in all_db_trades:
-            trade_broker = (t.get('broker') or '').lower()
-            is_broker_match = False
-            if broker_lower == 'webull' and 'webull' in trade_broker:
-                is_broker_match = True
-            elif broker_lower == 'alpaca_paper' and 'alpaca' in trade_broker:
-                is_broker_match = True
-            elif broker_lower == 'robinhood' and 'robinhood' in trade_broker:
-                is_broker_match = True
-            elif trade_broker == broker_lower:
-                is_broker_match = True
-            
-            if is_broker_match:
+            trade_broker = t.get('broker') or ''
+            if self._is_broker_match(broker_name, trade_broker):
                 db_trades.append(t)
                 # Index PENDING trades by key for promotion lookup
                 if t.get('status') == 'PENDING':
