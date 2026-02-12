@@ -10661,11 +10661,10 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     print(f"[POSITION SIZE] ✓ Channel max position size: ${channel_max_position_size}")
                 
                 if channel_default_qty:
-                    # Channel fixed QTY - use as CAP if signal has qty, otherwise use channel qty
                     signal_qty_val = opt.get('qty')
                     channel_qty_val = int(channel_default_qty)
-                    if signal_qty_val and signal_qty_val > 0:
-                        # Signal has qty - use minimum (signal intent, capped by channel limit)
+                    qty_actually_from_signal = opt.get('qty_specified', opt.get('_qty_from_signal', False))
+                    if signal_qty_val and signal_qty_val > 0 and qty_actually_from_signal:
                         final_qty = min(signal_qty_val, channel_qty_val)
                         opt['qty'] = final_qty
                         if final_qty < signal_qty_val:
@@ -10673,9 +10672,8 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         else:
                             print(f"[POSITION SIZE] ✓ Using signal qty={signal_qty_val} (within channel limit={channel_qty_val})")
                     else:
-                        # No signal qty - use channel default
                         opt['qty'] = channel_qty_val
-                        print(f"[POSITION SIZE] ✓ Using channel fixed QTY: {opt['qty']} contracts (no signal qty)")
+                        print(f"[POSITION SIZE] ✓ Using channel fixed QTY: {opt['qty']} contracts (auto-calc qty={signal_qty_val} overridden by channel setting)")
                     
                     # BUGFIX: Enforce MAX POSITION$ cap for fixed QTY mode
                     # If channel_max_position_size is set, verify the trade doesn't exceed it
