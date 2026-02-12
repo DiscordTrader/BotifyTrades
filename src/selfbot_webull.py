@@ -5623,7 +5623,7 @@ class SelfClient(discord.Client):
         try:
             from gui_app.broker_credentials_service import get_webull_credentials, set_broker_status
             wb_creds = get_webull_credentials() or {}
-            wb_paper_enabled = wb_creds.get('paper_mode', False)
+            wb_paper_enabled = wb_creds.get('paper_account_enabled', False)
             
             if wb_paper_enabled and (wb_creds.get('access_token') or wb_creds.get('email')):
                 _original_print("[WEBULL_PAPER] Starting paper broker initialization...", flush=True)

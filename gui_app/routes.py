@@ -7073,7 +7073,8 @@ def register_routes(app):
                     device_id=data.get('webull_did', existing_webull.get('device_id', '')),
                     access_token=existing_webull.get('access_token', ''),
                     refresh_token=existing_webull.get('refresh_token', ''),
-                    paper_mode=data.get('webull_paper', existing_webull.get('paper_mode', True))
+                    paper_mode=data.get('webull_paper', existing_webull.get('paper_mode', True)),
+                    paper_account_enabled=existing_webull.get('paper_account_enabled', False)
                 )
             
             # Save API keys
@@ -11935,6 +11936,7 @@ def register_routes(app):
                 'refresh_token': creds.get('refresh_token', ''),
                 'has_tokens': bool(creds.get('access_token') and creds.get('refresh_token')),
                 'paper_mode': creds.get('paper_mode', True),
+                'paper_account_enabled': creds.get('paper_account_enabled', False),
                 'live_status': live_status,
                 'paper_status': paper_status
             })
@@ -11989,7 +11991,8 @@ def register_routes(app):
                 paper_mode=data.get('paper_mode', existing.get('paper_mode', True)),
                 zone_id=zone_id,
                 rzone=rzone,
-                region_id=region_id
+                region_id=region_id,
+                paper_account_enabled=data.get('paper_account_enabled', existing.get('paper_account_enabled', False))
             )
             
             message = 'Webull credentials saved.'
@@ -12027,7 +12030,8 @@ def register_routes(app):
                 paper_mode=existing.get('paper_mode', True),
                 zone_id=existing.get('zone_id', ''),
                 rzone=existing.get('rzone', ''),
-                region_id=existing.get('region_id', '')
+                region_id=existing.get('region_id', ''),
+                paper_account_enabled=existing.get('paper_account_enabled', False)
             )
             
             print("[Webull] Tokens cleared manually - region data preserved, will require fresh authentication")

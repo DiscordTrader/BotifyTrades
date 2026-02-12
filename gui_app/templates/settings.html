@@ -988,6 +988,17 @@ input:checked + .slider:before {
                     <span class="slider"></span>
                 </label>
             </label>
+            <p class="help-text">Controls the primary Webull broker (WEBULL). When ON, primary broker uses paper trading.</p>
+        </div>
+        <div class="form-group">
+            <label class="toggle-label">
+                <span>Also Enable Paper Account</span>
+                <label class="switch">
+                    <input type="checkbox" id="webull-paper-account">
+                    <span class="slider"></span>
+                </label>
+            </label>
+            <p class="help-text">Enables a separate WEBULL_PAPER broker alongside the primary. Turn this ON with Paper Mode OFF to run both Live and Paper simultaneously.</p>
         </div>
         <div class="btn-group">
             <button id="save-webull-creds" class="btn btn-success">💾 Save</button>
@@ -3694,6 +3705,7 @@ async function loadWebullCredentials() {
             document.getElementById('webull-access-token').value = data.access_token || '';
             document.getElementById('webull-refresh-token').value = data.refresh_token || 'dummy';
             document.getElementById('webull-paper').checked = data.paper_mode;
+            document.getElementById('webull-paper-account').checked = data.paper_account_enabled || false;
             
             const status = data.paper_mode ? data.paper_status : data.live_status;
             updateConnectionStatus('webull-connection-status',
@@ -3758,7 +3770,8 @@ document.getElementById('save-webull-creds').addEventListener('click', async () 
         device_id: document.getElementById('webull-did').value.trim(),
         access_token: document.getElementById('webull-access-token').value.trim(),
         refresh_token: document.getElementById('webull-refresh-token').value.trim() || 'dummy',
-        paper_mode: document.getElementById('webull-paper').checked
+        paper_mode: document.getElementById('webull-paper').checked,
+        paper_account_enabled: document.getElementById('webull-paper-account').checked
     };
     
     try {
