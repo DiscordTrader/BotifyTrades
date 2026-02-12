@@ -312,6 +312,11 @@ class UnfilledOrderChaser:
             )
             self._tracked_orders[order_id] = order
             print(f"[ORDER_CHASER] Tracking exit order: {order_id} | {symbol} {quantity}x @ ${price:.2f}")
+            try:
+                from gui_app.database import record_order_event
+                record_order_event('CHASER_TRACKING', symbol=symbol, broker=broker_id, direction='STC', quantity=quantity, price=price, order_id=order_id, reason=f"Tracking exit order for fill confirmation", severity='info', source='order_chaser', position_key=position_key)
+            except Exception:
+                pass
     
     async def mark_filled(self, order_id: str, fill_price: Optional[float] = None):
         """Mark an order as filled and stop tracking it"""
@@ -322,6 +327,11 @@ class UnfilledOrderChaser:
                 order.final_fill_price = fill_price
                 del self._tracked_orders[order_id]
                 print(f"[ORDER_CHASER] ✓ Order filled: {order_id} @ ${fill_price:.2f}" if fill_price else f"[ORDER_CHASER] ✓ Order filled: {order_id}")
+                try:
+                    from gui_app.database import record_order_event
+                    record_order_event('ORDER_FILLED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=order.quantity, price=fill_price or order.original_price, order_id=order_id, status='FILLED', reason=f"Order confirmed filled", severity='info', source='order_chaser', position_key=order.position_key)
+                except Exception:
+                    pass
     
     async def untrack_order(self, order_id: str):
         """Stop tracking an order (exit or entry)"""
@@ -501,6 +511,11 @@ class UnfilledOrderChaser:
                 print(f"[ORDER_CHASER] ✓ Placed replacement order: {new_order_id} @ ${mid_price:.2f}")
                 order.replacement_order_id = new_order_id
                 order.status = OrderChaseStatus.REPLACED
+                try:
+                    from gui_app.database import record_order_event
+                    record_order_event('CHASER_REPLACED', symbol=order.symbol, broker=order.broker_id, direction=order.action, quantity=order.quantity, price=mid_price, order_id=new_order_id, reason=f"Stale order replaced: ${order.original_price:.2f} → ${mid_price:.2f} (attempt {order.chase_attempts})", severity='warning', source='order_chaser', position_key=order.position_key)
+                except Exception:
+                    pass
                 
                 async with self._lock:
                     if order.order_id in self._tracked_orders:

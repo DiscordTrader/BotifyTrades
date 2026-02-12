@@ -62,8 +62,56 @@
         <button id="tab-signals" class="tab" onclick="switchTab('signals')">
             📡 Signals
         </button>
+        <button id="tab-events" class="tab" onclick="switchTab('events')">
+            📋 Event Log
+        </button>
     </div>
     
+    <!-- Event Log Filter Bar (hidden by default) -->
+    <div id="events-filter-bar" style="display: none; padding: 16px; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.05); gap: 16px; align-items: center; flex-wrap: wrap;">
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <label style="font-size: 0.875rem; color: var(--text-secondary);">Type:</label>
+            <select id="event-type-filter" onchange="loadOrderEvents()"
+                    style="padding: 8px 12px; background: #2C2C2E; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; min-width: 160px;">
+                <option value="">All Events</option>
+                <option value="ORDER_PLACED">Order Placed</option>
+                <option value="ORDER_FILLED">Order Filled</option>
+                <option value="ORDER_FAILED">Order Failed</option>
+                <option value="ORDER_REJECTED">Order Rejected</option>
+                <option value="DUPLICATE_BLOCKED">Duplicate Blocked</option>
+                <option value="STOP_LOSS">Stop Loss</option>
+                <option value="PROFIT_TARGET">Profit Target</option>
+                <option value="TRAILING_STOP">Trailing Stop</option>
+                <option value="EARLY_TRAILING">Early Trailing</option>
+                <option value="GIVEBACK_GUARD">Giveback Guard</option>
+                <option value="RETRY_ATTEMPT">Retry Attempt</option>
+                <option value="MARKET_ORDER_ESCALATION">Market Escalation</option>
+                <option value="CHASER_TRACKING">Chaser Tracking</option>
+                <option value="CHASER_REPLACED">Chaser Replaced</option>
+            </select>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <label style="font-size: 0.875rem; color: var(--text-secondary);">Severity:</label>
+            <select id="event-severity-filter" onchange="loadOrderEvents()"
+                    style="padding: 8px 12px; background: #2C2C2E; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; min-width: 120px;">
+                <option value="">All</option>
+                <option value="critical">Critical</option>
+                <option value="warning">Warning</option>
+                <option value="info">Info</option>
+            </select>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <label style="font-size: 0.875rem; color: var(--text-secondary);">Symbol:</label>
+            <input type="text" id="event-symbol-filter" placeholder="e.g. AAPL"
+                   style="padding: 8px 12px; background: #2C2C2E; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; min-width: 120px;"
+                   onkeyup="debounceEventFilter()">
+        </div>
+        <div style="display: flex; gap: 8px; margin-left: auto;">
+            <button onclick="loadOrderEvents()" class="btn btn-primary btn-small">Refresh</button>
+            <button onclick="clearOrderEvents()" class="btn btn-small" style="background: rgba(255,59,48,0.15); color: #ff3b30; border: 1px solid rgba(255,59,48,0.3);">Clear All</button>
+        </div>
+    </div>
+
     <!-- Signals Filter Bar (hidden by default) -->
     <div id="signals-filter-bar" style="display: none; padding: 16px; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.05); gap: 16px; align-items: center; flex-wrap: wrap;">
         <div style="display: flex; gap: 12px; align-items: center;">
@@ -126,20 +174,23 @@ async function switchTab(tab) {
     document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
     document.getElementById(`tab-${tab}`).classList.add('active');
     
-    // Show/hide signals filter bar
     const signalsFilterBar = document.getElementById('signals-filter-bar');
+    const eventsFilterBar = document.getElementById('events-filter-bar');
+    signalsFilterBar.style.display = 'none';
+    eventsFilterBar.style.display = 'none';
+
     if (tab === 'signals') {
         signalsFilterBar.style.display = 'flex';
         await loadRetentionSettings();
         await loadSignalMessages();
+    } else if (tab === 'events') {
+        eventsFilterBar.style.display = 'flex';
+        await loadOrderEvents();
+    } else if (tab === 'filled') {
+        console.log('[DEBUG] Loading filled orders from API...');
+        await loadFilledOrders();
     } else {
-        signalsFilterBar.style.display = 'none';
-        if (tab === 'filled') {
-            console.log('[DEBUG] Loading filled orders from API...');
-            await loadFilledOrders();
-        } else {
-            filterAndDisplayTrades();
-        }
+        filterAndDisplayTrades();
     }
 }
 
@@ -926,5 +977,167 @@ window.addEventListener('beforeunload', () => {
         clearInterval(priceRefreshInterval);
     }
 });
+
+let eventFilterTimeout = null;
+let eventCurrentPage = 0;
+const EVENT_PAGE_SIZE = 50;
+
+function debounceEventFilter() {
+    if (eventFilterTimeout) clearTimeout(eventFilterTimeout);
+    eventFilterTimeout = setTimeout(() => loadOrderEvents(), 400);
+}
+
+async function loadOrderEvents(page = 0) {
+    eventCurrentPage = page;
+    const container = document.getElementById('trades-table-container');
+    container.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="margin: 0 auto 20px;"></div><div style="color: var(--text-secondary);">Loading events...</div></div>';
+
+    try {
+        const eventType = document.getElementById('event-type-filter').value;
+        const severity = document.getElementById('event-severity-filter').value;
+        const symbol = document.getElementById('event-symbol-filter').value.trim();
+
+        let url = `/api/order-events?limit=${EVENT_PAGE_SIZE}&offset=${page * EVENT_PAGE_SIZE}`;
+        if (eventType) url += `&event_type=${encodeURIComponent(eventType)}`;
+        if (severity) url += `&severity=${encodeURIComponent(severity)}`;
+        if (symbol) url += `&symbol=${encodeURIComponent(symbol)}`;
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!data.success) {
+            container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--error);">${data.error}</div>`;
+            return;
+        }
+
+        displayOrderEventsTable(data.events || [], data.total || 0);
+    } catch (error) {
+        console.error('Failed to load order events:', error);
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--error);">Failed to load event log</div>';
+    }
+}
+
+function getEventIcon(eventType) {
+    const icons = {
+        'ORDER_PLACED': '📤', 'ORDER_FILLED': '✅', 'ORDER_FAILED': '❌',
+        'ORDER_REJECTED': '🚫', 'DUPLICATE_BLOCKED': '🔒',
+        'STOP_LOSS': '🛑', 'PROFIT_TARGET': '🎯', 'TRAILING_STOP': '📉',
+        'EARLY_TRAILING': '⚡', 'GIVEBACK_GUARD': '🛡️',
+        'RETRY_ATTEMPT': '🔄', 'MARKET_ORDER_ESCALATION': '⬆️',
+        'CHASER_TRACKING': '👁️', 'CHASER_REPLACED': '🔀',
+        'EXIT_TRIGGERED': '🚪'
+    };
+    return icons[eventType] || '📋';
+}
+
+function getSeverityBadge(severity) {
+    const colors = {
+        'critical': 'background: rgba(255,59,48,0.2); color: #ff3b30; border: 1px solid rgba(255,59,48,0.3);',
+        'warning': 'background: rgba(255,159,10,0.2); color: #ff9f0a; border: 1px solid rgba(255,159,10,0.3);',
+        'info': 'background: rgba(10,132,255,0.2); color: #0a84ff; border: 1px solid rgba(10,132,255,0.3);'
+    };
+    const style = colors[severity] || colors['info'];
+    return `<span style="${style} padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">${severity}</span>`;
+}
+
+function displayOrderEventsTable(events, total) {
+    const container = document.getElementById('trades-table-container');
+
+    if (events.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px;">
+                <div style="font-size: 48px; margin-bottom: 16px;">📋</div>
+                <div style="font-size: 1.125rem; color: var(--text-primary); margin-bottom: 8px;">No Events Found</div>
+                <div style="color: var(--text-secondary); font-size: 0.875rem;">
+                    Order events will appear here as trades are executed.<br>
+                    Events track order placements, fills, risk triggers, and more.
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    let html = `
+        <div style="padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <span style="color: var(--text-secondary); font-size: 0.8125rem;">${total} total events</span>
+            <div style="display: flex; gap: 8px;">
+    `;
+    const totalPages = Math.ceil(total / EVENT_PAGE_SIZE);
+    if (eventCurrentPage > 0) {
+        html += `<button onclick="loadOrderEvents(${eventCurrentPage - 1})" class="btn btn-small" style="background: rgba(255,255,255,0.05); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.1);">← Prev</button>`;
+    }
+    html += `<span style="color: var(--text-secondary); font-size: 0.8125rem; padding: 6px 8px;">Page ${eventCurrentPage + 1}/${totalPages}</span>`;
+    if (eventCurrentPage < totalPages - 1) {
+        html += `<button onclick="loadOrderEvents(${eventCurrentPage + 1})" class="btn btn-small" style="background: rgba(255,255,255,0.05); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.1);">Next →</button>`;
+    }
+    html += `</div></div>`;
+
+    html += `
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 140px;">Time</th>
+                    <th style="width: 50px;"></th>
+                    <th>Event</th>
+                    <th>Symbol</th>
+                    <th>Broker</th>
+                    <th>Dir</th>
+                    <th>Qty</th>
+                    <th>Price</th>
+                    <th>Severity</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    for (const evt of events) {
+        let ts = evt.timestamp;
+        if (ts && !ts.endsWith('Z') && !ts.includes('+') && !ts.includes('-', 10)) {
+            ts = ts.replace(' ', 'T') + 'Z';
+        }
+        const time = ts ? new Date(ts).toLocaleString('en-US', { timeZone: 'America/New_York', hour12: true, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+
+        const icon = getEventIcon(evt.event_type);
+        const typeLabel = (evt.event_type || '').replace(/_/g, ' ');
+        const dirColor = evt.direction === 'BTO' ? '#30d158' : evt.direction === 'STC' ? '#ff453a' : '#fff';
+        const priceStr = evt.price ? `$${parseFloat(evt.price).toFixed(2)}` : '-';
+        const qtyStr = evt.quantity || '-';
+        const reasonStr = evt.reason || '';
+        const detailsStr = evt.details || '';
+        const combinedDetails = [reasonStr, detailsStr].filter(Boolean).join(' | ');
+
+        html += `
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+                <td style="font-size: 0.8125rem; color: var(--text-secondary); white-space: nowrap;">${time}</td>
+                <td style="font-size: 1.1rem; text-align: center;">${icon}</td>
+                <td style="font-size: 0.8125rem; font-weight: 600;">${typeLabel}</td>
+                <td style="font-weight: 600; color: #0a84ff;">${evt.symbol || '-'}</td>
+                <td style="font-size: 0.8125rem;">${evt.broker || '-'}</td>
+                <td style="font-weight: 600; color: ${dirColor};">${evt.direction || '-'}</td>
+                <td>${qtyStr}</td>
+                <td>${priceStr}</td>
+                <td>${getSeverityBadge(evt.severity || 'info')}</td>
+                <td style="font-size: 0.8125rem; color: var(--text-secondary); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${combinedDetails}">${combinedDetails || '-'}</td>
+            </tr>
+        `;
+    }
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+async function clearOrderEvents() {
+    if (!confirm('Clear all order events? This cannot be undone.')) return;
+    try {
+        const response = await fetch('/api/order-events/clear', { method: 'POST' });
+        const data = await response.json();
+        if (data.success) {
+            loadOrderEvents();
+        }
+    } catch (error) {
+        console.error('Failed to clear events:', error);
+    }
+}
 </script>
 {% endblock %}

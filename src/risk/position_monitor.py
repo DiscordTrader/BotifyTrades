@@ -1677,6 +1677,43 @@ class RiskManager:
             except Exception as notify_err:
                 print(f"[NOTIFY] Warning: Could not send profit target notification: {notify_err}")
         
+        try:
+            from gui_app.database import record_order_event
+            if is_stop_exit:
+                evt_type = 'STOP_LOSS'
+                evt_severity = 'critical'
+            elif is_trailing_exit:
+                evt_type = 'EARLY_TRAILING' if 'EARLY' in decision.reason else 'TRAILING_STOP'
+                evt_severity = 'warning'
+            elif is_giveback_exit:
+                evt_type = 'GIVEBACK_GUARD'
+                evt_severity = 'warning'
+            elif is_profit_exit:
+                evt_type = 'PROFIT_TARGET'
+                evt_severity = 'info'
+            else:
+                evt_type = 'EXIT_TRIGGERED'
+                evt_severity = 'info'
+            record_order_event(
+                evt_type,
+                symbol=position.symbol,
+                broker=position.broker,
+                direction='STC',
+                asset_type=position.asset,
+                quantity=exit_qty,
+                price=current_price,
+                channel_name=channel_settings.channel_name if channel_settings else None,
+                channel_id=channel_settings.channel_id if channel_settings else None,
+                status='TRIGGERED',
+                reason=decision.reason,
+                details=f"Entry: ${entry_price:.2f} | P&L: {pnl_pct:.2f}%",
+                severity=evt_severity,
+                source='risk_manager',
+                position_key=pos_key
+            )
+        except Exception:
+            pass
+        
         exit_mode = channel_settings.exit_strategy_mode if channel_settings else 'risk'
         
         if ARBITER_AVAILABLE and exit_order_arbiter and exit_mode == 'hybrid':

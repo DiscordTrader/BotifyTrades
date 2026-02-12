@@ -12794,6 +12794,224 @@ def set_routing_mapping_order_chase_enabled(mapping_id: int, enabled: Optional[b
         return False
 
 
+def init_order_events_table():
+    """Initialize the order_events table for comprehensive order lifecycle tracking."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS order_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            event_type TEXT NOT NULL,
+            symbol TEXT,
+            broker TEXT,
+            direction TEXT,
+            asset_type TEXT,
+            quantity REAL,
+            price REAL,
+            order_id TEXT,
+            trade_id INTEGER,
+            channel_id TEXT,
+            channel_name TEXT,
+            status TEXT,
+            reason TEXT,
+            details TEXT,
+            source TEXT DEFAULT 'system',
+            severity TEXT DEFAULT 'info',
+            position_key TEXT
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_order_events_timestamp ON order_events(timestamp)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_order_events_symbol ON order_events(symbol)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_order_events_type ON order_events(event_type)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_order_events_broker ON order_events(broker)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_order_events_severity ON order_events(severity)')
+    conn.commit()
+    print("[DATABASE] ✓ Order events table ready")
+
+
+def record_order_event(
+    event_type: str,
+    symbol: str = None,
+    broker: str = None,
+    direction: str = None,
+    asset_type: str = None,
+    quantity: float = None,
+    price: float = None,
+    order_id: str = None,
+    trade_id: int = None,
+    channel_id: str = None,
+    channel_name: str = None,
+    status: str = None,
+    reason: str = None,
+    details: str = None,
+    source: str = 'system',
+    severity: str = 'info',
+    position_key: str = None
+) -> Optional[int]:
+    """
+    Record an order lifecycle event to the database.
+    
+    Event types:
+        ORDER_PLACED       - BTO/STC order submitted to broker
+        ORDER_FILLED       - Order confirmed filled
+        ORDER_FAILED       - Order rejected by broker
+        ORDER_REJECTED     - Order rejected by bot (slippage, funds, filter)
+        STOP_LOSS          - Stop loss triggered
+        PROFIT_TARGET      - Profit target hit
+        TRAILING_STOP      - Trailing stop triggered
+        EARLY_TRAILING     - Early trailing stop triggered
+        GIVEBACK_GUARD     - Giveback guard triggered
+        CHASER_TRACKING    - Order chaser started tracking
+        CHASER_REPLACED    - Chaser cancelled stale order and replaced
+        CHASER_FILLED      - Chaser confirmed order filled
+        CHASER_FAILED      - Chaser failed to replace order
+        RETRY_ATTEMPT      - Risk retry attempt for failed exit
+        DUPLICATE_BLOCKED  - Duplicate order blocked by dedup
+        SL_UPDATE          - Stop loss updated via signal
+        MARKET_ORDER_ESCALATION - Switched from limit to market order
+        CONDITIONAL_CREATED    - Conditional order created
+        CONDITIONAL_TRIGGERED  - Conditional order triggered
+        CONDITIONAL_EXPIRED    - Conditional order expired
+    
+    Severity: info, warning, error, critical
+    """
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO order_events (
+                event_type, symbol, broker, direction, asset_type,
+                quantity, price, order_id, trade_id, channel_id,
+                channel_name, status, reason, details, source,
+                severity, position_key
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            event_type, symbol, broker, direction, asset_type,
+            quantity, price, order_id, trade_id, channel_id,
+            channel_name, status, reason, details, source,
+            severity, position_key
+        ))
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"[ORDER_EVENT] Error recording event: {e}")
+        return None
+
+
+def get_order_events(
+    limit: int = 100,
+    offset: int = 0,
+    symbol: str = None,
+    event_type: str = None,
+    broker: str = None,
+    severity: str = None,
+    date_from: str = None,
+    date_to: str = None,
+    channel_name: str = None,
+    direction: str = None
+):
+    """Get order events with optional filtering."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    where_clauses = []
+    params = []
+    
+    if symbol:
+        where_clauses.append('symbol LIKE ?')
+        params.append(f'%{symbol}%')
+    if event_type:
+        if ',' in event_type:
+            types = [t.strip() for t in event_type.split(',')]
+            placeholders = ','.join('?' * len(types))
+            where_clauses.append(f'event_type IN ({placeholders})')
+            params.extend(types)
+        else:
+            where_clauses.append('event_type = ?')
+            params.append(event_type)
+    if broker:
+        where_clauses.append('broker = ?')
+        params.append(broker)
+    if severity:
+        where_clauses.append('severity = ?')
+        params.append(severity)
+    if date_from:
+        where_clauses.append('timestamp >= ?')
+        params.append(date_from)
+    if date_to:
+        where_clauses.append('timestamp <= ?')
+        params.append(date_to)
+    if channel_name:
+        where_clauses.append('channel_name LIKE ?')
+        params.append(f'%{channel_name}%')
+    if direction:
+        where_clauses.append('direction = ?')
+        params.append(direction)
+    
+    where_sql = ' AND '.join(where_clauses) if where_clauses else '1=1'
+    
+    cursor.execute(f'SELECT COUNT(*) FROM order_events WHERE {where_sql}', params)
+    total_count = cursor.fetchone()[0]
+    
+    cursor.execute(f'''
+        SELECT * FROM order_events 
+        WHERE {where_sql}
+        ORDER BY timestamp DESC
+        LIMIT ? OFFSET ?
+    ''', params + [limit, offset])
+    
+    columns = [desc[0] for desc in cursor.description]
+    events = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    
+    return events, total_count
+
+
+def get_order_event_summary():
+    """Get summary counts by event type for dashboard display."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT event_type, severity, COUNT(*) as count
+        FROM order_events
+        WHERE timestamp >= datetime('now', '-24 hours')
+        GROUP BY event_type, severity
+        ORDER BY count DESC
+    ''')
+    
+    summary = {}
+    for row in cursor.fetchall():
+        event_type = row[0]
+        severity = row[1]
+        count = row[2]
+        if event_type not in summary:
+            summary[event_type] = {'total': 0, 'info': 0, 'warning': 0, 'error': 0, 'critical': 0}
+        summary[event_type]['total'] += count
+        summary[event_type][severity] = count
+    
+    return summary
+
+
+def cleanup_old_order_events(days: int = 30):
+    """Remove order events older than specified days."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'DELETE FROM order_events WHERE timestamp < datetime("now", ?)',
+            (f'-{days} days',)
+        )
+        deleted = cursor.rowcount
+        conn.commit()
+        if deleted > 0:
+            print(f"[DATABASE] Cleaned up {deleted} order events older than {days} days")
+        return deleted
+    except Exception as e:
+        print(f"[DATABASE] Error cleaning up order events: {e}")
+        return 0
+
+
 # Initialize tables
 init_channel_messages_table()
 init_signal_formats_table()
@@ -12805,5 +13023,6 @@ init_upstox_pending_orders_table()
 init_upstox_settings()
 init_service_orchestrator_tables()
 init_order_chase_settings()
+init_order_events_table()
 
 init_db()

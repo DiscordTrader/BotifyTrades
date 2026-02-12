@@ -12797,6 +12797,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     if is_platform_signal:
                         if order_key in self._executed_orders_permanent:
                             _original_print(f"[WORKER] ⏭️ DUPLICATE ORDER BLOCKED: {signal.get('action')} {signal.get('symbol')} (platform msg_id: {signal_id})", flush=True)
+                            try:
+                                from gui_app.database import record_order_event
+                                record_order_event('DUPLICATE_BLOCKED', symbol=signal.get('symbol'), broker=signal.get('broker'), direction=signal.get('action'), quantity=signal.get('qty'), price=signal.get('price'), channel_name=signal.get('_channel_name'), reason=f"Platform duplicate (msg_id: {signal_id})", severity='warning', source='dedup')
+                            except Exception:
+                                pass
                             self.order_queue.task_done()
                             continue
                         # RECORD IN PERMANENT CACHE
@@ -12815,7 +12820,11 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         elapsed = current_time - last_exec_time
                         if elapsed < DEDUPE_TTL_SECONDS:
                             _original_print(f"[WORKER] ⏭️ DUPLICATE ORDER BLOCKED: {signal.get('action')} {signal.get('symbol')} (seen {elapsed:.1f}s ago)", flush=True)
-                            # CRITICAL: Always call task_done() before continuing
+                            try:
+                                from gui_app.database import record_order_event
+                                record_order_event('DUPLICATE_BLOCKED', symbol=signal.get('symbol'), broker=signal.get('broker'), direction=signal.get('action'), quantity=signal.get('qty'), price=signal.get('price'), channel_name=signal.get('_channel_name'), reason=f"TTL duplicate (seen {elapsed:.1f}s ago)", severity='warning', source='dedup')
+                            except Exception:
+                                pass
                             self.order_queue.task_done()
                             continue
                         else:
@@ -13990,6 +13999,28 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                     _original_print(f"[ORDER FAILED] ❌ {signal['action']} {signal['symbol']} - {error_msg}", flush=True)
                     
                     try:
+                        from gui_app.database import record_order_event
+                        record_order_event(
+                            'ORDER_FAILED',
+                            symbol=signal.get('symbol'),
+                            broker=signal.get('broker', 'Unknown'),
+                            direction=signal.get('action'),
+                            asset_type=signal.get('asset') or signal.get('asset_type'),
+                            quantity=signal.get('qty'),
+                            price=signal.get('price'),
+                            channel_id=signal.get('channel_id'),
+                            channel_name=signal.get('_channel_name'),
+                            status='FAILED',
+                            reason=error_msg[:500],
+                            details=f"Error type: {error_type}",
+                            severity='error',
+                            source='risk_manager' if signal.get('_risk_management_order') else 'signal',
+                            position_key=signal.get('_position_key')
+                        )
+                    except Exception:
+                        pass
+                    
+                    try:
                         from gui_app.discord_notifier import notify_order_failed
                         is_risk_order = signal.get('_risk_management_order', False)
                         broker_name = signal.get('broker', 'Unknown')
@@ -14062,6 +14093,42 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                                 mode = "⚡ EMERGENCY" if retry_state.get('emergency_mode') else ""
                                 _original_print(f"[RISK-RETRY] {mode} Exit failed - attempt {retry_state['retry_count']}/{retry_state['max_retries']} | Cooldown: {retry_state['cooldown_remaining']:.0f}s", flush=True)
                                 
+                                try:
+                                    from gui_app.database import record_order_event
+                                    retry_severity = 'critical' if retry_state.get('exhausted') else 'warning'
+                                    retry_reason = f"Attempt {retry_state['retry_count']}/{retry_state['max_retries']}"
+                                    if retry_state.get('exhausted'):
+                                        retry_reason += " - MAX RETRIES EXHAUSTED"
+                                    elif retry_state.get('use_market'):
+                                        retry_reason += " - escalating to MARKET order"
+                                    record_order_event(
+                                        'RETRY_ATTEMPT' if not retry_state.get('exhausted') else 'ORDER_FAILED',
+                                        symbol=signal.get('symbol'),
+                                        broker=signal.get('broker'),
+                                        direction=signal.get('action'),
+                                        quantity=signal.get('qty'),
+                                        price=signal.get('price'),
+                                        channel_name=signal.get('_channel_name'),
+                                        reason=retry_reason,
+                                        details=f"Exit reason: {signal.get('exit_reason', 'N/A')}",
+                                        severity=retry_severity,
+                                        source='risk_manager',
+                                        position_key=signal.get('_position_key')
+                                    )
+                                    if retry_state.get('use_market'):
+                                        record_order_event(
+                                            'MARKET_ORDER_ESCALATION',
+                                            symbol=signal.get('symbol'),
+                                            broker=signal.get('broker'),
+                                            direction=signal.get('action'),
+                                            reason="Limit orders failed, switching to market order",
+                                            severity='warning',
+                                            source='risk_manager',
+                                            position_key=signal.get('_position_key')
+                                        )
+                                except Exception:
+                                    pass
+                                
                                 if retry_state.get('exhausted'):
                                     _original_print(f"[RISK-RETRY] ❌ Max retries exhausted for {signal['_position_key']}", flush=True)
                                     _original_print(f"[RISK-RETRY] ❌ MANUAL INTERVENTION REQUIRED - Close position manually", flush=True)
@@ -14120,6 +14187,33 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 
                 # Post-execution: Send Discord notification and save to database
                 if order_success:
+                    try:
+                        from gui_app.database import record_order_event
+                        order_id_val = None
+                        if isinstance(resp, dict):
+                            order_id_val = resp.get('orderId')
+                        elif hasattr(resp, 'order_id'):
+                            order_id_val = resp.order_id
+                        record_order_event(
+                            'ORDER_PLACED',
+                            symbol=signal.get('symbol'),
+                            broker=signal.get('broker', 'Unknown'),
+                            direction=signal.get('action'),
+                            asset_type=signal.get('asset') or signal.get('asset_type'),
+                            quantity=signal.get('qty'),
+                            price=signal.get('price'),
+                            order_id=str(order_id_val) if order_id_val else None,
+                            channel_id=signal.get('channel_id'),
+                            channel_name=signal.get('_channel_name'),
+                            status='PLACED',
+                            reason=signal.get('exit_reason') if signal.get('_risk_management_order') else 'Signal execution',
+                            severity='info',
+                            source='risk_manager' if signal.get('_risk_management_order') else 'signal',
+                            position_key=signal.get('_position_key')
+                        )
+                    except Exception:
+                        pass
+                    
                     # Update conditional order status to EXECUTED if this was a conditional order
                     cond_order_id = signal.get('_conditional_order_id')
                     if cond_order_id:

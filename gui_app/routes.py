@@ -18870,3 +18870,110 @@ def register_routes(app):
                 return jsonify({'success': False, 'error': 'Failed to send test notification'})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/order-events', methods=['GET'])
+    @login_required
+    def api_get_order_events():
+        """Get order event log with filtering support."""
+        try:
+            from gui_app.database import get_connection
+            limit = request.args.get('limit', 100, type=int)
+            offset = request.args.get('offset', 0, type=int)
+            event_type = request.args.get('event_type', '')
+            severity = request.args.get('severity', '')
+            broker = request.args.get('broker', '')
+            symbol = request.args.get('symbol', '')
+            source = request.args.get('source', '')
+            direction = request.args.get('direction', '')
+
+            query = "SELECT * FROM order_events WHERE 1=1"
+            params = []
+
+            if event_type:
+                query += " AND event_type = ?"
+                params.append(event_type)
+            if severity:
+                query += " AND severity = ?"
+                params.append(severity)
+            if broker:
+                query += " AND broker = ?"
+                params.append(broker)
+            if symbol:
+                query += " AND symbol LIKE ?"
+                params.append(f"%{symbol}%")
+            if source:
+                query += " AND source = ?"
+                params.append(source)
+            if direction:
+                query += " AND direction = ?"
+                params.append(direction)
+
+            count_query = query.replace("SELECT *", "SELECT COUNT(*)")
+            query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+            params_with_limit = params + [limit, offset]
+
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute(count_query, params)
+            total = cursor.fetchone()[0]
+
+            cursor.execute(query, params_with_limit)
+            rows = [dict(row) for row in cursor.fetchall()]
+
+            return jsonify({
+                'success': True,
+                'events': rows,
+                'total': total,
+                'limit': limit,
+                'offset': offset
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/order-events/clear', methods=['POST'])
+    @login_required
+    def api_clear_order_events():
+        """Clear order event log."""
+        try:
+            from gui_app.database import get_connection
+            conn = get_connection()
+            conn.execute("DELETE FROM order_events")
+            conn.commit()
+            return jsonify({'success': True, 'message': 'Order events cleared'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/order-events/stats', methods=['GET'])
+    @login_required
+    def api_order_event_stats():
+        """Get summary stats for order events."""
+        try:
+            from gui_app.database import get_connection
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT event_type, COUNT(*) as count
+                FROM order_events 
+                GROUP BY event_type
+                ORDER BY count DESC
+            """)
+            type_counts = {row[0]: row[1] for row in cursor.fetchall()}
+
+            cursor.execute("""
+                SELECT severity, COUNT(*) as count
+                FROM order_events
+                GROUP BY severity
+            """)
+            severity_counts = {row[0]: row[1] for row in cursor.fetchall()}
+
+            cursor.execute("SELECT COUNT(*) FROM order_events")
+            total = cursor.fetchone()[0]
+
+            return jsonify({
+                'success': True,
+                'total': total,
+                'by_type': type_counts,
+                'by_severity': severity_counts
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
