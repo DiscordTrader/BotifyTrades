@@ -214,7 +214,7 @@
     "highest_price": 1.47,
     "trailing_activated": false,
     "closing": true,
-    "closing_cycles": 8,
+    "closing_cycles": 29,
     "stop_loss_price": null,
     "profit_target_price": null,
     "broker": "Webull",
