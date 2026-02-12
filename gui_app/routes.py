@@ -3247,51 +3247,133 @@ def register_routes(app):
             if time.time() - timestamp < 5:
                 return cached_value
 
-        if not _bot_instance or not hasattr(_bot_instance, 'webull_paper_broker') or not _bot_instance.webull_paper_broker:
+        paper_broker = None
+        if _bot_instance:
+            paper_broker = getattr(_bot_instance, 'webull_paper_broker', None)
+
+        if not paper_broker:
             result = jsonify({
-                'buying_power': 0,
-                'cash_balance': 0,
-                'net_liquidation': 0,
-                'total_profit_loss': 0,
-                'day_profit_loss': 0,
-                'settled_cash': 0,
-                'unsettled_cash': 0,
+                'buying_power': 0, 'cash_balance': 0, 'net_liquidation': 0,
+                'total_profit_loss': 0, 'day_profit_loss': 0,
+                'settled_cash': 0, 'unsettled_cash': 0,
                 'status': 'not_initialized'
             })
             return result
 
         try:
-            future = asyncio.run_coroutine_threadsafe(
-                _bot_instance.webull_paper_broker.get_account_info(),
-                _bot_instance.loop
-            )
-            account_data = future.result(timeout=10)
-
-            if account_data and account_data.get('success'):
-                account = account_data.get('account', {})
+            wb_client = getattr(paper_broker, '_client', None) or getattr(paper_broker, 'wb', None)
+            if not wb_client:
+                print("[WEBULL_PAPER_BALANCE] No wb client found on paper broker")
                 result = jsonify({
-                    'buying_power': float(account.get('dayBuyingPower', 0) or account.get('usableCash', 0) or 0),
-                    'cash_balance': float(account.get('cashBalance', 0) or account.get('usableCash', 0) or 0),
-                    'net_liquidation': float(account.get('netLiquidation', 0) or account.get('totalMarketValue', 0) or 0),
-                    'total_profit_loss': float(account.get('unrealizedProfitLoss', 0) or 0),
-                    'day_profit_loss': float(account.get('dayProfitLoss', 0) or 0),
-                    'settled_cash': float(account.get('settledCash', 0) or 0),
-                    'unsettled_cash': float(account.get('unsettledCash', 0) or 0),
-                    'status': 'ok'
+                    'buying_power': 0, 'cash_balance': 0, 'net_liquidation': 0,
+                    'total_profit_loss': 0, 'day_profit_loss': 0,
+                    'settled_cash': 0, 'unsettled_cash': 0,
+                    'status': 'no_client'
                 })
-                _api_cache[cache_key] = (result, time.time())
                 return result
-            elif account_data:
-                result = jsonify({
-                    'buying_power': float(account_data.get('buying_power', 0)),
-                    'cash_balance': float(account_data.get('cash_balance', 0)),
-                    'net_liquidation': float(account_data.get('net_liquidation', 0)),
-                    'total_profit_loss': float(account_data.get('total_profit_loss', 0)),
-                    'day_profit_loss': float(account_data.get('day_profit_loss', 0)),
-                    'settled_cash': float(account_data.get('settled_cash', 0)),
-                    'unsettled_cash': float(account_data.get('unsettled_cash', 0)),
-                    'status': 'ok'
-                })
+
+            def _get_paper_balance():
+                try:
+                    raw = wb_client.get_account()
+                    print(f"[WEBULL_PAPER_BALANCE] Raw response type: {type(raw)}, keys: {list(raw.keys()) if isinstance(raw, dict) else 'N/A'}")
+
+                    if not raw or not isinstance(raw, dict):
+                        return None
+
+                    account_data = {}
+                    account_members = raw.get('accountMembers', [])
+                    if account_members and isinstance(account_members, list):
+                        for item in account_members:
+                            if isinstance(item, dict) and 'key' in item and 'value' in item:
+                                account_data[item['key']] = item['value']
+
+                    for k, v in raw.items():
+                        if k != 'accountMembers' and k not in account_data:
+                            account_data[k] = v
+
+                    print(f"[WEBULL_PAPER_BALANCE] Parsed {len(account_data)} fields: {list(account_data.keys())[:20]}")
+
+                    buying_power = 0.0
+                    for field in ['buyingPower', 'dayBuyingPower', 'cashBalance', 'cashAvailableForTrade', 'settledFunds', 'usableCash', 'overnightBuyingPower']:
+                        if field in account_data:
+                            try:
+                                val = float(account_data[field])
+                                if val > 0:
+                                    buying_power = val
+                                    print(f"[WEBULL_PAPER_BALANCE] Using '{field}' for buying_power: ${val:.2f}")
+                                    break
+                            except (ValueError, TypeError):
+                                pass
+
+                    net_liq = 0.0
+                    for field in ['netLiquidation', 'totalMarketValue', 'accountValue', 'totalAsset']:
+                        if field in account_data:
+                            try:
+                                val = float(account_data[field])
+                                if val > 0:
+                                    net_liq = val
+                                    break
+                            except (ValueError, TypeError):
+                                pass
+                    if net_liq == 0 and buying_power > 0:
+                        net_liq = buying_power
+
+                    cash = 0.0
+                    for field in ['cashBalance', 'settledCash', 'settledFunds', 'usableCash']:
+                        if field in account_data:
+                            try:
+                                val = float(account_data[field])
+                                if val > 0:
+                                    cash = val
+                                    break
+                            except (ValueError, TypeError):
+                                pass
+
+                    settled_cash = 0.0
+                    for field in ['settledCash', 'settledFunds']:
+                        if field in account_data:
+                            try:
+                                settled_cash = float(account_data[field])
+                                break
+                            except (ValueError, TypeError):
+                                pass
+
+                    unsettled_cash = 0.0
+                    if 'unsettledCash' in account_data:
+                        try:
+                            unsettled_cash = float(account_data['unsettledCash'])
+                        except (ValueError, TypeError):
+                            pass
+
+                    unrealized_pnl = 0.0
+                    for field in ['unrealizedProfitLoss', 'unrealizedPL']:
+                        if field in account_data:
+                            try:
+                                unrealized_pnl = float(account_data[field])
+                                break
+                            except (ValueError, TypeError):
+                                pass
+
+                    return {
+                        'buying_power': buying_power,
+                        'cash_balance': cash,
+                        'net_liquidation': net_liq,
+                        'total_profit_loss': unrealized_pnl,
+                        'day_profit_loss': 0,
+                        'settled_cash': settled_cash,
+                        'unsettled_cash': unsettled_cash,
+                        'status': 'ok'
+                    }
+                except Exception as e:
+                    print(f"[WEBULL_PAPER_BALANCE] Error in blocking call: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return None
+
+            balance_data = _get_paper_balance()
+
+            if balance_data:
+                result = jsonify(balance_data)
                 _api_cache[cache_key] = (result, time.time())
                 return result
             else:
@@ -3304,6 +3386,8 @@ def register_routes(app):
                 return result
         except Exception as e:
             print(f"[API] Exception in webull_paper balance endpoint: {e}")
+            import traceback
+            traceback.print_exc()
             result = jsonify({
                 'buying_power': 0, 'cash_balance': 0, 'net_liquidation': 0,
                 'total_profit_loss': 0, 'day_profit_loss': 0,

@@ -2155,16 +2155,34 @@ class WebullBroker:
                         print(f"[{self.name}] No refreshToken provided — continuing with accessToken only.")
                     self._apply_tokens(wb, acc, ref, did_from_web=did_web or None)
 
-            try:
-                wb.get_account_id()
-            except Exception as e_acc:
-                print(f"[{self.name}] get_account_id warning: {e_acc}")
+            if self._use_paper_account:
+                try:
+                    import requests as _req
+                    headers = wb.build_req_headers()
+                    paper_url = wb._urls.paper_account_id()
+                    resp = _req.get(paper_url, headers=headers, timeout=10)
+                    result = resp.json()
+                    if result and isinstance(result, list) and len(result) > 0 and 'id' in result[0]:
+                        wb._account_id = result[0]['id']
+                except Exception as e_acc:
+                    try:
+                        wb.get_account_id()
+                    except Exception:
+                        pass
+            else:
+                try:
+                    wb.get_account_id()
+                except Exception as e_acc:
+                    print(f"[{self.name}] get_account_id warning: {e_acc}")
             try:
                 wb.get_trade_token(c_pin)
             except Exception as e_pin:
-                log_error_to_db('broker_connection', f"Trade PIN verification failed: {str(e_pin)}", 
-                               'WebullBroker', 'critical', 'Check your 6-digit trading PIN in Settings')
-                raise RuntimeError(f"get_trade_token failed (check your 6-digit trading PIN): {e_pin}")
+                if self._use_paper_account:
+                    print(f"[{self.name}] get_trade_token warning (paper): {e_pin}")
+                else:
+                    log_error_to_db('broker_connection', f"Trade PIN verification failed: {str(e_pin)}", 
+                                   'WebullBroker', 'critical', 'Check your 6-digit trading PIN in Settings')
+                    raise RuntimeError(f"get_trade_token failed (check your 6-digit trading PIN): {e_pin}")
             return wb
 
         self._client = await self.loop.run_in_executor(None, _blocking_login)
@@ -2304,7 +2322,7 @@ class WebullBroker:
                 
                 # Extract buying power
                 buying_power = 0.0
-                for field in ['buyingPower', 'dayBuyingPower', 'cashAvailableForTrade', 'settledFunds']:
+                for field in ['buyingPower', 'dayBuyingPower', 'usableCash', 'cashAvailableForTrade', 'settledFunds']:
                     if field in account_data:
                         try:
                             buying_power = float(account_data[field])
@@ -2877,7 +2895,7 @@ class WebullBroker:
                     
                     # Try multiple possible field names for buying power
                     buying_power = 0.0
-                    for field in ['buyingPower', 'cashAvailableForTrade', 'cashBalance', 'dayBuyingPower', 'accountMembers.0.buyingPower']:
+                    for field in ['buyingPower', 'cashAvailableForTrade', 'usableCash', 'cashBalance', 'dayBuyingPower', 'accountMembers.0.buyingPower']:
                         if field in account_data:
                             try:
                                 buying_power = float(account_data[field])
@@ -3134,7 +3152,7 @@ class WebullBroker:
                     
                     # Try to find buying power
                     buying_power = 0.0
-                    for field in ['buyingPower', 'cashAvailableForTrade', 'cashBalance', 'dayBuyingPower']:
+                    for field in ['buyingPower', 'cashAvailableForTrade', 'usableCash', 'cashBalance', 'dayBuyingPower']:
                         if field in account_data:
                             try:
                                 buying_power = float(account_data[field])
