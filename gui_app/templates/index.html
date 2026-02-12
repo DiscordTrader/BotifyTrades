@@ -1890,7 +1890,9 @@ async function loadStats() {
         try {
             let balanceUrl = '/api/webull/balance';
             const brokerUpper = currentBroker ? currentBroker.toUpperCase() : '';
-            if (brokerUpper.startsWith('ALPACA')) {
+            if (brokerUpper === 'WEBULL_PAPER') {
+                balanceUrl = '/api/webull_paper/balance';
+            } else if (brokerUpper.startsWith('ALPACA')) {
                 balanceUrl = '/api/alpaca/balance';
             } else if (brokerUpper.startsWith('IBKR')) {
                 balanceUrl = '/api/ibkr/balance';

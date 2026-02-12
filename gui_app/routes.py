@@ -3236,6 +3236,83 @@ def register_routes(app):
             _api_cache[cache_key] = (result, time.time())
             return result
     
+    @app.route('/api/webull_paper/balance', methods=['GET'])
+    def api_webull_paper_balance() -> Any:
+        """Get Webull PAPER account balance for Dashboard"""
+        import asyncio
+
+        cache_key = 'webull_paper_balance'
+        if cache_key in _api_cache:
+            cached_value, timestamp = _api_cache[cache_key]
+            if time.time() - timestamp < 5:
+                return cached_value
+
+        if not _bot_instance or not hasattr(_bot_instance, 'webull_paper_broker') or not _bot_instance.webull_paper_broker:
+            result = jsonify({
+                'buying_power': 0,
+                'cash_balance': 0,
+                'net_liquidation': 0,
+                'total_profit_loss': 0,
+                'day_profit_loss': 0,
+                'settled_cash': 0,
+                'unsettled_cash': 0,
+                'status': 'not_initialized'
+            })
+            return result
+
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                _bot_instance.webull_paper_broker.get_account_info(),
+                _bot_instance.loop
+            )
+            account_data = future.result(timeout=10)
+
+            if account_data and account_data.get('success'):
+                account = account_data.get('account', {})
+                result = jsonify({
+                    'buying_power': float(account.get('dayBuyingPower', 0) or account.get('usableCash', 0) or 0),
+                    'cash_balance': float(account.get('cashBalance', 0) or account.get('usableCash', 0) or 0),
+                    'net_liquidation': float(account.get('netLiquidation', 0) or account.get('totalMarketValue', 0) or 0),
+                    'total_profit_loss': float(account.get('unrealizedProfitLoss', 0) or 0),
+                    'day_profit_loss': float(account.get('dayProfitLoss', 0) or 0),
+                    'settled_cash': float(account.get('settledCash', 0) or 0),
+                    'unsettled_cash': float(account.get('unsettledCash', 0) or 0),
+                    'status': 'ok'
+                })
+                _api_cache[cache_key] = (result, time.time())
+                return result
+            elif account_data:
+                result = jsonify({
+                    'buying_power': float(account_data.get('buying_power', 0)),
+                    'cash_balance': float(account_data.get('cash_balance', 0)),
+                    'net_liquidation': float(account_data.get('net_liquidation', 0)),
+                    'total_profit_loss': float(account_data.get('total_profit_loss', 0)),
+                    'day_profit_loss': float(account_data.get('day_profit_loss', 0)),
+                    'settled_cash': float(account_data.get('settled_cash', 0)),
+                    'unsettled_cash': float(account_data.get('unsettled_cash', 0)),
+                    'status': 'ok'
+                })
+                _api_cache[cache_key] = (result, time.time())
+                return result
+            else:
+                result = jsonify({
+                    'buying_power': 0, 'cash_balance': 0, 'net_liquidation': 0,
+                    'total_profit_loss': 0, 'day_profit_loss': 0,
+                    'settled_cash': 0, 'unsettled_cash': 0, 'status': 'loading'
+                })
+                _api_cache[cache_key] = (result, time.time())
+                return result
+        except Exception as e:
+            print(f"[API] Exception in webull_paper balance endpoint: {e}")
+            result = jsonify({
+                'buying_power': 0, 'cash_balance': 0, 'net_liquidation': 0,
+                'total_profit_loss': 0, 'day_profit_loss': 0,
+                'settled_cash': 0, 'unsettled_cash': 0,
+                'status': 'error', 'error': str(e)
+            })
+            _api_cache[cache_key] = (result, time.time())
+            return result
+
     @app.route('/api/alpaca/balance', methods=['GET'])
     def api_alpaca_balance() -> Any:
         """Get Alpaca paper account balance for Dashboard"""
