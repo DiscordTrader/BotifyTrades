@@ -2331,6 +2331,31 @@ class WebullBroker:
                         except (ValueError, TypeError):
                             pass
                 
+                # Paper account fallback - paper accounts have different JSON structure
+                if buying_power <= 0 and self._use_paper_account:
+                    for field in ['totalCashValue', 'netLiquidation', 'totalMarketValue', 'buyingPower']:
+                        if field in account_data:
+                            try:
+                                buying_power = float(account_data[field])
+                                if buying_power > 0:
+                                    break
+                            except (ValueError, TypeError):
+                                pass
+                    if buying_power <= 0:
+                        paper_summary = account.get('summary', {})
+                        if isinstance(paper_summary, dict):
+                            for field in ['totalCashValue', 'netLiquidation', 'buyingPower']:
+                                if field in paper_summary:
+                                    try:
+                                        buying_power = float(paper_summary[field])
+                                        if buying_power > 0:
+                                            break
+                                    except (ValueError, TypeError):
+                                        continue
+                    if buying_power <= 0:
+                        buying_power = 100000.0
+                        print(f"[{self.name}] Paper account - using default buying power: ${buying_power:.2f}")
+                
                 # Extract options buying power (critical for options trading)
                 options_bp = 0.0
                 if 'optionBuyingPower' in account_data:
@@ -2351,24 +2376,27 @@ class WebullBroker:
                                 break
                         except (ValueError, TypeError):
                             pass
+                if portfolio_value <= 0 and self._use_paper_account:
+                    portfolio_value = buying_power
                 
                 # Extract account type (Margin/Cash/IRA)
-                account_type = 'Unknown'
-                for field in ['brokerAccountTypeStr', 'accountType', 'brokerAccountType']:
-                    if field in account_data:
-                        raw_type = str(account_data[field]).upper()
-                        if 'MARGIN' in raw_type:
-                            account_type = 'Margin'
-                        elif 'CASH' in raw_type:
-                            account_type = 'Cash'
-                        elif 'IRA' in raw_type or 'ROTH' in raw_type or 'TRADITIONAL' in raw_type:
-                            account_type = 'IRA'
-                        else:
-                            account_type = account_data[field]
-                        break
+                account_type = 'Paper' if self._use_paper_account else 'Unknown'
+                if not self._use_paper_account:
+                    for field in ['brokerAccountTypeStr', 'accountType', 'brokerAccountType']:
+                        if field in account_data:
+                            raw_type = str(account_data[field]).upper()
+                            if 'MARGIN' in raw_type:
+                                account_type = 'Margin'
+                            elif 'CASH' in raw_type:
+                                account_type = 'Cash'
+                            elif 'IRA' in raw_type or 'ROTH' in raw_type or 'TRADITIONAL' in raw_type:
+                                account_type = 'IRA'
+                            else:
+                                account_type = account_data[field]
+                            break
                 
                 # Get account ID for display
-                account_id = account_data.get('secAccountId', account_data.get('accountId', 'N/A'))
+                account_id = account_data.get('secAccountId', account_data.get('accountId', account_data.get('id', 'N/A')))
                 
                 result = {
                     'buying_power': buying_power,
@@ -3350,16 +3378,39 @@ class WebullBroker:
                                 account_data[item['key']] = item['value']
                     
                     buying_power = 0.0
-                    for field in ['buyingPower', 'cashAvailableForTrade', 'cashBalance', 'dayBuyingPower']:
-                        if field in account_data:
-                            try:
-                                buying_power = float(account_data[field])
-                                if buying_power > 0:
-                                    break
-                            except (ValueError, TypeError):
-                                continue
                     
-                    net_liq = float(account_data.get('netLiquidation', 0))
+                    if account_data:
+                        for field in ['buyingPower', 'cashAvailableForTrade', 'cashBalance', 'dayBuyingPower']:
+                            if field in account_data:
+                                try:
+                                    buying_power = float(account_data[field])
+                                    if buying_power > 0:
+                                        break
+                                except (ValueError, TypeError):
+                                    continue
+                    elif self._use_paper_account:
+                        paper_bp = account_info.get('totalCashValue') or account_info.get('netLiquidation') or account_info.get('totalMarketValue')
+                        if paper_bp is not None:
+                            try:
+                                buying_power = float(paper_bp)
+                            except (ValueError, TypeError):
+                                pass
+                        if buying_power <= 0:
+                            paper_summary = account_info.get('summary', {})
+                            if isinstance(paper_summary, dict):
+                                for field in ['totalCashValue', 'netLiquidation', 'buyingPower']:
+                                    if field in paper_summary:
+                                        try:
+                                            buying_power = float(paper_summary[field])
+                                            if buying_power > 0:
+                                                break
+                                        except (ValueError, TypeError):
+                                            continue
+                        if buying_power <= 0:
+                            buying_power = 100000.0
+                            print(f"[FUNDS] Paper account - using default buying power: ${buying_power:.2f}")
+                    
+                    net_liq = float(account_data.get('netLiquidation', 0)) if account_data else float(account_info.get('netLiquidation', 0) or 0)
                     
                     if effective_price is not None and effective_price > 0:
                         order_cost = qty * effective_price
