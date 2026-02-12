@@ -1991,7 +1991,7 @@ class WebullBroker:
         # Normalize expiry (strip leading zeros, uppercase type)
         expiry_norm = expiry.replace('/', '').strip() if expiry else ""
         opt_type_norm = str(opt_type).upper() if opt_type else ""
-        dedupe_key = f"{symbol}_{strike_norm}_{opt_type_norm}_{expiry_norm}_{side}_{qty}_{price_norm}"
+        dedupe_key = f"{self.name}_{symbol}_{strike_norm}_{opt_type_norm}_{expiry_norm}_{side}_{qty}_{price_norm}"
         current_time = time.time()
         
         with WebullBroker._order_dedupe_lock:
@@ -2981,24 +2981,46 @@ class WebullBroker:
             if not hasattr(wb, "place_order_option"):
                 raise RuntimeError("Your installed `webull` package has no place_order_option(). Please upgrade that package.")
 
-            # Use ONLY the direct HTTP API call (SDK fails with 500, direct API works)
-            # This is the SINGLE order submission path - no fallbacks to prevent duplicates
             import requests
             import uuid
             
-            # ORDER-LEVEL DEDUPLICATION: Belt-and-suspenders to prevent duplicate API calls
             if not self._check_order_dedupe(symbol, strike, opt_type, expiry_mmdd, side, adjusted_qty, limit_price):
-                print(f"[WEBULL] ❌ Order BLOCKED by order-level deduplication")
+                print(f"[{self.name}] ❌ Order BLOCKED by order-level deduplication")
                 return {
                     'success': False,
                     'msg': 'Duplicate order blocked - same order was submitted within 60 seconds',
                     'error': 'DUPLICATE_ORDER'
                 }
             
-            headers = wb.build_req_headers(include_trade_token=True, include_time=True)
+            if self._use_paper_account:
+                print(f"[{self.name}] Using SDK place_order_option for paper account")
+                try:
+                    resp = wb.place_order_option(
+                        optionId=int(option_id),
+                        lmtPrice=float(effective_price),
+                        action=side,
+                        orderType='LMT',
+                        enforce=WB_ENFORCE,
+                        quant=int(adjusted_qty)
+                    )
+                    print(f"[{self.name}] SDK response: {resp}")
+                    if resp and isinstance(resp, dict):
+                        if resp.get('success') == False:
+                            error_msg = resp.get('msg', 'Unknown paper order error')
+                            print(f"[{self.name}] ❌ Paper option order failed: {error_msg}")
+                            return {'success': False, 'msg': error_msg, 'error': 'PAPER_ORDER_FAILED'}
+                        order_id = resp.get('orderId') or resp.get('data', {}).get('orderId')
+                        if order_id:
+                            print(f"[{self.name}] ✓ Paper order placed: orderId={order_id}")
+                        else:
+                            print(f"[{self.name}] ✓ Paper order placed (response: {resp})")
+                    return resp
+                except Exception as sdk_err:
+                    error_msg = str(sdk_err)
+                    print(f"[{self.name}] ❌ SDK place_order_option failed: {error_msg}")
+                    print(f"[{self.name}] Falling back to direct API...")
             
-            # Use the effective_price that was resolved earlier (handles market orders)
-            # limit_price is already populated from the early market order handling
+            headers = wb.build_req_headers(include_trade_token=True, include_time=True)
             
             api_payload = {
                 'orderType': 'LMT',
@@ -3007,20 +3029,19 @@ class WebullBroker:
                 'orders': [{'quantity': int(adjusted_qty), 'action': side, 'tickerId': int(option_id), 'tickerType': 'OPTION'}],
                 'lmtPrice': float(effective_price)
             }
-            print(f"[WEBULL] Placing option order via direct API: {api_payload}")
+            print(f"[{self.name}] Placing option order via direct API: {api_payload}")
             
             try:
                 api_url = wb._urls.place_option_orders(wb._account_id)
-                print(f"[WEBULL] API URL: {api_url}")
+                print(f"[{self.name}] API URL: {api_url}")
                 api_response = requests.post(api_url, json=api_payload, headers=headers, timeout=wb.timeout)
-                print(f"[WEBULL] Response Status: {api_response.status_code}")
+                print(f"[{self.name}] Response Status: {api_response.status_code}")
                 
                 if api_response.status_code == 200:
                     response_json = api_response.json()
-                    print(f"[WEBULL] ✓ Order placed successfully: orderId={response_json.get('orderId')}")
+                    print(f"[{self.name}] ✓ Order placed successfully: orderId={response_json.get('orderId')}")
                     return response_json
                 else:
-                    # Return detailed error
                     error_msg = f"Webull API Error {api_response.status_code}: {api_response.reason}"
                     try:
                         error_details = api_response.json()
@@ -3028,7 +3049,7 @@ class WebullBroker:
                     except:
                         error_msg += f" - Text: {api_response.text}"
                     
-                    print(f"[WEBULL] ❌ Order failed: {error_msg}")
+                    print(f"[{self.name}] ❌ Order failed: {error_msg}")
                     log_error_to_db('order_execution', f"Option order failed: {error_msg}", 
                                    'WebullBroker', 'error', f'Symbol: {symbol}, Action: {side}, Qty: {adjusted_qty}')
                     return {
@@ -3039,7 +3060,7 @@ class WebullBroker:
                     }
                     
             except Exception as api_error:
-                print(f"[WEBULL] ❌ API call failed: {api_error}")
+                print(f"[{self.name}] ❌ API call failed: {api_error}")
                 log_error_to_db('order_execution', f"Webull API call failed: {str(api_error)}", 
                                'WebullBroker', 'error', f'Symbol: {symbol}')
                 raise Exception(f"Webull API Error: {str(api_error)}") from api_error
