@@ -1661,12 +1661,12 @@ def register_routes(app):
             try:
                 from src.services.broker_health_monitor import BrokerHealthMonitor
                 health_monitor = BrokerHealthMonitor()
-                for broker_key in ['WEBULL', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB']:
+                for broker_key in ['WEBULL', 'WEBULL_PAPER', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB']:
                     state = health_monitor.get_broker_state(broker_key)
                     if state and state.get('is_connected'):
-                        # Check if already in list
                         display_map = {
-                            'WEBULL': 'Webull', 'ALPACA_PAPER': 'Alpaca (Paper)',
+                            'WEBULL': 'Webull', 'WEBULL_PAPER': 'Webull (Paper)',
+                            'ALPACA_PAPER': 'Alpaca (Paper)',
                             'ROBINHOOD': 'Robinhood', 'SCHWAB': 'Schwab'
                         }
                         display_name = display_map.get(broker_key, broker_key)
@@ -9012,7 +9012,10 @@ def register_routes(app):
                     return jsonify({'error': 'Webull LIVE broker not connected'}), 503
                     
             elif selected_broker == 'WEBULL_PAPER':
-                return jsonify({'error': 'Webull PAPER trading not supported for options'}), 400
+                if hasattr(_bot_instance, 'webull_paper_broker') and _bot_instance.webull_paper_broker:
+                    broker_to_use = _bot_instance.webull_paper_broker
+                else:
+                    return jsonify({'error': 'Webull PAPER broker not connected'}), 503
                 
             elif selected_broker == 'ALPACA':
                 return jsonify({'error': 'Alpaca LIVE not configured. Use Alpaca PAPER for testing.'}), 400
@@ -11648,16 +11651,18 @@ def register_routes(app):
                 else:
                     status['webull_live'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
                 
-                # Paper broker - detect type
-                paper_broker = getattr(_bot_instance, 'paper_broker', None)
-                paper_broker_type = type(paper_broker).__name__ if paper_broker else ''
-                
-                # Webull Paper
-                if paper_broker and 'Webull' in paper_broker_type:
+                # Webull Paper - uses dedicated webull_paper_broker instance
+                wb_paper_broker = getattr(_bot_instance, 'webull_paper_broker', None)
+                wb_paper_connected = wb_paper_broker and getattr(wb_paper_broker, '_logged_in', False)
+                if wb_paper_connected:
                     set_broker_status('webull_paper', True, 'connected')
                     status['webull_paper'] = {'connected': True, 'status': 'connected', 'error': None, 'account_info': None}
                 else:
                     status['webull_paper'] = {'connected': False, 'status': 'disconnected', 'error': None, 'account_info': None}
+                
+                # Paper broker - detect type (Alpaca)
+                paper_broker = getattr(_bot_instance, 'paper_broker', None)
+                paper_broker_type = type(paper_broker).__name__ if paper_broker else ''
                 
                 # Alpaca Paper
                 if paper_broker and ('Alpaca' in paper_broker_type or 'TradingClient' in paper_broker_type):
@@ -17115,7 +17120,7 @@ def register_routes(app):
                 from src.services.broker_health_monitor import get_health_monitor
                 health_monitor = get_health_monitor()  # Use singleton instance
                 # Use uppercase keys to match health monitor's normalization
-                for broker_key in ['WEBULL', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'QUESTRADE']:
+                for broker_key in ['WEBULL', 'WEBULL_PAPER', 'ALPACA_PAPER', 'ROBINHOOD', 'SCHWAB', 'IBKR', 'TASTYTRADE', 'QUESTRADE']:
                     state = health_monitor.get_broker_state(broker_key)
                     if state:
                         health_states[broker_key.upper()] = state
@@ -17130,6 +17135,7 @@ def register_routes(app):
                 
                 broker_mappings = [
                     ('WEBULL', 'broker', 'USA', 'USD', False),
+                    ('WEBULL_PAPER', 'webull_paper_broker', 'USA', 'USD', True),
                     ('ALPACA_PAPER', 'paper_broker', 'USA', 'USD', True),
                     ('ROBINHOOD', 'robinhood_broker', 'USA', 'USD', False),
                     ('SCHWAB', 'schwab_broker', 'USA', 'USD', False),
@@ -17143,7 +17149,7 @@ def register_routes(app):
                     if broker_instance is None:
                         continue
                     
-                    if broker_name == 'WEBULL':
+                    if broker_name in ('WEBULL', 'WEBULL_PAPER'):
                         if hasattr(broker_instance, 'is_authenticated'):
                             instance_connected = broker_instance.is_authenticated()
                         else:
