@@ -302,9 +302,9 @@ TOON_EXIT_PATTERN = re.compile(
 
 # Main conditional trigger pattern: SYMBOL over/under PRICE or PRICE-RANGE
 # Supports: "FRSX over 2.35" or "FRSX over 2.35-2.4" (uses first price as trigger)
-# Also handles common typos: ovwe, ovre, ovr, abve, abov
+# Also handles common typos: ocer, ober, ovwe, ovre, ovr, abve, abov
 CONDITIONAL_TRIGGER_PATTERN = re.compile(
-    r'(?:^|\s)\$?([A-Z]{1,5})\s+(?:over|ovwe|ovre|ovr|above|abve|abov)\s+\$?([\d.]+)(?:\s*[-–—to]+\s*\$?[\d.]+)?',
+    r'(?:^|\s)\$?([A-Z]{1,5})\s+(?:over|ocer|ober|ovwe|ovre|ovr|above|abve|abov)\s+\$?([\d.]+)(?:\s*[-–—to]+\s*\$?[\d.]+)?',
     re.IGNORECASE
 )
 
@@ -321,7 +321,7 @@ CONDITIONAL_TRIGGER_UNDER_ALT_PATTERN = re.compile(
 
 # Alternative format: ABOVE/OVER SYMBOL PRICE (e.g., "ABOVE SPY 500")
 CONDITIONAL_TRIGGER_ABOVE_ALT_PATTERN = re.compile(
-    r'(?:^|\s)(?:over|ovwe|ovre|ovr|above|abve|abov)\s+\$?([A-Z]{1,5})\s+\$?([\d.]+)',
+    r'(?:^|\s)(?:over|ocer|ober|ovwe|ovre|ovr|above|abve|abov)\s+\$?([A-Z]{1,5})\s+\$?([\d.]+)',
     re.IGNORECASE
 )
 
