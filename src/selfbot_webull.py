@@ -3338,11 +3338,13 @@ class WebullBroker:
             }
 
     async def place_stock_order(self, action: str = None, qty: int = None, symbol: str = None, limit_price: float = None, **kwargs) -> Dict[str, Any]:
-        # Support both naming conventions: qty/quantity and limit_price/price
+        force_market = kwargs.get('force_market', False)
         if qty is None:
             qty = kwargs.get('quantity', 1)
-        if limit_price is None:
+        if limit_price is None and not force_market:
             limit_price = kwargs.get('price')
+        elif force_market:
+            limit_price = None
         if symbol is None:
             symbol = kwargs.get('symbol')
         if action is None:
@@ -12442,7 +12444,7 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                 use_market_order = signal.get('_use_market_order', False)
                 if use_market_order:
                     stock_order_price = None
-                    _original_print(f"[{broker_name}] ⚡ Using MARKET ORDER for stock {signal.get('action', 'BTO')}", flush=True)
+                    _original_print(f"[{broker_name}] ⚡ Using MARKET ORDER for stock {signal.get('action', 'BTO')} (risk: {signal.get('risk_trigger', 'N/A')})", flush=True)
                 else:
                     # LIMIT CAP: Use _limit_price as the order price if set (prevents chasing)
                     stock_order_price = signal.get('price')
@@ -12451,22 +12453,20 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         _original_print(f"[{broker_name}] 🛡️ Using LIMIT CAP price: ${stock_order_price:.4f} (max allowed)")
                 
                 if uses_modern_signature:
-                    # Some brokers don't accept channel_id - only pass to those that do
                     if 'ALPACA' in broker_upper:
                         result = await broker_instance.place_stock_order(
                             symbol=signal['symbol'],
                             action=signal['action'],
                             quantity=signal['qty'],
-                            price=stock_order_price,  # Uses limit_cap price if enabled
+                            price=stock_order_price,
                             channel_id=signal.get('channel_id')
                         )
                     else:
-                        # Robinhood, Schwab, IBKR, Tastytrade don't accept channel_id
                         result = await broker_instance.place_stock_order(
                             symbol=signal['symbol'],
                             action=signal['action'],
                             quantity=signal['qty'],
-                            price=stock_order_price  # Uses limit_cap price if enabled
+                            price=stock_order_price
                         )
                 else:
                     # Webull and other legacy brokers (uses qty, not quantity)
@@ -12474,8 +12474,9 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                         action=signal['action'],
                         qty=signal['qty'],
                         symbol=signal['symbol'],
-                        limit_price=stock_order_price,  # Uses limit_cap price if enabled
-                        channel_id=signal.get('channel_id')
+                        limit_price=stock_order_price,
+                        channel_id=signal.get('channel_id'),
+                        force_market=use_market_order
                     )
                 # Convert OrderResult to dict format for consistency
                 stock_order_succeeded = False
@@ -14086,14 +14087,25 @@ Focus on: Why is this unusual? Bullish or bearish signal? Risk/reward assessment
                             use_market_order = signal.get('_use_market_order', False)
                             stock_price = None if use_market_order else signal.get('price')
                             if use_market_order:
-                                _original_print(f"[LIVE TRADE] ⚡ Using MARKET ORDER for stock {signal.get('action', 'BTO')}", flush=True)
+                                _original_print(f"[LIVE TRADE] ⚡ Using MARKET ORDER for stock {signal.get('action', 'BTO')} (risk: {signal.get('risk_trigger', 'N/A')})", flush=True)
                             _original_print(f"[LIVE TRADE] Calling {broker_name_used}.place_stock_order()...", flush=True)
-                            resp = await live_broker.place_stock_order(
-                                symbol=signal['symbol'],
-                                action=signal['action'],
-                                quantity=signal['qty'],
-                                price=stock_price
-                            )
+                            is_webull_broker = broker_name_used and 'WEBULL' in broker_name_used.upper()
+                            if is_webull_broker:
+                                resp = await live_broker.place_stock_order(
+                                    action=signal['action'],
+                                    qty=signal['qty'],
+                                    symbol=signal['symbol'],
+                                    limit_price=stock_price,
+                                    channel_id=signal.get('channel_id'),
+                                    force_market=use_market_order
+                                )
+                            else:
+                                resp = await live_broker.place_stock_order(
+                                    symbol=signal['symbol'],
+                                    action=signal['action'],
+                                    quantity=signal['qty'],
+                                    price=stock_price
+                                )
                             _original_print(f"[LIVE TRADE] Broker response received: {resp}", flush=True)
                             
                             live_stock_success = False
