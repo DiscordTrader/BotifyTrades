@@ -13096,8 +13096,14 @@ def get_order_events(
         where_clauses.append('broker = ?')
         params.append(broker)
     if severity:
-        where_clauses.append('severity = ?')
-        params.append(severity)
+        if ',' in severity:
+            sev_types = [t.strip() for t in severity.split(',')]
+            placeholders = ','.join('?' * len(sev_types))
+            where_clauses.append(f'severity IN ({placeholders})')
+            params.extend(sev_types)
+        else:
+            where_clauses.append('severity = ?')
+            params.append(severity)
     if date_from:
         where_clauses.append('timestamp >= ?')
         params.append(date_from)

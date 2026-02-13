@@ -60,33 +60,62 @@ Links to add Execution/Tracking channels, view Leaderboard, and access Settings.
     },
     
     "channels": {
-        "keywords": ["channel", "channels", "discord channel", "add channel", "execution", "tracking", "monitor", "configure channel"],
-        "title": "Channel Configuration",
-        "content": """Channels are Discord channels the bot monitors for trading signals:
+        "keywords": ["channel", "channels", "discord channel", "add channel", "execution", "tracking", "monitor", "configure channel", "channel settings", "channel features"],
+        "title": "Channel Configuration & Settings",
+        "content": """Channels are Discord channels the bot monitors for trading signals. Found in Trading > Execution > Channel Management.
 
 **Two Types of Channels:**
-1. **Execution Channels** (⚡) - Bot automatically executes trades from signals
-2. **Tracking Channels** (📡) - Bot tracks signals for P&L without executing
+1. **Execution Channels** - Bot automatically places REAL orders with your broker
+2. **Tracking Channels** - Bot tracks signals for P&L without executing trades
 
 **Adding a Channel:**
-1. Get the Discord Channel ID (Right-click channel → Copy ID)
-2. Go to Channels page
+1. Get the Discord Channel ID (Right-click channel > Copy ID in Discord)
+2. Go to Trading > Execution > Channel Management
 3. Enter Channel ID and a friendly name
 4. Toggle "Execute" and/or "Track" modes
 5. Click Add Channel
 
 **Channel Features:**
-• **Dual-Mode** - A channel can be both Execute AND Track simultaneously
-• **Broker Override** - Assign specific broker per channel
-• **Multi-Broker** - Execute on multiple brokers at once
-• **Allowed Users** - Filter signals by specific Discord users only
+- **Dual-Mode** - A channel can be both Execute AND Track simultaneously
+- **Broker Override** - Assign a specific broker per channel (e.g., Webull PAPER for one, Alpaca for another)
+- **Multi-Broker Execution** - Execute the same signal on multiple brokers at once
+- **Allowed Users** - Filter signals by specific Discord users only (by User ID)
+- **Ticker Filter** - Restrict trading to specific symbols. Modes: OFF, ALLOW LIST (only trade these), BLOCK LIST (don't trade these). Applied to BTO signals only
+- **Conditional Orders** - Enable "over/under" trigger-based orders per channel. Configure auto-execute, expiry time, and trigger offset
+- **NDX to QQQ Conversion** - Channels with limited NDX access can auto-convert to equivalent QQQ options with configurable delta matching
+- **Signal Update Automation** - Automatically apply signal provider's SL/PT updates to existing positions
+- **Trade Summary** - Enable per-channel trade summaries posted to a webhook
+- **Paper Trade Mode** - Toggle paper trading per channel for testing
+- **Market Selection** - US, Canada (CA), or India (IN) market
+- **Max Positions** - Limit how many open positions this channel can have at once (0 = unlimited)
+- **Daily Loss Limit** - Maximum dollar loss per day before the channel stops trading (0 = unlimited)
+- **Circuit Breaker** - Emergency trading halt when daily loss limit is hit
 
-**Per-Channel Risk Management:**
-Each channel can have custom settings:
-• 3-Tier Profit Targets (e.g., sell 33% at +20%, +40%, +60%)
-• Stop Loss percentage
-• Trailing Stop with activation threshold
-• Position Size (% of portfolio)
+**Position Sizing Options:**
+- **Position Size %** - Percentage of buying power to use per trade (execution)
+- **Tracking Position Size %** - Separate sizing for paper/tracking trades
+- **Default Quantity** - Fixed number of contracts/shares (overrides % sizing)
+- **Max Position Size $** - Dollar cap on any single position
+- **Force My Size %** - Ignore signal provider's percentage and always use your channel setting
+
+**Order Mode Options:**
+- **Entry Order Mode** - Limit (default, better price) or Market (faster fill, prioritizes speed)
+- **SL Order Mode** - Limit (default, retries before switching to market) or Market (immediate exit)
+- **SL Limit Offset** - When using Limit SL, adds a % offset between trigger and limit price (default 3%) for better fills
+- **Trim Order Mode** - Market (default) or Limit for profit target exits
+- **Trim Limit Offset** - Dollar or percentage offset for limit trim orders
+
+**Conditional Order Settings:**
+- **Enable Conditional Orders** - Turn on/off "over/under" price trigger monitoring
+- **Auto Execute** - Automatically execute when price condition is met
+- **Order Expiry** - How long conditional orders remain active
+- **Trigger Offset** - Buffer % added to trigger price to avoid false triggers
+- **Limit Cap** - Maximum limit price as % above trigger (prevents chasing runaway prices)
+- **Slippage Protection** - Maximum allowed slippage % before rejecting the order
+
+**Order Chasing:**
+- **Exit Order Chase** - Monitor unfilled exit orders, cancel stale ones, replace with mid-price
+- **Entry Order Chase** - Chase unfilled entry orders with updated prices
 
 **Reset Tracking** - Clears all signals/lots/closures for that channel to start fresh."""
     },
@@ -225,41 +254,126 @@ Click any position to see individual STC (Sell-to-Close) transactions:
     },
     
     "risk_management": {
-        "keywords": ["risk", "stop loss", "profit target", "trailing stop", "position size", "risk management", "tiered", "protect"],
-        "title": "Risk Management",
-        "content": """BotifyTrades offers comprehensive risk management:
+        "keywords": ["risk", "stop loss", "profit target", "trailing stop", "position size", "risk management", "tiered", "protect", "best settings", "recommended", "combinations"],
+        "title": "Risk Management - Complete Guide",
+        "content": """BotifyTrades has industry-grade risk management. Settings are in Trading > Execution > Channel Management > Per-Channel Risk.
 
-**Global Settings (in Settings page)**
-• Enable/Disable monitoring
-• Default Profit Target %
-• Default Stop Loss %
-• Default Trailing Stop %
+**Global vs Per-Channel:**
+- Global settings (Settings page) apply to ALL channels by default
+- Per-channel settings OVERRIDE global when "Enable Risk Management" is toggled ON for that channel
+- Toggle "Use Global Risk Settings" to inherit global defaults instead of custom
 
-**Per-Channel Overrides**
-Each channel can have custom risk settings:
+**=== 4-TIER PROFIT TARGETS ===**
+Automatically sell portions of your position as profit grows:
+- **PT1** - First target (e.g., sell 25% at +20% profit)
+- **PT2** - Second target (e.g., sell 25% at +40% profit)
+- **PT3** - Third target (e.g., sell 25% at +60% profit)
+- **PT4** - Fourth target (e.g., sell remaining at +100% profit)
+- Each tier has its own % trigger and quantity % to sell
+- Tiers trigger sequentially (PT1 must hit before PT2 activates)
 
-**3-Tier Profit Targets:**
-• Tier 1: Sell X% at Y% profit
-• Tier 2: Sell X% at Y% profit  
-• Tier 3: Sell X% at Y% profit
-Example: Sell 33% at +20%, 33% at +40%, 34% at +60%
+**=== STOP LOSS ===**
+Automatically exit if position drops by X% from entry price.
+- **SL %** - The percentage drop that triggers the exit
+- **SL Order Type** - Choose Market (instant exit) or Limit (better price, retries before switching to market)
+- **SL Limit Offset** - When using Limit SL, adds buffer between trigger and limit price (default 3%) for better fills
+- **Follow-up SL Updates** - Signal providers can update SL via messages like "SL to $X" which overrides channel defaults
+- **Dynamic SL Escalation** - After each profit target hit, the stop loss automatically moves up. Profiles: Standard, Aggressive, Conservative
 
-**Stop Loss:**
-Automatically sell if position drops by X% from entry
+**=== TRAILING STOP ===**
+Locks in profit by trailing behind the peak price:
+- **Activation %** - Position must gain this much before trailing begins (e.g., 15%)
+- **Trail %** - How far price can drop from peak before selling (e.g., 5%)
+- Example: Activate at +15%, trail by 5%. If price hits +25% then drops to +20%, it sells
 
-**Trailing Stop:**
-• Activation %: Start trailing after position gains X%
-• Trail %: Sell if price drops X% from the peak
-Example: Activate at +15%, trail by 5% - if price hits +20% then drops to +15%, triggers sell
+**=== EARLY TRAILING STOP ===**
+A breakeven-first approach for extra protection:
+- **Activation %** - After this gain, stop moves to breakeven (entry price)
+- **Step %** - Then locks in profit in steps as price climbs
+- Example: 5% activation, 3% step. At +5% gain, SL moves to entry. At +8%, SL moves to +5%. Always protects downside first
 
-**Position Sizing:**
-• Global: Fixed dollar amount or % of portfolio
-• Per-Channel: Override with specific % of portfolio
-• Auto-quantity calculation based on signal price
+**=== GIVEBACK GUARD ===**
+Prevents giving back too much unrealized profit:
+- **Giveback Allowed %** - Maximum % of peak profit you're willing to lose
+- Triggers when profit drops below (peak_profit - giveback_allowed %)
+- Great for volatile trades that spike then reverse
 
-**Slippage Protection:**
-• Maximum threshold % to reject trades
-• Protects against bad fills when price moves too fast"""
+**=== LEAVE RUNNER ===**
+Keep a small portion of winning trades running for extra upside:
+- **Enable** - Toggle on/off
+- **Runner %** - What percentage to leave (e.g., 25%)
+- After all profit targets hit, the runner stays open with a trailing stop
+- Lets you capture unexpected big moves
+
+**=== POSITION SIZING ===**
+- **Position Size %** - % of buying power per trade (execution)
+- **Tracking Size %** - Separate sizing for paper/tracking
+- **Default Quantity** - Fixed contracts/shares (overrides %)
+- **Max Position Size $** - Dollar cap on any position
+- **Force My Size** - Ignore signal provider's % and use your setting
+
+**=== ORDER MODES ===**
+- **Entry Order Mode** - Limit (default) or Market (faster fills)
+- **SL Order Mode** - Limit (retries, then switches to market) or Market (immediate)
+- **Trim Order Mode** - Market (default) or Limit for profit target exits
+
+**=== ADVANCED FEATURES ===**
+- **Limit Cap** - Prevents chasing runaway prices. Sets max limit price as % above trigger (e.g., 5% cap)
+- **Slippage Protection** - Rejects orders if price moved too far from signal price
+- **Circuit Breaker** - Emergency halt after daily loss limit is hit
+- **Max Positions** - Limit concurrent open positions per channel
+- **Daily Loss Limit** - Stop trading after losing $X in a day
+- **Order Chase** - Auto-replace unfilled exit orders with updated mid-prices
+- **Entry Chase** - Auto-replace unfilled entry orders with better prices
+- **Settled Cash Validation** - Blocks BTO when settled cash is insufficient (prevents good faith violations)
+
+**=== EXIT STRATEGY MODES ===**
+- **Risk** - Only use risk management rules (PT/SL/trailing) to exit
+- **Signal** - Only exit when signal provider sends STC
+- **Hybrid** - Use BOTH risk rules AND signal provider exits (whichever triggers first)
+
+**=== RECOMMENDED COMBINATIONS ===**
+
+**Conservative (Low Risk):**
+- SL: 10-15%
+- PT1: 25% at +15%, PT2: 25% at +30%, PT3: 50% at +50%
+- Trailing: Activate 10%, Trail 5%
+- Early Trailing: ON, 5% activation, 3% step
+- Position Size: 3-5% of account
+- Entry Mode: Limit
+- SL Mode: Market (guaranteed exit)
+- Exit Strategy: Hybrid
+
+**Moderate (Balanced):**
+- SL: 20-25%
+- PT1: 33% at +20%, PT2: 33% at +40%, PT3: 34% at +60%
+- Trailing: Activate 15%, Trail 5%
+- Leave Runner: ON, 25%
+- Giveback Guard: 15%
+- Position Size: 5-10%
+- Entry Mode: Market (for fast-moving signals)
+- SL Mode: Limit with 3% offset
+- Exit Strategy: Hybrid
+
+**Aggressive (High Risk/Reward):**
+- SL: 30-40%
+- PT1: 25% at +30%, PT2: 25% at +60%, PT3: 25% at +100%, PT4: 25% at +150%
+- Trailing: Activate 20%, Trail 8%
+- Leave Runner: ON, 30%
+- Dynamic SL: ON, Aggressive profile
+- Position Size: 10-15%
+- Entry Mode: Market
+- Exit Strategy: Risk
+
+**Scalping/0DTE:**
+- SL: 25-30%
+- PT1: 50% at +15%, PT2: 50% at +30%
+- No Trailing (too fast)
+- Early Trailing: ON, 10% activation, 5% step
+- Position Size: 3-5%
+- Entry Mode: Market
+- SL Mode: Market
+- Exit Strategy: Hybrid"""
     },
     
     "signals": {
@@ -445,6 +559,54 @@ BotifyTrades uses YOUR Discord account to monitor channels (not a bot account).
 • P&L summaries
 
 The webhook posts formatted messages with trade details to your chosen channel."""
+    },
+    
+    "event_tracking": {
+        "keywords": ["events", "event log", "trade events", "order events", "failures", "rejections", "broker failures", "entries", "exits", "activity", "what happened", "show events", "recent trades", "recent events", "errors", "order history"],
+        "title": "Event Tracking & Order History",
+        "content": """BotifyTrades tracks every order lifecycle event for full transparency. Use chatbot commands to query them.
+
+**Event Types Tracked:**
+- **ORDER_PLACED** - BTO/STC order submitted to broker
+- **ORDER_FILLED** - Order confirmed filled by broker
+- **ORDER_FAILED** - Order rejected by broker (insufficient funds, invalid order, etc.)
+- **ORDER_REJECTED** - Order blocked by bot (slippage protection, ticker filter, settled cash, etc.)
+- **STOP_LOSS** - Stop loss triggered
+- **PROFIT_TARGET** - Profit target hit (PT1, PT2, PT3, PT4)
+- **TRAILING_STOP** - Trailing stop triggered
+- **EARLY_TRAILING** - Early trailing stop triggered
+- **GIVEBACK_GUARD** - Giveback guard triggered (too much profit given back)
+- **CHASER_TRACKING** - Unfilled order chaser started monitoring
+- **CHASER_REPLACED** - Chaser cancelled stale order and replaced with better price
+- **CHASER_FILLED** - Chaser confirmed order filled
+- **CHASER_FAILED** - Chaser failed to replace order
+- **RETRY_ATTEMPT** - Risk exit retry after a failed attempt
+- **DUPLICATE_BLOCKED** - Duplicate order blocked by deduplication
+- **SL_UPDATE** - Stop loss updated via signal provider message
+- **MARKET_ORDER_ESCALATION** - Switched from limit to market order for faster fill
+- **CONDITIONAL_CREATED** - Conditional "over/under" order created
+- **CONDITIONAL_TRIGGERED** - Conditional order price condition met
+- **CONDITIONAL_EXPIRED** - Conditional order expired without triggering
+
+**Severity Levels:**
+- **info** - Normal operations (fills, placements)
+- **warning** - Attention needed (chasers, retries)
+- **error** - Problems (failed orders, broker errors)
+- **critical** - Urgent issues (circuit breaker, broker disconnect)
+
+**Chatbot Commands:**
+- "show events" or "recent events" - Last 20 events
+- "show failures" or "show errors" - Recent failures and errors
+- "show entries" - Recent BTO/entry events
+- "show exits" - Recent STC/exit events
+- "show broker failures" - Broker-specific errors
+- "show stops" - Recent stop loss and trailing stop triggers
+- "show targets" - Recent profit target hits
+- "event summary" - 24-hour summary by event type
+- "show events SPY" - Filter events by symbol
+- "show events webull" - Filter events by broker
+
+Events are stored for 30 days and automatically cleaned up."""
     },
     
     "authentication": {
@@ -783,6 +945,11 @@ def get_response(query: str) -> Dict:
             "topic": "greeting"
         }
     
+    # Check for event tracking commands
+    event_response = handle_event_commands(query)
+    if event_response:
+        return event_response
+    
     # Check for format teaching/management commands
     format_response = handle_format_commands(query)
     if format_response:
@@ -817,6 +984,237 @@ def get_response(query: str) -> Dict:
         "topic": None,
         "confidence": 0
     }
+
+
+def handle_event_commands(query: str) -> Optional[Dict]:
+    """Handle event tracking and order history commands.
+    
+    Commands:
+    - "show events" / "recent events" - Last 20 events
+    - "show failures" / "show errors" - Recent failures
+    - "show entries" - Recent BTO/entry events
+    - "show exits" - Recent STC/exit events 
+    - "show broker failures" - Broker errors
+    - "show stops" - Stop loss/trailing stop triggers
+    - "show targets" - Profit target hits
+    - "event summary" - 24h summary
+    - "show events SYMBOL" - Filter by symbol
+    """
+    query_lower = query.lower().strip()
+    
+    event_commands = {
+        'show events': {'limit': 20},
+        'recent events': {'limit': 20},
+        'show recent events': {'limit': 20},
+        'show all events': {'limit': 50},
+        'show order events': {'limit': 20},
+        'order history': {'limit': 20},
+        'what happened': {'limit': 20},
+        'show activity': {'limit': 20},
+    }
+    
+    filter_commands = {
+        'show failures': {'event_type': 'ORDER_FAILED,ORDER_REJECTED', 'label': 'Failures & Rejections'},
+        'show errors': {'event_type': 'ORDER_FAILED,ORDER_REJECTED', 'label': 'Failures & Rejections'},
+        'show rejections': {'event_type': 'ORDER_REJECTED', 'label': 'Order Rejections'},
+        'show entries': {'event_type': 'ORDER_PLACED,ORDER_FILLED', 'direction': 'BTO', 'label': 'Entry Orders'},
+        'show exits': {'event_type': 'ORDER_PLACED,ORDER_FILLED', 'direction': 'STC', 'label': 'Exit Orders'},
+        'show broker failures': {'severity': 'error,critical', 'label': 'Broker Failures'},
+        'show broker errors': {'severity': 'error,critical', 'label': 'Broker Errors'},
+        'show stops': {'event_type': 'STOP_LOSS,TRAILING_STOP,EARLY_TRAILING', 'label': 'Stop Loss Triggers'},
+        'show stop losses': {'event_type': 'STOP_LOSS,TRAILING_STOP,EARLY_TRAILING', 'label': 'Stop Loss Triggers'},
+        'show targets': {'event_type': 'PROFIT_TARGET', 'label': 'Profit Target Hits'},
+        'show profit targets': {'event_type': 'PROFIT_TARGET', 'label': 'Profit Target Hits'},
+        'show fills': {'event_type': 'ORDER_FILLED', 'label': 'Filled Orders'},
+        'show chasers': {'event_type': 'CHASER_TRACKING,CHASER_REPLACED,CHASER_FILLED,CHASER_FAILED', 'label': 'Order Chaser Activity'},
+        'show conditionals': {'event_type': 'CONDITIONAL_CREATED,CONDITIONAL_TRIGGERED,CONDITIONAL_EXPIRED', 'label': 'Conditional Orders'},
+        'show duplicates': {'event_type': 'DUPLICATE_BLOCKED', 'label': 'Blocked Duplicates'},
+        'show sl updates': {'event_type': 'SL_UPDATE', 'label': 'Stop Loss Updates'},
+        'show giveback': {'event_type': 'GIVEBACK_GUARD', 'label': 'Giveback Guard Triggers'},
+    }
+    
+    if query_lower in ('event summary', 'show event summary', 'events summary', 'summary'):
+        return _get_event_summary()
+    
+    for cmd, filters in filter_commands.items():
+        if query_lower == cmd:
+            return _query_events(filters.get('label', 'Events'), 
+                               event_type=filters.get('event_type'),
+                               severity=filters.get('severity'),
+                               direction=filters.get('direction'))
+    
+    for cmd, opts in event_commands.items():
+        if query_lower == cmd:
+            return _query_events('Recent Events', limit=opts.get('limit', 20))
+    
+    import re
+    sym_match = re.match(r'show events?\s+([A-Za-z]{1,5})$', query_lower)
+    if sym_match:
+        symbol = sym_match.group(1).upper()
+        known_brokers = ['webull', 'alpaca', 'ibkr', 'schwab', 'robinhood', 'tastytrade', 'questrade', 'dhan', 'upstox', 'zerodha']
+        if symbol.lower() in known_brokers:
+            return _query_events(f'{symbol.title()} Events', broker=symbol.lower())
+        return _query_events(f'{symbol} Events', symbol=symbol)
+    
+    return None
+
+
+def _format_event_row(event: Dict) -> str:
+    """Format a single event row for display."""
+    timestamp = event.get('timestamp', '')
+    if timestamp and len(timestamp) > 16:
+        timestamp = timestamp[5:16]
+    
+    event_type = event.get('event_type', 'UNKNOWN')
+    symbol = event.get('symbol', '')
+    broker = event.get('broker', '')
+    severity = event.get('severity', 'info')
+    reason = event.get('reason', '')
+    direction = event.get('direction', '')
+    qty = event.get('quantity', '')
+    price = event.get('price', '')
+    channel = event.get('channel_name', '')
+    
+    severity_icons = {'info': '[i]', 'warning': '[!]', 'error': '[X]', 'critical': '[!!]'}
+    icon = severity_icons.get(severity, '[?]')
+    
+    line = f"{icon} **{timestamp}** | {event_type}"
+    if symbol:
+        line += f" | {symbol}"
+    if direction:
+        line += f" ({direction})"
+    if qty:
+        line += f" x{int(qty) if float(qty) == int(float(qty)) else qty}"
+    if price:
+        line += f" @ ${price}"
+    if broker:
+        line += f" | {broker}"
+    if channel:
+        line += f" | #{channel}"
+    if reason:
+        line += f"\n  Reason: {reason}"
+    
+    return line
+
+
+def _query_events(label: str, event_type: str = None, severity: str = None, 
+                  direction: str = None, symbol: str = None, broker: str = None,
+                  limit: int = 20) -> Dict:
+    """Query order events from database and format response."""
+    try:
+        from . import database as db
+        
+        events, total = db.get_order_events(
+            limit=limit,
+            event_type=event_type,
+            severity=severity,
+            direction=direction,
+            symbol=symbol,
+            broker=broker
+        )
+        
+        if not events:
+            return {
+                "success": True,
+                "response": f"**{label}**\n\nNo events found matching your criteria.\n\nEvents are recorded when trades are placed, filled, rejected, or risk rules trigger. Start trading to see activity here!",
+                "topic": "event_tracking"
+            }
+        
+        response = f"**{label}** (showing {len(events)} of {total} total)\n\n"
+        
+        for event in events:
+            response += _format_event_row(event) + "\n"
+        
+        if total > limit:
+            response += f"\n*{total - limit} more events not shown. Use more specific filters to narrow results.*"
+        
+        response += "\n\n**Filter commands:** show failures, show entries, show exits, show stops, show targets, show broker failures, event summary"
+        
+        return {
+            "success": True,
+            "response": response,
+            "topic": "event_tracking"
+        }
+    except Exception as e:
+        print(f"[CHAT] Error querying events: {e}")
+        return {
+            "success": True,
+            "response": f"**Error Loading Events**\n\nCould not load events: {str(e)}\n\nThe event tracking system may not have recorded any events yet. Events are logged automatically during trading.",
+            "topic": "event_tracking"
+        }
+
+
+def _get_event_summary() -> Dict:
+    """Get 24-hour event summary."""
+    try:
+        from . import database as db
+        
+        summary = db.get_order_event_summary()
+        
+        if not summary:
+            return {
+                "success": True,
+                "response": "**24-Hour Event Summary**\n\nNo events recorded in the last 24 hours.\n\nEvents are logged automatically when the bot places orders, fills them, triggers risk rules, or encounters errors.",
+                "topic": "event_tracking"
+            }
+        
+        response = "**24-Hour Event Summary**\n\n"
+        
+        total_events = sum(data['total'] for data in summary.values())
+        total_errors = sum(data.get('error', 0) + data.get('critical', 0) for data in summary.values())
+        total_warnings = sum(data.get('warning', 0) for data in summary.values())
+        
+        response += f"**Overview:** {total_events} total events"
+        if total_errors:
+            response += f" | {total_errors} errors"
+        if total_warnings:
+            response += f" | {total_warnings} warnings"
+        response += "\n\n"
+        
+        categories = {
+            'Orders': ['ORDER_PLACED', 'ORDER_FILLED', 'ORDER_FAILED', 'ORDER_REJECTED'],
+            'Risk Triggers': ['STOP_LOSS', 'PROFIT_TARGET', 'TRAILING_STOP', 'EARLY_TRAILING', 'GIVEBACK_GUARD'],
+            'Order Chasing': ['CHASER_TRACKING', 'CHASER_REPLACED', 'CHASER_FILLED', 'CHASER_FAILED'],
+            'Conditionals': ['CONDITIONAL_CREATED', 'CONDITIONAL_TRIGGERED', 'CONDITIONAL_EXPIRED'],
+            'Other': ['DUPLICATE_BLOCKED', 'SL_UPDATE', 'MARKET_ORDER_ESCALATION', 'RETRY_ATTEMPT']
+        }
+        
+        for cat_name, cat_types in categories.items():
+            cat_events = {k: v for k, v in summary.items() if k in cat_types}
+            if cat_events:
+                response += f"**{cat_name}:**\n"
+                for evt_type, data in cat_events.items():
+                    count = data['total']
+                    extras = []
+                    if data.get('error', 0):
+                        extras.append(f"{data['error']} errors")
+                    if data.get('warning', 0):
+                        extras.append(f"{data['warning']} warnings")
+                    extra_str = f" ({', '.join(extras)})" if extras else ""
+                    response += f"- {evt_type}: {count}{extra_str}\n"
+                response += "\n"
+        
+        uncategorized = {k: v for k, v in summary.items() 
+                        if not any(k in types for types in categories.values())}
+        if uncategorized:
+            response += "**Other:**\n"
+            for evt_type, data in uncategorized.items():
+                response += f"- {evt_type}: {data['total']}\n"
+        
+        response += "\n**Commands:** show events, show failures, show entries, show exits, show stops, show targets"
+        
+        return {
+            "success": True,
+            "response": response,
+            "topic": "event_tracking"
+        }
+    except Exception as e:
+        print(f"[CHAT] Error getting event summary: {e}")
+        return {
+            "success": True,
+            "response": f"**Error**\n\nCould not load event summary: {str(e)}",
+            "topic": "event_tracking"
+        }
 
 
 def handle_format_commands(query: str) -> Optional[Dict]:
