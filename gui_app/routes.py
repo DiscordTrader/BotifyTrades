@@ -17309,16 +17309,21 @@ def register_routes(app):
                             getattr(broker_instance, '_logged_in', False)
                         )
                     
-                    if not instance_connected and not brokers_initialized:
+                    broker_tokens_expired = (
+                        broker_instance and 
+                        hasattr(broker_instance, '_tokens_valid') and 
+                        not broker_instance._tokens_valid
+                    )
+                    if not instance_connected and not brokers_initialized and not broker_tokens_expired:
                         continue
                     
                     # Get real-time status from health monitor (uses uppercase keys)
                     health_key = broker_name.upper()
                     health = health_states.get(health_key, {})
                     
-                    # Priority: broker instance status > health monitor (instance is more current)
-                    # Only use health monitor if instance status is unknown/False
-                    if instance_connected:
+                    if broker_tokens_expired:
+                        is_connected = False
+                    elif instance_connected:
                         is_connected = True
                     elif health:
                         is_connected = health.get('is_connected', False)
@@ -17338,6 +17343,17 @@ def register_routes(app):
                             buying_power = health_monitor._extract_buying_power(health_key, cached_info, 'options')
                             balance = cached_info.get('portfolio_value', cached_info.get('balance', 0))
                     
+                    disconnect_reason = health.get('reason')
+                    if not is_connected and not disconnect_reason and broker_instance:
+                        if hasattr(broker_instance, '_tokens_valid') and not broker_instance._tokens_valid:
+                            disconnect_reason = 'Auth tokens expired - please re-authenticate in Settings → Brokers'
+                        elif hasattr(broker_instance, 'connected') and not broker_instance.connected:
+                            last_error = getattr(broker_instance, '_last_error', None) or getattr(broker_instance, 'last_error', None)
+                            if last_error:
+                                disconnect_reason = str(last_error)
+                            else:
+                                disconnect_reason = 'Broker not connected'
+                    
                     state = {
                         'broker_name': broker_name,
                         'region': region,
@@ -17347,7 +17363,7 @@ def register_routes(app):
                         'currency': currency,
                         'is_paper': is_paper or getattr(broker_instance, 'paper_trade', False),
                         'status': health.get('status', 'connected' if is_connected else 'disconnected'),
-                        'reason': health.get('reason'),
+                        'reason': disconnect_reason,
                         'error_code': health.get('error_code'),
                         'last_check': health.get('last_check')
                     }

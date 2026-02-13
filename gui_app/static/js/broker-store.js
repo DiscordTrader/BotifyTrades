@@ -250,8 +250,13 @@ const BrokerStore = (function() {
                             <span style="width: 10px; height: 10px; border-radius: 50%; background: ${broker.is_connected ? '#10b981' : '#6b7280'};"></span>
                         </div>
                         <div style="font-size: 1.25rem; font-weight: 700; color: ${broker.is_connected ? 'var(--text-primary)' : 'var(--text-muted)'};">
-                            ${broker.is_connected ? formatCurrency(broker.balance, broker.currency) : 'Not connected'}
+                            ${broker.is_connected ? formatCurrency(broker.balance, broker.currency) : 'Disconnected'}
                         </div>
+                        ${!broker.is_connected && broker.reason ? `
+                            <div style="font-size: 0.7rem; color: #ef4444; margin-top: 4px; line-height: 1.3;">
+                                ${broker.reason}
+                            </div>
+                        ` : ''}
                         ${broker.is_connected && broker.buying_power ? `
                             <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
                                 Buying Power: ${formatCurrency(broker.buying_power, broker.currency)}
