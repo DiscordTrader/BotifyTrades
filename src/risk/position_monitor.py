@@ -21,7 +21,7 @@ from .risk_types import (
     PositionCacheEntry
 )
 from .position_cache import PositionCache
-from .tiered_targets import evaluate_tiered_targets, format_tier_reason, evaluate_channel_stop_loss
+from .tiered_targets import evaluate_tiered_targets, format_tier_reason, evaluate_channel_stop_loss, get_trim_order_price
 from .global_risk import evaluate_global_risk, evaluate_price_based_stops
 from .trailing_stop import evaluate_trailing_stop, get_effective_trailing_settings
 from .early_trailing import evaluate_early_trailing, EarlyTrailingState
@@ -1814,6 +1814,24 @@ class RiskManager:
                     stc_signal['price'] = offset_price
                     stc_signal['_sl_limit_offset_applied'] = True
                     print(f"[RISK] 📊 SL Limit Offset: trigger ${original_price:.2f} → limit ${offset_price:.2f} ({sl_offset*100:.1f}% below)")
+            
+            is_pt_exit = decision.risk_trigger == 'profit_target'
+            if is_pt_exit and channel_settings and not use_market:
+                if channel_settings.trim_order_mode == 'market':
+                    use_market = True
+                    tier_label = f"T{decision.tier_hit}" if decision.tier_hit else "PT"
+                    print(f"[RISK] 📊 Trim Market Order mode - using market order for {tier_label}")
+                elif channel_settings.trim_order_mode == 'limit':
+                    trim_price = get_trim_order_price(position.current_price, channel_settings, is_sell=True)
+                    if trim_price is not None:
+                        original_price = stc_signal['price']
+                        stc_signal['price'] = trim_price
+                        offset_mode = getattr(channel_settings, 'trim_limit_offset_mode', 'dollar')
+                        if offset_mode == 'percent':
+                            offset_display = f"{channel_settings.trim_limit_offset_pct}%"
+                        else:
+                            offset_display = f"${channel_settings.trim_limit_offset}"
+                        print(f"[RISK] 📊 Trim Limit Order: market ${original_price:.2f} → limit ${trim_price:.2f} ({offset_display} offset)")
             
             if use_market:
                 stc_signal['_use_market_order'] = True
