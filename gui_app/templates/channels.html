@@ -1347,9 +1347,19 @@ function renderChannels() {
                 </div>
                 
                 <!-- Order Type Controls Row -->
-                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: rgba(139,161,199,0.08); border-top: 1px solid rgba(139,161,199,0.08);">
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: rgba(139,161,199,0.08); border-top: 1px solid rgba(139,161,199,0.08);">
                     <div style="background: #0F1319; padding: 8px 10px;">
-                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">Trim Order Type</span>
+                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">Entry Order</span>
+                        <select id="entry-order-type-${channel.id}"
+                                style="width: 100%; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
+                                onchange="updateOrderType(${channel.id}, 'entry', this.value)">
+                            <option value="limit" ${(channel.entry_order_mode || 'limit') === 'limit' ? 'selected' : ''}>Limit</option>
+                            <option value="market" ${channel.entry_order_mode === 'market' ? 'selected' : ''}>Market</option>
+                        </select>
+                        <span style="font-size: 8px; color: #6B7A90; display: block; margin-top: 2px;">BTO entries</span>
+                    </div>
+                    <div style="background: #0F1319; padding: 8px 10px;">
+                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">Trim Order</span>
                         <select id="trim-order-type-${channel.id}"
                                 style="width: 100%; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
                                 onchange="updateOrderType(${channel.id}, 'trim', this.value)">
@@ -1365,14 +1375,14 @@ function renderChannels() {
                         </span>
                     </div>
                     <div style="background: #0F1319; padding: 8px 10px;">
-                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">SL Order Type</span>
+                        <span style="font-size: 9px; color: #6B7A90; text-transform: uppercase; display: block; margin-bottom: 4px;">SL Order</span>
                         <select id="sl-order-type-${channel.id}"
                                 style="width: 100%; padding: 3px 4px; font-size: 10px; background: #1B2231; border: 1px solid rgba(139,161,199,0.2); border-radius: 3px; color: #D1E4FF;"
                                 onchange="updateOrderType(${channel.id}, 'sl', this.value)">
                             <option value="limit" ${(channel.sl_order_mode || 'limit') === 'limit' ? 'selected' : ''}>Limit</option>
                             <option value="market" ${channel.sl_order_mode === 'market' ? 'selected' : ''}>Market</option>
                         </select>
-                        <span style="font-size: 8px; color: #6B7A90; display: block; margin-top: 2px;">Stop loss/trailing exits</span>
+                        <span style="font-size: 8px; color: #6B7A90; display: block; margin-top: 2px;">Stop loss exits</span>
                     </div>
                 </div>
                 
@@ -1792,7 +1802,9 @@ async function updateLimitCap(channelId, enabled, capPct) {
 async function updateOrderType(channelId, orderType, value) {
     try {
         const updates = {};
-        if (orderType === 'trim') {
+        if (orderType === 'entry') {
+            updates.entry_order_mode = value;
+        } else if (orderType === 'trim') {
             updates.trim_order_mode = value;
         } else if (orderType === 'sl') {
             updates.sl_order_mode = value;
@@ -1805,7 +1817,7 @@ async function updateOrderType(channelId, orderType, value) {
         });
         
         if (response.ok) {
-            const typeLabel = orderType === 'trim' ? 'Trim' : 'Stop Loss';
+            const typeLabel = orderType === 'entry' ? 'Entry' : orderType === 'trim' ? 'Trim' : 'Stop Loss';
             showNotification(`${typeLabel} order type set to ${value}`);
         } else {
             showNotification('Error updating order type', 'error');

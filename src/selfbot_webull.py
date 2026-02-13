@@ -3044,10 +3044,11 @@ class WebullBroker:
             
             headers = wb.build_req_headers(include_trade_token=True, include_time=True)
             
+            option_enforce = 'DAY'
             api_payload = {
                 'orderType': 'LMT',
                 'serialId': str(uuid.uuid4()),
-                'timeInForce': WB_ENFORCE,
+                'timeInForce': option_enforce,
                 'orders': [{'quantity': int(adjusted_qty), 'action': side, 'tickerId': int(option_id), 'tickerType': 'OPTION'}],
                 'lmtPrice': float(effective_price)
             }
@@ -3503,7 +3504,7 @@ class WebullBroker:
                     'lmtPrice': round(float(effective_price), 2),
                     'action': side,
                     'orderType': 'LMT',
-                    'enforce': WB_ENFORCE,
+                    'enforce': 'DAY',
                     'quant': int(adjusted_qty),
                     'outsideRegularTradingHour': True,
                     'stpPrice': None,
